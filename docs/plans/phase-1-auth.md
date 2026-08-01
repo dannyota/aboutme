@@ -11,14 +11,14 @@ sessions with a `__Host-session` cookie; CSRF protection; session device
 list/revoke/logout-everywhere; explicit cross-provider account linking with **no
 automatic email merge**.
 
-**Base:** branch `phase-0a-contracts`, commit `94c95f5` (current HEAD at
-drafting time). This plan assumes P0B task 0.3 (`sql/schema.sql`, `sqlc.yaml`,
-`cmd/migrate`, `make migrate-gen`/`migrate`) has landed before execution — the
-schema/migration tooling did not exist in the tree as of this commit
-(`apps/server/go.mod` already carries `goose` as an indirect dependency,
-suggesting that work is in flight on another branch). **Task 1, Step 1 is
-blocked until that tooling exists**; do not improvise a parallel migration
-mechanism.
+**Base:** `main`, commit `9382c86` (the squashed public initial commit,
+2026-08-02). The drafting-time base (`phase-0a-contracts` @ `94c95f5`) no longer
+exists — Phase 0 history was squashed for the public release. The P0B task 0.3
+tooling this plan depends on (`sql/schema.sql`, `sqlc.yaml`, `cmd/migrate`,
+`make migrate-gen`/`migrate`) is present at this base with its gates green, so
+the drafting-time blocker on Task 1, Step 1 is **resolved**. Workers must run
+`git rev-parse HEAD` and confirm their worktree is at this base (or a descendant
+of it) before starting; do not improvise a parallel migration mechanism.
 
 **Spec:** `../specs/aboutme-design.md` §3 "OAuth (RFC 9700 / OAuth 2.1-aligned)"
 and "Sessions (OWASP-aligned)" subsections, the `users`/`identities`/`sessions`
@@ -39,7 +39,7 @@ module `github.com/dannyota/aboutme/apps/server`, Go 1.26):
 | `internal/api`       | `router.New(logger, pinger DBPinger, opts Options) http.Handler`; `WriteData`/`WriteError` envelope helpers; `Middleware` type; `RequestID`, `Logging`, `BodyLimit` middleware; `RequestIDFromContext` |
 | `cmd/server/main.go` | wiring only: config → store → router → HTTP server, graceful shutdown                                                                                                                                  |
 
-## Environment facts (verified 2026-08-01, same as phase-0a-contracts.md)
+## Environment facts (verified 2026-08-01, re-verified 2026-08-02 at `9382c86`)
 
 - Go 1.26.5, Node 24.18.1, podman 5.8.4 available locally.
 - Postgres 18.4 (`docker.io/library/postgres:18.4-alpine`, per
