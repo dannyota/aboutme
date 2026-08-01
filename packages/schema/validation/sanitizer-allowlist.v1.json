@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "description": "The ONE versioned rich-text sanitizer allowlist (design spec §5, sanitizer contract). bluemonday (apps/server, write-path sanitization before a rich-text field is stored) and DOMPurify (apps/web, render-path re-sanitization — see packages/schema/README.md's bullet on this file and hostile-corpus.json) must both be configured to accept exactly this set of tags, attributes, and URL schemes, and both WILL BE conformance-tested against packages/schema/validation/hostile-corpus.json once wired (phase-gate review finding M3: at Phase 0, neither sanitizer exists yet in apps/ — grep finds no bluemonday/DOMPurify reference anywhere; the allowlist and corpus data artifacts are P0, the actual sanitizer wiring and hostile-corpus neutralization are P3/AC-SEC-001, per docs/plans/traceability.md's AC-SEC-001/AC-SEC-003 rows — this file only pins the DATA both will be tested against, not a claim that the testing already runs). resume.schema.json's sanitizerAllowlistVersion const pins which version of this file a given schemaVersion's documents were sanitized against; #/$defs/link's pattern hardcodes urlSchemes below for structured (non-HTML) URL fields, since JSON Schema cannot itself parse HTML to check tags/attributes — that half of this file only constrains bluemonday/DOMPurify, not resume.schema.json.",
+  "tags": ["p", "br", "strong", "em", "u", "ol", "ul", "li", "a"],
+  "attributes": {
+    "a": ["href", "rel", "target"]
+  },
+  "globalAttributes": [],
+  "urlSchemes": ["https", "mailto", "tel"],
+  "forbidden": {
+    "description": "Explicitly called out (not exhaustive — anything not in tags/attributes above is already rejected by construction): design spec §5 names these as forbidden outright.",
+    "tags": [
+      "script",
+      "style",
+      "iframe",
+      "svg",
+      "img",
+      "object",
+      "embed",
+      "form",
+      "input",
+      "link",
+      "meta",
+      "base"
+    ],
+    "attributePrefixes": ["on"],
+    "urlSchemes": ["javascript", "data", "vbscript", "file"]
+  },
+  "linkHardening": {
+    "externalRel": "noopener noreferrer",
+    "description": "Every emitted <a> gets rel=\"noopener noreferrer\" regardless of what (if anything) the source HTML specified — design spec §5."
+  }
+}

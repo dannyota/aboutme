@@ -1,0 +1,16 @@
+-- Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
+-- become type-safe Go methods in internal/store via `make generate`. See
+-- docs/specs/aboutme-design.md §3 "Schema management".
+--
+-- No product-table queries yet (schema.sql defines no product tables) —
+-- those land alongside users/identities/sessions in Phase 1 and
+-- resumes/slug_tombstones in Phase 2A. sqlc requires at least one query to
+-- generate anything, so the one query below is a deliberate placeholder:
+-- it proves the schema.sql -> sqlc -> internal/store codegen path produces
+-- real, compiling Go end-to-end (task 0.3's generation path must be
+-- verified, not just configured) without inventing product schema. Replace
+-- or remove it once Phase 1 adds real queries.
+
+-- name: Ping :one
+SELECT 1::int AS ok;
+

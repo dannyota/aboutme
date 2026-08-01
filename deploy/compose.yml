@@ -1,0 +1,232 @@
+# Dev stack for aboutme — also the self-hosting artifact (spec §6).
+#
+# One origin (http://localhost) fronted by Caddy, mirroring the production
+# route table (spec §2 — see deploy/caddy/Caddyfile for the full table) so
+# cookies/CORS behave identically in dev and prod.
+#
+# Before first run: `cp .env.example .env` (repo root) and set
+# POSTGRES_PASSWORD — there is no baked-in default (see deploy/README.md).
+#
+# Run with `podman compose`, never `docker`, from the repo root so the
+# root .env is picked up:
+#   podman compose --env-file .env -f deploy/compose.yml up -d --build
+#   podman compose --env-file .env -f deploy/compose.yml down
+#
+# All images are pinned to exact version tags (no floating :latest).
+# Third-party images are fully qualified (docker.io/library/...) to avoid
+# short-name ambiguity. Locally-built images are qualified `localhost/...`
+# so a stale/missing local tag can never be silently satisfied by pulling an
+# identically-named image from the public docker.io/aboutme/* namespace,
+# which this project does not own (podman's unqualified-search-registries
+# includes docker.io by default).
+#
+# Network layout (security review re-review, "topology-blind trust"): three
+# disjoint compose networks, not one flat default network shared by every
+# container.
+#   - db:       postgres, migrate, server — the only peers allowed to reach
+#     Postgres.
+#   - edge:     caddy, server ONLY, on a small fixed subnet. This is the
+#     server's entire TRUSTED_PROXY_CIDRS (see server.environment below):
+#     only a container on this specific network can ever assert a
+#     client-IP header the Go server honors. Neither postgres/migrate nor
+#     web ever join it, so a compromise of either (e.g. an SSRF/RCE in the
+#     Nuxt SSR container) cannot reach the server on this network at all,
+#     let alone spoof a trusted peer.
+#   - frontend: caddy, web — public-page routing only; never shares a
+#     subnet with `edge`, so web is never a trusted proxy of the Go server.
+
+name: aboutme
+
+services:
+  postgres:
+    image: docker.io/library/postgres:18.4-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aboutme}
+      # No baked-in default: this file also serves as the self-hosting
+      # artifact (spec §6), so a known password must never ship. Set
+      # POSTGRES_PASSWORD in .env — see deploy/README.md.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
+      POSTGRES_DB: ${POSTGRES_DB:-aboutme}
+    # Postgres 18+ images store data under a major-version-specific
+    # subdirectory and expect the volume mounted at /var/lib/postgresql
+    # (not .../data) — see https://github.com/docker-library/postgres/pull/1259.
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-aboutme} -d ${POSTGRES_DB:-aboutme}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - db
+
+  # One-shot migration runner: applies embedded goose migrations (cmd/migrate
+  # — spec §3 "Prod migration sequence") once Postgres is reachable, and
+  # exits. Same image as `server` (shared build + image tag, built once —
+  # see the `image:` field on both services), just a different entrypoint.
+  # Without this, a fresh or outdated database volume reports healthy at the
+  # Postgres level while the server 500s on every request for missing
+  # relations — see `server`'s depends_on below.
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+    image: localhost/aboutme/server:dev
+    entrypoint: ["/usr/local/bin/migrate"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # cmd/migrate loads the same internal/config.Config as the server
+      # (PORT/ENV included, even though migrate only uses DATABASE_URL) —
+      # see apps/server/internal/config/config.go's Load: ENV has no
+      # default and is required, so it must be set here too.
+      #
+      # DATABASE_URL deliberately carries NO password: POSTGRES_PASSWORD is
+      # spliced in unencoded below only as a separate PGPASSWORD variable,
+      # not into the URI. Splicing it into the URI directly used to corrupt
+      # the DSN whenever the password (generated per deploy/README.md's
+      # `openssl rand -base64 24`) contained `/`, `@`, `:`, or `=` — the
+      # base64 alphabet includes `/` and `+`, so this broke roughly 2 tries
+      # in 5 with a misleading "no such host" error naming a fragment of the
+      # password. pgx's pgconn.ParseConfig honors the standard libpq
+      # PGPASSWORD environment variable for a URL that omits the password
+      # (verified directly against pgconn's settings-merge precedence), so
+      # this is a drop-in fix with no code change required.
+      DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
+      ENV: dev
+    # migrate is a one-shot binary with no HTTP server, so it can never
+    # satisfy the HTTP healthcheck it would otherwise silently inherit from
+    # server.Dockerfile's image-level HEALTHCHECK (both `server` and `web`
+    # below explicitly re-declare theirs for the same reason — see their
+    # comments). Podman drops HEALTHCHECK from OCI images entirely, but
+    # compose.yml is also the self-hosting artifact for Docker users, where
+    # an inherited, permanently-failing healthcheck would mark this
+    # container unhealthy for its whole (brief) lifetime.
+    healthcheck:
+      disable: true
+    networks:
+      - db
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+    image: localhost/aboutme/server:dev
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8080"
+      # See migrate's DATABASE_URL/PGPASSWORD comment above: no credential
+      # is spliced into this URI.
+      DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Trust boundary (design spec §6). In a container Go must accept
+      # connections from Caddy over the compose network, so it cannot bind
+      # loopback here — the boundary is enforced by TRUSTED_PROXY_CIDRS plus
+      # the fact that only Caddy publishes a host port.
+      LISTEN_HOST: "0.0.0.0"
+      # Exactly the `edge` network's fixed subnet below — not a broad
+      # RFC1918 range. The `edge` network carries only caddy and this
+      # server (see the file-header comment), so this genuinely identifies
+      # "requests that arrived from Caddy," not "requests that arrived from
+      # any compose container" (security review re-review, "topology-blind
+      # trust": the previous default trusted three whole RFC1918 ranges,
+      # so any compromised sibling container — postgres, migrate, or web —
+      # was a trusted peer able to assert an arbitrary client-IP header).
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.90.0.0/28}
+      ENV: dev
+    # Kept in sync with server.Dockerfile's HEALTHCHECK: this compose-level
+    # definition takes precedence over the image's, so both must agree.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:8080/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    networks:
+      - db
+      - edge
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    image: localhost/aboutme/web:dev
+    restart: unless-stopped
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api/v1}
+    # Kept in sync with web.Dockerfile's HEALTHCHECK: this compose-level
+    # definition takes precedence over the image's, so both must agree.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - frontend
+
+  caddy:
+    image: docker.io/library/caddy:2.11.4-alpine
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      # Configurable for rootless Podman hosts that cannot bind privileged
+      # ports without a one-time `sysctl net.ipv4.ip_unprivileged_port_start`
+      # (needs root once, not at container-run time). Defaults to 80, the
+      # real self-hosting/production port ("one origin http://localhost").
+      - "${CADDY_HTTP_PORT:-80}:80"
+    volumes:
+      # :Z relabels the bind mount for this container under SELinux
+      # (enforcing on Fedora hosts); without it, rootless Podman denies the
+      # container read access to a host-owned file.
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+    networks:
+      - edge
+      - frontend
+
+volumes:
+  postgres-data:
+
+networks:
+  # postgres, migrate, server: the only peers ever allowed to reach the
+  # database.
+  db: {}
+  # caddy, server ONLY — see the file-header comment and server's
+  # TRUSTED_PROXY_CIDRS above. A fixed, deliberately small subnet (16
+  # addresses) so it reads as an intentional, auditable boundary rather
+  # than an incidental compose-assigned range.
+  edge:
+    ipam:
+      config:
+        - subnet: 10.90.0.0/28
+  # caddy, web — public-page routing only. Never shares a subnet with
+  # `edge`, so web is never a trusted proxy of the Go server (security
+  # review re-review, "topology-blind trust").
+  frontend: {}

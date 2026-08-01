@@ -1,0 +1,241 @@
+openapi: 3.1.0
+info:
+  title: aboutme API
+  version: 0.1.0
+  description: |
+    `/api/v1` — the REST contract for the aboutme resume builder + hosted
+    display service. This document is the single source of truth for the
+    API; every later phase **adds** paths and schemas here rather than
+    redefining shapes elsewhere. Go/TS/Dart clients are generated from it.
+
+    ## Response envelope
+
+    Every response body is one of:
+
+    - Success: `Envelope` — `{"data": ...}`.
+    - Failure: `Error` — `{"error": {"code": "...", "message": "..."}}`.
+      Both `code` and `message` are always present.
+
+    ## Write safety (revisions, `If-Match`, idempotency)
+
+    Every resume is guarded by a monotonically increasing `revision`
+    (server-assigned bigint). Because 64-bit integers are not safely
+    representable in JSON numbers for TS/Dart clients, `revision` is always
+    serialized as a **string** — see the `Revision` schema.
+
+    - **Optimistic concurrency.** Every mutating request (`POST`/`PATCH`/
+      `DELETE` that changes a resource) must carry the `If-Match` header in
+      ETag form: `If-Match: "r<revision>"` (see the `IfMatch` parameter).
+    - **Staleness is `412`, never `409`.** When the supplied `If-Match` does
+      not match the resource's current revision, the server returns
+      `412 Precondition Failed` with an `Error` body and the current
+      revision/document so the client can reconcile and retry. This follows
+      RFC 9110 §13.1.1: precondition failures are `412`.
+    - **`409 Conflict` is reserved for domain conflicts** — situations that
+      are not about a stale precondition at all, e.g. a requested slug is
+      already taken by another resume. `409` is never used to signal
+      revision staleness.
+    - **Idempotency.** Mutating requests may carry an `Idempotency-Key`
+      header (see the `IdempotencyKey` parameter): a client-generated UUID
+      scoped to `(user, route, mutation UUID)`. The server persists the
+      request-body hash and the response transactionally with a TTL.
+      Replaying the same key with an identical body returns the original
+      stored response without re-executing the mutation; replaying the same
+      key with a **different** body is rejected as a domain conflict
+      (`409`), not retried.
+  license:
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
+servers:
+  - url: https://aboutme.vn/api/v1
+tags:
+  - name: ops
+    description: Operational endpoints (liveness/readiness) used by ECS and
+      synthetic health checks. Not part of the public product surface, and
+      deliberately unversioned (served at the site root, not `/api/v1`) —
+      see each operation's path-level `servers` override.
+paths:
+  /healthz:
+    servers:
+      - url: https://aboutme.vn
+        description: >-
+          Unversioned root, not /api/v1 — health is infrastructure, not
+          product API, so a future /api/v2 must never break orchestrator or
+          synthetic checks (design doc §2 route table).
+    get:
+      operationId: getHealthz
+      tags: [ops]
+      security: []
+      summary: Liveness probe
+      description: |
+        Always returns `200` as long as the process is up and able to serve
+        HTTP — it does not check downstream dependencies (Postgres,
+        Chromium). Used for container liveness, not traffic admission; see
+        `/readyz` for that.
+
+        Responses use the standard JSON envelope
+        (`{"data":{"status":"ok"}}`), not plain text — the envelope is the
+        API-wide contract and machine-parseable probes are worth more than
+        human-readable ones.
+
+        Also available as `HEAD /healthz`, which returns the identical
+        status code and headers with no response body (RFC 9110 §9.3.2).
+
+        **Unversioned by design**: served at the site root
+        (`https://aboutme.vn/healthz`), not under `/api/v1` — see the
+        path-level `servers` override.
+      responses: &healthzResponses
+        "200":
+          description: The process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+              example:
+                data:
+                  status: ok
+    head:
+      operationId: headHealthz
+      tags: [ops]
+      security: []
+      summary: Liveness probe (HEAD)
+      description: |
+        `HEAD` form of `GET /healthz`: identical status code and headers
+        (including `Content-Type`) as the `GET` response, but with **no
+        response body** (RFC 9110 §9.3.2 — HEAD is GET without a body).
+        Container/monitoring probes such as `wget --spider` use this form.
+      responses: *healthzResponses
+  /readyz:
+    servers:
+      - url: https://aboutme.vn
+        description: >-
+          Unversioned root, not /api/v1 — health is infrastructure, not
+          product API, so a future /api/v2 must never break orchestrator or
+          synthetic checks (design doc §2 route table).
+    get:
+      operationId: getReadyz
+      tags: [ops]
+      security: []
+      summary: Readiness probe
+      description: |
+        Returns `200` when the server is ready to accept traffic (database
+        reachable, render queue not saturated). CloudFront/Caddy and ECS use
+        this to gate traffic admission; a `503` here should stop new
+        requests from being routed to this task.
+
+        Responses use the standard JSON envelope on success
+        (`{"data":{"status":"ready"}}`) and the standard error envelope on
+        failure (`{"error":{...}}`), not plain text — the envelope is the
+        API-wide contract and machine-parseable probes are worth more than
+        human-readable ones.
+
+        Also available as `HEAD /readyz`, which returns the identical
+        status code and headers with no response body (RFC 9110 §9.3.2).
+
+        **Unversioned by design**: served at the site root
+        (`https://aboutme.vn/readyz`), not under `/api/v1` — see the
+        path-level `servers` override.
+      responses: &readyzResponses
+        "200":
+          description: Ready to serve traffic.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+              example:
+                data:
+                  status: ready
+        "503":
+          description: Not ready (e.g. database unreachable, render queue
+            saturated).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: not_ready
+                  message: database is unreachable
+    head:
+      operationId: headReadyz
+      tags: [ops]
+      security: []
+      summary: Readiness probe (HEAD)
+      description: |
+        `HEAD` form of `GET /readyz`: identical status code and headers
+        (including `Content-Type`) as the `GET` response, but with **no
+        response body** (RFC 9110 §9.3.2 — HEAD is GET without a body).
+        Container/monitoring probes such as `wget --spider` use this form.
+      responses: *readyzResponses
+components:
+  schemas:
+    Envelope:
+      type: object
+      description: Success response wrapper. `data` carries the
+        operation-specific payload; individual operations refine its shape
+        via `allOf`.
+      required:
+        - data
+      properties:
+        data: {}
+    Error:
+      type: object
+      description: Failure response wrapper.
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable error code (e.g.
+                `slug_taken`, `precondition_failed`).
+              example: precondition_failed
+            message:
+              type: string
+              description: Human-readable message; not intended to be
+                parsed by clients.
+              example: The resume was modified since you last loaded it.
+    Revision:
+      type: string
+      pattern: "^[0-9]+$"
+      description: >-
+        A resume's revision number. Server-assigned, monotonically
+        increasing, and stored as a Postgres bigint — serialized here as a
+        **string** (not a JSON number) so TypeScript and Dart clients don't
+        lose precision on 64-bit values. Appears in resource bodies (e.g.
+        `"revision": "42"`) and is echoed in the `ETag` response header as
+        `"r<revision>"` for use in a subsequent `If-Match`.
+      example: "42"
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: >-
+        Optimistic-concurrency precondition, ETag form: `"r<revision>"`
+        (quotes included, per RFC 9110). Required on every mutating request.
+        A mismatch returns `412 Precondition Failed` with the current
+        revision/document — never `409` (see the write-safety section
+        above).
+      schema:
+        type: string
+        pattern: '^"r[0-9]+"$'
+      example: '"r42"'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Client-generated UUID scoping this mutation to `(user, route,
+        mutation UUID)`. Replaying the same key with an identical body
+        returns the original stored response; replaying it with a different
+        body is rejected as a domain conflict.
+      schema:
+        type: string
+        format: uuid
+      example: 018f0f3e-9e3a-7000-8000-000000000001

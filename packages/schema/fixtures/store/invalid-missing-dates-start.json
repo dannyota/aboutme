@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "personalDetails": {
+    "fullName": "Ada Lovelace",
+    "details": []
+  },
+  "content": {
+    "work": {
+      "sectionType": "work",
+      "entries": [
+        {
+          "id": "018f0000-0000-7000-8000-000000000401",
+          "jobTitle": "Engineer",
+          "employer": "Acme",
+          "dates": { "end": { "y": 2020, "m": 6 }, "present": false }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": { "family": "Inter", "baseSizePx": 14 },
+    "colors": { "primary": "#1a1a1a", "text": "#1a1a1a", "background": "#ffffff" },
+    "spacing": { "sectionGap": 16, "entryGap": 8, "lineHeight": 1.4 },
+    "heading": { "style": "normal", "showRule": false },
+    "layout": {
+      "columns": 1,
+      "sections": { "main": ["work"], "sidebar": [] }
+    },
+    "sectionDisplay": {
+      "skill": { "style": "text" },
+      "language": { "style": "text" }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}
