@@ -1,0 +1,296 @@
+# Semgrep configuration for aboutme.
+#
+# aboutme handles personal data (resumes) and OAuth sessions; semgrep is a
+# required PR gate (docs/specs/aboutme-design.md §0). This file holds the
+# project-specific custom rules only — the Go rule YAML schema has no
+# `extends`/include directive for pulling registry packs into a single
+# file, so published packs are combined with this file at the CLI/CI
+# invocation level:
+#
+#   semgrep \
+#     --config p/golang \
+#     --config p/gosec \
+#     --config p/typescript \
+#     --config p/javascript \
+#     --config p/owasp-top-ten \
+#     --config p/secrets \
+#     --config p/dockerfile \
+#     --config p/docker-compose \
+#     --config .semgrep.yml \
+#     --error .
+#
+# Pack coverage: p/golang + p/gosec = Go; p/typescript + p/javascript = the
+# Nuxt/Vue app's TS/JS (there is no published Vue-template-aware pack —
+# semgrep's TS/JS parsers do not parse .vue SFC blocks at all, which is why
+# the custom rules below use `languages: [generic]` for .vue files);
+# p/owasp-top-ten = cross-language OWASP coverage; p/secrets = credential/
+# key leak detection; p/dockerfile + p/docker-compose = deploy/*.Dockerfile
+# and deploy/compose.yml.
+#
+# Generated/vendored paths (packages/schema/gen/**, node_modules, .nuxt,
+# .output, lockfiles) are excluded via .semgrepignore, so they apply to
+# both the packs above and the rules below.
+#
+# Each custom rule below enforces an invariant this codebase's design
+# depends on (docs/specs/aboutme-design.md) rather than a generic bad
+# pattern already covered by the packs above.
+
+rules:
+  # ---------------------------------------------------------------------
+  # Sanitizer contract (spec §5): ONE versioned allowlist; bluemonday
+  # sanitizes on write (Go), DOMPurify re-sanitizes on render (Vue/TS).
+  # Stored rich text must never reach the DOM or an HTTP response as raw
+  # HTML outside that path.
+  # ---------------------------------------------------------------------
+
+  - id: vue-unsanitized-html-injection
+    languages: [generic]
+    severity: ERROR
+    message: >
+      Raw HTML is being injected into the DOM (via v-html, .innerHTML, or
+      insertAdjacentHTML) without an obvious call to the project's
+      sanitizer helper. The sanitizer contract (spec §5) requires stored/
+      user-supplied HTML to pass through the DOMPurify render path before
+      it reaches the DOM — rendering it any other way reopens the XSS hole
+      that contract exists to close. If this value is already
+      pre-sanitized through a helper this rule doesn't recognize, name the
+      helper so it contains "sanitiz"/"purify", or add a
+      `# nosemgrep: vue-unsanitized-html-injection` comment with a reason.
+    patterns:
+      - pattern-either:
+          - pattern: v-html="$EXPR"
+          - pattern: $EL.innerHTML = $EXPR
+          - pattern: $EL.insertAdjacentHTML($POS, $EXPR)
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: "^(?!.*(?i:saniti|purify)).*$"
+    paths:
+      include:
+        - "**/apps/web/**/*.vue"
+    metadata:
+      category: security
+      confidence: MEDIUM
+      technology: [vue]
+      owasp: ["A03:2021 - Injection"]
+      cwe:
+        [
+          "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+        ]
+      references:
+        - "docs/specs/aboutme-design.md §5 (sanitizer contract: bluemonday write-side, DOMPurify render-side, one versioned allowlist)"
+
+  - id: web-inner-html-without-sanitizer
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      Raw HTML is being assigned via .innerHTML/insertAdjacentHTML without
+      an obvious call to the project's sanitizer helper. Per the sanitizer
+      contract (spec §5), rendering stored/user-supplied HTML must go
+      through the DOMPurify render path. If this value is already
+      pre-sanitized through a helper this rule doesn't recognize, name the
+      helper so it contains "sanitiz"/"purify", or add a
+      `// nosemgrep: web-inner-html-without-sanitizer` comment with a
+      reason.
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $EXPR
+          - pattern: $EL.insertAdjacentHTML($POS, $EXPR)
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: "^(?!.*(?i:saniti|purify)).*$"
+    paths:
+      include:
+        - "**/apps/web/**/*.ts"
+    metadata:
+      category: security
+      confidence: MEDIUM
+      technology: [typescript, javascript]
+      owasp: ["A03:2021 - Injection"]
+      cwe:
+        [
+          "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+        ]
+      references:
+        - "docs/specs/aboutme-design.md §5 (sanitizer contract: bluemonday write-side, DOMPurify render-side, one versioned allowlist)"
+
+  - id: go-template-html-without-sanitizer
+    languages: [go]
+    severity: ERROR
+    message: >
+      Converting a string to template.HTML marks it as pre-trusted markup
+      and disables html/template's contextual auto-escaping for it — a
+      classic Go XSS gadget when the underlying string is stored/user rich
+      text. Per the sanitizer contract (spec §5), stored rich text must be
+      passed through the bluemonday sanitizer before it is ever marked
+      safe this way. If this value is already sanitized through a helper
+      this rule doesn't recognize, name the helper so it contains
+      "saniti"/"bluemonday"/"purify", or add a
+      `// nosemgrep: go-template-html-without-sanitizer` comment with a
+      reason.
+    patterns:
+      - pattern: template.HTML($EXPR)
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: "^(?!.*(?i:saniti|bluemonday|purify)).*$"
+    paths:
+      include:
+        - "**/apps/server/**/*.go"
+    metadata:
+      category: security
+      confidence: MEDIUM
+      technology: [go]
+      owasp: ["A03:2021 - Injection"]
+      cwe:
+        [
+          "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
+        ]
+      references:
+        - "docs/specs/aboutme-design.md §5 (sanitizer contract: bluemonday write-side, DOMPurify render-side, one versioned allowlist)"
+
+  # ---------------------------------------------------------------------
+  # http.ResponseWriter wrappers must stay transparent to
+  # http.ResponseController (spec §2/§8: SSE hub, /api/v1/events,
+  # /api/v1/live/*). A wrapper that embeds http.ResponseWriter but omits
+  # Unwrap() silently hides Flusher/Hijacker/etc. from anything using
+  # http.ResponseController-style capability checks instead of a naked
+  # type assertion — this already happened once in this repo (a logging
+  # wrapper broke http.Flusher, which would have broken SSE) before
+  # apps/server/internal/api/middleware.go's statusWriter added Unwrap().
+  # This rule is a regression guard against that defect recurring in a new
+  # wrapper.
+  # ---------------------------------------------------------------------
+
+  - id: go-response-writer-wrapper-missing-unwrap
+    languages: [go]
+    severity: WARNING
+    message: >
+      This struct embeds http.ResponseWriter (making it a wrapper) but the
+      file defines no Unwrap() http.ResponseWriter method for it.
+      Streaming handlers (SSE: /api/v1/events, /api/v1/live/*) reach
+      Flush/Hijack/SetWriteDeadline through http.ResponseController, which
+      only sees through wrapper layers via Unwrap() — a naked
+      `w.(http.Flusher)` type assertion does not work and silently drops
+      the capability instead of erroring. This exact defect already broke
+      SSE once in this repo; add an Unwrap() method that returns the
+      embedded writer.
+    patterns:
+      - pattern: |
+          type $T struct {
+            ...
+            http.ResponseWriter
+            ...
+          }
+      - pattern-not-inside: |
+          type $T struct {
+            ...
+            http.ResponseWriter
+            ...
+          }
+          ...
+          func ($RECV *$T) Unwrap() http.ResponseWriter { ... }
+      - pattern-not-inside: |
+          type $T struct {
+            ...
+            http.ResponseWriter
+            ...
+          }
+          ...
+          func ($RECV $T) Unwrap() http.ResponseWriter { ... }
+    paths:
+      include:
+        - "**/apps/server/**/*.go"
+    metadata:
+      category: correctness
+      confidence: HIGH
+      technology: [go]
+      references:
+        - "docs/specs/aboutme-design.md §2 (route table: /api/v1/events, /api/v1/live/* are SSE) and §8 (realtime transport: SSE hub)"
+
+  # ---------------------------------------------------------------------
+  # Store-layer invariant (spec §3): all writes go through pgx with
+  # parameterized queries. Building query text with fmt.Sprintf/string
+  # concatenation is a SQL injection risk regardless of whether today's
+  # call site happens to interpolate a "safe" value.
+  # ---------------------------------------------------------------------
+
+  - id: go-pgx-sql-string-building
+    languages: [go]
+    severity: ERROR
+    message: >
+      SQL query text built via fmt.Sprintf or string concatenation and
+      passed to a pgx Query/QueryRow/Exec call. Use pgx's parameter
+      placeholders ($1, $2, ...) with the values passed as call arguments
+      instead of interpolating them into the query string — the store
+      layer (spec §3) is the only writer to Postgres and must not
+      reintroduce SQL injection via ad hoc query building.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $Q := fmt.Sprintf(...)
+              ...
+              $CONN.Query($CTX, $Q, ...)
+          - pattern: |
+              $Q := fmt.Sprintf(...)
+              ...
+              $CONN.QueryRow($CTX, $Q, ...)
+          - pattern: |
+              $Q := fmt.Sprintf(...)
+              ...
+              $CONN.Exec($CTX, $Q, ...)
+          - pattern: $CONN.Query($CTX, fmt.Sprintf(...), ...)
+          - pattern: $CONN.QueryRow($CTX, fmt.Sprintf(...), ...)
+          - pattern: $CONN.Exec($CTX, fmt.Sprintf(...), ...)
+          - pattern: $CONN.Query($CTX, $A + $B, ...)
+          - pattern: $CONN.QueryRow($CTX, $A + $B, ...)
+          - pattern: $CONN.Exec($CTX, $A + $B, ...)
+    paths:
+      include:
+        - "**/apps/server/**/*.go"
+    metadata:
+      category: security
+      confidence: HIGH
+      technology: [go, pgx]
+      owasp: ["A03:2021 - Injection"]
+      cwe:
+        [
+          "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
+        ]
+      references:
+        - "docs/specs/aboutme-design.md §3 (store layer: all writes pass through pgx; DB reachable only from Go)"
+
+  # ---------------------------------------------------------------------
+  # Session/CSRF cookie hardening (spec §3 Sessions, OWASP-aligned):
+  # __Host-session and __Host-oauth-tx both require Secure, HttpOnly, and
+  # an explicit SameSite.
+  # ---------------------------------------------------------------------
+
+  - id: go-cookie-missing-security-flags
+    languages: [go]
+    severity: ERROR
+    message: >
+      http.Cookie literal missing one or more of Secure, HttpOnly, or an
+      explicit SameSite. Session and OAuth-transaction cookies
+      (__Host-session, __Host-oauth-tx) must set all three per spec §3:
+      Secure (never sent over plain HTTP), HttpOnly (unreachable from JS,
+      so an XSS gadget can't exfiltrate it), and an explicit SameSite
+      (Lax, per the spec's rationale that visitors arrive via external
+      links). Relying on Go's zero-value defaults instead of setting these
+      explicitly is exactly how this class of bug ships silently.
+    patterns:
+      - pattern: http.Cookie{...}
+      - pattern-not: "http.Cookie{..., Secure: true, ..., HttpOnly: true, ..., SameSite: $SS, ...}"
+    paths:
+      include:
+        - "**/apps/server/**/*.go"
+    metadata:
+      category: security
+      confidence: HIGH
+      technology: [go]
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      cwe:
+        [
+          "CWE-1004: Sensitive Cookie Without 'HttpOnly' Flag",
+          "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute",
+        ]
+      references:
+        - "docs/specs/aboutme-design.md §3 (Sessions: __Host-session Secure; HttpOnly; SameSite=Lax; Path=/, and __Host-oauth-tx with the same flags)"

@@ -1,0 +1,17 @@
+{
+  "name": "aboutme",
+  "private": true,
+  "description": "Repo-level tooling (docs lint/format). Apps carry their own manifests.",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "docs:lint": "prettier --check \"**/*.md\" \"**/*.{yml,yaml}\" && markdownlint-cli2 \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\"",
+    "docs:fmt": "prettier --write \"**/*.md\" \"**/*.{yml,yaml}\" && markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\""
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.43.2",
+    "markdownlint-cli2": "0.23.2",
+    "prettier": "3.9.6",
+    "vitest": "4.1.10",
+    "yaml": "2.9.0"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "personalDetails": {
+    "fullName": "Ada Lovelace",
+    "details": []
+  },
+  "content": {
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac",
+          "isHidden": false,
+          "jobTitle": "Engineer",
+          "employer": "Acme",
+          "employerLink": "",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": { "y": 2020 },
+            "end": { "y": 2022 },
+            "present": true
+          },
+          "description": ""
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "Inter",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#1a1a1a",
+      "text": "#1a1a1a",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 16,
+      "entryGap": 8,
+      "lineHeight": 1.4
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": false
+    },
+    "layout": {
+      "columns": 1,
+      "sections": {
+        "main": ["work"],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": { "style": "text" },
+      "language": { "style": "text" }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

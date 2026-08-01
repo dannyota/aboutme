@@ -1,0 +1,20 @@
+-- Declarative schema for the aboutme database — the single source of truth
+-- for both sqlc (type-safe queries) and migrations. See
+-- docs/specs/aboutme-design.md §3 "Schema management" for the full
+-- contract: `make migrate-gen` diffs this file against a throwaway
+-- Postgres database with Atlas and writes goose-format SQL into
+-- migrations/; apps/server/migrations/*.sql is generated output and
+-- should not be hand-edited except through that pipeline.
+--
+-- Product tables (users, identities, sessions, resumes, slug_tombstones)
+-- are NOT defined here yet. They land in Phase 1 (auth & sessions) and
+-- Phase 2A (resume domain & store) per docs/plans/implementation-plan.md.
+-- This file exists ahead of them so the sqlc/Atlas/goose toolchain (Phase
+-- 0B, tasks 0.3/0.3b) has a real, generation-verified target from day one.
+--
+-- citext is enabled now, not deferred to Phase 1, because it is
+-- infrastructure (an extension), not product schema: Phase 1's
+-- `users.email citext UNIQUE` column (spec §3) needs it, and enabling it
+-- here means the Phase 1 migration only adds tables, never mixes a
+-- CREATE EXTENSION with the first CREATE TABLE it depends on.
+CREATE EXTENSION IF NOT EXISTS citext;

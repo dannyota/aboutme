@@ -1,0 +1,31 @@
+{
+  "name": "@aboutme/web",
+  "private": true,
+  "type": "module",
+  "description": "Nuxt 4 / Vue 3 web app — editor SPA, SSR public pages, shared resume renderer.",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "lint": "eslint .",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@aboutme/schema": "file:../../packages/schema",
+    "nuxt": "4.5.1",
+    "vue": "3.5.40",
+    "vue-router": "5.2.0"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "1.16.0",
+    "@nuxt/test-utils": "4.1.0",
+    "@vue/test-utils": "2.4.11",
+    "eslint": "10.8.0",
+    "happy-dom": "20.11.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10",
+    "vue-tsc": "3.3.9"
+  }
+}

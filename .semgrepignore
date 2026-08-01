@@ -1,0 +1,20 @@
+# semgrep-specific excludes, layered on top of normal git-tracked scanning.
+#
+# packages/schema/gen/** is committed generated code (spec §7: "committed;
+# CI drift check") — it is derived mechanically from resume.schema.json, so
+# findings there would flag the generator's output rather than hand-written
+# logic. Faithfulness of the generator itself is covered by the schema
+# package's own conformance tests, not semgrep.
+packages/schema/gen/**
+
+# Vendored / build output. These are already git-ignored (see .gitignore)
+# so default `semgrep` runs (git-tracked files only) never see them, but
+# listing them here keeps the exclusion correct even when semgrep is run
+# with --no-git-ignore or against an untracked copy of the tree.
+**/node_modules/**
+**/.nuxt/**
+**/.output/**
+
+# Lockfiles — machine-generated, not hand-maintained.
+**/package-lock.json
+**/go.sum

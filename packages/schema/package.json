@@ -1,0 +1,27 @@
+{
+  "name": "@aboutme/schema",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./gen/ts/resume.ts",
+  "types": "./gen/ts/resume.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./gen/ts/resume.ts",
+      "default": "./gen/ts/resume.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "generate": "node scripts/generate.mjs"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "json-schema-to-typescript": "15.0.4",
+    "quicktype": "26.0.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}

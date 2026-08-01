@@ -1,0 +1,232 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least-privilege default for every job: the workflow only reads the repo. No
+# job writes back to it, and semgrep ci authenticates to its own platform via
+# SEMGREP_APP_TOKEN rather than GITHUB_TOKEN.
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.1
+          cache: npm
+      - run: npm ci
+      - run: make docs-lint
+
+  schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.1
+          cache: npm
+          cache-dependency-path: packages/schema/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+      - run: make schema-check
+      - run: go build ./... && go vet ./... && go test ./...
+        working-directory: packages/schema/gen/go
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.1
+          cache: npm
+      - run: npm ci
+      - run: make api-check
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+      - run: make server-build
+      - run: make server-vet
+      - run: make server-test
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          working-directory: apps/server
+      - name: go mod tidy is a no-op
+        run: |
+          cd apps/server
+          cp go.mod /tmp/go.mod.before && cp go.sum /tmp/go.sum.before
+          go mod tidy
+          diff /tmp/go.mod.before go.mod && diff /tmp/go.sum.before go.sum \
+            || { echo "go.mod/go.sum are not tidy — run 'go mod tidy' in apps/server and commit"; exit 1; }
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          cd apps/server && govulncheck ./...
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.1
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - run: make web-lint
+      - run: make web-typecheck
+      - run: make web-test
+      - run: make web-build
+
+  server-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: aboutme
+          POSTGRES_PASSWORD: aboutme_dev
+          POSTGRES_DB: aboutme
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aboutme"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+      # The migration harness now also runs ./cmd/migrate/..., whose generator
+      # e2e suite drives the pinned Atlas CLI. Install it explicitly and assert
+      # the version, because that suite self-skips (silently) when Atlas is
+      # absent — a silent skip would let the item-1 dir-format regression back in.
+      - name: Install the pinned Atlas CLI (v1.2.0)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/atlas" \
+            https://release.ariga.io/atlas/atlas-community-linux-amd64-v1.2.0
+          chmod +x "$HOME/.local/bin/atlas"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Assert Atlas is present and pinned
+        run: atlas version | grep -q 'v1.2.0'
+      - run: make server-test-integration
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+      - run: make server-migration-test
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+
+  migrations-append-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Reject modified or deleted migrations
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          changed=$(git diff --name-status "$base"...HEAD -- apps/server/migrations \
+            | grep -E '^(M|D|R)' | grep -E '\.sql$' || true)
+          if [ -n "$changed" ]; then
+            echo "Applied migrations are immutable; only new files may be added:"
+            echo "$changed"
+            exit 1
+          fi
+
+  # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
+  # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
+  # It replaces the separate osv-scanner job: Supply Chain covers dependency
+  # CVEs across both ecosystems. It authenticates with SEMGREP_APP_TOKEN, which
+  # GitHub withholds from FORK pull requests, so run it on push and same-repo
+  # PRs only — a fork PR would have no token and fail.
+  semgrep:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # semgrep ci is diff-aware; give it history
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: pip install semgrep==1.172.0
+      - run: semgrep ci
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005) through a
+  # live caddy process fronting stub backends. Needs a caddy binary but no
+  # database; pinned to 2.11.4 to match deploy/compose.yml's caddy image tag.
+  route-table:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+      - name: Install the pinned caddy (2.11.4)
+        run: |
+          go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: make route-table-test
+        env:
+          CADDY_BIN: caddy
+
+  # Enforces the single-source-of-truth contract: sql/schema.sql is the only
+  # declared source for BOTH sqlc's generated data layer and the Goose
+  # migrations. Fails on any sqlc drift (including untracked files, which
+  # `make sqlc-check`'s plain `git diff` misses) and on any schema<->migration
+  # divergence Atlas would emit. Both tools are pinned: an unpinned sqlc or
+  # Atlas would make this gate flap on generator formatting rather than real
+  # drift.
+  data-drift:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: aboutme
+          POSTGRES_PASSWORD: aboutme_dev
+          POSTGRES_DB: aboutme
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aboutme"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+      - name: Install the pinned sqlc (v1.31.1)
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Install the pinned Atlas CLI (v1.2.0)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/atlas" \
+            https://release.ariga.io/atlas/atlas-community-linux-amd64-v1.2.0
+          chmod +x "$HOME/.local/bin/atlas"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Assert both tools are present and pinned
+        run: |
+          atlas version | grep -q 'v1.2.0'
+          sqlc version | grep -q 'v1.31.1'
+      - run: make data-drift
+        env:
+          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable

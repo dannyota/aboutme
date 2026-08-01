@@ -1,0 +1,22 @@
+# Lint config scoped to docs/api/openapi.yaml — invoke as:
+#   npx @redocly/cli lint docs/api/openapi.yaml --config docs/api/redocly.yaml
+#
+# Always use the scoped package name "@redocly/cli", never the bare
+# "redocly" command: npm has an unrelated placeholder package literally
+# named "redocly" (prints a joke message and exits 0), so "npx redocly ..."
+# can silently resolve to that decoy instead of the real linter and mask a
+# lint failure. See docs/api/test/openapi.test.ts for the same guard.
+extends:
+  - recommended
+rules:
+  # /healthz and /readyz are unparameterized liveness/readiness probes with
+  # no request body or query/path params, so there is no client-triggerable
+  # 4xx to document for them (see design doc §2 route table).
+  operation-4xx-response: off
+  # Envelope, Error, Revision, IfMatch, and IdempotencyKey are the shared
+  # envelope/write-safety contract (design doc §4). They are deliberately
+  # declared ahead of use: later phases append paths to this file that
+  # reference them, per docs/plans/phase-0a-contracts.md Task 4 ("every
+  # later phase adds paths to this file; it is never rewritten"). Error is
+  # already referenced by GET /readyz's 503 response.
+  no-unused-components: off

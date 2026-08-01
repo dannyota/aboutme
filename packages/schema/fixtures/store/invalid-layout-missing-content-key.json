@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "personalDetails": {
+    "fullName": "Ada Lovelace",
+    "headline": "Analytical Engineer",
+    "photo": {
+      "key": "resumes/ada/photo-original.jpg",
+      "crop": {
+        "x": 0.1,
+        "y": 0.05,
+        "width": 0.8,
+        "height": 0.8
+      }
+    },
+    "details": [
+      {
+        "id": "f0cf483d-585c-4340-9adc-773b3bea3db0",
+        "type": "email",
+        "value": "ada@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "2c25e47b-3eaa-4670-ac85-c23626079998",
+        "type": "phone",
+        "value": "+84 90 000 0000",
+        "isHidden": false
+      },
+      {
+        "id": "9d150558-23be-4bcd-b7ec-181932f94907",
+        "type": "location",
+        "value": "Hanoi, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "062fe149-9545-4484-8df0-332c302cd3b8",
+        "type": "linkedin",
+        "label": "LinkedIn",
+        "value": "https://linkedin.com/in/ada",
+        "isHidden": false
+      },
+      {
+        "id": "09418968-1a86-49cb-8dd8-c746a2780249",
+        "type": "website",
+        "value": "https://ada.example.com",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "cb3fc772-efe2-4338-b299-def6d3bc18e4",
+          "isHidden": false,
+          "text": "<p>Engineer and mathematician with a focus on analytical engines.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac",
+          "isHidden": false,
+          "jobTitle": "Principal Engineer",
+          "employer": "Analytical Engines Ltd",
+          "employerLink": "https://analytical-engines.example.com",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 3
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<p>Leading design of the difference engine successor.</p>"
+        },
+        {
+          "id": "fd62bb07-f757-45cc-bd5f-8425be767300",
+          "isHidden": true,
+          "jobTitle": "Junior Engineer",
+          "employer": "Babbage Works",
+          "employerLink": "",
+          "city": "London",
+          "country": "United Kingdom",
+          "dates": {
+            "start": {
+              "y": 2018,
+              "m": 6
+            },
+            "end": {
+              "y": 2022,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<p>Early-career role, currently hidden from the public resume.</p>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "528090d8-76ea-4a3c-8a72-15004434fdd1",
+          "isHidden": false,
+          "degree": "B.Sc. Mathematics",
+          "school": "University of London",
+          "schoolLink": "https://london.example.edu",
+          "city": "London",
+          "country": "United Kingdom",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 9
+            },
+            "end": {
+              "y": 2018,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<p>Focused on numerical analysis and mechanical computation.</p>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "5bd5dd21-108a-41e1-a2f7-34eeb93ee539",
+          "isHidden": false,
+          "name": "Go",
+          "level": 5,
+          "infoHtml": "<p>Primary backend language since 2015.</p>"
+        },
+        {
+          "id": "4bfed595-5c57-4207-916d-7a4a8581ea1f",
+          "isHidden": false,
+          "name": "TypeScript",
+          "infoHtml": ""
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "9bc9b0b0-aaa6-4a43-b9f7-d958a3819ba0",
+          "isHidden": false,
+          "name": "English",
+          "level": 5
+        },
+        {
+          "id": "bf4ba44d-afa9-4995-a407-115fe8375712",
+          "isHidden": false,
+          "name": "Vietnamese",
+          "level": 3
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "6b8f414a-589f-44c4-9110-017486558074",
+          "isHidden": false,
+          "title": "Certified Analytical Engineer",
+          "titleLink": "https://credentials.example.com/cae-1843-001",
+          "issuer": "Institute of Computing",
+          "date": {
+            "y": 2019,
+            "m": 1
+          },
+          "description": "<p>Credential ID CAE-1843-001.</p>"
+        }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Projects",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "12949dfe-d9dc-4292-a17b-faeda92081e4",
+          "isHidden": false,
+          "title": "Note G Interpreter",
+          "link": "https://github.com/ada/note-g",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 4
+            },
+            "end": {
+              "y": 2021,
+              "m": 11
+            },
+            "present": false
+          },
+          "description": "<p>An interpreter for the algorithm described in Note G.</p>"
+        }
+      ]
+    },
+    "a6a0a5fa-7fe4-4d52-be40-0da2db95de12": {
+      "sectionType": "custom",
+      "displayName": "Awards",
+      "iconKey": "trophy",
+      "entries": [
+        {
+          "id": "6f2b6ec0-dc76-4c6e-a44f-6d9e2141b44e",
+          "isHidden": false,
+          "title": "Lovelace Medal",
+          "titleLink": "https://bcs.example.org/lovelace-medal",
+          "subtitle": "British Computer Society",
+          "city": "London",
+          "dates": {
+            "start": {
+              "y": 2020
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<p>Awarded for contributions to computing.</p>"
+        },
+        {
+          "id": "55b412f2-fd0d-4c41-be7d-f2603d6058b3",
+          "isHidden": false,
+          "title": "Hackathon Winner",
+          "titleLink": "",
+          "subtitle": "",
+          "city": "",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 11
+            },
+            "end": {
+              "y": 2019,
+              "m": 11
+            },
+            "present": false
+          },
+          "description": ""
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "Be Vietnam Pro",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#0f172a",
+      "text": "#1a1a1a",
+      "background": "#ffffff",
+      "accent": "#2563eb"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "layout": {
+      "columns": 2,
+      "sections": {
+        "main": ["profile", "work", "education", "hobbies"],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate",
+          "project",
+          "a6a0a5fa-7fe4-4d52-be40-0da2db95de12"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "bar"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "letter",
+    "dateFormat": "Mon YYYY"
+  }
+}

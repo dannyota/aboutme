@@ -1,0 +1,12 @@
+// Root Go workspace: ties apps/server to the generated schema module so the
+// server has a real, buildable dependency on packages/schema/gen/go instead
+// of a copy-pasted or reimplemented section model (design spec §3, "Codegen
+// fidelity"). Contributor/CI-only — never required at container runtime
+// (the built server binary embeds its own compiled code; see
+// deploy/server.Dockerfile).
+go 1.26.5
+
+use (
+	./apps/server
+	./packages/schema/gen/go
+)

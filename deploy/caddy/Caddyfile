@@ -1,0 +1,66 @@
+# Dev-stack route table — implements the FULL authoritative Caddy table in
+# docs/specs/aboutme-design.md §2, on ONE origin (http://localhost) so
+# cookies/CSRF behave identically to production.
+#
+#   /api/v1/*                                   -> server:8080
+#     Covers /api/v1/events, /api/v1/live/* (SSE) and
+#     /api/v1/public/resumes/{slug}/pdf too — spec §2 lists those as their
+#     own rows only to call out CloudFront-specific tuning (SSE heartbeat,
+#     PDF gating); at the Caddy layer they are already under /api/v1/*, so
+#     no separate matcher is needed.
+#   /healthz, /readyz                            -> server:8080
+#     Unversioned by design: health is infrastructure, not product API, so
+#     an /api/v2 must never break orchestrator/synthetic checks.
+#   /sitemap.xml, /robots.txt, /llms.txt, /*.md  -> server:8080
+#     Generated from publish state. /*.md matches only a root-level
+#     /{slug}.md (Caddy's path wildcard does not cross a "/"), matching the
+#     spec's "root-level" slug page, not a nested path.
+#   /print and /print/*                          -> denied (no backend)
+#     Internal-only by spec: Go calls Nuxt's /print/* directly inside the
+#     compose network with a short-lived single-audience token. A client
+#     reaching /print/* through Caddy would bypass that boundary entirely,
+#     so Caddy rejects it before any handler runs, rather than relying on
+#     it "just" falling through to a page Nuxt happens not to have yet.
+#   everything else                              -> web:3000
+#     Nuxt SSR public pages + editor SPA.
+{
+	admin off
+}
+
+:80 {
+	encode zstd gzip
+
+	@print path /print /print/*
+	# Client-IP trust boundary (design spec §6, "Client-IP trust boundary").
+	# Caddy is the SOLE boundary: strip anything the viewer supplied, then set
+	# the one canonical header Go accepts. Without the strip, a client could
+	# send its own X-Real-IP and be keyed as another address — or exhaust a
+	# victim's rate-limit bucket.
+	# DEV ONLY — do not promote unchanged. {http.request.remote.host} is the
+	# viewer here because the client connects to Caddy directly. Behind
+	# CloudFront it is the EDGE address, which would key the rate limiter by
+	# edge and let one attacker exhaust the bucket shared by every viewer
+	# behind it. Production must verify X-Origin-Secret and derive the viewer
+	# from CloudFront's validated chain — tracked as a blocking PI task.
+	request_header -X-Real-IP
+	request_header -X-Forwarded-For
+	request_header -Forwarded
+
+	handle @print {
+		respond 404
+	}
+
+	@go path /api/v1/* /healthz /readyz /sitemap.xml /robots.txt /llms.txt /*.md
+	handle @go {
+		reverse_proxy server:8080 {
+			# The validated viewer address. In dev this is the direct peer;
+			# in production Caddy derives it from CloudFront's forwarded
+			# chain after verifying X-Origin-Secret.
+			header_up X-Real-IP {http.request.remote.host}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}
