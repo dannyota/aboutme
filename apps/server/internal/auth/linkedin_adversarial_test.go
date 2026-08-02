@@ -287,6 +287,7 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL))
 
 	existingUserID := createTestUser(t, q)
+	raw, _ := issueTestSession(t, q, existingUserID) // resolveLinkOrReauth's purpose=link arm now re-authenticates the completing request (link.go's authenticateLinkOrReauthSession fix, gate hardening) -- see link_test.go's identical addition for the full reasoning.
 	txCookie, tx := beginLinkedInTransaction(t, q, auth.PurposeLink, existingUserID)
 
 	subject := uniqueLinkedInSubject(t)
@@ -298,7 +299,7 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 		Nonce:         tx.Nonce, // the real, server-generated nonce for this transaction
 	})
 
-	resp := doLinkedInCallback(t, handler, "code-link", tx.State, txCookie) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
+	resp := doLinkedInCallback(t, handler, "code-link", tx.State, txCookie, sessionRequestCookie(raw)) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
 
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("callback status = %d, want %d (redirect on a successful link)", resp.StatusCode, http.StatusFound)

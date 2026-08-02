@@ -24,6 +24,16 @@ package auth
 // single-use __Host-oauth-tx handle (the same RFC 9700 mix-up defense
 // transaction.go's own Consume already documents for cross-provider
 // confusion, applied here to cross-USER confusion instead).
+//
+// Trusted-at-Begin is necessary but not sufficient, though: the account
+// could have revoked every session (DELETE /api/v1/sessions, "log out
+// everywhere") in the window between Begin and this /callback, up to
+// oauthTxTTL=10 minutes later. resolveLinkOrReauth's own
+// authenticateLinkOrReauthSession therefore ALSO re-authenticates the
+// completing request's own __Host-session cookie and requires it still
+// name tx.LinkingUserID, for both purpose=link and purpose=reauth alike --
+// Begin-time trust establishes WHO asked; this /callback-time check
+// establishes that the same authenticated session is still live now.
 
 import (
 	"context"
@@ -119,30 +129,35 @@ var errIdentityAlreadyLinked = errors.New("auth: identity already linked to a di
 //     through to link's own CreateIdentity behavior.
 //   - the request completing this /callback carries no valid
 //     __Host-session cookie, or one that no longer authenticates as
-//     tx.LinkingUserID (touchReauthenticatedForCurrentSession's own
-//     defense-in-depth: the flow started under one session, up to
-//     oauthTxTTL=10 minutes ago, and something about it has since
-//     changed -- expired, been revoked, or a different user is now using
-//     this browser). Unreachable for purpose=link's own identity
-//     resolution (which never reads any session at all, resolving
-//     purely off tx.LinkingUserID -- see resolveLinkOrReauth's own doc
-//     comment), reachable only inside the purpose=reauth branch that
-//     needs a concrete session row to call TouchReauthenticated on.
+//     tx.LinkingUserID (authenticateLinkOrReauthSession's own
+//     defense-in-depth, shared by BOTH purposes: the flow started under
+//     one session, up to oauthTxTTL=10 minutes ago, and something about
+//     it has since changed -- expired, been revoked (including via
+//     DELETE /api/v1/sessions, "log out everywhere" -- see that
+//     function's own doc comment for the gap this closes), or a
+//     different user is now using this browser).
 var errLinkOrReauthRejected = errors.New("auth: link/reauth transaction rejected")
 
 // resolveLinkOrReauth resolves a purpose=link or purpose=reauth /callback
 // for provider/providerUserID against tx (already consumed by
 // TransactionStore.Consume, so tx.Purpose is one of these two and
 // tx.LinkingUserID is trusted -- see this file's own top-of-file doc
-// comment for why). r and w are needed ONLY for purpose=reauth's
-// TouchReauthenticated call, which needs a concrete session ROW, not just
-// tx.LinkingUserID's bare user id -- see touchReauthenticatedForCurrentSession's
-// own doc comment for why that can only be read from the CURRENT request's
-// own __Host-session cookie, never recovered from tx itself.
-// purpose=link's own resolution below never reads r/w at all: it resolves
-// purely off tx.LinkingUserID, exactly as design spec §3 intends ("Linking
-// happens only from an authenticated session" -- the ONE captured at
-// Begin, not whatever session happens to be current at /callback time).
+// comment for why). r and w are needed for authenticateLinkOrReauthSession
+// below -- the ONE authorization check both purposes share (fix: an
+// earlier version of this function gave purpose=link and purpose=reauth
+// two DIFFERENT trust models -- reauth re-authenticated the completing
+// request's own __Host-session cookie and required it to still name
+// tx.LinkingUserID; link trusted tx.LinkingUserID alone, resolving
+// entirely from the Begin-time value with no re-check at /callback. That
+// asymmetry meant DELETE /api/v1/sessions ("log out everywhere") --
+// which revokes every session row but never touches oauth_transactions --
+// left a PENDING purpose=link transaction fully able to complete for up
+// to oauthTxTTL=10 minutes AFTER a visitor used their account's own
+// recovery control, permanently attaching a provider identity with no
+// unlink endpoint in v1 to undo it). Both purposes now call the exact
+// same check, unconditionally, before either branch below does anything
+// else -- there is no second, weaker path left for that asymmetry to
+// reappear at.
 //
 // Deliberately takes NO email at all: a link/reauth attaches or
 // reauthenticates purely by (provider, providerUserID) --
@@ -157,10 +172,15 @@ var errLinkOrReauthRejected = errors.New("auth: link/reauth transaction rejected
 //
 // Algorithm:
 //
+//  0. authenticateLinkOrReauthSession(tx.LinkingUserID): the completing
+//     request's own __Host-session cookie must still authenticate, and
+//     still name tx.LinkingUserID, or the whole attempt is rejected
+//     (errLinkOrReauthRejected) before either step below runs.
 //  1. GetIdentityByProviderSubject(provider, providerUserID):
 //     - found, belongs to tx.LinkingUserID already: idempotent success
 //     (no-op) for purpose=link; for purpose=reauth, refresh
-//     reauthenticated_at via touchReauthenticatedForCurrentSession.
+//     reauthenticated_at (SessionManager.TouchReauthenticated) on the
+//     session step 0 just authenticated.
 //     - found, belongs to a DIFFERENT user: errIdentityAlreadyLinked
 //     (DD-C15) for either purpose -- no row mutated.
 //     - not found (unclaimed): purpose=link creates identities with
@@ -175,6 +195,11 @@ var errLinkOrReauthRejected = errors.New("auth: link/reauth transaction rejected
 // callback's own purpose branch, which skips SessionManager.Issue
 // entirely for PurposeLink/PurposeReauth).
 func (s *Service) resolveLinkOrReauth(ctx context.Context, r *http.Request, w http.ResponseWriter, tx Transaction, provider Provider, providerUserID string) error {
+	sess, err := s.authenticateLinkOrReauthSession(r, w, tx.LinkingUserID)
+	if err != nil {
+		return err
+	}
+
 	identity, err := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
 		Provider:       string(provider),
 		ProviderUserID: providerUserID,
@@ -185,7 +210,10 @@ func (s *Service) resolveLinkOrReauth(ctx context.Context, r *http.Request, w ht
 			return errIdentityAlreadyLinked
 		}
 		if tx.Purpose == PurposeReauth {
-			return s.touchReauthenticatedForCurrentSession(ctx, r, w, tx.LinkingUserID)
+			if touchErr := s.sessionMgr.TouchReauthenticated(ctx, sess.ID); touchErr != nil {
+				return fmt.Errorf("auth: resolve link or reauth: touch reauthenticated: %w", touchErr)
+			}
+			return nil
 		}
 		// purpose == PurposeLink, already linked to the SAME user:
 		// idempotent no-op success -- a naive re-INSERT here would hit
@@ -235,53 +263,60 @@ func (s *Service) resolveLinkOrReauth(ctx context.Context, r *http.Request, w ht
 	}
 }
 
-// touchReauthenticatedForCurrentSession refreshes reauthenticated_at
-// (SessionManager.TouchReauthenticated, Task 7) on the session
-// authenticating the request completing THIS /callback -- the reason
-// resolveLinkOrReauth needs r/w at all. TouchReauthenticated takes a
-// concrete session id, and oauth_transactions carries no session-id
-// column (only linking_user_id, a bare user id -- a user can hold many
-// concurrent sessions across devices, so "the session to refresh" cannot
-// be recovered from tx alone). The __Host-session cookie on THIS request
-// is the one and only place that session id can come from: /callback is a
-// public route (reachable by an anonymous purpose=login visitor too, so
-// it can never be wrapped in route-level RequireSession the way
-// sessionChain's JSON API is), but the SAME browser that began this
-// purpose=reauth flow at /start (RequireSession-wrapped there, via
-// startPurposeAndLinkingUser) is, in the ordinary case, still carrying
-// that exact session cookie when the provider redirects it back here, up
-// to oauthTxTTL=10 minutes later.
+// authenticateLinkOrReauthSession re-authenticates the request completing
+// THIS /callback against linkingUserID (tx.LinkingUserID) -- the ONE
+// authorization check resolveLinkOrReauth's purpose=link and
+// purpose=reauth branches now share (see that function's own doc comment
+// for the gap this closes). TouchReauthenticated takes a concrete session
+// id, and oauth_transactions carries no session-id column (only
+// linking_user_id, a bare user id -- a user can hold many concurrent
+// sessions across devices, so "the session to touch" cannot be recovered
+// from tx alone); the __Host-session cookie on THIS request is the one and
+// only place that session id can come from -- /callback is a public route
+// (reachable by an anonymous purpose=login visitor too, so it can never be
+// wrapped in route-level RequireSession the way sessionChain's JSON API
+// is), but the SAME browser that began this purpose=link/reauth flow at
+// /start (RequireSession-wrapped there, via startPurposeAndLinkingUser)
+// is, in the ordinary case, still carrying that exact session cookie when
+// the provider redirects it back here, up to oauthTxTTL=10 minutes later.
 //
 // Re-authenticates independently (readAndAuthenticateSession, the same
-// helper RequireSession itself calls) rather than trusting tx.LinkingUserID
+// helper RequireSession itself calls) rather than trusting linkingUserID
 // alone, and verifies the re-authenticated session's own UserID still
-// equals linkingUserID before touching anything -- defense-in-depth
-// against the narrow window where the two could have diverged (the
-// session was revoked, rotated past its grace window, or -- a shared
-// browser -- a different user is now signed in) between /start and this
-// /callback. Any failure of either check is errLinkOrReauthRejected, the
-// same generic, no-oracle code as reauth's other rejection case, since
-// distinguishing "no cookie" from "wrong user" from "session expired"
-// here would hand an observer more than DD-C3's contract allows anywhere
-// else in this package.
-func (s *Service) touchReauthenticatedForCurrentSession(ctx context.Context, r *http.Request, w http.ResponseWriter, linkingUserID uuid.UUID) error {
+// equals linkingUserID before returning it -- defense-in-depth against the
+// narrow window where the two could have diverged (the session was
+// revoked -- including by DELETE /api/v1/sessions in between /start and
+// this /callback -- rotated past its grace window, or -- a shared browser
+// -- a different user is now signed in). Any failure of either check is
+// errLinkOrReauthRejected, the same generic, no-oracle code as this
+// package's other link/reauth rejections, since distinguishing "no
+// cookie" from "wrong user" from "session expired" here would hand an
+// observer more than DD-C3's contract allows anywhere else in this
+// package.
+//
+// A rotated successor cookie is set as soon as Authenticate reports one --
+// BEFORE the sess.UserID comparison below, not after (fix: the previous
+// ordering here discarded an already-minted, already-persisted successor
+// token on a mismatch, silently stranding the browser on a dead
+// predecessor once its rotation grace window lapsed, even though the
+// rotation write itself had already durably happened). Whether to honor
+// THIS request's authorization is independent of whether to tell the
+// browser about a credential the database already committed to.
+func (s *Service) authenticateLinkOrReauthSession(r *http.Request, w http.ResponseWriter, linkingUserID uuid.UUID) (store.Session, error) {
 	sess, rotated, err := readAndAuthenticateSession(r, s.sessionMgr)
-	if err != nil {
-		if errors.Is(err, ErrSessionInvalid) {
-			return errLinkOrReauthRejected
-		}
-		return fmt.Errorf("auth: touch reauthenticated: authenticate session: %w", err)
-	}
-	if sess.UserID != linkingUserID {
-		return errLinkOrReauthRejected
-	}
 	if rotated != "" {
 		SetSessionCookie(w, rotated)
 	}
-	if err := s.sessionMgr.TouchReauthenticated(ctx, sess.ID); err != nil {
-		return fmt.Errorf("auth: touch reauthenticated: %w", err)
+	if err != nil {
+		if errors.Is(err, ErrSessionInvalid) {
+			return store.Session{}, errLinkOrReauthRejected
+		}
+		return store.Session{}, fmt.Errorf("auth: authenticate link or reauth: %w", err)
 	}
-	return nil
+	if sess.UserID != linkingUserID {
+		return store.Session{}, errLinkOrReauthRejected
+	}
+	return sess, nil
 }
 
 // redirectLinkOrReauthError maps resolveLinkOrReauth's error taxonomy to
