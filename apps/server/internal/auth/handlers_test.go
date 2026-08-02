@@ -32,6 +32,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 // testLogger is a *slog.Logger that discards output -- these tests assert
@@ -1133,5 +1134,70 @@ func TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	cleared := extractCookie(resp, auth.OAuthTxCookieName)
 	if cleared == nil || cleared.MaxAge >= 0 {
 		t.Error("__Host-oauth-tx not cleared on a canceled login")
+	}
+}
+
+// ---- cheap win: SetSessionManagerForTest must also swap sessions -------
+
+// TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock is
+// regression coverage for a gap in the test seam itself (export_test.go's
+// SetSessionManagerForTest): it used to set svc.sessionMgr only, leaving
+// svc.sessions -- the seam a LOGIN callback's sessions.Issue call actually
+// goes through (handleGoogleCallback/handleGitHubCallback/
+// handleLinkedInCallback) -- still pointed at the ORIGINAL, real-wall-clock
+// SessionManager NewService built internally. A test that injected a fake
+// clock to drive session behavior deterministically therefore still got a
+// freshly LOGGED-IN session timestamped off the real wall clock, silently
+// defeating the very fake clock it just injected for exactly the
+// timestamps a login issues (CreatedAt, AbsoluteExpiresAt,
+// ReauthenticatedAt) -- session AUTHENTICATION (RequireSession, revoke/
+// list/reauth-check) was never affected, only issuance. Proven here by
+// setting the fake clock to testutil.Epoch (2024-01-01, nowhere near this
+// test's real wall-clock run time) and asserting the freshly-issued
+// session's own CreatedAt round-trips as exactly that instant, read back
+// from the database -- not merely close to the real "now".
+func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	q := newTestQueries(t)
+	svc, err := auth.NewServiceForTest(testLogger(), config.Config{
+		PublicOrigin:       testPublicOrigin,
+		GoogleClientID:     oidctest.DefaultClientID,
+		GoogleClientSecret: "test-google-client-secret",
+	}, q, p.URL, "", "")
+	if err != nil {
+		t.Fatalf("NewServiceForTest() error = %v", err)
+	}
+	clk := testutil.NewClockAtEpoch()
+	sm := auth.NewSessionManagerForTest(q, clk.Now)
+	auth.SetSessionManagerForTest(svc, sm)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+
+	txCookie, state, nonce := beginGoogle(t, handler)
+	subject := uniqueSubject(t)
+	code := "code-clock-seam-" + uuid.NewString()
+	p.RegisterCode(code, oidctest.Claims{
+		Subject:       subject,
+		Email:         uniqueEmail(t),
+		EmailVerified: ptrTrue(),
+		Nonce:         nonce,
+	})
+
+	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code="+code+"&state="+state, txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	sessionCookie := extractCookie(resp, auth.SessionCookieName)
+	if sessionCookie == nil || sessionCookie.Value == "" {
+		t.Fatal("login did not issue a session cookie")
+	}
+
+	row, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(sessionCookie.Value))
+	if err != nil {
+		t.Fatalf("GetSessionByTokenHash() error = %v", err)
+	}
+	if !row.CreatedAt.Equal(clk.Now()) {
+		t.Errorf("issued session CreatedAt = %v, want %v (the injected SessionManager's fake clock -- SetSessionManagerForTest must point svc.sessions at it too, not just svc.sessionMgr)", row.CreatedAt, clk.Now())
 	}
 }
