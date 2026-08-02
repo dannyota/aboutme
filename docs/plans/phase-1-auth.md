@@ -1251,13 +1251,21 @@ also write Step 2's rejection matrix.
   `Purpose == PurposeLink`): (1) `RequireRecentReauth` on the caller's current
   session — `403 reauth_required` if stale. (2) `GetIdentityByProviderSubject` —
   if it belongs to `tx.LinkingUserID` already, idempotent success (no-op). If it
-  belongs to a **different** user, reject (`409 identity_already_linked` — this
+  belongs to a **different** user, reject with
+  `302 ?error=identity_already_linked` (corrected 2026-08-02, DD-C15: the plan's
+  own top-level-navigation reasoning — a callback is a browser navigation, never
+  a raw JSON 409 — applies to the link callback too; the distinct code stays
+  because the actor is authenticated and the condition is user-actionable. This
   is the case that prevents hijacking someone else's already-claimed provider
-  identity by linking it onto your own account). If unclaimed, `CreateIdentity`
-  with `user_id = tx.LinkingUserID`. **No email check at all for linking** — per
-  spec, LinkedIn linking is allowed without a verified email, and nothing in the
-  spec restricts linking a provider identity whose email differs from the
-  account's registered email; `users.email` is never modified by a link.
+  identity by linking it onto your own account). Link/reauth-purpose callback
+  outcomes (success AND error) redirect to
+  `PublicOrigin + "/app/settings/sessions"` — the page that initiates them —
+  while login-purpose keeps `/login?error=` and `/`. If unclaimed,
+  `CreateIdentity` with `user_id = tx.LinkingUserID`. **No email check at all
+  for linking** — per spec, LinkedIn linking is allowed without a verified
+  email, and nothing in the spec restricts linking a provider identity whose
+  email differs from the account's registered email; `users.email` is never
+  modified by a link.
 
 - [ ] **Step 1: Write the failing new-account / existing-identity / no-merge
       happy-path tests**
@@ -1304,7 +1312,7 @@ also write Step 2's rejection matrix.
   | Test                                                                    | Setup                                                                          | Assert                                                                                                                |
   | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
   | `TestLink_RejectsWithoutRecentReauth`                                   | session with `reauthenticated_at` 20 minutes ago attempts `purpose=link` start | `403 reauth_required`, no transaction even created                                                                    |
-  | `TestLink_RejectsIdentityAlreadyClaimedByAnotherUser`                   | user B tries to link a `(provider, sub)` already owned by user A's identity    | `409`, no row mutated                                                                                                 |
+  | `TestLink_RejectsIdentityAlreadyClaimedByAnotherUser`                   | user B tries to link a `(provider, sub)` already owned by user A's identity    | `302 ?error=identity_already_linked` (DD-C15), no row mutated                                                         |
   | `TestLink_IdempotentWhenAlreadyLinkedToSelf`                            | user links the same identity twice                                             | second call succeeds as a no-op, no duplicate row (unique constraint would 500 a naive re-insert — assert it doesn't) |
   | `TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity` | a `purpose=reauth` round trip against an **already-linked** provider           | bumps `sessions.reauthenticated_at` and creates/touches nothing in `identities`                                       |
 
