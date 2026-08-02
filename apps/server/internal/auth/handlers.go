@@ -16,6 +16,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/oauth2"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
@@ -30,6 +31,14 @@ import (
 const (
 	GoogleStartPath    = "/api/v1/auth/google/start"
 	GoogleCallbackPath = "/api/v1/auth/google/callback"
+)
+
+// LinkedInStartPath and LinkedInCallbackPath are the literal routes
+// Service registers for "Sign in with LinkedIn" (design spec §3's OAuth
+// table), mirroring GoogleStartPath/GoogleCallbackPath's naming.
+const (
+	LinkedInStartPath    = "/api/v1/auth/linkedin/start"
+	LinkedInCallbackPath = "/api/v1/auth/linkedin/callback"
 )
 
 // The full, closed vocabulary of ?error= codes a provider callback can
@@ -89,9 +98,10 @@ type sessionIssuer interface {
 }
 
 // Service implements the OAuth login HTTP surface for every provider
-// (only Google is wired in this phase task; LinkedIn/GitHub follow the
-// same pattern in later tasks). It holds the shared OAuth transaction and
-// session machinery plus each provider's own client credentials.
+// (Google and LinkedIn are wired as of this phase task; GitHub follows
+// the same pattern in a later task). It holds the shared OAuth
+// transaction and session machinery plus each provider's own client
+// credentials.
 type Service struct {
 	tx       *TransactionStore
 	q        *store.Queries
@@ -101,7 +111,8 @@ type Service struct {
 	publicOrigin   string
 	trustedProxies api.TrustedProxies
 
-	google googleProviderConfig
+	google   googleProviderConfig
+	linkedin linkedinProviderConfig
 
 	// googleIssuerOverride replaces the real googleIssuer
 	// ("https://accounts.google.com") used for discovery. Empty in
@@ -110,6 +121,10 @@ type Service struct {
 	// against an in-process oidctest.Provider instead of the real Google
 	// endpoint.
 	googleIssuerOverride string
+	// linkedinIssuerOverride is googleIssuerOverride's LinkedIn
+	// counterpart, replacing the real linkedinIssuer
+	// ("https://www.linkedin.com/oauth").
+	linkedinIssuerOverride string
 }
 
 // NewService builds a Service backed by q, wiring per-provider OAuth2
@@ -150,6 +165,10 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 			clientID:     cfg.GoogleClientID,
 			clientSecret: cfg.GoogleClientSecret,
 		},
+		linkedin: linkedinProviderConfig{
+			clientID:     cfg.LinkedInClientID,
+			clientSecret: cfg.LinkedInClientSecret,
+		},
 	}, nil
 }
 
@@ -160,6 +179,8 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(GoogleStartPath, route(http.MethodGet, s.handleGoogleStart))
 	mux.Handle(GoogleCallbackPath, route(http.MethodGet, s.handleGoogleCallback))
+	mux.Handle(LinkedInStartPath, route(http.MethodGet, s.handleLinkedInStart))
+	mux.Handle(LinkedInCallbackPath, route(http.MethodGet, s.handleLinkedInCallback))
 }
 
 // handleGoogleStart begins a Google login transaction and redirects the
@@ -170,14 +191,14 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 
 	provider, err := s.googleProvider(ctx)
 	if err != nil {
-		s.writeInternalError(w, r, "google_provider_discovery")
+		s.writeInternalError(w, r, ProviderGoogle, "google_provider_discovery", err)
 		return
 	}
 
 	redirectURI := s.googleRedirectURL()
 	handle, tx, err := s.tx.Begin(ctx, ProviderGoogle, PurposeLogin, uuid.Nil, redirectURI)
 	if err != nil {
-		s.writeInternalError(w, r, "begin_transaction")
+		s.writeInternalError(w, r, ProviderGoogle, "begin_transaction", err)
 		return
 	}
 
@@ -213,17 +234,17 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, "missing or malformed __Host-oauth-tx cookie")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "missing or malformed __Host-oauth-tx cookie")
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderGoogle)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
+			s.redirectAuthFailed(w, r, ProviderGoogle, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
 			return
 		}
-		s.writeInternalError(w, r, "consume_transaction")
+		s.writeInternalError(w, r, ProviderGoogle, "consume_transaction", err)
 		return
 	}
 
@@ -236,7 +257,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// their own authorization code into the victim's transaction.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, "state parameter mismatch")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "state parameter mismatch")
 		return
 	}
 
@@ -246,39 +267,49 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// access_denied carrying the wrong state still gets the generic
 	// rejection, never this friendlier one.
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, cancelledErrorCode, "user denied consent (access_denied)")
+		s.redirectWithError(w, r, ProviderGoogle, cancelledErrorCode, "user denied consent (access_denied)")
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, "callback missing code and no recognized error parameter")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "callback missing code and no recognized error parameter")
 		return
 	}
 
 	provider, err := s.googleProvider(ctx)
 	if err != nil {
-		s.writeInternalError(w, r, "google_provider_discovery")
+		s.writeInternalError(w, r, ProviderGoogle, "google_provider_discovery", err)
 		return
 	}
 
-	oauth2Cfg := s.googleOAuth2Config(provider.Endpoint(), s.googleRedirectURL())
+	// tx.RedirectURI (not s.googleRedirectURL()): the exact redirect_uri
+	// Begin stored for THIS transaction, not one rebuilt from this
+	// Service's current PublicOrigin config -- see provider_cache.go's
+	// sibling hardening note and TestGoogleCallback_UsesStoredRedirectURI_
+	// NotCurrentPublicOrigin (google_test.go). A real provider enforces
+	// redirect_uri as an exact match against what it issued the
+	// authorization code for; rebuilding it from current config would
+	// desync the two if PUBLIC_ORIGIN changes between /start and
+	// /callback (the oauth_transactions.redirect_uri column would
+	// otherwise be a vestigial, never-read field).
+	oauth2Cfg := s.googleOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, "token exchange failed")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "token exchange failed")
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
-		s.redirectAuthFailed(w, r, "token response missing id_token")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "token response missing id_token")
 		return
 	}
 
 	verifier := provider.Verifier(&oidc.Config{ClientID: s.google.clientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		s.redirectAuthFailed(w, r, "id_token verification failed (issuer, audience, signature, or expiry)")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "id_token verification failed (issuer, audience, signature, or expiry)")
 		return
 	}
 
@@ -286,30 +317,30 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// IDToken.Nonce) -- this is an application-level check and an easy
 	// one to accidentally skip.
 	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
-		s.redirectAuthFailed(w, r, "nonce mismatch")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "nonce mismatch")
 		return
 	}
 
 	var claims googleClaims
 	if claimsErr := idToken.Claims(&claims); claimsErr != nil {
-		s.redirectAuthFailed(w, r, "id_token claims decode failed")
+		s.redirectAuthFailed(w, r, ProviderGoogle, "id_token claims decode failed")
 		return
 	}
 	if claims.Email == "" || !claims.EmailVerified {
-		s.redirectWithError(w, r, emailNotVerifiedErrorCode, "email absent or email_verified != true")
+		s.redirectWithError(w, r, ProviderGoogle, emailNotVerifiedErrorCode, "email absent or email_verified != true")
 		return
 	}
 
 	usr, err := s.resolveGoogleUser(ctx, idToken.Subject, claims.Email, claims.Name)
 	if err != nil {
-		s.writeInternalError(w, r, "resolve_user")
+		s.writeInternalError(w, r, ProviderGoogle, "resolve_user", err)
 		return
 	}
 
 	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
 	rawSession, _, err := s.sessions.Issue(ctx, usr.ID, r.UserAgent(), clientIP)
 	if err != nil {
-		s.writeInternalError(w, r, "issue_session")
+		s.writeInternalError(w, r, ProviderGoogle, "issue_session", err)
 		return
 	}
 
@@ -389,13 +420,18 @@ func emailLocalPart(email string) string {
 
 // redirectWithError clears the __Host-oauth-tx cookie (ruling 1), logs
 // the rejection server-side (fix-round Important 2), and redirects the
-// browser to the app's landing page with ?error=code -- /callback is a
-// top-level browser navigation, so every rejection is a redirect the
-// user actually sees, never a raw JSON error body.
-func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, code, reason string) {
+// browser to the app's login page with ?error=code (DD-C7,
+// integration-owner ruling: distinct from the bare "/" a SUCCESSFUL
+// callback redirects to below -- a rejection's ?error= code is meant to
+// render on the login screen, not the app's post-login landing page) --
+// /callback is a top-level browser navigation, so every rejection is a
+// redirect the user actually sees, never a raw JSON error body. provider
+// identifies which provider's callback this is (see logRejection) -- it
+// is never echoed to the client, only logged.
+func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, provider Provider, code, reason string) {
 	ClearOAuthTxCookie(w)
-	s.logRejection(r, code, reason)
-	http.Redirect(w, r, s.publicOrigin+"/?error="+url.QueryEscape(code), http.StatusFound)
+	s.logRejection(r, provider, code, reason)
+	http.Redirect(w, r, s.publicOrigin+"/login?error="+url.QueryEscape(code), http.StatusFound)
 }
 
 // redirectAuthFailed is redirectWithError's shorthand for the generic,
@@ -403,70 +439,90 @@ func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, code
 // facing detail logged server-side only (see logRejection) -- it never
 // reaches the client, which always sees the same generic
 // authFailedErrorCode regardless of reason's value.
-func (s *Service) redirectAuthFailed(w http.ResponseWriter, r *http.Request, reason string) {
-	s.redirectWithError(w, r, authFailedErrorCode, reason)
+func (s *Service) redirectAuthFailed(w http.ResponseWriter, r *http.Request, provider Provider, reason string) {
+	s.redirectWithError(w, r, provider, authFailedErrorCode, reason)
 }
 
 // writeInternalError clears the __Host-oauth-tx cookie (ruling 1: applies
 // to every exit path, including this server's own internal failures, not
 // only a rejected callback), logs the failing operation server-side
-// (fix-round Important 2), and writes an opaque 500 via the standard api
-// error envelope -- integration-owner ruling 2: never leak a wrapped
-// error's text to the client. Clearing the cookie here is a safe no-op
-// when handleGoogleStart's own two internal-error paths call this before
-// any tx cookie for the current attempt has been set at all; it still
-// tidies up a stale cookie left over from an earlier, abandoned attempt.
-func (s *Service) writeInternalError(w http.ResponseWriter, r *http.Request, op string) {
+// (fix-round Important 2) -- including err's SQLSTATE class code when it
+// is a *pgconn.PgError (see logInternalError) -- and writes an opaque 500
+// via the standard api error envelope -- integration-owner ruling 2:
+// never leak a wrapped error's text to the client. Clearing the cookie
+// here is a safe no-op when handleGoogleStart's own two internal-error
+// paths call this before any tx cookie for the current attempt has been
+// set at all; it still tidies up a stale cookie left over from an
+// earlier, abandoned attempt.
+func (s *Service) writeInternalError(w http.ResponseWriter, r *http.Request, provider Provider, op string, err error) {
 	ClearOAuthTxCookie(w)
-	s.logInternalError(r, op)
+	s.logInternalError(r, provider, op, err)
 	api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 }
 
-// logRejection logs a rejected /callback attempt at Warn level: the
-// outward error code (never more specific than what the browser itself
-// already sees -- DD-C3 already permits the client to know this much),
-// a short, fixed reason string this package writes itself at each call
-// site (never user- or provider-supplied data: no OAuth authorization
-// code, no token, no email, no raw state/nonce value), and the request
-// id, so an operator can correlate a specific rejected request in the
-// access log with why it was rejected. A nil logger (see NewService) is
-// a silent no-op.
-func (s *Service) logRejection(r *http.Request, code, reason string) {
+// logRejection logs a rejected /callback attempt at Warn level: which
+// provider it was for (this funnel is shared by every provider Service
+// registers, not just Google -- a provider-neutral message plus this
+// attribute is what still lets an operator filter or correlate by
+// provider in a shared log stream), the outward error code (never more
+// specific than what the browser itself already sees -- DD-C3 already
+// permits the client to know this much), a short, fixed reason string
+// this package writes itself at each call site (never user- or
+// provider-supplied data: no OAuth authorization code, no token, no
+// email, no raw state/nonce value), and the request id, so an operator
+// can correlate a specific rejected request in the access log with why
+// it was rejected. A nil logger (see NewService) is a silent no-op.
+func (s *Service) logRejection(r *http.Request, provider Provider, code, reason string) {
 	if s.logger == nil {
 		return
 	}
-	s.logger.WarnContext(r.Context(), "auth: google callback rejected",
+	s.logger.WarnContext(r.Context(), "auth: callback rejected",
 		"request_id", api.RequestIDFromContext(r.Context()),
+		"provider", provider,
 		"error_code", code,
 		"reason", reason,
 	)
 }
 
 // logInternalError logs this server's own failure (never the browser's
-// fault) at Error level: which operation failed (op, a short fixed
-// string) and the request id -- deliberately NOT the underlying error's
-// own text (unlike a plain %w wrap, a database constraint-violation
-// message can itself embed a bound parameter value, e.g. Postgres's own
-// "Key (email)=(...) already exists" detail on users_email_key; logging
-// that verbatim would leak an email address into the server log, which
-// fix-round Important 2 explicitly forbids). A nil logger is a silent
-// no-op.
-func (s *Service) logInternalError(r *http.Request, op string) {
+// fault) at Error level: which provider it was for (see logRejection's
+// same reasoning), which operation failed (op, a short fixed string),
+// the request id, and -- when err is a *pgconn.PgError -- its SQLSTATE
+// class code (pgconn.PgError.Code, e.g. "23505" for unique_violation)
+// ONLY. Deliberately NOT err's own message/detail text (unlike a plain
+// %w wrap, a database constraint-violation message can itself embed a
+// bound parameter value, e.g. Postgres's own "Key (email)=(...) already
+// exists" detail on users_email_key; logging that verbatim would leak an
+// email address into the server log, which fix-round Important 2
+// explicitly forbids) -- the SQLSTATE class code alone is enough for an
+// operator to distinguish, say, a constraint violation from a connection
+// failure, without risking that leak. A nil logger is a silent no-op.
+func (s *Service) logInternalError(r *http.Request, provider Provider, op string, err error) {
 	if s.logger == nil {
 		return
 	}
-	s.logger.ErrorContext(r.Context(), "auth: google callback internal error",
+	attrs := []any{
 		"request_id", api.RequestIDFromContext(r.Context()),
+		"provider", provider,
 		"op", op,
-	)
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		attrs = append(attrs, "sqlstate", pgErr.Code)
+	}
+	s.logger.ErrorContext(r.Context(), "auth: callback internal error", attrs...)
 }
 
-// route mirrors internal/api's own unexported route helper (same 405
-// Method Not Allowed + standard error envelope treatment for a mismatched
-// method, including HEAD satisfying a GET route). Duplicated here rather
-// than imported because api.route is unexported and internal/auth cannot
-// reach it; see internal/api/router.go's route for the shared behavior
-// this mirrors.
+// route restricts handler to the given HTTP method, responding 405 Method
+// Not Allowed with the standard error envelope (and an Allow header) for
+// any other method on the same registered path. Deliberately NOT
+// internal/api's own route helper (which this package cannot reach --
+// api.route is unexported -- and would not want here regardless, see
+// methodMatches below): every /start and /callback route this package
+// registers has a real server-side side effect on every request that
+// reaches its handler (TransactionStore.Begin's database INSERT, or
+// Consume's atomic single-use claim), so this is deliberately stricter
+// than internal/api/router.go's route, not merely a copy of it.
 func route(method string, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !methodMatches(method, r.Method) {
@@ -480,11 +536,21 @@ func route(method string, handler http.HandlerFunc) http.HandlerFunc {
 }
 
 // methodMatches reports whether requestMethod satisfies a route
-// registered for routeMethod: every method matches itself, and HEAD
-// additionally satisfies a GET route (RFC 9110 §9.3.2).
+// registered for routeMethod: exact match only (DD-C8, integration-owner
+// ruling). This is a deliberate divergence from internal/api's own
+// route/methodMatches (and from Go's stdlib ServeMux "GET /pattern"
+// registration syntax), both of which let HEAD satisfy a registered GET
+// route per RFC 9110 §9.3.2 ("HEAD is identical to GET but without a
+// body") -- the right default for an idempotent, side-effect-free GET,
+// but wrong here: handleGoogleStart/handleLinkedInStart's GET has a real
+// side effect (TransactionStore.Begin's database INSERT and a real
+// __Host-oauth-tx Set-Cookie) on every request that reaches it, and
+// handleGoogleCallback/handleLinkedInCallback's GET atomically consumes a
+// single-use transaction. A HEAD request is exactly the shape a
+// link-preview/prefetch crawler sends without ever intending to complete
+// the flow -- letting it fall through to either handler would mean a
+// prefetcher hitting every link on a page burns a real transaction (and
+// sets a real cookie) for a request the visitor never made.
 func methodMatches(routeMethod, requestMethod string) bool {
-	if requestMethod == routeMethod {
-		return true
-	}
-	return routeMethod == http.MethodGet && requestMethod == http.MethodHead
+	return requestMethod == routeMethod
 }

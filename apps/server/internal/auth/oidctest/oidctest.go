@@ -111,8 +111,27 @@ type Provider struct {
 	t   *testing.T
 	key *rsa.PrivateKey
 
-	mu    sync.Mutex
-	codes map[string]Claims
+	mu                    sync.Mutex
+	codes                 map[string]Claims
+	discoveryBlock        func() // see BlockDiscoveryForTest; nil means discovery never blocks
+	lastTokenRedirectURI  string
+	lastTokenRedirectSeen bool
+}
+
+// LastTokenRedirectURI returns the "redirect_uri" form value the most
+// recent /token exchange sent (RFC 6749 §4.1.3), and whether any exchange
+// has happened yet at all. It exists so a test can prove WHICH redirect
+// URI a client's token exchange actually used -- e.g. that it came from a
+// stored OAuth transaction's own RedirectURI rather than being rebuilt
+// from the caller's current configuration (internal/auth's
+// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin) --
+// since this mock, like a real authorization server would with a
+// registered exact-match redirect_uri, otherwise has no way to surface
+// which value a client sent.
+func (p *Provider) LastTokenRedirectURI() (redirectURI string, seen bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.lastTokenRedirectURI, p.lastTokenRedirectSeen
 }
 
 // NewProvider starts an in-process OIDC test server and registers
@@ -180,7 +199,44 @@ type discoveryDocument struct {
 	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported"`
 }
 
+// BlockDiscoveryForTest makes the discovery endpoint
+// (/.well-known/openid-configuration) block, once entered, until release
+// is called -- entered is closed the instant a request actually reaches
+// the handler, so a caller can deterministically know a discovery request
+// is in flight (blocked inside the network round trip) without a
+// sleep-based race. It exists specifically so a test can prove a lazy
+// OIDC-provider cache does NOT hold its own mutex for the duration of the
+// discovery HTTP call (internal/auth's provider-discovery lazy-init):
+// while this Provider's discovery response is deliberately withheld, the
+// test can assert the caller's cache mutex is still free to acquire.
+// release is idempotent (safe to call more than once, e.g. once
+// explicitly mid-test and again via t.Cleanup as a safety net). Must be
+// called before the request that would trigger discovery; a Provider
+// supports at most one blocked discovery registration at a time (a second
+// call replaces the first).
+func (p *Provider) BlockDiscoveryForTest() (entered <-chan struct{}, release func()) {
+	enteredCh := make(chan struct{})
+	releaseCh := make(chan struct{})
+	var enteredOnce, releaseOnce sync.Once
+
+	p.mu.Lock()
+	p.discoveryBlock = func() {
+		enteredOnce.Do(func() { close(enteredCh) })
+		<-releaseCh
+	}
+	p.mu.Unlock()
+
+	return enteredCh, func() { releaseOnce.Do(func() { close(releaseCh) }) }
+}
+
 func (p *Provider) serveDiscovery(w http.ResponseWriter, _ *http.Request) {
+	p.mu.Lock()
+	block := p.discoveryBlock
+	p.mu.Unlock()
+	if block != nil {
+		block()
+	}
+
 	doc := discoveryDocument{
 		Issuer:                           p.URL,
 		AuthorizationEndpoint:            p.URL + "/authorize",
@@ -264,6 +320,11 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 		p.writeTokenError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
+
+	p.mu.Lock()
+	p.lastTokenRedirectURI = r.PostFormValue("redirect_uri")
+	p.lastTokenRedirectSeen = true
+	p.mu.Unlock()
 
 	code := r.PostFormValue("code")
 	claims, ok := p.takeCode(code)
