@@ -157,14 +157,14 @@ server/data/migrations/security-middleware → **P0C** web/dev-stack/fixtures/CI
 
 ## Phase status (kept current by the integration owner)
 
-| Phase             | State                                                | Notes                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ----------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0A contracts     | **Implemented**                                      | Schema (draft-permissive, schema-derived codegen, conformance + hostile corpus), OpenAPI, budgets, traceability                                                                                                                                                                                                                                                                                       |
-| P0B server + data | **Implemented**                                      | Go skeleton, rate-limit/security/cache middleware, sqlc + Atlas + goose, 4-scenario migration harness                                                                                                                                                                                                                                                                                                 |
-| P0C web + stack   | **Implemented**                                      | Nuxt 4 SSR, podman stack with migration service, full route table, client-IP trust boundary                                                                                                                                                                                                                                                                                                           |
-| **P0 exit gate**  | **5 of 5 passed** ✅ · **merged**                    | Design review ✅ · adversarial review ✅ · traceability closure ✅ · independent fail-closed UAT ✅ · Opus 5 evidence verification ✅ — corroborated at pre-squash pin `4e3a2b9` (local ledger `.superpowers/sdd/phase-0bc/gate-verification-final.txt`; not in public history). Merged to `main` as squashed public initial commit `9382c86` (2026-08-02); full gate suite re-run green at `9382c86` |
-| PI infrastructure | Not started                                          | Blocks P9A                                                                                                                                                                                                                                                                                                                                                                                            |
-| P1 auth           | Plan drafted (`phase-1-auth.md`), spec gaps resolved | Not started                                                                                                                                                                                                                                                                                                                                                                                           |
+| Phase             | State                                                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0A contracts     | **Implemented**                                                   | Schema (draft-permissive, schema-derived codegen, conformance + hostile corpus), OpenAPI, budgets, traceability                                                                                                                                                                                                                                                                                       |
+| P0B server + data | **Implemented**                                                   | Go skeleton, rate-limit/security/cache middleware, sqlc + Atlas + goose, 4-scenario migration harness                                                                                                                                                                                                                                                                                                 |
+| P0C web + stack   | **Implemented**                                                   | Nuxt 4 SSR, podman stack with migration service, full route table, client-IP trust boundary                                                                                                                                                                                                                                                                                                           |
+| **P0 exit gate**  | **5 of 5 passed** ✅ · **merged**                                 | Design review ✅ · adversarial review ✅ · traceability closure ✅ · independent fail-closed UAT ✅ · Opus 5 evidence verification ✅ — corroborated at pre-squash pin `4e3a2b9` (local ledger `.superpowers/sdd/phase-0bc/gate-verification-final.txt`; not in public history). Merged to `main` as squashed public initial commit `9382c86` (2026-08-02); full gate suite re-run green at `9382c86` |
+| PI infrastructure | **Plan adopted** (`phase-pi-infrastructure.md` Rev 3, 2026-08-02) | Two Opus review rounds applied; traceability rows AC-INF-001…008 + AC-OPS-015…019 ratified. Execution NOT started — hard-blocked on the human-owner escalations recorded in the plan (spend authorization first). Blocks P9A                                                                                                                                                                          |
+| P1 auth           | Plan drafted (`phase-1-auth.md`), spec gaps resolved              | Not started                                                                                                                                                                                                                                                                                                                                                                                           |
 
 Both exit-gate reviews returned no-ship on first run; every finding was applied
 to the spec and implemented. The corrected contract is recorded in
@@ -214,14 +214,15 @@ ship a production Caddy configuration and an end-to-end test with two viewers
 through one simulated edge plus forged forwarding headers.
 
 **Exit:** Terraform modules apply cleanly to a staging environment: VPC, ECS on
-EC2 Graviton (host networking, fixed ports per P0 contract), RDS Postgres (gp3),
-S3 (media), CloudFront + ACM (us-east-1) with the **cookie/cache/origin behavior
-matrix** from spec §6, Caddy origin `origin.aboutme.vn` (DNS-01 via Cloudflare),
-EIP + auto-reassociation, origin-secret + prefix-list ingress, **SSM secrets
-(IAM scoping + rotation)**, **CloudWatch alarms + dashboards + SNS/on-call**,
+EC2 Graviton (host networking for the edge/API tier — web tier bridge-mode per
+PI D24 — fixed ports per P0 contract), RDS Postgres (gp3), S3 (media),
+CloudFront + ACM (us-east-1) with the **cookie/cache/origin behavior matrix**
+from spec §6, Caddy origin `origin.aboutme.vn` (DNS-01 via Cloudflare), EIP +
+auto-reassociation, origin-secret + prefix-list ingress, **SSM secrets (IAM
+scoping + rotation)**, **CloudWatch alarms + dashboards + SNS/on-call**,
 scheduled retention + RDS restore-verification jobs (overlap-locked, alarmed),
-multi-arch arm64 build + ECS deploy pipeline with drain→readiness, migration
-advisory-lock sequence. `terraform validate`/`plan` in CI; modules are
+arm64 (Graviton) image build + ECS deploy pipeline with drain→readiness,
+migration advisory-lock sequence. `terraform validate`/`plan` in CI; modules are
 environment-parameterized so staging and production differ only by variables.
 
 ---
@@ -465,8 +466,13 @@ reviews as previously unmapped are now assigned: mobile client (P11), session
 device list/revoke (P1), logout-everywhere + `Clear-Site-Data` (P1),
 doc-migration CAS race (P2A), pagination modes + fonts (P3), template thumbnails
 (P7B), cache-invalidation surfaces (P5A), disclosure wording (P5B), media/avatar
-upload (P2B), audit retention (P8-priv), CloudFront matrix + origin rotation +
-two-runner migration + real restore + alarms (P9A/P10).
+upload (P2B), audit retention (P8-priv). Infrastructure rows were ratified at
+Phase PI plan adoption: AC-INF-001…008 (PI — production client-IP boundary,
+CloudFront behavior matrix as code, env parity, secret scoping, alarm inventory,
+scheduled jobs, plus the PI-originated staging access gate and staging noindex
+controls per PI decision D25) and AC-OPS-015…019 (P9A — live CloudFront matrix,
+origin-secret rotation drill, live two-runner migration, real restore, alarm
+receipt); live origin-bypass rejection remains AC-OPS-002 (P9A).
 
 ## Deferred (documented, not v1-blocking)
 
