@@ -1215,6 +1215,20 @@ also write Step 2's rejection matrix.
   in Task 4 Step 2 is replaced with the real three-way branch below;
   `purpose=link`/`purpose=reauth` handling added to `start`)
 
+> **DD-C16 (2026-08-02, added at Task 10 review — security):** `/start` with
+> `purpose=link` or `purpose=reauth` **must require same-site initiation** —
+> `Sec-Fetch-Site: same-origin`, else an Origin/Referer same-origin check, else
+> reject `403 csrf_rejected`, **fail closed**. `purpose=login` is unaffected (it
+> must stay linkable from anywhere). Why: without it, an attacker page can
+> top-level-navigate a victim to `/start?purpose=reauth` — which completes with
+> no interaction for an already-consented provider and **refreshes the
+> recent-reauth window** — and then to `/start?purpose=link`, attaching the
+> attacker's provider identity to the victim's account for permanent takeover.
+> `SameSite=Lax` does **not** block top-level GET navigations, and the reauth
+> window cannot gate itself. The callback needs no equivalent gate: it requires
+> a `__Host-` transaction cookie only a gated same-origin `/start` can set, plus
+> a server-side `state` never exposed to the initiating page.
+
 **Interfaces:**
 
 - Consumes: `TransactionStore.Begin/Consume` (Task 2, `PurposeLink` /
