@@ -255,11 +255,18 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(SessionsPath+"/{id}", route(http.MethodDelete, s.sessionChain(s.handleRevokeSession)))
 }
 
-// The closed vocabulary of JSON API error codes this package's
-// session-authenticated surface produces (distinct from the OAuth
-// callback's own ?error= redirect vocabulary above, which is a different
-// mechanism entirely -- a query parameter on a 302, never a JSON body). A
-// new distinct code is a deliberate, reviewed decision, not something to
+// The closed vocabulary of JSON API error codes this package ITSELF
+// introduces for its session-authenticated surface (distinct from the
+// OAuth callback's own ?error= redirect vocabulary above, which is a
+// different mechanism entirely -- a query parameter on a 302, never a
+// JSON body). Deliberately scoped to codes this package defines, not an
+// exhaustive list of every code a response from this surface can ever
+// carry: internal_error, method_not_allowed, body_too_large, and other
+// generic infrastructure codes are internal/api's own (api.WriteError
+// call sites in this package reuse them verbatim, e.g.
+// writeSessionAPIInternalError/handleSessionsCollection's 405) and are
+// documented at their own definition, not repeated here. A new distinct
+// code IN THIS LIST is a deliberate, reviewed decision, not something to
 // invent ad hoc at a new call site:
 //
 //   - session_required: RequireSession's own single rejection code (401)

@@ -18,14 +18,21 @@ package auth
 // reauth must never revoke anything and then discover it should have
 // refused.
 //
-// DD-C14 (fix round 1, finding I2, design owner ruling): logout
-// (handleLogout) and revoking the caller's own CURRENT session
-// (handleRevokeSession) both mean the credential LINEAGE dies, not just
-// its current row -- see revokeCurrentPredecessorIfAny's own doc comment
-// for the full mechanism (and why it needed a database fallback beyond
-// the context-based seam the fix was originally described with). DELETE
-// /sessions (handleRevokeAllSessions) needs no equivalent: it already
-// sweeps every one of the caller's sessions, predecessor included.
+// DD-C14 (fix round 1, finding I2, design owner ruling), extended by
+// DD-C14b (fix round 2, owner ruling): revoking ANY session -- the
+// caller's own current one via logout, or ANY id named via DELETE
+// /sessions/{id} -- also revokes its rotation LINEAGE partner(s): the row
+// it was rotated FROM (if it's a successor) and the row that was rotated
+// FROM it (if it's a predecessor with a still-live successor). See
+// revokeLineagePartners' own doc comment for the full mechanism,
+// including why the predecessor direction alone (DD-C14) was
+// insufficient: a rotation race-loser request legitimately authenticates
+// AS the predecessor (holding its own correct CSRF secret), so a caller
+// can revoke a predecessor and get a clean 204 while its successor stays
+// live for its full idle/absolute lifetime -- logout claiming success
+// without ending the session. DELETE /sessions (handleRevokeAllSessions)
+// needs no equivalent: it already sweeps every one of the caller's
+// sessions, every lineage member included.
 
 import (
 	"context"
@@ -63,8 +70,23 @@ func writeNoContent(w http.ResponseWriter) {
 }
 
 // handleLogout implements POST /api/v1/auth/logout: revokes the caller's
-// own current session, clears its cookie, and sets Clear-Site-Data so the
-// browser drops cached credential-derived state too.
+// own current session (and its full rotation lineage -- see
+// revokeLineagePartners), clears its cookie, and sets Clear-Site-Data so
+// the browser drops cached credential-derived state too.
+//
+// Ordering (fix round 2, finding N1): ClearSessionCookie and
+// Clear-Site-Data are written BEFORE the (fallible) lineage sweep, not
+// after. This is a deliberate choice, not an oversight: sess.ID -- the
+// row the client is actually using RIGHT NOW -- is already durably
+// revoked by the time either header is set, so the caller's own browser
+// is safe to tell "you're logged out" regardless of what happens next.
+// The lineage sweep is best-effort cleanup of a SEPARATE row the client
+// isn't currently presenting; if it fails, writeSessionAPIInternalError
+// below still overwrites the status/body with a 500, but net/http only
+// honors headers set before the first WriteHeader call, so the
+// already-queued Set-Cookie/Clear-Site-Data headers still reach the
+// client on that 500 too -- graceful degradation over an all-or-nothing
+// response the caller's own session revocation doesn't actually need.
 func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
@@ -84,79 +106,106 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.writeSessionAPIInternalError(w, r, "revoke_session", err)
 		return
 	}
-	// DD-C14 (fix round 1, finding I2): logout kills the whole credential
-	// LINEAGE, not just sess's own row -- see
-	// revokeCurrentPredecessorIfAny's own doc comment.
-	if !s.revokeCurrentPredecessorIfAny(ctx, sess, w, r) {
-		return
-	}
 
 	ClearSessionCookie(w)
 	w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)
+
+	// DD-C14/DD-C14b (fix round 1 finding I2, fix round 2 finding
+	// DD-C14b): logout kills the whole credential LINEAGE, not just
+	// sess's own row -- see revokeLineagePartners' own doc comment.
+	predecessorID, hasPredecessor := PredecessorSessionIDFromContext(ctx)
+	if !s.revokeLineagePartners(ctx, sess, predecessorID, hasPredecessor, w, r) {
+		return
+	}
+
 	writeNoContent(w)
 }
 
-// revokeCurrentPredecessorIfAny revokes the session sess was rotated
-// FROM, if any, alongside sess itself (DD-C14, fix round 1 finding I2):
-// logout and revoke-current-session mean the caller's whole credential
-// LINEAGE dies, not just its current row -- otherwise a predecessor
-// session stays authenticate-able (with its own still-valid raw token)
-// for up to rotationGrace (60s) after the caller believed they had logged
-// out. It is a no-op (returning true immediately) for the overwhelmingly
-// common case where sess was never rotated at all. Callers (handleLogout;
-// handleRevokeSession, only when revoking the caller's own CURRENT
-// session) must stop and return immediately when this reports false -- it
-// has already written the response.
+// revokeLineagePartners revokes the session(s) directly linked to row by
+// rotation -- the row it was rotated FROM (if any) and the row that was
+// rotated FROM it (if any) -- so revoking ANY one row in a rotation pair
+// kills the OTHER half too (DD-C14, fix round 1 finding I2; DD-C14b, fix
+// round 2 owner ruling). It is a no-op (returning true immediately,
+// touching nothing) for the overwhelmingly common case where row was
+// never involved in a rotation at all. Callers must stop and return
+// immediately when this reports false -- it has already written the
+// response.
 //
-// Two mechanisms, checked in order:
+// Two directions, both checked, since either one alone left a real gap:
 //
-//  1. PredecessorSessionIDFromContext (context.go): RequireSession
-//     populates this ONLY when its OWN Authenticate call, for THIS exact
-//     request, is what performed the rotation. This is the mechanism
-//     task-9-brief.md's fix round 1 originally described ("When
-//     Authenticate rotated in-flight, RequireSession must place the
-//     predecessor session id in context").
-//  2. FindImmediatePredecessorSession (sql/queries.sql): a database
-//     lookup via the EXACT (not heuristic) timing relationship
-//     session.go's tryRotate establishes between a predecessor and its
-//     successor. This exists because mechanism 1 turns out to be
-//     unreachable for every real request on this specific pair of
-//     handlers: both are behind RequireCSRF, which validates the
-//     request's X-CSRF-Token against the POST-rotation session (a fresh
-//     csrf_secret the client cannot possibly know on the very first
-//     request that mints it) -- verified empirically: a single request
-//     presenting an old, rotation-due cookie directly to POST
-//     /auth/logout gets 403 csrf_rejected before handleLogout ever runs,
-//     even though RequireSession's own rotation already committed to the
-//     database and set the response's Set-Cookie. The REALISTIC exposure
-//     the review traced is therefore always the two-step case instead: an
-//     earlier, unrelated request (typically GET /me, exempt from CSRF)
-//     rotates the session, and a LATER logout/revoke-current request --
-//     correctly authenticated and CSRF-validated against the successor --
-//     never rotates again itself, so mechanism 1 alone would never find
-//     the predecessor. Mechanism 2 covers this by construction: it
-//     doesn't care which request performed the rotation, only that sess
-//     is a successor and its predecessor is still unrevoked.
-func (s *Service) revokeCurrentPredecessorIfAny(ctx context.Context, sess store.Session, w http.ResponseWriter, r *http.Request) bool {
-	predecessorID, hasPredecessor := PredecessorSessionIDFromContext(ctx)
-	if !hasPredecessor {
+//   - Predecessor direction (row is a SUCCESSOR): closes DD-C14. Two
+//     mechanisms, checked in order -- ctxPredecessorID/hasCtxPredecessor
+//     (RequireSession's PredecessorSessionIDFromContext fast path,
+//     populated ONLY when its OWN Authenticate call, for THIS exact
+//     request, performed the rotation -- task-9-brief.md's fix round 1
+//     literal description), then FindImmediatePredecessorSession (a
+//     database lookup via the EXACT, not heuristic, timing relationship
+//     session.go's tryRotate establishes). The context fast path turns
+//     out to be unreachable for every real request through handleLogout/
+//     handleRevokeSession specifically, since both sit behind
+//     RequireCSRF, which validates against the POST-rotation session --
+//     a client cannot hold a correct CSRF token for a secret that doesn't
+//     exist until this exact request mints it. Kept anyway: correct,
+//     cheap when it does apply, and literally what fix round 1 was asked
+//     for. The database fallback is what actually closes the exposure in
+//     practice (see task-9-report.md's fix round 1 section).
+//   - Successor direction (row is a PREDECESSOR with rotation_grace_until
+//     set): closes DD-C14b. A rotation race-loser request -- one that
+//     presents an old token still within ITS OWN grace window, after some
+//     OTHER request already won the rotation -- authenticates AS the
+//     predecessor (Authenticate's `RotationGraceUntil == nil` guard never
+//     re-attempts rotation for a row already mid-rotation), and that
+//     request legitimately holds the predecessor's own correct CSRF
+//     secret. Revoking only that predecessor would leave its successor
+//     authenticating for its own full idle/absolute lifetime -- logout
+//     claiming success without ending the session. FindImmediateSuccessorSession
+//     solves the SAME exact timing identity for the other variable.
+func (s *Service) revokeLineagePartners(ctx context.Context, row store.Session, ctxPredecessorID uuid.UUID, hasCtxPredecessor bool, w http.ResponseWriter, r *http.Request) bool {
+	predecessorID := ctxPredecessorID
+	foundPredecessor := hasCtxPredecessor
+	if !foundPredecessor {
 		predRow, err := s.q.FindImmediatePredecessorSession(ctx, store.FindImmediatePredecessorSessionParams{
-			UserID:                sess.UserID,
-			PredecessorGraceUntil: sess.CreatedAt.Add(rotationGrace),
+			UserID:                row.UserID,
+			PredecessorGraceUntil: row.CreatedAt.Add(rotationGrace),
 		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return true
-			}
+		switch {
+		case err == nil:
+			predecessorID, foundPredecessor = predRow.ID, true
+		case errors.Is(err, pgx.ErrNoRows):
+			// No predecessor -- row was never a rotation successor.
+		default:
 			s.writeSessionAPIInternalError(w, r, "find_predecessor_session", err)
 			return false
 		}
-		predecessorID = predRow.ID
 	}
-	if err := s.sessionMgr.Revoke(ctx, predecessorID); err != nil {
-		s.writeSessionAPIInternalError(w, r, "revoke_predecessor_session", err)
-		return false
+	if foundPredecessor {
+		if err := s.sessionMgr.Revoke(ctx, predecessorID); err != nil {
+			s.writeSessionAPIInternalError(w, r, "revoke_predecessor_session", err)
+			return false
+		}
 	}
+
+	if row.RotationGraceUntil != nil {
+		succRow, err := s.q.FindImmediateSuccessorSession(ctx, store.FindImmediateSuccessorSessionParams{
+			UserID:             row.UserID,
+			SuccessorCreatedAt: row.RotationGraceUntil.Add(-rotationGrace),
+		})
+		switch {
+		case err == nil:
+			if revokeErr := s.sessionMgr.Revoke(ctx, succRow.ID); revokeErr != nil {
+				s.writeSessionAPIInternalError(w, r, "revoke_successor_session", revokeErr)
+				return false
+			}
+		case errors.Is(err, pgx.ErrNoRows):
+			// row started rotating (rotation_grace_until is set) but its
+			// successor is already gone (revoked some other way) -- not
+			// an error, nothing left to sweep.
+		default:
+			s.writeSessionAPIInternalError(w, r, "find_successor_session", err)
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -278,10 +327,11 @@ func (s *Service) handleRevokeAllSessions(w http.ResponseWriter, r *http.Request
 const notFoundCode = "not_found"
 
 // handleRevokeSession implements DELETE /api/v1/sessions/{id}: revokes
-// one session that must belong to the caller. Requires a recent
-// reauthentication (DD-C11), checked BEFORE RevokeForUser touches a
-// single row -- see this file's own top-of-file doc comment. Revoking the
-// caller's OWN current session also clears its cookie in this same
+// one session that must belong to the caller, and its rotation lineage
+// partner(s) if any (DD-C14b -- see revokeLineagePartners). Requires a
+// recent reauthentication (DD-C11), checked BEFORE RevokeForUser touches
+// a single row -- see this file's own top-of-file doc comment. Revoking
+// the caller's OWN current session also clears its cookie in this same
 // response.
 func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -316,15 +366,39 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// DD-C14/DD-C14b (fix round 1 finding I2, fix round 2 owner ruling):
+	// revoking ANY session -- the caller's own current one, or a
+	// different one merely named by id -- also revokes its rotation
+	// lineage partner(s): a caller who sees BOTH halves of a still-open
+	// rotation pair in their own device list (a within-grace predecessor
+	// and its successor, task-9-brief.md's grace-window visibility rule)
+	// must not be able to leave the other half live by picking just one
+	// row to revoke.
 	if targetID == sess.ID {
+		// The target IS the request's own governing session: sess is
+		// already fully in hand from context (no extra read needed), and
+		// the context-based predecessor fast path only ever applies to
+		// THIS exact session -- see revokeLineagePartners' own doc
+		// comment.
 		ClearSessionCookie(w)
-		// DD-C14 (fix round 1, finding I2): revoking the caller's own
-		// CURRENT session kills the whole credential lineage, exactly
-		// like logout -- see revokeCurrentPredecessorIfAny's own doc
-		// comment. Only applies in this branch: revoking a DIFFERENT
-		// session the caller owns must never touch the (unrelated,
-		// still-live) session this request is itself authenticated with.
-		if !s.revokeCurrentPredecessorIfAny(ctx, sess, w, r) {
+		predecessorID, hasPredecessor := PredecessorSessionIDFromContext(ctx)
+		if !s.revokeLineagePartners(ctx, sess, predecessorID, hasPredecessor, w, r) {
+			return
+		}
+	} else {
+		// The target is a DIFFERENT session the caller merely named by
+		// id: RevokeForUser only reports a row count, not the row
+		// itself, so its own created_at/rotation_grace_until/user_id
+		// (needed to find ITS lineage partner(s)) require a second read.
+		// The context-based predecessor fast path never applies here --
+		// it only ever describes THIS request's own governing session's
+		// rotation, never an arbitrary target's.
+		targetRow, getErr := s.q.GetSessionByID(ctx, targetID)
+		if getErr != nil {
+			s.writeSessionAPIInternalError(w, r, "get_revoked_session", getErr)
+			return
+		}
+		if !s.revokeLineagePartners(ctx, targetRow, uuid.Nil, false, w, r) {
 			return
 		}
 	}

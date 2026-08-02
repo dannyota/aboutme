@@ -73,7 +73,41 @@ type Querier interface {
 	// so a coincidental rotation_grace_until collision with a DIFFERENT
 	// user's session can never cross-match.
 	FindImmediatePredecessorSession(ctx context.Context, arg FindImmediatePredecessorSessionParams) (Session, error)
+	// Fix round 2, finding DD-C14b (owner ruling, extends DD-C14): the exact
+	// mirror of FindImmediatePredecessorSession above, in the other
+	// direction. A rotation race-loser request (one that presents an old
+	// token still within ITS OWN grace window, after some OTHER request
+	// already won the rotation and minted a successor) authenticates AS THE
+	// PREDECESSOR -- Authenticate's `sess.RotationGraceUntil == nil` guard
+	// means it never re-attempts rotation for a row that's already rotating
+	// -- so a caller can hold a fully legitimate session (and its own,
+	// correct CSRF secret) for a row that is itself a predecessor with a
+	// live, unrevoked successor. Logging out (or revoking) that predecessor
+	// alone would leave the successor authenticating for its own full
+	// idle/absolute lifetime -- logout claiming success without actually
+	// ending the session. Given a session that may itself be a rotation
+	// PREDECESSOR (rotation_grace_until IS NOT NULL), finds the exact
+	// successor row it was rotated INTO, if that successor is still live
+	// (revoked_at IS NULL): the same exact (not heuristic) timing identity as
+	// the predecessor lookup, solved for the other variable --
+	// successor.created_at = predecessor.rotation_grace_until - rotationGrace
+	// -- computed in Go and passed as the single timestamp argument.
+	// user_id-scoped for the same cross-user-collision reasoning as
+	// FindImmediatePredecessorSession.
+	FindImmediateSuccessorSession(ctx context.Context, arg FindImmediateSuccessorSessionParams) (Session, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	// Fix round 2, finding DD-C14b: DELETE /sessions/{id}'s lineage sweep
+	// (sessions_handlers.go's revokeLineagePartners) needs the just-revoked
+	// TARGET session's own created_at/rotation_grace_until/user_id to look up
+	// its rotation lineage partner(s) -- RevokeSessionForUser only reports a
+	// row count, not the row itself, and the target is not always the
+	// caller's own current session (sess, already fully in hand from
+	// context), so a second read is unavoidable here. revoked_at is already
+	// set to non-NULL by the time this runs (it always runs strictly after a
+	// successful RevokeForUser), but every other column this caller needs
+	// (created_at, rotation_grace_until, user_id) is untouched by that
+	// UPDATE.
+	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
