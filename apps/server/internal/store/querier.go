@@ -11,6 +11,16 @@ import (
 )
 
 type Querier interface {
+	// D12, all three omissions deliberate -- do NOT "fix" them: this does not
+	// bump `revision` (a backfill rewrites storage to something byte-identical
+	// to what every reader was already served, so nothing observable changes),
+	// does not bump `updated_at` (which tracks user-visible change), and is not
+	// user-scoped (it is a system job).
+	// Fully named params (owner decision 2026-08-03): the from/to schema
+	// versions are both int32 and sqlc's positional naming would emit
+	// `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
+	// A caller swapping them silently rewrites current rows back to the old
+	// version. Named args make the pair unswappable at the call site.
 	BackfillResumeDocumentCAS(ctx context.Context, arg BackfillResumeDocumentCASParams) (int64, error)
 	// Single-row conditional UPDATE that decides the >24h rotation winner: only
 	// a row that has neither already started rotating (rotation_grace_until
