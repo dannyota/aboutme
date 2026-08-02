@@ -16,30 +16,44 @@ import (
 
 const backfillResumeDocumentCAS = `-- name: BackfillResumeDocumentCAS :execrows
 UPDATE resumes
-SET personal_details = $4, content = $5, customization = $6,
-    schema_version = $7
-WHERE id = $1 AND schema_version = $2 AND revision = $3
+SET personal_details = $1,
+    content = $2,
+    customization = $3,
+    schema_version = $4
+WHERE id = $5
+    AND schema_version = $6
+    AND revision = $7
 `
 
 type BackfillResumeDocumentCASParams struct {
-	ID              uuid.UUID
-	SchemaVersion   int32
-	Revision        int64
-	PersonalDetails json.RawMessage
-	Content         json.RawMessage
-	Customization   json.RawMessage
-	SchemaVersion_2 int32
+	PersonalDetails   json.RawMessage
+	Content           json.RawMessage
+	Customization     json.RawMessage
+	ToSchemaVersion   int32
+	ID                uuid.UUID
+	FromSchemaVersion int32
+	Revision          int64
 }
 
+// D12, all three omissions deliberate -- do NOT "fix" them: this does not
+// bump `revision` (a backfill rewrites storage to something byte-identical
+// to what every reader was already served, so nothing observable changes),
+// does not bump `updated_at` (which tracks user-visible change), and is not
+// user-scoped (it is a system job).
+// Fully named params (owner decision 2026-08-03): the from/to schema
+// versions are both int32 and sqlc's positional naming would emit
+// `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
+// A caller swapping them silently rewrites current rows back to the old
+// version. Named args make the pair unswappable at the call site.
 func (q *Queries) BackfillResumeDocumentCAS(ctx context.Context, arg BackfillResumeDocumentCASParams) (int64, error) {
 	result, err := q.db.Exec(ctx, backfillResumeDocumentCAS,
-		arg.ID,
-		arg.SchemaVersion,
-		arg.Revision,
 		arg.PersonalDetails,
 		arg.Content,
 		arg.Customization,
-		arg.SchemaVersion_2,
+		arg.ToSchemaVersion,
+		arg.ID,
+		arg.FromSchemaVersion,
+		arg.Revision,
 	)
 	if err != nil {
 		return 0, err

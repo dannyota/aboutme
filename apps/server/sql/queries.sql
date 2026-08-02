@@ -234,10 +234,24 @@ WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING revision;
 
 -- name: BackfillResumeDocumentCAS :execrows
+-- D12, all three omissions deliberate -- do NOT "fix" them: this does not
+-- bump `revision` (a backfill rewrites storage to something byte-identical
+-- to what every reader was already served, so nothing observable changes),
+-- does not bump `updated_at` (which tracks user-visible change), and is not
+-- user-scoped (it is a system job).
+-- Fully named params (owner decision 2026-08-03): the from/to schema
+-- versions are both int32 and sqlc's positional naming would emit
+-- `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
+-- A caller swapping them silently rewrites current rows back to the old
+-- version. Named args make the pair unswappable at the call site.
 UPDATE resumes
-SET personal_details = $4, content = $5, customization = $6,
-    schema_version = $7
-WHERE id = $1 AND schema_version = $2 AND revision = $3;
+SET personal_details = sqlc.arg(personal_details),
+    content = sqlc.arg(content),
+    customization = sqlc.arg(customization),
+    schema_version = sqlc.arg(to_schema_version)
+WHERE id = sqlc.arg(id)
+    AND schema_version = sqlc.arg(from_schema_version)
+    AND revision = sqlc.arg(revision);
 
 -- name: ListResumeIDsBelowSchemaVersion :many
 SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2;
