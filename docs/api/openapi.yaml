@@ -553,10 +553,13 @@ paths:
         - sessionCookie: []
       summary: List the caller's own live sessions (device list)
       description: >-
-        Every LIVE session belonging to the caller — explicitly revoked
-        sessions are excluded, and so are grace-dead rotation
-        predecessors (a superseded session row whose rotation grace
-        window has already elapsed but isn't itself marked revoked).
+        Every LIVE session belonging to the caller. A session is excluded
+        the moment ANY of these become true: it is explicitly revoked; it
+        is idle-expired (no activity for 30 days); it is absolute-expired
+        (90 days since it was first issued, regardless of activity); or it
+        is a grace-dead rotation predecessor (a superseded session row
+        whose rotation grace window has already elapsed but isn't itself
+        marked revoked).
       responses:
         "200":
           description: The caller's own live sessions.
@@ -647,17 +650,31 @@ paths:
           csrfToken: []
       summary: Revoke one of the caller's own sessions
       description: >-
-        Revokes exactly one session, which must belong to the caller.
-        Requires a RECENT reauthentication (see `DELETE /sessions`),
-        checked BEFORE the row is touched. Revoking the CURRENT session
-        (the one this request is itself authenticated with) also clears
-        its `__Host-session` cookie in this same response.
+        Revokes exactly one session, which must belong to the caller AND
+        be LIVE by the same rule `GET /sessions` excludes by (not
+        revoked, not idle/absolute-expired, not a grace-dead rotation
+        predecessor). Requires a RECENT reauthentication (see `DELETE
+        /sessions`), checked BEFORE any row is touched. Revoking the
+        CURRENT session (the one this request is itself authenticated
+        with) also clears its `__Host-session` cookie in this same
+        response.
 
 
-        An `id` that doesn't exist, is already revoked, or belongs to a
-        DIFFERENT user all return the exact same `404` (DD-C5's no-oracle
-        contract) — never a distinct `403` that would confirm the id
-        exists for someone else.
+        Also revokes the target's own rotation LINEAGE partner(s), if
+        any: the session it was itself rotated from, and the session (if
+        still live) that was rotated from it. This applies to any target,
+        not only the caller's current session — a caller who sees both
+        halves of a still-open rotation pair in their own device list
+        must not be able to leave the other half live by revoking just
+        one of the two rows.
+
+
+        An `id` that doesn't exist, belongs to a DIFFERENT user, is
+        already revoked, is idle-expired, is absolute-expired, or is a
+        grace-dead rotation predecessor all return the exact same `404`
+        (DD-C5's no-oracle contract) — never a distinct `403` that would
+        confirm the id exists for someone else, or a distinct `410`/`400`
+        that would confirm it once existed but is merely dead.
       responses:
         "204":
           description: Revoked. No response body. Also clears
@@ -788,8 +805,10 @@ components:
       type: object
       description: One of the caller's own LIVE sessions (design spec §3
         "Device visibility"), as returned by `GET /sessions`. Explicitly
-        revoked sessions, and grace-dead rotation predecessors, are never
-        included.
+        revoked, idle-expired, absolute-expired, and grace-dead
+        rotation-predecessor sessions are never included — see `GET
+        /sessions`' own operation description for the full exclusion
+        rule.
       required:
         - id
         - createdAt

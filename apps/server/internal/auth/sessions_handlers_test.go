@@ -167,6 +167,31 @@ func TestLogout_RevokesCurrentSessionAndClearsCookie(t *testing.T) {
 	}
 }
 
+// TestLogout_LeavesOtherLiveSessionsUntouched is fix round 2's finding
+// N3: logout (and its rotation-lineage sweep, DD-C14/DD-C14b) must never
+// revoke a session that isn't part of the caller's current rotation
+// lineage -- insurance against a future relaxation of
+// revokeLineagePartners' own queries accidentally broadening their scope
+// beyond the exact predecessor/successor pair.
+func TestLogout_LeavesOtherLiveSessionsUntouched(t *testing.T) {
+	handler, q := newSessionAPITestService(t)
+	userID := createTestUser(t, q)
+	rawCurrent, current := issueTestSession(t, q, userID)
+	_, other := issueTestSession(t, q, userID)
+
+	resp := doJSON(t, handler, http.MethodPost, auth.LogoutPath, testPublicOrigin, csrfTokenFor(current), "", sessionRequestCookie(rawCurrent)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
+	if revokedAt := rowRevokedAt(t, current.ID); revokedAt == nil {
+		t.Error("current session's revoked_at is still NULL after logout, want non-NULL")
+	}
+	if revokedAt := rowRevokedAt(t, other.ID); revokedAt != nil {
+		t.Error("an UNRELATED (non-lineage) session was revoked by logout, want it left untouched")
+	}
+}
+
 // TestLogout_ResponseCarriesClearSiteDataHeader is task-9-brief.md's own
 // pinned wire value, checked exactly.
 func TestLogout_ResponseCarriesClearSiteDataHeader(t *testing.T) {
@@ -340,6 +365,133 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if after.StatusCode != http.StatusUnauthorized {
 		t.Errorf("GET %s with the PREDECESSOR's raw token after revoking the successor via DELETE /sessions/{id} status = %d, want %d (DD-C14)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor is fix
+// round 2's required test for finding DD-C14b (owner ruling, extends
+// DD-C14): a rotation RACE-LOSER request -- one presenting an old token
+// still within ITS OWN grace window, after some OTHER request already
+// won the rotation and minted a successor -- authenticates AS THE
+// PREDECESSOR, holding its own legitimately-correct CSRF secret (unlike
+// fix round 1's scenario, this one genuinely passes CSRF, since the
+// client never needed to know a not-yet-existent successor secret).
+// Logging out with that token must not leave the LIVE successor
+// authenticating for its own full idle/absolute lifetime -- logout
+// claiming success (204) without ending the session. Forces the rotation
+// directly via SessionManager.Authenticate (simulating the winning side
+// of a real concurrent race deterministically) rather than racing two
+// real HTTP requests against each other.
+func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T) {
+	handler, q, clk, sm := newRotationCapableTestService(t)
+
+	userID := createTestUser(t, q)
+	rawA, sessA, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.94")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+
+	// Force the rotation OUTSIDE the HTTP request under test -- exactly
+	// like a genuine race would leave a losing concurrent request still
+	// holding rawA while some OTHER request already won and minted B.
+	// Authenticate returns the GOVERNING (successor) session on a
+	// winning rotation, not the predecessor -- so successorB below is B,
+	// not A; A's own row (and its now-set rotation_grace_until) is
+	// fetched separately to confirm setup.
+	successorB, rawB, err := sm.Authenticate(context.Background(), rawA)
+	if err != nil {
+		t.Fatalf("Authenticate() (forcing the rotation) error = %v", err)
+	}
+	if rawB == "" {
+		t.Fatal("Authenticate() did not rotate -- test setup broken, not the code under test")
+	}
+	rowA, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(rawA))
+	if err != nil {
+		t.Fatalf("look up A's row: %v", err)
+	}
+	if rowA.RotationGraceUntil == nil {
+		t.Fatal("predecessor A's rotation_grace_until is still nil after rotation -- test setup broken")
+	}
+	if successorB.ID == rowA.ID {
+		t.Fatal("Authenticate() returned A itself as the successor -- test setup broken")
+	}
+
+	// rawA is still within its own grace window: log out with it
+	// directly (the race-loser path), using A's own, legitimately-known
+	// CSRF token -- this request must NOT itself trigger another
+	// rotation (RotationGraceUntil is already set) and must authenticate
+	// as A.
+	logoutResp := doJSON(t, handler, http.MethodPost, auth.LogoutPath, testPublicOrigin, csrfTokenFor(sessA), "", sessionRequestCookie(rawA)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if logoutResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("logout with the race-loser predecessor token status = %d, want %d", logoutResp.StatusCode, http.StatusNoContent)
+	}
+
+	// The exposure this fix closes: B (the LIVE successor) must no
+	// longer authenticate either, not just A.
+	afterB := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawB)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if afterB.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET %s with the SUCCESSOR's raw token after logging out via the predecessor status = %d, want %d (DD-C14b)", auth.MePath, afterB.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth is fix
+// round 2's required "non-current-revoke lineage case": DD-C14b applies
+// the same lineage sweep to ANY target DELETE /sessions/{id} names, not
+// just the caller's own current session -- a caller who sees BOTH halves
+// of a still-open rotation pair in their own device list (a within-grace
+// predecessor and its live successor) and picks the OLDER (predecessor)
+// row to revoke must not be able to leave the successor live.
+func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing.T) {
+	handler, q, clk, sm := newRotationCapableTestService(t)
+
+	userID := createTestUser(t, q)
+	rawA, _, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.95")
+	if err != nil {
+		t.Fatalf("Issue() (A) error = %v", err)
+	}
+
+	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+
+	_, rawB, err := sm.Authenticate(context.Background(), rawA)
+	if err != nil {
+		t.Fatalf("Authenticate() (forcing A's rotation) error = %v", err)
+	}
+	if rawB == "" {
+		t.Fatal("Authenticate() did not rotate -- test setup broken, not the code under test")
+	}
+	aRow, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(rawA))
+	if err != nil {
+		t.Fatalf("look up A's row: %v", err)
+	}
+	bRow, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(rawB))
+	if err != nil {
+		t.Fatalf("look up B's row: %v", err)
+	}
+
+	// A separate, unrelated CURRENT session, issued fresh (at the SAME,
+	// already-advanced fake-clock instant) so its own recent-reauth check
+	// passes trivially -- the caller is browsing via this session and
+	// revokes A (neither their current session, nor a fresh one) by id.
+	rawCurrent, currentSess, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.96")
+	if err != nil {
+		t.Fatalf("Issue() (current) error = %v", err)
+	}
+
+	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(aRow.ID), testPublicOrigin, csrfTokenFor(currentSess), "", sessionRequestCookie(rawCurrent)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE %s (A, not the caller's own current session) status = %d, want %d", sessionIDPath(aRow.ID), resp.StatusCode, http.StatusNoContent)
+	}
+
+	if revokedAt := rowRevokedAt(t, aRow.ID); revokedAt == nil {
+		t.Error("target session A's revoked_at is still NULL, want non-NULL")
+	}
+	if revokedAt := rowRevokedAt(t, bRow.ID); revokedAt == nil {
+		t.Error("A's live successor B's revoked_at is still NULL after revoking A by id, want non-NULL (DD-C14b: the lineage sweep must apply to ANY revoked target, not just the caller's own current session)")
+	}
+	if revokedAt := rowRevokedAt(t, currentSess.ID); revokedAt != nil {
+		t.Error("the caller's own (unrelated) current session was revoked as a side effect, want it untouched")
 	}
 }
 
