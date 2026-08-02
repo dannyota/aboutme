@@ -31,3 +31,12 @@ func CompiledSchemaPointerForTest() *jsonschema.Schema {
 func NewSchemaCompilerForTest() *jsonschema.Compiler {
 	return newSchemaCompiler()
 }
+
+// IsResumeCapExceededForTest exposes isResumeCapExceeded (store.go) to
+// package resume_test, so a test can prove the D7 cap-violation mapping
+// requires an EXACT match on both the SQLSTATE and the message -- not the
+// SQLSTATE alone, which other CHECK constraints on resumes also raise --
+// without going through a live database.
+func IsResumeCapExceededForTest(err error) bool {
+	return isResumeCapExceeded(err)
+}
