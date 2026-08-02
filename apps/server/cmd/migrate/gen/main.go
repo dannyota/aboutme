@@ -172,10 +172,23 @@ var sqlLineCommentPattern = regexp.MustCompile(`(?m)--.*$`)
 // for the same tradeoff): it deliberately permits modifier combinations
 // that aren't valid Postgres grammar (e.g. "CREATE RECURSIVE SEQUENCE")
 // rather than risk a false negative on a real one.
+//
+// The class keyword is matched with a trailing \b and the name afterward
+// is captured in its own, wholly optional, lenient group ([^\s(;]+ — any
+// run of non-whitespace, non-paren, non-semicolon bytes): a detector must
+// never make FIRING contingent on the declared name's shape (regression
+// for review finding Minor 4 — a digit-leading double-quoted name like
+// "1st_policy" made the previous strict [a-zA-Z_][a-zA-Z0-9_]* name group
+// fail to match at all, which failed the ENTIRE statement match, silently
+// accepting the object). Group 2 may come back "" for a genuinely
+// malformed statement; every real caller of this pattern only relies on
+// group 2 for a human-readable name in an error message, never for
+// control flow.
 var undiffableObjectPattern = regexp.MustCompile(
 	`(?i)CREATE\s+(?:OR\s+REPLACE\s+)?` +
 		`(?:(?:CONSTRAINT|MATERIALIZED|RECURSIVE|TEMP|TEMPORARY|UNLOGGED)\s+)*` +
-		`(TRIGGER|FUNCTION|PROCEDURE|VIEW|SEQUENCE|RULE|POLICY)\s+"?([a-zA-Z_][a-zA-Z0-9_]*)"?`,
+		`(TRIGGER|FUNCTION|PROCEDURE|VIEW|SEQUENCE|RULE|POLICY)\b` +
+		`(?:\s+([^\s(;]+))?`,
 )
 
 // alterFunctionOrTriggerPattern matches ALTER FUNCTION or ALTER TRIGGER —
@@ -199,12 +212,6 @@ var alterTableTriggerTogglePattern = regexp.MustCompile(`(?is)\bALTER\s+TABLE\s+
 // Down" section may legitimately do that as part of a rollback.
 var dropFunctionOrTriggerPattern = regexp.MustCompile(`(?i)\bDROP\s+(FUNCTION|TRIGGER)\s+(?:IF\s+EXISTS\s+)?"?([a-zA-Z_][a-zA-Z0-9_]*)"?`)
 
-// blockCommentPattern matches a /* ... */ block comment (B3 normalization
-// stage 1, alongside sqlLineCommentPattern for "--" comments). Non-greedy
-// and (?s) (dot matches newline) so a comment spanning multiple lines is
-// matched as one span without swallowing real code past its close.
-var blockCommentPattern = regexp.MustCompile(`(?s)/\*.*?\*/`)
-
 // leadingOrReplacePattern matches a leading "CREATE OR REPLACE" so it can
 // be elided to "CREATE" before comparing two statements — B3 normalization
 // stage 4: "CREATE FUNCTION f()" and "CREATE OR REPLACE FUNCTION f()" for
@@ -222,6 +229,17 @@ var leadingOrReplacePattern = regexp.MustCompile(`(?i)^CREATE\s+OR\s+REPLACE\s+`
 // stage 5.
 var undiffableStatementNamePattern = regexp.MustCompile(
 	`(?i)\b(FUNCTION|TRIGGER)\s+((?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*)(?:\.(?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*))?)`,
+)
+
+// triggerTargetTablePattern captures a CREATE TRIGGER statement's target
+// table — the "ON table_name" clause that always follows the trigger's
+// own name and event list (BEFORE/AFTER/INSTEAD OF ...), and always
+// precedes EXECUTE FUNCTION — anchored via the non-greedy .*? so it finds
+// THAT "ON", not some other occurrence of the word. A bare trigger name is
+// not its real Postgres identity: two different tables may each have
+// their own, independent, same-named trigger (see undiffableObjectIdentity).
+var triggerTargetTablePattern = regexp.MustCompile(
+	`(?is)\bTRIGGER\s+(?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*)\s+.*?\bON\s+((?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*)(?:\.(?:"[^"]+"|[a-zA-Z_][a-zA-Z0-9_]*))?)`,
 )
 
 // gooseUpMarker and gooseDownMarker locate a goose migration file's
@@ -549,14 +567,25 @@ func checkExtensionDeclarations(migrationsDir, schemaFile string) error {
 		schemaFile, migrationsDir, missingMigration, missingSchema)
 }
 
-// stripSQLComments strips both "--" line comments and /* ... */ block
-// comments — B3 normalization stage 1. Block comments are stripped first:
-// a "--" appearing inside a /* ... */ span (e.g. "/* comment -- note */")
-// must be treated as part of that block comment, not as the start of a
-// line comment that would otherwise truncate the line and strand the
-// block comment's own closing "*/" unmatched.
+// stripSQLComments returns sql with every "--" line comment and /* ... */
+// block comment removed — B3 normalization stage 1 — while leaving any
+// single-quoted string literal or dollar-quoted span's content completely
+// untouched, including one that happens to contain "--" or "/*" as
+// literal data (e.g. DEFAULT '--'). It is a thin reassembly of
+// scanSQLSegments' segments (which recognize comments only in plain,
+// non-quoted context — see that function's doc comment): regression for
+// review finding Minor 5, where an earlier version ran the comment
+// regexes as a blind pre-pass over raw text, misreading a literal "--"
+// inside a quoted string as a real comment and stripping past it —
+// corrupting the literal into an unbalanced quote that made every later
+// stage (scanSQLSegments' own quote-tracking, then splitStatements) merge
+// the rest of the file into one dangling verbatim span.
 func stripSQLComments(sql string) string {
-	return sqlLineCommentPattern.ReplaceAllString(blockCommentPattern.ReplaceAllString(sql, ""), "")
+	var out strings.Builder
+	for _, seg := range scanSQLSegments(sql) {
+		out.WriteString(seg.text)
+	}
+	return out.String()
 }
 
 // matchDollarTagAt reports whether sql[i:] begins with a Postgres
@@ -595,12 +624,26 @@ type sqlSegment struct {
 // quote as the SQL escape) and dollar-quoted spans ($$...$$ or
 // $tag$...$tag$) — the two verbatim-content forms Postgres recognizes
 // inside a statement. Shared by splitStatements (a plain segment's ';'
-// ends a statement; one inside a verbatim segment never does) and
+// ends a statement; one inside a verbatim segment never does),
 // collapseWhitespace (only a plain segment's whitespace is safe to
-// collapse — B3 normalization stage 2). An unterminated quote/dollar-quote
-// (malformed SQL) is treated as one verbatim span running to the end of
-// the text, rather than panicking or looping forever looking for a close
-// that will never come.
+// collapse — B3 normalization stage 2), and stripSQLComments.
+//
+// "--" line comments and /* ... */ block comments (B3 normalization stage
+// 1) are recognized and discarded in THIS single pass too, rather than as
+// a separate pre-pass over raw text (regression for review finding
+// Minor 5): a comment marker is checked for only while in plain
+// (non-quoted) context, BEFORE the quote/dollar-quote checks below, so it
+// is never misread as starting inside an already-open quoted span (a "--"
+// or "/*" that is really just data in a string literal, e.g.
+// DEFAULT '--', must never be treated as a comment), and — just as
+// importantly — a quote character appearing inside a real comment (e.g.
+// "-- don't strip me") is never misread as opening a string literal
+// either, since comment bytes are skipped before the quote checks ever
+// see them.
+//
+// An unterminated quote/dollar-quote/block-comment (malformed SQL) is
+// treated as running to the end of the text, rather than panicking or
+// looping forever looking for a close that will never come.
 func scanSQLSegments(sql string) []sqlSegment {
 	var segments []sqlSegment
 	var plain strings.Builder
@@ -613,6 +656,23 @@ func scanSQLSegments(sql string) []sqlSegment {
 
 	i := 0
 	for i < len(sql) {
+		if i+1 < len(sql) && sql[i] == '-' && sql[i+1] == '-' {
+			j := i + 2
+			for j < len(sql) && sql[j] != '\n' {
+				j++
+			}
+			i = j
+			continue
+		}
+		if i+1 < len(sql) && sql[i] == '/' && sql[i+1] == '*' {
+			end := strings.Index(sql[i+2:], "*/")
+			if end == -1 {
+				i = len(sql)
+				break
+			}
+			i = i + 2 + end + 2
+			continue
+		}
 		if sql[i] == '\'' {
 			flushPlain()
 			j := i + 1
@@ -764,6 +824,97 @@ func normalizeUndiffableStatement(stmt string) (name, normalized string, err err
 	return canonical, normalized, nil
 }
 
+// captureParenSpan returns the substring of s starting at the first '('
+// at or after index start through its matching ')', respecting
+// single-quoted string literals (so a parenthesis inside a default-value
+// string literal, e.g. DEFAULT 'a)b', is never mistaken for a real one)
+// and nested parentheses (e.g. a type modifier like numeric(10,2), or a
+// default expression like DEFAULT (1+2)). ok is false if s has no such
+// balanced span (malformed SQL) — every real caller already knows stmt
+// matched undiffableObjectPattern with class FUNCTION and is only
+// extracting the argument list that must exist right after the name.
+func captureParenSpan(s string, start int) (span string, ok bool) {
+	i := start
+	for i < len(s) && s[i] != '(' {
+		i++
+	}
+	if i >= len(s) {
+		return "", false
+	}
+	openAt := i
+	depth := 0
+	for i < len(s) {
+		switch {
+		case s[i] == '\'':
+			j := i + 1
+			for j < len(s) {
+				if s[j] == '\'' {
+					if j+1 < len(s) && s[j+1] == '\'' {
+						j += 2
+						continue
+					}
+					j++
+					break
+				}
+				j++
+			}
+			i = j
+			continue
+		case s[i] == '(':
+			depth++
+		case s[i] == ')':
+			depth--
+			if depth == 0 {
+				return s[openAt : i+1], true
+			}
+		}
+		i++
+	}
+	return "", false
+}
+
+// undiffableObjectIdentity computes the composite identity D9 uses to
+// tell two same-named objects apart — regression for review finding
+// Important 1: a bare name is not either class's real identity in
+// Postgres. A TRIGGER's name is scoped to its target table (two different
+// tables may each have their own, independent, same-named trigger); a
+// FUNCTION's name is scoped to its argument list (overloading). Keying
+// the cross-check's maps on the bare name alone let a migration's OTHER
+// same-named object (on a different table, or a different overload)
+// silently stand in for the one schema.sql actually declares, or vice
+// versa. key is the composite identity, safe as a map key — it is
+// prefixed with class, so a FUNCTION and TRIGGER that happen to share a
+// bare name never collide either, a real failure the bare-name key hit in
+// practice. name is the canonical bare name and detail a short
+// human-readable qualifier ("ON table" or the normalized argument list),
+// both for error messages only.
+func undiffableObjectIdentity(class, stmt string) (key, name, detail string, err error) {
+	m := undiffableStatementNamePattern.FindStringSubmatchIndex(stmt)
+	if m == nil {
+		return "", "", "", fmt.Errorf("internal error: could not locate a FUNCTION/TRIGGER name in statement: %s", stmt)
+	}
+	name = canonicalObjectName(stmt[m[4]:m[5]])
+
+	switch class {
+	case "FUNCTION":
+		argSpan, ok := captureParenSpan(stmt, m[5])
+		if !ok {
+			return "", "", "", fmt.Errorf("internal error: could not locate function %q's argument list: %s", name, stmt)
+		}
+		normalizedArgs := collapseWhitespace(argSpan)
+		return "FUNCTION:" + name + ":" + normalizedArgs, name, normalizedArgs, nil
+	case "TRIGGER":
+		tm := triggerTargetTablePattern.FindStringSubmatch(stmt)
+		if tm == nil {
+			return "", "", "", fmt.Errorf("internal error: could not locate trigger %q's target table (ON <table>): %s", name, stmt)
+		}
+		table := canonicalObjectName(tm[1])
+		return "TRIGGER:" + name + ":" + table, name, "ON " + table, nil
+	default:
+		return "", "", "", fmt.Errorf("internal error: undiffableObjectIdentity called for unsupported class %q", class)
+	}
+}
+
 // undiffableDecl is one CREATE FUNCTION/TRIGGER statement extracted from
 // sql/schema.sql, pending the D9 cross-check against migrationsDir.
 type undiffableDecl struct {
@@ -791,8 +942,14 @@ func matchAlterUndiffableObject(stmt string) (class, name string, ok bool) {
 // CREATE [OR REPLACE] [CONSTRAINT] TRIGGER (see checkUndiffableObjects),
 // including every ALTER variant the B4 addendum added — an ALTER is never
 // eligible regardless of which object class it targets, since the
-// cross-check only ever compares CREATE statement text.
-func unconditionalRejectError(schemaFile, class, name string) error {
+// cross-check only ever compares CREATE statement text. location
+// describes where the violation was found in human-readable form: either
+// schemaFile directly, or (regression for review finding Important 3) a
+// phrase describing a hand-written migration's own "-- +goose Up"
+// section — the B4 addendum is enforced there too, not only against
+// schema.sql, since an ALTER hiding in a migration is exactly as invisible
+// to Atlas's differ as one hiding in schema.sql.
+func unconditionalRejectError(location, class, name string) error {
 	return fmt.Errorf(
 		"%s declares or alters a %s (%q): Atlas community edition's schema differ silently ignores triggers, "+
 			"functions, procedures, views, sequences, rules, and policies, in every CREATE or ALTER form "+
@@ -801,7 +958,7 @@ func unconditionalRejectError(schemaFile, class, name string) error {
 			"CREATE [OR REPLACE] FUNCTION or CREATE [OR REPLACE] [CONSTRAINT] TRIGGER statement is ever "+
 			"eligible for the hand-written-migration cross-check (see checkUndiffableObjects); a %s has "+
 			"no such escape hatch — do not declare one in %s",
-		schemaFile, strings.ToLower(class), name, strings.ToLower(class), schemaFile,
+		location, strings.ToLower(class), name, strings.ToLower(class), location,
 	)
 }
 
@@ -908,27 +1065,51 @@ func readMigrationsUp(migrationsDir string) (string, error) {
 	return combined.String(), nil
 }
 
+// migrationUndiffableDecl is one CREATE FUNCTION/TRIGGER statement found
+// in migrationsDir's hand-written "-- +goose Up" sections, keyed by its
+// composite identity (see undiffableObjectIdentity) in
+// crossCheckFunctionsAndTriggers' migrationByKey map.
+type migrationUndiffableDecl struct {
+	class      string // "FUNCTION" or "TRIGGER"
+	name       string // canonical bare name, for error messages
+	detail     string // "ON table" or the normalized argument list, for error messages
+	normalized string // last occurrence (file + in-file order) wins
+}
+
 // crossCheckFunctionsAndTriggers is the D9 cross-check: every FUNCTION or
 // TRIGGER checkUndiffableObjects finds declared in schemaFile (declared)
 // must have a matching hand-written migration under migrationsDir —
 // Atlas's differ can never generate one (see the package doc comment) —
 // and that migration's own declaration must be byte-for-byte the SAME
-// statement after B3 normalization, not merely the same object name, or a
-// hand-edited schema.sql and a stale migration could silently disagree
-// about the function/trigger's actual body while this gate reports clean.
-// Conversely, a migration that hand-writes a FUNCTION/TRIGGER schema.sql
-// never declares is also rejected, keeping the two in sync in both
-// directions. Only migrationsDir's "-- +goose Up" sections are ever
-// scanned (B2 — see readMigrationsUp): a migration's own "-- +goose Down"
-// section legitimately rolls a FUNCTION/TRIGGER back with its own DROP
+// statement after B3 normalization, not merely the same object identity,
+// or a hand-edited schema.sql and a stale migration could silently
+// disagree about the function/trigger's actual body while this gate
+// reports clean. Conversely, a migration that hand-writes a
+// FUNCTION/TRIGGER schema.sql never declares is also rejected, keeping
+// the two in sync in both directions. Identity is composite, never a bare
+// name (see undiffableObjectIdentity — regression for review finding
+// Important 1): a TRIGGER's identity is its name plus its target table,
+// and a FUNCTION's is its name plus its argument list, since Postgres
+// itself scopes both that way and a bare-name key let one same-named
+// object silently stand in for a different one.
+//
+// Only migrationsDir's "-- +goose Up" sections are ever scanned (B2 —
+// see readMigrationsUp): a migration's own "-- +goose Down" section
+// legitimately rolls a FUNCTION/TRIGGER back with its own DROP
 // statements, which must never be misread as declaring — or illegally
-// dropping — anything the Up-side check cares about.
+// dropping — anything the Up-side check cares about. Within that Up text,
+// both a DROP FUNCTION/TRIGGER and any ALTER that mutates one (the B4
+// addendum — regression for review finding Important 3) are rejected
+// unconditionally: a hand-written migration can retarget a function body
+// or silently disable a trigger exactly as invisibly to Atlas's differ as
+// schema.sql declaring the ALTER directly.
 func crossCheckFunctionsAndTriggers(migrationsDir, schemaFile string, declared []undiffableDecl) error {
 	upRaw, err := readMigrationsUp(migrationsDir)
 	if err != nil {
 		return err
 	}
 	upStripped := stripSQLComments(upRaw)
+	migrationsUpLocation := fmt.Sprintf("a hand-written migration's \"-- +goose Up\" section under %s", migrationsDir)
 
 	if m := dropFunctionOrTriggerPattern.FindStringSubmatch(upStripped); m != nil {
 		return fmt.Errorf(
@@ -939,9 +1120,11 @@ func crossCheckFunctionsAndTriggers(migrationsDir, schemaFile string, declared [
 		)
 	}
 
-	migrationStatements := map[string]string{} // canonical name -> last normalized statement
-	migrationClasses := map[string]string{}    // canonical name -> class ("FUNCTION"/"TRIGGER")
+	migrationByKey := map[string]migrationUndiffableDecl{}
 	for _, stmt := range splitStatements(upStripped) {
+		if class, name, ok := matchAlterUndiffableObject(stmt); ok {
+			return unconditionalRejectError(migrationsUpLocation, class, name)
+		}
 		m := undiffableObjectPattern.FindStringSubmatch(stmt)
 		if m == nil {
 			continue
@@ -952,55 +1135,62 @@ func crossCheckFunctionsAndTriggers(migrationsDir, schemaFile string, declared [
 			// (e.g. a VIEW); only FUNCTION/TRIGGER are ever cross-checked.
 			continue
 		}
-		name, normalized, normErr := normalizeUndiffableStatement(stmt)
+		key, name, detail, idErr := undiffableObjectIdentity(class, stmt)
+		if idErr != nil {
+			return idErr
+		}
+		_, normalized, normErr := normalizeUndiffableStatement(stmt)
 		if normErr != nil {
 			return normErr
 		}
-		migrationStatements[name] = normalized // last occurrence (file + in-file order) wins
-		migrationClasses[name] = class
+		migrationByKey[key] = migrationUndiffableDecl{class: class, name: name, detail: detail, normalized: normalized}
 	}
 
-	declaredNames := map[string]bool{}
+	declaredKeys := map[string]bool{}
 	for _, d := range declared {
-		name, schemaNormalized, normErr := normalizeUndiffableStatement(d.statement)
+		key, name, detail, idErr := undiffableObjectIdentity(d.class, d.statement)
+		if idErr != nil {
+			return idErr
+		}
+		_, schemaNormalized, normErr := normalizeUndiffableStatement(d.statement)
 		if normErr != nil {
 			return normErr
 		}
-		declaredNames[name] = true
+		declaredKeys[key] = true
 
-		migrationStmt, ok := migrationStatements[name]
+		mig, ok := migrationByKey[key]
 		if !ok {
 			return fmt.Errorf(
-				"%s declares %s %q with no matching hand-written migration under %s: Atlas's differ can "+
-					"never generate one for a %s (see the package doc comment) — hand-write a migration "+
+				"%s declares %s %q (%s) with no matching hand-written migration under %s: Atlas's differ "+
+					"can never generate one for a %s (see the package doc comment) — hand-write a migration "+
 					"whose \"-- +goose Up\" section creates it with the identical statement",
-				schemaFile, strings.ToLower(d.class), name, migrationsDir, strings.ToLower(d.class),
+				schemaFile, strings.ToLower(d.class), name, detail, migrationsDir, strings.ToLower(d.class),
 			)
 		}
-		if migrationStmt != schemaNormalized {
+		if mig.normalized != schemaNormalized {
 			return fmt.Errorf(
-				"%s's declaration of %s %q does not match the last hand-written migration under %s that "+
-					"creates it: the two have drifted — keep sql/schema.sql and the migration's "+
+				"%s's declaration of %s %q (%s) does not match the last hand-written migration under %s "+
+					"that creates it: the two have drifted — keep sql/schema.sql and the migration's "+
 					"\"-- +goose Up\" CREATE statement identical (see the D9 cross-check)",
-				schemaFile, strings.ToLower(d.class), name, migrationsDir,
+				schemaFile, strings.ToLower(d.class), name, detail, migrationsDir,
 			)
 		}
 	}
 
-	var orphans []string
-	for name := range migrationStatements {
-		if !declaredNames[name] {
-			orphans = append(orphans, name)
+	var orphanKeys []string
+	for key := range migrationByKey {
+		if !declaredKeys[key] {
+			orphanKeys = append(orphanKeys, key)
 		}
 	}
-	if len(orphans) > 0 {
-		sort.Strings(orphans)
-		name := orphans[0]
+	if len(orphanKeys) > 0 {
+		sort.Strings(orphanKeys)
+		mig := migrationByKey[orphanKeys[0]]
 		return fmt.Errorf(
-			"a hand-written migration under %s declares %s %q with no matching declaration in %s: the "+
-				"D9 cross-check requires sql/schema.sql to declare every function/trigger a migration "+
+			"a hand-written migration under %s declares %s %q (%s) with no matching declaration in %s: "+
+				"the D9 cross-check requires sql/schema.sql to declare every function/trigger a migration "+
 				"hand-writes, so the two never drift silently",
-			migrationsDir, strings.ToLower(migrationClasses[name]), name, schemaFile,
+			migrationsDir, strings.ToLower(mig.class), mig.name, mig.detail, schemaFile,
 		)
 	}
 
