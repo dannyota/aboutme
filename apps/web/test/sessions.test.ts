@@ -169,9 +169,11 @@ describe('sessions.vue', () => {
     'shows the reauth prompt (not a generic error) when a single-session '
     + 'revoke requires recent reauth',
     async () => {
+      let deleteAttempts = 0;
       registerEndpoint('/api/v1/sessions/sess-2', {
         method: 'DELETE',
         handler: (event) => {
+          deleteAttempts += 1;
           setResponseStatus(event, 403);
           return { error: { code: 'reauth_required', message: 'x' } };
         },
@@ -187,6 +189,12 @@ describe('sessions.vue', () => {
         .trigger('click');
       await flushPromises();
       await flushPromises();
+
+      // A boolean flag can't tell "attempted once" from "attempted
+      // twice" — mutate()'s CSRF self-heal must not treat this 403 as
+      // csrf_rejected and retry it (that would double-fire a mutation
+      // the server already refused for an unrelated reason).
+      expect(deleteAttempts).toBe(1);
 
       expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
         false,
@@ -383,11 +391,11 @@ describe('sessions.vue', () => {
     'shows the reauth prompt when revoke-all requires recent reauth, '
     + 'without touching any session row',
     async () => {
-      let revokeAllAttempted = false;
+      let revokeAllAttempts = 0;
       registerEndpoint('/api/v1/sessions', {
         method: 'DELETE',
         handler: (event) => {
-          revokeAllAttempted = true;
+          revokeAllAttempts += 1;
           setResponseStatus(event, 403);
           return { error: { code: 'reauth_required', message: 'x' } };
         },
@@ -403,7 +411,11 @@ describe('sessions.vue', () => {
       await flushPromises();
       await flushPromises();
 
-      expect(revokeAllAttempted).toBe(true);
+      // A boolean flag can't tell "attempted once" from "attempted
+      // twice" — mutate()'s CSRF self-heal must not treat this 403 as
+      // csrf_rejected and retry it (that would double-fire a mutation
+      // the server already refused for an unrelated reason).
+      expect(revokeAllAttempts).toBe(1);
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
       expect(prompt.text()).toContain('then try again');
       expect(prompt.text()).not.toContain('link a new provider');
