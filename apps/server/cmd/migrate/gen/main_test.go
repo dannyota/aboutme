@@ -704,6 +704,19 @@ func TestCheckUndiffableObjects_DetectsEveryUnsupportedVariant(t *testing.T) {
 			want:   []string{"p1", noCrossCheckPath},
 		},
 		{
+			// Regression for review finding Minor 4: a detector must never
+			// make firing contingent on the name's shape. A digit-leading
+			// quoted identifier ("1st_policy") previously made the whole
+			// undiffableObjectPattern match fail (the optional leading '"'
+			// consumed the quote, then [a-zA-Z_] couldn't match '1', and
+			// backtracking to skip the quote left the bare '"' character
+			// itself unmatched either way) — so the entire CREATE POLICY
+			// statement was silently accepted.
+			name:   "policy with digit-leading quoted name",
+			schema: `CREATE POLICY "1st_policy" ON widgets USING (true);` + "\n",
+			want:   []string{"1st_policy", noCrossCheckPath},
+		},
+		{
 			name:   "alter function",
 			schema: "ALTER FUNCTION enforce_max_resumes() COST 100;\n",
 			want:   []string{"enforce_max_resumes", noCrossCheckPath},
@@ -862,6 +875,57 @@ func TestSplitStatements_DollarQuotedBodySemicolonSurvivesIntact(t *testing.T) {
 	}
 }
 
+// TestStripSQLComments_PreservesDashDashInsideSingleQuotedLiteral is the
+// regression test for review finding Minor 5: stripSQLComments previously
+// ran its comment regexes over raw text as a blind pre-pass, before any
+// quote-awareness, so a "--" that is really just data inside a
+// single-quoted string literal (not a comment at all) got misread as one
+// and stripped — corrupting the literal and leaving an unbalanced quote
+// behind for every later stage to trip over.
+func TestStripSQLComments_PreservesDashDashInsideSingleQuotedLiteral(t *testing.T) {
+	t.Parallel()
+
+	sql := "CREATE TABLE widgets (id int PRIMARY KEY, sep text DEFAULT '--');\n" +
+		"CREATE VIEW v1 AS SELECT 1;\n"
+
+	got := stripSQLComments(sql)
+	if !strings.Contains(got, "DEFAULT '--'") {
+		t.Errorf("stripSQLComments() = %q, want the literal '--' preserved intact (a quote-unaware pre-pass corrupts it)", got)
+	}
+	if !strings.Contains(got, "CREATE VIEW v1 AS SELECT 1;") {
+		t.Errorf("stripSQLComments() = %q, want the later statement intact, not swallowed by a corrupted trailing quote", got)
+	}
+}
+
+// TestSplitStatements_QuotedLiteralContainingDashDashKeepsStatementsSeparate
+// exercises the exact pipeline checkUndiffableObjects and
+// crossCheckFunctionsAndTriggers use (stripSQLComments then
+// splitStatements): under the Minor 5 bug, the corrupted unbalanced quote
+// left by a non-quote-aware stripSQLComments made scanSQLSegments treat
+// the rest of the file as one dangling verbatim span, so splitStatements
+// merged the CREATE TABLE and the later CREATE VIEW into a single
+// "statement" — and checkUndiffableObjects's per-statement single-match
+// scan then reports at most the FIRST undiffable object in that merged
+// blob, silently missing a second one hidden in the same tail (e.g. a
+// later VIEW or SEQUENCE, per the review finding).
+func TestSplitStatements_QuotedLiteralContainingDashDashKeepsStatementsSeparate(t *testing.T) {
+	t.Parallel()
+
+	sql := "CREATE TABLE widgets (id int PRIMARY KEY, sep text DEFAULT '--');\n" +
+		"CREATE VIEW v1 AS SELECT 1;\n"
+
+	got := splitStatements(stripSQLComments(sql))
+	if len(got) != 2 {
+		t.Fatalf("splitStatements(stripSQLComments(sql)) returned %d statement(s), want 2 (a '--' inside a single-quoted literal must never corrupt statement boundaries): %q", len(got), got)
+	}
+	if !strings.Contains(got[0], "DEFAULT '--'") {
+		t.Errorf("statement 0 = %q, want the literal '--' preserved intact", got[0])
+	}
+	if !strings.Contains(got[1], "CREATE VIEW v1") {
+		t.Errorf("statement 1 = %q, want the separate CREATE VIEW statement", got[1])
+	}
+}
+
 // -----------------------------------------------------------------------
 // Step 2: the D9 FUNCTION/TRIGGER cross-check
 // -----------------------------------------------------------------------
@@ -1004,15 +1068,74 @@ func TestCrossCheck_DropInUpSectionFails(t *testing.T) {
 	}
 }
 
+// TestCrossCheck_MigrationUpSection_AlterVariantsRejected is the
+// regression test for review finding Important 3: the B4 addendum's
+// unconditional ALTER rejection previously ran only against schema.sql —
+// matchAlterUndiffableObject was never called against a migration's own
+// "-- +goose Up" section, so a hand-written migration whose Up section
+// contains ALTER TABLE ... DISABLE TRIGGER (or ALTER FUNCTION/ALTER
+// TRIGGER) passed the gate cleanly while the trigger it silently disables
+// sits inert in the database — the exact invisibility to Atlas's differ
+// the package doc comment already describes, just reached from the
+// migration side instead of schema.sql.
+func TestCrossCheck_MigrationUpSection_AlterVariantsRejected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		alter string
+	}{
+		{name: "alter function", alter: "ALTER FUNCTION enforce_max_resumes() COST 100;\n"},
+		{name: "alter trigger", alter: "ALTER TRIGGER resumes_max_3 ON resumes RENAME TO resumes_max_4;\n"},
+		{name: "alter table enable trigger", alter: "ALTER TABLE resumes ENABLE TRIGGER resumes_max_3;\n"},
+		{name: "alter table disable trigger", alter: "ALTER TABLE resumes DISABLE TRIGGER resumes_max_3;\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			migrations := filepath.Join(dir, "migrations")
+			if err := os.Mkdir(migrations, 0o750); err != nil {
+				t.Fatalf("Mkdir: %v", err)
+			}
+			// The Up section creates the matching function+trigger (so a
+			// name/body-only check would see nothing wrong) AND ALSO
+			// contains the ALTER — which must be rejected regardless.
+			up := enforceMaxResumesFn + "\n" + resumesMax3Trigger + "\n" + tt.alter
+			writeFile(t, filepath.Join(migrations, "00005_resumes_max_3.sql"), gooseMigrationFile(up, "-- no-op down\n"))
+
+			schema := filepath.Join(dir, "schema.sql")
+			writeFile(t, schema, enforceMaxResumesFn+"\n"+resumesMax3Trigger)
+
+			err := checkUndiffableObjects(migrations, schema)
+			if err == nil {
+				t.Fatalf("checkUndiffableObjects() error = nil, want an error: a migration's Up section must never contain %s, even alongside a matching CREATE", tt.name)
+			}
+			if !strings.Contains(err.Error(), "resumes") {
+				t.Errorf("checkUndiffableObjects() error = %q, want it to mention the affected object", err)
+			}
+		})
+	}
+}
+
 // -----------------------------------------------------------------------
 // B2: only "-- +goose Up" is ever scanned
 // -----------------------------------------------------------------------
 
 // TestCrossCheck_DownSectionContentNeverExtracted is the second B2
 // direction: a migration whose Up section is entirely unrelated to
-// functions/triggers, but whose Down section happens to contain
-// CREATE-FUNCTION-shaped text inside a comment and inside a string
-// literal, must never have that text picked up as a real declaration.
+// functions/triggers, but whose Down section happens to contain an
+// UNCOMMENTED CREATE FUNCTION with no schema.sql counterpart, must never
+// have that text picked up as a real declaration. Regression for review
+// finding Important 2: an earlier version of this test put its probe
+// inside "--" comments, which stripSQLComments erases regardless of
+// whether Up/Down-scoping (gooseUpSection) is even applied — so the test
+// passed vacuously even with Up-scoping fully removed, and was not
+// actually testing B2. An uncommented probe fails loudly as an orphan
+// (see TestCrossCheck_MigrationDeclaresUnknownFunctionFails) if Down is
+// ever scanned by mistake.
 func TestCrossCheck_DownSectionContentNeverExtracted(t *testing.T) {
 	t.Parallel()
 
@@ -1022,16 +1145,15 @@ func TestCrossCheck_DownSectionContentNeverExtracted(t *testing.T) {
 		t.Fatalf("Mkdir: %v", err)
 	}
 	up := "CREATE TABLE widgets (id bigint PRIMARY KEY);\n"
-	down := "-- CREATE     FUNCTION ghost() RETURNS trigger AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;\n" +
-		"DROP TABLE widgets;\n" +
-		"-- also: SELECT 'CREATE FUNCTION ghost2()' AS not_a_declaration;\n"
+	down := "DROP TABLE widgets;\n" +
+		"CREATE FUNCTION ghost() RETURNS trigger AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;\n"
 	writeFile(t, filepath.Join(migrations, "00002_widgets.sql"), gooseMigrationFile(up, down))
 
 	schema := filepath.Join(dir, "schema.sql")
 	writeFile(t, schema, "CREATE TABLE widgets (id bigint PRIMARY KEY);\n")
 
 	if err := checkUndiffableObjects(migrations, schema); err != nil {
-		t.Errorf("checkUndiffableObjects() error = %v, want nil: the Down section's CREATE-shaped comment/string must never be extracted as a real declaration (if it were, \"ghost\" would fail as undeclared in schema.sql)", err)
+		t.Errorf("checkUndiffableObjects() error = %v, want nil: the Down section's CREATE FUNCTION must never be extracted as a real declaration (if it were, \"ghost\" would fail as undeclared in schema.sql)", err)
 	}
 }
 
@@ -1213,6 +1335,144 @@ func TestCrossCheck_NameQualificationOrQuotingDoesNotFalsePositive(t *testing.T)
 				t.Errorf("checkUndiffableObjects() error = %v, want nil: %s vs the bare name for the same object must match", err, tt.name)
 			}
 		})
+	}
+}
+
+// -----------------------------------------------------------------------
+// Composite identity: a bare name is not a TRIGGER's or FUNCTION's real
+// identity in Postgres (regression for review finding Important 1)
+// -----------------------------------------------------------------------
+//
+// setUpdatedAtFn/setUpdatedAtTrigger model a trigger function shared
+// across two tables — a plausible Phase 2A/3 shape (e.g. a generic
+// "set_updated_at" trigger reused on both resumes and resume_versions). A
+// TRIGGER's real identity is its name PLUS its target table (Postgres
+// itself allows two different tables to each have their own,
+// independent, same-named trigger); a bare-name identity key collapses
+// these into one, either hiding a genuinely orphaned migration statement
+// behind the "last occurrence" of the same name (fail-open) or rejecting
+// two legitimately distinct, correctly-declared objects as if they were
+// one mismatched one (fail-shut, but wrong).
+
+const setUpdatedAtFn = `CREATE FUNCTION set_updated_at() RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+`
+
+func setUpdatedAtTrigger(table string) string {
+	return "CREATE TRIGGER set_updated_at BEFORE UPDATE ON " + table +
+		" FOR EACH ROW EXECUTE FUNCTION set_updated_at();\n"
+}
+
+// TestCrossCheck_SameTriggerNameOnDifferentTables_MigrationExtraTableIsOrphan
+// is the fail-open case from the review finding: the migration declares
+// set_updated_at on BOTH resumes and resume_versions; schema.sql declares
+// it only on resume_versions. A bare-name key's "last occurrence wins"
+// rule would let the migration's resumes-table trigger hide behind the
+// resume_versions declaration and report clean — exactly the orphan the
+// gate exists to catch.
+func TestCrossCheck_SameTriggerNameOnDifferentTables_MigrationExtraTableIsOrphan(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	migrations := filepath.Join(dir, "migrations")
+	if err := os.Mkdir(migrations, 0o750); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	up := setUpdatedAtFn + "\n" + setUpdatedAtTrigger("resumes") + "\n" + setUpdatedAtTrigger("resume_versions")
+	writeFile(t, filepath.Join(migrations, "00005_set_updated_at.sql"), gooseMigrationFile(up, "-- no-op down\n"))
+
+	schema := filepath.Join(dir, "schema.sql")
+	writeFile(t, schema, setUpdatedAtFn+"\n"+setUpdatedAtTrigger("resume_versions"))
+
+	err := checkUndiffableObjects(migrations, schema)
+	if err == nil {
+		t.Fatal("checkUndiffableObjects() error = nil, want an error: the migration's set_updated_at trigger ON resumes has no matching schema.sql declaration — a same-named trigger on a different table must not collapse identity with it")
+	}
+	if !strings.Contains(err.Error(), "resumes") {
+		t.Errorf("checkUndiffableObjects() error = %q, want it to mention the orphaned resumes-table trigger", err)
+	}
+}
+
+// TestCrossCheck_SameTriggerNameOnDifferentTables_BothDeclaredMatch is the
+// mirror, fail-shut-but-wrong case: both tables' triggers are correctly
+// declared on both sides. A bare-name key would compare schema.sql's
+// first-processed declaration against whichever migration statement
+// happens to be "last" for that shared name, rejecting a legitimate
+// schema as if the (different-table) bodies had drifted.
+func TestCrossCheck_SameTriggerNameOnDifferentTables_BothDeclaredMatch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	migrations := filepath.Join(dir, "migrations")
+	if err := os.Mkdir(migrations, 0o750); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	up := setUpdatedAtFn + "\n" + setUpdatedAtTrigger("resumes") + "\n" + setUpdatedAtTrigger("resume_versions")
+	writeFile(t, filepath.Join(migrations, "00005_set_updated_at.sql"), gooseMigrationFile(up, "-- no-op down\n"))
+
+	schema := filepath.Join(dir, "schema.sql")
+	writeFile(t, schema, setUpdatedAtFn+"\n"+setUpdatedAtTrigger("resumes")+"\n"+setUpdatedAtTrigger("resume_versions"))
+
+	if err := checkUndiffableObjects(migrations, schema); err != nil {
+		t.Errorf("checkUndiffableObjects() error = %v, want nil: a shared trigger name across two distinct tables, both correctly declared and matching, must not be treated as a mismatch", err)
+	}
+}
+
+// TestCrossCheck_OverloadedFunctionName_DifferentArgListsAreDistinctIdentities
+// is the FUNCTION-side analogue: two overloads of to_label sharing a name
+// but differing argument lists are distinct objects in Postgres. schema.sql
+// declares only the text overload, so the int overload the migration
+// hand-writes is an orphan a bare-name key would hide.
+func TestCrossCheck_OverloadedFunctionName_DifferentArgListsAreDistinctIdentities(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	migrations := filepath.Join(dir, "migrations")
+	if err := os.Mkdir(migrations, 0o750); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	fnInt := "CREATE FUNCTION to_label(n int) RETURNS text AS $$ SELECT n::text; $$ LANGUAGE sql;\n"
+	fnText := "CREATE FUNCTION to_label(n text) RETURNS text AS $$ SELECT n; $$ LANGUAGE sql;\n"
+	writeFile(t, filepath.Join(migrations, "00005_to_label.sql"),
+		gooseMigrationFile(fnInt+"\n"+fnText, "-- no-op down\n"))
+
+	schema := filepath.Join(dir, "schema.sql")
+	writeFile(t, schema, fnText)
+
+	err := checkUndiffableObjects(migrations, schema)
+	if err == nil {
+		t.Fatal("checkUndiffableObjects() error = nil, want an error: the int-argument overload of to_label has no matching schema.sql declaration — overloaded functions must not collapse identity")
+	}
+	if !strings.Contains(err.Error(), "to_label") {
+		t.Errorf("checkUndiffableObjects() error = %q, want it to mention to_label", err)
+	}
+}
+
+// TestCrossCheck_OverloadedFunctionName_BothDeclaredMatch mirrors the
+// trigger "both declared" case for functions: both overloads correctly
+// declared on both sides must pass.
+func TestCrossCheck_OverloadedFunctionName_BothDeclaredMatch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	migrations := filepath.Join(dir, "migrations")
+	if err := os.Mkdir(migrations, 0o750); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	fnInt := "CREATE FUNCTION to_label(n int) RETURNS text AS $$ SELECT n::text; $$ LANGUAGE sql;\n"
+	fnText := "CREATE FUNCTION to_label(n text) RETURNS text AS $$ SELECT n; $$ LANGUAGE sql;\n"
+	writeFile(t, filepath.Join(migrations, "00005_to_label.sql"),
+		gooseMigrationFile(fnInt+"\n"+fnText, "-- no-op down\n"))
+
+	schema := filepath.Join(dir, "schema.sql")
+	writeFile(t, schema, fnInt+"\n"+fnText)
+
+	if err := checkUndiffableObjects(migrations, schema); err != nil {
+		t.Errorf("checkUndiffableObjects() error = %v, want nil: two overloads of the same function name, both correctly declared and matching, must not be treated as a mismatch", err)
 	}
 }
 
