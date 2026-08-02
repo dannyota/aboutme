@@ -1002,6 +1002,28 @@ func ValidateForStore(doc schema.Resume) error
 
 ---
 
+> **Owner correction 5 (2026-08-03) — how far the write-path choke point is
+> actually enforced.** D16 calls `internal/resume` the single write-path choke
+> point, and Task 6's review correctly objected that a doc comment asserting
+> that guarantee is not the same as providing it. What this phase enforces, and
+> what it does not:
+>
+> - **Enforced:** `encodeParts` is **unexported**, so no package outside
+>   `internal/resume` can produce the three jsonb values. Tests reach it through
+>   the existing `export_test.go` seam.
+> - **Not enforced, and deliberately named as convention:** sqlc generates
+>   `store.Queries.CreateResume` / `UpdateResumeDocumentCAS` /
+>   `UpdateResumeTitleCAS` as exported methods that any package may call. They
+>   cannot be unexported without hand-editing generated code, which this repo
+>   forbids. `AssembleCanonical` also stays exported — it marshals and never
+>   writes, and Task 11's blind suite consumes it by name.
+>
+> A `forbidigo`-style lint rule restricting those three generated methods to
+> `internal/resume` is the real closure and is **recorded as a phase-gate
+> follow-up**, not silently skipped. Until it lands, `store.go`'s package
+> comment must describe the convention as a convention — an unenforced invariant
+> stated as a guarantee is what a future implementer will trust.
+
 ### Task 6: Resume store — create (cap), get/list (projected), delete, revision CAS
 
 Satisfies the store half of **AC-DOC-001** and builds the write-safety primitive
@@ -1212,6 +1234,29 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 
 ---
 
+> **Owner correction 4 (2026-08-03) — `Project` returns bytes, not
+> `schema.Resume`.** Task 6's review found that the original typed-return
+> signature forced `docmigrate` to decode, which forced either importing
+> `resume` (an import cycle) or duplicating the decoder — and the duplicate that
+> shipped used plain `json.Unmarshal`, dropping `DisallowUnknownFields` and the
+> trailing-data checks that `DecodeParts` applies. That left `DecodeParts` with
+> **zero production callers**, made Task 5's strict-decode suite guard dead
+> code, and meant a stored part carrying a field the current Go struct does not
+> declare would be silently dropped on read and then persisted lossily by the
+> next `SaveDocument` — precisely the read/write disagreement strict decoding
+> exists to prevent.
+>
+> The cycle was an artifact of the signature, not of the requirement. With
+> `Project` returning parts, `docmigrate` imports nothing from `resume`, there
+> is no duplicate decoder, and `internal/resume` keeps a single strict decode at
+> the boundary. This also **restores consistency with D13**, which already says
+> converters are `func(json.RawMessage) (json.RawMessage, error)` over the full
+> assembled document precisely because "typed structs only exist for the current
+> version" — a converter chain lifting a v1 document cannot decode it into the
+> current Go type at all. Task 8 assembles, runs the chain over the full
+> document bytes, and re-splits into the three parts (D4's own decomposition);
+> the caller decodes once, strictly.
+
 ### Task 8: Doc-shape migration machinery — projection-only read, CAS write persistence, CAS backfill, wire-version declarations
 
 Implements the spec §3 doc-migrations bullet and the wire-version machinery row
@@ -1253,10 +1298,11 @@ type Projector struct { /* convs map[int32]ConvertFunc; current int32 */ }
 func NewProjector(convs map[int32]ConvertFunc, current int32) (*Projector, error)
 func NewIdentityProjector() *Projector // production wiring today: no convs
 
-// Project is PURE (D18): parts+version in, current-version typed doc out.
-// It never touches the database.
+// Project is PURE (D18): parts+version in, current-version PARTS out.
+// It never touches the database, and it never decodes into schema types --
+// see owner correction 4. internal/resume owns the one strict decode.
 func (p *Projector) Project(personalDetails, content, customization json.RawMessage,
-    storedVersion int32) (schema.Resume, error)
+    storedVersion int32) (pd, c, cu json.RawMessage, err error)
 ```
 
 ```go
