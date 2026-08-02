@@ -901,9 +901,13 @@ interval").
   // Authenticate looks up rawToken, enforces idle/absolute/revoked, performs
   // >24h rotation if due (see algorithm below), and throttles the
   // last_seen_at write to at most once per lastSeenThrottle. Returns the
-  // *governing* session (the successor, if this call triggered or observed a
-  // rotation) and, when a rotation this call triggered mints a new raw
-  // token, that token for the caller to Set-Cookie.
+  // *governing* session — the successor only when THIS call won the
+  // rotation; a CAS loser gets the existing (predecessor) row, per the
+  // algorithm below. (Corrected 2026-08-02 at Task 7 review: the earlier
+  // "or observed a rotation" wording contradicted the algorithm and would
+  // break CSRF binding — a loser's client cannot hold the successor's
+  // secret.) When a rotation this call triggered mints a new raw token,
+  // that token is returned for the caller to Set-Cookie.
   func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (sess store.Session, rotatedToken string, err error)
 
   func (m *SessionManager) Revoke(ctx context.Context, sessionID uuid.UUID) error
