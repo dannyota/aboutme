@@ -102,6 +102,9 @@ func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip str
 		AbsoluteExpiresAt: now.Add(absoluteTimeout),
 		UA:                stringParam(ua),
 		IP:                ipParam,
+		// RotatedFrom is deliberately omitted (nil): a fresh login is
+		// never a rotation successor -- see tryRotate's own successor
+		// insert (below) for the one call site that sets it.
 	})
 	if err != nil {
 		return "", store.Session{}, fmt.Errorf("auth: issue session: %w", err)
@@ -126,7 +129,10 @@ func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip str
 // affects a row (wins); every other caller's affects zero rows (loses).
 // The winner inserts one successor row, copying user_id,
 // reauthenticated_at, absolute_expires_at, ua, and ip unchanged from the
-// predecessor -- rotation never extends absolute expiry, and never resets
+// predecessor, and recording the predecessor's own id in the successor's
+// rotated_from column (fix round 3, DD-C14c: the exact, database-enforced
+// lineage link sessions_handlers.go's revokeLineagePartners depends on) --
+// rotation never extends absolute expiry, and never resets
 // reauthenticated_at (it is not itself a fresh OAuth login: design
 // decision 2 tracks the session's whole *lineage*, and resetting it here
 // would silently satisfy the recent-reauth gate without a real
@@ -238,6 +244,14 @@ func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Sessio
 		AbsoluteExpiresAt: predecessor.AbsoluteExpiresAt,
 		UA:                predecessor.UA,
 		IP:                predecessor.IP,
+		// RotatedFrom (fix round 3, DD-C14c): the exact, database-
+		// enforced (sessions_rotated_from_key) lineage link back to
+		// predecessor -- sessions_handlers.go's revokeLineagePartners
+		// reads this straight off a row it already has in hand for the
+		// predecessor direction, and queries FindLiveSuccessorSession
+		// against it for the successor direction, with no timestamp
+		// reconstruction either way.
+		RotatedFrom: &predecessor.ID,
 	})
 	if err != nil {
 		return store.Session{}, "", false, fmt.Errorf("auth: rotate session: create successor: %w", err)

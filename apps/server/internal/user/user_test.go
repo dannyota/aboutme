@@ -38,9 +38,14 @@ var (
 	_ *netip.Addr = store.Session{}.IP
 	_ []byte      = store.Session{}.TokenHash
 	_ []byte      = store.Session{}.CSRFSecret
-	_ string      = store.OAuthTransaction{}.PKCEVerifier
-	_ string      = store.OAuthTransaction{}.RedirectURI
-	_ *uuid.UUID  = store.OAuthTransaction{}.LinkingUserID
+	// RotatedFrom (fix round 3, DD-C14c): the exact rotation-lineage FK a
+	// successor row carries back to its predecessor -- additive to the
+	// original Task 0.3 pin set above, same nullable-native-pointer
+	// contract as every other nullable column here.
+	_ *uuid.UUID = store.Session{}.RotatedFrom
+	_ string     = store.OAuthTransaction{}.PKCEVerifier
+	_ string     = store.OAuthTransaction{}.RedirectURI
+	_ *uuid.UUID = store.OAuthTransaction{}.LinkingUserID
 )
 
 // TestSchema_PreservesAuthConstraints is a unit test (no database) that

@@ -368,6 +368,72 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 	}
 }
 
+// TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie
+// is fix round 3's required test for DD-C14c item 6: the caller,
+// authenticated via a rotation SUCCESSOR B, names its PREDECESSOR A -- a
+// DIFFERENT id, not their own current session -- in DELETE
+// /sessions/{id}. The lineage sweep on A finds and revokes its own live
+// successor, which is B: the caller's own current session dies as an
+// INDIRECT side effect of a request that named a different id entirely.
+// This response must still clear B's cookie and set Clear-Site-Data.
+func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t *testing.T) {
+	handler, q, clk, sm := newRotationCapableTestService(t)
+
+	userID := createTestUser(t, q)
+	rawA, _, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.103")
+	if err != nil {
+		t.Fatalf("Issue() (A) error = %v", err)
+	}
+
+	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+
+	_, rawB, err := sm.Authenticate(context.Background(), rawA)
+	if err != nil {
+		t.Fatalf("Authenticate() (forcing A's rotation) error = %v", err)
+	}
+	if rawB == "" {
+		t.Fatal("Authenticate() did not rotate -- test setup broken, not the code under test")
+	}
+	aRow, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(rawA))
+	if err != nil {
+		t.Fatalf("look up A's row: %v", err)
+	}
+	bRow, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(rawB))
+	if err != nil {
+		t.Fatalf("look up B's row: %v", err)
+	}
+
+	// DELETE /sessions/{id} requires a RECENT reauthentication. Rotation
+	// copies reauthenticated_at forward from A unchanged, which by the
+	// fake clock's own 25h-advanced "now" is stale -- touch B's fresh
+	// (by the SAME fake clock the Service under test reads) so only
+	// DD-C14c's own behavior is under test here.
+	pool := newRowInspectorPool(t)
+	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1`, bRow.ID, clk.Now()); err != nil {
+		t.Fatalf("touch B's reauthenticated_at fresh: %v", err)
+	}
+
+	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(aRow.ID), testPublicOrigin, csrfTokenFor(bRow), "", sessionRequestCookie(rawB)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE %s (A, named while authenticated via its own successor B) status = %d, want %d", sessionIDPath(aRow.ID), resp.StatusCode, http.StatusNoContent)
+	}
+
+	if revokedAt := rowRevokedAt(t, aRow.ID); revokedAt == nil {
+		t.Error("target session A's revoked_at is still NULL, want non-NULL")
+	}
+	if revokedAt := rowRevokedAt(t, bRow.ID); revokedAt == nil {
+		t.Error("B's revoked_at is still NULL after revoking its predecessor A by id, want non-NULL (DD-C14c)")
+	}
+
+	cleared := extractCookie(resp, auth.SessionCookieName)
+	if cleared == nil || cleared.MaxAge >= 0 {
+		t.Error("__Host-session not cleared even though the caller's own current session (B) died via the lineage sweep on a DIFFERENT named target (DD-C14c item 6)")
+	}
+	if got := resp.Header.Get("Clear-Site-Data"); got != `"cookies", "storage"` {
+		t.Errorf("Clear-Site-Data = %q, want %q (DD-C14c item 6)", got, `"cookies", "storage"`)
+	}
+}
+
 // TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor is fix
 // round 2's required test for finding DD-C14b (owner ruling, extends
 // DD-C14): a rotation RACE-LOSER request -- one presenting an old token
@@ -492,6 +558,70 @@ func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing
 	}
 	if revokedAt := rowRevokedAt(t, currentSess.ID); revokedAt != nil {
 		t.Error("the caller's own (unrelated) current session was revoked as a side effect, want it untouched")
+	}
+}
+
+// TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched is fix
+// round 3's required deterministic blast-radius test (DD-C14c item 5),
+// replacing fix round 2's flaky version of this property: three
+// INDEPENDENT (non-lineage) sessions for the SAME user, all minted at the
+// EXACT SAME frozen-clock instant (byte-identical created_at, asserted
+// below) -- the precise collision shape that broke fix round 2's
+// timestamp-reconstruction successor query. That query matched on
+// `created_at = successor_created_at` alone with no tiebreak; when TWO
+// unrelated same-user rows shared that instant, pgx's `:one` silently
+// took whichever one Postgres happened to return first -- observed
+// flaky ~1-in-3 under `-shuffle=on`, sometimes revoking the wrong,
+// completely unrelated session instead of leaving it alone.
+//
+// DD-C14c's exact `rotated_from` foreign key makes this collision
+// structurally impossible to mishandle: neither session here was ever
+// rotated from another, so revoking the target (and its now-a-no-op
+// lineage sweep) must never touch either of the other two, no matter how
+// their timestamps line up. Run with `-race -count=10 -shuffle=on` as
+// this fix's own required demonstration of determinism.
+func TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched(t *testing.T) {
+	handler, q, _, sm := newRotationCapableTestService(t)
+
+	userID := createTestUser(t, q)
+	_, targetSess, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.100")
+	if err != nil {
+		t.Fatalf("Issue() (target) error = %v", err)
+	}
+	_, otherSess, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.101")
+	if err != nil {
+		t.Fatalf("Issue() (other) error = %v", err)
+	}
+	rawCurrent, currentSess, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.102")
+	if err != nil {
+		t.Fatalf("Issue() (current) error = %v", err)
+	}
+
+	// The frozen clock (newRotationCapableTestService never advances it
+	// in this test) means all three share the exact same instant --
+	// asserted directly so this test fails loudly, not silently, if that
+	// setup assumption ever stops holding.
+	if !targetSess.CreatedAt.Equal(otherSess.CreatedAt) || !otherSess.CreatedAt.Equal(currentSess.CreatedAt) {
+		t.Fatalf("test setup broken: created_at values are not byte-identical (target=%v other=%v current=%v), want a frozen clock to make them exactly equal",
+			targetSess.CreatedAt, otherSess.CreatedAt, currentSess.CreatedAt)
+	}
+	if targetSess.RotatedFrom != nil || otherSess.RotatedFrom != nil || currentSess.RotatedFrom != nil {
+		t.Fatal("test setup broken: a fresh Issue() session has a non-nil RotatedFrom, want nil (none of these three is a rotation successor of anything)")
+	}
+
+	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(targetSess.ID), testPublicOrigin, csrfTokenFor(currentSess), "", sessionRequestCookie(rawCurrent)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+
+	if revokedAt := rowRevokedAt(t, targetSess.ID); revokedAt == nil {
+		t.Error("target session's revoked_at is still NULL, want non-NULL")
+	}
+	if revokedAt := rowRevokedAt(t, otherSess.ID); revokedAt != nil {
+		t.Error("an UNRELATED session sharing the exact same created_at instant was revoked, want it untouched (DD-C14c blast-radius property)")
+	}
+	if revokedAt := rowRevokedAt(t, currentSess.ID); revokedAt != nil {
+		t.Error("the caller's own (also same-instant, also unrelated) current session was revoked, want it untouched")
 	}
 }
 
