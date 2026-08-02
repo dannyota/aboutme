@@ -54,6 +54,13 @@ type Querier interface {
 	// safely. revoked_at is immediate and orthogonal to rotation_grace_until
 	// (design decision 1) -- this never touches that column.
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
+	// Ownership-checked counterpart to RevokeSession: only revokes id if it
+	// also belongs to user_id. Returns the affected row count so a caller can
+	// distinguish "revoked" (1) from "no such session for this user" (0) --
+	// internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
+	// DELETE /sessions/{id}) turns 0 into a 404, not a 403, so it never
+	// confirms whether the id exists for someone else.
+	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
 	// Unconditional: callers throttle to at most once per lastSeenThrottle
 	// themselves (internal/auth.SessionManager.Authenticate) before issuing
 	// this write, so it is not itself CAS-guarded.
