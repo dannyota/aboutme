@@ -14,9 +14,14 @@ resume docs; SSE live refresh; chromedp PDF/og. Full design:
 [`../specs/aboutme-design.md`](../specs/aboutme-design.md).
 
 **Source of truth:** the spec. Where this plan and the spec disagree, the spec
-wins and the plan is corrected. Status: Rev 3 (2026-08-01) — incorporates two
-review rounds 1–2: phase splits, staging gate, infrastructure phase (PI),
-fail-closed UAT with Opus 5 verification, traceability artifact.
+wins and the plan is corrected. Status: Rev 4 (2026-08-02) — Rev 3 added phase
+splits, the staging gate, the infrastructure phase (PI), fail-closed UAT with
+Opus 5 verification, and the traceability artifact. Rev 4 records execution
+corrections: P0 and P1 are complete and merged, PI is resequenced to after P7B
+(it blocks only P9A, and provisioning before the runtime shape settles means
+building it twice), and acceptance rows are minted at plan adoption rather than
+promised in prose — four consecutive phase plans found this paragraph's
+predecessor claiming rows the matrix did not contain.
 
 ## Global constraints (apply to every task)
 
@@ -110,7 +115,6 @@ provider accounts are used only for staging smoke.
 ```mermaid
 graph TD
     P0[P0 Foundations + frozen contracts] --> P1[P1 Auth & sessions]
-    P0 --> PI[PI Infrastructure as code]
     P0 --> P2A[P2A Resume domain/store]
     P1 --> P2B[P2B Resume HTTP API + media]
     P2A --> P2B
@@ -142,15 +146,18 @@ graph TD
     P7B --> P9
     P8P --> P9
     P9 --> P9A[P9A Production-like staging rehearsal]
+    P7B --> PI[PI Infrastructure as code]
     PI --> P9A
     P9A --> HC{Human launch checkpoint}
     HC --> P10[P10 Promote to production]
 ```
 
 Security infra (P8-sec) starts at P0 as middleware; each route adds its policy
-in its owning phase. **PI (infrastructure as code) starts right after P0** —
-staging is deployed from PI's modules for the P9A gate; P10 only promotes. P0
-executes as three review units: **P0A** contracts/budgets/mobile → **P0B**
+in its owning phase. **PI (infrastructure as code) runs after P7B** — early
+enough to build and refresh staging for the P9A gate, late enough that the
+runtime shape it provisions (S3 media, the print worker's cgroup, SSE origin
+timeouts) is already settled; P10 only promotes. P0 executes as three review
+units: **P0A** contracts/budgets/mobile → **P0B**
 server/data/migrations/security-middleware → **P0C** web/dev-stack/fixtures/CI.
 
 ---
@@ -198,7 +205,7 @@ factories, and numeric budgets exist; all CI jobs green on the empty slice.
 
 ---
 
-## Phase PI — Infrastructure as code (starts right after P0A/P0B contracts)
+## Phase PI — Infrastructure as code (runs after P7B, before P9A)
 
 **Why before P9A:** P9A's staging gate can only exist if the infrastructure
 exists first. PI **builds** it; P9A **exercises** it; P10 **promotes**.
