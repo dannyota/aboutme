@@ -3,7 +3,9 @@ module github.com/dannyota/aboutme/apps/server
 go 1.26.5
 
 require (
+	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/dannyota/aboutme/packages/schema/gen/go v0.0.0
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.27.3
@@ -21,6 +23,7 @@ require (
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
