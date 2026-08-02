@@ -440,7 +440,35 @@ P2A DDL lands in this one task so the schema head changes **once**.
 `apps/server/migrations/00004_add_resume_tables.sql`; create (hand-written)
 `apps/server/migrations/00005_add_resume_cap_trigger.sql`; regenerate
 `apps/server/migrations/atlas.sum` via the pinned Atlas; create
-`apps/server/migrations/resume_schema_test.go`.
+`apps/server/migrations/resume_schema_test.go`; commit the regenerated
+`apps/server/internal/store/models.go` (see owner correction 1 below).
+
+> **Owner correction 1 (2026-08-03) — `internal/store/models.go` is in this
+> task's scope.** This plan's Step 3 said `make sqlc-check` "must stay clean —
+> no query changes yet". That was wrong: sqlc derives `models.go` from
+> `schema.sql`, so **adding a table changes the generated models whether or not
+> any query references it**. Confirmed at execution — `make data-drift` fails
+> with `internal/store is out of date with sql/*.sql` and a modified `models.go`
+> adding `Resume`, `SlugTombstone`, and `IdempotencyRecord`. The repo rule is
+> that generated artifacts are committed alongside the source change that causes
+> them, so the regeneration belongs to **this** task, not Task 4. Task 4 still
+> owns `sql/queries.sql` and the query-derived generated files. `internal/store`
+> remains a serialized artifact; this task and Task 4 are its only P2A writers,
+> in that order.
+>
+> **Owner correction 2 (2026-08-03) — `BETWEEN` is replaced by explicit
+> `>=`/`<=` in both slug format checks (applied to the DDL above).** As
+> originally ratified, both checks used `char_length(slug) BETWEEN 4 AND 30`.
+> That makes `make data-drift` fail forever. Atlas's own parse of `schema.sql`
+> expands `BETWEEN` into a nested expression tree — `((A AND B) AND C)` — while
+> Postgres flattens the executed constraint to `(A AND B AND C)`; the differ
+> compares the two textually and never converges. Proven at execution by
+> generating the migration Atlas wanted: its `Up` and `Down` differ **only** in
+> parenthesis nesting, with no semantic change. The explicit form is
+> byte-for-byte what Postgres reports, so the diff converges. `BETWEEN` is
+> inclusive, so the constraint's meaning is identical — 4 and 30 remain
+> accepted, 3 and 31 remain rejected, and Task 3's boundary matrix is unchanged.
+> Recorded rather than silently patched because this edits ratified DDL text.
 
 **DDL appended to `sql/schema.sql`** (decisions D5/D7/D11/D15; constraint names
 ≤ 63 bytes):
@@ -465,7 +493,8 @@ CREATE TABLE resumes (
     CONSTRAINT resumes_slug_key UNIQUE (slug),
     CONSTRAINT resumes_slug_format_check CHECK (
         slug IS NULL
-        OR (char_length(slug) BETWEEN 4 AND 30
+        OR (char_length(slug) >= 4
+            AND char_length(slug) <= 30
             AND slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$')
     ),
     CONSTRAINT resumes_live_requires_slug_check CHECK (NOT live OR slug IS NOT NULL),
@@ -484,7 +513,8 @@ CREATE TABLE slug_tombstones (
     released_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT slug_tombstones_slug_key UNIQUE (slug),
     CONSTRAINT slug_tombstones_slug_format_check CHECK (
-        char_length(slug) BETWEEN 4 AND 30
+        char_length(slug) >= 4
+        AND char_length(slug) <= 30
         AND slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
     )
 );
