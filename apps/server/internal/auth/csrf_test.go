@@ -109,28 +109,47 @@ func assertCSRFRejected(t *testing.T, rec *httptest.ResponseRecorder) {
 // row proving each side of the decision, and the missing/wrong-content-
 // type rows already cover the reject side.
 //
-// Rows 15-18 were added after Opus review of task 8 caught a defect in
+// Row 15 pins the newly-accepted Content-Type variants that motivated the
+// switch to mime.ParseMediaType in the first place: row 14 only covers the
+// old two-literal allowlist's exact charset spelling
+// ("; charset=utf-8", with the leading space); row 15 uses
+// "application/json;charset=UTF-8" (no space before charset, uppercase
+// encoding name) -- a shape real fetch()/XHR clients also send, which the
+// old literal allowlist would have rejected.
+//
+// Rows 16-19 were added after Opus review of task 8 caught a defect in
 // that original ruling (not in its implementation): requiring
 // Content-Type on every mutating request 403s every bodiless mutating
 // endpoint (POST /auth/logout, most spec'd DELETEs) the moment they're
 // wired. The corrected ruling, DD-C6 (csrf.go), only checks Content-Type
 // when the request actually carries a body:
 //
-//   - Row 15/16 prove a bodiless DELETE/POST with a valid Origin and
+//   - Row 16/17 prove a bodiless DELETE/POST with a valid Origin and
 //     token succeeds with no Content-Type at all.
-//   - Row 17 proves the carve-out is about Content-Type, not about CSRF
+//   - Row 18 proves the carve-out is about Content-Type, not about CSRF
 //     itself: a request that *does* carry a body (deliberately
 //     form-encoded-shaped, "foo=bar" -- the classic auto-submitting
 //     cross-site HTML form vector, which never sets Content-Type:
 //     application/json) is still rejected. This is the defense-in-depth
 //     row; row 7 (adjusted to also carry a "{}" body under the new
 //     ruling) is the generic version of the same check.
-//   - Row 18 completes the original decode-first requirement: a token
+//   - Row 19 completes the original decode-first requirement: a token
 //     that is the *same* session's secret, correctly shaped, but encoded
 //     with the standard base64 alphabet/padding (StdEncoding) instead of
 //     the RawURLEncoding the header contract requires, must still be
 //     rejected -- proving the compare is anchored to the documented
 //     encoding, not merely "some encoding of the right bytes."
+//
+// A second review pass (round 2) confirmed hasBody's original
+// ContentLength > 0 check classified a real server's chunked/h2 request
+// (ContentLength == -1) as bodiless, letting it silently skip the
+// Content-Type gate -- see hasBody's own doc comment (csrf.go) for the
+// fix; no new row was added for that specific fix since httptest cannot
+// produce a request shaped the way a real chunked request would be by the
+// time RequireCSRF sees it (net/http.Server, not this test file, is what
+// sets ContentLength = -1) -- the RED evidence for that fix instead used
+// a hand-built *http.Request, recorded in task-8-report.md, not this
+// matrix.
 func TestRequireCSRF_Matrix(t *testing.T) {
 	t.Parallel()
 
@@ -162,6 +181,7 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 		{"PATCH also enforced", "PATCH", "https://evil.example", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"DELETE also enforced", "DELETE", "https://evil.example", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"charset suffix content-type allowed", "POST", "http://localhost", "", "application/json; charset=utf-8", validToken, "{}", http.StatusOK},
+		{"no-space uppercase charset content-type allowed", "POST", "http://localhost", "", "application/json;charset=UTF-8", validToken, "{}", http.StatusOK},
 		{"bodiless DELETE skips content-type check", "DELETE", "http://localhost", "", "", validToken, "", http.StatusOK},
 		{"bodiless POST (logout-shaped) skips content-type check", "POST", "http://localhost", "", "", validToken, "", http.StatusOK},
 		{"body present without content-type still rejected (form-style body)", "POST", "http://localhost", "", "", validToken, "foo=bar", http.StatusForbidden},
