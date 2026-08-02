@@ -121,11 +121,45 @@ func withGoogleIssuer(issuer string) testServiceOption {
 // withLinkedInIssuer is withGoogleIssuer's LinkedIn counterpart: arranges
 // for the returned Service to run LinkedIn OIDC discovery against issuer
 // instead of the real "https://www.linkedin.com/oauth". Unlike
-// withGoogleIssuer, newTestService does NOT force every caller to supply
-// this (see newTestService's own doc comment for why) -- only a test that
-// actually drives a LinkedIn route needs it.
+// withGoogleIssuer, newTestService does NOT t.Fatal when this is omitted
+// (see newTestService's own doc comment for why) -- instead, an omitted
+// override silently defaults to unroutableLinkedInIssuerSentinel (fix
+// round 1 item 1: a forgotten override must still fail fast and OFFLINE,
+// never silently reach the real network).
 func withLinkedInIssuer(issuer string) testServiceOption {
 	return func(c *testServiceConfig) { c.linkedinIssuer = issuer }
+}
+
+// unroutableLinkedInIssuerSentinel is resolvedLinkedInIssuer's default
+// substitution when withLinkedInIssuer is not supplied: a syntactically
+// valid but genuinely unroutable address (loopback, port 1 -- nothing
+// ever listens there, so a connection attempt fails immediately with
+// connection-refused, no DNS lookup and no real network egress). It
+// exists specifically for a test that forgets withLinkedInIssuer but
+// still drives a LinkedIn route -- fix round 1 item 1 flagged exactly
+// this gap: unlike withGoogleIssuer's hard t.Fatal guard, an omitted
+// LinkedIn override previously fell through to the real
+// "https://www.linkedin.com/oauth", so a forgetful caller (the staged
+// adversarial suite, authored independently of this file) would silently
+// perform live OIDC discovery against the real network on every
+// hermetic-looking test run. A default substitution, not a t.Fatal guard
+// like Google's: Google's own hard-fail guard predates LinkedIn existing
+// at all and every test in this file already supplies it, so changing
+// that established contract is out of scope for this fix round.
+const unroutableLinkedInIssuerSentinel = "http://127.0.0.1:1"
+
+// resolvedLinkedInIssuer returns sc.linkedinIssuer if the caller supplied
+// one (withLinkedInIssuer), or unroutableLinkedInIssuerSentinel
+// otherwise. Factored out of newTestService so this exact substitution
+// can be tested directly and deterministically, without needing to
+// actually drive a LinkedIn route (and without ever risking a real
+// network call from a test that forgets withLinkedInIssuer -- which is
+// exactly the bug this default exists to prevent).
+func resolvedLinkedInIssuer(sc testServiceConfig) string {
+	if sc.linkedinIssuer != "" {
+		return sc.linkedinIssuer
+	}
+	return unroutableLinkedInIssuerSentinel
 }
 
 // withLogger arranges for the returned Service's own logger (the one
@@ -172,11 +206,18 @@ func withSessionIssuer(si sessionIssuerForTest) testServiceOption {
 // real https://accounts.google.com on every hermetic-looking test run.
 // Forcing this here, once, makes that mistake impossible to repeat.
 //
-// A LinkedIn issuer override (withLinkedInIssuer) is NOT forced the same
-// way: unlike Google, no test in this package drives a LinkedIn route by
-// default, so an omitted override is inert (linkedin_test.go's own tests
-// always supply one via withLinkedInIssuer, the same discipline Task 4
-// established for Google).
+// A LinkedIn issuer override (withLinkedInIssuer) is NOT forced with a
+// t.Fatal the same way -- unlike Google, no test in this package drives a
+// LinkedIn route by default, so an omitted override being INERT would be
+// fine on its own. But it must never be allowed to fall through to the
+// real "https://www.linkedin.com/oauth" either (fix round 1 item 1): a
+// forgetful caller that DOES drive a LinkedIn route -- the staged
+// adversarial suite, authored independently of this file, WILL drive
+// LinkedIn routes -- would otherwise perform live OIDC discovery against
+// the real network. resolvedLinkedInIssuer's unroutable sentinel default
+// is what keeps that both inert (nothing breaks for a test that never
+// touches LinkedIn) and safe (a test that does, but forgot the override,
+// fails fast and OFFLINE instead of silently going out to the network).
 func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *store.Queries) {
 	t.Helper()
 
@@ -206,7 +247,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 		logger = testLogger()
 	}
 
-	svc, err := auth.NewServiceForTest(logger, cfg, q, sc.googleIssuer, sc.linkedinIssuer)
+	svc, err := auth.NewServiceForTest(logger, cfg, q, sc.googleIssuer, resolvedLinkedInIssuer(sc))
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
@@ -345,6 +386,62 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 
 	release()
 	<-requestDone
+}
+
+// TestResolvedLinkedInIssuer_DefaultsToUnroutableSentinelWhenOmitted is
+// fix round 1 item 1's core regression test: a testServiceConfig with no
+// linkedinIssuer set (the shape a test gets by simply forgetting
+// withLinkedInIssuer) must resolve to unroutableLinkedInIssuerSentinel,
+// never the empty string (which newTestService would otherwise pass
+// straight through to NewServiceForTest, leaving the real
+// "https://www.linkedin.com/oauth" in place).
+func TestResolvedLinkedInIssuer_DefaultsToUnroutableSentinelWhenOmitted(t *testing.T) {
+	t.Parallel()
+
+	var sc testServiceConfig // linkedinIssuer deliberately left unset
+	if got := resolvedLinkedInIssuer(sc); got != unroutableLinkedInIssuerSentinel {
+		t.Errorf("resolvedLinkedInIssuer(no override) = %q, want the unroutable sentinel %q", got, unroutableLinkedInIssuerSentinel)
+	}
+}
+
+// TestResolvedLinkedInIssuer_UsesExplicitOverrideWhenSupplied is the
+// above test's sibling: an explicit withLinkedInIssuer value must still
+// win over the sentinel default -- otherwise linkedin_test.go's own
+// tests (which all supply a real oidctest.Provider URL) would silently
+// stop reaching it.
+func TestResolvedLinkedInIssuer_UsesExplicitOverrideWhenSupplied(t *testing.T) {
+	t.Parallel()
+
+	sc := testServiceConfig{linkedinIssuer: "http://example.invalid"}
+	if got := resolvedLinkedInIssuer(sc); got != "http://example.invalid" {
+		t.Errorf("resolvedLinkedInIssuer(explicit override) = %q, want %q", got, "http://example.invalid")
+	}
+}
+
+// TestService_LinkedInRoute_OmittedIssuerOverride_FailsFastOffline is the
+// end-to-end companion to TestResolvedLinkedInIssuer_..._Omitted above:
+// proves the sentinel default holds in practice when a LinkedIn route is
+// actually driven, not just in isolation. This is itself a SAFE,
+// local-only assertion, never a real network dependency:
+// unroutableLinkedInIssuerSentinel (127.0.0.1:1) is loopback with no
+// listener, so the discovery call fails immediately with
+// connection-refused, which handleLinkedInStart surfaces as the standard
+// opaque 500 via writeInternalError -- this test is deliberately only
+// ever run AFTER the sentinel-default fix exists (see this dispatch's fix
+// report for why it was not exercised against the pre-fix code: doing so
+// would have meant a real external network attempt to
+// https://www.linkedin.com from a test).
+func TestService_LinkedInRoute_OmittedIssuerOverride_FailsFastOffline(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL)) // no withLinkedInIssuer
+
+	resp := doGet(t, handler, auth.LinkedInStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("GET %s (no LinkedIn issuer override) status = %d, want %d (discovery against the unroutable sentinel must fail fast, not silently succeed against the real network)",
+			auth.LinkedInStartPath, resp.StatusCode, http.StatusInternalServerError)
+	}
 }
 
 func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T) {

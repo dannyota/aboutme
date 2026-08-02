@@ -1,8 +1,12 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -81,6 +85,29 @@ func GoogleProviderCacheTryLockForTest(svc *Service) (unlock func(), ok bool) {
 		return nil, false
 	}
 	return svc.google.cache.mu.Unlock, true
+}
+
+// ResolveLinkedInUserForTest exposes resolveLinkedInUser (linkedin.go) to
+// package auth_test. It exists specifically so a test can exercise DD-C12's
+// defense-in-depth linkingUserID==uuid.Nil branch directly: the
+// oauth_transactions table's own CHECK constraint
+// (oauth_transactions_link_needs_user) already makes that state
+// impossible to reach through a real Begin-backed Transaction, so the
+// only way to prove the Go-level check exists and works is to call this
+// function directly with a hand-built purpose/linkingUserID pair, rather
+// than through the full /start-/callback HTTP round trip every other
+// test in this package drives.
+func ResolveLinkedInUserForTest(ctx context.Context, svc *Service, purpose Purpose, linkingUserID uuid.UUID, providerUserID, email string, emailVerified *bool, name string) (store.User, error) {
+	return svc.resolveLinkedInUser(ctx, purpose, linkingUserID, providerUserID, email, emailVerified, name)
+}
+
+// IsLinkedInLinkRejectedForTest reports whether err is
+// errLinkedInLinkRejected (linkedin.go) -- DD-C12's interim link/reauth
+// safety-net sentinel -- so a test using ResolveLinkedInUserForTest can
+// assert a rejection happened for EXACTLY this reason, not some unrelated
+// database error.
+func IsLinkedInLinkRejectedForTest(err error) bool {
+	return errors.Is(err, errLinkedInLinkRejected)
 }
 
 // SetSessionIssuerForTest replaces svc's session-issuance seam
