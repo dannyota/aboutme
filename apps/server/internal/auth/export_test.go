@@ -35,17 +35,22 @@ func NewSessionManagerForTest(q *store.Queries, now func() time.Time) *SessionMa
 const SessionCookieName = sessionCookieName
 
 // NewServiceForTest builds a Service exactly like NewService, but also
-// sets the unexported googleIssuerOverride field to googleIssuer --
-// task-4-brief.md Step 2's issuer-override seam: "the Service needs a way
-// to use a non-https://accounts.google.com issuer in tests ... add an
-// unexported googleIssuerOverride field". googleIssuer is NOT optional in
-// practice: every caller in this package's own test helper
-// (handlers_test.go's newTestService) is required to supply a non-empty
-// one and fails the test immediately otherwise -- a fix-round Critical
-// finding was exactly a test that omitted it and performed live OIDC
-// discovery against the real https://accounts.google.com. This
-// constructor itself stays permissive (an empty override still leaves
-// production's real issuer in place) so it also doubles as a direct,
+// sets the unexported googleIssuerOverride/linkedinIssuerOverride fields
+// to googleIssuer/linkedinIssuer -- task-4-brief.md Step 2's
+// issuer-override seam: "the Service needs a way to use a
+// non-https://accounts.google.com issuer in tests ... add an unexported
+// googleIssuerOverride field", extended here to LinkedIn's own discovery
+// issuer. Neither is optional in practice: every caller in this package's
+// own test helper (handlers_test.go's newTestService) is required to
+// supply a non-empty googleIssuer and fails the test immediately
+// otherwise -- a fix-round Critical finding was exactly a test that
+// omitted it and performed live OIDC discovery against the real
+// https://accounts.google.com. linkedinIssuer has no such forced guard
+// (see newTestService's own doc comment for why): unlike Google, no
+// existing test's default path reaches LinkedIn's discovery at all, so
+// only a test that actually drives a LinkedIn route needs to supply one.
+// This constructor itself stays permissive (an empty override leaves the
+// corresponding real issuer in place) so it also doubles as a direct,
 // deliberate way to test NewService's own no-override default if that's
 // ever needed.
 //
@@ -53,12 +58,13 @@ const SessionCookieName = sessionCookieName
 // constructor/option -- the same seam idiom NewSessionManagerForTest above
 // already established for this package -- so production code has no way
 // to point itself at an arbitrary issuer by accident.
-func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries, googleIssuer string) (*Service, error) {
+func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries, googleIssuer, linkedinIssuer string) (*Service, error) {
 	svc, err := NewService(logger, cfg, q)
 	if err != nil {
 		return nil, err
 	}
 	svc.googleIssuerOverride = googleIssuer
+	svc.linkedinIssuerOverride = linkedinIssuer
 	return svc, nil
 }
 

@@ -292,7 +292,7 @@ func newServiceWithOrigin(t *testing.T, q *store.Queries, issuer, origin string)
 		GoogleClientID:     oidctest.DefaultClientID,
 		GoogleClientSecret: "test-google-client-secret",
 	}
-	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, issuer)
+	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, issuer, "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
