@@ -183,13 +183,29 @@ func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (ses
 // BeginSessionRotation and the successor CreateSession below are two
 // separate statements, not one transaction: SessionManager holds only a
 // *store.Queries (task-7-brief.md's exact, binding struct shape), which
-// has no pool/transaction access of its own. If CreateSession fails after
-// BeginSessionRotation already won, the predecessor row is left with
-// rotation_grace_until set but no successor -- it stays valid (and
-// un-rotatable again, since rotation_grace_until is no longer NULL) for
-// the remainder of the grace window, then dies. That bounds the blast
-// radius of an exceedingly rare same-connection INSERT failure to a forced
-// logout after rotationGrace, never a stuck or double-rotated row.
+// has no pool/transaction access of its own. AC-AUTH-004's "atomic" is the
+// exactly-one-winner CAS itself (BeginSessionRotation's single-statement
+// conditional UPDATE) -- accepted at the 2026-08-02 Task 7 review, with the
+// matching entry on the phase ledger -- not statement-level atomicity
+// across the winning path's two writes. Two crash outcomes follow from
+// that, both bounded and neither a stuck or double-rotated row:
+//
+//   - The UPDATE lands but the INSERT is lost (process/connection dies
+//     between the two, or CreateSession itself errors below): the
+//     predecessor is left with rotation_grace_until set but no successor.
+//     It stays valid -- and un-rotatable again, since rotation_grace_until
+//     is no longer NULL -- for the remainder of the grace window, then
+//     dies with no successor to take over. The user simply has to log in
+//     again; availability impact only, no session is ever left reachable
+//     in a broken state.
+//   - The INSERT lands but the response never reaches the caller (e.g. the
+//     server crashes, or the connection drops, after CreateSession returns
+//     but before Authenticate's caller receives it): the successor row is
+//     a real, valid session, but its raw token existed only in the
+//     crashed process's memory and was never Set-Cookie'd anywhere. It is
+//     an orphan -- unreachable by any client -- until it dies on its own
+//     at its inherited absolute_expires_at (never later, since rotation
+//     never extends it).
 func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Session, now time.Time) (successor store.Session, raw string, won bool, err error) {
 	graceUntil := now.Add(rotationGrace)
 	_, err = m.q.BeginSessionRotation(ctx, store.BeginSessionRotationParams{
@@ -271,12 +287,39 @@ func sessionDead(sess store.Session, now time.Time) bool {
 // rotation_grace_until are orthogonal (design decision 1). Revoking a
 // session that does not exist, or is already revoked, is a no-op success
 // rather than an error, so logout is safe to retry.
+//
+// Callers MUST verify sessionID belongs to the authenticated user before
+// calling; this method performs no ownership check. It exists for the
+// "revoke my own current session" call sites (e.g. logout), which already
+// know sessionID is the caller's own because it came from the caller's own
+// authenticated request. For revoking a session by an id a caller merely
+// names (e.g. Task 9's DELETE /sessions/{id}, where the id could belong to
+// someone else), use RevokeForUser instead, which checks ownership itself.
 func (m *SessionManager) Revoke(ctx context.Context, sessionID uuid.UUID) error {
 	now := m.now()
 	if err := m.q.RevokeSession(ctx, store.RevokeSessionParams{ID: sessionID, RevokedAt: &now}); err != nil {
 		return fmt.Errorf("auth: revoke session: %w", err)
 	}
 	return nil
+}
+
+// RevokeForUser revokes the session identified by sessionID only if it
+// belongs to userID, and reports how many rows that affected: 1 if
+// sessionID existed, belonged to userID, and was not already revoked; 0
+// otherwise (unknown id, already revoked, or -- the ownership check this
+// method adds over Revoke -- belongs to a different user). Callers must
+// treat 0 as "no such session for this user" without distinguishing why,
+// the same no-oracle reasoning as ErrSessionInvalid: Task 9's
+// DELETE /sessions/{id} turns 0 into a 404, never a 403, so an attacker
+// probing session ids can't learn whether a given id belongs to someone
+// else versus not existing at all.
+func (m *SessionManager) RevokeForUser(ctx context.Context, sessionID, userID uuid.UUID) (int64, error) {
+	now := m.now()
+	n, err := m.q.RevokeSessionForUser(ctx, store.RevokeSessionForUserParams{ID: sessionID, UserID: userID, RevokedAt: &now})
+	if err != nil {
+		return 0, fmt.Errorf("auth: revoke session for user: %w", err)
+	}
+	return n, nil
 }
 
 // RevokeAll revokes every not-already-revoked session belonging to

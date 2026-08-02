@@ -61,6 +61,15 @@ UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1;
 -- (design decision 1) -- this never touches that column.
 UPDATE sessions SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL;
 
+-- name: RevokeSessionForUser :execrows
+-- Ownership-checked counterpart to RevokeSession: only revokes id if it
+-- also belongs to user_id. Returns the affected row count so a caller can
+-- distinguish "revoked" (1) from "no such session for this user" (0) --
+-- internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
+-- DELETE /sessions/{id}) turns 0 into a 404, not a 403, so it never
+-- confirms whether the id exists for someone else.
+UPDATE sessions SET revoked_at = $3 WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL;
+
 -- name: RevokeAllSessions :execrows
 -- Logout-everywhere: revokes every one of the user's not-already-revoked
 -- sessions and reports how many rows that affected.
