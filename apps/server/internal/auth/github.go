@@ -215,6 +215,22 @@ func (s *Service) handleGitHubStart(w http.ResponseWriter, r *http.Request) {
 // verification), fetches the authenticated user's profile and email
 // list, resolves or creates the local user, and issues a session.
 //
+// DD-C10 (owner ruling, fix round 2 item 2): a failure fetching /user or
+// /user/emails -- a non-200 status, a network error reaching
+// api.github.com, or a malformed/undecodable response body -- is a
+// PROVIDER-side failure, not a local one, and funnels through
+// redirectAuthFailed (302 ?error=auth_failed) exactly like a failed
+// token exchange already does, NOT writeInternalError's 500.
+// writeInternalError is reserved for genuinely local failures this
+// server's own database/session machinery can produce
+// (begin_transaction, consume_transaction's non-ErrTransactionInvalid
+// path, resolve_user, issue_session) -- GitHub being briefly unreachable
+// or misbehaving is an ordinary, expected external-dependency failure a
+// visitor can retry, not an internal server defect worth a 500 and an
+// error-level log line. See TestGitHubCallback_UserAPINon200_RedirectsAuthFailed
+// and TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed
+// (github_test.go) for the regression coverage.
+//
 // ClearOAuthTxCookie is called on every exit path, exactly like
 // handleGoogleCallback (see that function's doc comment for why it is
 // deliberately not a deferred call).
@@ -277,7 +293,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	var user githubUser
 	if err = s.githubAPIGet(ctx, client, "/user", &user); err != nil {
-		s.writeInternalError(w, r, ProviderGitHub, "fetch_github_user", err)
+		s.redirectAuthFailed(w, r, ProviderGitHub, "github /user api call failed (non-200 status, network error, or malformed response)")
 		return
 	}
 	if user.ID == 0 {
@@ -287,7 +303,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	var emails []githubEmail
 	if err = s.githubAPIGet(ctx, client, "/user/emails", &emails); err != nil {
-		s.writeInternalError(w, r, ProviderGitHub, "fetch_github_emails", err)
+		s.redirectAuthFailed(w, r, ProviderGitHub, "github /user/emails api call failed (non-200 status, network error, or malformed response)")
 		return
 	}
 	email, ok := primaryVerifiedGitHubEmail(emails)
