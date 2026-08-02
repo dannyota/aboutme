@@ -1,6 +1,6 @@
-h1:tcNxeBc76uDqIFiiD6BWfPdBs5miyGaILpw3Zww4pH8=
+h1:uuYR/vsVE4zyXZOhAnSDIAB4EpNIbeplkcRXftUbjmw=
 00001_extensions.sql h1:i/DrexuE4a+cpbhE8yyVE+gbaCv3d9fciU41gRYZ6CI=
 00002_add_auth_tables.sql h1:V7vMFtKmZ2YdAtBWJ4KBO5m3wn9JLe2bvs4IyyMxWE0=
 00003_add_sessions_rotated_from.sql h1:vFdHKmSfA/WA/ic+R0ulr1bpWoW/XVGhJBUr+RG1nAk=
 00004_add_resume_tables.sql h1:+YO6JX9HRg69+kU8RQGCRTYZ7OiHS9gUiCPE8xtnMVc=
-00005_add_resume_cap_trigger.sql h1:U21db/0bMGdT5/+ZWtJEvjloHnSLoWHqZCbPGpI8IQ0=
+00005_add_resume_cap_trigger.sql h1:j/DERi1faON/t7A2j+a4N7Bquh/3T6Z2IatpniIF3Do=
