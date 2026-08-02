@@ -20,3 +20,9 @@ rules:
   # later phase adds paths to this file; it is never rewritten"). Error is
   # already referenced by GET /readyz's 503 response.
   no-unused-components: off
+  # GET /auth/{provider}/start and .../callback (Task 9, AC-AUTH-005) are
+  # top-level browser redirects by design (DD-C4): their only real response
+  # is 302, whether the login succeeds or is rejected -- there is no 2xx to
+  # document, the same way GET /healthz and /readyz have no 4xx to document
+  # above. Every other operation in this document keeps this rule enabled.
+  operation-2xx-response: off

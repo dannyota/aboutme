@@ -325,6 +325,95 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const listIdentitiesByUserID = `-- name: ListIdentitiesByUserID :many
+SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE user_id = $1 ORDER BY created_at
+`
+
+// Task 9's GET /me: every provider identity linked to user_id, oldest
+// first (created_at) so the first-ever linked provider always sorts
+// first.
+func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error) {
+	rows, err := q.db.Query(ctx, listIdentitiesByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Identity
+	for rows.Next() {
+		var i Identity
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.ProviderUserID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveSessionsForUser = `-- name: ListLiveSessionsForUser :many
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions
+WHERE user_id = $1
+  AND revoked_at IS NULL
+  AND (rotation_grace_until IS NULL OR rotation_grace_until > $2::timestamptz)
+ORDER BY created_at DESC
+`
+
+type ListLiveSessionsForUserParams struct {
+	UserID uuid.UUID
+	Now    time.Time
+}
+
+// Task 9's GET /sessions device list (design spec §3): every session
+// belonging to user_id that is still LIVE as of now -- explicitly revoked
+// rows are excluded (revoked_at IS NULL), and so are Task 7's grace-dead
+// rotation predecessors: a session rotation has already superseded keeps
+// revoked_at NULL but has rotation_grace_until in the past, and that row
+// must never appear in the caller's own device list -- it is unreachable
+// by any client, exactly like an explicitly revoked one, just not marked
+// that way. sqlc.arg(now) is cast explicitly so this parameter's Go type
+// is a plain (non-pointer) time.Time regardless of rotation_grace_until's
+// own nullability. Ordered newest-created first.
+func (q *Queries) ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error) {
+	rows, err := q.db.Query(ctx, listLiveSessionsForUser, arg.UserID, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Session
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TokenHash,
+			&i.CSRFSecret,
+			&i.CreatedAt,
+			&i.LastSeenAt,
+			&i.ReauthenticatedAt,
+			&i.AbsoluteExpiresAt,
+			&i.RotationGraceUntil,
+			&i.RevokedAt,
+			&i.UA,
+			&i.IP,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeAllSessions = `-- name: RevokeAllSessions :execrows
 UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL
 `

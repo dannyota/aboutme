@@ -53,6 +53,21 @@ type Querier interface {
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// Task 9's GET /me: every provider identity linked to user_id, oldest
+	// first (created_at) so the first-ever linked provider always sorts
+	// first.
+	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
+	// Task 9's GET /sessions device list (design spec §3): every session
+	// belonging to user_id that is still LIVE as of now -- explicitly revoked
+	// rows are excluded (revoked_at IS NULL), and so are Task 7's grace-dead
+	// rotation predecessors: a session rotation has already superseded keeps
+	// revoked_at NULL but has rotation_grace_until in the past, and that row
+	// must never appear in the caller's own device list -- it is unreachable
+	// by any client, exactly like an explicitly revoked one, just not marked
+	// that way. sqlc.arg(now) is cast explicitly so this parameter's Go type
+	// is a plain (non-pointer) time.Time regardless of rotation_grace_until's
+	// own nullability. Ordered newest-created first.
+	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
