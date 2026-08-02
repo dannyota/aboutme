@@ -10,6 +10,7 @@ package auth_test
 import (
 	"context"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
@@ -32,11 +33,27 @@ func ptrTrue() *bool {
 // send (oauth2.Config.Exchange with oauth2.VerifierOption) is proven
 // through oidctest's own code_challenge validation (ruling 4a/4c), not
 // merely assumed.
+//
+// subject/email use uniqueSubject/uniqueEmail (google_adversarial_test.go,
+// same package) rather than fixed literals: this test's own database is
+// shared and persists across every run against TEST_DATABASE_URL (no
+// per-test reset -- see that file's own doc comment), so a fixed
+// "g-sub-1"/"new@example.com" would silently REUSE a row a previous run
+// already created instead of exercising the new-user path a second time,
+// which is exactly what happened here once resolveGoogleUser's name
+// gained a real fallback (fix-round ruling b1): a re-run of this suite
+// found an existing identity for the fixed subject and returned its
+// already-created user (with the OLD full-email name), so the new name
+// assertion below failed against a stale row -- collision-proof
+// identifiers are what a "new user" test genuinely needs.
 func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
 	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
 
 	startResp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet (handlers_test.go) closes the body itself before returning; the linter cannot see through the wrapper.
 	if startResp.StatusCode != 302 {
@@ -71,15 +88,15 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	// registering the exact nonce /start sent is what proves handleGoogle
 	// Callback's own nonce comparison (go-oidc does not check it) actually
 	// matches a genuine round trip.
-	p.RegisterCode("code-1", oidctest.Claims{
-		Subject:       "g-sub-1",
-		Email:         "new@example.com",
+	p.RegisterCode("code-new-user", oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
 		EmailVerified: ptrTrue(),
 		CodeChallenge: codeChallenge,
 		Nonce:         nonce,
 	})
 
-	cbResp := doGet(t, handler, auth.GoogleCallbackPath+"?code=code-1&state="+state, txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
+	cbResp := doGet(t, handler, auth.GoogleCallbackPath+"?code=code-new-user&state="+state, txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
 	if cbResp.StatusCode != 302 {
 		t.Fatalf("GET callback status = %d, want 302", cbResp.StatusCode)
 	}
@@ -101,20 +118,29 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	usr, err := q.GetUserByEmail(ctx, "new@example.com")
+	usr, err := q.GetUserByEmail(ctx, email)
 	if err != nil {
-		t.Fatalf("GetUserByEmail(new@example.com) error = %v, want a created user row", err)
+		t.Fatalf("GetUserByEmail(%q) error = %v, want a created user row", email, err)
 	}
-	if usr.Email != "new@example.com" {
-		t.Errorf("user.Email = %q, want %q", usr.Email, "new@example.com")
+	if usr.Email != email {
+		t.Errorf("user.Email = %q, want %q", usr.Email, email)
+	}
+	// Fix-round ruling b1: oidctest.Claims has no Name field at all, so
+	// this happy path always exercises resolveGoogleUser's fallback --
+	// the LOCAL PART of the email, never the full address (see the
+	// dedicated TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart
+	// below for a case where the distinction is even more explicit).
+	wantName, _, _ := strings.Cut(email, "@")
+	if usr.Name != wantName {
+		t.Errorf("user.Name = %q, want %q (email local part, never the full email)", usr.Name, wantName)
 	}
 
 	identity, err := q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
 		Provider:       "google",
-		ProviderUserID: "g-sub-1",
+		ProviderUserID: subject,
 	})
 	if err != nil {
-		t.Fatalf("GetIdentityByProviderSubject(google, g-sub-1) error = %v, want a created identity row", err)
+		t.Fatalf("GetIdentityByProviderSubject(google, %q) error = %v, want a created identity row", subject, err)
 	}
 	if identity.UserID != usr.ID {
 		t.Errorf("identity.UserID = %v, want %v (the same created user)", identity.UserID, usr.ID)
@@ -126,12 +152,16 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 // (provider, sub) logging in again must authenticate as the SAME user
 // (not create a second one) and must not attempt a second identities
 // insert (identities_provider_subject_key's UNIQUE constraint would
-// surface that as a 500, not silently succeed).
+// surface that as a 500, not silently succeed). subject/email are unique
+// per run (see the happy-path test's doc comment for why that matters).
 func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T) {
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
 	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
 
 	login := func(code string) (userID string) {
 		startResp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
@@ -145,8 +175,8 @@ func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T)
 		txCookie := extractCookie(startResp, auth.OAuthTxCookieName)
 
 		p.RegisterCode(code, oidctest.Claims{
-			Subject:       "g-sub-repeat",
-			Email:         "repeat@example.com",
+			Subject:       subject,
+			Email:         email,
 			EmailVerified: ptrTrue(),
 			CodeChallenge: codeChallenge,
 			Nonce:         nonce,
@@ -160,9 +190,9 @@ func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T)
 			t.Fatalf("callback(%s) missing __Host-session cookie", code)
 		}
 
-		usr, err := q.GetUserByEmail(context.Background(), "repeat@example.com")
+		usr, err := q.GetUserByEmail(context.Background(), email)
 		if err != nil {
-			t.Fatalf("GetUserByEmail(repeat@example.com) error = %v", err)
+			t.Fatalf("GetUserByEmail(%q) error = %v", email, err)
 		}
 		return usr.ID.String()
 	}
@@ -176,11 +206,65 @@ func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T)
 	inspector := newRowInspectorPool(t)
 	var identityCount int
 	if err := inspector.QueryRow(context.Background(),
-		`SELECT count(*) FROM identities WHERE provider = 'google' AND provider_user_id = 'g-sub-repeat'`,
+		`SELECT count(*) FROM identities WHERE provider = 'google' AND provider_user_id = $1`, subject,
 	).Scan(&identityCount); err != nil {
 		t.Fatalf("count identities: %v", err)
 	}
 	if identityCount != 1 {
-		t.Errorf("identities row count for (google, g-sub-repeat) = %d, want exactly 1", identityCount)
+		t.Errorf("identities row count for (google, %q) = %d, want exactly 1", subject, identityCount)
+	}
+}
+
+// TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail is
+// fix-round ruling b1's dedicated regression test: when Google's optional
+// "name" claim is absent (as it always is from oidctest, which has no
+// Name field), the created user's display name must be the LOCAL PART of
+// the email (the part before "@"), never the full email address -- a
+// later phase renders this value as a display name, and the full email
+// would leak the visitor's address to anyone who can see it.
+// subject/email are unique per run (see the happy-path test's doc
+// comment for why that matters).
+func TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
+	wantName, _, _ := strings.Cut(email, "@")
+
+	startResp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
+	loc, err := url.Parse(startResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse start redirect Location: %v", err)
+	}
+	state := loc.Query().Get("state")
+	codeChallenge := loc.Query().Get("code_challenge")
+	nonce := loc.Query().Get("nonce")
+	txCookie := extractCookie(startResp, auth.OAuthTxCookieName)
+
+	p.RegisterCode("code-name-fallback", oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		CodeChallenge: codeChallenge,
+		Nonce:         nonce,
+	})
+
+	cbResp := doGet(t, handler, auth.GoogleCallbackPath+"?code=code-name-fallback&state="+state, txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
+	if cbResp.StatusCode != 302 {
+		t.Fatalf("GET callback status = %d, want 302", cbResp.StatusCode)
+	}
+
+	usr, err := q.GetUserByEmail(context.Background(), email)
+	if err != nil {
+		t.Fatalf("GetUserByEmail(%q) error = %v, want a created user row", email, err)
+	}
+	if usr.Name != wantName {
+		t.Errorf("user.Name = %q, want %q (email local part only)", usr.Name, wantName)
+	}
+	if usr.Name == email {
+		t.Errorf("user.Name = %q, want it to NOT equal the full email %q", usr.Name, email)
 	}
 }

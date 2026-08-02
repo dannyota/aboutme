@@ -17,9 +17,14 @@ import (
 const googleIssuer = "https://accounts.google.com"
 
 // googleScopes are the OAuth2 scopes requested for Google login: "openid"
-// is required for the OIDC flow itself, "email" is what design spec §3
-// requires this provider check (sub claim + email_verified == true).
-var googleScopes = []string{oidc.ScopeOpenID, "email"}
+// is required for the OIDC flow itself; "email" is what design spec §3
+// requires this provider check (sub claim + email_verified == true);
+// "profile" (fix-round ruling b1) requests the optional "name" claim so
+// resolveGoogleUser's email-local-part fallback is the exception, not the
+// default, for a real Google login -- Google still doesn't guarantee the
+// claim is present even with this scope granted, and oidctest's Claims has
+// no Name field at all, so every test still exercises the fallback.
+var googleScopes = []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail}
 
 // googleClaims is the subset of a Google ID token's claims this package
 // reads. Name is optional (unlike Email/EmailVerified, it is not a claim
