@@ -333,6 +333,30 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) er
 	return err
 }
 
+const revokeSessionForUser = `-- name: RevokeSessionForUser :execrows
+UPDATE sessions SET revoked_at = $3 WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeSessionForUserParams struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	RevokedAt *time.Time
+}
+
+// Ownership-checked counterpart to RevokeSession: only revokes id if it
+// also belongs to user_id. Returns the affected row count so a caller can
+// distinguish "revoked" (1) from "no such session for this user" (0) --
+// internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
+// DELETE /sessions/{id}) turns 0 into a 404, not a 403, so it never
+// confirms whether the id exists for someone else.
+func (q *Queries) RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeSessionForUser, arg.ID, arg.UserID, arg.RevokedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const touchLastSeenAt = `-- name: TouchLastSeenAt :exec
 UPDATE sessions SET last_seen_at = $2 WHERE id = $1
 `
