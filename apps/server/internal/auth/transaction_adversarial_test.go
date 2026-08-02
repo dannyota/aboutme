@@ -6,10 +6,10 @@
 // docs/specs/aboutme-design.md §3 alone, without reading transaction.go;
 // reconciled against the landed implementation (commit ccbb334) only for
 // its two seams (clock injection, handle hashing) and to reuse this
-// package's existing live-DB harness (newTestQueries/
-// requireTestDatabaseURL, both defined in transaction_test.go) instead of
-// duplicating it -- see notes.md's integration report for exactly what
-// changed and why.
+// package's existing live-DB harness (newTestQueries, defined in
+// transaction_test.go, and internal/testutil.RequireTestDatabaseURL)
+// instead of duplicating it -- see notes.md's integration report for
+// exactly what changed and why.
 //
 // Scope: this file does not test cookie.go, or Begin's own output shape
 // (handle length, PKCE/nonce presence, PurposeLink/PurposeReauth
@@ -87,15 +87,14 @@ func rowState(ctx context.Context, t *testing.T, db rowQuerier, handle string) (
 
 // newRowInspectorPool opens a small, dedicated connection pool against
 // TEST_DATABASE_URL for rowState's direct table reads. It reuses
-// requireTestDatabaseURL (defined in transaction_test.go) rather than
-// re-reading the environment variable itself. Callers must call
-// newTestQueries (which applies migrations idempotently) before this, in
-// the same test, so the schema is guaranteed to exist by the time this
-// pool is used.
+// internal/testutil.RequireTestDatabaseURL rather than re-reading the
+// environment variable itself. Callers must call newTestQueries (which
+// applies migrations idempotently) before this, in the same test, so the
+// schema is guaranteed to exist by the time this pool is used.
 func newRowInspectorPool(t *testing.T) *store.Pool {
 	t.Helper()
 
-	dsn := requireTestDatabaseURL(t)
+	dsn := testutil.RequireTestDatabaseURL(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
