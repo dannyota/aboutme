@@ -1,0 +1,347 @@
+package auth
+
+// github.go implements "Sign in with GitHub" (design spec §3's OAuth
+// table; AC-AUTH-003): plain OAuth2, deliberately NOT OIDC. GitHub has no
+// ID token, no issuer/audience/signature to verify, and no nonce --
+// transaction.go's Begin already leaves Transaction.Nonce empty for
+// ProviderGitHub. This file must never import coreos/go-oidc (nor
+// anything JWT-shaped): that absence is AC-AUTH-003's enforceable
+// invariant, guarded by TestGitHubCallback_NoOIDCImportInPackage
+// (task-6-brief.md Step 2). GitHub's own defense against a cross-provider
+// mix-up is instead the distinct /api/v1/auth/github/callback endpoint
+// plus TransactionStore.Consume's provider check (transaction.go) -- see
+// that function's own doc comment for the RFC 9700 §4.4 reasoning.
+//
+// handleGitHubStart/handleGitHubCallback otherwise follow the exact same
+// routing/funnel pattern handlers.go's Google handlers established:
+// Begin/Consume for the transaction, the shared __Host-oauth-tx cookie
+// helpers (cookie.go), and the shared redirectWithError/redirectAuthFailed/
+// writeInternalError funnel (handlers.go) for every rejection and
+// internal failure -- so DD-C3's closed ?error= vocabulary (including
+// cancelledErrorCode for a provider-signaled access_denied) and DD-C4's
+// "always clear the tx cookie, always 302" contract apply identically to
+// GitHub, even though the underlying verification is entirely different.
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"golang.org/x/oauth2"
+
+	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
+)
+
+// GitHubStartPath and GitHubCallbackPath are the literal routes Service
+// registers for "Sign in with GitHub" (design spec §3's OAuth table).
+// Exported for the same reason GoogleStartPath/GoogleCallbackPath
+// (handlers.go) are: callers (tests, and later phases wiring the same
+// paths into docs/api/openapi.yaml) never need to hand-copy the literal
+// strings.
+const (
+	GitHubStartPath    = "/api/v1/auth/github/start"
+	GitHubCallbackPath = "/api/v1/auth/github/callback"
+)
+
+// githubAuthorizeURL, githubTokenURL, and githubAPIBaseURL are GitHub's
+// real endpoints. Production dials these directly; tests override all
+// three at once via githubEndpointOverride (see githubOAuth2Config and
+// githubAPIURL below) -- see SetGitHubEndpointForTest's doc comment
+// (export_test.go).
+const (
+	githubAuthorizeURL = "https://github.com/login/oauth/authorize"
+	githubTokenURL     = "https://github.com/login/oauth/access_token"
+	githubAPIBaseURL   = "https://api.github.com"
+)
+
+// githubScopes requests "user:email": without it, an account with
+// "Keep my email addresses private" enabled (GitHub's own setting) omits
+// private addresses from GET /user/emails entirely, which would make a
+// login for such an account always fail the verified-primary-email
+// requirement even though the account genuinely has one.
+var githubScopes = []string{"user:email"}
+
+// githubProviderConfig holds GitHub's OAuth2 client credentials --
+// distinct type (rather than fields directly on Service), mirroring
+// googleProviderConfig's own reasoning (google.go), even though GitHub
+// needs no lazily-discovered provider to protect with a mutex: keeping
+// the same shape across providers is itself the point, not an
+// accident.
+type githubProviderConfig struct {
+	clientID     string
+	clientSecret string
+}
+
+// githubOAuth2Config builds the oauth2.Config for a single request, from
+// this Service's GitHub credentials, redirect URL, and (in production)
+// GitHub's real authorize/token endpoints -- or, when
+// githubEndpointOverride is set (tests only), that override's endpoints
+// instead.
+func (s *Service) githubOAuth2Config(redirectURL string) oauth2.Config {
+	authorizeURL, tokenURL := githubAuthorizeURL, githubTokenURL
+	if s.githubEndpointOverride != "" {
+		authorizeURL = s.githubEndpointOverride + "/login/oauth/authorize"
+		tokenURL = s.githubEndpointOverride + "/login/oauth/access_token"
+	}
+	return oauth2.Config{
+		ClientID:     s.github.clientID,
+		ClientSecret: s.github.clientSecret,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  authorizeURL,
+			TokenURL: tokenURL,
+		},
+		RedirectURL: redirectURL,
+		Scopes:      githubScopes,
+	}
+}
+
+// githubAPIBaseURLFor returns the GitHub REST API base URL to call:
+// githubAPIBaseURL ("https://api.github.com") in production, or
+// githubEndpointOverride (tests only) when set.
+func (s *Service) githubAPIBaseURLFor() string {
+	if s.githubEndpointOverride != "" {
+		return s.githubEndpointOverride
+	}
+	return githubAPIBaseURL
+}
+
+// githubRedirectURL is the absolute callback URL registered with GitHub
+// and sent as this flow's redirect_uri -- must be byte-identical between
+// the /start authorize request and the /callback token exchange, per
+// OAuth2's redirect_uri-must-match requirement (mirrors
+// googleRedirectURL, google.go).
+func (s *Service) githubRedirectURL() string {
+	return s.publicOrigin + GitHubCallbackPath
+}
+
+// githubUser is the subset of GET /user's response this package reads:
+// ID becomes identities.provider_user_id (stringified -- the schema
+// column is text, matching every provider); Login is GitHub's
+// always-present username; Name is the account's optional display name.
+type githubUser struct {
+	ID    int64  `json:"id"`
+	Login string `json:"login"`
+	Name  string `json:"name"`
+}
+
+// githubEmail is one entry of GET /user/emails's response.
+type githubEmail struct {
+	Email    string `json:"email"`
+	Primary  bool   `json:"primary"`
+	Verified bool   `json:"verified"`
+}
+
+// githubAPIGet issues an authenticated GET to path (e.g. "/user") against
+// this Service's configured GitHub API base URL, using client (an
+// *http.Client from oauth2.Config.Client, which attaches the exchanged
+// access token's Authorization header automatically), and decodes a JSON
+// response body into out.
+func (s *Service) githubAPIGet(ctx context.Context, client *http.Client, path string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.githubAPIBaseURLFor()+path, nil)
+	if err != nil {
+		return fmt.Errorf("auth: build github api request %s: %w", path, err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("auth: github api call %s: %w", path, err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // read-only GET response; nothing meaningful to do with a close error here
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("auth: github api call %s: unexpected status %d", path, resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("auth: github api call %s: decode response: %w", path, err)
+	}
+	return nil
+}
+
+// primaryVerifiedGitHubEmail returns the entry of emails with Primary &&
+// Verified both true (design spec §3's GitHub rule: "email from
+// /user/emails -- verified primary only"), or ("", false) when no such
+// entry exists.
+func primaryVerifiedGitHubEmail(emails []githubEmail) (email string, ok bool) {
+	for _, e := range emails {
+		if e.Primary && e.Verified {
+			return e.Email, true
+		}
+	}
+	return "", false
+}
+
+// githubDisplayName returns user's display name for a newly created
+// users row: user.Name when GitHub supplies one, else user.Login (always
+// present on a genuine GitHub account, unlike Name, which an account may
+// leave blank) -- never empty, since users.name is NOT NULL.
+func githubDisplayName(user githubUser) string {
+	if user.Name != "" {
+		return user.Name
+	}
+	return user.Login
+}
+
+// handleGitHubStart begins a GitHub login transaction and redirects the
+// browser to GitHub's own authorize endpoint, with PKCE (S256) bound to
+// the transaction -- no oidc.Nonce option (unlike handleGoogleStart):
+// GitHub issues no ID token to bind one to.
+func (s *Service) handleGitHubStart(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	redirectURI := s.githubRedirectURL()
+	handle, tx, err := s.tx.Begin(ctx, ProviderGitHub, PurposeLogin, uuid.Nil, redirectURI)
+	if err != nil {
+		s.writeInternalError(w, r, "begin_transaction")
+		return
+	}
+
+	oauth2Cfg := s.githubOAuth2Config(redirectURI)
+	authURL := oauth2Cfg.AuthCodeURL(tx.State, oauth2.S256ChallengeOption(tx.PKCEVerifier))
+
+	SetOAuthTxCookie(w, handle)
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
+
+// handleGitHubCallback completes a GitHub login: consumes the OAuth
+// transaction, exchanges the authorization code (with PKCE, plain
+// OAuth2 -- no ID token, no signature/issuer/audience/nonce
+// verification), fetches the authenticated user's profile and email
+// list, resolves or creates the local user, and issues a session.
+//
+// ClearOAuthTxCookie is called on every exit path, exactly like
+// handleGoogleCallback (see that function's doc comment for why it is
+// deliberately not a deferred call).
+func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	handle, err := ReadOAuthTxCookie(r)
+	if err != nil {
+		s.redirectAuthFailed(w, r, "missing or malformed __Host-oauth-tx cookie")
+		return
+	}
+
+	tx, err := s.tx.Consume(ctx, handle, ProviderGitHub)
+	if err != nil {
+		if errors.Is(err, ErrTransactionInvalid) {
+			s.redirectAuthFailed(w, r, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
+			return
+		}
+		s.writeInternalError(w, r, "consume_transaction")
+		return
+	}
+
+	// The OAuth `state` parameter (RFC 6749 §10.12) -- identical
+	// reasoning to handleGoogleCallback's own check.
+	state := r.URL.Query().Get("state")
+	if state == "" || state != tx.State {
+		s.redirectAuthFailed(w, r, "state parameter mismatch")
+		return
+	}
+
+	// Ruling b2 (handlers.go): the provider's own signal that the
+	// visitor declined consent, checked only after state has already
+	// been validated -- identical to handleGoogleCallback.
+	if r.URL.Query().Get("error") == "access_denied" {
+		s.redirectWithError(w, r, cancelledErrorCode, "user denied consent (access_denied)")
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		s.redirectAuthFailed(w, r, "callback missing code and no recognized error parameter")
+		return
+	}
+
+	oauth2Cfg := s.githubOAuth2Config(s.githubRedirectURL())
+	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
+	if err != nil {
+		s.redirectAuthFailed(w, r, "token exchange failed")
+		return
+	}
+
+	client := oauth2Cfg.Client(ctx, token)
+
+	var user githubUser
+	if err = s.githubAPIGet(ctx, client, "/user", &user); err != nil {
+		s.writeInternalError(w, r, "fetch_github_user")
+		return
+	}
+	if user.ID == 0 {
+		s.redirectAuthFailed(w, r, "github /user response missing id")
+		return
+	}
+
+	var emails []githubEmail
+	if err = s.githubAPIGet(ctx, client, "/user/emails", &emails); err != nil {
+		s.writeInternalError(w, r, "fetch_github_emails")
+		return
+	}
+	email, ok := primaryVerifiedGitHubEmail(emails)
+	if !ok {
+		s.redirectWithError(w, r, emailNotVerifiedErrorCode, "no verified primary email in /user/emails")
+		return
+	}
+
+	providerUserID := strconv.FormatInt(user.ID, 10)
+	usr, err := s.resolveGitHubUser(ctx, providerUserID, email, githubDisplayName(user))
+	if err != nil {
+		s.writeInternalError(w, r, "resolve_user")
+		return
+	}
+
+	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
+	rawSession, _, err := s.sessions.Issue(ctx, usr.ID, r.UserAgent(), clientIP)
+	if err != nil {
+		s.writeInternalError(w, r, "issue_session")
+		return
+	}
+
+	SetSessionCookie(w, rawSession)
+	ClearOAuthTxCookie(w)
+	http.Redirect(w, r, s.publicOrigin+"/", http.StatusFound)
+}
+
+// resolveGitHubUser resolves the local user for a validated GitHub login:
+// an existing identity reuses its user; an unknown identity creates a new
+// user + identity. Task 4's documented stub, duplicated here for GitHub
+// exactly like resolveGoogleUser (google.go) documents for itself --
+// TODO(Task 10): task-10-brief.md's resolveLoginIdentity replaces every
+// provider's own copy of this with the real three-way branch (NewUser |
+// ExistingIdentity | EmailCollision), per design decision 5 and
+// AC-AUTH-001 (no automatic email merge across providers).
+func (s *Service) resolveGitHubUser(ctx context.Context, providerUserID, email, name string) (store.User, error) {
+	identity, err := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
+		Provider:       string(ProviderGitHub),
+		ProviderUserID: providerUserID,
+	})
+	if err == nil {
+		usr, getErr := s.q.GetUserByID(ctx, identity.UserID)
+		if getErr != nil {
+			return store.User{}, fmt.Errorf("auth: resolve github user: get user: %w", getErr)
+		}
+		return usr, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return store.User{}, fmt.Errorf("auth: resolve github user: get identity: %w", err)
+	}
+
+	usr, err := s.q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: name})
+	if err != nil {
+		return store.User{}, fmt.Errorf("auth: resolve github user: create user: %w", err)
+	}
+	if _, err := s.q.CreateIdentity(ctx, store.CreateIdentityParams{
+		UserID:         usr.ID,
+		Provider:       string(ProviderGitHub),
+		ProviderUserID: providerUserID,
+	}); err != nil {
+		return store.User{}, fmt.Errorf("auth: resolve github user: create identity: %w", err)
+	}
+	return usr, nil
+}

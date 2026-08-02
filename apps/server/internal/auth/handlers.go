@@ -102,6 +102,7 @@ type Service struct {
 	trustedProxies api.TrustedProxies
 
 	google googleProviderConfig
+	github githubProviderConfig
 
 	// googleIssuerOverride replaces the real googleIssuer
 	// ("https://accounts.google.com") used for discovery. Empty in
@@ -110,6 +111,14 @@ type Service struct {
 	// against an in-process oidctest.Provider instead of the real Google
 	// endpoint.
 	googleIssuerOverride string
+
+	// githubEndpointOverride replaces GitHub's real OAuth2 endpoints
+	// (https://github.com/login/oauth/...) and REST API base
+	// (https://api.github.com) alike. Empty in production; set only by
+	// tests -- see SetGitHubEndpointForTest (export_test.go) -- so a
+	// bare *Service can never be pointed at anything but the real
+	// network for GitHub, mirroring googleIssuerOverride's own guard.
+	githubEndpointOverride string
 }
 
 // NewService builds a Service backed by q, wiring per-provider OAuth2
@@ -150,6 +159,10 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 			clientID:     cfg.GoogleClientID,
 			clientSecret: cfg.GoogleClientSecret,
 		},
+		github: githubProviderConfig{
+			clientID:     cfg.GitHubClientID,
+			clientSecret: cfg.GitHubClientSecret,
+		},
 	}, nil
 }
 
@@ -160,6 +173,8 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(GoogleStartPath, route(http.MethodGet, s.handleGoogleStart))
 	mux.Handle(GoogleCallbackPath, route(http.MethodGet, s.handleGoogleCallback))
+	mux.Handle(GitHubStartPath, route(http.MethodGet, s.handleGitHubStart))
+	mux.Handle(GitHubCallbackPath, route(http.MethodGet, s.handleGitHubCallback))
 }
 
 // handleGoogleStart begins a Google login transaction and redirects the
