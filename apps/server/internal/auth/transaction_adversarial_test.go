@@ -59,8 +59,8 @@ type rowQuerier interface {
 // handleHash reproduces oauth_transactions.handle_hash from a raw handle
 // string. Confirmed against the landed implementation's own hashHandle
 // (transaction.go): sha256.Sum256(handle) as a raw digest, matching
-// design spec §3's "hashed at rest (sha256) exactly like the session
-// token."
+// design spec §3's description of the handle as "hashed at rest (sha256)
+// exactly like the session token".
 func handleHash(handle string) [sha256.Size]byte {
 	return sha256.Sum256([]byte(handle))
 }
@@ -71,7 +71,7 @@ func handleHash(handle string) [sha256.Size]byte {
 // rather than a plain SELECT means the query always returns exactly one
 // row (count=0, consumed_at=NULL when the handle doesn't exist), so
 // callers never have to special-case pgx.ErrNoRows.
-func rowState(t *testing.T, ctx context.Context, db rowQuerier, handle string) (consumedAt *time.Time, count int) {
+func rowState(ctx context.Context, t *testing.T, db rowQuerier, handle string) (consumedAt *time.Time, count int) {
 	t.Helper()
 
 	sum := handleHash(handle)
@@ -172,7 +172,7 @@ func TestConsume_RejectsReplay(t *testing.T) {
 	}
 	assertTxEqual(t, got1, began)
 
-	consumedAt1, count1 := rowState(t, ctx, inspector, handle)
+	consumedAt1, count1 := rowState(ctx, t, inspector, handle)
 	if consumedAt1 == nil {
 		t.Fatal("after first Consume(): consumed_at is NULL, want non-NULL")
 	}
@@ -184,7 +184,7 @@ func TestConsume_RejectsReplay(t *testing.T) {
 		t.Fatalf("second (replayed) Consume() error = %v, want ErrTransactionInvalid", err)
 	}
 
-	consumedAt2, count2 := rowState(t, ctx, inspector, handle)
+	consumedAt2, count2 := rowState(ctx, t, inspector, handle)
 	if count2 != 1 {
 		t.Errorf("after replayed Consume(): %d rows for handle, want 1 (no new row created)", count2)
 	}
@@ -331,8 +331,8 @@ func TestConsume_NoOracleAcrossFailureModes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("replay setup: Begin() error: %v", err)
 		}
-		if _, err := ts.Consume(ctx, handle, auth.ProviderGoogle); err != nil {
-			t.Fatalf("replay setup: first Consume() error: %v, want nil", err)
+		if _, firstErr := ts.Consume(ctx, handle, auth.ProviderGoogle); firstErr != nil {
+			t.Fatalf("replay setup: first Consume() error: %v, want nil", firstErr)
 		}
 		_, err = ts.Consume(ctx, handle, auth.ProviderGoogle)
 		errs["replay"] = err
