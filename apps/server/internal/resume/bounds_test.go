@@ -61,28 +61,24 @@ func baseDocForBounds() schema.Resume {
 	}
 }
 
-// Section builders that leave DisplayName/IconKey nil (absent) unless a
-// case specifically sets them -- both are optional in resume.schema.json,
-// and an empty (as opposed to absent) iconKey fails its own pattern.
+// Section builders that go through the schema package's own sanctioned
+// NewXSection constructors (round 2 review finding 1: hand-built Section{}
+// literals bypass the same guarantee the constructors themselves once
+// bypassed too -- using the real constructors here means this harness now
+// exercises the exact API a real caller uses, not a stand-in for it). All
+// three pass nil for displayName/iconKey (both optional in
+// resume.schema.json; an empty, as opposed to absent, iconKey fails its own
+// pattern), since none of these bound cases care about display metadata.
 func customSection(entries []schema.CustomEntry) schema.Section {
-	if entries == nil {
-		entries = []schema.CustomEntry{}
-	}
-	return schema.Section{SectionType: schema.SectionTypeCustom, CustomEntries: entries}
+	return schema.NewCustomSection(nil, nil, entries)
 }
 
 func workSection(entries []schema.WorkEntry) schema.Section {
-	if entries == nil {
-		entries = []schema.WorkEntry{}
-	}
-	return schema.Section{SectionType: schema.Work, WorkEntries: entries}
+	return schema.NewWorkSection(nil, nil, entries)
 }
 
 func profileSection(entries []schema.ProfileEntry) schema.Section {
-	if entries == nil {
-		entries = []schema.ProfileEntry{}
-	}
-	return schema.Section{SectionType: schema.Profile, ProfileEntries: entries}
+	return schema.NewProfileSection(nil, nil, entries)
 }
 
 func sortedContentKeys(content map[string]schema.Section) []string {
@@ -202,8 +198,22 @@ func padDocToCanonicalBytes(target int) schema.Resume {
 // schema.RawSchema; Keyword is "" for MaxDocumentBytes, which is a
 // store-layer bound with no corresponding JSON-Schema keyword at all.
 type boundCase struct {
-	Name        string
-	BoundPath   string
+	Name      string
+	BoundPath string // exact path walkSchemaBounds reports for the field this case actually exercises
+	// Aliases lists every OTHER schema path (as walkSchemaBounds reports it)
+	// that this case's (Keyword, Limit) test is DELIBERATELY treated as also
+	// covering -- an explicit, listed exemption to the "one representative
+	// document per value class" economy (task brief Step 3: "one pair per
+	// distinct maxLength class"), never an automatic one keyed on the
+	// numeric value alone. Round-2 review finding 2: keying coverage on
+	// (keyword, limit) alone let a brand-new field that happened to reuse an
+	// EXISTING limit (e.g. a hypothetical new maxLength:160 field) pass
+	// silently, with nothing recorded about why. Every path found in the
+	// schema must now be this case's own BoundPath or be named here; a path
+	// that is neither fails TestBoundsCompletenessGuard, forcing a
+	// conscious decision (add a case, or add here with justification) rather
+	// than silence.
+	Aliases     []string
 	Keyword     string
 	Limit       int
 	Valid       func() schema.Resume
@@ -258,7 +268,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "content-maxproperties",
-		BoundPath: "$defs.content.maxProperties",
+		BoundPath: "$.$defs.content.maxProperties",
 		Keyword:   "maxProperties",
 		Limit:     24,
 		Valid: func() schema.Resume {
@@ -281,10 +291,26 @@ var namedBounds = []boundCase{
 		IssueSubstr: "maxProperties",
 	},
 	{
-		Name:      "section-entries-maxitems",
-		BoundPath: "$defs.section.oneOf[*].properties.entries.maxItems",
-		Keyword:   "maxItems",
-		Limit:     64,
+		Name: "section-entries-maxitems",
+		// oneOf[1] is "work" (oneOf order: profile, work, education, skill,
+		// language, certificate, project, custom -- see resume.schema.json's
+		// $defs.section). The other 7 branches declare the IDENTICAL
+		// maxItems:64 on their own "entries" array; per the brief's "one
+		// pair per distinct maxItems class" economy this is exercised as one
+		// representative document, with the other 7 explicitly named below
+		// (not silently assumed) -- see boundCase.Aliases's comment.
+		BoundPath: "$.$defs.section.oneOf[1].properties.entries.maxItems",
+		Aliases: []string{
+			"$.$defs.section.oneOf[0].properties.entries.maxItems", // profile
+			"$.$defs.section.oneOf[2].properties.entries.maxItems", // education
+			"$.$defs.section.oneOf[3].properties.entries.maxItems", // skill
+			"$.$defs.section.oneOf[4].properties.entries.maxItems", // language
+			"$.$defs.section.oneOf[5].properties.entries.maxItems", // certificate
+			"$.$defs.section.oneOf[6].properties.entries.maxItems", // project
+			"$.$defs.section.oneOf[7].properties.entries.maxItems", // custom
+		},
+		Keyword: "maxItems",
+		Limit:   64,
 		Valid: func() schema.Resume {
 			doc := baseDocForBounds()
 			doc.Content = map[string]schema.Section{"work": workSection(nWorkEntries(64))}
@@ -301,7 +327,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "personaldetails-details-maxitems",
-		BoundPath: "$defs.personalDetails.properties.details.maxItems",
+		BoundPath: "$.$defs.personalDetails.properties.details.maxItems",
 		Keyword:   "maxItems",
 		Limit:     16,
 		Valid: func() schema.Resume {
@@ -318,7 +344,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "layout-sections-main-maxitems",
-		BoundPath: "$defs.customization.properties.layout.properties.sections.properties.main.maxItems",
+		BoundPath: "$.$defs.customization.properties.layout.properties.sections.properties.main.maxItems",
 		Keyword:   "maxItems",
 		Limit:     24,
 		Valid: func() schema.Resume {
@@ -341,8 +367,34 @@ var namedBounds = []boundCase{
 		IssueSubstr: "maxItems",
 	},
 	{
+		// Round-2 review finding 2: main and sidebar are two DIFFERENT
+		// schema paths sharing the same maxItems:24 value -- reachability is
+		// per-path (does layout.sections.SIDEBAR specifically carry this
+		// bound through the pipeline?), not per-value, and the main-array
+		// case above never exercises sidebar at all. Cheap enough to give
+		// its own real case rather than alias it away.
+		Name:      "layout-sections-sidebar-maxitems",
+		BoundPath: "$.$defs.customization.properties.layout.properties.sections.properties.sidebar.maxItems",
+		Keyword:   "maxItems",
+		Limit:     24,
+		Valid: func() schema.Resume {
+			doc := baseDocForBounds()
+			doc.Content = lettersContent(24)
+			doc.Customization.Layout.Sections.Sidebar = sortedContentKeys(doc.Content)
+			return doc
+		},
+		Invalid: func() schema.Resume {
+			doc := baseDocForBounds()
+			doc.Content = lettersContent(24)
+			sidebar := append(sortedContentKeys(doc.Content), "z")
+			doc.Customization.Layout.Sections.Sidebar = sidebar
+			return doc
+		},
+		IssueSubstr: "maxItems",
+	},
+	{
 		Name:      "sectionkey-maxlength",
-		BoundPath: "$defs.sectionKey.maxLength",
+		BoundPath: "$.$defs.sectionKey.maxLength",
 		Keyword:   "maxLength",
 		Limit:     36,
 		Valid: func() schema.Resume {
@@ -363,7 +415,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "personaldetail-label-maxlength",
-		BoundPath: "$defs.personalDetail.properties.label.maxLength",
+		BoundPath: "$.$defs.personalDetail.properties.label.maxLength",
 		Keyword:   "maxLength",
 		Limit:     40,
 		Valid: func() schema.Resume {
@@ -384,7 +436,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "iconkey-maxlength",
-		BoundPath: "$defs.iconKey.maxLength",
+		BoundPath: "$.$defs.iconKey.maxLength",
 		Keyword:   "maxLength",
 		Limit:     64,
 		Valid: func() schema.Resume {
@@ -405,7 +457,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "displayname-maxlength",
-		BoundPath: "$defs.displayName.maxLength",
+		BoundPath: "$.$defs.displayName.maxLength",
 		Keyword:   "maxLength",
 		Limit:     80,
 		Valid: func() schema.Resume {
@@ -426,9 +478,17 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "city-country-name-maxlength",
-		BoundPath: "$defs.workEntry.allOf[1].properties.city.maxLength",
-		Keyword:   "maxLength",
-		Limit:     120,
+		BoundPath: "$.$defs.workEntry.allOf[1].properties.city.maxLength",
+		Aliases: []string{
+			"$.$defs.workEntry.allOf[1].properties.country.maxLength",
+			"$.$defs.educationEntry.allOf[1].properties.city.maxLength",
+			"$.$defs.educationEntry.allOf[1].properties.country.maxLength",
+			"$.$defs.customEntry.allOf[1].properties.city.maxLength",
+			"$.$defs.skillEntry.allOf[1].properties.name.maxLength",
+			"$.$defs.languageEntry.allOf[1].properties.name.maxLength",
+		},
+		Keyword: "maxLength",
+		Limit:   120,
 		Valid: func() schema.Resume {
 			return docWithWorkField(func(e *schema.WorkEntry) { e.City = strp(strings.Repeat("a", 120)) })
 		},
@@ -439,9 +499,21 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "fullname-jobtitle-title-maxlength",
-		BoundPath: "$defs.personalDetails.properties.fullName.maxLength",
-		Keyword:   "maxLength",
-		Limit:     160,
+		BoundPath: "$.$defs.personalDetails.properties.fullName.maxLength",
+		Aliases: []string{
+			"$.$defs.personalDetails.properties.headline.maxLength",
+			"$.$defs.workEntry.allOf[1].properties.jobTitle.maxLength",
+			"$.$defs.workEntry.allOf[1].properties.employer.maxLength",
+			"$.$defs.educationEntry.allOf[1].properties.degree.maxLength",
+			"$.$defs.educationEntry.allOf[1].properties.school.maxLength",
+			"$.$defs.certificateEntry.allOf[1].properties.title.maxLength",
+			"$.$defs.certificateEntry.allOf[1].properties.issuer.maxLength",
+			"$.$defs.projectEntry.allOf[1].properties.title.maxLength",
+			"$.$defs.customEntry.allOf[1].properties.title.maxLength",
+			"$.$defs.customEntry.allOf[1].properties.subtitle.maxLength",
+		},
+		Keyword: "maxLength",
+		Limit:   160,
 		Valid: func() schema.Resume {
 			doc := baseDocForBounds()
 			doc.PersonalDetails.FullName = strp(strings.Repeat("a", 160))
@@ -456,7 +528,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "personaldetail-value-maxlength",
-		BoundPath: "$defs.personalDetail.properties.value.maxLength",
+		BoundPath: "$.$defs.personalDetail.properties.value.maxLength",
 		Keyword:   "maxLength",
 		Limit:     256,
 		Valid: func() schema.Resume {
@@ -477,7 +549,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "photo-key-maxlength",
-		BoundPath: "$defs.photo.properties.key.maxLength",
+		BoundPath: "$.$defs.photo.properties.key.maxLength",
 		Keyword:   "maxLength",
 		Limit:     512,
 		Valid: func() schema.Resume {
@@ -494,7 +566,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "link-maxlength",
-		BoundPath: "$defs.link.maxLength",
+		BoundPath: "$.$defs.link.maxLength",
 		Keyword:   "maxLength",
 		Limit:     2048,
 		Valid: func() schema.Resume {
@@ -511,7 +583,7 @@ var namedBounds = []boundCase{
 	},
 	{
 		Name:      "richtext-maxlength-codepoints",
-		BoundPath: "$defs.richText.maxLength",
+		BoundPath: "$.$defs.richText.maxLength",
 		Keyword:   "maxLength",
 		Limit:     16384,
 		Valid: func() schema.Resume {
@@ -529,6 +601,57 @@ var namedBounds = []boundCase{
 			return doc
 		},
 		IssueSubstr: "maxLength",
+	},
+	// Round-2 review finding 3: every row above is maxLength/maxItems/
+	// maxProperties/byte-size -- none depends on D1(a)'s format ASSERTION
+	// (as opposed to mere annotation), so deleting AssertFormat() from
+	// validate.go would leave the ENTIRE parity corpus green; only the two
+	// one-sided Go-only D1a tests would catch it, and the brief designates
+	// the parity test as THE enforcement for D1(a). These two rows are
+	// invalid ONLY via format, tying D1(a) to the parity corpus for real
+	// (Keyword is "" -- format is not a maxLength/maxItems/maxProperties
+	// bound, so these are outside the completeness guard's schema walk, same
+	// as MaxDocumentBytes above).
+	{
+		Name:    "personaldetail-id-format-uuid",
+		Keyword: "",
+		Valid: func() schema.Resume {
+			doc := baseDocForBounds()
+			doc.PersonalDetails.Details = []schema.PersonalDetail{
+				{ID: boundUUID(0), Type: schema.TypeCustom, Value: "x", IsHidden: false},
+			}
+			return doc
+		},
+		Invalid: func() schema.Resume {
+			doc := baseDocForBounds()
+			// $defs/uuid is {"type":"string","format":"uuid"} -- no pattern
+			// at all, so only format assertion can reject this; the pattern
+			// keyword literally doesn't exist here to fall back on.
+			doc.PersonalDetails.Details = []schema.PersonalDetail{
+				{ID: "not-a-uuid", Type: schema.TypeCustom, Value: "x", IsHidden: false},
+			}
+			return doc
+		},
+		IssueSubstr: "uuid",
+	},
+	{
+		Name:    "workentry-employerlink-format-uri",
+		Keyword: "",
+		Valid: func() schema.Resume {
+			link := "https://a.co/"
+			return docWithWorkField(func(e *schema.WorkEntry) { e.EmployerLink = &link })
+		},
+		Invalid: func() schema.Resume {
+			// $defs/link's pattern (`^(https://|mailto:|tel:)`) is anchored
+			// at the START only (no trailing $), so it matches on the prefix
+			// alone regardless of what follows -- a trailing control
+			// character passes pattern untouched. Only format:uri (which
+			// both jsonschema/v6's net/url-based parser and ajv's `[^\s]*$`
+			// regex reject a raw control character under) catches this.
+			link := "https://a.co/\n"
+			return docWithWorkField(func(e *schema.WorkEntry) { e.EmployerLink = &link })
+		},
+		IssueSubstr: "uri",
 	},
 }
 
@@ -609,21 +732,37 @@ func walkSchemaBounds(t *testing.T) map[string]map[int][]string {
 	return found
 }
 
-func TestBoundsCompletenessGuard(t *testing.T) {
-	found := walkSchemaBounds(t)
-
-	covered := map[string]map[int]bool{
-		"maxLength":     {},
-		"maxItems":      {},
-		"maxProperties": {},
-	}
-	for _, bc := range namedBounds {
+// missingBoundCoverage compares found (walkSchemaBounds' output: keyword ->
+// limit -> every exact schema path declaring it) against cases' claimed
+// coverage (each case's own BoundPath plus its listed Aliases) and returns
+// one message per (keyword, limit, path) triple that is covered by
+// NEITHER -- sorted, for deterministic output. Extracted from
+// TestBoundsCompletenessGuard so TestMissingBoundCoverage_* can exercise it
+// directly against synthetic input, independent of the real schema (round-2
+// review finding 2's own regression test).
+func missingBoundCoverage(found map[string]map[int][]string, cases []boundCase) []string {
+	// covered[keyword][limit] is the set of paths some case explicitly
+	// claims (its own BoundPath, or a listed Alias) -- keyed by PATH, not
+	// just by (keyword, limit) alone, so a brand-new path reusing an
+	// existing limit is not silently absorbed.
+	covered := map[string]map[int]map[string]bool{}
+	for _, bc := range cases {
 		if bc.Keyword == "" {
 			continue
 		}
-		covered[bc.Keyword][bc.Limit] = true
+		if covered[bc.Keyword] == nil {
+			covered[bc.Keyword] = map[int]map[string]bool{}
+		}
+		if covered[bc.Keyword][bc.Limit] == nil {
+			covered[bc.Keyword][bc.Limit] = map[string]bool{}
+		}
+		covered[bc.Keyword][bc.Limit][bc.BoundPath] = true
+		for _, alias := range bc.Aliases {
+			covered[bc.Keyword][bc.Limit][alias] = true
+		}
 	}
 
+	var missing []string
 	for _, kw := range []string{"maxLength", "maxItems", "maxProperties"} {
 		limits := make([]int, 0, len(found[kw]))
 		for limit := range found[kw] {
@@ -631,12 +770,56 @@ func TestBoundsCompletenessGuard(t *testing.T) {
 		}
 		sort.Ints(limits)
 		for _, limit := range limits {
-			if !covered[kw][limit] {
-				t.Errorf(
-					"schema.RawSchema declares %s: %d (at %s) with no corresponding limit/limit+1 test in namedBounds -- add a boundCase for it",
-					kw, limit, strings.Join(found[kw][limit], ", "),
-				)
+			paths := append([]string(nil), found[kw][limit]...)
+			sort.Strings(paths)
+			for _, path := range paths {
+				if !covered[kw][limit][path] {
+					missing = append(missing, fmt.Sprintf(
+						"%s: %d at %s -- no covering test (neither a boundCase.BoundPath nor a listed Aliases entry)",
+						kw, limit, path,
+					))
+				}
 			}
+		}
+	}
+	return missing
+}
+
+func TestBoundsCompletenessGuard(t *testing.T) {
+	found := walkSchemaBounds(t)
+	for _, msg := range missingBoundCoverage(found, namedBounds) {
+		t.Errorf("schema.RawSchema declares %s -- add a boundCase or explicitly list it in an existing case's Aliases", msg)
+	}
+}
+
+// TestMissingBoundCoverage_CatchesNewPathReusingAnExistingLimit is the
+// round-2 review finding 2 regression test: a hypothetical NEW schema field
+// ($defs.tagline.maxLength) that happens to reuse an EXISTING, already-
+// tested limit (160, claimed today by fullname-jobtitle-title-maxlength)
+// must still be reported missing -- proving coverage is keyed by path, not
+// silently granted by value alone. This is entirely synthetic (no real
+// schema file is touched): it feeds a "found" map missingBoundCoverage
+// would have produced if resume.schema.json gained that field, without
+// waiting for that to actually happen.
+func TestMissingBoundCoverage_CatchesNewPathReusingAnExistingLimit(t *testing.T) {
+	realFullNamePath := "$.$defs.personalDetails.properties.fullName.maxLength"
+	found := map[string]map[int][]string{
+		"maxLength": {
+			160: {realFullNamePath, "$.$defs.tagline.maxLength"},
+		},
+	}
+	missing := missingBoundCoverage(found, namedBounds)
+	if len(missing) != 1 {
+		t.Fatalf("expected exactly 1 missing entry, got %d: %v", len(missing), missing)
+	}
+	if !strings.Contains(missing[0], "$.$defs.tagline.maxLength") {
+		t.Fatalf("expected the missing entry to name $.$defs.tagline.maxLength, got: %v", missing[0])
+	}
+	// The REAL, already-covered fullName path must NOT be reported missing
+	// -- proves this isn't just failing on every path indiscriminately.
+	for _, m := range missing {
+		if strings.Contains(m, realFullNamePath) {
+			t.Fatalf("fullName's own path was reported missing, but it is namedBounds' directly-tested BoundPath: %v", missing)
 		}
 	}
 }

@@ -2,98 +2,112 @@
   "bounds": [
     {
       "file": "bounds/city-country-name-maxlength-invalid.json",
-      "boundPath": "$defs.workEntry.allOf[1].properties.city.maxLength",
+      "boundPath": "$.$defs.workEntry.allOf[1].properties.city.maxLength",
       "limit": 120,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/city-country-name-maxlength-valid.json",
-      "boundPath": "$defs.workEntry.allOf[1].properties.city.maxLength",
+      "boundPath": "$.$defs.workEntry.allOf[1].properties.city.maxLength",
       "limit": 120,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/content-maxproperties-invalid.json",
-      "boundPath": "$defs.content.maxProperties",
+      "boundPath": "$.$defs.content.maxProperties",
       "limit": 24,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/content-maxproperties-valid.json",
-      "boundPath": "$defs.content.maxProperties",
+      "boundPath": "$.$defs.content.maxProperties",
       "limit": 24,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/displayname-maxlength-invalid.json",
-      "boundPath": "$defs.displayName.maxLength",
+      "boundPath": "$.$defs.displayName.maxLength",
       "limit": 80,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/displayname-maxlength-valid.json",
-      "boundPath": "$defs.displayName.maxLength",
+      "boundPath": "$.$defs.displayName.maxLength",
       "limit": 80,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/fullname-jobtitle-title-maxlength-invalid.json",
-      "boundPath": "$defs.personalDetails.properties.fullName.maxLength",
+      "boundPath": "$.$defs.personalDetails.properties.fullName.maxLength",
       "limit": 160,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/fullname-jobtitle-title-maxlength-valid.json",
-      "boundPath": "$defs.personalDetails.properties.fullName.maxLength",
+      "boundPath": "$.$defs.personalDetails.properties.fullName.maxLength",
       "limit": 160,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/iconkey-maxlength-invalid.json",
-      "boundPath": "$defs.iconKey.maxLength",
+      "boundPath": "$.$defs.iconKey.maxLength",
       "limit": 64,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/iconkey-maxlength-valid.json",
-      "boundPath": "$defs.iconKey.maxLength",
+      "boundPath": "$.$defs.iconKey.maxLength",
       "limit": 64,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/layout-sections-main-maxitems-invalid.json",
-      "boundPath": "$defs.customization.properties.layout.properties.sections.properties.main.maxItems",
+      "boundPath": "$.$defs.customization.properties.layout.properties.sections.properties.main.maxItems",
       "limit": 24,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/layout-sections-main-maxitems-valid.json",
-      "boundPath": "$defs.customization.properties.layout.properties.sections.properties.main.maxItems",
+      "boundPath": "$.$defs.customization.properties.layout.properties.sections.properties.main.maxItems",
+      "limit": 24,
+      "expect": "valid",
+      "storeExpect": "valid"
+    },
+    {
+      "file": "bounds/layout-sections-sidebar-maxitems-invalid.json",
+      "boundPath": "$.$defs.customization.properties.layout.properties.sections.properties.sidebar.maxItems",
+      "limit": 24,
+      "expect": "invalid",
+      "storeExpect": "invalid"
+    },
+    {
+      "file": "bounds/layout-sections-sidebar-maxitems-valid.json",
+      "boundPath": "$.$defs.customization.properties.layout.properties.sections.properties.sidebar.maxItems",
       "limit": 24,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/link-maxlength-invalid.json",
-      "boundPath": "$defs.link.maxLength",
+      "boundPath": "$.$defs.link.maxLength",
       "limit": 2048,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/link-maxlength-valid.json",
-      "boundPath": "$defs.link.maxLength",
+      "boundPath": "$.$defs.link.maxLength",
       "limit": 2048,
       "expect": "valid",
       "storeExpect": "valid"
@@ -111,57 +125,67 @@
       "storeExpect": "valid"
     },
     {
+      "file": "bounds/personaldetail-id-format-uuid-invalid.json",
+      "expect": "invalid",
+      "storeExpect": "invalid"
+    },
+    {
+      "file": "bounds/personaldetail-id-format-uuid-valid.json",
+      "expect": "valid",
+      "storeExpect": "valid"
+    },
+    {
       "file": "bounds/personaldetail-label-maxlength-invalid.json",
-      "boundPath": "$defs.personalDetail.properties.label.maxLength",
+      "boundPath": "$.$defs.personalDetail.properties.label.maxLength",
       "limit": 40,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/personaldetail-label-maxlength-valid.json",
-      "boundPath": "$defs.personalDetail.properties.label.maxLength",
+      "boundPath": "$.$defs.personalDetail.properties.label.maxLength",
       "limit": 40,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/personaldetail-value-maxlength-invalid.json",
-      "boundPath": "$defs.personalDetail.properties.value.maxLength",
+      "boundPath": "$.$defs.personalDetail.properties.value.maxLength",
       "limit": 256,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/personaldetail-value-maxlength-valid.json",
-      "boundPath": "$defs.personalDetail.properties.value.maxLength",
+      "boundPath": "$.$defs.personalDetail.properties.value.maxLength",
       "limit": 256,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/personaldetails-details-maxitems-invalid.json",
-      "boundPath": "$defs.personalDetails.properties.details.maxItems",
+      "boundPath": "$.$defs.personalDetails.properties.details.maxItems",
       "limit": 16,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/personaldetails-details-maxitems-valid.json",
-      "boundPath": "$defs.personalDetails.properties.details.maxItems",
+      "boundPath": "$.$defs.personalDetails.properties.details.maxItems",
       "limit": 16,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/photo-key-maxlength-invalid.json",
-      "boundPath": "$defs.photo.properties.key.maxLength",
+      "boundPath": "$.$defs.photo.properties.key.maxLength",
       "limit": 512,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/photo-key-maxlength-valid.json",
-      "boundPath": "$defs.photo.properties.key.maxLength",
+      "boundPath": "$.$defs.photo.properties.key.maxLength",
       "limit": 512,
       "expect": "valid",
       "storeExpect": "valid"
@@ -180,43 +204,53 @@
     },
     {
       "file": "bounds/richtext-maxlength-codepoints-invalid.json",
-      "boundPath": "$defs.richText.maxLength",
+      "boundPath": "$.$defs.richText.maxLength",
       "limit": 16384,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/richtext-maxlength-codepoints-valid.json",
-      "boundPath": "$defs.richText.maxLength",
+      "boundPath": "$.$defs.richText.maxLength",
       "limit": 16384,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/section-entries-maxitems-invalid.json",
-      "boundPath": "$defs.section.oneOf[*].properties.entries.maxItems",
+      "boundPath": "$.$defs.section.oneOf[1].properties.entries.maxItems",
       "limit": 64,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/section-entries-maxitems-valid.json",
-      "boundPath": "$defs.section.oneOf[*].properties.entries.maxItems",
+      "boundPath": "$.$defs.section.oneOf[1].properties.entries.maxItems",
       "limit": 64,
       "expect": "valid",
       "storeExpect": "valid"
     },
     {
       "file": "bounds/sectionkey-maxlength-invalid.json",
-      "boundPath": "$defs.sectionKey.maxLength",
+      "boundPath": "$.$defs.sectionKey.maxLength",
       "limit": 36,
       "expect": "invalid",
       "storeExpect": "invalid"
     },
     {
       "file": "bounds/sectionkey-maxlength-valid.json",
-      "boundPath": "$defs.sectionKey.maxLength",
+      "boundPath": "$.$defs.sectionKey.maxLength",
       "limit": 36,
+      "expect": "valid",
+      "storeExpect": "valid"
+    },
+    {
+      "file": "bounds/workentry-employerlink-format-uri-invalid.json",
+      "expect": "invalid",
+      "storeExpect": "invalid"
+    },
+    {
+      "file": "bounds/workentry-employerlink-format-uri-valid.json",
       "expect": "valid",
       "storeExpect": "valid"
     }
