@@ -325,7 +325,12 @@ func TestHarness_ConcurrentRunners_ExactlyOneApplies(t *testing.T) {
 	// acquire it itself.
 	pollAdvisoryLock(ctx, t, probeConn, false)
 
-	statuses, err := migrations.Status(ctx, dbA)
+	// providerA.Status, not the package-level migrations.Status: the latter
+	// checks the real embedded migrations.FS, which (unlike this test's
+	// synthetic fsys) grows with every real product migration — see the
+	// package doc comment's "independent of how many real product
+	// migrations exist" guarantee, which this exact call previously broke.
+	statuses, err := providerA.Status(ctx)
 	if err != nil {
 		t.Fatalf("Status() error: %v", err)
 	}
