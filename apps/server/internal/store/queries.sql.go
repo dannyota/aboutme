@@ -7,11 +7,45 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const backfillResumeDocumentCAS = `-- name: BackfillResumeDocumentCAS :execrows
+UPDATE resumes
+SET personal_details = $4, content = $5, customization = $6,
+    schema_version = $7
+WHERE id = $1 AND schema_version = $2 AND revision = $3
+`
+
+type BackfillResumeDocumentCASParams struct {
+	ID              uuid.UUID
+	SchemaVersion   int32
+	Revision        int64
+	PersonalDetails json.RawMessage
+	Content         json.RawMessage
+	Customization   json.RawMessage
+	SchemaVersion_2 int32
+}
+
+func (q *Queries) BackfillResumeDocumentCAS(ctx context.Context, arg BackfillResumeDocumentCASParams) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillResumeDocumentCAS,
+		arg.ID,
+		arg.SchemaVersion,
+		arg.Revision,
+		arg.PersonalDetails,
+		arg.Content,
+		arg.Customization,
+		arg.SchemaVersion_2,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
 
 const beginSessionRotation = `-- name: BeginSessionRotation :one
 UPDATE sessions SET rotation_grace_until = $2
@@ -78,6 +112,47 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 		&i.ConsumedAt,
 	)
 	return i, err
+}
+
+const countResumesForUser = `-- name: CountResumesForUser :one
+SELECT count(*) FROM resumes WHERE user_id = $1
+`
+
+func (q *Queries) CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countResumesForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createIdempotencyRecord = `-- name: CreateIdempotencyRecord :exec
+INSERT INTO idempotency_records
+    (user_id, route, idempotency_key, request_hash,
+     response_status, response_body, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type CreateIdempotencyRecordParams struct {
+	UserID         uuid.UUID
+	Route          string
+	IdempotencyKey uuid.UUID
+	RequestHash    []byte
+	ResponseStatus int32
+	ResponseBody   json.RawMessage
+	ExpiresAt      time.Time
+}
+
+func (q *Queries) CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) error {
+	_, err := q.db.Exec(ctx, createIdempotencyRecord,
+		arg.UserID,
+		arg.Route,
+		arg.IdempotencyKey,
+		arg.RequestHash,
+		arg.ResponseStatus,
+		arg.ResponseBody,
+		arg.ExpiresAt,
+	)
+	return err
 }
 
 const createIdentity = `-- name: CreateIdentity :one
@@ -155,6 +230,53 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const createResume = `-- name: CreateResume :one
+INSERT INTO resumes (user_id, title, schema_version, lng,
+                     personal_details, content, customization)
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at
+`
+
+type CreateResumeParams struct {
+	UserID          uuid.UUID
+	Title           string
+	SchemaVersion   int32
+	Lng             *string
+	PersonalDetails json.RawMessage
+	Content         json.RawMessage
+	Customization   json.RawMessage
+}
+
+func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error) {
+	row := q.db.QueryRow(ctx, createResume,
+		arg.UserID,
+		arg.Title,
+		arg.SchemaVersion,
+		arg.Lng,
+		arg.PersonalDetails,
+		arg.Content,
+		arg.Customization,
+	)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -251,6 +373,70 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteExpiredIdempotencyRecordsForUser = `-- name: DeleteExpiredIdempotencyRecordsForUser :execrows
+DELETE FROM idempotency_records
+WHERE user_id = $1 AND expires_at <= $2
+`
+
+type DeleteExpiredIdempotencyRecordsForUserParams struct {
+	UserID    uuid.UUID
+	ExpiresAt time.Time
+}
+
+// D11 opportunistic reaping (owner ruling): every Execute deletes the
+// calling user's expired rows in the same tx before inserting, so the TTL
+// is enforced by normal traffic, not by a job that doesn't exist yet.
+func (q *Queries) DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredIdempotencyRecordsForUser, arg.UserID, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteIdempotencyRecordIfExpired = `-- name: DeleteIdempotencyRecordIfExpired :execrows
+DELETE FROM idempotency_records
+WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
+    AND expires_at <= $4
+`
+
+type DeleteIdempotencyRecordIfExpiredParams struct {
+	UserID         uuid.UUID
+	Route          string
+	IdempotencyKey uuid.UUID
+	ExpiresAt      time.Time
+}
+
+func (q *Queries) DeleteIdempotencyRecordIfExpired(ctx context.Context, arg DeleteIdempotencyRecordIfExpiredParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteIdempotencyRecordIfExpired,
+		arg.UserID,
+		arg.Route,
+		arg.IdempotencyKey,
+		arg.ExpiresAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteResumeForUser = `-- name: DeleteResumeForUser :execrows
+DELETE FROM resumes WHERE id = $1 AND user_id = $2
+`
+
+type DeleteResumeForUserParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteResumeForUser, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const findLiveSuccessorSession = `-- name: FindLiveSuccessorSession :one
 SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE rotated_from = $1 AND revoked_at IS NULL
 `
@@ -295,6 +481,34 @@ func (q *Queries) FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uui
 	return i, err
 }
 
+const getIdempotencyRecord = `-- name: GetIdempotencyRecord :one
+SELECT id, user_id, route, idempotency_key, request_hash, response_status, response_body, created_at, expires_at FROM idempotency_records
+WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
+`
+
+type GetIdempotencyRecordParams struct {
+	UserID         uuid.UUID
+	Route          string
+	IdempotencyKey uuid.UUID
+}
+
+func (q *Queries) GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error) {
+	row := q.db.QueryRow(ctx, getIdempotencyRecord, arg.UserID, arg.Route, arg.IdempotencyKey)
+	var i IdempotencyRecord
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Route,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.ResponseStatus,
+		&i.ResponseBody,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const getIdentityByProviderSubject = `-- name: GetIdentityByProviderSubject :one
 SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE provider = $1 AND provider_user_id = $2
 `
@@ -313,6 +527,38 @@ func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdent
 		&i.Provider,
 		&i.ProviderUserID,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getResumeForUser = `-- name: GetResumeForUser :one
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE id = $1 AND user_id = $2
+`
+
+type GetResumeForUserParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error) {
+	row := q.db.QueryRow(ctx, getResumeForUser, arg.ID, arg.UserID)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -520,6 +766,86 @@ func (q *Queries) ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessi
 	return items, nil
 }
 
+const listResumeIDsBelowSchemaVersion = `-- name: ListResumeIDsBelowSchemaVersion :many
+SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2
+`
+
+type ListResumeIDsBelowSchemaVersionParams struct {
+	SchemaVersion int32
+	Limit         int32
+}
+
+func (q *Queries) ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listResumeIDsBelowSchemaVersion, arg.SchemaVersion, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listResumesForUser = `-- name: ListResumesForUser :many
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE user_id = $1 ORDER BY created_at, id
+`
+
+func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
+	rows, err := q.db.Query(ctx, listResumesForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Resume
+	for rows.Next() {
+		var i Resume
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Title,
+			&i.Slug,
+			&i.Live,
+			&i.DownloadEnabled,
+			&i.SEOGeoEnabled,
+			&i.SchemaVersion,
+			&i.Revision,
+			&i.Lng,
+			&i.PersonalDetails,
+			&i.Content,
+			&i.Customization,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockUserForResumeWrite = `-- name: LockUserForResumeWrite :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUserForResumeWrite, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const revokeAllSessions = `-- name: RevokeAllSessions :execrows
 UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL
 `
@@ -635,4 +961,63 @@ type TouchReauthenticatedAtParams struct {
 func (q *Queries) TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error {
 	_, err := q.db.Exec(ctx, touchReauthenticatedAt, arg.ID, arg.ReauthenticatedAt)
 	return err
+}
+
+const updateResumeDocumentCAS = `-- name: UpdateResumeDocumentCAS :one
+UPDATE resumes
+SET personal_details = $4, content = $5, customization = $6,
+    schema_version = $7, revision = revision + 1, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING revision
+`
+
+type UpdateResumeDocumentCASParams struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Revision        int64
+	PersonalDetails json.RawMessage
+	Content         json.RawMessage
+	Customization   json.RawMessage
+	SchemaVersion   int32
+}
+
+func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error) {
+	row := q.db.QueryRow(ctx, updateResumeDocumentCAS,
+		arg.ID,
+		arg.UserID,
+		arg.Revision,
+		arg.PersonalDetails,
+		arg.Content,
+		arg.Customization,
+		arg.SchemaVersion,
+	)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
+const updateResumeTitleCAS = `-- name: UpdateResumeTitleCAS :one
+UPDATE resumes
+SET title = $4, revision = revision + 1, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING revision
+`
+
+type UpdateResumeTitleCASParams struct {
+	ID       uuid.UUID
+	UserID   uuid.UUID
+	Revision int64
+	Title    string
+}
+
+func (q *Queries) UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error) {
+	row := q.db.QueryRow(ctx, updateResumeTitleCAS,
+		arg.ID,
+		arg.UserID,
+		arg.Revision,
+		arg.Title,
+	)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
 }

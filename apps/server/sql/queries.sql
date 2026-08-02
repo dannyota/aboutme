@@ -199,3 +199,67 @@ UPDATE oauth_transactions
 SET consumed_at = $2
 WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
 RETURNING *;
+
+-- name: LockUserForResumeWrite :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: CreateResume :one
+INSERT INTO resumes (user_id, title, schema_version, lng,
+                     personal_details, content, customization)
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+
+-- name: GetResumeForUser :one
+SELECT * FROM resumes WHERE id = $1 AND user_id = $2;
+
+-- name: ListResumesForUser :many
+SELECT * FROM resumes WHERE user_id = $1 ORDER BY created_at, id;
+
+-- name: CountResumesForUser :one
+SELECT count(*) FROM resumes WHERE user_id = $1;
+
+-- name: DeleteResumeForUser :execrows
+DELETE FROM resumes WHERE id = $1 AND user_id = $2;
+
+-- name: UpdateResumeDocumentCAS :one
+UPDATE resumes
+SET personal_details = $4, content = $5, customization = $6,
+    schema_version = $7, revision = revision + 1, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING revision;
+
+-- name: UpdateResumeTitleCAS :one
+UPDATE resumes
+SET title = $4, revision = revision + 1, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING revision;
+
+-- name: BackfillResumeDocumentCAS :execrows
+UPDATE resumes
+SET personal_details = $4, content = $5, customization = $6,
+    schema_version = $7
+WHERE id = $1 AND schema_version = $2 AND revision = $3;
+
+-- name: ListResumeIDsBelowSchemaVersion :many
+SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2;
+
+-- name: CreateIdempotencyRecord :exec
+INSERT INTO idempotency_records
+    (user_id, route, idempotency_key, request_hash,
+     response_status, response_body, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: GetIdempotencyRecord :one
+SELECT * FROM idempotency_records
+WHERE user_id = $1 AND route = $2 AND idempotency_key = $3;
+
+-- name: DeleteIdempotencyRecordIfExpired :execrows
+DELETE FROM idempotency_records
+WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
+    AND expires_at <= $4;
+
+-- name: DeleteExpiredIdempotencyRecordsForUser :execrows
+-- D11 opportunistic reaping (owner ruling): every Execute deletes the
+-- calling user's expired rows in the same tx before inserting, so the TTL
+-- is enforced by normal traffic, not by a job that doesn't exist yet.
+DELETE FROM idempotency_records
+WHERE user_id = $1 AND expires_at <= $2;

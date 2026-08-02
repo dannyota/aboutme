@@ -25,6 +25,7 @@ sql:
           csrf_secret: "CSRFSecret"
           pkce_verifier: "PKCEVerifier"
           redirect_uri: "RedirectURI"
+          seo_geo_enabled: "SEOGeoEnabled"
         overrides:
           - db_type: "uuid"
             go_type:

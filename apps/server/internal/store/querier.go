@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	BackfillResumeDocumentCAS(ctx context.Context, arg BackfillResumeDocumentCASParams) (int64, error)
 	// Single-row conditional UPDATE that decides the >24h rotation winner: only
 	// a row that has neither already started rotating (rotation_grace_until
 	// still NULL) nor been revoked is claimed. Under concurrent callers racing
@@ -30,6 +31,8 @@ type Querier interface {
 	// transaction just like any other outcome, so it can never be retried
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
+	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) error
 	// internal/auth's login-resolution algorithm calls
 	// GetIdentityByProviderSubject first specifically to avoid racing
 	// identities_provider_subject_key's UNIQUE (provider, provider_user_id) in
@@ -38,6 +41,7 @@ type Querier interface {
 	// this insert to fail.
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
+	CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error)
 	// Always inserts a brand-new row -- used both by Issue (fixation defense: a
 	// login never reuses an existing session row) and by the >24h rotation
 	// winner's successor insert (internal/auth.SessionManager.Authenticate),
@@ -54,6 +58,12 @@ type Querier interface {
 	// become type-safe Go methods in internal/store via `make generate`. See
 	// docs/specs/aboutme-design.md §3 "Schema management".
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// D11 opportunistic reaping (owner ruling): every Execute deletes the
+	// calling user's expired rows in the same tx before inserting, so the TTL
+	// is enforced by normal traffic, not by a job that doesn't exist yet.
+	DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (int64, error)
+	DeleteIdempotencyRecordIfExpired(ctx context.Context, arg DeleteIdempotencyRecordIfExpiredParams) (int64, error)
+	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
 	// Fix round 3, finding DD-C14c (owner ruling: schema change, replacing
 	// fix round 1/2's timestamp-reconstruction queries): given a session
 	// that may itself be a rotation PREDECESSOR, finds the exact successor
@@ -74,7 +84,9 @@ type Querier interface {
 	// needs no equivalent query at all: a session's own rotated_from column,
 	// already in hand on any row already read, IS the answer.
 	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
+	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
 	// Fix round 2, finding DD-C14b: DELETE /sessions/{id}'s lineage sweep
 	// (sessions_handlers.go's revokeLineagePartners) needs the just-revoked
 	// TARGET session's own id/rotated_from/user_id to look up its rotation
@@ -118,6 +130,9 @@ type Querier interface {
 	// as a deterministic tiebreaker for two rows created in the same instant
 	// (fix round 1, M4).
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
+	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
+	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
+	LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
@@ -148,6 +163,8 @@ type Querier interface {
 	// (design decision 2) -- called only after a real reauth round trip
 	// (internal/auth.SessionManager.TouchReauthenticated), never by rotation.
 	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
+	UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error)
+	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)
