@@ -54,10 +54,21 @@ dev: ## Start the dev stack (podman compose): postgres + server + web + caddy
 dev-down: ## Stop the dev stack and remove containers (keeps the postgres volume)
 	podman compose --env-file .env -f deploy/compose.yml down
 
-test-db-up: ## Start a throwaway Postgres for integration tests (publishes 5432)
+test-db-up: ## Start a throwaway Postgres for integration tests (publishes 5432) and wait until it accepts connections
 	podman run -d --rm --name aboutme-test-db -p 127.0.0.1:5432:5432 \
 	  -e POSTGRES_USER=aboutme -e POSTGRES_PASSWORD=aboutme_dev -e POSTGRES_DB=aboutme \
 	  docker.io/library/postgres:18.4-alpine
+	@echo "Waiting for aboutme-test-db to accept connections..."
+	@i=0; \
+	until podman exec aboutme-test-db pg_isready -U aboutme -d aboutme >/dev/null 2>&1; do \
+	  i=$$((i + 1)); \
+	  if [ $$i -ge 30 ]; then \
+	    echo "test-db-up: aboutme-test-db did not become ready within 30s; see 'podman logs aboutme-test-db'" >&2; \
+	    exit 1; \
+	  fi; \
+	  sleep 1; \
+	done; \
+	echo "aboutme-test-db is ready."
 
 test-db-down: ## Stop the throwaway integration-test Postgres
 	podman rm -f aboutme-test-db
