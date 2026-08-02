@@ -7,28 +7,111 @@ package store
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 )
 
-const ping = `-- name: Ping :one
-
-SELECT 1::int AS ok
+const beginSessionRotation = `-- name: BeginSessionRotation :one
+UPDATE sessions SET rotation_grace_until = $2
+WHERE id = $1 AND rotation_grace_until IS NULL AND revoked_at IS NULL
+RETURNING id
 `
+
+type BeginSessionRotationParams struct {
+	ID                 uuid.UUID
+	RotationGraceUntil *time.Time
+}
+
+func (q *Queries) BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, beginSessionRotation, arg.ID, arg.RotationGraceUntil)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createUser = `-- name: CreateUser :one
+
+INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING id, email, name, avatar_key, created_at, updated_at
+`
+
+type CreateUserParams struct {
+	Email     string
+	Name      string
+	AvatarKey *string
+}
 
 // Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
 // become type-safe Go methods in internal/store via `make generate`. See
 // docs/specs/aboutme-design.md §3 "Schema management".
-//
-// No product-table queries yet (schema.sql defines no product tables) —
-// those land alongside users/identities/sessions in Phase 1 and
-// resumes/slug_tombstones in Phase 2A. sqlc requires at least one query to
-// generate anything, so the one query below is a deliberate placeholder:
-// it proves the schema.sql -> sqlc -> internal/store codegen path produces
-// real, compiling Go end-to-end (task 0.3's generation path must be
-// verified, not just configured) without inventing product schema. Replace
-// or remove it once Phase 1 adds real queries.
-func (q *Queries) Ping(ctx context.Context) (int32, error) {
-	row := q.db.QueryRow(ctx, ping)
-	var ok int32
-	err := row.Scan(&ok)
-	return ok, err
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.Name, arg.AvatarKey)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getIdentityByProviderSubject = `-- name: GetIdentityByProviderSubject :one
+SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE provider = $1 AND provider_user_id = $2
+`
+
+type GetIdentityByProviderSubjectParams struct {
+	Provider       string
+	ProviderUserID string
+}
+
+func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error) {
+	row := q.db.QueryRow(ctx, getIdentityByProviderSubject, arg.Provider, arg.ProviderUserID)
+	var i Identity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE email = $1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

@@ -1,16 +1,20 @@
 -- Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
 -- become type-safe Go methods in internal/store via `make generate`. See
 -- docs/specs/aboutme-design.md §3 "Schema management".
---
--- No product-table queries yet (schema.sql defines no product tables) —
--- those land alongside users/identities/sessions in Phase 1 and
--- resumes/slug_tombstones in Phase 2A. sqlc requires at least one query to
--- generate anything, so the one query below is a deliberate placeholder:
--- it proves the schema.sql -> sqlc -> internal/store codegen path produces
--- real, compiling Go end-to-end (task 0.3's generation path must be
--- verified, not just configured) without inventing product schema. Replace
--- or remove it once Phase 1 adds real queries.
 
--- name: Ping :one
-SELECT 1::int AS ok;
+-- name: CreateUser :one
+INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING *;
 
+-- name: GetUserByID :one
+SELECT * FROM users WHERE id = $1;
+
+-- name: GetUserByEmail :one
+SELECT * FROM users WHERE email = $1;
+
+-- name: GetIdentityByProviderSubject :one
+SELECT * FROM identities WHERE provider = $1 AND provider_user_id = $2;
+
+-- name: BeginSessionRotation :one
+UPDATE sessions SET rotation_grace_until = $2
+WHERE id = $1 AND rotation_grace_until IS NULL AND revoked_at IS NULL
+RETURNING id;

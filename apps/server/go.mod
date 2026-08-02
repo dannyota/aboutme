@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/dannyota/aboutme/packages/schema/gen/go v0.0.0
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pressly/goose/v3 v3.27.3
 	golang.org/x/time v0.15.0
