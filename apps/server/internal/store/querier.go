@@ -12,6 +12,18 @@ import (
 
 type Querier interface {
 	BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error)
+	// Atomically claims a transaction: only a row that is unexpired and not yet
+	// consumed (as of now, $2) is updated and returned. A handle that is
+	// unknown, expired, or already consumed matches no row, so the caller sees
+	// exactly one outcome (pgx.ErrNoRows) for all three cases -- see
+	// internal/auth.ErrTransactionInvalid's doc comment for why that collapse
+	// is deliberate. The provider-mismatch check (RFC 9700 mix-up defense)
+	// happens in Go, after this still consumes the row: an attacker replaying
+	// a valid handle against the wrong provider's callback burns the
+	// transaction just like any other outcome, so it can never be retried
+	// against the correct provider either.
+	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
+	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
 	// Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
 	// become type-safe Go methods in internal/store via `make generate`. See
 	// docs/specs/aboutme-design.md §3 "Schema management".

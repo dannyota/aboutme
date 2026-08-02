@@ -23,10 +23,11 @@ func TestLoad_ValidConfig(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"PORT":         "9090",
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "debug",
-		"ENV":          "dev",
+		"PORT":          "9090",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "debug",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -49,6 +50,9 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if got.Env != "dev" {
 		t.Errorf("Env = %q, want %q", got.Env, "dev")
 	}
+	if got.PublicOrigin != "https://aboutme.vn" {
+		t.Errorf("PublicOrigin = %q, want %q", got.PublicOrigin, "https://aboutme.vn")
+	}
 	if got.TrustedProxyCIDRs != nil {
 		t.Errorf("TrustedProxyCIDRs = %v, want nil (default outside prod/staging)", got.TrustedProxyCIDRs)
 	}
@@ -67,6 +71,7 @@ func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 
 	got, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "staging",
 		"LISTEN_HOST":         "127.0.0.1",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32,::1/128",
@@ -90,9 +95,10 @@ func TestLoad_PortDefaultsTo8080(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "info",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "info",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -106,8 +112,9 @@ func TestLoad_LogLevelDefaultsToInfo(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -121,9 +128,10 @@ func TestLoad_LogLevelCaseInsensitive(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "WARN",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "WARN",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -151,9 +159,18 @@ func TestLoad_MissingRequiredVars(t *testing.T) {
 		{
 			name: "missing ENV",
 			vars: map[string]string{
-				"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": "https://aboutme.vn",
 			},
 			wantErr: "ENV",
+		},
+		{
+			name: "missing PUBLIC_ORIGIN",
+			vars: map[string]string{
+				"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
+				"ENV":          "dev",
+			},
+			wantErr: "PUBLIC_ORIGIN",
 		},
 	}
 
@@ -176,9 +193,10 @@ func TestLoad_InvalidValues(t *testing.T) {
 	t.Parallel()
 
 	base := map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "info",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "info",
+		"ENV":           "dev",
 	}
 
 	tests := []struct {
@@ -225,8 +243,9 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 			t.Parallel()
 
 			vars := map[string]string{
-				"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-				"ENV":          envValue,
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": "https://aboutme.vn",
+				"ENV":           envValue,
 			}
 			if envValue == "prod" || envValue == "staging" {
 				// prod and staging both require TRUSTED_PROXY_CIDRS (fail
@@ -251,8 +270,9 @@ func TestLoad_ListenHostDefaultsToLoopback(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -266,9 +286,10 @@ func TestLoad_ListenHostCustomValueAcceptedOutsideProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
-		"LISTEN_HOST":  "0.0.0.0",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+		"LISTEN_HOST":   "0.0.0.0",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -282,9 +303,10 @@ func TestLoad_ListenHostInvalidValue(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
-		"LISTEN_HOST":  "not-an-ip",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+		"LISTEN_HOST":   "not-an-ip",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error for invalid LISTEN_HOST")
@@ -304,6 +326,7 @@ func TestLoad_ListenHostNonLoopbackRejectedInProd(t *testing.T) {
 
 	_, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "prod",
 		"LISTEN_HOST":         "0.0.0.0",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
@@ -321,6 +344,7 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 
 	got, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "prod",
 		"LISTEN_HOST":         "127.0.0.1",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
@@ -343,6 +367,7 @@ func TestLoad_ListenHostNonLoopbackRejectedInStaging(t *testing.T) {
 
 	_, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "staging",
 		"LISTEN_HOST":         "0.0.0.0",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
@@ -360,6 +385,7 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 
 	got, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "staging",
 		"LISTEN_HOST":         "127.0.0.1",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
@@ -381,8 +407,9 @@ func TestLoad_TrustedProxyCIDRs_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "prod",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "prod",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error: TRUSTED_PROXY_CIDRS is required when ENV=prod")
@@ -401,8 +428,9 @@ func TestLoad_TrustedProxyCIDRs_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "staging",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "staging",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error: TRUSTED_PROXY_CIDRS is required when ENV=staging")
@@ -416,8 +444,9 @@ func TestLoad_TrustedProxyCIDRs_OptionalOutsideProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -432,6 +461,7 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 
 	got, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "prod",
 		"LISTEN_HOST":         "127.0.0.1",
 		"TRUSTED_PROXY_CIDRS": " 127.0.0.1/32 , ::1/128 ",
@@ -464,6 +494,7 @@ func TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone(t *testing.T) {
 
 			_, err := config.Load(env(map[string]string{
 				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
 				"ENV":                 "dev",
 				"TRUSTED_PROXY_CIDRS": cidr,
 			}))
@@ -502,6 +533,7 @@ func TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix(t *testing.T) {
 
 			_, err := config.Load(env(map[string]string{
 				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
 				"ENV":                 "dev",
 				"TRUSTED_PROXY_CIDRS": cidr,
 			}))
@@ -525,6 +557,7 @@ func TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted(t *testing.T) {
 
 	got, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "dev",
 		"TRUSTED_PROXY_CIDRS": "10.0.0.0/8, 2001:db8::/48",
 	}))
@@ -560,6 +593,7 @@ func TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix(t *testing.T) {
 
 			_, err := config.Load(env(map[string]string{
 				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
 				"ENV":                 "dev",
 				"TRUSTED_PROXY_CIDRS": cidr,
 			}))
@@ -582,6 +616,7 @@ func TestLoad_TrustedProxyCIDRs_InvalidCIDR(t *testing.T) {
 
 	_, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "dev",
 		"TRUSTED_PROXY_CIDRS": "not-a-cidr",
 	}))
