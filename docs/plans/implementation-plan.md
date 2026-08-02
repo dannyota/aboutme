@@ -466,13 +466,17 @@ reviews as previously unmapped are now assigned: mobile client (P11), session
 device list/revoke (P1), logout-everywhere + `Clear-Site-Data` (P1),
 doc-migration CAS race (P2A), pagination modes + fonts (P3), template thumbnails
 (P7B), cache-invalidation surfaces (P5A), disclosure wording (P5B), media/avatar
-upload (P2B), audit retention (P8-priv). Infrastructure rows were ratified at
-Phase PI plan adoption: AC-INF-001…008 (PI — production client-IP boundary,
-CloudFront behavior matrix as code, env parity, secret scoping, alarm inventory,
-scheduled jobs, plus the PI-originated staging access gate and staging noindex
-controls per PI decision D25) and AC-OPS-015…019 (P9A — live CloudFront matrix,
-origin-secret rotation drill, live two-runner migration, real restore, alarm
-receipt); live origin-bypass rejection remains AC-OPS-002 (P9A).
+upload (P2B), audit retention (P8-priv). **This paragraph has repeatedly claimed
+rows the matrix did not contain — four phase plans (PI, P2A, P3, and the
+infrastructure set) each found a claimed-but-absent row during review. Rows are
+now minted at plan adoption, and this paragraph names only rows that exist.**
+Infrastructure rows were ratified at Phase PI plan adoption: AC-INF-001…008 (PI
+— production client-IP boundary, CloudFront behavior matrix as code, env parity,
+secret scoping, alarm inventory, scheduled jobs, plus the PI-originated staging
+access gate and staging noindex controls per PI decision D25) and AC-OPS-015…019
+(P9A — live CloudFront matrix, origin-secret rotation drill, live two-runner
+migration, real restore, alarm receipt); live origin-bypass rejection remains
+AC-OPS-002 (P9A).
 
 ## Deferred (documented, not v1-blocking)
 
