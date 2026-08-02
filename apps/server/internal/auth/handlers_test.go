@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
@@ -306,6 +307,34 @@ func extractCookie(resp *http.Response, name string) *http.Cookie {
 	return nil
 }
 
+// requestCookie builds an *http.Cookie carrying only Name/Value, for
+// attaching to an outbound test *http.Request -- via req.AddCookie, or
+// one of doGet/doJSON/doCallback's own cookies... parameters, which every
+// call site across this package's test files ultimately feeds into
+// req.AddCookie -- never a real response Set-Cookie. Secure/HttpOnly/
+// SameSite are response-cookie attributes: they tell a BROWSER how to
+// treat a cookie a SERVER sets via Set-Cookie, and have no wire
+// representation at all on a request's own Cookie header (RFC 6265
+// §5.4) -- there is nothing for this helper to set, and setting them here
+// would be simulating a shape a real request cookie can never have.
+// Production Set-Cookie construction lives exclusively in cookie.go's
+// oauthTxCookie and session_cookie.go's sessionCookie, both already
+// covered by .semgrep.yml's go-cookie-missing-security-flags rule (which,
+// as of fix round 1, excludes _test.go entirely -- see that rule's own
+// updated paths.exclude comment for why request-side construction there
+// can never be the regression it exists to catch).
+//
+// Centralized here (fix round 1, Task 10 review finding, semgrep) rather
+// than one bare &http.Cookie{Name: ..., Value: ...} literal per call
+// site specifically so semgrep's two remaining upstream registry rules
+// (p/gosec/p/golang's cookie-missing-httponly and cookie-missing-secure --
+// not this project's own rule, which the .semgrep.yml exclusion above
+// already silences for every _test.go file) need exactly ONE nosemgrep
+// pair, here, rather than one per call site.
+func requestCookie(name, value string) *http.Cookie {
+	return &http.Cookie{Name: name, Value: value} // nosemgrep: go.lang.security.audit.net.cookie-missing-httponly.cookie-missing-httponly,go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- request-side cookie (see this function's own doc comment): Secure/HttpOnly/SameSite are response-cookie attributes with no meaning on a Cookie header this helper builds for req.AddCookie.
+}
+
 // failingSessionIssuer structurally satisfies handlers.go's unexported
 // sessionIssuer interface (Go interface satisfaction needs no shared
 // name across packages) -- Issue always fails, letting a test force
@@ -318,6 +347,43 @@ type failingSessionIssuer struct{}
 
 func (failingSessionIssuer) Issue(context.Context, uuid.UUID, string, string) (string, store.Session, error) {
 	return "", store.Session{}, errors.New("stub: session issuance deliberately failed for a test -- must never leak")
+}
+
+// pgErrorSessionIssuer is failingSessionIssuer's sibling (fix round 1, I7):
+// Issue always fails with a *pgconn.PgError shaped exactly like a real
+// users_email_key unique-violation (the same SQLSTATE/message/detail/
+// constraint shape a genuine concurrent-registration race would produce),
+// deterministically forcing writeInternalError/logInternalError's
+// SQLSTATE-extraction-and-redaction path (fix-round Important 2) without
+// needing an actual database race. This restores the coverage
+// TestGoogleCallback_ResolveUserConflict_LogsSQLSTATE's retirement note
+// (below) flagged as lost: that test's own repro (a second registration
+// racing a real UNIQUE constraint) no longer reaches the database at all
+// now that resolveLoginIdentity checks GetUserByEmail first, so this seam
+// -- already established by failingSessionIssuer for an unrelated
+// purpose -- is reused instead of trying to force a genuine, inherently
+// non-deterministic race.
+type pgErrorSessionIssuer struct{}
+
+// pgUniqueViolationMessage/pgUniqueViolationDetail/pgUniqueViolationConstraint
+// are the exact fields a real users_email_key violation carries -- Detail
+// deliberately embeds a bound email value (Postgres's own behavior,
+// "Key (email)=(...) already exists"), which is precisely why
+// logInternalError must never log this struct's Message/Detail/
+// ConstraintName fields, only its Code.
+const (
+	pgUniqueViolationMessage    = `duplicate key value violates unique constraint "users_email_key"`
+	pgUniqueViolationDetail     = "Key (email)=(pg-error-test@example.com) already exists."
+	pgUniqueViolationConstraint = "users_email_key"
+)
+
+func (pgErrorSessionIssuer) Issue(context.Context, uuid.UUID, string, string) (string, store.Session, error) {
+	return "", store.Session{}, &pgconn.PgError{
+		Code:           "23505",
+		Message:        pgUniqueViolationMessage,
+		Detail:         pgUniqueViolationDetail,
+		ConstraintName: pgUniqueViolationConstraint,
+	}
 }
 
 // ---- Service construction / route registration -----------------------
@@ -724,7 +790,7 @@ func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFaile
 	p := oidctest.NewProvider(t)
 	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
-	fakeTxCookie := &http.Cookie{Name: auth.OAuthTxCookieName, Value: "never-issued-handle-shaped-value"}
+	fakeTxCookie := requestCookie(auth.OAuthTxCookieName, "never-issued-handle-shaped-value")
 	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code=c&state=s", fakeTxCookie) //nolint:bodyclose // doGet closes the body itself before returning.
 
 	if resp.StatusCode != http.StatusFound {
@@ -923,6 +989,90 @@ func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *te
 // a genuine unique-violation is trivial to force deterministically
 // (two direct CreateUser calls with the same email, no HTTP layer or
 // race required).
+//
+// Superseded (fix round 1, I7) by
+// TestGoogleCallback_SessionIssuanceUniqueViolation_LogsSQLSTATEOnly
+// below: SetSessionIssuerForTest/pgErrorSessionIssuer (an already-
+// established seam, extended here rather than reinvented) forces the
+// SAME writeInternalError/logInternalError path with a synthetic
+// *pgconn.PgError shaped exactly like a real users_email_key violation,
+// deterministically, downstream of a real successful resolveLoginIdentity
+// call rather than trying to force the database's own constraint under a
+// race.
+
+// TestGoogleCallback_SessionIssuanceUniqueViolation_LogsSQLSTATEOnly is
+// fix round 1's I7: restores this package's ONLY coverage of
+// logInternalError's SQLSTATE-extraction-and-redaction behavior
+// (pgconn.PgError.Code logged; raw Message/Detail/ConstraintName text,
+// which for a real unique-violation embeds a bound value -- see
+// pgUniqueViolationDetail's own literal email -- never logged), lost when
+// TestGoogleCallback_ResolveUserConflict_LogsSQLSTATE was retired (see
+// that test's own doc comment above for why its specific repro no longer
+// reaches the database). Rather than forcing a genuine, inherently
+// non-deterministic concurrent race, this drives a real, successful
+// Google login all the way through resolveLoginIdentity's NewUser branch
+// and fails ONLY at the very next step -- session issuance -- via
+// pgErrorSessionIssuer, deterministically reaching the exact same
+// writeInternalError/logInternalError code path a real CreateUser
+// constraint violation would have, with a synthetic error shaped
+// identically to a genuine one.
+func TestGoogleCallback_SessionIssuanceUniqueViolation_LogsSQLSTATEOnly(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	logger, logBuf := newCapturingLogger()
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLogger(logger), withSessionIssuer(pgErrorSessionIssuer{}))
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
+	txCookie, state, nonce := beginGoogle(t, handler)
+	p.RegisterCode("code-sqlstate-session-issuance", oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		Nonce:         nonce,
+	})
+	resp := doCallback(t, handler, "code-sqlstate-session-issuance", state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d (session issuance failed with a unique-violation-shaped error)", resp.StatusCode, http.StatusInternalServerError)
+	}
+	if extractCookie(resp, auth.SessionCookieName) != nil {
+		t.Error("a session cookie was set despite session issuance itself failing")
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	bodyStr := string(body)
+	if !strings.Contains(bodyStr, `"internal_error"`) {
+		t.Errorf("response body = %q, want it to contain the generic internal_error code", bodyStr)
+	}
+	if strings.Contains(bodyStr, pgUniqueViolationMessage) || strings.Contains(bodyStr, pgUniqueViolationDetail) || strings.Contains(bodyStr, pgUniqueViolationConstraint) {
+		t.Errorf("response body = %q, leaked the underlying Postgres error text -- must be opaque", bodyStr)
+	}
+
+	logged := logBuf.String()
+	if !strings.Contains(logged, `"sqlstate":"23505"`) {
+		t.Errorf("log record = %q, want it to contain the unique_violation SQLSTATE (\"sqlstate\":\"23505\")", logged)
+	}
+	if !strings.Contains(logged, `"provider":"google"`) {
+		t.Errorf("log record = %q, want a provider attribute identifying which provider's callback failed", logged)
+	}
+	if strings.Contains(logged, pgUniqueViolationMessage) {
+		t.Errorf("log record = %q, leaked the raw postgres error message -- logInternalError must log only the SQLSTATE code, never message text (which for a real DB error can embed PII)", logged)
+	}
+	if strings.Contains(logged, pgUniqueViolationDetail) {
+		t.Errorf("log record = %q, leaked the raw postgres detail text (which embeds a bound email value for a real violation)", logged)
+	}
+	if strings.Contains(logged, pgUniqueViolationConstraint) {
+		t.Errorf("log record = %q, leaked the constraint name -- want the SQLSTATE code only", logged)
+	}
+	if strings.Contains(logged, email) {
+		t.Errorf("log record = %q, leaked the visitor's email", logged)
+	}
+}
 
 // TestGoogleCallback_RejectionLogsProviderAttribute proves logRejection's
 // output identifies WHICH provider's callback was rejected: the shared

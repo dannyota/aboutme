@@ -53,6 +53,15 @@
 // differed from this suite's own best-supported guess -- see notes.md's
 // integration report for the exact diff and reasoning per marker. No
 // assertion or scenario was weakened in reconciliation.
+//
+// Fix round 1 (Opus review, findings C1/DD-C16): the reauth-then-link
+// same-site chain C1 found required TestLink_RejectsWithoutRecentReauth's
+// own /start request to carry a same-site signal (an Origin header) it
+// didn't need before -- glue only, at that one test's own call site; see
+// its doc comment for the exact reasoning. No other test in this file
+// drives /start via HTTP (the other three construct their transaction
+// directly via TransactionStore.Begin, bypassing /start's same-site check
+// entirely), so nothing else here needed touching.
 package auth_test
 
 import (
@@ -531,7 +540,7 @@ func beginGoogleTransaction(t *testing.T, q *store.Queries, purpose auth.Purpose
 	if err != nil {
 		t.Fatalf("TransactionStore.Begin() error = %v", err)
 	}
-	return &http.Cookie{Name: auth.OAuthTxCookieName, Value: handle}, transaction
+	return requestCookie(auth.OAuthTxCookieName, handle), transaction
 }
 
 // sessionRowReauthenticatedAt reads sessions.reauthenticated_at for id
@@ -562,6 +571,18 @@ func sessionRowReauthenticatedAt(ctx context.Context, t *testing.T, db rowQuerie
 // this test's own assertions below -- no change needed; this was an
 // ADAPT guess during derivation. Drives Google (the brief's own
 // "cheapest provider" convention for shared-logic coverage).
+//
+// Glue added post-landing (fix round 1, DD-C16/C1): the request below now
+// carries an Origin header matching testPublicOrigin. DD-C16 added a
+// same-site-initiation check (sameSiteInitiated, csrf.go) that runs
+// BEFORE the reauth gate this test targets -- an unadorned request (no
+// Sec-Fetch-Site, no Origin, no Referer) now fails closed at that EARLIER
+// check with 403 csrf_rejected, never reaching the reauth check this test
+// exists to prove. This is glue restoring the request to a same-site shape
+// (a real settings-page-initiated request would send one of these
+// signals), not a change to what property is being asserted -- the
+// scenario, and every assertion below, are unchanged from original
+// authorship.
 func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 	t.Parallel()
 
@@ -573,7 +594,7 @@ func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 	raw, sess := issueTestSession(t, q, userID)
 	forceReauthenticatedAtStale(t, sess.ID) // sessions_handlers_test.go: reauthenticated_at -> now-20m.
 
-	resp := doJSON(t, handler, http.MethodGet, auth.GoogleStartPath+"?purpose=link", "", "", "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	resp := doJSON(t, handler, http.MethodGet, auth.GoogleStartPath+"?purpose=link", testPublicOrigin, "", "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("GET %s?purpose=link with a stale-reauth session status = %d, want %d", auth.GoogleStartPath, resp.StatusCode, http.StatusForbidden)
 	}

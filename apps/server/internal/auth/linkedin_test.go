@@ -25,6 +25,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -221,6 +222,48 @@ func TestLinkedInStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPat
 	}
 }
 
+// TestLinkedInCallback_RejectionLogsProviderAttribute mirrors
+// TestGoogleCallback_RejectionLogsProviderAttribute (handlers_test.go) and
+// TestGitHubCallback_RejectionLogsProviderAttribute (github_test.go) for
+// LinkedIn (fix round 1, M3 -- restoring an assertion lost when this
+// file's own DD-C12 tests, one of which originally carried it, were
+// removed): the shared rejection funnel (redirectWithError/
+// redirectAuthFailed, handlers.go) is reused by every provider Service
+// registers, so its log message is deliberately provider-neutral ("auth:
+// callback rejected", never "auth: linkedin callback rejected") -- the
+// provider attribute passed at each call site is what still lets an
+// operator filter or correlate by provider in a shared log stream, and is
+// the ONLY thing that would catch a copy-paste slip (e.g.
+// ProviderGoogle hardcoded at a LinkedIn call site) -- the response the
+// browser sees is identical either way, so only a log assertion like this
+// one discriminates a swapped constant.
+func TestLinkedInCallback_RejectionLogsProviderAttribute(t *testing.T) {
+	t.Parallel()
+
+	logger, logBuf := newCapturingLogger()
+	// This request never reaches a real LinkedIn (or Google) call (it's
+	// rejected at the missing-tx-cookie check, the very first line of
+	// handleLinkedInCallback), so any non-empty override satisfies
+	// newTestService's guard -- auth.UnroutableTestSentinel documents that
+	// explicitly rather than a bare, unexplained literal (mirrors
+	// TestGitHubCallback_RejectionLogsProviderAttribute's identical
+	// reasoning). withGoogleIssuer is required here only to satisfy
+	// newTestService's own belt-and-suspenders guard (it checks
+	// googleIssuer/githubEndpoint, not linkedinIssuer -- see that
+	// function's doc comment) -- this test never drives a Google route.
+	handler, _ := newTestService(t, withGoogleIssuer(auth.UnroutableTestSentinel), withLinkedInIssuer(auth.UnroutableTestSentinel), withLogger(logger))
+
+	resp := doGet(t, handler, auth.LinkedInCallbackPath+"?code=whatever&state=whatever") //nolint:bodyclose // doGet closes the body itself before returning.
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+
+	logged := logBuf.String()
+	if !strings.Contains(logged, `"provider":"linkedin"`) {
+		t.Errorf("log record = %q, want a provider attribute identifying LinkedIn as the callback that was rejected", logged)
+	}
+}
+
 // ==== Constructing a link/reauth transaction directly ====
 //
 // beginLinkedInTransaction (below) is reused by linkedin_adversarial_test.go
@@ -258,5 +301,5 @@ func beginLinkedInTransaction(t *testing.T, q *store.Queries, purpose auth.Purpo
 	if err != nil {
 		t.Fatalf("TransactionStore.Begin() error = %v", err)
 	}
-	return &http.Cookie{Name: auth.OAuthTxCookieName, Value: handle}, transaction
+	return requestCookie(auth.OAuthTxCookieName, handle), transaction
 }

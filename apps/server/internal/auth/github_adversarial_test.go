@@ -274,7 +274,7 @@ func TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider(t *testing.T
 		t.Fatalf("Begin(ProviderGoogle) error = %v", err)
 	}
 
-	googleTxCookie := &http.Cookie{Name: auth.OAuthTxCookieName, Value: handle}
+	googleTxCookie := requestCookie(auth.OAuthTxCookieName, handle)
 
 	resp := doGitHubCallback(t, handler, "irrelevant-code-never-exchanged", tx.State, googleTxCookie) //nolint:bodyclose // doGitHubCallback -> doGet closes the body itself before returning.
 

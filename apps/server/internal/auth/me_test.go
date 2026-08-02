@@ -71,7 +71,7 @@ func issueTestSession(t *testing.T, q *store.Queries, userID uuid.UUID) (raw str
 // sessionRequestCookie returns the __Host-session cookie a request
 // carrying raw (issueTestSession's own return value) would send.
 func sessionRequestCookie(raw string) *http.Cookie {
-	return &http.Cookie{Name: auth.SessionCookieName, Value: raw}
+	return requestCookie(auth.SessionCookieName, raw)
 }
 
 // doJSON issues a method request for path against handler, with an
@@ -318,7 +318,7 @@ func TestGetMe_NoSessionCookie_Returns401(t *testing.T) {
 func TestGetMe_InvalidSessionToken_Returns401AndClearsCookie(t *testing.T) {
 	handler, _ := newSessionAPITestService(t)
 
-	fakeCookie := &http.Cookie{Name: auth.SessionCookieName, Value: "never-issued-session-token"}
+	fakeCookie := requestCookie(auth.SessionCookieName, "never-issued-session-token")
 	resp := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", fakeCookie) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)

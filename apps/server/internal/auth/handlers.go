@@ -136,6 +136,23 @@ const emailAlreadyRegisteredErrorCode = "email_already_registered"
 // own doc comment (link.go).
 const identityAlreadyLinkedErrorCode = "identity_already_linked"
 
+// pgUniqueViolationCode is Postgres's SQLSTATE class code for a unique-
+// constraint violation (23505) -- checked by isUniqueViolation below, the
+// fix round 1 (I2/I3) race-recovery seam resolveLoginIdentity's CreateUser
+// call and resolveLinkOrReauth's CreateIdentity call (link.go) both use to
+// tell an ordinary, already-handled outcome racing in under them apart
+// from a genuine database defect.
+const pgUniqueViolationCode = "23505"
+
+// isUniqueViolation reports whether err is (or wraps) a *pgconn.PgError
+// whose Code is pgUniqueViolationCode -- the exact, narrow signal
+// resolveLoginIdentity/resolveLinkOrReauth's race-recovery branches key
+// off, never a broader "was this any kind of database error" check.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode
+}
+
 // settingsSessionsPath is DD-C15's redirect target for every link/reauth-
 // purpose /callback outcome, success and rejection alike: the settings
 // page that initiates a link/reauth flow (Task 11's job to build), so the
@@ -755,6 +772,26 @@ func (s *Service) resolveLoginIdentity(ctx context.Context, provider Provider, p
 
 	usr, err := s.q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: name})
 	if err != nil {
+		if isUniqueViolation(err) {
+			// Lost a race against a concurrent registration for this exact
+			// email between the GetUserByEmail check above and this INSERT
+			// (fix round 1, I2): from this caller's perspective that is an
+			// entirely ORDINARY email collision, not a server defect -- DD-C4
+			// requires /callback to redirect, never 500, on a top-level
+			// browser navigation. Re-run the same read the happy path above
+			// already does and return its result exactly as if the check had
+			// seen the row the first time.
+			if _, getErr := s.q.GetUserByEmail(ctx, email); getErr == nil {
+				return loginResult{Kind: loginResultEmailCollision}, nil
+			} else if !errors.Is(getErr, pgx.ErrNoRows) {
+				return loginResult{}, fmt.Errorf("auth: resolve login identity: get user by email after race: %w", getErr)
+			}
+			// The unique index fired but a same-transaction re-read now sees
+			// no row at all (e.g. the concurrent winner's row was itself
+			// deleted in between) -- no longer an ordinary collision; fall
+			// through to the generic wrapped-error path below rather than
+			// silently treating this genuine anomaly as success.
+		}
 		return loginResult{}, fmt.Errorf("auth: resolve login identity: create user: %w", err)
 	}
 	if _, err := s.q.CreateIdentity(ctx, store.CreateIdentityParams{
