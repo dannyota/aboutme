@@ -57,7 +57,7 @@ The stack publishes on `${CADDY_HTTP_PORT}` (8080 in rootless environments).
 | UAT-P1-12 | **Web pages render and point at the real endpoints.** `make web-build` succeeds; the login page's three provider links have `href` exactly `/api/v1/auth/{google,github,linkedin}/start` and are plain anchors; the settings page renders. Record the built output paths as evidence.                                                                                                                                                                                                                                                                                                                                                | —                        |
 | UAT-P1-13 | **Contract conformance.** `make api-check` passes; every path this phase added is present in `docs/api/openapi.yaml`; `make schema-check`, `make sqlc-check`, `make data-drift`, `make server-migration-test` all pass.                                                                                                                                                                                                                                                                                                                                                                                                              | —                        |
 | UAT-P1-14 | **Full quality gate.** `make server-build server-vet server-test`, `golangci-lint run ./...`, `govulncheck ./...`, `make semgrep`, `make web-lint web-typecheck web-test`, `make docs-lint` — all pass with the exact output recorded.                                                                                                                                                                                                                                                                                                                                                                                               | —                        |
-| UAT-P1-15 | **Secrets hygiene.** No provider client secret, session token, CSRF secret, or OAuth handle appears in any committed file, in the server's log output during the run, or in any evidence artifact this run produces. `.env` is not staged, tracked, or quoted.                                                                                                                                                                                                                                                                                                                                                                       | —                        |
+| UAT-P1-15 | **Secrets hygiene.** No provider client secret, session token, CSRF secret, or OAuth handle appears in any committed file, in the server's log output during the run, or in **any evidence or scratch artifact this run produces** — name every path you wrote secret-bearing scratch files to, so this is checkable without forensics. `.env` is not staged, tracked, or quoted. If `*_CLIENT_ID`/`*_CLIENT_SECRET` are empty in this environment, say so: that half of the row is then vacuous, not proven.                                                                                                                        | —                        |
 | UAT-P1-16 | **Migration immutability and append-only.** `git diff --name-status <base>...HEAD -- apps/server/migrations` shows only `A` entries for `*.sql` — nothing modified, renamed, or deleted; `00001_extensions.sql` is byte-identical to its state at the base commit; each migration added during this phase appears in exactly one commit and is never edited afterward (`git log --follow` per file); `atlas.sum` verifies. (Corrected 2026-08-02 — the original wording assumed `00002` predated the phase; it did not.)                                                                                                             | —                        |
 
 ## Reporting
@@ -65,9 +65,11 @@ The stack publishes on `${CADDY_HTTP_PORT}` (8080 in rootless environments).
 One row per ID: expected / observed / `PASS` | `FAIL` | `BLOCKED`, each linked
 to its evidence (command, exact output, request/response dumps, DB verification
 query and result, server log excerpt). Missing evidence, an undisclosed retry,
-or any unexplained error output fails that row. Report the environment honestly
-— if a scenario cannot run here, mark it `BLOCKED` with the reason rather than
-substituting a weaker check. `BLOCKED` counts as `FAIL`.
+or any unexplained error output fails that row. **Any** state-changing action
+taken during the run is disclosable — seeding, truncation, container restarts, a
+discarded attempt — not only a re-issued scenario command. Report the
+environment honestly — if a scenario cannot run here, mark it `BLOCKED` with the
+reason rather than substituting a weaker check. `BLOCKED` counts as `FAIL`.
 
 Seeding note: rows that need an authenticated session may create users and
 session rows directly in the database (the token is the sha256 preimage the
@@ -108,3 +110,29 @@ unchanged.
   1 FAIL / 1 BLOCKED — still an overall `FAIL`, on UAT-P1-01 alone. The
   criterion now names the correct invocation and tells a future worker how to
   tell a client artifact from a server defect before recording one.
+
+### 2026-08-02 — after run 2 (verdict PASS; evidence pinned at `2d17f77`)
+
+Adjudicated by the Opus evidence verification of run 2, which upheld the run
+with corrections. Run 2's recorded verdicts stand unchanged; both items below
+apply to **run 3 onward**.
+
+- **UAT-P1-15 — the criterion binds the worker's own artifacts, and run 2 did
+  not check them.** The row already says "any evidence artifact this run
+  produces", but run 2 checked only committed files, container logs, and its
+  report — while its scratch files held session tokens, CSRF secrets and a live
+  `csrfToken` in plaintext. Verification re-grepped 18 secret values across the
+  captured and live logs and found none leaked, so the verdict held. The row is
+  restated to make the artifact scope explicit and to require the worker to name
+  where it wrote secret-bearing scratch files, so a verifier can check them
+  without forensics. Note also: the provider-secret half of this row is
+  **vacuously true** in any environment where `*_CLIENT_ID`/`*_CLIENT_SECRET`
+  are empty — say so rather than reporting a clean grep as though it proved
+  something.
+- **Reporting — a setup-step retry is a disclosable retry.** Run 2 disclosed no
+  retries "at the scenario-command level", which was literally true while
+  omitting a mid-run `TRUNCATE` of all four auth tables after a seeding script
+  aborted. Verification established by catalog forensics that it happened and
+  that no verdict depended on pre-truncate state. The Reporting section now
+  states that **any** state-changing action taken during the run is disclosable,
+  not only a re-issued scenario command.
