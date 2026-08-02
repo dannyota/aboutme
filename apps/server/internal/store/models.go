@@ -26,9 +26,9 @@ type OAuthTransaction struct {
 	Purpose       string
 	LinkingUserID *uuid.UUID
 	State         string
-	PkceVerifier  string
+	PKCEVerifier  string
 	Nonce         *string
-	RedirectUri   string
+	RedirectURI   string
 	CreatedAt     time.Time
 	ExpiresAt     time.Time
 	ConsumedAt    *time.Time
@@ -38,7 +38,7 @@ type Session struct {
 	ID                 uuid.UUID
 	UserID             uuid.UUID
 	TokenHash          []byte
-	CsrfSecret         []byte
+	CSRFSecret         []byte
 	CreatedAt          time.Time
 	LastSeenAt         time.Time
 	ReauthenticatedAt  time.Time
