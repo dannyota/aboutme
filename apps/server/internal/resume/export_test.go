@@ -7,11 +7,16 @@ package resume
 // suffix), never shipped.
 
 import (
+	"context"
 	"encoding/json"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 // CompileCountForTest reports how many times mustCompileSchema has run.
@@ -55,4 +60,24 @@ func IsResumeCapExceededForTest(err error) bool {
 // reimplementation of it.
 func EncodePartsForTest(doc schema.Resume) (personalDetails, content, customization json.RawMessage, err error) {
 	return encodeParts(doc)
+}
+
+// CreateTxForTest exposes (*Store).createTx (store.go, B7's tx-scoped create
+// core) to package resume_test, so Task 7's IdempotencyStore composition
+// tests (idempotency_test.go) can call the REAL cap-checked create logic --
+// composed inside IdempotencyStore.Execute's own transaction exactly as
+// P2B's eventual caller will -- rather than a hand-rolled INSERT stand-in
+// that would prove nothing about the composition.
+func (s *Store) CreateTxForTest(ctx context.Context, qtx *store.Queries, userID uuid.UUID, title string, doc schema.Resume) (Resume, error) {
+	return s.createTx(ctx, qtx, userID, title, doc)
+}
+
+// NewIdempotencyStoreForTest builds an IdempotencyStore backed by pool that
+// uses now instead of the real wall clock, so tests in package resume_test
+// (which, by this package's own convention, cannot reach IdempotencyStore's
+// unexported clock field directly) can exercise Execute's IdempotencyTTL
+// expiry logic deterministically -- advancing a fake clock, never a real
+// sleep. Every non-test caller uses NewIdempotencyStore.
+func NewIdempotencyStoreForTest(pool *store.Pool, now func() time.Time) *IdempotencyStore {
+	return &IdempotencyStore{pool: pool, q: store.New(pool), now: now}
 }
