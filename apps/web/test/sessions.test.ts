@@ -1,8 +1,20 @@
-import { describe, expect, it } from 'vitest';
-import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  mockNuxtImport,
+  mountSuspended,
+  registerEndpoint,
+} from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { createError } from 'h3';
+import { createError, setResponseStatus } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
+
+// revoke-all (on success) and the current-session "Log out" button both
+// navigate away via `navigateTo` — stub it so tests can assert on the
+// target without a real page transition tearing the mounted wrapper down
+// mid-test. `mockNuxtImport`'s factory is hoisted above any top-level
+// `const`, so the mock function has to be created inside it; `navigateTo`
+// itself becomes accessible as an auto-import in this file afterward.
+mockNuxtImport('navigateTo', () => vi.fn());
 
 // The registerEndpoint mock's event doesn't normalize header casing the way
 // a real Node request does, and h3's own `getRequestHeader` disagrees with
@@ -54,6 +66,10 @@ registerEndpoint('/api/v1/me', () => ({ data: meData }));
 registerEndpoint('/api/v1/sessions', () => ({ data: sessionsData }));
 
 describe('sessions.vue', () => {
+  beforeEach(() => {
+    vi.mocked(navigateTo).mockClear();
+  });
+
   it('lists sessions and treats the current one distinctly', async () => {
     const wrapper = await mountSuspended(SessionsPage);
     await flushPromises();
@@ -215,16 +231,113 @@ describe('sessions.vue', () => {
     },
   );
 
-  it('logs out everywhere via revoke-all, sending the CSRF header',
+  it('sends the CSRF header when logging out everywhere', async () => {
+    let receivedHeader: string | undefined;
+    let receivedMethod: string | undefined;
+    registerEndpoint('/api/v1/sessions/revoke-all', {
+      method: 'POST',
+      handler: (event) => {
+        receivedMethod = event.method;
+        receivedHeader = requestHeader(event, 'x-csrf-token');
+        return { data: { revoked: true } };
+      },
+    });
+
+    const wrapper = await mountSuspended(SessionsPage);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="revoke-all-button"]').trigger('click');
+    await flushPromises();
+
+    expect(receivedMethod).toBe('POST');
+    expect(receivedHeader).toBe('test-csrf-token');
+  });
+
+  it(
+    'navigates to /login on a successful revoke-all, without '
+    + 'refetching /me or the session list afterward',
     async () => {
-      let receivedHeader: string | undefined;
-      let receivedMethod: string | undefined;
+      let meGetCalls = 0;
+      registerEndpoint('/api/v1/me', {
+        method: 'GET',
+        handler: () => {
+          meGetCalls += 1;
+          return { data: meData };
+        },
+      });
+      let sessionsGetCalls = 0;
+      registerEndpoint('/api/v1/sessions', {
+        method: 'GET',
+        handler: () => {
+          sessionsGetCalls += 1;
+          return { data: sessionsData };
+        },
+      });
+      registerEndpoint('/api/v1/sessions/revoke-all', {
+        method: 'POST',
+        handler: () => ({ data: { revoked: true } }),
+      });
+
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+
+      const meGetCallsAtMount = meGetCalls;
+      const sessionsGetCallsAtMount = sessionsGetCalls;
+
+      await wrapper.get('[data-testid="revoke-all-button"]').trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      // Revoke-all destroys the current session too (Clear-Site-Data) —
+      // there is nothing left to refetch, only somewhere else to go.
+      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+      expect(meGetCalls).toBe(meGetCallsAtMount);
+      expect(sessionsGetCalls).toBe(sessionsGetCallsAtMount);
+    },
+  );
+
+  it(
+    'shows the reauth prompt when revoke-all requires recent reauth, '
+    + 'without touching any session row',
+    async () => {
+      let revokeAllAttempted = false;
       registerEndpoint('/api/v1/sessions/revoke-all', {
         method: 'POST',
         handler: (event) => {
-          receivedMethod = event.method;
-          receivedHeader = requestHeader(event, 'x-csrf-token');
-          return { data: { revoked: true } };
+          revokeAllAttempted = true;
+          setResponseStatus(event, 403);
+          return { error: { code: 'reauth_required', message: 'x' } };
+        },
+      });
+
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+      expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
+        false,
+      );
+
+      await wrapper.get('[data-testid="revoke-all-button"]').trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      expect(revokeAllAttempted).toBe(true);
+      const prompt = wrapper.get('[data-testid="reauth-prompt"]');
+      expect(prompt.text()).toContain('confirm it\'s you');
+      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
+        false,
+      );
+      // Sensitive-op rejection, not a generic failure — and definitely
+      // not a silent success.
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    },
+  );
+
+  it('shows an error banner for a non-reauth revoke-all failure',
+    async () => {
+      registerEndpoint('/api/v1/sessions/revoke-all', {
+        method: 'POST',
+        handler: () => {
+          throw createError({ statusCode: 500 });
         },
       });
 
@@ -233,8 +346,14 @@ describe('sessions.vue', () => {
 
       await wrapper.get('[data-testid="revoke-all-button"]').trigger('click');
       await flushPromises();
+      await flushPromises();
 
-      expect(receivedMethod).toBe('POST');
-      expect(receivedHeader).toBe('test-csrf-token');
+      expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
+        'Could not log out everywhere',
+      );
+      expect(
+        wrapper.find('[data-testid="reauth-prompt"]').exists(),
+      ).toBe(false);
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });
 });

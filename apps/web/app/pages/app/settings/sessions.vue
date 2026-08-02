@@ -37,15 +37,12 @@ const allProviders: AuthProvider[] = ['google', 'github', 'linkedin'];
 const route = useRoute();
 const { csrfToken, identities, logout, refresh: refreshMe } = useAuth();
 
-// useAuth's own `/me` fetch is fire-and-forget (so components like a nav
-// bar don't block page render behind it). This page performs CSRF-guarded
-// mutations, so it explicitly waits for a fresh csrfToken before anything
-// on it becomes interactive.
-await refreshMe();
-
+// DD-C9: same reasoning as useAuth's own `/me` call — this must not run
+// during SSR (no proxy, no cookies there), so the real fetch happens
+// client-side only.
 const { data: sessionsResponse } = await useFetch<SessionsEnvelope>(
   '/api/v1/sessions',
-  { credentials: 'include' },
+  { credentials: 'include', server: false },
 );
 
 // Subsequent refreshes (after a revoke/revoke-all) go through a plain
@@ -94,16 +91,6 @@ async function revokeSession(id: string): Promise<void> {
   await refreshSessions();
 }
 
-async function revokeAll(): Promise<void> {
-  revokeError.value = null;
-  await $fetch('/api/v1/sessions/revoke-all', {
-    method: 'POST',
-    credentials: 'include',
-    headers: csrfHeaders(csrfToken.value),
-  });
-  await refreshSessions();
-}
-
 // --- Provider linking (Step 3: minimal reauth-required UX) ---
 
 const linkedProviders = computed(
@@ -122,10 +109,45 @@ async function openAddProvider(): Promise<void> {
   showAddProvider.value = true;
 }
 
-const reauthRequired = computed(
-  () => route.query.error === 'reauth_required',
-);
+// Reachable two ways: (1) the callback landing on this page's URL with
+// `?error=reauth_required` after a `purpose=link` top-level navigation
+// bounced back, or (2) a same-page fetch (revoke-all below) getting a
+// live `403 reauth_required` — which never touches the URL, so this has
+// to be settable programmatically, not just derived from the route.
+const reauthRequired = ref(route.query.error === 'reauth_required');
 const reauthProvider = computed(() => identities.value[0]?.provider ?? null);
+
+function isReauthRequiredError(error: unknown): boolean {
+  const code = (
+    error as { data?: { error?: { code?: string } } }
+  )?.data?.error?.code;
+  return code === 'reauth_required';
+}
+
+async function revokeAll(): Promise<void> {
+  revokeError.value = null;
+  try {
+    await $fetch('/api/v1/sessions/revoke-all', {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfHeaders(csrfToken.value),
+    });
+  } catch (error) {
+    if (isReauthRequiredError(error)) {
+      // Logout-everywhere requires recent reauth (spec: "sensitive
+      // operations require recent OAuth reauth"). Nothing was revoked —
+      // show the same "confirm it's you" prompt the link flow uses,
+      // rather than a generic error.
+      reauthRequired.value = true;
+      return;
+    }
+    revokeError.value = 'Could not log out everywhere. Try again.';
+    return;
+  }
+  // Success destroys the current session too (Clear-Site-Data) — there is
+  // nothing left here to refetch; leave for the login screen.
+  await navigateTo('/login');
+}
 </script>
 
 <template>
