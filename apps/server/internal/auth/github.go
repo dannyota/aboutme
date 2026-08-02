@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -139,6 +140,14 @@ type githubEmail struct {
 // *http.Client from oauth2.Config.Client, which attaches the exchanged
 // access token's Authorization header automatically), and decodes a JSON
 // response body into out.
+//
+// The response body is wrapped in io.LimitReader(maxProviderResponseBytes)
+// before decoding (security-relevant cheap-win fix): json.Decoder.Decode
+// otherwise reads the ENTIRE body into memory with no cap at all, however
+// large GitHub's (or a misconfigured githubEndpointOverride's) response
+// happens to be. A body that hits the cap fails json.Decode with a
+// truncation/syntax error -- ordinary decode-failure handling, no special
+// case needed -- rather than the read itself ever completing unbounded.
 func (s *Service) githubAPIGet(ctx context.Context, client *http.Client, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.githubAPIBaseURLFor()+path, nil)
 	if err != nil {
@@ -155,7 +164,7 @@ func (s *Service) githubAPIGet(ctx context.Context, client *http.Client, path st
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("auth: github api call %s: unexpected status %d", path, resp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxProviderResponseBytes)).Decode(out); err != nil {
 		return fmt.Errorf("auth: github api call %s: decode response: %w", path, err)
 	}
 	return nil
@@ -237,7 +246,11 @@ func (s *Service) handleGitHubStart(w http.ResponseWriter, r *http.Request) {
 // handleGoogleCallback (see that function's doc comment for why it is
 // deliberately not a deferred call).
 func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	// withProviderHTTPClient (provider_http.go): every outbound call below
+	// (token exchange, /user, /user/emails) shares one bounded client
+	// (timeout + this file's own maxProviderResponseBytes cap on the
+	// bodies githubAPIGet decodes).
+	ctx := withProviderHTTPClient(r.Context())
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {

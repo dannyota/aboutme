@@ -103,6 +103,13 @@ func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries,
 // auth_test's pure-function tests (see DefaultTestOverrideForTest).
 const UnroutableTestSentinel = unroutableProviderSentinel
 
+// MaxProviderResponseBytesForTest exposes maxProviderResponseBytes
+// (provider_http.go) to package auth_test, so a test proving githubAPIGet
+// truncates an oversized provider response (github_test.go) can size its
+// fixture relative to the real production cap, rather than hard-coding a
+// second, independently-maintained copy of that number.
+const MaxProviderResponseBytesForTest = maxProviderResponseBytes
+
 // DefaultTestOverrideForTest exposes defaultTestOverride to package
 // auth_test, so the substitution NewServiceForTest applies to each
 // provider override can be tested directly and deterministically, without

@@ -20,6 +20,7 @@ package auth_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"math/rand/v2" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- test-only row-collision avoidance (uniqueGitHubUserID below), not a security-sensitive value; same judgment already expressed to golangci-lint via the //nolint:gosec on that call site, and the same reasoning testutil/ids.go's identical import-line suppression documents.
 	"net/http"
 	"net/http/httptest"
@@ -76,6 +77,16 @@ type gitHubStubConfig struct {
 	// 2's other DD-C10 regression case (a malformed/undecodable response,
 	// as distinct from a bad status code).
 	emailsAPIMalformedJSON bool
+
+	// userAPIOversizedBody, when true, makes GET /user respond 200 with a
+	// SYNTACTICALLY VALID JSON body deliberately larger than
+	// auth.MaxProviderResponseBytesForTest -- security-relevant cheap-win
+	// regression coverage for githubAPIGet's io.LimitReader cap (github.go):
+	// without that cap, this body decodes successfully (the padding field
+	// is simply ignored, the same as any other unrecognized JSON field);
+	// with it, the read is truncated mid-body and json.Decode fails on the
+	// resulting incomplete JSON.
+	userAPIOversizedBody bool
 }
 
 // gitHubStubOption configures newGitHubStub.
@@ -129,6 +140,13 @@ func withUserAPIStatus(status int) gitHubStubOption {
 // the same redirectAuthFailed path, not writeInternalError.
 func withEmailsAPIMalformedJSON() gitHubStubOption {
 	return func(c *gitHubStubConfig) { c.emailsAPIMalformedJSON = true }
+}
+
+// withUserAPIOversizedBody makes GET /user respond with a body larger
+// than githubAPIGet's own response-size cap -- see
+// gitHubStubConfig.userAPIOversizedBody's own doc comment.
+func withUserAPIOversizedBody() gitHubStubOption {
+	return func(c *gitHubStubConfig) { c.userAPIOversizedBody = true }
 }
 
 // gitHubStub is an in-process, GitHub-shaped HTTP server backing a single
@@ -290,6 +308,27 @@ func (gh *gitHubStub) serveUser(w http.ResponseWriter, r *http.Request) {
 
 	if cfg.userAPIStatus != 0 {
 		w.WriteHeader(cfg.userAPIStatus)
+		return
+	}
+
+	if cfg.userAPIOversizedBody {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// A syntactically valid JSON object, deliberately larger than
+		// auth.MaxProviderResponseBytesForTest -- see
+		// gitHubStubConfig.userAPIOversizedBody's own doc comment.
+		if _, err := w.Write([]byte(`{"id":` + strconv.FormatInt(cfg.userID, 10) + `,"login":"` + cfg.userLogin + `","padding":"`)); err != nil {
+			gh.t.Errorf("github stub: writing oversized user response prefix: %v", err)
+			return
+		}
+		padding := strings.Repeat("x", auth.MaxProviderResponseBytesForTest+1)
+		if _, err := io.WriteString(w, padding); err != nil {
+			gh.t.Errorf("github stub: writing oversized user response padding: %v", err)
+			return
+		}
+		if _, err := w.Write([]byte(`"}`)); err != nil {
+			gh.t.Errorf("github stub: writing oversized user response suffix: %v", err)
+		}
 		return
 	}
 
@@ -669,6 +708,34 @@ func TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed(t *testing.T)
 
 	txCookie, state := beginGitHubFlow(t, handler)
 	resp := doGitHubCallback(t, handler, "code-emails-malformed", state, txCookie) //nolint:bodyclose // doGitHubCallback -> doGet closes the body itself before returning.
+
+	assertGitHubRejectedAuthFailed(t, resp)
+}
+
+// TestGitHubCallback_UserAPIOversizedBody_RedirectsAuthFailed is
+// security-relevant cheap-win regression coverage: githubAPIGet
+// (github.go) now wraps the response body it decodes in
+// io.LimitReader(maxProviderResponseBytes) before handing it to
+// json.Decode, so an oversized GET /user response is truncated mid-body
+// rather than read into memory unbounded. The truncated body is no longer
+// valid JSON, so this decode failure funnels through the exact same
+// provider-side-failure path (redirectAuthFailed, DD-C10) as a non-200
+// status or a malformed body already do above -- it is not a new failure
+// class, just a new way to reach the existing one.
+func TestGitHubCallback_UserAPIOversizedBody_RedirectsAuthFailed(t *testing.T) {
+	t.Parallel()
+
+	userID := uniqueGitHubUserID(t)
+
+	gh := newGitHubStub(t,
+		withTokenResponse("code-user-oversized", "access-token-user-oversized"),
+		withUser(userID, "octocat"),
+		withUserAPIOversizedBody(),
+	)
+	handler, _ := newTestService(t, withGitHubEndpoint(gh.URL))
+
+	txCookie, state := beginGitHubFlow(t, handler)
+	resp := doGitHubCallback(t, handler, "code-user-oversized", state, txCookie) //nolint:bodyclose // doGitHubCallback -> doGet closes the body itself before returning.
 
 	assertGitHubRejectedAuthFailed(t, resp)
 }

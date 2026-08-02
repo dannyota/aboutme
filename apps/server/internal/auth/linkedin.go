@@ -106,7 +106,10 @@ func (s *Service) linkedinRedirectURL() string {
 // an OIDC nonce bound to the transaction -- see handleGoogleStart's
 // identical shape.
 func (s *Service) handleLinkedInStart(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	// withProviderHTTPClient (provider_http.go): bounds the OIDC discovery
+	// call below with a timeout, same as every other outbound provider
+	// call this package makes.
+	ctx := withProviderHTTPClient(r.Context())
 
 	purpose, linkingUserID, ok := s.startPurposeAndLinkingUser(w, r)
 	if !ok {
@@ -147,7 +150,10 @@ func (s *Service) handleLinkedInStart(w http.ResponseWriter, r *http.Request) {
 // doc comment for the shared exit-path/cookie-clearing obligations both
 // funnel through (redirectWithError/redirectAuthFailed/writeInternalError).
 func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	// withProviderHTTPClient (provider_http.go): every outbound call below
+	// (OIDC discovery, token exchange, ID token verification's JWKS fetch)
+	// shares one bounded client.
+	ctx := withProviderHTTPClient(r.Context())
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {

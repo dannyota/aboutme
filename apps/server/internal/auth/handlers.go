@@ -494,7 +494,10 @@ func (s *Service) writeSessionAPIInternalError(w http.ResponseWriter, r *http.Re
 // browser to Google's own authorize endpoint, with PKCE (S256) and an
 // OIDC nonce bound to the transaction.
 func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	// withProviderHTTPClient (provider_http.go): bounds the OIDC discovery
+	// call below with a timeout, same as every other outbound provider
+	// call this package makes.
+	ctx := withProviderHTTPClient(r.Context())
 
 	purpose, linkingUserID, ok := s.startPurposeAndLinkingUser(w, r)
 	if !ok {
@@ -542,7 +545,10 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 // before the first WriteHeader/Write) -- only ResponseRecorder-based
 // tests that read .Header() instead of .Result() would fail to notice.
 func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	// withProviderHTTPClient (provider_http.go): every outbound call below
+	// (OIDC discovery, token exchange, ID token verification's JWKS fetch)
+	// shares one bounded client.
+	ctx := withProviderHTTPClient(r.Context())
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
