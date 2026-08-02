@@ -243,6 +243,61 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const findImmediatePredecessorSession = `-- name: FindImmediatePredecessorSession :one
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions
+WHERE user_id = $1
+  AND revoked_at IS NULL
+  AND rotation_grace_until = $2::timestamptz
+`
+
+type FindImmediatePredecessorSessionParams struct {
+	UserID                uuid.UUID
+	PredecessorGraceUntil time.Time
+}
+
+// Fix round 1, finding I2 / design owner ruling DD-C14: given a session
+// that may itself be a rotation SUCCESSOR, finds the exact row it was
+// rotated FROM, if that predecessor is still live (revoked_at IS NULL).
+// Not a heuristic: session.go's tryRotate sets
+// predecessor.rotation_grace_until = now + rotationGrace and
+// successor.created_at = now from the SAME `now` value in the same
+// function call, so predecessor.rotation_grace_until always equals
+// successor.created_at + rotationGrace EXACTLY for a genuine
+// predecessor/successor pair, and essentially never coincidentally for
+// an unrelated row (rotation_grace_until is a random-offset instant, not
+// a value any other write path in this schema ever produces). The caller
+// computes successor.created_at + rotationGrace in Go (rotationGrace is
+// session.go's own constant) and passes it as the single timestamp
+// argument -- this exists specifically because RequireSession's
+// context-based predecessor seam (ContextWithPredecessorSessionID) only
+// covers the narrow case where the SAME request's own Authenticate call
+// performs the rotation, which a CSRF-gated mutating endpoint can never
+// observe in practice (RequireCSRF validates against the POST-rotation
+// session, which a client cannot have a correct token for on its very
+// first use) -- see task-9-report.md's fix-round-1 section for the full
+// reasoning. user_id scopes the match to the caller's own lineage only,
+// so a coincidental rotation_grace_until collision with a DIFFERENT
+// user's session can never cross-match.
+func (q *Queries) FindImmediatePredecessorSession(ctx context.Context, arg FindImmediatePredecessorSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, findImmediatePredecessorSession, arg.UserID, arg.PredecessorGraceUntil)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.CSRFSecret,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.ReauthenticatedAt,
+		&i.AbsoluteExpiresAt,
+		&i.RotationGraceUntil,
+		&i.RevokedAt,
+		&i.UA,
+		&i.IP,
+	)
+	return i, err
+}
+
 const getIdentityByProviderSubject = `-- name: GetIdentityByProviderSubject :one
 SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE provider = $1 AND provider_user_id = $2
 `
@@ -362,27 +417,44 @@ const listLiveSessionsForUser = `-- name: ListLiveSessionsForUser :many
 SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions
 WHERE user_id = $1
   AND revoked_at IS NULL
-  AND (rotation_grace_until IS NULL OR rotation_grace_until > $2::timestamptz)
-ORDER BY created_at DESC
+  AND last_seen_at >= $2::timestamptz
+  AND absolute_expires_at >= $3::timestamptz
+  AND (rotation_grace_until IS NULL OR rotation_grace_until >= $3::timestamptz)
+ORDER BY created_at DESC, id DESC
 `
 
 type ListLiveSessionsForUserParams struct {
-	UserID uuid.UUID
-	Now    time.Time
+	UserID     uuid.UUID
+	IdleCutoff time.Time
+	Now        time.Time
 }
 
 // Task 9's GET /sessions device list (design spec §3): every session
-// belonging to user_id that is still LIVE as of now -- explicitly revoked
-// rows are excluded (revoked_at IS NULL), and so are Task 7's grace-dead
-// rotation predecessors: a session rotation has already superseded keeps
-// revoked_at NULL but has rotation_grace_until in the past, and that row
-// must never appear in the caller's own device list -- it is unreachable
-// by any client, exactly like an explicitly revoked one, just not marked
-// that way. sqlc.arg(now) is cast explicitly so this parameter's Go type
-// is a plain (non-pointer) time.Time regardless of rotation_grace_until's
-// own nullability. Ordered newest-created first.
+// belonging to user_id that is still LIVE as of now -- mirrors
+// session.go's sessionDead exactly, predicate for predicate (fix round 1,
+// finding I1: the original version only excluded revoked/grace-dead rows,
+// silently listing idle-expired and absolute-expired sessions as live
+// devices with no GC to ever remove them):
+//
+//   - not explicitly revoked (revoked_at IS NULL);
+//   - not idle-expired: last_seen_at >= idle_cutoff, where idle_cutoff =
+//     now - idleTimeout is computed in GO (session.go's own constant) and
+//     passed as a query arg, never re-literalled as a SQL interval here;
+//   - not absolute-expired: absolute_expires_at >= now;
+//   - not a grace-dead rotation predecessor: rotation_grace_until IS NULL
+//     OR rotation_grace_until >= now -- a session rotation has already
+//     superseded keeps revoked_at NULL but has rotation_grace_until in
+//     the past, and that row must never appear in the caller's own
+//     device list, exactly like an explicitly revoked one, just not
+//     marked that way.
+//
+// sqlc.arg(...)::timestamptz casts are explicit so both parameters' Go
+// types are plain (non-pointer) time.Time regardless of the nullable
+// columns they're compared against. Ordered newest-created first, with id
+// as a deterministic tiebreaker for two rows created in the same instant
+// (fix round 1, M4).
 func (q *Queries) ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error) {
-	rows, err := q.db.Query(ctx, listLiveSessionsForUser, arg.UserID, arg.Now)
+	rows, err := q.db.Query(ctx, listLiveSessionsForUser, arg.UserID, arg.IdleCutoff, arg.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -452,23 +524,45 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) er
 }
 
 const revokeSessionForUser = `-- name: RevokeSessionForUser :execrows
-UPDATE sessions SET revoked_at = $3 WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+UPDATE sessions
+SET revoked_at = $3
+WHERE id = $1
+  AND user_id = $2
+  AND revoked_at IS NULL
+  AND last_seen_at >= $4::timestamptz
+  AND absolute_expires_at >= $5::timestamptz
+  AND (rotation_grace_until IS NULL OR rotation_grace_until >= $5::timestamptz)
 `
 
 type RevokeSessionForUserParams struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	RevokedAt *time.Time
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	RevokedAt  *time.Time
+	IdleCutoff time.Time
+	Now        time.Time
 }
 
 // Ownership-checked counterpart to RevokeSession: only revokes id if it
-// also belongs to user_id. Returns the affected row count so a caller can
-// distinguish "revoked" (1) from "no such session for this user" (0) --
-// internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
+// also belongs to user_id AND is still LIVE by the exact same predicates
+// ListLiveSessionsForUser uses below (fix round 1, findings I1/M5): a
+// session that is already idle-expired, absolute-expired, or a grace-dead
+// rotation predecessor must revoke ZERO rows here too -- otherwise a
+// caller could "revoke" a row GET /sessions' own device list already
+// refuses to show them, which is exactly the self-inconsistency the
+// review caught. Returns the affected row count so a caller can
+// distinguish "revoked" (1) from "no such LIVE session for this user" (0)
+// -- internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
 // DELETE /sessions/{id}) turns 0 into a 404, not a 403, so it never
-// confirms whether the id exists for someone else.
+// confirms whether the id exists for someone else, is merely dead, or
+// belongs to another user.
 func (q *Queries) RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeSessionForUser, arg.ID, arg.UserID, arg.RevokedAt)
+	result, err := q.db.Exec(ctx, revokeSessionForUser,
+		arg.ID,
+		arg.UserID,
+		arg.RevokedAt,
+		arg.IdleCutoff,
+		arg.Now,
+	)
 	if err != nil {
 		return 0, err
 	}

@@ -304,18 +304,27 @@ func (m *SessionManager) Revoke(ctx context.Context, sessionID uuid.UUID) error 
 }
 
 // RevokeForUser revokes the session identified by sessionID only if it
-// belongs to userID, and reports how many rows that affected: 1 if
-// sessionID existed, belonged to userID, and was not already revoked; 0
-// otherwise (unknown id, already revoked, or -- the ownership check this
-// method adds over Revoke -- belongs to a different user). Callers must
-// treat 0 as "no such session for this user" without distinguishing why,
-// the same no-oracle reasoning as ErrSessionInvalid: Task 9's
-// DELETE /sessions/{id} turns 0 into a 404, never a 403, so an attacker
-// probing session ids can't learn whether a given id belongs to someone
-// else versus not existing at all.
+// belongs to userID AND is still LIVE by sessionDead's exact predicates
+// (fix round 1, findings I1/M5), and reports how many rows that affected:
+// 1 if sessionID existed, belonged to userID, was not already revoked,
+// and was not idle-expired, absolute-expired, or a grace-dead rotation
+// predecessor; 0 otherwise. Callers must treat 0 as "no such LIVE session
+// for this user" without distinguishing why, the same no-oracle reasoning
+// as ErrSessionInvalid: Task 9's DELETE /sessions/{id} turns 0 into a
+// 404, never a 403, so an attacker probing session ids can't learn
+// whether a given id belongs to someone else, doesn't exist, or is
+// merely dead -- and a caller can never "revoke" a row GET /sessions'
+// own device list already refuses to show them (the self-inconsistency
+// the review caught before this fix).
 func (m *SessionManager) RevokeForUser(ctx context.Context, sessionID, userID uuid.UUID) (int64, error) {
 	now := m.now()
-	n, err := m.q.RevokeSessionForUser(ctx, store.RevokeSessionForUserParams{ID: sessionID, UserID: userID, RevokedAt: &now})
+	n, err := m.q.RevokeSessionForUser(ctx, store.RevokeSessionForUserParams{
+		ID:         sessionID,
+		UserID:     userID,
+		RevokedAt:  &now,
+		IdleCutoff: now.Add(-idleTimeout),
+		Now:        now,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("auth: revoke session for user: %w", err)
 	}

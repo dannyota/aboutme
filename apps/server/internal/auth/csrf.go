@@ -48,11 +48,14 @@ const csrfRejectedMessage = "CSRF validation failed"
 // through untouched regardless of Origin, Referer, Content-Type, or
 // token, and without ever reading the session from context.
 //
-// Ordering in the chain (handlers.go): RequestID -> Logging -> BodyLimit
-// -> RequireSession -> RequireCSRF -> handler. RequireCSRF must run after
-// RequireSession because it reads the session's CSRFSecret from context;
-// running it earlier would always fail closed (SessionFromContext returns
-// ok=false), never a bypass.
+// Ordering in the chain (handlers.go's RegisterRoutes/sessionChain,
+// mirroring router.go's New): RequestID -> SecurityHeaders -> Logging ->
+// NoStoreCache -> RateLimit -> BodyLimit -> RequireSession -> RequireCSRF
+// -> handler (fix round 1, M1: corrected from an earlier version of this
+// comment that omitted SecurityHeaders, NoStoreCache, and RateLimit).
+// RequireCSRF must run after RequireSession because it reads the
+// session's CSRFSecret from context; running it earlier would always
+// fail closed (SessionFromContext returns ok=false), never a bypass.
 //
 // Every rejection path returns 403 with the single csrfRejectedCode via
 // api.WriteError -- fail closed, per AC-SEC-002.

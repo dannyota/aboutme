@@ -229,10 +229,12 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	// layers, in order, before the handler: RequireSession, then
 	// RequireCSRF. Combined with api.New's own outer chain (applied
 	// identically to every route RegisterRoutes adds -- see router.go's
-	// New), the FULL order every request here passes through is:
+	// New), the FULL order every request here passes through is (fix
+	// round 1, M1: the previous version of this comment omitted
+	// SecurityHeaders, NoStoreCache, and RateLimit):
 	//
-	//	RequestID -> SecurityHeaders -> Logging -> RateLimit -> BodyLimit
-	//	-> RequireSession -> RequireCSRF -> handler
+	//	RequestID -> SecurityHeaders -> Logging -> NoStoreCache ->
+	//	RateLimit -> BodyLimit -> RequireSession -> RequireCSRF -> handler
 	//
 	// RequireCSRF only enforces on mutating methods (GET/HEAD/OPTIONS pass
 	// through untouched -- csrf.go's isMutatingMethod), so applying it
@@ -252,6 +254,27 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(SessionsPath, http.HandlerFunc(s.handleSessionsCollection))
 	mux.Handle(SessionsPath+"/{id}", route(http.MethodDelete, s.sessionChain(s.handleRevokeSession)))
 }
+
+// The closed vocabulary of JSON API error codes this package's
+// session-authenticated surface produces (distinct from the OAuth
+// callback's own ?error= redirect vocabulary above, which is a different
+// mechanism entirely -- a query parameter on a 302, never a JSON body). A
+// new distinct code is a deliberate, reviewed decision, not something to
+// invent ad hoc at a new call site:
+//
+//   - session_required: RequireSession's own single rejection code (401)
+//     -- adjudicated 2026-08-02 (fix round 1) as THE canonical code for
+//     "no valid session," to be reused verbatim by every later
+//     session-authenticated endpoint this package or Task 10 adds
+//     (provider link/unlink, account deletion, email change, slug
+//     release, ...), never reinvented under a different literal.
+//   - csrf_rejected: RequireCSRF's own single rejection code (403,
+//     csrf.go's csrfRejectedCode) -- established at Task 8.
+//   - reauth_required: RequireRecentReauth's own rejection code (403,
+//     reauthRequiredCode below) -- shared with the phase's other
+//     sensitive-operation flows (provider link/reauth).
+//   - not_found: DELETE /sessions/{id}'s uniform, no-oracle 404
+//     (sessions_handlers.go's notFoundCode).
 
 // sessionRequiredCode is the single error code every RequireSession
 // rejection returns: no __Host-session cookie at all, and a cookie that
@@ -293,9 +316,13 @@ const reauthRequiredCode = "reauth_required"
 // clears.
 //
 // Ordering (RegisterRoutes' sessionChain, matching csrf.go's own
-// documented chain): RequestID -> Logging -> BodyLimit -> RequireSession
-// -> RequireCSRF -> handler. RequireCSRF depends on RequireSession having
-// already populated the session in context.
+// documented chain): RequestID -> SecurityHeaders -> Logging ->
+// NoStoreCache -> RateLimit -> BodyLimit -> RequireSession -> RequireCSRF
+// -> handler (fix round 1, M1: the previous version of this comment
+// omitted SecurityHeaders, NoStoreCache, and RateLimit -- see router.go's
+// New for the authoritative composition this mirrors). RequireCSRF
+// depends on RequireSession having already populated the session in
+// context.
 func RequireSession(m *SessionManager) api.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -315,11 +342,25 @@ func RequireSession(m *SessionManager) api.Middleware {
 				return
 			}
 
+			ctx := ContextWithSession(r.Context(), sess)
 			if rotated != "" {
 				SetSessionCookie(w, rotated)
+				// DD-C14 (fix round 1, finding I2): this request's own
+				// Authenticate call just rotated a predecessor into sess.
+				// cookie.Value is still the PREDECESSOR's own raw token --
+				// Authenticate never mutates it in place, rotation mints a
+				// brand-new successor row and returns THAT as sess -- so
+				// hashing it again finds the exact predecessor row without
+				// changing Authenticate's own three-value return contract
+				// (many already-committed tests destructure it directly).
+				// See ContextWithPredecessorSessionID's own doc comment
+				// for why a handler needs this at all.
+				if predRow, lookupErr := m.q.GetSessionByTokenHash(r.Context(), hashSessionToken(cookie.Value)); lookupErr == nil {
+					ctx = ContextWithPredecessorSessionID(ctx, predRow.ID)
+				}
 			}
 
-			next.ServeHTTP(w, r.WithContext(ContextWithSession(r.Context(), sess)))
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
