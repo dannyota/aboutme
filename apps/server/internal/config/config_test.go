@@ -70,15 +70,17 @@ func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "staging",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32,::1/128",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
-		"GITHUB_CLIENT_ID":     "github-client-id",
-		"GITHUB_CLIENT_SECRET": "github-client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32,::1/128",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -256,15 +258,19 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 				// closed — see TestLoad_TrustedProxyCIDRs_RequiredInProd and
 				// TestLoad_TrustedProxyCIDRs_RequiredInStaging),
 				// GOOGLE_CLIENT_ID/SECRET (see
-				// TestLoad_GoogleCredentials_RequiredInProd/Staging), and
+				// TestLoad_GoogleCredentials_RequiredInProd/Staging),
 				// GITHUB_CLIENT_ID/SECRET (see
-				// TestLoad_GitHubCredentials_RequiredInProd/Staging);
+				// TestLoad_GitHubCredentials_RequiredInProd/Staging), and
+				// LINKEDIN_CLIENT_ID/SECRET (see
+				// TestLoad_LinkedInCredentials_RequiredInProd/Staging);
 				// LISTEN_HOST is left at its loopback default.
 				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32,::1/128"
 				vars["GOOGLE_CLIENT_ID"] = "client-id"
 				vars["GOOGLE_CLIENT_SECRET"] = "client-secret"
 				vars["GITHUB_CLIENT_ID"] = "github-client-id"
 				vars["GITHUB_CLIENT_SECRET"] = "github-client-secret"
+				vars["LINKEDIN_CLIENT_ID"] = "client-id"
+				vars["LINKEDIN_CLIENT_SECRET"] = "client-secret"
 			}
 
 			got, err := config.Load(env(vars))
@@ -355,15 +361,17 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "prod",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
-		"GITHUB_CLIENT_ID":     "github-client-id",
-		"GITHUB_CLIENT_SECRET": "github-client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "prod",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -400,15 +408,17 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "staging",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
-		"GITHUB_CLIENT_ID":     "github-client-id",
-		"GITHUB_CLIENT_SECRET": "github-client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -480,15 +490,17 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "prod",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  " 127.0.0.1/32 , ::1/128 ",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
-		"GITHUB_CLIENT_ID":     "github-client-id",
-		"GITHUB_CLIENT_SECRET": "github-client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "prod",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    " 127.0.0.1/32 , ::1/128 ",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -811,7 +823,10 @@ func TestLoad_GitHubCredentials_OptionalInDev(t *testing.T) {
 // with an empty client id/secret that would only fail later, per-request,
 // against the real GitHub endpoint. Every case also supplies valid Google
 // credentials, so the failure asserted here is unambiguously GitHub's own
-// (not Google's check firing first).
+// (not Google's check firing first). LinkedIn credentials are NOT needed
+// here: Load checks GitHub before LinkedIn (see Load's own call order), so
+// a missing GitHub credential is always reported first regardless of
+// LinkedIn's state.
 func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -881,6 +896,140 @@ func TestLoad_GitHubCredentials_RequiredInStaging(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GITHUB_CLIENT_ID") {
 		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GITHUB_CLIENT_ID")
+	}
+}
+
+// ---- LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET ----------------------
+
+func TestLoad_LinkedInCredentials_ValidConfig(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "dev",
+		"LINKEDIN_CLIENT_ID":     "test-client-id",
+		"LINKEDIN_CLIENT_SECRET": "test-client-secret",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.LinkedInClientID != "test-client-id" {
+		t.Errorf("LinkedInClientID = %q, want %q", got.LinkedInClientID, "test-client-id")
+	}
+	if got.LinkedInClientSecret != "test-client-secret" {
+		t.Errorf("LinkedInClientSecret = %q, want %q", got.LinkedInClientSecret, "test-client-secret")
+	}
+}
+
+// TestLoad_LinkedInCredentials_OptionalInDev mirrors
+// TestLoad_GoogleCredentials_OptionalInDev: a developer working on an
+// unrelated feature is never forced to obtain real LinkedIn OAuth
+// credentials just to start the server in dev.
+func TestLoad_LinkedInCredentials_OptionalInDev(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.LinkedInClientID != "" {
+		t.Errorf("LinkedInClientID = %q, want empty (optional in dev)", got.LinkedInClientID)
+	}
+	if got.LinkedInClientSecret != "" {
+		t.Errorf("LinkedInClientSecret = %q, want empty (optional in dev)", got.LinkedInClientSecret)
+	}
+}
+
+// TestLoad_LinkedInCredentials_RequiredInProd mirrors
+// TestLoad_GoogleCredentials_RequiredInProd: a production server cannot
+// offer "Sign in with LinkedIn" without real credentials, so Load must
+// refuse to start rather than silently booting with an empty client
+// id/secret that would only fail later, per-request, against the real
+// LinkedIn endpoint. Google AND GitHub credentials are both set (valid)
+// here: Load checks Google, then GitHub, then LinkedIn (Load's own call
+// order), so both earlier checks must already pass or their own error
+// would mask the LINKEDIN_CLIENT_* failure this test is actually
+// targeting.
+func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		vars map[string]string
+	}{
+		{
+			name: "missing client id",
+			vars: map[string]string{"LINKEDIN_CLIENT_SECRET": "secret"},
+		},
+		{
+			name: "missing client secret",
+			vars: map[string]string{"LINKEDIN_CLIENT_ID": "client-id"},
+		},
+		{
+			name: "missing both",
+			vars: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := map[string]string{
+				"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":        "https://aboutme.vn",
+				"ENV":                  "prod",
+				"LISTEN_HOST":          "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+				"GOOGLE_CLIENT_ID":     "google-client-id",
+				"GOOGLE_CLIENT_SECRET": "google-client-secret",
+				"GITHUB_CLIENT_ID":     "github-client-id",
+				"GITHUB_CLIENT_SECRET": "github-client-secret",
+			}
+			for k, v := range tt.vars {
+				vars[k] = v
+			}
+
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want error: LINKEDIN_CLIENT_ID/SECRET required when ENV=prod")
+			}
+			if !strings.Contains(err.Error(), "LINKEDIN_CLIENT_ID") && !strings.Contains(err.Error(), "LINKEDIN_CLIENT_SECRET") {
+				t.Errorf("Load() error = %q, want it to name LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_LinkedInCredentials_RequiredInStaging is the staging
+// counterpart of TestLoad_LinkedInCredentials_RequiredInProd — staging
+// shares prod's strictness so a misconfiguration is caught before it
+// reaches prod. Google AND GitHub credentials are both set (valid) for
+// the same reason as TestLoad_LinkedInCredentials_RequiredInProd above.
+func TestLoad_LinkedInCredentials_RequiredInStaging(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "staging",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":     "google-client-id",
+		"GOOGLE_CLIENT_SECRET": "google-client-secret",
+		"GITHUB_CLIENT_ID":     "github-client-id",
+		"GITHUB_CLIENT_SECRET": "github-client-secret",
+	}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error: LINKEDIN_CLIENT_ID/SECRET required when ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "LINKEDIN_CLIENT_ID") {
+		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "LINKEDIN_CLIENT_ID")
 	}
 }
 

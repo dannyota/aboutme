@@ -52,7 +52,7 @@ const (
 // githubAuthorizeURL, githubTokenURL, and githubAPIBaseURL are GitHub's
 // real endpoints. Production dials these directly; tests override all
 // three at once via githubEndpointOverride (see githubOAuth2Config and
-// githubAPIURL below) -- see SetGitHubEndpointForTest's doc comment
+// githubAPIBaseURLFor below) -- see NewServiceForTest's doc comment
 // (export_test.go).
 const (
 	githubAuthorizeURL = "https://github.com/login/oauth/authorize"
@@ -198,7 +198,7 @@ func (s *Service) handleGitHubStart(w http.ResponseWriter, r *http.Request) {
 	redirectURI := s.githubRedirectURL()
 	handle, tx, err := s.tx.Begin(ctx, ProviderGitHub, PurposeLogin, uuid.Nil, redirectURI)
 	if err != nil {
-		s.writeInternalError(w, r, "begin_transaction")
+		s.writeInternalError(w, r, ProviderGitHub, "begin_transaction", err)
 		return
 	}
 
@@ -223,17 +223,17 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, "missing or malformed __Host-oauth-tx cookie")
+		s.redirectAuthFailed(w, r, ProviderGitHub, "missing or malformed __Host-oauth-tx cookie")
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderGitHub)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
+			s.redirectAuthFailed(w, r, ProviderGitHub, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
 			return
 		}
-		s.writeInternalError(w, r, "consume_transaction")
+		s.writeInternalError(w, r, ProviderGitHub, "consume_transaction", err)
 		return
 	}
 
@@ -241,7 +241,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// reasoning to handleGoogleCallback's own check.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, "state parameter mismatch")
+		s.redirectAuthFailed(w, r, ProviderGitHub, "state parameter mismatch")
 		return
 	}
 
@@ -249,20 +249,27 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// visitor declined consent, checked only after state has already
 	// been validated -- identical to handleGoogleCallback.
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, cancelledErrorCode, "user denied consent (access_denied)")
+		s.redirectWithError(w, r, ProviderGitHub, cancelledErrorCode, "user denied consent (access_denied)")
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, "callback missing code and no recognized error parameter")
+		s.redirectAuthFailed(w, r, ProviderGitHub, "callback missing code and no recognized error parameter")
 		return
 	}
 
-	oauth2Cfg := s.githubOAuth2Config(s.githubRedirectURL())
+	// tx.RedirectURI (not s.githubRedirectURL()): the exact redirect_uri
+	// Begin stored for THIS transaction, not one rebuilt from this
+	// Service's current PublicOrigin config -- mirrors
+	// handleGoogleCallback's own hardening (google.go/handlers.go) and
+	// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin's
+	// reasoning: a real provider enforces redirect_uri as an exact match
+	// against what it issued the authorization code for.
+	oauth2Cfg := s.githubOAuth2Config(tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, "token exchange failed")
+		s.redirectAuthFailed(w, r, ProviderGitHub, "token exchange failed")
 		return
 	}
 
@@ -270,36 +277,36 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	var user githubUser
 	if err = s.githubAPIGet(ctx, client, "/user", &user); err != nil {
-		s.writeInternalError(w, r, "fetch_github_user")
+		s.writeInternalError(w, r, ProviderGitHub, "fetch_github_user", err)
 		return
 	}
 	if user.ID == 0 {
-		s.redirectAuthFailed(w, r, "github /user response missing id")
+		s.redirectAuthFailed(w, r, ProviderGitHub, "github /user response missing id")
 		return
 	}
 
 	var emails []githubEmail
 	if err = s.githubAPIGet(ctx, client, "/user/emails", &emails); err != nil {
-		s.writeInternalError(w, r, "fetch_github_emails")
+		s.writeInternalError(w, r, ProviderGitHub, "fetch_github_emails", err)
 		return
 	}
 	email, ok := primaryVerifiedGitHubEmail(emails)
 	if !ok {
-		s.redirectWithError(w, r, emailNotVerifiedErrorCode, "no verified primary email in /user/emails")
+		s.redirectWithError(w, r, ProviderGitHub, emailNotVerifiedErrorCode, "no verified primary email in /user/emails")
 		return
 	}
 
 	providerUserID := strconv.FormatInt(user.ID, 10)
 	usr, err := s.resolveGitHubUser(ctx, providerUserID, email, githubDisplayName(user))
 	if err != nil {
-		s.writeInternalError(w, r, "resolve_user")
+		s.writeInternalError(w, r, ProviderGitHub, "resolve_user", err)
 		return
 	}
 
 	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
 	rawSession, _, err := s.sessions.Issue(ctx, usr.ID, r.UserAgent(), clientIP)
 	if err != nil {
-		s.writeInternalError(w, r, "issue_session")
+		s.writeInternalError(w, r, ProviderGitHub, "issue_session", err)
 		return
 	}
 
