@@ -150,6 +150,17 @@ func assertCSRFRejected(t *testing.T, rec *httptest.ResponseRecorder) {
 // sets ContentLength = -1) -- the RED evidence for that fix instead used
 // a hand-built *http.Request, recorded in task-8-report.md, not this
 // matrix.
+//
+// Rows 20-22 (phase gate hardening) pin three Origin shapes an attacker
+// might expect a looser check to accept: the literal string "null" (an
+// opaque origin -- a sandboxed iframe, a file:// page, or certain
+// redirected cross-origin requests all send exactly this), a host that
+// carries the allowed origin as a literal PREFIX with an attacker-chosen
+// suffix appended (".evil.test" is a different host entirely, not a
+// subdomain relationship, but a prefix/substring check would wrongly
+// treat it as related), and a trailing-slash variant of the allowed
+// origin. originAllowed's exact `==` comparison already rejects all
+// three -- these are pinned regressions, not fixes for a found defect.
 func TestRequireCSRF_Matrix(t *testing.T) {
 	t.Parallel()
 
@@ -186,6 +197,17 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 		{"bodiless POST (logout-shaped) skips content-type check", "POST", "http://localhost", "", "", validToken, "", http.StatusOK},
 		{"body present without content-type still rejected (form-style body)", "POST", "http://localhost", "", "", validToken, "foo=bar", http.StatusForbidden},
 		{"same session's secret, wrong base64 encoding (standard alphabet/padding)", "POST", "http://localhost", "", "application/json", base64.StdEncoding.EncodeToString(sess.CSRFSecret), "{}", http.StatusForbidden},
+		// Rows 20-22 (security-relevant cheap-win hardening): pin
+		// originAllowed's exact-string-match contract (csrf.go) against
+		// three shapes a naive Origin check (substring/prefix, or a
+		// scheme+host-only comparison that tolerates a trailing slash)
+		// could wrongly accept. originAllowed already does a bare Go `==`
+		// against allowedOrigin, so these pass today -- the rows exist to
+		// keep it that way as a pinned regression, not because a defect
+		// was found.
+		{"Origin: null (opaque origin -- sandboxed iframe, file://, etc.)", "POST", "null", "", "application/json", validToken, "{}", http.StatusForbidden},
+		{"suffix-host origin (allowed origin as a literal prefix, evil suffix appended)", "POST", "http://localhost.evil.test", "", "application/json", validToken, "{}", http.StatusForbidden},
+		{"trailing-slash origin", "POST", "http://localhost/", "", "application/json", validToken, "{}", http.StatusForbidden},
 	}
 
 	for _, tc := range cases {
