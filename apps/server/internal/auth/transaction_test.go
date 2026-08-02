@@ -24,11 +24,20 @@ import (
 )
 
 // requireTestDatabaseURL returns TEST_DATABASE_URL, skipping the calling
-// test (not failing it) when unset.
+// test (not failing it) when unset -- UNLESS REQUIRE_TEST_DB=1 is also set
+// in the environment, in which case a missing TEST_DATABASE_URL is a hard
+// t.Fatal instead. This closes the gap a gate run must never fall into
+// silently: `make server-test`/a bare `go test ./...` stay hermetic (skip)
+// by default, but `make server-test-db` sets REQUIRE_TEST_DB=1 precisely so
+// it can never pass vacuously with every DB-backed case skipped -- see the
+// Makefile target's own comment.
 func requireTestDatabaseURL(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
+		if os.Getenv("REQUIRE_TEST_DB") == "1" {
+			t.Fatal("REQUIRE_TEST_DB=1 is set but TEST_DATABASE_URL is unset; refusing to silently skip this live-database test")
+		}
 		t.Skip("TEST_DATABASE_URL not set; skipping live-database integration test")
 	}
 	return dsn

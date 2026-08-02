@@ -1413,8 +1413,20 @@ app-wide store) or any editor-related scaffolding.
 ## Phase exit criteria
 
 - [ ] `go build ./... && go vet ./... && go test ./... -race` clean in
-      `apps/server`; `npm run lint && npm run typecheck && npm test` clean in
-      `apps/web`.
+      `apps/server` (hermetic; every DB-backed case in `internal/auth`,
+      `internal/store`, and `internal/user` self-skips here with no
+      `TEST_DATABASE_URL`, by design), AND, separately,
+      `make test-db-up && make server-test-db` clean against a live Postgres --
+      the DSN-bearing command that actually exercises every AC-AUTH acceptance
+      test, the 20-way rotation race, the six-pair merge matrix, and every
+      DD-C5/DD-C14 session test the bare `go test ./...` above only compiles,
+      never runs. `server-test-db` sets `REQUIRE_TEST_DB=1`, so it fails rather
+      than passing vacuously if `TEST_DATABASE_URL` ever ends up unset. A gate
+      run records the resulting non-skipped case count (`go test -v`'s
+      `--- PASS`/`--- SKIP` tally, or `go test -json` reduced the same way) as
+      evidence alongside the pass/fail result -- a green run with a suspiciously
+      low non-skipped count is itself a finding, not a pass;
+      `npm run lint &&     npm run typecheck && npm test` clean in `apps/web`.
 - [ ] Sign in with Google/GitHub/LinkedIn (mock providers in CI) issues a
       `__Host-session` cookie; `/me` returns the user + CSRF token.
 - [ ] Session list, per-session revoke, logout-everywhere, and `Clear-Site-Data`
