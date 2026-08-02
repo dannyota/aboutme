@@ -557,20 +557,20 @@ func sessionRowReauthenticatedAt(ctx context.Context, t *testing.T, db rowQuerie
 
 // TestLink_RejectsWithoutRecentReauth is the brief's Step 3 row 1: a
 // session whose reauthenticated_at is stale (>15m, session.go's
-// reauthWindow) attempting a purpose=link /start must be rejected with
-// 403 reauth_required, and -- the row's own explicit "no transaction even
-// created" clause -- TransactionStore.Begin must never run at all: the
-// gate has to be checked BEFORE Begin, not after (a stale caller must
-// never even get a live, single-use transaction handle to carry forward).
+// reauthWindow) attempting a purpose=link /start must be rejected, and --
+// the row's own explicit "no transaction even created" clause --
+// TransactionStore.Begin must never run at all: the gate has to be
+// checked BEFORE Begin, not after (a stale caller must never even get a
+// live, single-use transaction handle to carry forward).
 //
 // Confirmed against the landed startPurposeAndLinkingUser (link.go): a
 // `?purpose=link` query parameter on the existing GET .../start route is
 // exactly right (Purpose(r.URL.Query().Get("purpose")) compared against
-// PurposeLink/PurposeReauth), and the reauth gate (RequireRecentReauth,
-// then 403 reauthRequiredCode) runs BEFORE TransactionStore.Begin, per
-// this test's own assertions below -- no change needed; this was an
-// ADAPT guess during derivation. Drives Google (the brief's own
-// "cheapest provider" convention for shared-logic coverage).
+// PurposeLink/PurposeReauth), and the reauth gate (RequireRecentReauth)
+// runs BEFORE TransactionStore.Begin, per this test's own assertions
+// below -- no change needed; this was an ADAPT guess during derivation.
+// Drives Google (the brief's own "cheapest provider" convention for
+// shared-logic coverage).
 //
 // Glue added post-landing (fix round 1, DD-C16/C1): the request below now
 // carries an Origin header matching testPublicOrigin. DD-C16 added a
@@ -580,9 +580,19 @@ func sessionRowReauthenticatedAt(ctx context.Context, t *testing.T, db rowQuerie
 // check with 403 csrf_rejected, never reaching the reauth check this test
 // exists to prove. This is glue restoring the request to a same-site shape
 // (a real settings-page-initiated request would send one of these
-// signals), not a change to what property is being asserted -- the
-// scenario, and every assertion below, are unchanged from original
-// authorship.
+// signals), not a change to what property is being asserted.
+//
+// Response-shape reconciliation (fix round 2, DD-C17, owner ruling): the
+// rejection itself was originally a raw JSON 403 (this test's own
+// original assertions, matching the DD-C16-era wire shape). DD-C17
+// corrected this: GET /start is a top-level browser navigation exactly
+// like /callback, so a stale-reauth rejection now redirects (302) to
+// PublicOrigin + "/app/settings/sessions?error=reauth_required" -- the
+// settings page that initiated the flow already renders this code and
+// prompts for step-up -- rather than showing the visitor a raw JSON
+// document. Only the response-shape assertions below changed; the
+// underlying scenario (a stale-reauth purpose=link /start must reject
+// before Begin ever runs) is exactly as originally authored.
 func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 	t.Parallel()
 
@@ -595,11 +605,12 @@ func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 	forceReauthenticatedAtStale(t, sess.ID) // sessions_handlers_test.go: reauthenticated_at -> now-20m.
 
 	resp := doJSON(t, handler, http.MethodGet, auth.GoogleStartPath+"?purpose=link", testPublicOrigin, "", "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("GET %s?purpose=link with a stale-reauth session status = %d, want %d", auth.GoogleStartPath, resp.StatusCode, http.StatusForbidden)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("GET %s?purpose=link with a stale-reauth session status = %d, want %d (DD-C17: a redirect, not a raw JSON 403)", auth.GoogleStartPath, resp.StatusCode, http.StatusFound)
 	}
-	if got := decodeErrorCode(t, resp); got != "reauth_required" {
-		t.Errorf("error.code = %q, want %q", got, "reauth_required")
+	wantLocation := testPublicOrigin + wantSettingsSessionsPath + "?error=reauth_required"
+	if got := resp.Header.Get("Location"); got != wantLocation {
+		t.Errorf("Location = %q, want %q (DD-C17: the settings page that initiated the flow, with ?error=reauth_required)", got, wantLocation)
 	}
 	if tx := extractCookie(resp, auth.OAuthTxCookieName); tx != nil && tx.MaxAge >= 0 {
 		t.Error("a LIVE __Host-oauth-tx cookie was set despite the reauth rejection, want none -- no transaction may be created before the reauth gate passes")
