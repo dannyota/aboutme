@@ -1441,3 +1441,40 @@ app-wide store) or any editor-related scaffolding.
       10 diff specifically gets independent adversarial review per the master
       plan's workflow table (author never signs off its own correctness on the
       highest-risk task in the phase).
+
+---
+
+## Appendix — execution decision record (DD-C1 … DD-C17)
+
+Rulings the integration owner made during execution, when implementation or
+review exposed a contract the plan or spec left open. Recorded here because the
+phase gate's adversarial reviewer, UAT author, and evidence verifier must judge
+against them, and because the working ledger they were made in is git-ignored.
+Where a ruling corrected plan text, the correction is already applied inline
+above; this table is the index and the rationale.
+
+| ID      | Decision                                                                                                                                                                   | Why                                                                                                                     |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| DD-C1   | `Consume` is single-attempt fail-closed: any attempt on a valid handle burns it, including one that then fails the provider check                                          | "Atomically marks consumed and returns it" reads consume-then-validate; a mix-up attempt should kill the transaction    |
+| DD-C2   | Whether an expired `Consume` sets `consumed_at` is deliberately unpinned                                                                                                   | Unobservable through the contract; pinning it would over-constrain the implementation                                   |
+| DD-C3   | Every callback rejection not plan-pinned redirects `302` with one generic `?error=auth_failed`; `email_not_verified` and `email_already_registered` stay distinct          | No oracle across OIDC failure classes; the two exceptions are user-actionable                                           |
+| DD-C4   | `302` is the pinned status for all callback rejections, except genuinely local failures which are opaque `500`s                                                            | A callback is a top-level browser navigation, never a raw JSON consumer                                                 |
+| DD-C5   | `DELETE /sessions/{id}` returns a uniform `404` for any id not resolving to a live session owned by the caller                                                             | Other-user / unknown / already-revoked must be indistinguishable; effect stays idempotent                               |
+| DD-C6   | The CSRF `Content-Type` check applies only when the request carries a body; media type parsed, any charset accepted                                                        | Requiring it unconditionally would `403` every bodiless `DELETE` and logout                                             |
+| DD-C7   | Error redirects target `/login?error=`; success targets `/`                                                                                                                | The login page is what renders the error vocabulary                                                                     |
+| DD-C8   | `/start` and `/callback` reject non-`GET`, including `HEAD`, with `405`                                                                                                    | Go's `GET /path` pattern also matches `HEAD`; a prefetcher must not create or burn transactions                         |
+| DD-C9   | Authenticated `/api/v1` fetches in the web app are `server: false`                                                                                                         | SSR resolves them against Nitro with no cookies; auth-gated pages have no crawler value                                 |
+| DD-C10  | Provider-side failures (non-200 REST, malformed JSON) use the `302` funnel; `500` is reserved for local failures                                                           | A `500` on a top-level navigation is both bad UX and a response-shape oracle                                            |
+| DD-C11  | Both `DELETE /sessions/{id}` and `DELETE /sessions` require session + CSRF + recent reauth; logout-everywhere is `DELETE /sessions`                                        | Spec §4 requires reauth on both revokes; the plan's invented `POST /revoke-all` rested on a false premise               |
+| DD-C12  | (Superseded by Task 10) Interim link branch: never issue a session for anyone but the linking user                                                                         | Closed an account-switch hole in the interim LinkedIn implementation                                                    |
+| DD-C13  | `GET /sessions` → `200 {data:[…]}` flat array; mutating successes → `204 No Content`; RFC 3339 UTC timestamps                                                              | The `{data}` envelope applies to bodied responses only                                                                  |
+| DD-C14  | Logout and revoke-current kill the credential **lineage**, both directions (predecessor and successor)                                                                     | A rotation race-loser's logout otherwise returned `204` while a live successor survived                                 |
+| DD-C14c | Lineage is tracked by a `sessions.rotated_from` self-FK with a partial unique index, not reconstructed from timestamps                                                     | Timestamp reconstruction matched any same-user row sharing the microsecond; the FK makes the linkage exact              |
+| DD-C15  | Link-flow rejections redirect `302` with the distinct `?error=identity_already_linked`; link/reauth outcomes return to `/app/settings/sessions`                            | Same top-level-navigation reasoning as DD-C4; the actor is authenticated so distinctness is safe                        |
+| DD-C16  | `/start?purpose=link\|reauth` requires same-site initiation (`Sec-Fetch-Site: same-origin`, else Origin/Referer), fail closed, `403 csrf_rejected`; `purpose=login` exempt | Without it, a cross-site chain refreshes the reauth window and links an attacker's identity — permanent takeover        |
+| DD-C17  | `/start` link/reauth rejections redirect: `reauth_required` → settings with the code, `session_required` → `/login` with none; `csrf_rejected` stays `403` JSON            | A raw JSON body renders as a document on a navigation; the CSRF case stays opaque so an attack is not handed a redirect |
+
+Client contract recorded alongside these: on `403 csrf_rejected` from a mutating
+call, a client refetches `GET /me` once and retries before surfacing an error —
+sessions rotate after 24h and the rejecting response already carries the new
+cookie, so recovery is a single round trip.
