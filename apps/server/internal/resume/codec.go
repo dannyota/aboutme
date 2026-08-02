@@ -62,10 +62,15 @@ func DecodeParts(personalDetails, content, customization json.RawMessage, schema
 	// map decoding (it only rejects unrecognized STRUCT fields; a map's keys
 	// are inherently open-ended section keys). Per-entry strictness comes
 	// from schema.Section's own UnmarshalJSON instead -- see that file's
-	// header and decodeEntries.
+	// header and decodeEntries. The trailing-data check below still applies
+	// (matching strictUnmarshal's own second check for personalDetails/
+	// customization) -- nothing about decoding into a map exempts it.
 	dec := json.NewDecoder(bytes.NewReader(content))
 	if err := dec.Decode(&contentMap); err != nil {
 		return schema.Resume{}, fmt.Errorf("resume: decoding content: %w", err)
+	}
+	if dec.More() {
+		return schema.Resume{}, fmt.Errorf("resume: decoding content: unexpected trailing data after JSON value")
 	}
 	doc.Content = contentMap
 

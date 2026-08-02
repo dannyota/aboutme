@@ -78,6 +78,23 @@ func TestCodec_RoundTrip_ByteStable(t *testing.T) {
 				t.Fatalf("DecodeParts: %v", err)
 			}
 
+			// Fidelity: EncodeParts must not silently drop or rewrite a field
+			// (e.g. a stray `json:"-"` or missing struct tag on a future
+			// schema field). Comparing doc against the raw fixture bytes
+			// isn't the right check (see the byte-stability comment below --
+			// omitempty legitimately normalizes some inputs), but doc and
+			// doc2 (decoded back from doc's OWN EncodeParts output) both pass
+			// through the identical marshaler, so AssembleCanonical(doc) and
+			// AssembleCanonical(doc2) must match byte-for-byte: any field the
+			// codec dropped on the way out shows up here as a difference,
+			// even though the earlier byte-stability checks below (which
+			// only ever compare pass-1-output against pass-2-output, never
+			// against doc itself) would not catch it.
+			docCanonical, err := resume.AssembleCanonical(doc)
+			if err != nil {
+				t.Fatalf("AssembleCanonical(doc): %v", err)
+			}
+
 			pd1, c1, cu1, err := resume.EncodeParts(doc)
 			if err != nil {
 				t.Fatalf("EncodeParts (pass 1): %v", err)
@@ -86,6 +103,14 @@ func TestCodec_RoundTrip_ByteStable(t *testing.T) {
 			doc2, err := resume.DecodeParts(pd1, c1, cu1, parts.SchemaVersion)
 			if err != nil {
 				t.Fatalf("DecodeParts (pass 2): %v", err)
+			}
+
+			doc2Canonical, err := resume.AssembleCanonical(doc2)
+			if err != nil {
+				t.Fatalf("AssembleCanonical(doc2): %v", err)
+			}
+			if !bytes.Equal(docCanonical, doc2Canonical) {
+				t.Errorf("EncodeParts/DecodeParts lost fidelity -- AssembleCanonical(doc) != AssembleCanonical(doc2):\n doc:  %s\n doc2: %s", docCanonical, doc2Canonical)
 			}
 
 			pd2, c2, cu2, err := resume.EncodeParts(doc2)
@@ -252,6 +277,18 @@ func TestCodec_UnknownField_StrictDecodeError(t *testing.T) {
 			name:            "a field foreign to workEntry inside content",
 			personalDetails: base.PersonalDetails,
 			content:         json.RawMessage(`{"work":{"sectionType":"work","entries":[{"id":"018f0000-0000-7000-8000-000000000001","degree":"not a work field"}]}}`),
+			customization:   base.Customization,
+		},
+		{
+			// content is a map, not a struct, so DisallowUnknownFields cannot
+			// apply to it directly -- but trailing data after the single
+			// JSON value must still be rejected, same as personalDetails and
+			// customization (round-2 review finding: this asymmetry existed
+			// only because the check was originally added to strictUnmarshal
+			// alone, which content's map decode doesn't go through).
+			name:            "trailing data after content's JSON value",
+			personalDetails: base.PersonalDetails,
+			content:         json.RawMessage(`{}garbage`),
 			customization:   base.Customization,
 		},
 	}

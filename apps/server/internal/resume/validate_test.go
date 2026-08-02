@@ -69,13 +69,35 @@ func TestD1a_FormatAssertion_MatchesAjvPosture(t *testing.T) {
 func TestD1a_FormatAssertion_URI(t *testing.T) {
 	doc := validDocForTest(t)
 	work := doc.Content["work"]
-	badLink := "https://not a valid uri because of the space and\nnewline"
+	// The embedded newline is the load-bearing part: $defs/link's pattern
+	// (`^(https://|mailto:|tel:)`) is anchored at the START only, so it
+	// matches on the "https://" prefix regardless of what follows -- only
+	// format:uri (not pattern, not maxLength) rejects this value. A bare
+	// space would NOT be enough here: net/url.Parse (which jsonschema/v6's
+	// uri format validator uses) tolerates an unencoded space, so a
+	// same-shaped assertion using only a space would not actually isolate
+	// format the way this one does.
+	badLink := "https://a.example.com/\nnewline"
 	work.WorkEntries[0].EmployerLink = &badLink
 	doc.Content["work"] = work
 
 	err := resume.ValidateForStore(doc)
 	if err == nil {
 		t.Fatal("expected ValidateForStore to reject an invalid uri format, got nil")
+	}
+	ve, ok := err.(*resume.ValidationError)
+	if !ok {
+		t.Fatalf("expected *resume.ValidationError, got %T: %v", err, err)
+	}
+	found := false
+	for _, issue := range ve.Issues {
+		if strings.Contains(issue, "uri") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected an issue mentioning the uri format violation, got: %v", ve.Issues)
 	}
 }
 
@@ -294,17 +316,81 @@ func TestValidateForStore_IssuesDeterministic(t *testing.T) {
 	}
 }
 
+// TestValidateForStore_IssuesSortedPathFirstAcrossLayers proves the
+// "path-first" claim in ValidationError's doc comment for real: a
+// STORE-layer issue at path "content.aaa...." must sort BEFORE a
+// SCHEMA-layer issue at path "content.zzz...", even though the schema
+// issue's own rendered text ("at '/content/zzz/...': ...") would sort
+// alphabetically before the store issue's rendered text ("duplicate-
+// entry-id (content.aaa...): ...") under a naive string sort -- 'a' < 'd'.
+// Round-2 review minor finding: a plain sort.Strings on the rendered
+// messages sorted by WHICH LAYER produced the message (schema issues render
+// "at '/...'", sorting before every rule name), not by path at all.
+func TestValidateForStore_IssuesSortedPathFirstAcrossLayers(t *testing.T) {
+	doc := validDocForTest(t)
+
+	// Store-layer issue (duplicate-entry-id) at content key "aaa".
+	dupID := "00000000-0000-0000-0000-000000000001"
+	aaa := schema.NewWorkSection(nil, nil, []schema.WorkEntry{
+		{ID: dupID},
+		{ID: dupID},
+	})
+
+	// Schema-layer issue (maxLength) at content key "zzz", alphabetically
+	// AFTER "aaa" -- so a genuinely path-first sort must place the "aaa"
+	// store issue(s) first.
+	tooLong := strings.Repeat("a", 161)
+	zzz := schema.NewWorkSection(nil, nil, []schema.WorkEntry{
+		{ID: "00000000-0000-0000-0000-000000000002", JobTitle: &tooLong},
+	})
+
+	doc.Content = map[string]schema.Section{"aaa": aaa, "zzz": zzz}
+	doc.Customization.Layout.Sections.Main = []string{"aaa", "zzz"}
+	doc.Customization.Layout.Sections.Sidebar = []string{}
+
+	err := resume.ValidateForStore(doc)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	ve, ok := err.(*resume.ValidationError)
+	if !ok {
+		t.Fatalf("expected *resume.ValidationError, got %T", err)
+	}
+	if len(ve.Issues) < 2 {
+		t.Fatalf("expected at least 2 issues, got %d: %v", len(ve.Issues), ve.Issues)
+	}
+	firstIssue := ve.Issues[0]
+	if !strings.Contains(firstIssue, "content.aaa") {
+		t.Fatalf("expected the first (path-first-sorted) issue to be about content.aaa (the store-layer duplicate-entry-id issue), got: %v", ve.Issues)
+	}
+	lastIssue := ve.Issues[len(ve.Issues)-1]
+	if !strings.Contains(lastIssue, "zzz") {
+		t.Fatalf("expected the last issue to be about content.zzz (the schema-layer maxLength issue), got: %v", ve.Issues)
+	}
+}
+
 // TestValidateForStore_MatchingIssue spot-checks that specific known
 // fixtures report an issue that actually names the rule/field at fault, not
 // just "invalid" with no detail.
 func TestValidateForStore_MatchingIssue(t *testing.T) {
+	// Every fixtures/store/invalid-*.json fixture (task brief Step 2: "every
+	// fixtures/store/invalid-* fixture rejected ... with a matching issue"),
+	// naming the rule/field actually at fault -- round-2 review minor
+	// finding: only 4 of 11 were checked before. valid-unique-entry-id.json
+	// is deliberately excluded: it is the one non-"invalid-*" fixture in
+	// this directory, and is covered separately by
+	// TestValidateForStore_StoreFixtures's accept-case assertion.
 	cases := []struct {
 		file      string
 		substring string
 	}{
 		{"invalid-duplicate-entry-id.json", "duplicate-entry-id"},
-		{"invalid-oversize-richtext-bytes.json", "rich-text-byte-length"},
+		{"invalid-layout-duplicate-across-arrays.json", "layout-exactly-once"},
+		{"invalid-layout-missing-content-key.json", "layout-missing-content-key"},
 		{"invalid-layout-orphan-content-key.json", "layout-orphan-content-key"},
+		{"invalid-missing-dates-start.json", "start"}, // JSON-Schema "required" violation: missing property 'start'
+		{"invalid-oversize-richtext-bytes.json", "rich-text-byte-length"},
+		{"invalid-personal-detail-url-scheme.json", "personal-detail-url-scheme"},
 		{"invalid-reversed-date-range.json", "date-range-order"},
 	}
 	dir := filepath.Join(schemaFixturesDir(t), "store")
@@ -320,6 +406,30 @@ func TestValidateForStore_MatchingIssue(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.substring) {
 				t.Errorf("%s: expected error to contain %q, got: %v", tc.file, tc.substring, err)
+			}
+		})
+	}
+
+	// The three "hostile sectiontype" fixtures never reach ValidateForStore
+	// at all -- schema.Section.UnmarshalJSON rejects the unknown sectionType
+	// at DECODE time (see loadFullDocument's own doc comment). Their
+	// "matching issue" is the decode error naming the offending value.
+	decodeCases := []struct {
+		file      string
+		substring string
+	}{
+		{"invalid-hostile-sectiontype-constructor.json", "constructor"},
+		{"invalid-hostile-sectiontype-hasownproperty.json", "hasOwnProperty"},
+		{"invalid-hostile-sectiontype-proto.json", "__proto__"},
+	}
+	for _, tc := range decodeCases {
+		t.Run(tc.file, func(t *testing.T) {
+			_, decodeErr := loadFullDocument(t, filepath.Join(dir, tc.file))
+			if decodeErr == nil {
+				t.Fatalf("expected a decode error for %s", tc.file)
+			}
+			if !strings.Contains(decodeErr.Error(), tc.substring) {
+				t.Errorf("%s: expected decode error to contain %q, got: %v", tc.file, tc.substring, decodeErr)
 			}
 		})
 	}

@@ -84,8 +84,13 @@ describe("bounds/fixtures cross-language JSON-Schema verdict parity (ajv)", () =
   });
 
   it("agrees with the naming-convention verdict for every top-level fixtures/*.json fixture", () => {
+    // isFile() alone would also match a stray non-JSON file (e.g. a
+    // README) dropped into fixtures/ -- the Go side (listJSONFixtures in
+    // apps/server/internal/resume/validate_test.go) additionally requires
+    // a ".json" suffix; this must match it exactly, or a non-JSON file
+    // would break only this side (round-2 review minor finding).
     const names = readdirSync(join(root, "fixtures"), { withFileTypes: true })
-      .filter((entry) => entry.isFile())
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
       .map((entry) => entry.name);
     expect(names.length).toBeGreaterThan(0);
     for (const name of names) {

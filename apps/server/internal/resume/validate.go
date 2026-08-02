@@ -95,58 +95,121 @@ func ValidateForStore(doc schema.Resume) error {
 		}}
 	}
 
-	var issues []string
+	var entries []issueEntry
 
 	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(canonical))
 	if err != nil {
-		issues = append(issues, fmt.Sprintf("(document): could not parse canonical document: %v", err))
+		entries = append(entries, issueEntry{text: fmt.Sprintf("(document): could not parse canonical document: %v", err)})
 	} else if err := compiledSchema.Validate(instance); err != nil {
-		issues = append(issues, schemaIssues(err)...)
+		entries = append(entries, schemaIssueEntries(err)...)
 	}
 
 	if len(canonical) > MaxDocumentBytes {
-		issues = append(issues, fmt.Sprintf(
+		entries = append(entries, issueEntry{text: fmt.Sprintf(
 			"(document): canonical document is %d bytes, exceeds the %d-byte limit",
 			len(canonical), MaxDocumentBytes,
-		))
+		)})
 	}
 
 	for _, issue := range schema.ValidateDocument(doc) {
-		issues = append(issues, issue.String())
+		entries = append(entries, issueEntry{path: issue.Path, text: issue.String()})
 	}
 
-	if len(issues) == 0 {
+	if len(entries) == 0 {
 		return nil
 	}
-	sort.Strings(issues)
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].path != entries[j].path {
+			return entries[i].path < entries[j].path
+		}
+		return entries[i].text < entries[j].text
+	})
+	issues := make([]string, len(entries))
+	for i, e := range entries {
+		issues[i] = e.text
+	}
 	return &ValidationError{Issues: issues}
 }
 
-// schemaIssues flattens a jsonschema/v6 validation error's cause tree into
-// one string per LEAF violation (mirrors ajv's allErrors:true: every
-// bottom-level constraint violation reported, not just the first). The
-// top-level error jsonschema/v6 returns from Schema.Validate always wraps
-// its causes under a synthetic kind.Schema node (see that library's
+// issueEntry pairs a rendered issue message (text) with the dotted/
+// bracketed path it applies to (path), so ValidateForStore can sort by path
+// FIRST and text only as a tiebreaker -- genuinely "path-first", not merely
+// an accident of which layer's message happens to start with an earlier
+// letter (round-2 review minor finding: plain sort.Strings on the rendered
+// text alone sorted schema issues -- which all render as "at '/...': ..." --
+// strictly before every store issue, which render as "rule (path): ...",
+// regardless of the paths actually involved, since 'a' < every rule name's
+// first letter). path uses store's own dotted/bracketed convention
+// ("content.work.entries[0].jobTitle"), including for schema issues, so the
+// two layers' paths compare meaningfully against each other, not just
+// within their own layer.
+type issueEntry struct {
+	path string
+	text string
+}
+
+// schemaIssueEntries flattens a jsonschema/v6 validation error's cause tree
+// into one issueEntry per LEAF violation (mirrors ajv's allErrors:true:
+// every bottom-level constraint violation reported, not just the first).
+// The top-level error jsonschema/v6 returns from Schema.Validate always
+// wraps its causes under a synthetic kind.Schema node (see that library's
 // (*Schema).validate), so this never emits that wrapper's own generic
 // "jsonschema validation failed with ..." message -- only real per-field
 // violations, each already formatted as "at '/instance/location': message"
 // by the leaf ValidationError's own Error() method.
-func schemaIssues(err error) []string {
+func schemaIssueEntries(err error) []issueEntry {
 	ve, ok := err.(*jsonschema.ValidationError)
 	if !ok {
-		return []string{err.Error()}
+		return []issueEntry{{text: err.Error()}}
 	}
-	var out []string
-	collectSchemaIssues(ve, &out)
+	var out []issueEntry
+	collectSchemaIssueEntries(ve, &out)
 	return out
 }
 
-func collectSchemaIssues(ve *jsonschema.ValidationError, out *[]string) {
+func collectSchemaIssueEntries(ve *jsonschema.ValidationError, out *[]issueEntry) {
 	if len(ve.Causes) == 0 {
-		*out = append(*out, ve.Error())
+		*out = append(*out, issueEntry{path: instanceLocationPath(ve.InstanceLocation), text: ve.Error()})
 		return
 	}
 	for _, cause := range ve.Causes {
-		collectSchemaIssues(cause, out)
+		collectSchemaIssueEntries(cause, out)
 	}
+}
+
+// instanceLocationPath renders a jsonschema/v6 InstanceLocation (one path
+// segment per element, array indices as plain numeric strings) using
+// schema.ValidationIssue.Path's OWN dotted/bracketed convention
+// ("content.work.entries[0].jobTitle") instead of jsonschema/v6's native
+// JSON-pointer-with-leading-slash rendering ("/content/work/entries/0/
+// jobTitle") -- '/' sorts before every letter, so leaving it in place would
+// make every schema issue sort before every store issue regardless of path,
+// the same layer-segregation bug this function exists to avoid.
+func instanceLocationPath(segments []string) string {
+	var b strings.Builder
+	for _, s := range segments {
+		if isDigits(s) {
+			b.WriteByte('[')
+			b.WriteString(s)
+			b.WriteByte(']')
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(s)
+	}
+	return b.String()
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
