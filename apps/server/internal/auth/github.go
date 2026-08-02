@@ -30,12 +30,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 // GitHubStartPath and GitHubCallbackPath are the literal routes Service
@@ -195,8 +192,13 @@ func githubDisplayName(user githubUser) string {
 func (s *Service) handleGitHubStart(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	purpose, linkingUserID, ok := s.startPurposeAndLinkingUser(w, r)
+	if !ok {
+		return
+	}
+
 	redirectURI := s.githubRedirectURL()
-	handle, tx, err := s.tx.Begin(ctx, ProviderGitHub, PurposeLogin, uuid.Nil, redirectURI)
+	handle, tx, err := s.tx.Begin(ctx, ProviderGitHub, purpose, linkingUserID, redirectURI)
 	if err != nil {
 		s.writeInternalError(w, r, ProviderGitHub, "begin_transaction", err)
 		return
@@ -239,14 +241,14 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, "missing or malformed __Host-oauth-tx cookie")
+		s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, "missing or malformed __Host-oauth-tx cookie")
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderGitHub)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, ProviderGitHub, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
+			s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
 			return
 		}
 		s.writeInternalError(w, r, ProviderGitHub, "consume_transaction", err)
@@ -257,7 +259,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// reasoning to handleGoogleCallback's own check.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, ProviderGitHub, "state parameter mismatch")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "state parameter mismatch")
 		return
 	}
 
@@ -265,13 +267,13 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// visitor declined consent, checked only after state has already
 	// been validated -- identical to handleGoogleCallback.
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, ProviderGitHub, cancelledErrorCode, "user denied consent (access_denied)")
+		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, cancelledErrorCode, "user denied consent (access_denied)")
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, ProviderGitHub, "callback missing code and no recognized error parameter")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "callback missing code and no recognized error parameter")
 		return
 	}
 
@@ -285,7 +287,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	oauth2Cfg := s.githubOAuth2Config(tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, "token exchange failed")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "token exchange failed")
 		return
 	}
 
@@ -293,34 +295,53 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	var user githubUser
 	if err = s.githubAPIGet(ctx, client, "/user", &user); err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, "github /user api call failed (non-200 status, network error, or malformed response)")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "github /user api call failed (non-200 status, network error, or malformed response)")
 		return
 	}
 	if user.ID == 0 {
-		s.redirectAuthFailed(w, r, ProviderGitHub, "github /user response missing id")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "github /user response missing id")
+		return
+	}
+	providerUserID := strconv.FormatInt(user.ID, 10)
+
+	// purpose=link/reauth: resolved entirely off (provider, providerUserID)
+	// by link.go's shared algorithm -- no email check at all (Task 10),
+	// so GET /user/emails below is never even called for this branch
+	// (fewer GitHub API calls, and a link never blocked merely because the
+	// visitor has since made their GitHub email private).
+	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
+		if linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGitHub, providerUserID); linkErr != nil {
+			s.redirectLinkOrReauthError(w, r, ProviderGitHub, tx.Purpose, linkErr)
+			return
+		}
+		ClearOAuthTxCookie(w)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
 		return
 	}
 
 	var emails []githubEmail
 	if err = s.githubAPIGet(ctx, client, "/user/emails", &emails); err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, "github /user/emails api call failed (non-200 status, network error, or malformed response)")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "github /user/emails api call failed (non-200 status, network error, or malformed response)")
 		return
 	}
 	email, ok := primaryVerifiedGitHubEmail(emails)
 	if !ok {
-		s.redirectWithError(w, r, ProviderGitHub, emailNotVerifiedErrorCode, "no verified primary email in /user/emails")
+		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, emailNotVerifiedErrorCode, "no verified primary email in /user/emails")
 		return
 	}
 
-	providerUserID := strconv.FormatInt(user.ID, 10)
-	usr, err := s.resolveGitHubUser(ctx, providerUserID, email, githubDisplayName(user))
+	result, err := s.resolveLoginIdentity(ctx, ProviderGitHub, providerUserID, email, githubDisplayName(user))
 	if err != nil {
-		s.writeInternalError(w, r, ProviderGitHub, "resolve_user", err)
+		s.writeInternalError(w, r, ProviderGitHub, "resolve_login_identity", err)
+		return
+	}
+	if result.Kind == loginResultEmailCollision {
+		s.redirectEmailAlreadyRegistered(w, r, ProviderGitHub)
 		return
 	}
 
 	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
-	rawSession, _, err := s.sessions.Issue(ctx, usr.ID, r.UserAgent(), clientIP)
+	rawSession, _, err := s.sessions.Issue(ctx, result.User.ID, r.UserAgent(), clientIP)
 	if err != nil {
 		s.writeInternalError(w, r, ProviderGitHub, "issue_session", err)
 		return
@@ -328,43 +349,5 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	SetSessionCookie(w, rawSession)
 	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.publicOrigin+"/", http.StatusFound)
-}
-
-// resolveGitHubUser resolves the local user for a validated GitHub login:
-// an existing identity reuses its user; an unknown identity creates a new
-// user + identity. Task 4's documented stub, duplicated here for GitHub
-// exactly like resolveGoogleUser (google.go) documents for itself --
-// TODO(Task 10): task-10-brief.md's resolveLoginIdentity replaces every
-// provider's own copy of this with the real three-way branch (NewUser |
-// ExistingIdentity | EmailCollision), per design decision 5 and
-// AC-AUTH-001 (no automatic email merge across providers).
-func (s *Service) resolveGitHubUser(ctx context.Context, providerUserID, email, name string) (store.User, error) {
-	identity, err := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
-		Provider:       string(ProviderGitHub),
-		ProviderUserID: providerUserID,
-	})
-	if err == nil {
-		usr, getErr := s.q.GetUserByID(ctx, identity.UserID)
-		if getErr != nil {
-			return store.User{}, fmt.Errorf("auth: resolve github user: get user: %w", getErr)
-		}
-		return usr, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return store.User{}, fmt.Errorf("auth: resolve github user: get identity: %w", err)
-	}
-
-	usr, err := s.q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: name})
-	if err != nil {
-		return store.User{}, fmt.Errorf("auth: resolve github user: create user: %w", err)
-	}
-	if _, err := s.q.CreateIdentity(ctx, store.CreateIdentityParams{
-		UserID:         usr.ID,
-		Provider:       string(ProviderGitHub),
-		ProviderUserID: providerUserID,
-	}); err != nil {
-		return store.User{}, fmt.Errorf("auth: resolve github user: create identity: %w", err)
-	}
-	return usr, nil
+	http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
 }
