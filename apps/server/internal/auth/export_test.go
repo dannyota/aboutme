@@ -3,6 +3,7 @@ package auth
 import (
 	"time"
 
+	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -31,3 +32,25 @@ func NewSessionManagerForTest(q *store.Queries, now func() time.Time) *SessionMa
 // helpers that use it -- so this seam is what keeps it a real, exercised
 // symbol rather than dead code in the meantime).
 const SessionCookieName = sessionCookieName
+
+// NewServiceForTest builds a Service exactly like NewService, but also
+// sets the unexported googleIssuerOverride field to googleIssuer --
+// task-4-brief.md Step 2's issuer-override seam: "the Service needs a way
+// to use a non-https://accounts.google.com issuer in tests ... add an
+// unexported googleIssuerOverride field". An empty googleIssuer leaves
+// production's real "https://accounts.google.com" issuer in place, so a
+// caller that doesn't need the override can still use this constructor
+// uniformly.
+//
+// This lives in export_test.go rather than as an exported production
+// constructor/option -- the same seam idiom NewSessionManagerForTest above
+// already established for this package -- so production code has no way
+// to point itself at an arbitrary issuer by accident.
+func NewServiceForTest(cfg config.Config, q *store.Queries, googleIssuer string) (*Service, error) {
+	svc, err := NewService(cfg, q)
+	if err != nil {
+		return nil, err
+	}
+	svc.googleIssuerOverride = googleIssuer
+	return svc, nil
+}

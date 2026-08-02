@@ -80,6 +80,35 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 	return i, err
 }
 
+const createIdentity = `-- name: CreateIdentity :one
+INSERT INTO identities (user_id, provider, provider_user_id) VALUES ($1, $2, $3) RETURNING id, user_id, provider, provider_user_id, created_at
+`
+
+type CreateIdentityParams struct {
+	UserID         uuid.UUID
+	Provider       string
+	ProviderUserID string
+}
+
+// internal/auth's login-resolution algorithm calls
+// GetIdentityByProviderSubject first specifically to avoid racing
+// identities_provider_subject_key's UNIQUE (provider, provider_user_id) in
+// the common case; Task 10's link algorithm handles the
+// already-claimed-by-another-user case explicitly instead of relying on
+// this insert to fail.
+func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error) {
+	row := q.db.QueryRow(ctx, createIdentity, arg.UserID, arg.Provider, arg.ProviderUserID)
+	var i Identity
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Provider,
+		&i.ProviderUserID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createOAuthTransaction = `-- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (
     handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, expires_at

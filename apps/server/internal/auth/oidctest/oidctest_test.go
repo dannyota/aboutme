@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
 )
@@ -456,5 +458,171 @@ func TestProvider_UnregisteredCode_Rejected(t *testing.T) {
 	_, status := exchangeCode(t, p, "never-registered")
 	if status == http.StatusOK {
 		t.Fatal("exchange of an unregistered code succeeded, want failure")
+	}
+}
+
+// TestProvider_ClientIDOverride proves Provider.ClientID can be changed
+// from its DefaultClientID default, that Claims.Audience then defaults to
+// the overridden value (not the original DefaultClientID) when signing a
+// token, and that go-oidc's own audience check enforces this: a verifier
+// configured with the overridden ClientID accepts the token, one still
+// configured with DefaultClientID rejects it. This is the seam task-4/5's
+// tests use to point a Service at a provider registered under a
+// non-default client id.
+func TestProvider_ClientIDOverride(t *testing.T) {
+	p := oidctest.NewProvider(t)
+	p.ClientID = "custom-client-id"
+	p.RegisterCode("code", oidctest.Claims{Subject: "user-1"})
+
+	ctx := context.Background()
+	provider, err := oidc.NewProvider(ctx, p.URL)
+	if err != nil {
+		t.Fatalf("oidc.NewProvider: %v", err)
+	}
+
+	rawIDToken, status := exchangeCode(t, p, "code")
+	if status != http.StatusOK {
+		t.Fatalf("token exchange status = %d, want %d", status, http.StatusOK)
+	}
+
+	overriddenVerifier := provider.Verifier(&oidc.Config{ClientID: "custom-client-id"})
+	if _, err := overriddenVerifier.Verify(ctx, rawIDToken); err != nil {
+		t.Errorf("Verify against the overridden ClientID failed: %v, want success", err)
+	}
+
+	defaultVerifier := provider.Verifier(&oidc.Config{ClientID: oidctest.DefaultClientID})
+	if _, err := defaultVerifier.Verify(ctx, rawIDToken); err == nil {
+		t.Error("Verify against DefaultClientID succeeded for a token whose audience is the overridden ClientID, want error")
+	}
+}
+
+// exchangeViaOAuth2Config builds a real oauth2.Config from p's discovery
+// endpoint (via go-oidc, exactly as production code does) and exchanges
+// code through it -- proving the mock is compatible with the actual
+// oauth2.Config.Exchange call path, not just a hand-rolled HTTP POST (see
+// exchangeCodeFull), and, when verifier is non-empty, exercising the PKCE
+// code_verifier send end to end.
+func exchangeViaOAuth2Config(t *testing.T, p *oidctest.Provider, code, verifier string) (*oauth2.Token, error) {
+	t.Helper()
+
+	ctx := context.Background()
+	provider, err := oidc.NewProvider(ctx, p.URL)
+	if err != nil {
+		t.Fatalf("oidc.NewProvider: %v", err)
+	}
+	cfg := oauth2.Config{
+		ClientID: p.ClientID,
+		Endpoint: provider.Endpoint(),
+	}
+
+	var opts []oauth2.AuthCodeOption
+	if verifier != "" {
+		opts = append(opts, oauth2.VerifierOption(verifier))
+	}
+	return cfg.Exchange(ctx, code, opts...)
+}
+
+// TestProvider_PKCE_AcceptsMatchingVerifier proves the /token endpoint
+// accepts an exchange whose code_verifier hashes (S256) to the
+// code_challenge registered for the code -- exercised through a real
+// oauth2.Config.Exchange call (ruling 4c: at least one test must go
+// through this path), the same call production's google.go/linkedin.go
+// make.
+func TestProvider_PKCE_AcceptsMatchingVerifier(t *testing.T) {
+	p := oidctest.NewProvider(t)
+
+	verifier := oauth2.GenerateVerifier()
+	p.RegisterCode("code", oidctest.Claims{
+		Subject:       "user-1",
+		CodeChallenge: oauth2.S256ChallengeFromVerifier(verifier),
+	})
+
+	token, err := exchangeViaOAuth2Config(t, p, "code", verifier)
+	if err != nil {
+		t.Fatalf("Exchange with the matching code_verifier failed: %v, want success", err)
+	}
+	if token.AccessToken == "" {
+		t.Error("token response missing access_token")
+	}
+}
+
+// TestProvider_PKCE_RejectsMismatchedVerifier proves the /token endpoint
+// rejects an exchange whose code_verifier does NOT hash to the registered
+// code_challenge -- this is the property that makes the PKCE send in
+// google.go/linkedin.go's Exchange call actually proven, not merely
+// assumed to be sent.
+func TestProvider_PKCE_RejectsMismatchedVerifier(t *testing.T) {
+	p := oidctest.NewProvider(t)
+
+	correctVerifier := oauth2.GenerateVerifier()
+	wrongVerifier := oauth2.GenerateVerifier()
+	p.RegisterCode("code", oidctest.Claims{
+		Subject:       "user-1",
+		CodeChallenge: oauth2.S256ChallengeFromVerifier(correctVerifier),
+	})
+
+	_, err := exchangeViaOAuth2Config(t, p, "code", wrongVerifier)
+	if err == nil {
+		t.Fatal("Exchange with a mismatched code_verifier succeeded, want failure")
+	}
+	var retrieveErr *oauth2.RetrieveError
+	if errors.As(err, &retrieveErr) && retrieveErr.ErrorCode != "invalid_grant" {
+		t.Errorf("RetrieveError.ErrorCode = %q, want %q", retrieveErr.ErrorCode, "invalid_grant")
+	}
+}
+
+// TestProvider_PKCE_RejectsMissingVerifierWhenChallengeRegistered proves a
+// code registered with a CodeChallenge cannot be exchanged with no
+// code_verifier at all -- PKCE must not be silently skippable just by
+// omitting it.
+func TestProvider_PKCE_RejectsMissingVerifierWhenChallengeRegistered(t *testing.T) {
+	p := oidctest.NewProvider(t)
+
+	p.RegisterCode("code", oidctest.Claims{
+		Subject:       "user-1",
+		CodeChallenge: oauth2.S256ChallengeFromVerifier(oauth2.GenerateVerifier()),
+	})
+
+	_, err := exchangeViaOAuth2Config(t, p, "code", "")
+	if err == nil {
+		t.Fatal("Exchange with no code_verifier succeeded despite a registered code_challenge, want failure")
+	}
+}
+
+// TestProvider_PKCE_NotRequiredWhenChallengeUnregistered guards backward
+// compatibility: a code registered without a CodeChallenge (every test
+// above this one in the file) must keep exchanging successfully with no
+// code_verifier at all -- CodeChallenge is opt-in per code, not a global
+// requirement retrofitted onto every existing test.
+func TestProvider_PKCE_NotRequiredWhenChallengeUnregistered(t *testing.T) {
+	p := oidctest.NewProvider(t)
+	p.RegisterCode("code", oidctest.Claims{Subject: "user-1"})
+
+	_, err := exchangeViaOAuth2Config(t, p, "code", "")
+	if err != nil {
+		t.Errorf("Exchange with no code_verifier and no registered CodeChallenge failed: %v, want success", err)
+	}
+}
+
+// TestProvider_TokenError_IsJSONWithErrorCode proves the /token endpoint's
+// error responses are JSON with a proper status, so
+// golang.org/x/oauth2's RetrieveError.ErrorCode actually populates from
+// them (ruling 4b): a bare http.Error's "text/plain" Content-Type makes
+// oauth2 parse the body as an x-www-form-urlencoded query string instead
+// (see internal/token.go's doTokenRoundTrip), silently losing the error
+// code -- this regression test is what proves that's fixed.
+func TestProvider_TokenError_IsJSONWithErrorCode(t *testing.T) {
+	p := oidctest.NewProvider(t)
+
+	_, err := exchangeViaOAuth2Config(t, p, "never-registered", "")
+	if err == nil {
+		t.Fatal("Exchange of an unregistered code succeeded, want failure")
+	}
+	var retrieveErr *oauth2.RetrieveError
+	if !errors.As(err, &retrieveErr) {
+		t.Fatalf("error = %v (%T), want *oauth2.RetrieveError", err, err)
+	}
+	if retrieveErr.ErrorCode != "invalid_grant" {
+		t.Errorf("RetrieveError.ErrorCode = %q, want %q (Content-Type must be application/json for this to populate)", retrieveErr.ErrorCode, "invalid_grant")
 	}
 }

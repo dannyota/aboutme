@@ -70,11 +70,13 @@ func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":       "https://aboutme.vn",
-		"ENV":                 "staging",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32,::1/128",
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "staging",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32,::1/128",
+		"GOOGLE_CLIENT_ID":     "client-id",
+		"GOOGLE_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -250,9 +252,13 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 			if envValue == "prod" || envValue == "staging" {
 				// prod and staging both require TRUSTED_PROXY_CIDRS (fail
 				// closed — see TestLoad_TrustedProxyCIDRs_RequiredInProd and
-				// TestLoad_TrustedProxyCIDRs_RequiredInStaging); LISTEN_HOST
-				// is left at its loopback default.
+				// TestLoad_TrustedProxyCIDRs_RequiredInStaging) and
+				// GOOGLE_CLIENT_ID/SECRET (see
+				// TestLoad_GoogleCredentials_RequiredInProd/Staging);
+				// LISTEN_HOST is left at its loopback default.
 				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32,::1/128"
+				vars["GOOGLE_CLIENT_ID"] = "client-id"
+				vars["GOOGLE_CLIENT_SECRET"] = "client-secret"
 			}
 
 			got, err := config.Load(env(vars))
@@ -343,11 +349,13 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":       "https://aboutme.vn",
-		"ENV":                 "prod",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "prod",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":     "client-id",
+		"GOOGLE_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -384,11 +392,13 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":       "https://aboutme.vn",
-		"ENV":                 "staging",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "staging",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":     "client-id",
+		"GOOGLE_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -460,11 +470,13 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":       "https://aboutme.vn",
-		"ENV":                 "prod",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": " 127.0.0.1/32 , ::1/128 ",
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "prod",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  " 127.0.0.1/32 , ::1/128 ",
+		"GOOGLE_CLIENT_ID":     "client-id",
+		"GOOGLE_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -606,6 +618,195 @@ func TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix(t *testing.T) {
 			if !strings.Contains(err.Error(), "IPv4-in-IPv6") {
 				t.Errorf("Load() error = %q, want it to explain the IPv4-in-IPv6 mapping so the "+
 					"operator knows to use the plain IPv4 form", err.Error())
+			}
+		})
+	}
+}
+
+// ---- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET --------------------------
+
+func TestLoad_GoogleCredentials_ValidConfig(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "dev",
+		"GOOGLE_CLIENT_ID":     "test-client-id",
+		"GOOGLE_CLIENT_SECRET": "test-client-secret",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GoogleClientID != "test-client-id" {
+		t.Errorf("GoogleClientID = %q, want %q", got.GoogleClientID, "test-client-id")
+	}
+	if got.GoogleClientSecret != "test-client-secret" {
+		t.Errorf("GoogleClientSecret = %q, want %q", got.GoogleClientSecret, "test-client-secret")
+	}
+}
+
+// TestLoad_GoogleCredentials_OptionalInDev proves a developer working on an
+// unrelated feature is never forced to obtain real Google OAuth
+// credentials just to start the server in dev — the same
+// optional-outside-prod/staging shape TRUSTED_PROXY_CIDRS already has.
+func TestLoad_GoogleCredentials_OptionalInDev(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GoogleClientID != "" {
+		t.Errorf("GoogleClientID = %q, want empty (optional in dev)", got.GoogleClientID)
+	}
+	if got.GoogleClientSecret != "" {
+		t.Errorf("GoogleClientSecret = %q, want empty (optional in dev)", got.GoogleClientSecret)
+	}
+}
+
+// TestLoad_GoogleCredentials_RequiredInProd guards the fail-closed half: a
+// production server cannot offer "Sign in with Google" without real
+// credentials, so Load must refuse to start rather than silently booting
+// with an empty client id/secret that would only fail later, per-request,
+// against the real Google endpoint.
+func TestLoad_GoogleCredentials_RequiredInProd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		vars map[string]string
+	}{
+		{
+			name: "missing client id",
+			vars: map[string]string{"GOOGLE_CLIENT_SECRET": "secret"},
+		},
+		{
+			name: "missing client secret",
+			vars: map[string]string{"GOOGLE_CLIENT_ID": "client-id"},
+		},
+		{
+			name: "missing both",
+			vars: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := map[string]string{
+				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
+				"ENV":                 "prod",
+				"LISTEN_HOST":         "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+			}
+			for k, v := range tt.vars {
+				vars[k] = v
+			}
+
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want error: GOOGLE_CLIENT_ID/SECRET required when ENV=prod")
+			}
+			if !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID") && !strings.Contains(err.Error(), "GOOGLE_CLIENT_SECRET") {
+				t.Errorf("Load() error = %q, want it to name GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_GoogleCredentials_RequiredInStaging is the staging counterpart
+// of TestLoad_GoogleCredentials_RequiredInProd — staging shares prod's
+// strictness so a misconfiguration is caught before it reaches prod.
+func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(env(map[string]string{
+		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
+		"ENV":                 "staging",
+		"LISTEN_HOST":         "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+	}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error: GOOGLE_CLIENT_ID/SECRET required when ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID") {
+		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GOOGLE_CLIENT_ID")
+	}
+}
+
+// ---- PUBLIC_ORIGIN format validation -----------------------------------
+
+// TestLoad_PublicOrigin_ValidFormats proves the format check accepts every
+// shape a real deployment's PUBLIC_ORIGIN legitimately takes: with and
+// without an explicit port, https and http (dev).
+func TestLoad_PublicOrigin_ValidFormats(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []string{
+		"https://aboutme.vn",
+		"https://aboutme.vn:8443",
+		"http://localhost:8080",
+		"http://localhost",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := config.Load(env(map[string]string{
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": origin,
+				"ENV":           "dev",
+			}))
+			if err != nil {
+				t.Fatalf("Load() unexpected error: %v", err)
+			}
+			if got.PublicOrigin != origin {
+				t.Errorf("PublicOrigin = %q, want %q", got.PublicOrigin, origin)
+			}
+		})
+	}
+}
+
+// TestLoad_PublicOrigin_InvalidFormats guards the fail-fast format
+// validation (task-4-brief.md integration-owner ruling): PUBLIC_ORIGIN must
+// parse as scheme://host[:port] only — no path, no trailing slash, no
+// query, no fragment — since it becomes the base of every absolute OAuth
+// redirect/callback URL this server builds (an unnoticed trailing slash or
+// path would silently double up or corrupt every one of them).
+func TestLoad_PublicOrigin_InvalidFormats(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"https://aboutme.vn/",         // trailing slash
+		"https://aboutme.vn/api",      // path
+		"https://aboutme.vn?x=1",      // query
+		"https://aboutme.vn#frag",     // fragment
+		"aboutme.vn",                  // no scheme
+		"ftp://aboutme.vn",            // unsupported scheme
+		"https://",                    // no host
+		"not a url at all : : spaces", // unparseable
+	}
+	for _, origin := range cases {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := config.Load(env(map[string]string{
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": origin,
+				"ENV":           "dev",
+			}))
+			if err == nil {
+				t.Fatalf("Load() error = nil, want error rejecting PUBLIC_ORIGIN %q", origin)
+			}
+			if !strings.Contains(err.Error(), "PUBLIC_ORIGIN") {
+				t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "PUBLIC_ORIGIN")
 			}
 		})
 	}

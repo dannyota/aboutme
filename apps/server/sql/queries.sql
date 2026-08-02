@@ -14,6 +14,15 @@ SELECT * FROM users WHERE email = $1;
 -- name: GetIdentityByProviderSubject :one
 SELECT * FROM identities WHERE provider = $1 AND provider_user_id = $2;
 
+-- name: CreateIdentity :one
+-- internal/auth's login-resolution algorithm calls
+-- GetIdentityByProviderSubject first specifically to avoid racing
+-- identities_provider_subject_key's UNIQUE (provider, provider_user_id) in
+-- the common case; Task 10's link algorithm handles the
+-- already-claimed-by-another-user case explicitly instead of relying on
+-- this insert to fail.
+INSERT INTO identities (user_id, provider, provider_user_id) VALUES ($1, $2, $3) RETURNING *;
+
 -- name: CreateSession :one
 -- Always inserts a brand-new row -- used both by Issue (fixation defense: a
 -- login never reuses an existing session row) and by the >24h rotation
