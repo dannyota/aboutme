@@ -76,3 +76,17 @@ func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries,
 func SetSessionIssuerForTest(svc *Service, si sessionIssuer) {
 	svc.sessions = si
 }
+
+// SetGitHubEndpointForTest overrides svc's unexported
+// githubEndpointOverride field with endpoint (e.g. a newGitHubStub's
+// httptest.Server URL, github_test.go), mirroring
+// NewServiceForTest's googleIssuerOverride seam: production's real
+// https://github.com and https://api.github.com endpoints are only ever
+// used when this is left unset, so a bare *Service (built via NewService,
+// with no explicit call to this function) can never be pointed at
+// anything but the real network for GitHub -- task-6-brief.md's own copy
+// of "the issuer-override guard" NewServiceForTest already established
+// for Google.
+func SetGitHubEndpointForTest(svc *Service, endpoint string) {
+	svc.githubEndpointOverride = endpoint
+}

@@ -78,10 +78,12 @@ func (noopPinger) Ping(context.Context) error { return nil }
 
 // testServiceConfig is newTestService's own scratch options struct --
 // deliberately not config.Config itself, which carries no test-only
-// fields; only the Google issuer override needs a seam, provided by
-// auth.NewServiceForTest.
+// fields; only each provider's own endpoint-override seam is needed here,
+// provided by auth.NewServiceForTest (Google) and
+// auth.SetGitHubEndpointForTest (GitHub).
 type testServiceConfig struct {
-	googleIssuer string
+	googleIssuer   string
+	githubEndpoint string
 }
 
 // testServiceOption configures newTestService.
@@ -95,6 +97,18 @@ func withGoogleIssuer(issuer string) testServiceOption {
 	return func(c *testServiceConfig) { c.googleIssuer = issuer }
 }
 
+// withGitHubEndpoint arranges for the returned Service to dial endpoint
+// (e.g. a newGitHubStub's httptest.Server URL, github_test.go) instead of
+// the real "https://github.com" / "https://api.github.com" for every
+// GitHub OAuth2/API call -- see auth.SetGitHubEndpointForTest's doc
+// comment. Task 6's own copy of the issuer-override guard below: GitHub
+// has no OIDC discovery to omit, but the same "a test that forgot the
+// override would dial the real provider" risk applies to its OAuth2
+// endpoints and REST API base URL.
+func withGitHubEndpoint(endpoint string) testServiceOption {
+	return func(c *testServiceConfig) { c.githubEndpoint = endpoint }
+}
+
 // newTestService builds a Service backed by a fresh live-database
 // connection (see newTestQueries) and wraps it in the exact same router
 // wiring cmd/server/main.go uses (api.New + Service.RegisterRoutes), so
@@ -102,12 +116,16 @@ func withGoogleIssuer(issuer string) testServiceOption {
 // bypass. It returns the resulting http.Handler and the *store.Queries
 // backing it, for direct row assertions.
 //
-// A non-empty Google issuer override (withGoogleIssuer) is REQUIRED, not
-// optional: fix-round Critical finding was exactly a test that called
-// this with no override and so performed live OIDC discovery against the
-// real https://accounts.google.com on every hermetic-looking test run.
-// Forcing this here, once, makes that mistake impossible to repeat --
-// including for Task 5/6's own copies of this pattern.
+// At least one provider endpoint override (withGoogleIssuer or
+// withGitHubEndpoint) is REQUIRED, not optional: fix-round Critical
+// finding was exactly a test that called this with no override and so
+// performed live OIDC discovery against the real
+// https://accounts.google.com on every hermetic-looking test run. Forcing
+// at least one override here, once, makes that mistake impossible to
+// repeat for either provider -- a test that supplies only
+// withGitHubEndpoint never dials Google (it never calls a Google route at
+// all), and vice versa, so this stays a genuine per-provider seam rather
+// than a blanket requirement to supply both.
 func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *store.Queries) {
 	t.Helper()
 
@@ -117,22 +135,29 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	for _, opt := range opts {
 		opt(&sc)
 	}
-	if sc.googleIssuer == "" {
-		t.Fatal("newTestService: no Google issuer override supplied (withGoogleIssuer) -- " +
-			"every test Service must be pointed at an oidctest.Provider, never the real " +
-			"https://accounts.google.com, or a request to /start or /callback would " +
-			"perform live OIDC discovery against the real network")
+	if sc.googleIssuer == "" && sc.githubEndpoint == "" {
+		t.Fatal("newTestService: no provider endpoint override supplied (withGoogleIssuer or " +
+			"withGitHubEndpoint) -- every test Service must be pointed at a local stub, never " +
+			"the real https://accounts.google.com or https://github.com/api.github.com, or a " +
+			"request to /start or /callback would perform live network I/O against the real provider")
 	}
 
-	cfg := config.Config{
-		PublicOrigin:       testPublicOrigin,
-		GoogleClientID:     oidctest.DefaultClientID,
-		GoogleClientSecret: "test-google-client-secret",
+	cfg := config.Config{PublicOrigin: testPublicOrigin}
+	if sc.googleIssuer != "" {
+		cfg.GoogleClientID = oidctest.DefaultClientID
+		cfg.GoogleClientSecret = "test-google-client-secret"
+	}
+	if sc.githubEndpoint != "" {
+		cfg.GitHubClientID = "test-github-client-id"
+		cfg.GitHubClientSecret = "test-github-client-secret"
 	}
 
 	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, sc.googleIssuer)
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
+	}
+	if sc.githubEndpoint != "" {
+		auth.SetGitHubEndpointForTest(svc, sc.githubEndpoint)
 	}
 
 	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)

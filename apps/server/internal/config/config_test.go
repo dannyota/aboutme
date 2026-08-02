@@ -77,6 +77,8 @@ func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32,::1/128",
 		"GOOGLE_CLIENT_ID":     "client-id",
 		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"GITHUB_CLIENT_ID":     "github-client-id",
+		"GITHUB_CLIENT_SECRET": "github-client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -252,13 +254,17 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 			if envValue == "prod" || envValue == "staging" {
 				// prod and staging both require TRUSTED_PROXY_CIDRS (fail
 				// closed — see TestLoad_TrustedProxyCIDRs_RequiredInProd and
-				// TestLoad_TrustedProxyCIDRs_RequiredInStaging) and
+				// TestLoad_TrustedProxyCIDRs_RequiredInStaging),
 				// GOOGLE_CLIENT_ID/SECRET (see
-				// TestLoad_GoogleCredentials_RequiredInProd/Staging);
+				// TestLoad_GoogleCredentials_RequiredInProd/Staging), and
+				// GITHUB_CLIENT_ID/SECRET (see
+				// TestLoad_GitHubCredentials_RequiredInProd/Staging);
 				// LISTEN_HOST is left at its loopback default.
 				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32,::1/128"
 				vars["GOOGLE_CLIENT_ID"] = "client-id"
 				vars["GOOGLE_CLIENT_SECRET"] = "client-secret"
+				vars["GITHUB_CLIENT_ID"] = "github-client-id"
+				vars["GITHUB_CLIENT_SECRET"] = "github-client-secret"
 			}
 
 			got, err := config.Load(env(vars))
@@ -356,6 +362,8 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
 		"GOOGLE_CLIENT_ID":     "client-id",
 		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"GITHUB_CLIENT_ID":     "github-client-id",
+		"GITHUB_CLIENT_SECRET": "github-client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -399,6 +407,8 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
 		"GOOGLE_CLIENT_ID":     "client-id",
 		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"GITHUB_CLIENT_ID":     "github-client-id",
+		"GITHUB_CLIENT_SECRET": "github-client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -477,6 +487,8 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 		"TRUSTED_PROXY_CIDRS":  " 127.0.0.1/32 , ::1/128 ",
 		"GOOGLE_CLIENT_ID":     "client-id",
 		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"GITHUB_CLIENT_ID":     "github-client-id",
+		"GITHUB_CLIENT_SECRET": "github-client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -739,6 +751,136 @@ func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID") {
 		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GOOGLE_CLIENT_ID")
+	}
+}
+
+// ---- GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET --------------------------
+//
+// GitHub login is plain OAuth2, not OIDC (AC-AUTH-003) -- no discovery, no
+// issuer, no nonce -- but its client credentials carry the identical
+// fail-closed requirement as Google's: same optional-in-dev,
+// required-in-prod/staging shape, mirrored test-for-test below.
+
+func TestLoad_GitHubCredentials_ValidConfig(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "dev",
+		"GITHUB_CLIENT_ID":     "test-github-client-id",
+		"GITHUB_CLIENT_SECRET": "test-github-client-secret",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GitHubClientID != "test-github-client-id" {
+		t.Errorf("GitHubClientID = %q, want %q", got.GitHubClientID, "test-github-client-id")
+	}
+	if got.GitHubClientSecret != "test-github-client-secret" {
+		t.Errorf("GitHubClientSecret = %q, want %q", got.GitHubClientSecret, "test-github-client-secret")
+	}
+}
+
+// TestLoad_GitHubCredentials_OptionalInDev proves a developer working on an
+// unrelated feature is never forced to obtain real GitHub OAuth
+// credentials just to start the server in dev — the same
+// optional-outside-prod/staging shape GOOGLE_CLIENT_ID/SECRET already has.
+func TestLoad_GitHubCredentials_OptionalInDev(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GitHubClientID != "" {
+		t.Errorf("GitHubClientID = %q, want empty (optional in dev)", got.GitHubClientID)
+	}
+	if got.GitHubClientSecret != "" {
+		t.Errorf("GitHubClientSecret = %q, want empty (optional in dev)", got.GitHubClientSecret)
+	}
+}
+
+// TestLoad_GitHubCredentials_RequiredInProd guards the fail-closed half: a
+// production server cannot offer "Sign in with GitHub" without real
+// credentials, so Load must refuse to start rather than silently booting
+// with an empty client id/secret that would only fail later, per-request,
+// against the real GitHub endpoint. Every case also supplies valid Google
+// credentials, so the failure asserted here is unambiguously GitHub's own
+// (not Google's check firing first).
+func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		vars map[string]string
+	}{
+		{
+			name: "missing client id",
+			vars: map[string]string{"GITHUB_CLIENT_SECRET": "secret"},
+		},
+		{
+			name: "missing client secret",
+			vars: map[string]string{"GITHUB_CLIENT_ID": "client-id"},
+		},
+		{
+			name: "missing both",
+			vars: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := map[string]string{
+				"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":        "https://aboutme.vn",
+				"ENV":                  "prod",
+				"LISTEN_HOST":          "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+				"GOOGLE_CLIENT_ID":     "client-id",
+				"GOOGLE_CLIENT_SECRET": "client-secret",
+			}
+			for k, v := range tt.vars {
+				vars[k] = v
+			}
+
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want error: GITHUB_CLIENT_ID/SECRET required when ENV=prod")
+			}
+			if !strings.Contains(err.Error(), "GITHUB_CLIENT_ID") && !strings.Contains(err.Error(), "GITHUB_CLIENT_SECRET") {
+				t.Errorf("Load() error = %q, want it to name GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_GitHubCredentials_RequiredInStaging is the staging counterpart
+// of TestLoad_GitHubCredentials_RequiredInProd — staging shares prod's
+// strictness so a misconfiguration is caught before it reaches prod.
+func TestLoad_GitHubCredentials_RequiredInStaging(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "staging",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":     "client-id",
+		"GOOGLE_CLIENT_SECRET": "client-secret",
+	}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error: GITHUB_CLIENT_ID/SECRET required when ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "GITHUB_CLIENT_ID") {
+		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GITHUB_CLIENT_ID")
 	}
 }
 

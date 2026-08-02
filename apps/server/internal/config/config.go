@@ -67,6 +67,15 @@ type Config struct {
 	// GoogleClientID. Same required-in-prod/staging, optional-in-dev
 	// semantics.
 	GoogleClientSecret string
+	// GitHubClientID is the OAuth2 client id for "Sign in with GitHub"
+	// (docs/specs/aboutme-design.md §3 OAuth: plain OAuth2, no OIDC —
+	// AC-AUTH-003). Same required-in-prod/staging, optional-in-dev
+	// semantics as GoogleClientID.
+	GitHubClientID string
+	// GitHubClientSecret is the OAuth2 client secret paired with
+	// GitHubClientID. Same required-in-prod/staging, optional-in-dev
+	// semantics.
+	GitHubClientSecret string
 }
 
 const (
@@ -144,6 +153,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	githubClientID, githubClientSecret, err := loadGitHubCredentials(getenv("GITHUB_CLIENT_ID"), getenv("GITHUB_CLIENT_SECRET"), env)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port:               port,
 		ListenHost:         listenHost,
@@ -154,6 +168,8 @@ func Load(getenv func(string) string) (Config, error) {
 		TrustedProxyCIDRs:  trustedProxyCIDRs,
 		GoogleClientID:     googleClientID,
 		GoogleClientSecret: googleClientSecret,
+		GitHubClientID:     githubClientID,
+		GitHubClientSecret: githubClientSecret,
 	}, nil
 }
 
@@ -391,6 +407,34 @@ func loadGoogleCredentials(rawClientID, rawClientSecret, env string) (clientID, 
 		if clientSecret == "" {
 			return "", "", fmt.Errorf("config: GOOGLE_CLIENT_SECRET is required when ENV=%s: "+
 				"production and staging cannot offer Google login without real credentials", env)
+		}
+	}
+	return clientID, clientSecret, nil
+}
+
+// loadGitHubCredentials validates GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET.
+// Required (both, non-empty) when env requires production OAuth
+// credentials (see requiresProductionOAuthCredentials) — the same
+// fail-closed, staging-shares-prod pattern as loadGoogleCredentials.
+// GitHub login itself is plain OAuth2, not OIDC (AC-AUTH-003: no
+// discovery, no issuer, no nonce), but its client credentials carry the
+// identical requirement: a production or staging server cannot genuinely
+// offer "Sign in with GitHub" without real credentials, so Load fails fast
+// rather than booting and only failing later, per-request, against the
+// real GitHub endpoint. Optional outside that — both empty is a valid dev
+// configuration (GitHub login simply won't work until set).
+func loadGitHubCredentials(rawClientID, rawClientSecret, env string) (clientID, clientSecret string, err error) {
+	clientID = strings.TrimSpace(rawClientID)
+	clientSecret = strings.TrimSpace(rawClientSecret)
+
+	if requiresProductionOAuthCredentials(env) {
+		if clientID == "" {
+			return "", "", fmt.Errorf("config: GITHUB_CLIENT_ID is required when ENV=%s: "+
+				"production and staging cannot offer GitHub login without real credentials", env)
+		}
+		if clientSecret == "" {
+			return "", "", fmt.Errorf("config: GITHUB_CLIENT_SECRET is required when ENV=%s: "+
+				"production and staging cannot offer GitHub login without real credentials", env)
 		}
 	}
 	return clientID, clientSecret, nil
