@@ -126,6 +126,14 @@ jobs:
       - run: make server-test-integration
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+      # Runs the DB-backed auth/store/user suites. Without this, a bare
+      # `go test ./...` reports ok while every DSN-gated case skips — the
+      # acceptance tests for AC-AUTH-001..005 and AC-SEC-002 among them. The
+      # target sets REQUIRE_TEST_DB=1, so a missing DSN fails the job instead
+      # of passing vacuously.
+      - run: make server-test-db
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
       - run: make server-migration-test
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
