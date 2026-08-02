@@ -54,7 +54,7 @@ type Resume struct {
 	Slug            *string
 	Live            bool
 	DownloadEnabled bool
-	SeoGeoEnabled   bool
+	SEOGeoEnabled   bool
 	SchemaVersion   int32
 	Revision        int64
 	Lng             *string
