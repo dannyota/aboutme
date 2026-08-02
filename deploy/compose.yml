@@ -102,6 +102,9 @@ services:
       # this is a drop-in fix with no code change required.
       DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
+      # Required by internal/config.Load like ENV (see the comment above);
+      # migrate never serves OAuth but loads the same Config.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       ENV: dev
     # migrate is a one-shot binary with no HTTP server, so it can never
     # satisfy the HTTP healthcheck it would otherwise silently inherit from
@@ -146,6 +149,11 @@ services:
       # so any compromised sibling container — postgres, migrate, or web —
       # was a trusted peer able to assert an arbitrary client-IP header).
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.90.0.0/28}
+      # Origin the browser reaches the stack on — auth cookie scope, OAuth
+      # redirect URIs, and CSRF Origin checks all derive from it. The
+      # default matches CADDY_HTTP_PORT=8080 (the rootless-podman setup);
+      # if you change the published port, set PUBLIC_ORIGIN with it.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       ENV: dev
     # Kept in sync with server.Dockerfile's HEALTHCHECK: this compose-level
     # definition takes precedence over the image's, so both must agree.
