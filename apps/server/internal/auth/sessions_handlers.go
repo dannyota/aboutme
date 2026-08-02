@@ -17,13 +17,25 @@ package auth
 // handler does -- before RevokeForUser/RevokeAll ever touch a row. A stale
 // reauth must never revoke anything and then discover it should have
 // refused.
+//
+// DD-C14 (fix round 1, finding I2, design owner ruling): logout
+// (handleLogout) and revoking the caller's own CURRENT session
+// (handleRevokeSession) both mean the credential LINEAGE dies, not just
+// its current row -- see revokeCurrentPredecessorIfAny's own doc comment
+// for the full mechanism (and why it needed a database fallback beyond
+// the context-based seam the fix was originally described with). DELETE
+// /sessions (handleRevokeAllSessions) needs no equivalent: it already
+// sweeps every one of the caller's sessions, predecessor included.
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -72,10 +84,80 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 		s.writeSessionAPIInternalError(w, r, "revoke_session", err)
 		return
 	}
+	// DD-C14 (fix round 1, finding I2): logout kills the whole credential
+	// LINEAGE, not just sess's own row -- see
+	// revokeCurrentPredecessorIfAny's own doc comment.
+	if !s.revokeCurrentPredecessorIfAny(ctx, sess, w, r) {
+		return
+	}
 
 	ClearSessionCookie(w)
 	w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)
 	writeNoContent(w)
+}
+
+// revokeCurrentPredecessorIfAny revokes the session sess was rotated
+// FROM, if any, alongside sess itself (DD-C14, fix round 1 finding I2):
+// logout and revoke-current-session mean the caller's whole credential
+// LINEAGE dies, not just its current row -- otherwise a predecessor
+// session stays authenticate-able (with its own still-valid raw token)
+// for up to rotationGrace (60s) after the caller believed they had logged
+// out. It is a no-op (returning true immediately) for the overwhelmingly
+// common case where sess was never rotated at all. Callers (handleLogout;
+// handleRevokeSession, only when revoking the caller's own CURRENT
+// session) must stop and return immediately when this reports false -- it
+// has already written the response.
+//
+// Two mechanisms, checked in order:
+//
+//  1. PredecessorSessionIDFromContext (context.go): RequireSession
+//     populates this ONLY when its OWN Authenticate call, for THIS exact
+//     request, is what performed the rotation. This is the mechanism
+//     task-9-brief.md's fix round 1 originally described ("When
+//     Authenticate rotated in-flight, RequireSession must place the
+//     predecessor session id in context").
+//  2. FindImmediatePredecessorSession (sql/queries.sql): a database
+//     lookup via the EXACT (not heuristic) timing relationship
+//     session.go's tryRotate establishes between a predecessor and its
+//     successor. This exists because mechanism 1 turns out to be
+//     unreachable for every real request on this specific pair of
+//     handlers: both are behind RequireCSRF, which validates the
+//     request's X-CSRF-Token against the POST-rotation session (a fresh
+//     csrf_secret the client cannot possibly know on the very first
+//     request that mints it) -- verified empirically: a single request
+//     presenting an old, rotation-due cookie directly to POST
+//     /auth/logout gets 403 csrf_rejected before handleLogout ever runs,
+//     even though RequireSession's own rotation already committed to the
+//     database and set the response's Set-Cookie. The REALISTIC exposure
+//     the review traced is therefore always the two-step case instead: an
+//     earlier, unrelated request (typically GET /me, exempt from CSRF)
+//     rotates the session, and a LATER logout/revoke-current request --
+//     correctly authenticated and CSRF-validated against the successor --
+//     never rotates again itself, so mechanism 1 alone would never find
+//     the predecessor. Mechanism 2 covers this by construction: it
+//     doesn't care which request performed the rotation, only that sess
+//     is a successor and its predecessor is still unrevoked.
+func (s *Service) revokeCurrentPredecessorIfAny(ctx context.Context, sess store.Session, w http.ResponseWriter, r *http.Request) bool {
+	predecessorID, hasPredecessor := PredecessorSessionIDFromContext(ctx)
+	if !hasPredecessor {
+		predRow, err := s.q.FindImmediatePredecessorSession(ctx, store.FindImmediatePredecessorSessionParams{
+			UserID:                sess.UserID,
+			PredecessorGraceUntil: sess.CreatedAt.Add(rotationGrace),
+		})
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return true
+			}
+			s.writeSessionAPIInternalError(w, r, "find_predecessor_session", err)
+			return false
+		}
+		predecessorID = predRow.ID
+	}
+	if err := s.sessionMgr.Revoke(ctx, predecessorID); err != nil {
+		s.writeSessionAPIInternalError(w, r, "revoke_predecessor_session", err)
+		return false
+	}
+	return true
 }
 
 // sessionDeviceEntry is one row of GET /sessions' device list
@@ -118,12 +200,13 @@ func (s *Service) handleSessionsCollection(w http.ResponseWriter, r *http.Reques
 }
 
 // handleSessionsList implements GET /api/v1/sessions: every LIVE session
-// belonging to the caller. Explicitly revoked rows are never returned --
-// and neither are Task 7's grace-dead rotation predecessors (rows with
-// rotation_grace_until in the past but revoked_at still NULL: see
-// ListLiveSessionsForUser's own doc comment, sql/queries.sql) -- a
-// superseded predecessor must never masquerade as a live device the
-// caller could still revoke.
+// belonging to the caller, mirroring session.go's sessionDead exactly
+// (fix round 1, finding I1): explicitly revoked rows are never returned;
+// neither are idle-expired or absolute-expired rows; neither are Task 7's
+// grace-dead rotation predecessors (rows with rotation_grace_until in the
+// past but revoked_at still NULL: see ListLiveSessionsForUser's own doc
+// comment, sql/queries.sql) -- a superseded predecessor must never
+// masquerade as a live device the caller could still revoke.
 func (s *Service) handleSessionsList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
@@ -132,9 +215,11 @@ func (s *Service) handleSessionsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := s.sessionMgr.now()
 	rows, err := s.q.ListLiveSessionsForUser(ctx, store.ListLiveSessionsForUserParams{
-		UserID: sess.UserID,
-		Now:    s.sessionMgr.now(),
+		UserID:     sess.UserID,
+		IdleCutoff: now.Add(-idleTimeout),
+		Now:        now,
 	})
 	if err != nil {
 		s.writeSessionAPIInternalError(w, r, "list_sessions", err)
@@ -233,6 +318,15 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 
 	if targetID == sess.ID {
 		ClearSessionCookie(w)
+		// DD-C14 (fix round 1, finding I2): revoking the caller's own
+		// CURRENT session kills the whole credential lineage, exactly
+		// like logout -- see revokeCurrentPredecessorIfAny's own doc
+		// comment. Only applies in this branch: revoking a DIFFERENT
+		// session the caller owns must never touch the (unrelated,
+		// still-live) session this request is itself authenticated with.
+		if !s.revokeCurrentPredecessorIfAny(ctx, sess, w, r) {
+			return
+		}
 	}
 	writeNoContent(w)
 }

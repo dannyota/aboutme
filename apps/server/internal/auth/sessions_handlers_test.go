@@ -25,7 +25,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 // sessionsListEnvelope decodes GET /sessions' success envelope.
@@ -100,6 +104,35 @@ func forceRotationGraceDead(t *testing.T, sessionID uuid.UUID) {
 	past := time.Now().Add(-time.Minute)
 	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET rotation_grace_until = $2 WHERE id = $1`, sessionID, past); err != nil {
 		t.Fatalf("force rotation_grace_until into the past: %v", err)
+	}
+}
+
+// forceSessionIdleExpired directly SQL-updates sessionID's last_seen_at
+// to older than idleTimeout (30d, session_adversarial_test.go's mirrored
+// constant), while leaving revoked_at NULL -- fix round 1, finding I1:
+// ListLiveSessionsForUser/RevokeSessionForUser must both treat this
+// exactly like a grace-dead predecessor, not as a still-live session.
+func forceSessionIdleExpired(t *testing.T, sessionID uuid.UUID) {
+	t.Helper()
+
+	pool := newRowInspectorPool(t)
+	past := time.Now().Add(-(idleTimeout + time.Hour))
+	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET last_seen_at = $2 WHERE id = $1`, sessionID, past); err != nil {
+		t.Fatalf("force last_seen_at idle-expired: %v", err)
+	}
+}
+
+// forceSessionAbsoluteExpired directly SQL-updates sessionID's
+// absolute_expires_at to one hour in the past, while leaving revoked_at
+// and last_seen_at untouched -- fix round 1, finding I1's absolute-expiry
+// counterpart to forceSessionIdleExpired above.
+func forceSessionAbsoluteExpired(t *testing.T, sessionID uuid.UUID) {
+	t.Helper()
+
+	pool := newRowInspectorPool(t)
+	past := time.Now().Add(-time.Hour)
+	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET absolute_expires_at = $2 WHERE id = $1`, sessionID, past); err != nil {
+		t.Fatalf("force absolute_expires_at expired: %v", err)
 	}
 }
 
@@ -179,6 +212,134 @@ func TestLogout_WrongMethod_Returns405(t *testing.T) {
 	resp := doJSON(t, handler, http.MethodGet, auth.LogoutPath, "", "", "") //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("GET %s status = %d, want %d", auth.LogoutPath, resp.StatusCode, http.StatusMethodNotAllowed)
+	}
+}
+
+// newRotationCapableTestService is TestGetMe_RotatesSessionOnAuthenticate_SetsNewCookie's
+// (me_test.go) setup, factored out for reuse here: a bare Service whose
+// internal *SessionManager is swapped (SetSessionManagerForTest,
+// export_test.go) for one driven by a fake, advanceable clock, so a test
+// can push a session's age past rotationAge (24h) deterministically and
+// drive the resulting rotation through the REAL HTTP handler chain
+// instead of racing the real wall clock.
+func newRotationCapableTestService(t *testing.T) (http.Handler, *store.Queries, *testutil.Clock, *auth.SessionManager) {
+	t.Helper()
+
+	q := newTestQueries(t)
+	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, q)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	clk := testutil.NewClockAtEpoch()
+	sm := auth.NewSessionManagerForTest(q, clk.Now)
+	auth.SetSessionManagerForTest(svc, sm)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	return handler, q, clk, sm
+}
+
+// TestLogout_RotatedRequest_RevokesPredecessorToo is fix round 1's
+// finding I2 (design owner ruling DD-C14): logout kills the whole
+// credential LINEAGE, not just the successor row the logout request was
+// itself authenticated with. Issues a session, ages it past rotationAge
+// via a fake clock, drives a request that rotates it (GET /me), then logs
+// out using the SUCCESSOR's own cookie -- the OLD (predecessor) raw token
+// must stop authenticating immediately, not merely remain valid for up to
+// rotationGrace (60s) the way it would have before this fix (the exact
+// exposure the review traced).
+func TestLogout_RotatedRequest_RevokesPredecessorToo(t *testing.T) {
+	handler, q, clk, sm := newRotationCapableTestService(t)
+
+	userID := createTestUser(t, q)
+	rawOld, _, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.92")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+
+	rotateResp := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if rotateResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s (rotating request) status = %d, want %d", auth.MePath, rotateResp.StatusCode, http.StatusOK)
+	}
+	successor := extractCookie(rotateResp, auth.SessionCookieName)
+	if successor == nil {
+		t.Fatal("rotating request did not carry a successor Set-Cookie -- test setup broken, not the code under test")
+	}
+	successorSess, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(successor.Value))
+	if err != nil {
+		t.Fatalf("look up successor row by its new token: %v", err)
+	}
+
+	logoutResp := doJSON(t, handler, http.MethodPost, auth.LogoutPath, testPublicOrigin, csrfTokenFor(successorSess), "", sessionRequestCookie(successor.Value)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if logoutResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("logout with the successor's own cookie status = %d, want %d", logoutResp.StatusCode, http.StatusNoContent)
+	}
+
+	// The exposure this fix closes: the OLD (predecessor) raw token must
+	// no longer authenticate at all -- not merely "until its grace window
+	// expires."
+	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if after.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET %s with the PREDECESSOR's raw token after logout (via the successor) status = %d, want %d (DD-C14: logout must kill the whole lineage)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
+	}
+
+	// For completeness: the successor's own token is of course also dead
+	// (ordinary logout behavior, not this fix's own novel assertion).
+	afterSuccessor := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(successor.Value)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if afterSuccessor.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET %s with the successor's own raw token after its own logout status = %d, want %d", auth.MePath, afterSuccessor.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo
+// is DD-C14's DELETE /sessions/{id} counterpart to
+// TestLogout_RotatedRequest_RevokesPredecessorToo above: revoking one's
+// own CURRENT session by id, after an in-flight rotation, must revoke the
+// predecessor too.
+func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *testing.T) {
+	handler, q, clk, sm := newRotationCapableTestService(t)
+
+	userID := createTestUser(t, q)
+	rawOld, _, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.93")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	clk.Advance(25 * time.Hour) // past rotationAge (24h)
+
+	rotateResp := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if rotateResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s (rotating request) status = %d, want %d", auth.MePath, rotateResp.StatusCode, http.StatusOK)
+	}
+	successor := extractCookie(rotateResp, auth.SessionCookieName)
+	if successor == nil {
+		t.Fatal("rotating request did not carry a successor Set-Cookie -- test setup broken, not the code under test")
+	}
+	successorSess, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(successor.Value))
+	if err != nil {
+		t.Fatalf("look up successor row by its new token: %v", err)
+	}
+
+	// DELETE /sessions/{id} requires a RECENT reauthentication. Rotation
+	// copies reauthenticated_at forward from the predecessor unchanged
+	// (session.go's tryRotate, by design -- rotation must never itself
+	// satisfy the recent-reauth gate), which by the fake clock's own
+	// 25h-advanced "now" is stale -- touch it fresh (by the SAME fake
+	// clock the Service under test reads) so only DD-C14's own behavior
+	// is under test here, not an unrelated reauth rejection.
+	pool := newRowInspectorPool(t)
+	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1`, successorSess.ID, clk.Now()); err != nil {
+		t.Fatalf("touch successor's reauthenticated_at fresh: %v", err)
+	}
+
+	delResp := doJSON(t, handler, http.MethodDelete, sessionIDPath(successorSess.ID), testPublicOrigin, csrfTokenFor(successorSess), "", sessionRequestCookie(successor.Value)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if delResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE own current (rotated) session status = %d, want %d", delResp.StatusCode, http.StatusNoContent)
+	}
+
+	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if after.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET %s with the PREDECESSOR's raw token after revoking the successor via DELETE /sessions/{id} status = %d, want %d (DD-C14)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
 	}
 }
 
@@ -283,6 +444,65 @@ func TestListSessions_ExcludesGraceDeadRotationPredecessors(t *testing.T) {
 	for _, entry := range body.Data {
 		if entry.ID == predecessor.ID.String() {
 			t.Errorf("device list includes the grace-dead predecessor %s, want it excluded (revoked_at is NULL but rotation_grace_until is in the past)", predecessor.ID)
+		}
+	}
+	if len(body.Data) != 1 || body.Data[0].ID != current.ID.String() {
+		t.Errorf("data = %+v, want exactly the one live session %s", body.Data, current.ID)
+	}
+}
+
+// TestListSessions_ExcludesIdleExpiredSessions is fix round 1's finding
+// I1: the original ListLiveSessionsForUser only excluded revoked and
+// grace-dead rows, silently listing an idle-expired session (last_seen_at
+// older than idleTimeout, 30d) as a live device -- one of sessionDead's
+// four death modes it was missing.
+func TestListSessions_ExcludesIdleExpiredSessions(t *testing.T) {
+	handler, q := newSessionAPITestService(t)
+	userID := createTestUser(t, q)
+	rawCurrent, current := issueTestSession(t, q, userID)
+	_, idleExpired := issueTestSession(t, q, userID)
+	forceSessionIdleExpired(t, idleExpired.ID)
+
+	resp := doJSON(t, handler, http.MethodGet, auth.SessionsPath, "", "", "", sessionRequestCookie(rawCurrent)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var body sessionsListEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+
+	for _, entry := range body.Data {
+		if entry.ID == idleExpired.ID.String() {
+			t.Errorf("device list includes the idle-expired session %s, want it excluded", idleExpired.ID)
+		}
+	}
+	if len(body.Data) != 1 || body.Data[0].ID != current.ID.String() {
+		t.Errorf("data = %+v, want exactly the one live session %s", body.Data, current.ID)
+	}
+}
+
+// TestListSessions_ExcludesAbsoluteExpiredSessions is fix round 1's
+// finding I1's absolute-expiry counterpart to the idle-expiry test above.
+func TestListSessions_ExcludesAbsoluteExpiredSessions(t *testing.T) {
+	handler, q := newSessionAPITestService(t)
+	userID := createTestUser(t, q)
+	rawCurrent, current := issueTestSession(t, q, userID)
+	_, absoluteExpired := issueTestSession(t, q, userID)
+	forceSessionAbsoluteExpired(t, absoluteExpired.ID)
+
+	resp := doJSON(t, handler, http.MethodGet, auth.SessionsPath, "", "", "", sessionRequestCookie(rawCurrent)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var body sessionsListEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+
+	for _, entry := range body.Data {
+		if entry.ID == absoluteExpired.ID.String() {
+			t.Errorf("device list includes the absolute-expired session %s, want it excluded", absoluteExpired.ID)
 		}
 	}
 	if len(body.Data) != 1 || body.Data[0].ID != current.ID.String() {
@@ -468,6 +688,46 @@ func TestDeleteSession_WithoutRecentReauth_Returns403AndLeavesSessionLive(t *tes
 
 	if revokedAt := rowRevokedAt(t, sess.ID); revokedAt != nil {
 		t.Error("session row's revoked_at is non-NULL after a reauth-rejected DELETE, want NULL (never touched)")
+	}
+}
+
+// TestDeleteSession_OwnDeadSessionID_Returns404 is fix round 1's finding
+// M5 (self-consistency with I1): revoking one's own session id must 404,
+// not succeed, when that session is already dead by ANY of sessionDead's
+// predicates -- grace-dead, idle-expired, or absolute-expired -- exactly
+// mirroring what GET /sessions already excludes from the device list. A
+// caller must never be able to "revoke" a row the list itself says
+// doesn't exist.
+func TestDeleteSession_OwnDeadSessionID_Returns404(t *testing.T) {
+	tests := []struct {
+		name     string
+		makeDead func(t *testing.T, id uuid.UUID)
+	}{
+		{"grace-dead rotation predecessor", forceRotationGraceDead},
+		{"idle-expired", forceSessionIdleExpired},
+		{"absolute-expired", forceSessionAbsoluteExpired},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, q := newSessionAPITestService(t)
+			userID := createTestUser(t, q)
+			rawCaller, caller := issueTestSession(t, q, userID)
+			_, dead := issueTestSession(t, q, userID)
+			tt.makeDead(t, dead.ID)
+
+			resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(dead.ID), testPublicOrigin, csrfTokenFor(caller), "", sessionRequestCookie(rawCaller)) //nolint:bodyclose // doJSON closes the body itself before returning.
+			if resp.StatusCode != http.StatusNotFound {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+			}
+			if got := decodeErrorCode(t, resp); got != "not_found" {
+				t.Errorf("error.code = %q, want %q", got, "not_found")
+			}
+
+			if revokedAt := rowRevokedAt(t, dead.ID); revokedAt != nil {
+				t.Errorf("dead session's revoked_at = %v after a rejected DELETE, want nil (RevokeForUser must affect zero rows, not set revoked_at as a side effect)", revokedAt)
+			}
+		})
 	}
 }
 
