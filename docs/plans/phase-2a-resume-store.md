@@ -933,7 +933,12 @@ const MaxDocumentBytes = 512 * 1024 // budgets.md: resume doc total, P2A store
 func AssembleCanonical(doc schema.Resume) ([]byte, error)
 func DecodeParts(personalDetails, content, customization json.RawMessage,
     schemaVersion int32) (schema.Resume, error)
-func EncodeParts(doc schema.Resume) (personalDetails, content,
+// encodeParts is UNEXPORTED (owner correction 5): it is the only way to
+// produce the three jsonb values, so keeping it package-private is the half
+// of the D16 choke point that can actually be enforced. Tests reach it
+// through export_test.go. AssembleCanonical stays exported — it marshals
+// and never writes, and Task 11's blind suite consumes it by name.
+func encodeParts(doc schema.Resume) (personalDetails, content,
     customization json.RawMessage, err error)
 
 type ValidationError struct{ Issues []string } // stable, sorted, path-first
@@ -1366,9 +1371,23 @@ func (s *Store) BackfillOne(ctx context.Context, id uuid.UUID) (BackfillResult, 
       case, the row is not now current) — proving the result is a retry signal,
       not "already done"; a second `BackfillOne` (fresh read) on the same row
       then succeeds with `BackfillApplied`.
+- [ ] **Step 3c: a discriminating test for the strict decode on the read path
+      (added 2026-08-03 after Task 6's re-review).** Task 6 restored
+      `DecodeParts` to the read path, but nothing yet _fails_ if it is removed:
+      swapping it back for a plain `json.Unmarshal` at `projectRow` leaves every
+      test in the package green — the exact blind spot that let the lax
+      duplicate ship in the first place. Insert a row, then
+      `UPDATE resumes SET personal_details = personal_details || '{"unknownField":1}'`
+      via direct SQL, and assert `Get` returns an error rather than silently
+      dropping the field. Without this, the invariant is structural but
+      unguarded.
 - [ ] **Step 4: implement; green.** `Store.Get`/`List` now project;
       `SaveDocument` persists current version (Task 6's tests still green — run
-      them).
+      them). **Carried from Task 6's review:** `List` currently returns
+      `nil, err` on the first projection failure, so one row at an unknown
+      `schema_version` makes the whole list unreadable. Unreachable while
+      `CurrentVersion` is the only version — but this task is what makes it
+      reachable. Decide deliberately whether that stays fail-closed.
 - [ ] **Step 5: gate.** Live-DB command + tally (Task 6 Step 5's form), plus
       `make server-build server-vet server-test`.
 - [ ] **Step 6: commit** —
