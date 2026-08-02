@@ -1103,6 +1103,58 @@ func TestLoad_PublicOrigin_InvalidFormats(t *testing.T) {
 	}
 }
 
+// TestLoad_PublicOrigin_Normalization is a security-relevant cheap-win
+// fix: PUBLIC_ORIGIN is compared by EXACT string match against every
+// request's Origin header (auth.originAllowed, csrf.go) and used verbatim
+// to build every absolute OAuth redirect/callback URL. Before this fix,
+// loadPublicOrigin validated the format but stored raw's scheme/host
+// verbatim -- so an operator-entered "https://ABOUTME.vn" (mixed case) or
+// "https://aboutme.vn:443" (an explicit, semantically-default port) passed
+// startup validation cleanly and then 403'd every mutating request in
+// production, because a real browser's Origin header is always
+// normalized (lowercase host, default port omitted) and would never
+// byte-match either shape. Table below proves: (1) scheme+host are
+// lowercased, (2) a DEFAULT port for the scheme (":80" on http, ":443" on
+// https) is stripped, (3) a NON-default port is preserved unchanged, (4)
+// an origin already in canonical form round-trips byte-identical.
+func TestLoad_PublicOrigin_Normalization(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"already canonical, unchanged", "https://aboutme.vn", "https://aboutme.vn"},
+		{"uppercase host lowercased", "https://ABOUTME.vn", "https://aboutme.vn"},
+		{"mixed-case scheme and host lowercased", "Https://Aboutme.VN", "https://aboutme.vn"},
+		{"https default port 443 stripped", "https://aboutme.vn:443", "https://aboutme.vn"},
+		{"http default port 80 stripped", "http://aboutme.vn:80", "http://aboutme.vn"},
+		{"https on port 80 is NOT the default for https, preserved", "https://aboutme.vn:80", "https://aboutme.vn:80"},
+		{"http on port 443 is NOT the default for http, preserved", "http://aboutme.vn:443", "http://aboutme.vn:443"},
+		{"non-default port preserved", "https://aboutme.vn:8443", "https://aboutme.vn:8443"},
+		{"uppercase host with non-default port", "https://ABOUTME.vn:8443", "https://aboutme.vn:8443"},
+		{"localhost with default http port stripped", "http://localhost:80", "http://localhost"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := config.Load(env(map[string]string{
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": tc.input,
+				"ENV":           "dev",
+			}))
+			if err != nil {
+				t.Fatalf("Load() unexpected error: %v", err)
+			}
+			if got.PublicOrigin != tc.want {
+				t.Errorf("PublicOrigin = %q, want %q (input %q)", got.PublicOrigin, tc.want, tc.input)
+			}
+		})
+	}
+}
+
 func TestLoad_TrustedProxyCIDRs_InvalidCIDR(t *testing.T) {
 	t.Parallel()
 

@@ -247,6 +247,23 @@ func loadEnv(raw string) (string, error) {
 // slash or path here would silently double up or corrupt every absolute
 // URL this server builds from it, so this fails fast at startup rather
 // than surfacing as a broken redirect later.
+//
+// After validation, the result is NORMALIZED (security-relevant cheap-win
+// fix): scheme and host are lowercased, and a port that is the scheme's
+// own DEFAULT (":80" for http, ":443" for https) is stripped. This
+// matters because PublicOrigin is never treated as "a URL to parse and
+// compare structurally" downstream — csrf.go's originAllowed compares it
+// against a request's Origin header with a bare Go `==`, and every
+// absolute OAuth redirect/callback URL this server builds concatenates it
+// verbatim. A real browser always sends Origin in this exact normalized
+// form (RFC 6454): lowercase scheme/host, default port omitted. An
+// operator-entered "https://ABOUTME.vn" or "https://aboutme.vn:443" was
+// previously stored byte-for-byte as typed — a value that passes every
+// check above, starts the server successfully, and then silently 403s
+// every mutating request in production (originAllowed never matches),
+// discovered only after deploy. Normalizing once, here, means the
+// stored value is always the one a real browser's Origin header can
+// actually equal.
 func loadPublicOrigin(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -257,7 +274,8 @@ func loadPublicOrigin(raw string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("config: PUBLIC_ORIGIN: invalid value %q: %w", raw, err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
 		return "", fmt.Errorf("config: PUBLIC_ORIGIN: invalid value %q: scheme must be http or https", raw)
 	}
 	if u.Host == "" {
@@ -267,7 +285,20 @@ func loadPublicOrigin(raw string) (string, error) {
 		return "", fmt.Errorf("config: PUBLIC_ORIGIN: invalid value %q: must be scheme://host[:port] only "+
 			"— no userinfo, path, trailing slash, query, or fragment", raw)
 	}
-	return raw, nil
+
+	host := strings.ToLower(u.Hostname())
+	port := u.Port()
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		port = ""
+	}
+	hostport := host
+	if strings.Contains(host, ":") { // IPv6 literal: re-add the brackets url.Hostname() strips.
+		hostport = "[" + host + "]"
+	}
+	if port != "" {
+		hostport += ":" + port
+	}
+	return scheme + "://" + hostport, nil
 }
 
 // requiresProductionTrustBoundary reports whether env must satisfy
