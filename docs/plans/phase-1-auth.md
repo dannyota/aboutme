@@ -1263,17 +1263,19 @@ also write Step 2's rejection matrix.
 
   **Link algorithm** (`link.go`, called only when the transaction's
   `Purpose == PurposeLink`): (1) `RequireRecentReauth` on the caller's current
-  session — `403 reauth_required` if stale. (2) `GetIdentityByProviderSubject` —
-  if it belongs to `tx.LinkingUserID` already, idempotent success (no-op). If it
-  belongs to a **different** user, reject with
-  `302 ?error=identity_already_linked` (corrected 2026-08-02, DD-C15: the plan's
-  own top-level-navigation reasoning — a callback is a browser navigation, never
-  a raw JSON 409 — applies to the link callback too; the distinct code stays
-  because the actor is authenticated and the condition is user-actionable. This
-  is the case that prevents hijacking someone else's already-claimed provider
-  identity by linking it onto your own account). Link/reauth-purpose callback
-  outcomes (success AND error) redirect to
-  `PublicOrigin + "/app/settings/sessions"` — the page that initiates them —
+  session — if stale, `302` to `/app/settings/sessions?error=reauth_required`
+  (DD-C17: `/start` is a top-level navigation, so a raw JSON 403 would render a
+  JSON document to the user; the JSON-API endpoints in Task 9 keep their
+  `403 reauth_required`). (2) `GetIdentityByProviderSubject` — if it belongs to
+  `tx.LinkingUserID` already, idempotent success (no-op). If it belongs to a
+  **different** user, reject with `302 ?error=identity_already_linked`
+  (corrected 2026-08-02, DD-C15: the plan's own top-level-navigation reasoning —
+  a callback is a browser navigation, never a raw JSON 409 — applies to the link
+  callback too; the distinct code stays because the actor is authenticated and
+  the condition is user-actionable. This is the case that prevents hijacking
+  someone else's already-claimed provider identity by linking it onto your own
+  account). Link/reauth-purpose callback outcomes (success AND error) redirect
+  to `PublicOrigin + "/app/settings/sessions"` — the page that initiates them —
   while login-purpose keeps `/login?error=` and `/`. If unclaimed,
   `CreateIdentity` with `user_id = tx.LinkingUserID`. **No email check at all
   for linking** — per spec, LinkedIn linking is allowed without a verified
@@ -1325,7 +1327,7 @@ also write Step 2's rejection matrix.
 
   | Test                                                                    | Setup                                                                          | Assert                                                                                                                |
   | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-  | `TestLink_RejectsWithoutRecentReauth`                                   | session with `reauthenticated_at` 20 minutes ago attempts `purpose=link` start | `403 reauth_required`, no transaction even created                                                                    |
+  | `TestLink_RejectsWithoutRecentReauth`                                   | session with `reauthenticated_at` 20 minutes ago attempts `purpose=link` start | `302` to `/app/settings/sessions?error=reauth_required` (DD-C17), no transaction even created                         |
   | `TestLink_RejectsIdentityAlreadyClaimedByAnotherUser`                   | user B tries to link a `(provider, sub)` already owned by user A's identity    | `302 ?error=identity_already_linked` (DD-C15), no row mutated                                                         |
   | `TestLink_IdempotentWhenAlreadyLinkedToSelf`                            | user links the same identity twice                                             | second call succeeds as a no-op, no duplicate row (unique constraint would 500 a naive re-insert — assert it doesn't) |
   | `TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity` | a `purpose=reauth` round trip against an **already-linked** provider           | bumps `sessions.reauthenticated_at` and creates/touches nothing in `identities`                                       |
@@ -1390,14 +1392,14 @@ app-wide store) or any editor-related scaffolding.
 
   Add a minimal "confirm your identity" state to `sessions.vue`: an "add
   provider" action that first calls `GET /api/v1/me`, and — if the server's
-  `purpose=link` start would 403 with `reauth_required` (surfaced by attempting
-  the navigation and having the callback bounce back with an error query param,
-  since `start` for `purpose=link` is itself a top-level navigation, not a
-  fetchable JSON call) — shows a "sign in again to confirm it's you" prompt that
-  re-triggers `purpose=reauth` against one of the user's existing linked
-  providers before retrying the link. Keep this intentionally minimal (a single
-  component, no new route) — polish is P5B's register of "disclosure wording"
-  concerns, not this task's.
+  `purpose=link` start bounces back with `?error=reauth_required` (DD-C17;
+  surfaced by attempting the navigation and having the callback bounce back with
+  an error query param, since `start` for `purpose=link` is itself a top-level
+  navigation, not a fetchable JSON call) — shows a "sign in again to confirm
+  it's you" prompt that re-triggers `purpose=reauth` against one of the user's
+  existing linked providers before retrying the link. Keep this intentionally
+  minimal (a single component, no new route) — polish is P5B's register of
+  "disclosure wording" concerns, not this task's.
 
 - [ ] **Step 4: `npm run lint && npm run typecheck && npm test`, then commit**
 
