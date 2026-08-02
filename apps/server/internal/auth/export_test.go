@@ -203,6 +203,22 @@ func SetSessionIssuerForTest(svc *Service, si sessionIssuer) {
 // recent-reauth boundary, deterministically through the REAL HTTP handler
 // chain (RequireSession -> RequireCSRF -> handler), instead of either
 // racing the real wall clock or reaching into the database directly.
+//
+// Also sets svc.sessions = m (fix: this used to set sessionMgr only). Per
+// NewService, sessions and sessionMgr are the SAME *SessionManager
+// instance in production ("sessions: sessionMgr, sessionMgr: sessionMgr"),
+// and *SessionManager satisfies the narrower sessionIssuer interface m is
+// assigned through here. Leaving sessions pointing at the ORIGINAL,
+// real-wall-clock SessionManager after this call meant a test that swapped
+// in a fake clock to drive a login round trip deterministically (Issue,
+// called via sessions.Issue from handleGoogleCallback/handleGitHubCallback/
+// handleLinkedInCallback) still got a session row timestamped off the real
+// clock -- silently defeating the very fake clock the test just injected,
+// for any assertion touching the ISSUED session's own CreatedAt/
+// AbsoluteExpiresAt/ReauthenticatedAt. Session AUTHENTICATION
+// (sessionMgr, e.g. RequireSession, revoke/list/reauth-check) was never
+// affected by this gap -- only issuance.
 func SetSessionManagerForTest(svc *Service, m *SessionManager) {
 	svc.sessionMgr = m
+	svc.sessions = m
 }
