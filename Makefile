@@ -1,5 +1,5 @@
 # aboutme — repo-level targets. App-specific targets arrive with the apps.
-.PHONY: help docs-lint docs-fmt generate schema-gen schema-check api-check server-build server-vet server-test web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check migrate-gen server-migration-test data-drift route-table-test
+.PHONY: help docs-lint docs-fmt generate schema-gen schema-check api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check migrate-gen server-migration-test data-drift route-table-test
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-12s %s\n", $$1, $$2}'
@@ -31,6 +31,10 @@ server-vet: ## Vet the Go API server
 
 server-test: ## Test the Go API server
 	cd apps/server && go test ./...
+
+server-test-db: ## Run the auth/store/user DB-backed test suite against a live Postgres (needs test-db-up or TEST_DATABASE_URL); REQUIRE_TEST_DB=1 turns a missing TEST_DATABASE_URL into a failure instead of a silent skip, so a gate run can never pass vacuously
+	cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable} \
+	  go test ./internal/auth/... ./internal/store/... ./internal/user/... -race -count=1
 
 web-build: ## Build the Nuxt web app
 	cd apps/web && npm run build

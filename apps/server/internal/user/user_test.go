@@ -74,6 +74,25 @@ func TestSchema_PreservesAuthConstraints(t *testing.T) {
 	}
 }
 
+// requireTestDatabaseURL returns TEST_DATABASE_URL, skipping the calling
+// test (not failing it) when unset -- UNLESS REQUIRE_TEST_DB=1 is also set
+// in the environment, in which case a missing TEST_DATABASE_URL is a hard
+// t.Fatal instead, matching internal/auth's own requireTestDatabaseURL
+// (transaction_test.go): a gate run (`make server-test-db`, which sets
+// REQUIRE_TEST_DB=1) must never pass vacuously with this test silently
+// skipped.
+func requireTestDatabaseURL(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		if os.Getenv("REQUIRE_TEST_DB") == "1" {
+			t.Fatal("REQUIRE_TEST_DB=1 is set but TEST_DATABASE_URL is unset; refusing to silently skip this live-database test")
+		}
+		t.Skip("TEST_DATABASE_URL not set; skipping live-database integration test")
+	}
+	return dsn
+}
+
 // newIntegrationStore returns a user.Store backed by a fresh transaction
 // against TEST_DATABASE_URL, rolled back automatically when the test
 // finishes so repeated runs against a persistent test database never
@@ -83,10 +102,7 @@ func TestSchema_PreservesAuthConstraints(t *testing.T) {
 func newIntegrationStore(t *testing.T) (*user.Store, context.Context) {
 	t.Helper()
 
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL not set; skipping live-database integration test")
-	}
+	dsn := requireTestDatabaseURL(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
