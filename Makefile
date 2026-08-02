@@ -1,5 +1,5 @@
 # aboutme — repo-level targets. App-specific targets arrive with the apps.
-.PHONY: help docs-lint docs-fmt generate schema-gen schema-check api-check server-build server-vet server-test web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check migrate-gen server-migration-test data-drift route-table-test
+.PHONY: help docs-lint docs-fmt generate schema-gen schema-check api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check migrate-gen server-migration-test data-drift route-table-test
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-12s %s\n", $$1, $$2}'
@@ -32,6 +32,10 @@ server-vet: ## Vet the Go API server
 server-test: ## Test the Go API server
 	cd apps/server && go test ./...
 
+server-test-db: ## Run the auth/store/user DB-backed test suite against a live Postgres (needs test-db-up or TEST_DATABASE_URL); REQUIRE_TEST_DB=1 turns a missing TEST_DATABASE_URL into a failure instead of a silent skip, so a gate run can never pass vacuously
+	cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable} \
+	  go test ./internal/auth/... ./internal/store/... ./internal/user/... -race -count=1 -v
+
 web-build: ## Build the Nuxt web app
 	cd apps/web && npm run build
 
@@ -50,10 +54,21 @@ dev: ## Start the dev stack (podman compose): postgres + server + web + caddy
 dev-down: ## Stop the dev stack and remove containers (keeps the postgres volume)
 	podman compose --env-file .env -f deploy/compose.yml down
 
-test-db-up: ## Start a throwaway Postgres for integration tests (publishes 5432)
+test-db-up: ## Start a throwaway Postgres for integration tests (publishes 5432) and wait until it accepts connections
 	podman run -d --rm --name aboutme-test-db -p 127.0.0.1:5432:5432 \
 	  -e POSTGRES_USER=aboutme -e POSTGRES_PASSWORD=aboutme_dev -e POSTGRES_DB=aboutme \
 	  docker.io/library/postgres:18.4-alpine
+	@echo "Waiting for aboutme-test-db to accept connections..."
+	@i=0; \
+	until podman exec aboutme-test-db pg_isready -U aboutme -d aboutme >/dev/null 2>&1; do \
+	  i=$$((i + 1)); \
+	  if [ $$i -ge 30 ]; then \
+	    echo "test-db-up: aboutme-test-db did not become ready within 30s; see 'podman logs aboutme-test-db'" >&2; \
+	    exit 1; \
+	  fi; \
+	  sleep 1; \
+	done; \
+	echo "aboutme-test-db is ready."
 
 test-db-down: ## Stop the throwaway integration-test Postgres
 	podman rm -f aboutme-test-db

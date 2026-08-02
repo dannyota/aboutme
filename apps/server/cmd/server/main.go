@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
@@ -50,13 +51,18 @@ func run() error {
 	}
 	defer pool.Close(context.Background())
 
+	authService, err := auth.NewService(logger, cfg, store.New(pool))
+	if err != nil {
+		return fmt.Errorf("create auth service: %w", err)
+	}
+
 	handler := api.New(logger, pool, api.Options{
 		// TrustedProxyCIDRs is validated by internal/config (required and
 		// loopback-checked in production — see config.Load) and converts
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	})
+	}, authService.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))

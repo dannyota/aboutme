@@ -46,15 +46,15 @@ import (
 // talks to a real Postgres server several times.
 const e2eTimeout = 60 * time.Second
 
-// realExtensionsMigrationPath and realAtlasSumPath point at the actual
-// committed goose extension migration and its checksum entry — three
-// directories up from this package (cmd/migrate/gen -> cmd/migrate -> cmd
-// -> apps/server, then into migrations/) — so these tests exercise the
-// real Up/Down migration this tool must handle correctly, not a synthetic
-// stand-in.
+// realExtensionsMigrationPath points at the actual committed goose
+// extension migration — three directories up from this package
+// (cmd/migrate/gen -> cmd/migrate -> cmd -> apps/server, then into
+// migrations/) — so these tests exercise the real Up/Down migration this
+// tool must handle correctly, not a synthetic stand-in. Its checksum is
+// never borrowed from the real committed atlas.sum; see
+// seedRealExtensionsMigration's doc comment for why.
 const (
 	realExtensionsMigrationPath = "../../../migrations/00001_extensions.sql"
-	realAtlasSumPath            = "../../../migrations/atlas.sum"
 )
 
 func requireAtlas(t *testing.T) {
@@ -149,6 +149,27 @@ func copyRealFile(t *testing.T, srcRelPath, dst string) {
 	}
 }
 
+// seedRealExtensionsMigration copies the real, committed
+// 00001_extensions.sql into migrationsDir and then hashes migrationsDir
+// with Atlas to produce a fresh, self-consistent atlas.sum scoped to
+// exactly that one file. It deliberately does NOT copy the real repo's own
+// committed atlas.sum (realAtlasSumPath): that file's checksum list grows
+// with every real product migration, so copying it wholesale next to only
+// a single-file migrationsDir works only by coincidence, for exactly as
+// long as the real migrations directory happens to contain exactly one
+// file. These e2e tests intentionally isolate the extensions migration
+// from however many other real product migrations exist (see the package
+// doc comment: they reproduce the extension-replay bug in isolation), so
+// their atlas.sum must be generated for what's actually on disk here, not
+// borrowed from the full real directory.
+func seedRealExtensionsMigration(t *testing.T, migrationsDir string) {
+	t.Helper()
+	copyRealFile(t, realExtensionsMigrationPath, filepath.Join(migrationsDir, "00001_extensions.sql"))
+	if err := runAtlas("migrate", "hash", "--dir", "file://"+migrationsDir, "--dir-format", dirFormat); err != nil {
+		t.Fatalf("atlas migrate hash (seed atlas.sum for 00001_extensions.sql): %v", err)
+	}
+}
+
 // onlyNewMigrationFile returns the single *.sql filename in dir not listed
 // in exclude, failing the test if there isn't exactly one.
 func onlyNewMigrationFile(t *testing.T, dir string, exclude ...string) string {
@@ -218,8 +239,7 @@ func TestRun_EndToEnd_GooseFormatReplayAcrossExtensionBoundary(t *testing.T) {
 	adminURL := requireTestDatabaseURL(t)
 
 	migrationsDir, schemaFile := newTempProject(t)
-	copyRealFile(t, realExtensionsMigrationPath, filepath.Join(migrationsDir, "00001_extensions.sql"))
-	copyRealFile(t, realAtlasSumPath, filepath.Join(migrationsDir, "atlas.sum"))
+	seedRealExtensionsMigration(t, migrationsDir)
 
 	t.Setenv("DATABASE_URL", adminURL)
 
@@ -315,8 +335,7 @@ func TestRun_AtomicPublish_MigrationsDirUntouchedUntilSuccess(t *testing.T) {
 	adminURL := requireTestDatabaseURL(t)
 
 	migrationsDir, schemaFile := newTempProject(t)
-	copyRealFile(t, realExtensionsMigrationPath, filepath.Join(migrationsDir, "00001_extensions.sql"))
-	copyRealFile(t, realAtlasSumPath, filepath.Join(migrationsDir, "atlas.sum"))
+	seedRealExtensionsMigration(t, migrationsDir)
 
 	before, err := os.ReadDir(migrationsDir)
 	if err != nil {
@@ -476,8 +495,7 @@ func TestRun_Check_NoDriftWhenSchemaMatches(t *testing.T) {
 	adminURL := requireTestDatabaseURL(t)
 
 	migrationsDir, schemaFile := newTempProject(t)
-	copyRealFile(t, realExtensionsMigrationPath, filepath.Join(migrationsDir, "00001_extensions.sql"))
-	copyRealFile(t, realAtlasSumPath, filepath.Join(migrationsDir, "atlas.sum"))
+	seedRealExtensionsMigration(t, migrationsDir)
 	// The real 00001_extensions.sql's Up section is exactly this
 	// statement — schema.sql declares the same extension and nothing
 	// else, so there is nothing left for Atlas to diff.
@@ -511,8 +529,7 @@ func TestRun_Check_DetectsDrift(t *testing.T) {
 	adminURL := requireTestDatabaseURL(t)
 
 	migrationsDir, schemaFile := newTempProject(t)
-	copyRealFile(t, realExtensionsMigrationPath, filepath.Join(migrationsDir, "00001_extensions.sql"))
-	copyRealFile(t, realAtlasSumPath, filepath.Join(migrationsDir, "atlas.sum"))
+	seedRealExtensionsMigration(t, migrationsDir)
 	// schemaWidgets adds a table no migration captures yet.
 	writeFile(t, schemaFile, schemaWidgets)
 

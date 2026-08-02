@@ -31,6 +31,7 @@ func TestRun_MissingDatabaseURL(t *testing.T) {
 func TestRun_UnreachableDatabase(t *testing.T) {
 	t.Setenv("DATABASE_URL", unreachableDSN)
 	t.Setenv("ENV", "dev")
+	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
 	err := run(false, &bytes.Buffer{})
 	if err == nil {
@@ -44,6 +45,7 @@ func TestRun_UnreachableDatabase(t *testing.T) {
 func TestRun_UnreachableDatabase_CheckMode(t *testing.T) {
 	t.Setenv("DATABASE_URL", unreachableDSN)
 	t.Setenv("ENV", "dev")
+	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
 	err := run(true, &bytes.Buffer{})
 	if err == nil {

@@ -1079,6 +1079,20 @@ CloudFront matrix live probing (AC-OPS-015), rotation drill (AC-OPS-016), live
 two-runner migration (AC-OPS-017), real restore timing (AC-OPS-018), alarm
 receipt (AC-OPS-019), SSE soak — all P9A, against this staging environment.
 
+> **Constraint inherited from Phase 1 (DD-C16) — do not apply a blanket
+> `Referrer-Policy: no-referrer` at the edge.** The
+> `/api/v1/auth/{provider}/start` endpoints reject cross-site initiation for
+> `purpose=link|reauth`: they accept `Sec-Fetch-Site: same-origin` and otherwise
+> fall back to an Origin/Referer same-origin check, failing closed. On browsers
+> that do not send `Sec-Fetch-Site`, stripping the same-origin `Referer` from
+> the app's HTML document leaves the fallback with no signal and **provider
+> linking breaks for those users**. The response-headers policy may set
+> `no-referrer` on `/api/v1/*` (the Go server already does), but the policy
+> applied to the Nuxt document must preserve same-origin referrers —
+> `strict-origin-when-cross-origin` (the browser default) or `same-origin`. This
+> is not discoverable from `apps/web`, which sets no policy of its own; assert
+> it in Task 6's behavior tests and spot-check it in Task 14's bring-up.
+
 ---
 
 ## Escalations pending human owner
