@@ -30,6 +30,98 @@ func (q *Queries) BeginSessionRotation(ctx context.Context, arg BeginSessionRota
 	return id, err
 }
 
+const consumeOAuthTransaction = `-- name: ConsumeOAuthTransaction :one
+UPDATE oauth_transactions
+SET consumed_at = $2
+WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
+RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at
+`
+
+type ConsumeOAuthTransactionParams struct {
+	HandleHash []byte
+	ConsumedAt *time.Time
+}
+
+// Atomically claims a transaction: only a row that is unexpired and not yet
+// consumed (as of now, $2) is updated and returned. A handle that is
+// unknown, expired, or already consumed matches no row, so the caller sees
+// exactly one outcome (pgx.ErrNoRows) for all three cases -- see
+// internal/auth.ErrTransactionInvalid's doc comment for why that collapse
+// is deliberate. The provider-mismatch check (RFC 9700 mix-up defense)
+// happens in Go, after this still consumes the row: an attacker replaying
+// a valid handle against the wrong provider's callback burns the
+// transaction just like any other outcome, so it can never be retried
+// against the correct provider either.
+func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error) {
+	row := q.db.QueryRow(ctx, consumeOAuthTransaction, arg.HandleHash, arg.ConsumedAt)
+	var i OAuthTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.HandleHash,
+		&i.Provider,
+		&i.Purpose,
+		&i.LinkingUserID,
+		&i.State,
+		&i.PKCEVerifier,
+		&i.Nonce,
+		&i.RedirectURI,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const createOAuthTransaction = `-- name: CreateOAuthTransaction :one
+INSERT INTO oauth_transactions (
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, expires_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at
+`
+
+type CreateOAuthTransactionParams struct {
+	HandleHash    []byte
+	Provider      string
+	Purpose       string
+	LinkingUserID *uuid.UUID
+	State         string
+	PKCEVerifier  string
+	Nonce         *string
+	RedirectURI   string
+	ExpiresAt     time.Time
+}
+
+func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error) {
+	row := q.db.QueryRow(ctx, createOAuthTransaction,
+		arg.HandleHash,
+		arg.Provider,
+		arg.Purpose,
+		arg.LinkingUserID,
+		arg.State,
+		arg.PKCEVerifier,
+		arg.Nonce,
+		arg.RedirectURI,
+		arg.ExpiresAt,
+	)
+	var i OAuthTransaction
+	err := row.Scan(
+		&i.ID,
+		&i.HandleHash,
+		&i.Provider,
+		&i.Purpose,
+		&i.LinkingUserID,
+		&i.State,
+		&i.PKCEVerifier,
+		&i.Nonce,
+		&i.RedirectURI,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 
 INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING id, email, name, avatar_key, created_at, updated_at

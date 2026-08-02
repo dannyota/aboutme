@@ -32,6 +32,14 @@ type Config struct {
 	LogLevel string
 	// Env is one of "dev", "staging", "prod".
 	Env string
+	// PublicOrigin is the externally reachable origin (scheme://host, no
+	// trailing slash) this server is served at, e.g. "https://aboutme.vn".
+	// It has no safe default — dev, staging, and prod are each served from
+	// a different origin — so, like Env, Load requires it and fails fast
+	// rather than silently guessing. Later phases use it to build absolute
+	// OAuth redirect/callback URLs and validate the CSRF Origin header;
+	// this phase only loads and stores it.
+	PublicOrigin string
 	// TrustedProxyCIDRs is the set of reverse-proxy hops this server
 	// treats as able to assert a request's real client IP and scheme (see
 	// api.TrustedProxies for the spoofing risk of getting this wrong).
@@ -74,8 +82,9 @@ var validEnvs = map[string]bool{
 // substitute a fake lookup so they never mutate global state.
 //
 // PORT defaults to 8080, LISTEN_HOST defaults to "127.0.0.1", and
-// LOG_LEVEL defaults to "info" when unset. DATABASE_URL and ENV have no
-// safe default and are required. TRUSTED_PROXY_CIDRS is required when
+// LOG_LEVEL defaults to "info" when unset. DATABASE_URL, ENV, and
+// PUBLIC_ORIGIN have no safe default and are required.
+// TRUSTED_PROXY_CIDRS is required when
 // ENV=prod or ENV=staging (see TrustedProxyCIDRs and
 // requiresProductionTrustBoundary) and optional in dev. Load fails fast
 // with a descriptive error naming the offending variable when any of these
@@ -101,6 +110,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	publicOrigin, err := loadPublicOrigin(getenv("PUBLIC_ORIGIN"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	listenHost, err := loadListenHost(getenv("LISTEN_HOST"), env)
 	if err != nil {
 		return Config{}, err
@@ -117,6 +131,7 @@ func Load(getenv func(string) string) (Config, error) {
 		DatabaseURL:       databaseURL,
 		LogLevel:          logLevel,
 		Env:               env,
+		PublicOrigin:      publicOrigin,
 		TrustedProxyCIDRs: trustedProxyCIDRs,
 	}, nil
 }
@@ -166,6 +181,19 @@ func loadEnv(raw string) (string, error) {
 		return "", fmt.Errorf("config: ENV: invalid value %q: must be one of dev, staging, prod", raw)
 	}
 	return env, nil
+}
+
+// loadPublicOrigin validates raw as the server's public origin. Required,
+// like Env: there is no safe default (dev/staging/prod each serve from a
+// different origin), so Load fails fast rather than silently guessing.
+// Format validation (scheme, trailing slash, etc.) is left to whichever
+// later phase first depends on it structurally, per YAGNI.
+func loadPublicOrigin(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("config: PUBLIC_ORIGIN is required")
+	}
+	return raw, nil
 }
 
 // requiresProductionTrustBoundary reports whether env must satisfy
