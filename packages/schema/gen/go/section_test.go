@@ -159,6 +159,79 @@ func TestSectionMarshalJSON_WireShape(t *testing.T) {
 	}
 }
 
+// TestSectionRoundTrip_AbsentDisplayNameAndIconKeyStayAbsent proves the fix
+// for a round-trip fidelity gap: resume.schema.json's `section` $def only
+// requires sectionType and entries -- a freshly created section may have
+// neither displayName nor iconKey set yet (design spec §3, "a freshly
+// created section persists before its title/icon are chosen"). Before
+// DisplayName/IconKey became *string, decoding such a section and
+// re-marshaling it always produced `"displayName":""` and `"iconKey":""` --
+// and an empty iconKey fails the schema's own iconKey pattern
+// (`^[a-z0-9]+(-[a-z0-9]+)*$`, which requires at least one character), so a
+// legitimately schema-valid draft section became schema-INVALID the moment
+// it round-tripped through this package. See
+// fixtures/draft-cleared-name-empty-section.json.
+func TestSectionRoundTrip_AbsentDisplayNameAndIconKeyStayAbsent(t *testing.T) {
+	const payload = `{"sectionType":"work","entries":[]}`
+	var section Section
+	if err := json.Unmarshal([]byte(payload), &section); err != nil {
+		t.Fatalf("UnmarshalJSON: %v", err)
+	}
+	if section.DisplayName != nil {
+		t.Errorf("DisplayName: got %q, want nil (absent from the payload)", *section.DisplayName)
+	}
+	if section.IconKey != nil {
+		t.Errorf("IconKey: got %q, want nil (absent from the payload)", *section.IconKey)
+	}
+
+	data, err := json.Marshal(section)
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(data, &wire); err != nil {
+		t.Fatalf("unmarshal into map: %v", err)
+	}
+	if _, ok := wire["displayName"]; ok {
+		t.Errorf("re-marshaled wire has a displayName key, want it absent: %s", data)
+	}
+	if _, ok := wire["iconKey"]; ok {
+		t.Errorf("re-marshaled wire has an iconKey key, want it absent: %s", data)
+	}
+}
+
+// TestSectionRoundTrip_ExplicitlyClearedDisplayNameStaysPresentAndEmpty is
+// the contrast case: displayName (unlike iconKey) may be explicitly ""
+// (cleared while retyping a section title, per the schema's own
+// $defs.section description) -- that state must stay distinguishable from
+// "absent" and survive a round trip.
+func TestSectionRoundTrip_ExplicitlyClearedDisplayNameStaysPresentAndEmpty(t *testing.T) {
+	const payload = `{"sectionType":"work","displayName":"","entries":[]}`
+	var section Section
+	if err := json.Unmarshal([]byte(payload), &section); err != nil {
+		t.Fatalf("UnmarshalJSON: %v", err)
+	}
+	if section.DisplayName == nil || *section.DisplayName != "" {
+		t.Fatalf("DisplayName: got %v, want a present pointer to \"\"", section.DisplayName)
+	}
+
+	data, err := json.Marshal(section)
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(data, &wire); err != nil {
+		t.Fatalf("unmarshal into map: %v", err)
+	}
+	raw, ok := wire["displayName"]
+	if !ok {
+		t.Fatalf("re-marshaled wire missing displayName key (explicitly-cleared value was dropped): %s", data)
+	}
+	if string(raw) != `""` {
+		t.Errorf("displayName = %s, want \"\"", raw)
+	}
+}
+
 func TestSectionUnmarshalJSON_RejectsCrossTypeEntry(t *testing.T) {
 	// An education-shaped entry carrying degree/school/schoolLink — none of
 	// which are WorkEntry fields — inside a sectionType: "work" section.
@@ -278,8 +351,8 @@ func TestSectionValidate_RejectsDiscriminatorEntryMismatch(t *testing.T) {
 	// says "work" but the populated slice is EducationEntries.
 	mismatched := Section{
 		SectionType:      Work,
-		DisplayName:      "Experience",
-		IconKey:          "briefcase",
+		DisplayName:      ptr("Experience"),
+		IconKey:          ptr("briefcase"),
 		EducationEntries: []EducationEntry{},
 	}
 
@@ -292,7 +365,7 @@ func TestSectionValidate_RejectsDiscriminatorEntryMismatch(t *testing.T) {
 }
 
 func TestSectionValidate_RejectsNoEntriesPopulated(t *testing.T) {
-	empty := Section{SectionType: Work, DisplayName: "Experience", IconKey: "briefcase"}
+	empty := Section{SectionType: Work, DisplayName: ptr("Experience"), IconKey: ptr("briefcase")}
 	if err := empty.Validate(); err == nil {
 		t.Fatalf("expected Validate to reject a Section with no entries slice populated, got nil")
 	}
@@ -301,8 +374,8 @@ func TestSectionValidate_RejectsNoEntriesPopulated(t *testing.T) {
 func TestSectionValidate_RejectsMultipleEntriesPopulated(t *testing.T) {
 	both := Section{
 		SectionType:      Work,
-		DisplayName:      "Experience",
-		IconKey:          "briefcase",
+		DisplayName:      ptr("Experience"),
+		IconKey:          ptr("briefcase"),
 		WorkEntries:      []WorkEntry{},
 		EducationEntries: []EducationEntry{},
 	}
