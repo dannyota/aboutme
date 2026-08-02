@@ -11,6 +11,13 @@ import (
 )
 
 type Querier interface {
+	// Single-row conditional UPDATE that decides the >24h rotation winner: only
+	// a row that has neither already started rotating (rotation_grace_until
+	// still NULL) nor been revoked is claimed. Under concurrent callers racing
+	// the same session id, exactly one UPDATE affects a row (returns its id);
+	// every other caller's UPDATE affects zero rows and pgx reports
+	// pgx.ErrNoRows -- that caller lost the race and must not mint a second
+	// successor (see internal/auth.SessionManager.Authenticate).
 	BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error)
 	// Atomically claims a transaction: only a row that is unexpired and not yet
 	// consumed (as of now, $2) is updated and returned. A handle that is
@@ -24,13 +31,37 @@ type Querier interface {
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
+	// Always inserts a brand-new row -- used both by Issue (fixation defense: a
+	// login never reuses an existing session row) and by the >24h rotation
+	// winner's successor insert (internal/auth.SessionManager.Authenticate),
+	// which passes the predecessor's user_id, reauthenticated_at,
+	// absolute_expires_at, ua, and ip through unchanged so a rotation never
+	// extends absolute expiry or silently satisfies the recent-reauth gate.
+	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
 	// become type-safe Go methods in internal/store via `make generate`. See
 	// docs/specs/aboutme-design.md §3 "Schema management".
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// Logout-everywhere: revokes every one of the user's not-already-revoked
+	// sessions and reports how many rows that affected.
+	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
+	// Idempotent: revoking an already-revoked (or nonexistent) session id
+	// affects zero rows rather than erroring, so logout/revoke can be retried
+	// safely. revoked_at is immediate and orthogonal to rotation_grace_until
+	// (design decision 1) -- this never touches that column.
+	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
+	// Unconditional: callers throttle to at most once per lastSeenThrottle
+	// themselves (internal/auth.SessionManager.Authenticate) before issuing
+	// this write, so it is not itself CAS-guarded.
+	TouchLastSeenAt(ctx context.Context, arg TouchLastSeenAtParams) error
+	// Records that this session's lineage just completed a full OAuth login
+	// (design decision 2) -- called only after a real reauth round trip
+	// (internal/auth.SessionManager.TouchReauthenticated), never by rotation.
+	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
 }
 
 var _ Querier = (*Queries)(nil)
