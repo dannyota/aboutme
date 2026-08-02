@@ -212,12 +212,88 @@ func contains(s, substr string) bool {
 	})()
 }
 
-// fixtures/store/invalid-duplicate-entry-id.json (AC-DOC-002: entry ids
-// unique across the whole resume) is a pre-existing fixture for a separate,
-// already-tracked P2A store-layer rule (see test/schema.test.ts's comment on
-// why fixtures/store/ is excluded from the schema fixture scan) — not one of
-// the rules this validator implements, so it is deliberately not exercised
-// here, mirroring test/store-validation.test.ts's own note.
+// AC-DOC-002: entry ids must be unique across the WHOLE resume, not merely
+// within one section. invalid-duplicate-entry-id.json's id
+// "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac" appears once in `work` and once in
+// `skill` — a single section's own entries array has no uniqueItems keyword
+// that could ever catch a cross-section collision like this one.
+func TestValidateDocument_DuplicateEntryID(t *testing.T) {
+	resume := loadResumeFixture(t, "store", "invalid-duplicate-entry-id.json")
+	issues := ValidateDocument(resume)
+
+	var duplicateIssues []ValidationIssue
+	for _, i := range issues {
+		if i.Rule == "duplicate-entry-id" {
+			duplicateIssues = append(duplicateIssues, i)
+		}
+	}
+	// One issue per occurrence, sorted by path ("content.skill..." <
+	// "content.work..." per ValidateDocument's return-boundary sort).
+	if len(duplicateIssues) != 2 {
+		t.Fatalf("expected exactly 2 duplicate-entry-id issues (one per occurrence), got %d: %v", len(duplicateIssues), issues)
+	}
+	if duplicateIssues[0].Path != "content.skill.entries[0].id" {
+		t.Fatalf("expected issue 0 at content.skill.entries[0].id, got: %v", duplicateIssues[0])
+	}
+	if duplicateIssues[1].Path != "content.work.entries[0].id" {
+		t.Fatalf("expected issue 1 at content.work.entries[0].id, got: %v", duplicateIssues[1])
+	}
+	if !contains(duplicateIssues[0].Message, "content.work.entries[0].id") {
+		t.Fatalf("expected issue 0's message to name the other occurrence, got: %s", duplicateIssues[0].Message)
+	}
+	if !contains(duplicateIssues[1].Message, "content.skill.entries[0].id") {
+		t.Fatalf("expected issue 1's message to name the other occurrence, got: %s", duplicateIssues[1].Message)
+	}
+}
+
+// The same document shape as invalid-duplicate-entry-id.json, but with the
+// skill entry's id changed to something unique — proves the rule only fires
+// on an actual collision, not merely on having entries in more than one
+// section.
+func TestValidateDocument_UniqueEntryIDsProduceNoDuplicateIssue(t *testing.T) {
+	resume := loadResumeFixture(t, "store", "valid-unique-entry-id.json")
+	if issues := ValidateDocument(resume); len(issues) != 0 {
+		t.Fatalf("expected zero issues, got %d: %v", len(issues), issues)
+	}
+}
+
+// Phase-gate re-review finding M1's fix applies here too: a 3-way id
+// collision must produce one issue per occurrence (not just the first
+// repeat), each naming every OTHER occurrence in its message.
+func TestValidateEntryIDUniqueness_FlagsEveryOccurrenceOfAThreeWayDuplicate(t *testing.T) {
+	dup := "dup"
+	content := map[string]Section{
+		"a": NewWorkSection("", "", []WorkEntry{{ID: dup}}),
+		"b": NewSkillSection("", "", []SkillEntry{{ID: dup}}),
+		"c": NewLanguageSection("", "", []LanguageEntry{{ID: dup}}),
+	}
+	issues := ValidateEntryIDUniqueness(content)
+	if len(issues) != 3 {
+		t.Fatalf("expected exactly 3 issues (one per occurrence), got %d: %v", len(issues), issues)
+	}
+	wantPaths := []string{
+		"content.a.entries[0].id",
+		"content.b.entries[0].id",
+		"content.c.entries[0].id",
+	}
+	for i, want := range wantPaths {
+		if issues[i].Path != want {
+			t.Fatalf("issue %d: expected path %q, got %q (full: %v)", i, want, issues[i].Path, issues)
+		}
+		if issues[i].Rule != "duplicate-entry-id" {
+			t.Fatalf("issue %d: expected rule duplicate-entry-id, got %q", i, issues[i].Rule)
+		}
+	}
+}
+
+func TestValidateEntryIDUniqueness_AcceptsEmptyOrNilContent(t *testing.T) {
+	if issues := ValidateEntryIDUniqueness(nil); len(issues) != 0 {
+		t.Fatalf("expected zero issues for nil content, got: %v", issues)
+	}
+	if issues := ValidateEntryIDUniqueness(map[string]Section{}); len(issues) != 0 {
+		t.Fatalf("expected zero issues for empty content, got: %v", issues)
+	}
+}
 
 // Phase-gate review finding I1: validation/store.ts used to throw uncaught
 // TypeErrors on inputs this Go half handles cleanly (a hostile sectionType

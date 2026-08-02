@@ -4,10 +4,10 @@
 // Store-layer aggregate validation for the resume document (design spec §3
 // "Relational constraints & store-layer invariants" / §5 sanitizer
 // contract). resume.schema.json (JSON Schema) enforces everything
-// expressible as a per-value or single-object constraint; these three rules
+// expressible as a per-value or single-object constraint; these four rules
 // are not expressible there — see validation/store.ts's package doc (the TS
 // half of this same store layer) for exactly why. This file is the Go half:
-// the same three rules, applied against the hand-written Section/Resume
+// the same four rules, applied against the hand-written Section/Resume
 // types from resume.go/section.go, and conformance-tested against the same
 // fixtures/store/*.json corpus as store_validate_test.go and
 // test/store-validation.test.ts.
@@ -254,6 +254,125 @@ func validateDateRanges(content map[string]Section) []ValidationIssue {
 	return issues
 }
 
+// entryIDs returns section's entries' ids, in their array order — regardless
+// of which SectionType-specific slice actually holds them. Mirrors
+// validateRichTextLengths's per-sectionType switch. An unrecognized
+// SectionType returns nil (no ids) rather than panicking — the same
+// tolerance every other switch in this file applies — though in practice
+// this is unreachable via decoded JSON: Section.UnmarshalJSON already
+// rejects an unknown sectionType at the decode boundary (see section.go).
+func entryIDs(section Section) []string {
+	switch section.SectionType {
+	case Profile:
+		ids := make([]string, len(section.ProfileEntries))
+		for i, e := range section.ProfileEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	case Work:
+		ids := make([]string, len(section.WorkEntries))
+		for i, e := range section.WorkEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	case Education:
+		ids := make([]string, len(section.EducationEntries))
+		for i, e := range section.EducationEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	case Skill:
+		ids := make([]string, len(section.SkillEntries))
+		for i, e := range section.SkillEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	case Language:
+		ids := make([]string, len(section.LanguageEntries))
+		for i, e := range section.LanguageEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	case Certificate:
+		ids := make([]string, len(section.CertificateEntries))
+		for i, e := range section.CertificateEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	case Project:
+		ids := make([]string, len(section.ProjectEntries))
+		for i, e := range section.ProjectEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	case SectionTypeCustom:
+		ids := make([]string, len(section.CustomEntries))
+		for i, e := range section.CustomEntries {
+			ids[i] = e.ID
+		}
+		return ids
+	}
+	return nil
+}
+
+// ValidateEntryIDUniqueness enforces AC-DOC-002 (design spec §3): entry ids
+// are client-generated uuids that must be unique ACROSS THE WHOLE RESUME,
+// not merely within one section. resume.schema.json has no per-array
+// uniqueItems on any section's `entries` — even if it did, that would only
+// dedup entries WITHIN one section's own array; it could never catch the
+// same id reused across two DIFFERENT sections (e.g. one `work` entry and
+// one `skill` entry sharing an id), which is exactly the cross-structure gap
+// this rule closes — the same category of gap ValidateLayoutSections closes
+// for customization.layout.sections. Mirrors validation/store.ts's
+// validateEntryIdUniqueness. See fixtures/store/invalid-duplicate-entry-id.json.
+//
+// Reports one issue per OCCURRENCE of a duplicated id (not just the first
+// repeat), so a caller can point at every offending entry, not only the
+// second one found.
+func ValidateEntryIDUniqueness(content map[string]Section) []ValidationIssue {
+	var issues []ValidationIssue
+
+	pathsByID := map[string][]string{}
+	for _, key := range sortedKeys(content) {
+		for i, id := range entryIDs(content[key]) {
+			path := fmt.Sprintf("content.%s.entries[%d].id", key, i)
+			pathsByID[id] = append(pathsByID[id], path)
+		}
+	}
+
+	ids := make([]string, 0, len(pathsByID))
+	for id := range pathsByID {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		paths := pathsByID[id]
+		if len(paths) <= 1 {
+			continue
+		}
+		for _, path := range paths {
+			others := make([]string, 0, len(paths)-1)
+			for _, p := range paths {
+				if p != path {
+					others = append(others, p)
+				}
+			}
+			sort.Strings(others)
+			issues = append(issues, ValidationIssue{
+				Rule: "duplicate-entry-id",
+				Path: path,
+				Message: fmt.Sprintf(
+					"%s: entry id %q is not unique across the whole resume — also used at %s",
+					path, id, strings.Join(others, ", "),
+				),
+			})
+		}
+	}
+
+	return issues
+}
+
 // detailTypesWithoutURLConstraint are the personalDetails.details[] chip
 // types explicitly exempted from the https-scheme requirement below (design
 // spec §3: no design-spec-defined value format for these — see
@@ -379,6 +498,7 @@ func ValidateDocument(r Resume) []ValidationIssue {
 	issues = append(issues, validateRichTextLengths(r.Content)...)
 	issues = append(issues, ValidateLayoutSections(r.Content, r.Customization.Layout)...)
 	issues = append(issues, validateDateRanges(r.Content)...)
+	issues = append(issues, ValidateEntryIDUniqueness(r.Content)...)
 	issues = append(issues, ValidatePersonalDetailURLSchemes(r.PersonalDetails.Details)...)
 	issues = append(issues, ValidatePhotoKeyTraversal(r.PersonalDetails.Photo)...)
 	sort.SliceStable(issues, func(i, j int) bool {

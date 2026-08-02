@@ -2,7 +2,7 @@
 // "Relational constraints & store-layer invariants" / §5 sanitizer contract).
 //
 // resume.schema.json (JSON Schema) enforces everything expressible as a
-// per-value or single-object constraint. These three rules are NOT
+// per-value or single-object constraint. These four rules are NOT
 // expressible there, for the reasons documented at each rule's schema
 // $def/description:
 //
@@ -19,12 +19,15 @@
 //   3. Date range ordering (`start` <= `end`). A cross-field numeric
 //      comparison between two sibling object properties, which JSON
 //      Schema's declarative keyword set cannot express (see dateRange's
-//      description in resume.schema.json — this is the same reason
-//      duplicate-entry-id checking (AC-DOC-002) already lives here instead
-//      of in the schema).
+//      description in resume.schema.json).
+//   4. Entry-id uniqueness across the WHOLE resume (AC-DOC-002). JSON
+//      Schema's `uniqueItems` only dedups within a single array; it cannot
+//      catch the same id reused across two different `content` sections
+//      (see content's description in resume.schema.json and
+//      fixtures/store/invalid-duplicate-entry-id.json).
 //
 // This file is the TypeScript half of that store layer; gen/go/store_validate.go
-// is the Go half — both apply the same three rules and are conformance-tested
+// is the Go half — both apply the same four rules and are conformance-tested
 // against the same fixtures/store/*.json corpus (see test/store-validation.test.ts
 // and gen/go/store_validate_test.go). Neither half is generated: unlike
 // resume.schema.json's types, these rules have no JSON Schema representation
@@ -224,6 +227,63 @@ export function validateLayoutSections(
         rule: "layout-orphan-content-key",
         path: "customization.layout.sections",
         message: `content section "${key}" is not placed in layout.sections.main or .sidebar`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * AC-DOC-002 (design spec §3): entry ids are client-generated uuids that
+ * must be unique ACROSS THE WHOLE RESUME, not merely within one section.
+ * resume.schema.json has no per-array `uniqueItems` on any section's
+ * `entries` — even if it did, that would only dedup entries WITHIN one
+ * section's own array; it could never catch the same id reused across two
+ * DIFFERENT sections (e.g. one `work` entry and one `skill` entry sharing an
+ * id), which is exactly the cross-structure gap this rule closes — the same
+ * category of gap validateLayoutSections closes for
+ * customization.layout.sections. See
+ * fixtures/store/invalid-duplicate-entry-id.json.
+ *
+ * Reports one issue per OCCURRENCE of a duplicated id (not just the first
+ * repeat), so a caller can point at every offending entry, not only the
+ * second one found.
+ *
+ * A missing or non-string `id` (unreachable through ajv, which requires
+ * `id` and constrains it to `format: "uuid"`, but this file's inputs are
+ * "untyped JSON in practice" per this file's header) is treated as the
+ * empty string "" — the same value Go's ID field defaults to for an absent
+ * JSON key, since Go has no separate "missing" state for a required
+ * `string` field. This keeps the two halves' set of REACHABLE documents
+ * (a JSON body with the `id` key entirely absent) behaving identically,
+ * rather than picking an arbitrary TS-only tolerance for a case Go can
+ * actually receive.
+ */
+export function validateEntryIdUniqueness(
+  content: Record<string, DocumentSection> | undefined,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const pathsById = new Map<string, string[]>();
+
+  for (const [sectionKey, section] of Object.entries(content ?? {})) {
+    toArray<DocumentEntry>(section?.entries).forEach((entry, entryIndex) => {
+      const id = typeof entry?.id === "string" ? entry.id : "";
+      const path = `content.${sectionKey}.entries[${entryIndex}].id`;
+      const paths = pathsById.get(id) ?? [];
+      paths.push(path);
+      pathsById.set(id, paths);
+    });
+  }
+
+  for (const [id, paths] of pathsById) {
+    if (paths.length <= 1) continue;
+    for (const path of paths) {
+      const others = paths.filter((p) => p !== path).sort();
+      issues.push({
+        rule: "duplicate-entry-id",
+        path,
+        message: `${path}: entry id "${id}" is not unique across the whole resume — also used at ${others.join(", ")}`,
       });
     }
   }
@@ -514,6 +574,7 @@ export function validateDocument(
     ...validateRichTextLengths(doc.content),
     ...validateLayoutSections(doc.content, doc.customization?.layout?.sections),
     ...validateDateRanges(doc.content),
+    ...validateEntryIdUniqueness(doc.content),
     ...validatePersonalDetailUrlSchemes(doc.personalDetails),
     ...validatePhotoKeyTraversal(doc.personalDetails),
   ];

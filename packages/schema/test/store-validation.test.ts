@@ -6,6 +6,7 @@ import {
   utf8ByteLength,
   validateDateRange,
   validateDocument,
+  validateEntryIdUniqueness,
   validateLayoutSections,
   validatePersonalDetailUrlSchemes,
   validatePhotoKeyTraversal,
@@ -169,11 +170,53 @@ describe("store-layer validator: reversed date range (start > end)", () => {
   });
 });
 
-// fixtures/store/invalid-duplicate-entry-id.json (AC-DOC-002: entry ids unique
-// across the whole resume) is a pre-existing fixture for a separate, already-
-// tracked P2A store-layer rule (see test/schema.test.ts's comment on why
-// fixtures/store/ is excluded from the schema fixture scan) — not one of the
-// rules this validator implements, so it is deliberately not exercised here.
+describe("store-layer validator: entry-id uniqueness across the whole resume (AC-DOC-002)", () => {
+  it("rejects the same entry id reused in a different section — a single section's uniqueItems could never catch this", () => {
+    const issues = validateDocument(
+      fixture("store", "invalid-duplicate-entry-id.json"),
+    );
+    expect(rules(issues)).toContain("duplicate-entry-id");
+    // One issue per occurrence, sorted by path — "content.skill..." < "content.work...".
+    const duplicateIssues = issues.filter((i) => i.rule === "duplicate-entry-id");
+    expect(duplicateIssues.map((i) => i.path)).toEqual([
+      "content.skill.entries[0].id",
+      "content.work.entries[0].id",
+    ]);
+    expect(duplicateIssues[0].message).toContain("content.work.entries[0].id");
+    expect(duplicateIssues[1].message).toContain("content.skill.entries[0].id");
+  });
+
+  it("accepts the same document shape when every entry id is unique", () => {
+    expect(
+      validateDocument(fixture("store", "valid-unique-entry-id.json")),
+    ).toEqual([]);
+  });
+
+  it("validateEntryIdUniqueness flags every occurrence of a 3-way duplicate id, not just the first repeat", () => {
+    const doc = {
+      content: {
+        a: { sectionType: "work", entries: [{ id: "dup" }] },
+        b: { sectionType: "skill", entries: [{ id: "dup" }] },
+        c: { sectionType: "language", entries: [{ id: "dup" }] },
+      },
+    };
+    const issues = validateEntryIdUniqueness(doc.content);
+    expect(issues).toHaveLength(3);
+    for (const issue of issues) {
+      expect(issue.rule).toBe("duplicate-entry-id");
+    }
+    expect(issues.map((i) => i.path)).toEqual([
+      "content.a.entries[0].id",
+      "content.b.entries[0].id",
+      "content.c.entries[0].id",
+    ]);
+  });
+
+  it("validateEntryIdUniqueness accepts an empty or undefined content map without throwing", () => {
+    expect(validateEntryIdUniqueness(undefined)).toEqual([]);
+    expect(validateEntryIdUniqueness({})).toEqual([]);
+  });
+});
 
 // Phase-gate review finding I1: validateDocument used to throw uncaught
 // TypeErrors on inputs Go's ValidateDocument handles cleanly, because every
