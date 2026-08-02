@@ -2,16 +2,14 @@
 // database (spec §9): creating a transaction (Begin) and atomically
 // claiming it exactly once (Consume). Every test here is skipped, not
 // failed, when TEST_DATABASE_URL is unset, so `go test ./...` stays fully
-// hermetic by default -- the same convention internal/store,
-// cmd/migrate, and migrations already use (each keeps its own small copy
-// of this live-DB test infrastructure; see cmd/migrate/testdb_test.go's
-// doc comment for why it isn't shared across packages).
+// hermetic by default. Test setup goes through internal/testutil's shared
+// RequireMigratedTestDatabaseURL, the same helper internal/user and
+// internal/store use, so this package's tests never depend on another
+// package's test binary having already applied migrations first.
 package auth_test
 
 import (
 	"context"
-	"database/sql"
-	"os"
 	"testing"
 	"time"
 
@@ -20,55 +18,20 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-// requireTestDatabaseURL returns TEST_DATABASE_URL, skipping the calling
-// test (not failing it) when unset -- UNLESS REQUIRE_TEST_DB=1 is also set
-// in the environment, in which case a missing TEST_DATABASE_URL is a hard
-// t.Fatal instead. This closes the gap a gate run must never fall into
-// silently: `make server-test`/a bare `go test ./...` stay hermetic (skip)
-// by default, but `make server-test-db` sets REQUIRE_TEST_DB=1 precisely so
-// it can never pass vacuously with every DB-backed case skipped -- see the
-// Makefile target's own comment.
-func requireTestDatabaseURL(t *testing.T) string {
-	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		if os.Getenv("REQUIRE_TEST_DB") == "1" {
-			t.Fatal("REQUIRE_TEST_DB=1 is set but TEST_DATABASE_URL is unset; refusing to silently skip this live-database test")
-		}
-		t.Skip("TEST_DATABASE_URL not set; skipping live-database integration test")
-	}
-	return dsn
-}
-
-// newTestQueries applies every pending migration to TEST_DATABASE_URL --
-// idempotent, since another package's test (or a real deploy) may have
-// already migrated this same database -- and returns a *store.Queries
-// backed by a fresh pgx connection pool against it.
+// newTestQueries returns a *store.Queries backed by a fresh pgx connection
+// pool against TEST_DATABASE_URL, with the database's schema brought to
+// head first (see internal/testutil.MigrateTestDatabase -- idempotent,
+// since another package's test may already have migrated this same
+// database).
 func newTestQueries(t *testing.T) *store.Queries {
 	t.Helper()
-	dsn := requireTestDatabaseURL(t)
+	dsn := testutil.RequireMigratedTestDatabaseURL(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	migrationDB, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatalf("open database for migrations: %v", err)
-	}
-	t.Cleanup(func() {
-		if closeErr := migrationDB.Close(); closeErr != nil {
-			t.Logf("close migration database: %v", closeErr)
-		}
-	})
-	if err = migrationDB.PingContext(ctx); err != nil {
-		t.Fatalf("ping database (is TEST_DATABASE_URL reachable?): %v", err)
-	}
-	if _, err = migrations.Apply(ctx, migrationDB); err != nil {
-		t.Fatalf("apply migrations: %v", err)
-	}
 
 	pool, err := store.NewPool(ctx, dsn)
 	if err != nil {
