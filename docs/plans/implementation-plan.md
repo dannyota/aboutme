@@ -72,21 +72,21 @@ author cannot weaken an adversarial test without review.
 
 ## Testing strategy (pyramid + gates)
 
-| Layer                    | Tooling                                                                                                                         | Owner       | Gate              |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------- |
-| Unit                     | Go `testing` (table-driven); Vitest                                                                                             | author, TDD | per task          |
-| Integration              | Go `httptest` vs ephemeral Postgres (testcontainers)                                                                            | author      | per task          |
-| Contract                 | OpenAPI examples validated; generated TS client compiles; drift check                                                           | P0          | CI                |
-| Migration                | empty→head, prev-release→head, concurrent advisory-lock, partial-failure recovery                                               | P0          | CI                |
-| Write-safety/concurrency | If-Match matrix, idempotency replay/reject/rollback, CAS-vs-autosave races                                                      | P2A         | CI + soak         |
-| Security                 | OAuth replay/mix-up/expiry, CSRF matrix, XSS hostile corpus (bluemonday+DOMPurify+SSR+real browser), spoofed-header rate limits | P1/P3/P5    | CI                |
-| Renderer golden          | SSR string snapshots (fixtures × templates × pagination modes)                                                                  | P3          | CI diff = review  |
-| Visual regression        | Playwright screenshot diff of `/print` per template (pinned Chromium/fonts)                                                     | P3/P7       | CI                |
-| Resource bounds          | chromedp in production cgroup: 512 MiB, bounded queue, kill-on-timeout, readiness-on-saturation, no outbound                    | P7A         | CI + P9A          |
-| E2E                      | Playwright full flows                                                                                                           | P4+         | per phase from P5 |
-| Accessibility            | axe + keyboard-nav on editor + public page                                                                                      | P4/P5       | per phase + P9    |
-| UAT (acceptance)         | UAT agent, machine-readable report                                                                                              | UAT agent   | phase gate + P9A  |
-| Ops drills               | real RDS restore, SSE soak under proxy, deploy/rollback, EIP recovery, secret rotation, alarm-fires-and-received                | P9A         | pre-deploy        |
+| Layer                    | Tooling                                                                                                                                                                          | Owner       | Gate              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------- |
+| Unit                     | Go `testing` (table-driven); Vitest                                                                                                                                              | author, TDD | per task          |
+| Integration              | Go `httptest` vs ephemeral Postgres (testcontainers)                                                                                                                             | author      | per task          |
+| Contract                 | OpenAPI examples validated; generated TS client compiles; drift check                                                                                                            | P0          | CI                |
+| Migration                | empty→head, prev-release→head, concurrent advisory-lock, partial-failure recovery                                                                                                | P0          | CI                |
+| Write-safety/concurrency | If-Match matrix, idempotency replay/reject/rollback, CAS-vs-autosave races                                                                                                       | P2A         | CI + soak         |
+| Security                 | OAuth replay/mix-up/expiry, CSRF matrix, XSS hostile corpus (bluemonday+DOMPurify+SSR+real browser), spoofed-header rate limits                                                  | P1/P3/P5    | CI                |
+| Renderer golden          | SSR string snapshots (fixtures × templates × pagination modes)                                                                                                                   | P3          | CI diff = review  |
+| Visual regression        | Playwright screenshot diff per template on a standalone renderer harness in P3 (pinned browser image/platform + fonts); `/print` itself is P7A's artifact and is diffed from P7B | P3/P7       | CI                |
+| Resource bounds          | chromedp in production cgroup: 512 MiB, bounded queue, kill-on-timeout, readiness-on-saturation, no outbound                                                                     | P7A         | CI + P9A          |
+| E2E                      | Playwright full flows                                                                                                                                                            | P4+         | per phase from P5 |
+| Accessibility            | axe + keyboard-nav on editor + public page                                                                                                                                       | P4/P5       | per phase + P9    |
+| UAT (acceptance)         | UAT agent, machine-readable report                                                                                                                                               | UAT agent   | phase gate + P9A  |
+| Ops drills               | real RDS restore, SSE soak under proxy, deploy/rollback, EIP recovery, secret rotation, alarm-fires-and-received                                                                 | P9A         | pre-deploy        |
 
 Coverage target: ≥80% lines on Go domain packages and web composables/stores;
 renderer covered by golden snapshots. Coverage is necessary, not sufficient —
