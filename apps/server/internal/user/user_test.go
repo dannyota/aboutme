@@ -3,6 +3,7 @@ package user_test
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
@@ -20,16 +21,26 @@ import (
 // and internal/auth build on. A failure here means schema.sql, queries.sql,
 // or the sqlc.yaml overrides drifted from what later tasks expect. The
 // field-level lines pin the nullable-column contract (native pointers, per
-// the design decision above), not just the type names.
+// the design decision above), not just the type names — including the
+// sqlc.yaml `rename` entries that keep initialism-bearing columns (ua, ip,
+// csrf_secret, pkce_verifier, redirect_uri) from silently reverting to
+// sqlc's default casing (Ua, Ip, CsrfSecret, PkceVerifier, RedirectUri).
 var (
-	_ store.User     = store.User{}
-	_ store.Identity = store.Identity{}
-	_ store.Session  = store.Session{}
+	_ store.User             = store.User{}
+	_ store.Identity         = store.Identity{}
+	_ store.Session          = store.Session{}
+	_ store.OAuthTransaction = store.OAuthTransaction{}
 
-	_ *string    = store.User{}.AvatarKey
-	_ *time.Time = store.Session{}.RotationGraceUntil
-	_ *time.Time = store.Session{}.RevokedAt
-	_ *string    = store.Session{}.UA
+	_ *string     = store.User{}.AvatarKey
+	_ *time.Time  = store.Session{}.RotationGraceUntil
+	_ *time.Time  = store.Session{}.RevokedAt
+	_ *string     = store.Session{}.UA
+	_ *netip.Addr = store.Session{}.IP
+	_ []byte      = store.Session{}.TokenHash
+	_ []byte      = store.Session{}.CSRFSecret
+	_ string      = store.OAuthTransaction{}.PKCEVerifier
+	_ string      = store.OAuthTransaction{}.RedirectURI
+	_ *uuid.UUID  = store.OAuthTransaction{}.LinkingUserID
 )
 
 // TestSchema_PreservesAuthConstraints is a unit test (no database) that

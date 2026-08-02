@@ -22,6 +22,9 @@ sql:
           ua: "UA"
           ip: "IP"
           oauth_transaction: "OAuthTransaction"
+          csrf_secret: "CSRFSecret"
+          pkce_verifier: "PKCEVerifier"
+          redirect_uri: "RedirectURI"
         overrides:
           - db_type: "uuid"
             go_type:
