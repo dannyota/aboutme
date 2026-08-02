@@ -15,11 +15,16 @@ package auth_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
@@ -29,9 +34,19 @@ import (
 )
 
 // testLogger is a *slog.Logger that discards output -- these tests assert
-// on HTTP responses and database rows, not log lines.
+// on HTTP responses and database rows, not log lines (the one test that
+// DOES assert on log output, TestGoogleCallback_SessionIssuanceFails_...,
+// builds its own capturing logger instead -- see newCapturingLogger).
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
+}
+
+// newCapturingLogger returns a *slog.Logger whose JSON output lands in
+// the returned *bytes.Buffer, for fix-round Important 2's log-emission
+// test.
+func newCapturingLogger() (*slog.Logger, *bytes.Buffer) {
+	var buf bytes.Buffer
+	return slog.New(slog.NewJSONHandler(&buf, nil)), &buf
 }
 
 // mustQueryParam parses rawURL and returns its name query parameter,
@@ -86,6 +101,13 @@ func withGoogleIssuer(issuer string) testServiceOption {
 // these tests exercise the real registration/middleware path, not a
 // bypass. It returns the resulting http.Handler and the *store.Queries
 // backing it, for direct row assertions.
+//
+// A non-empty Google issuer override (withGoogleIssuer) is REQUIRED, not
+// optional: fix-round Critical finding was exactly a test that called
+// this with no override and so performed live OIDC discovery against the
+// real https://accounts.google.com on every hermetic-looking test run.
+// Forcing this here, once, makes that mistake impossible to repeat --
+// including for Task 5/6's own copies of this pattern.
 func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *store.Queries) {
 	t.Helper()
 
@@ -95,6 +117,12 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	for _, opt := range opts {
 		opt(&sc)
 	}
+	if sc.googleIssuer == "" {
+		t.Fatal("newTestService: no Google issuer override supplied (withGoogleIssuer) -- " +
+			"every test Service must be pointed at an oidctest.Provider, never the real " +
+			"https://accounts.google.com, or a request to /start or /callback would " +
+			"perform live OIDC discovery against the real network")
+	}
 
 	cfg := config.Config{
 		PublicOrigin:       testPublicOrigin,
@@ -102,7 +130,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 		GoogleClientSecret: "test-google-client-secret",
 	}
 
-	svc, err := auth.NewServiceForTest(cfg, q, sc.googleIssuer)
+	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, sc.googleIssuer)
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
@@ -119,10 +147,13 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 // NOT visible here, the same way a real net/http client would never see
 // it either.
 //
-// The response Body is closed here, inside doGet, before returning: every
-// caller in this package only reads headers/cookies, never the body, and
-// closing it here once satisfies bodyclose for every call site instead of
-// repeating a defer/nolint at each one.
+// The response Body is Close()'d here before returning, but remains
+// readable afterward -- ResponseRecorder.Result() wraps an in-memory
+// bytes.Reader in io.NopCloser, whose Close is a genuine no-op, so a
+// caller that does need the body (e.g. an internal-error envelope
+// assertion) can still read it. Every other caller in this package only
+// reads headers/cookies, and this Close() satisfies bodyclose for all of
+// them without repeating a defer/nolint at each call site.
 func doGet(t *testing.T, handler http.Handler, path string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
@@ -150,13 +181,27 @@ func extractCookie(resp *http.Response, name string) *http.Cookie {
 	return nil
 }
 
+// failingSessionIssuer structurally satisfies handlers.go's unexported
+// sessionIssuer interface (Go interface satisfaction needs no shared
+// name across packages) -- Issue always fails, letting a test force
+// Service into its writeInternalError funnel deterministically
+// (fix-round Important 1: there is no realistic way to fail a real
+// *SessionManager.Issue without corrupting a live database mid-request).
+// The error text is deliberately distinctive so a test can also prove it
+// never reaches the client response or (per Important 2) the log.
+type failingSessionIssuer struct{}
+
+func (failingSessionIssuer) Issue(context.Context, uuid.UUID, string, string) (string, store.Session, error) {
+	return "", store.Session{}, errors.New("stub: session issuance deliberately failed for a test -- must never leak")
+}
+
 // ---- Service construction / route registration -----------------------
 
 func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	q := newTestQueries(t)
-	_, err := auth.NewService(config.Config{}, q)
+	_, err := auth.NewService(testLogger(), config.Config{}, q)
 	if err == nil {
 		t.Fatal("NewService() error = nil, want error for a config with no PublicOrigin")
 	}
@@ -165,7 +210,8 @@ func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := newTestService(t)
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
 	// /start with no code/state at all still runs (it begins a fresh
 	// transaction and redirects) -- proving the route is registered and
@@ -188,7 +234,8 @@ func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T
 func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := newTestService(t)
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
 	for _, path := range []string{auth.GoogleStartPath, auth.GoogleCallbackPath} {
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil)
@@ -206,11 +253,17 @@ func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 // simplest rejection path: no __Host-oauth-tx cookie at all. DD-C3/DD-C4
 // pin this to a 302 with the generic ?error=auth_failed code (no oracle
 // distinguishing this from any other rejected-transaction failure mode).
+// This request never establishes any specific email/subject (it is
+// rejected before any provider interaction at all), so there is no
+// meaningful scoped row to assert against beyond "no session cookie" --
+// see google_adversarial_test.go's TestGoogleCallback_RejectsMissingTxCookie
+// for the version of this scenario that DOES drive a real registered code
+// through a real oidctest provider and asserts scoped no-user/no-identity.
 func TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := newTestService(t)
-	before := countUsers(t)
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
 	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code=whatever&state=whatever") //nolint:bodyclose // doGet closes the body itself before returning.
 	if resp.StatusCode != http.StatusFound {
@@ -223,8 +276,6 @@ func TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed(t *testing.T) {
 	if extractCookie(resp, auth.SessionCookieName) != nil {
 		t.Error("a session cookie was set for a rejected callback, want none")
 	}
-
-	assertUsersCountUnchanged(t, before)
 }
 
 // TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFailed
@@ -232,12 +283,17 @@ func TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed(t *testing.T) {
 // issued by Begin) -- ErrTransactionInvalid's path through Consume.
 // Ruling 1 requires ClearOAuthTxCookie to run even here: this test proves
 // it by inspecting the callback response's own Set-Cookie header for
-// __Host-oauth-tx with a negative Max-Age, not just its absence.
+// __Host-oauth-tx with a negative Max-Age, not just its absence. Like
+// TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed above, this
+// request never reaches a point where any specific email/subject is
+// established (Consume itself rejects the handle before any provider
+// interaction), so there is no scoped row to check beyond "no session
+// cookie".
 func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
-	handler, _ := newTestService(t)
-	before := countUsers(t)
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
 	fakeTxCookie := &http.Cookie{Name: auth.OAuthTxCookieName, Value: "never-issued-handle-shaped-value"}
 	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code=c&state=s", fakeTxCookie) //nolint:bodyclose // doGet closes the body itself before returning.
@@ -256,8 +312,9 @@ func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFaile
 	if cleared.MaxAge >= 0 {
 		t.Errorf("__Host-oauth-tx MaxAge = %d, want negative (cleared)", cleared.MaxAge)
 	}
-
-	assertUsersCountUnchanged(t, before)
+	if extractCookie(resp, auth.SessionCookieName) != nil {
+		t.Error("a session cookie was set for a rejected callback, want none")
+	}
 }
 
 // TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed
@@ -268,21 +325,30 @@ func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFaile
 // attacker who can get a victim's browser to visit
 // .../callback?code=<attacker's code>&state=<anything> while the victim
 // holds a legitimate pending transaction cookie could splice their own
-// authorization code into the victim's transaction.
+// authorization code into the victim's transaction. Unlike the two tests
+// above, this flow DOES have a real transaction and a real registered
+// code, so (fix-round Important 3) it asserts a scoped
+// assertNoUser/assertNoIdentity instead of a global row count --
+// uniqueSubject/uniqueEmail/assertNoUser/assertNoIdentity are
+// google_adversarial_test.go's helpers, shared here since both files are
+// package auth_test.
 func TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
-	before := countUsers(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
 
-	startResp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
-	txCookie := extractCookie(startResp, auth.OAuthTxCookieName)
-	if txCookie == nil {
-		t.Fatal("start response missing __Host-oauth-tx cookie")
-	}
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
+	txCookie, _, nonce := beginGoogle(t, handler) // beginGoogle: google_adversarial_test.go; state deliberately discarded below
+	p.RegisterCode("code-state-mismatch-handlers", oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		Nonce:         nonce,
+	})
 
-	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code=irrelevant&state=not-the-real-state", txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
+	resp := doGet(t, handler, auth.GoogleCallbackPath+"?code=code-state-mismatch-handlers&state=not-the-real-state", txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
@@ -293,33 +359,143 @@ func TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed(t *test
 	if cleared == nil || cleared.MaxAge >= 0 {
 		t.Error("__Host-oauth-tx not cleared on a state-mismatch rejection")
 	}
-
-	assertUsersCountUnchanged(t, before)
-}
-
-// countUsers returns the current number of rows in users. The test
-// database is shared across this whole package's live-DB test suite (no
-// per-test reset), so an absolute "count == 0" assertion is meaningless --
-// countUsers/assertUsersCountUnchanged instead compare a before/after
-// snapshot, the only thing a single test can meaningfully own.
-func countUsers(t *testing.T) int {
-	t.Helper()
-
-	inspector := newRowInspectorPool(t)
-	var count int
-	if err := inspector.QueryRow(context.Background(), `SELECT count(*) FROM users`).Scan(&count); err != nil {
-		t.Fatalf("count users: %v", err)
+	if extractCookie(resp, auth.SessionCookieName) != nil {
+		t.Error("a session cookie was set for a rejected callback, want none")
 	}
-	return count
+
+	assertNoUser(t, q, email)
+	assertNoIdentity(t, q, subject)
 }
 
-// assertUsersCountUnchanged is a coarse guard for the rejection-path
-// tests above: none of them should ever create a users row, checked as a
-// before/after delta rather than an absolute count (see countUsers).
-func assertUsersCountUnchanged(t *testing.T, before int) {
-	t.Helper()
+// ---- fix-round Important 1 + 2: internal-error (500) funnel -----------
 
-	if after := countUsers(t); after != before {
-		t.Errorf("users row count changed from %d to %d, want unchanged (a rejected callback must create nothing)", before, after)
+// TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs
+// drives a FULLY successful OIDC round trip (real provider, real PKCE,
+// real nonce, verified email) all the way to the last step -- session
+// issuance -- then, via SetSessionIssuerForTest's seam, forces that one
+// step to fail. This is the only realistic way to reach handleGoogleCallback's
+// writeInternalError funnel deterministically (every other internal-error
+// call site requires an actual database failure). It asserts, together,
+// both fix-round obligations that funnel must satisfy:
+//
+//   - Important 1: __Host-oauth-tx is cleared, the response body is the
+//     generic {"error":{"code":"internal_error",...}} envelope with no
+//     trace of the underlying stub error's text, and no __Host-session
+//     cookie is set.
+//   - Important 2: at least one log record is emitted, carrying a
+//     request id, and containing neither the authorization code used in
+//     this exchange nor the underlying stub error's own message (proving
+//     logInternalError's deliberate choice not to log raw error text).
+func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	q := newTestQueries(t)
+	logger, logBuf := newCapturingLogger()
+
+	cfg := config.Config{
+		PublicOrigin:       testPublicOrigin,
+		GoogleClientID:     oidctest.DefaultClientID,
+		GoogleClientSecret: "test-google-client-secret",
+	}
+	svc, err := auth.NewServiceForTest(logger, cfg, q, p.URL)
+	if err != nil {
+		t.Fatalf("NewServiceForTest() error = %v", err)
+	}
+	auth.SetSessionIssuerForTest(svc, failingSessionIssuer{})
+
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
+	txCookie, state, nonce := beginGoogle(t, handler)
+
+	const secretCode = "code-session-issue-fails-must-not-leak-into-body-or-log"
+	p.RegisterCode(secretCode, oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		Nonce:         nonce,
+	})
+
+	resp := doCallback(t, handler, secretCode, state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning (still readable; see doGet's doc comment).
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	if extractCookie(resp, auth.SessionCookieName) != nil {
+		t.Error("a session cookie was set despite Issue failing, want none")
+	}
+	cleared := extractCookie(resp, auth.OAuthTxCookieName)
+	if cleared == nil {
+		t.Fatal("response missing a __Host-oauth-tx Set-Cookie header on a 500, want one clearing it (Important 1)")
+	}
+	if cleared.MaxAge >= 0 {
+		t.Errorf("__Host-oauth-tx MaxAge = %d, want negative (cleared)", cleared.MaxAge)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	bodyStr := string(body)
+	if !strings.Contains(bodyStr, `"internal_error"`) {
+		t.Errorf("response body = %q, want it to contain the generic internal_error code", bodyStr)
+	}
+	if strings.Contains(bodyStr, "deliberately failed") || strings.Contains(bodyStr, secretCode) {
+		t.Errorf("response body = %q, leaked the underlying stub error or authorization code -- must be opaque", bodyStr)
+	}
+
+	logged := logBuf.String()
+	if logged == "" {
+		t.Fatal("no log record was emitted for an internal-error (500) failure, want at least one (Important 2)")
+	}
+	if !strings.Contains(logged, `"request_id"`) {
+		t.Errorf("log record = %q, want a request_id field", logged)
+	}
+	if strings.Contains(logged, "deliberately failed") {
+		t.Errorf("log record = %q, contains the underlying stub error's own text -- logInternalError must log only a fixed op string, never raw error text (which for a real DB error can embed PII)", logged)
+	}
+	if strings.Contains(logged, secretCode) {
+		t.Errorf("log record = %q, leaked the authorization code -- must never log OAuth codes/tokens/secrets", logged)
+	}
+	if strings.Contains(logged, email) {
+		t.Errorf("log record = %q, leaked the visitor's email -- must never log emails", logged)
+	}
+}
+
+// ---- fix-round ruling b2: provider-signaled cancel ---------------------
+
+// TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled proves a
+// callback carrying ?error=access_denied (RFC 6749 §4.1.2.1's signal that
+// the visitor declined consent at the provider) redirects with its own
+// distinct error code (handlers.go's cancelledErrorCode -- not the
+// generic auth_failed) while still clearing the transaction cookie and
+// never authenticating the visitor.
+func TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
+
+	txCookie, state, _ := beginGoogle(t, handler)
+
+	path := auth.GoogleCallbackPath + "?error=access_denied&state=" + url.QueryEscape(state)
+	resp := doGet(t, handler, path, txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
+
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	const wantErrorCode = "cancelled" //nolint:misspell // exact, ruling-specified wire value (double-L "cancelled"), not a typo for "canceled"
+	if got := mustQueryParam(t, resp.Header.Get("Location"), "error"); got != wantErrorCode {
+		t.Errorf("error param = %q, want %q (RFC 6749 access_denied maps to its own distinct code)", got, wantErrorCode)
+	}
+	if extractCookie(resp, auth.SessionCookieName) != nil {
+		t.Error("a session cookie was set on a canceled login, want none")
+	}
+	cleared := extractCookie(resp, auth.OAuthTxCookieName)
+	if cleared == nil || cleared.MaxAge >= 0 {
+		t.Error("__Host-oauth-tx not cleared on a canceled login")
 	}
 }
