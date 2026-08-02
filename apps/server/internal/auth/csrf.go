@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/subtle"
 	"encoding/base64"
+	"mime"
 	"net/http"
 	"net/url"
 
@@ -13,17 +14,22 @@ import (
 // base64.RawURLEncoding of the authenticated session's csrf_secret.
 const CSRFHeaderName = "X-CSRF-Token"
 
-// Content-Type decision (integration owner ruling, task-8 scope
-// adjustment -- the brief offered a choice and asked for it to be
-// pinned): accept exactly these two values and reject everything else,
-// including any other parameter or casing variant. The charset=utf-8
-// suffix is allowed because browser fetch()/XHR implementations commonly
-// append it to a JSON body automatically, so requiring its exact absence
-// would reject ordinary same-origin clients along with attackers.
-const (
-	contentTypeJSON        = "application/json"
-	contentTypeJSONCharset = "application/json; charset=utf-8"
-)
+// DD-C6: Content-Type ruling, corrected. The original task-8 ruling
+// required Content-Type on every mutating request; Opus review of task 8
+// caught that this 403s every bodiless mutating endpoint (POST
+// /auth/logout, most spec'd DELETEs) the moment they're wired, since a
+// bodiless request has no reason to ever set Content-Type. Corrected
+// rule: the Content-Type check (contentTypeAllowed) applies only when the
+// request actually carries a body (hasBody: ContentLength > 0, or a
+// Transfer-Encoding header present). A bodiless mutating request skips
+// the Content-Type check entirely but still must pass every other check
+// (session, Origin/Referer, token) unchanged -- this is not a CSRF
+// carve-out, only a Content-Type carve-out. When a body is present,
+// Content-Type must parse (mime.ParseMediaType) to media type
+// "application/json" with no parameters other than an optional charset
+// of any value/case -- accepting real clients' "application/json;
+// charset=UTF-8" and "application/json;charset=utf-8" variants alike,
+// while still rejecting an unrelated or malformed Content-Type.
 
 // csrfRejectedCode is the single error code every CSRF rejection reason
 // returns -- missing/mismatched Origin or Referer, missing/wrong
@@ -58,12 +64,16 @@ func RequireCSRF(allowedOrigin string) api.Middleware {
 				return
 			}
 
+			// Check order is deliberate: method -> origin -> content-type
+			// -> session -> token. Cheapest and most decisive checks run
+			// first, so a request that fails an earlier one never pays
+			// for the session lookup or the token compare.
 			if !originAllowed(r, allowedOrigin) {
 				rejectCSRF(w)
 				return
 			}
 
-			if !contentTypeAllowed(r.Header.Get("Content-Type")) {
+			if hasBody(r) && !contentTypeAllowed(r.Header.Get("Content-Type")) {
 				rejectCSRF(w)
 				return
 			}
@@ -124,10 +134,29 @@ func originAllowed(r *http.Request, allowedOrigin string) bool {
 	return u.Scheme+"://"+u.Host == allowedOrigin
 }
 
-// contentTypeAllowed reports whether ct is exactly one of the two values
-// the Content-Type ruling above accepts.
+// hasBody reports whether r carries a request body: a positive
+// Content-Length, or a Transfer-Encoding header (e.g. chunked) present.
+// RequireCSRF only enforces contentTypeAllowed when this is true --
+// DD-C6 above.
+func hasBody(r *http.Request) bool {
+	return r.ContentLength > 0 || r.Header.Get("Transfer-Encoding") != ""
+}
+
+// contentTypeAllowed reports whether ct -- a Content-Type header value on
+// a request hasBody already confirmed carries a body -- is accepted under
+// DD-C6: media type application/json (mime.ParseMediaType already
+// lowercases it) with no parameters other than an optional charset of any
+// value or case.
 func contentTypeAllowed(ct string) bool {
-	return ct == contentTypeJSON || ct == contentTypeJSONCharset
+	if ct == "" {
+		return false
+	}
+	mediaType, params, err := mime.ParseMediaType(ct)
+	if err != nil || mediaType != "application/json" {
+		return false
+	}
+	delete(params, "charset")
+	return len(params) == 0
 }
 
 // validCSRFToken reports whether headerToken -- the raw X-CSRF-Token

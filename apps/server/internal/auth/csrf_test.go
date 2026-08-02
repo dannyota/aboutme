@@ -13,8 +13,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -46,6 +48,21 @@ func csrfTestSession(fill byte) store.Session {
 		secret[i] = fill
 	}
 	return store.Session{ID: uuid.New(), CSRFSecret: secret}
+}
+
+// requestBody returns an io.Reader for body, or nil for an empty string --
+// nil produces a request with no body at all (Body == nil, ContentLength
+// == 0), matching a real bodiless mutating request (e.g. logout, most
+// spec'd DELETEs) rather than a request with an empty JSON body. A
+// non-empty body goes through strings.NewReader, which
+// httptest.NewRequestWithContext (via http.NewRequestWithContext)
+// recognizes and uses to set ContentLength automatically -- exactly what
+// hasBody (csrf.go) inspects.
+func requestBody(body string) io.Reader {
+	if body == "" {
+		return nil
+	}
+	return strings.NewReader(body)
 }
 
 // passThroughHandler is the downstream handler RequireCSRF wraps in these
@@ -81,18 +98,39 @@ func assertCSRFRejected(t *testing.T, rec *httptest.ResponseRecorder) {
 }
 
 // TestRequireCSRF_Matrix is the CSRF matrix: every combination of method,
-// Origin, Referer, Content-Type, and token that determines whether a
-// mutating cookie-authenticated request is allowed through.
+// Origin, Referer, Content-Type, request body, and token that determines
+// whether a mutating cookie-authenticated request is allowed through.
 //
-// The first 13 rows are task-8-brief.md's Step 1 matrix verbatim. The
-// 14th row ("charset suffix content-type allowed") is required by the
-// integration owner's Content-Type ruling (task-8-brief.md's offered
-// choice, resolved: accept exactly "application/json" and
-// "application/json; charset=utf-8" -- the latter because browser
-// fetch()/XHR implementations commonly append that suffix automatically
-// -- reject every other value) -- the brief asked for a row proving each
-// side of that ruling; the missing/wrong-content-type rows below already
-// cover the reject side, so this row adds the accept side.
+// Rows 1-13 are task-8-brief.md's Step 1 matrix verbatim (each given a
+// "{}" body so the Content-Type check in rows that set one is actually
+// exercised rather than skipped by DD-C6's bodiless carve-out below).
+// Row 14 ("charset suffix content-type allowed") is required by the
+// integration owner's original Content-Type ruling: the brief asked for a
+// row proving each side of the decision, and the missing/wrong-content-
+// type rows already cover the reject side.
+//
+// Rows 15-18 were added after Opus review of task 8 caught a defect in
+// that original ruling (not in its implementation): requiring
+// Content-Type on every mutating request 403s every bodiless mutating
+// endpoint (POST /auth/logout, most spec'd DELETEs) the moment they're
+// wired. The corrected ruling, DD-C6 (csrf.go), only checks Content-Type
+// when the request actually carries a body:
+//
+//   - Row 15/16 prove a bodiless DELETE/POST with a valid Origin and
+//     token succeeds with no Content-Type at all.
+//   - Row 17 proves the carve-out is about Content-Type, not about CSRF
+//     itself: a request that *does* carry a body (deliberately
+//     form-encoded-shaped, "foo=bar" -- the classic auto-submitting
+//     cross-site HTML form vector, which never sets Content-Type:
+//     application/json) is still rejected. This is the defense-in-depth
+//     row; row 7 (adjusted to also carry a "{}" body under the new
+//     ruling) is the generic version of the same check.
+//   - Row 18 completes the original decode-first requirement: a token
+//     that is the *same* session's secret, correctly shaped, but encoded
+//     with the standard base64 alphabet/padding (StdEncoding) instead of
+//     the RawURLEncoding the header contract requires, must still be
+//     rejected -- proving the compare is anchored to the documented
+//     encoding, not merely "some encoding of the right bytes."
 func TestRequireCSRF_Matrix(t *testing.T) {
 	t.Parallel()
 
@@ -107,29 +145,34 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 		referer     string
 		contentType string
 		token       string
+		body        string
 		wantStatus  int
 	}{
-		{"valid same-origin", "POST", "http://localhost", "", "application/json", validToken, http.StatusOK},
-		{"GET never needs CSRF", "GET", "https://evil.example", "", "", "", http.StatusOK},
-		{"missing origin, valid referer fallback", "POST", "", "http://localhost/app", "application/json", validToken, http.StatusOK},
-		{"missing both origin and referer", "POST", "", "", "application/json", validToken, http.StatusForbidden},
-		{"cross-origin", "POST", "https://evil.example", "", "application/json", validToken, http.StatusForbidden},
-		{"referer wrong origin", "POST", "", "https://evil.example/x", "application/json", validToken, http.StatusForbidden},
-		{"missing content-type", "POST", "http://localhost", "", "", validToken, http.StatusForbidden},
-		{"wrong content-type", "POST", "http://localhost", "", "text/plain", validToken, http.StatusForbidden},
-		{"missing token", "POST", "http://localhost", "", "application/json", "", http.StatusForbidden},
-		{"wrong token", "POST", "http://localhost", "", "application/json", "not-the-real-token", http.StatusForbidden},
-		{"another session's valid-shaped token", "POST", "http://localhost", "", "application/json", csrfTokenFor(otherSess), http.StatusForbidden},
-		{"PATCH also enforced", "PATCH", "https://evil.example", "", "application/json", validToken, http.StatusForbidden},
-		{"DELETE also enforced", "DELETE", "https://evil.example", "", "application/json", validToken, http.StatusForbidden},
-		{"charset suffix content-type allowed", "POST", "http://localhost", "", "application/json; charset=utf-8", validToken, http.StatusOK},
+		{"valid same-origin", "POST", "http://localhost", "", "application/json", validToken, "{}", http.StatusOK},
+		{"GET never needs CSRF", "GET", "https://evil.example", "", "", "", "", http.StatusOK},
+		{"missing origin, valid referer fallback", "POST", "", "http://localhost/app", "application/json", validToken, "{}", http.StatusOK},
+		{"missing both origin and referer", "POST", "", "", "application/json", validToken, "{}", http.StatusForbidden},
+		{"cross-origin", "POST", "https://evil.example", "", "application/json", validToken, "{}", http.StatusForbidden},
+		{"referer wrong origin", "POST", "", "https://evil.example/x", "application/json", validToken, "{}", http.StatusForbidden},
+		{"missing content-type, body present", "POST", "http://localhost", "", "", validToken, "{}", http.StatusForbidden},
+		{"wrong content-type", "POST", "http://localhost", "", "text/plain", validToken, "{}", http.StatusForbidden},
+		{"missing token", "POST", "http://localhost", "", "application/json", "", "{}", http.StatusForbidden},
+		{"wrong token", "POST", "http://localhost", "", "application/json", "not-the-real-token", "{}", http.StatusForbidden},
+		{"another session's valid-shaped token", "POST", "http://localhost", "", "application/json", csrfTokenFor(otherSess), "{}", http.StatusForbidden},
+		{"PATCH also enforced", "PATCH", "https://evil.example", "", "application/json", validToken, "{}", http.StatusForbidden},
+		{"DELETE also enforced", "DELETE", "https://evil.example", "", "application/json", validToken, "{}", http.StatusForbidden},
+		{"charset suffix content-type allowed", "POST", "http://localhost", "", "application/json; charset=utf-8", validToken, "{}", http.StatusOK},
+		{"bodiless DELETE skips content-type check", "DELETE", "http://localhost", "", "", validToken, "", http.StatusOK},
+		{"bodiless POST (logout-shaped) skips content-type check", "POST", "http://localhost", "", "", validToken, "", http.StatusOK},
+		{"body present without content-type still rejected (form-style body)", "POST", "http://localhost", "", "", validToken, "foo=bar", http.StatusForbidden},
+		{"same session's secret, wrong base64 encoding (standard alphabet/padding)", "POST", "http://localhost", "", "application/json", base64.StdEncoding.EncodeToString(sess.CSRFSecret), "{}", http.StatusForbidden},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			req := httptest.NewRequestWithContext(context.Background(), tc.method, "/resume", nil)
+			req := httptest.NewRequestWithContext(context.Background(), tc.method, "/resume", requestBody(tc.body))
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
 			}
