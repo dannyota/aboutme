@@ -23,6 +23,7 @@ import (
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
+	"golang.org/x/oauth2"
 )
 
 // DefaultClientID is the OAuth2 client id a Provider registers itself
@@ -80,6 +81,18 @@ type Claims struct {
 	// key (whose public half is published at /jwks.json). Set a
 	// different key to test a bad-signature rejection.
 	SigningKey *rsa.PrivateKey
+
+	// CodeChallenge is the PKCE (RFC 7636) S256 code_challenge a real
+	// authorization server would have remembered from the /authorize
+	// request that issued this code. Empty (the default, and every
+	// pre-existing test in this package) means PKCE is not enforced for
+	// this code -- /token accepts an exchange with no code_verifier at
+	// all, exactly like a provider a client never sent code_challenge to.
+	// Set it (e.g. to oauth2.S256ChallengeFromVerifier(verifier)) to prove
+	// a client's PKCE send: /token then requires the exchange's
+	// code_verifier to hash (S256) to this exact value, rejecting a
+	// missing or mismatched one with invalid_grant.
+	CodeChallenge string
 }
 
 // Provider is an in-process, OIDC-shaped HTTP server: discovery, JWKS, and
@@ -212,6 +225,29 @@ type tokenResponse struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
+// tokenErrorResponse is the token endpoint's RFC 6749 §5.2 error body:
+// {"error": "..."}.
+type tokenErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// writeTokenError writes a token-endpoint error response as JSON with the
+// given status and RFC 6749 §5.2 error code, so
+// golang.org/x/oauth2's RetrieveError.ErrorCode actually populates from it.
+// A bare http.Error's "text/plain" Content-Type makes oauth2 parse the
+// body as an x-www-form-urlencoded query string instead of JSON (see
+// golang.org/x/oauth2/internal.doTokenRoundTrip's content-type switch),
+// silently losing the error code -- this is what makes a caller's
+// errors.As(err, &oauth2.RetrieveError{}).ErrorCode check meaningful
+// against this mock.
+func (p *Provider) writeTokenError(w http.ResponseWriter, status int, errorCode string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(tokenErrorResponse{Error: errorCode}); err != nil {
+		p.t.Errorf("oidctest: encoding token error response: %v", err)
+	}
+}
+
 // accessTokenExpiresInSeconds is the OAuth2 access token's advertised
 // lifetime, deliberately fixed and independent of the ID token's own "exp"
 // claim: RFC 6749's access-token expires_in and OIDC's id_token exp are
@@ -225,15 +261,28 @@ const accessTokenExpiresInSeconds = 3600
 
 func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "oidctest: parsing token request: "+err.Error(), http.StatusBadRequest)
+		p.writeTokenError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
 
 	code := r.PostFormValue("code")
 	claims, ok := p.takeCode(code)
 	if !ok {
-		http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
+		p.writeTokenError(w, http.StatusBadRequest, "invalid_grant")
 		return
+	}
+
+	// PKCE (RFC 7636): a code registered with a CodeChallenge requires a
+	// matching code_verifier on this exchange -- see Claims.CodeChallenge.
+	// Checked after takeCode (which already consumed the single-use code)
+	// so a PKCE-failed exchange still burns the code, matching a real
+	// authorization server's behavior for any failed exchange attempt.
+	if claims.CodeChallenge != "" {
+		verifier := r.PostFormValue("code_verifier")
+		if verifier == "" || oauth2.S256ChallengeFromVerifier(verifier) != claims.CodeChallenge {
+			p.writeTokenError(w, http.StatusBadRequest, "invalid_grant")
+			return
+		}
 	}
 
 	idToken, err := p.signIDToken(claims)

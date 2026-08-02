@@ -5,6 +5,7 @@ package config
 import (
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -53,6 +54,19 @@ type Config struct {
 	// topology's correct value (e.g. a podman-compose network's subnet)
 	// isn't something this package can know in advance.
 	TrustedProxyCIDRs []netip.Prefix
+	// GoogleClientID is the OAuth2 client id for "Sign in with Google"
+	// (docs/specs/aboutme-design.md §3 OAuth). Required (non-empty) when
+	// Env is "prod" or "staging" — same fail-closed, staging-shares-prod
+	// pattern as TrustedProxyCIDRs, since a production/staging server
+	// cannot genuinely offer Google login without real credentials.
+	// Optional in dev: a developer working on an unrelated feature must
+	// not be forced to obtain real Google OAuth credentials just to start
+	// the server.
+	GoogleClientID string
+	// GoogleClientSecret is the OAuth2 client secret paired with
+	// GoogleClientID. Same required-in-prod/staging, optional-in-dev
+	// semantics.
+	GoogleClientSecret string
 }
 
 const (
@@ -125,14 +139,21 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	googleClientID, googleClientSecret, err := loadGoogleCredentials(getenv("GOOGLE_CLIENT_ID"), getenv("GOOGLE_CLIENT_SECRET"), env)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
-		Port:              port,
-		ListenHost:        listenHost,
-		DatabaseURL:       databaseURL,
-		LogLevel:          logLevel,
-		Env:               env,
-		PublicOrigin:      publicOrigin,
-		TrustedProxyCIDRs: trustedProxyCIDRs,
+		Port:               port,
+		ListenHost:         listenHost,
+		DatabaseURL:        databaseURL,
+		LogLevel:           logLevel,
+		Env:                env,
+		PublicOrigin:       publicOrigin,
+		TrustedProxyCIDRs:  trustedProxyCIDRs,
+		GoogleClientID:     googleClientID,
+		GoogleClientSecret: googleClientSecret,
 	}, nil
 }
 
@@ -186,12 +207,34 @@ func loadEnv(raw string) (string, error) {
 // loadPublicOrigin validates raw as the server's public origin. Required,
 // like Env: there is no safe default (dev/staging/prod each serve from a
 // different origin), so Load fails fast rather than silently guessing.
-// Format validation (scheme, trailing slash, etc.) is left to whichever
-// later phase first depends on it structurally, per YAGNI.
+//
+// Format is also validated (task-4-brief.md's first real consumer:
+// building absolute OAuth redirect/callback URLs by concatenating
+// PublicOrigin with a path): raw must parse as scheme://host[:port] and
+// nothing else — no userinfo, no path (including a bare trailing slash,
+// which parses as Path "/"), no query, no fragment. An unnoticed trailing
+// slash or path here would silently double up or corrupt every absolute
+// URL this server builds from it, so this fails fast at startup rather
+// than surfacing as a broken redirect later.
 func loadPublicOrigin(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", fmt.Errorf("config: PUBLIC_ORIGIN is required")
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("config: PUBLIC_ORIGIN: invalid value %q: %w", raw, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", fmt.Errorf("config: PUBLIC_ORIGIN: invalid value %q: scheme must be http or https", raw)
+	}
+	if u.Host == "" {
+		return "", fmt.Errorf("config: PUBLIC_ORIGIN: invalid value %q: must include a host", raw)
+	}
+	if u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("config: PUBLIC_ORIGIN: invalid value %q: must be scheme://host[:port] only "+
+			"— no userinfo, path, trailing slash, query, or fragment", raw)
 	}
 	return raw, nil
 }
@@ -313,4 +356,42 @@ func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
 		return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS is required when ENV=%s", env)
 	}
 	return cidrs, nil
+}
+
+// requiresProductionOAuthCredentials reports whether env must supply real
+// GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET rather than being allowed to leave
+// them empty. Same prod+staging strictness as
+// requiresProductionTrustBoundary (staging validates the real deployment
+// before it reaches prod), kept as its own named predicate rather than
+// reusing that function directly: the two concerns — client-IP trust
+// boundary vs. OAuth provider credentials — are unrelated and should not
+// be coupled by sharing one function that merely happens to have the same
+// body today.
+func requiresProductionOAuthCredentials(env string) bool {
+	return env == "prod" || env == "staging"
+}
+
+// loadGoogleCredentials validates GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET.
+// Required (both, non-empty) when env requires production OAuth
+// credentials (see requiresProductionOAuthCredentials): a production or
+// staging server cannot genuinely offer "Sign in with Google" without real
+// credentials, so Load fails fast rather than booting and only failing
+// later, per-request, against the real Google endpoint. Optional outside
+// that — both empty is a valid dev configuration (Google login simply
+// won't work until set).
+func loadGoogleCredentials(rawClientID, rawClientSecret, env string) (clientID, clientSecret string, err error) {
+	clientID = strings.TrimSpace(rawClientID)
+	clientSecret = strings.TrimSpace(rawClientSecret)
+
+	if requiresProductionOAuthCredentials(env) {
+		if clientID == "" {
+			return "", "", fmt.Errorf("config: GOOGLE_CLIENT_ID is required when ENV=%s: "+
+				"production and staging cannot offer Google login without real credentials", env)
+		}
+		if clientSecret == "" {
+			return "", "", fmt.Errorf("config: GOOGLE_CLIENT_SECRET is required when ENV=%s: "+
+				"production and staging cannot offer Google login without real credentials", env)
+		}
+	}
+	return clientID, clientSecret, nil
 }

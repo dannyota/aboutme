@@ -24,6 +24,68 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
 }
 
+// TestRouter_RegisterExtraRoutes_GetsStandardMiddlewareChain proves New's
+// variadic register extension point (design decision 7): a caller-supplied
+// func(*http.ServeMux) can attach routes New itself knows nothing about
+// (internal/auth's Google/LinkedIn/GitHub start/callback handlers, wired
+// from cmd/server/main.go — internal/auth imports internal/api, so the
+// reverse import would cycle, hence this inversion). The registered route
+// must actually respond AND go through the same middleware chain as
+// /healthz and /readyz: X-Request-Id is set on the response only if
+// RequestID wrapped it, so asserting that header here is what proves the
+// extra route isn't served by some bypass path that skips the standard
+// chain.
+func TestRouter_RegisterExtraRoutes_GetsStandardMiddlewareChain(t *testing.T) {
+	t.Parallel()
+
+	register := func(mux *http.ServeMux) {
+		mux.Handle("/probe", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusTeapot)
+		}))
+	}
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, register)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/probe", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d (the registered handler)", rec.Code, http.StatusTeapot)
+	}
+	if rec.Header().Get(api.RequestIDHeader) == "" {
+		t.Error("response missing X-Request-Id header — the registered route must go through the standard middleware chain")
+	}
+}
+
+// TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply proves every
+// register func New receives is actually applied, not just the first —
+// main.go may eventually pass more than one provider/service's
+// RegisterRoutes.
+func TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply(t *testing.T) {
+	t.Parallel()
+
+	first := func(mux *http.ServeMux) {
+		mux.Handle("/probe-a", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+	}
+	second := func(mux *http.ServeMux) {
+		mux.Handle("/probe-b", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusAccepted)
+		}))
+	}
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, first, second)
+
+	for path, want := range map[string]int{"/probe-a": http.StatusOK, "/probe-b": http.StatusAccepted} {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Errorf("%s status = %d, want %d", path, rec.Code, want)
+		}
+	}
+}
+
 func TestRouter_Healthz_ReturnsOK(t *testing.T) {
 	t.Parallel()
 

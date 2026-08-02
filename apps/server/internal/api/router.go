@@ -97,7 +97,16 @@ func (o Options) withDefaults() Options {
 // syntax (e.g. "GET /healthz") specifically so 404 and 405 responses can be
 // generated ourselves via WriteError instead of ServeMux's plain-text
 // defaults.
-func New(logger *slog.Logger, pinger DBPinger, opts Options) http.Handler {
+//
+// register lets callers (the composition root in cmd/server/main.go)
+// attach additional routes without this package importing the packages
+// that define them — internal/auth imports internal/api (for its error
+// envelope and TrustedProxies), so the reverse import would cycle. Each
+// func receives the same mux built below, before the middleware chain is
+// wrapped around it, so every extra route gets the same RequestID/
+// SecurityHeaders/Logging/RateLimit/BodyLimit treatment as /healthz and
+// /readyz's siblings (design decision 7).
+func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*http.ServeMux)) http.Handler {
 	opts = opts.withDefaults()
 
 	// Readyz never sees the raw pinger directly: cachedPinger memoizes it
@@ -111,8 +120,14 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", route(http.MethodGet, Healthz()))
 	mux.Handle("/readyz", route(http.MethodGet, Readyz(readyPinger, opts.ReadyTimeout)))
+	for _, r := range register {
+		r(mux)
+	}
 	// "/" is a subtree pattern: it matches every path not claimed by a more
 	// specific registration above, making it the catch-all 404 handler.
+	// net/http's ServeMux dispatches by pattern specificity, not
+	// registration order, so registering this after the register funcs
+	// above does not let it shadow anything they added.
 	mux.Handle("/", NotFound())
 
 	// Health probes (see isHealthPath) get their own chain, deliberately

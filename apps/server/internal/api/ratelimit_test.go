@@ -665,6 +665,54 @@ func TestIPKeyFunc_TrustedPeerMissingHeader_Fails(t *testing.T) {
 	}
 }
 
+// TestClientIP_UntrustedPeer_UsesRemoteAddr proves ClientIP resolves an
+// untrusted request's raw socket peer address, bare (no port) — the shape
+// internal/auth's SessionManager.Issue requires (it hard-fails on a
+// "host:port" string).
+func TestClientIP_UntrustedPeer_UsesRemoteAddr(t *testing.T) {
+	t.Parallel()
+
+	got, ok := api.ClientIP(rateLimitedReq("203.0.113.7:54321", ""), nil)
+	if !ok {
+		t.Fatal("ClientIP ok = false, want true for an untrusted request with a valid RemoteAddr")
+	}
+	if got != "203.0.113.7" {
+		t.Errorf("ClientIP = %q, want %q (bare address, no port)", got, "203.0.113.7")
+	}
+}
+
+// TestClientIP_TrustedProxy_UsesCanonicalHeader proves ClientIP takes the
+// viewer address from TrustedClientIPHeader — never the trusted proxy's
+// own RemoteAddr — matching resolveClientIP/IPKeyFunc's own trust
+// decision exactly (this wrapper must not invent a different one).
+func TestClientIP_TrustedProxy_UsesCanonicalHeader(t *testing.T) {
+	t.Parallel()
+
+	req := rateLimitedReq("127.0.0.1:9000", "198.51.100.42")
+	got, ok := api.ClientIP(req, api.LoopbackTrustedProxies())
+	if !ok {
+		t.Fatal("ClientIP ok = false, want true for a trusted peer with a canonical header")
+	}
+	if got != "198.51.100.42" {
+		t.Errorf("ClientIP = %q, want %q (the canonical header value, not the proxy's own RemoteAddr)", got, "198.51.100.42")
+	}
+}
+
+// TestClientIP_TrustedProxyMissingHeader_FailsClosed proves ClientIP fails
+// closed (ok=false) rather than falling back to the trusted proxy's own
+// RemoteAddr when the canonical header is absent — the same fail-closed
+// contract resolveClientIP documents (security review finding #1): a
+// caller like session issuance must not silently record the proxy's own
+// address as if it were the viewer's.
+func TestClientIP_TrustedProxyMissingHeader_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	_, ok := api.ClientIP(rateLimitedReq("127.0.0.1:9000", ""), api.LoopbackTrustedProxies())
+	if ok {
+		t.Error("ClientIP ok = true for a trusted peer with no canonical header, want false (fail closed)")
+	}
+}
+
 // TestAccountKeyFunc_DistinctAccountsGetDistinctKeys proves AccountKeyFunc
 // reads the account ID a later phase's auth middleware would stash in
 // context via WithAccountID.

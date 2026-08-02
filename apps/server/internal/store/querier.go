@@ -30,6 +30,13 @@ type Querier interface {
 	// transaction just like any other outcome, so it can never be retried
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
+	// internal/auth's login-resolution algorithm calls
+	// GetIdentityByProviderSubject first specifically to avoid racing
+	// identities_provider_subject_key's UNIQUE (provider, provider_user_id) in
+	// the common case; Task 10's link algorithm handles the
+	// already-claimed-by-another-user case explicitly instead of relying on
+	// this insert to fail.
+	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
 	// Always inserts a brand-new row -- used both by Issue (fixation defense: a
 	// login never reuses an existing session row) and by the >24h rotation
