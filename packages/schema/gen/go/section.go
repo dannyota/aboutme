@@ -49,8 +49,23 @@ import (
 // boundary, since Go's type system can't reject it at compile time.
 type Section struct {
 	SectionType SectionType
-	DisplayName string
-	IconKey     string
+	// DisplayName and IconKey are *string, not string: resume.schema.json's
+	// `section` $def makes both genuinely optional (only sectionType and
+	// entries are required — see this file's header and the schema's own
+	// $defs.section description), and displayName may ALSO be explicitly ""
+	// (cleared while retyping a section title) — a state distinct from
+	// "never set". A plain string could not tell "absent" apart from "set to
+	// the empty string" (the same "never fabricate a sentinel" rule that
+	// governs every other draft-permissive field in this schema), and iconKey
+	// specifically has no explicit-empty-string allowance in the schema at
+	// all (its pattern requires at least one character when present) — so an
+	// absent iconKey re-marshaled as "" would fail the schema's own iconKey
+	// pattern on the very next validation pass. nil means the key is absent
+	// from the wire form entirely (MarshalJSON below uses `omitempty`);
+	// non-nil (including a pointer to "") means the key is present with that
+	// value.
+	DisplayName *string
+	IconKey     *string
 
 	ProfileEntries     []ProfileEntry
 	WorkEntries        []WorkEntry
@@ -66,56 +81,56 @@ func NewProfileSection(displayName, iconKey string, entries []ProfileEntry) Sect
 	if entries == nil {
 		entries = []ProfileEntry{}
 	}
-	return Section{SectionType: Profile, DisplayName: displayName, IconKey: iconKey, ProfileEntries: entries}
+	return Section{SectionType: Profile, DisplayName: &displayName, IconKey: &iconKey, ProfileEntries: entries}
 }
 
 func NewWorkSection(displayName, iconKey string, entries []WorkEntry) Section {
 	if entries == nil {
 		entries = []WorkEntry{}
 	}
-	return Section{SectionType: Work, DisplayName: displayName, IconKey: iconKey, WorkEntries: entries}
+	return Section{SectionType: Work, DisplayName: &displayName, IconKey: &iconKey, WorkEntries: entries}
 }
 
 func NewEducationSection(displayName, iconKey string, entries []EducationEntry) Section {
 	if entries == nil {
 		entries = []EducationEntry{}
 	}
-	return Section{SectionType: Education, DisplayName: displayName, IconKey: iconKey, EducationEntries: entries}
+	return Section{SectionType: Education, DisplayName: &displayName, IconKey: &iconKey, EducationEntries: entries}
 }
 
 func NewSkillSection(displayName, iconKey string, entries []SkillEntry) Section {
 	if entries == nil {
 		entries = []SkillEntry{}
 	}
-	return Section{SectionType: Skill, DisplayName: displayName, IconKey: iconKey, SkillEntries: entries}
+	return Section{SectionType: Skill, DisplayName: &displayName, IconKey: &iconKey, SkillEntries: entries}
 }
 
 func NewLanguageSection(displayName, iconKey string, entries []LanguageEntry) Section {
 	if entries == nil {
 		entries = []LanguageEntry{}
 	}
-	return Section{SectionType: Language, DisplayName: displayName, IconKey: iconKey, LanguageEntries: entries}
+	return Section{SectionType: Language, DisplayName: &displayName, IconKey: &iconKey, LanguageEntries: entries}
 }
 
 func NewCertificateSection(displayName, iconKey string, entries []CertificateEntry) Section {
 	if entries == nil {
 		entries = []CertificateEntry{}
 	}
-	return Section{SectionType: Certificate, DisplayName: displayName, IconKey: iconKey, CertificateEntries: entries}
+	return Section{SectionType: Certificate, DisplayName: &displayName, IconKey: &iconKey, CertificateEntries: entries}
 }
 
 func NewProjectSection(displayName, iconKey string, entries []ProjectEntry) Section {
 	if entries == nil {
 		entries = []ProjectEntry{}
 	}
-	return Section{SectionType: Project, DisplayName: displayName, IconKey: iconKey, ProjectEntries: entries}
+	return Section{SectionType: Project, DisplayName: &displayName, IconKey: &iconKey, ProjectEntries: entries}
 }
 
 func NewCustomSection(displayName, iconKey string, entries []CustomEntry) Section {
 	if entries == nil {
 		entries = []CustomEntry{}
 	}
-	return Section{SectionType: SectionTypeCustom, DisplayName: displayName, IconKey: iconKey, CustomEntries: entries}
+	return Section{SectionType: SectionTypeCustom, DisplayName: &displayName, IconKey: &iconKey, CustomEntries: entries}
 }
 
 // Validate reports whether exactly one of Section's entries slices is
@@ -156,9 +171,13 @@ func (s Section) Validate() error {
 // sectionWire is only the wire format at the Marshal/Unmarshal boundary.
 type sectionWire struct {
 	SectionType SectionType `json:"sectionType"`
-	DisplayName string      `json:"displayName"`
-	IconKey     string      `json:"iconKey"`
-	Entries     any         `json:"entries"`
+	// omitempty on a *string omits the key only when the pointer itself is
+	// nil -- a non-nil pointer to "" still gets written out. That is exactly
+	// "absent stays absent, explicitly-cleared stays present-and-empty" (see
+	// Section.DisplayName/IconKey's comment above).
+	DisplayName *string `json:"displayName,omitempty"`
+	IconKey     *string `json:"iconKey,omitempty"`
+	Entries     any     `json:"entries"`
 }
 
 func (s Section) MarshalJSON() ([]byte, error) {
@@ -201,8 +220,8 @@ func (s Section) MarshalJSON() ([]byte, error) {
 func (s *Section) UnmarshalJSON(data []byte) error {
 	var wire struct {
 		SectionType SectionType     `json:"sectionType"`
-		DisplayName string          `json:"displayName"`
-		IconKey     string          `json:"iconKey"`
+		DisplayName *string         `json:"displayName,omitempty"`
+		IconKey     *string         `json:"iconKey,omitempty"`
 		Entries     json.RawMessage `json:"entries"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
