@@ -292,13 +292,18 @@ func TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser(t *te
 // I6: 401 session_required on ?purpose=link|reauth with no session at all
 // ============================================================================
 
-// TestStart_PurposeLinkOrReauth_NoSession_RejectsSessionRequired is fix
-// round 1's I6: the most basic rejection startPurposeAndLinkingUser
-// produces -- no __Host-session cookie at all -- had no dedicated test.
-// Every request here is otherwise same-site (a matching Origin header),
-// so a rejection can only be attributed to the missing session, never
-// DD-C16's same-site gate running first and masking it.
-func TestStart_PurposeLinkOrReauth_NoSession_RejectsSessionRequired(t *testing.T) {
+// TestStart_PurposeLinkOrReauth_NoSession_RedirectsToLoginNoErrorCode is
+// fix round 1's I6, reshaped by fix round 2's DD-C17: the most basic
+// rejection startPurposeAndLinkingUser produces -- no __Host-session
+// cookie at all -- had no dedicated test, and (before DD-C17) returned a
+// raw JSON 401 on what is a top-level browser navigation. DD-C17 requires
+// a 302 to PublicOrigin + "/login" instead, with NO ?error= query param at
+// all -- arriving at the login page IS the message; a distinct code would
+// announce that a link/reauth attempt was in flight. Every request here is
+// otherwise same-site (a matching Origin header), so a rejection can only
+// be attributed to the missing session, never DD-C16's same-site gate
+// running first and masking it.
+func TestStart_PurposeLinkOrReauth_NoSession_RedirectsToLoginNoErrorCode(t *testing.T) {
 	t.Parallel()
 
 	for _, purpose := range []auth.Purpose{auth.PurposeLink, auth.PurposeReauth} {
@@ -312,14 +317,20 @@ func TestStart_PurposeLinkOrReauth_NoSession_RejectsSessionRequired(t *testing.T
 				"Origin": testPublicOrigin,
 			}) // deliberately no cookies at all.
 
-			if resp.StatusCode != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want %d (no session cookie at all)", resp.StatusCode, http.StatusUnauthorized)
+			if resp.StatusCode != http.StatusFound {
+				t.Fatalf("status = %d, want %d (DD-C17: a redirect, not a raw JSON 401 -- /start is a top-level browser navigation)", resp.StatusCode, http.StatusFound)
 			}
-			if got := decodeErrorCode(t, resp); got != "session_required" {
-				t.Errorf("error.code = %q, want %q", got, "session_required")
+			wantLocation := testPublicOrigin + "/login"
+			if got := resp.Header.Get("Location"); got != wantLocation {
+				t.Errorf("Location = %q, want %q (DD-C17: no ?error= code -- arriving at the login page IS the message)", got, wantLocation)
+			}
+			if extractCookie(resp, auth.SessionCookieName) == nil {
+				t.Error("response did not clear the __Host-session cookie on a missing/invalid-session rejection, want it cleared (same hygiene as the JSON-API rejectSession)")
+			} else if sc := extractCookie(resp, auth.SessionCookieName); sc.MaxAge >= 0 || sc.Value != "" {
+				t.Errorf("__Host-session cookie = %+v, want cleared (empty value, negative Max-Age)", sc)
 			}
 			if tx := extractCookie(resp, auth.OAuthTxCookieName); tx != nil && tx.MaxAge >= 0 {
-				t.Error("a LIVE __Host-oauth-tx cookie was set despite the missing-session rejection, want none")
+				t.Error("a LIVE __Host-oauth-tx cookie was set despite the missing-session rejection, want none -- no transaction row may exist before this gate passes")
 			}
 		})
 	}

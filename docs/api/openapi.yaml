@@ -67,8 +67,11 @@ tags:
       bodies illustrate — but accept a `purpose=link` or `purpose=reauth`
       query parameter (Task 10, design decision 5) that DOES require a
       valid `sessionCookie` on `/start` (see each `/start` operation's own
-      `purpose` parameter and `401`/`403` responses); `.../callback` itself
-      is always reachable anonymously (an OAuth provider redirect carries
+      `purpose` parameter and `302`/`403` responses — DD-C17, fix round 2:
+      a missing/stale session redirects rather than returning a JSON
+      `401`/`403`, since `/start` is itself a top-level browser
+      navigation); `.../callback` itself is always reachable anonymously
+      (an OAuth provider redirect carries
       no cookie-forwarding guarantee of its own), and instead re-derives
       the caller's session from the request's own `__Host-session` cookie
       only when the transaction it is completing was itself begun for
@@ -193,14 +196,21 @@ paths:
 
   # ---- OAuth login (Google/GitHub/LinkedIn) -------------------------------
   # /start begins a transaction and redirects to the provider; /callback
-  # completes it. Both are top-level browser navigations (302), never a
-  # JSON response — see each operation's own description for the shared
-  # DD-C3/DD-C4/DD-C7 contract (closed ?error= vocabulary, always redirect,
-  # rejections go to /login?error=<code>, success goes to /) and DD-C15 for
-  # how a purpose=link/reauth transaction (Task 10, the `purpose` query
+  # completes it. Both are top-level browser navigations -- see each
+  # operation's own description for the shared DD-C3/DD-C4/DD-C7 contract
+  # (closed ?error= vocabulary, always redirect, rejections go to
+  # /login?error=<code>, success goes to /) and DD-C15 for how a
+  # purpose=link/reauth transaction (Task 10, the `purpose` query
   # parameter on every /start below) redirects to
   # /app/settings/sessions?error=<code> instead, on success and rejection
-  # alike.
+  # alike. DD-C17 (fix round 2) extends the same "redirect, not raw JSON"
+  # reasoning to /start's OWN rejections (stale reauth, missing session)
+  # with exactly one deliberate exception -- the DD-C16 same-site check
+  # stays a flat 403 JSON body, never a redirect, because redirecting a
+  # cross-site-forced request would hand an attacker's page a same-origin
+  # navigation primitive rather than protect against one. See each
+  # /start operation's own 302/403 responses and the `purpose` parameter's
+  # own description for the exact shapes.
   /auth/google/start:
     get:
       operationId: getAuthGoogleStart
@@ -235,47 +245,62 @@ paths:
         - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
-          description: Redirects to Google's own authorize endpoint.
+          description: >-
+            Always a redirect, but to one of three different targets
+            (DD-C17, fix round 2 — `/start` is a top-level browser
+            navigation, so its own rejections follow the same
+            "redirect, not raw JSON" reasoning as `/callback`, except
+            where a redirect itself would be unsafe — see the `403`
+            response below for that one exception):
+
+
+            - **Success**: to Google's own authorize endpoint.
+
+            - `purpose=link`/`reauth`, no valid `__Host-session` cookie:
+              to `PublicOrigin + "/login"` — no `?error=` code at all;
+              arriving at the login page IS the message (see the `purpose`
+              parameter's own description for why no code is attached
+              here).
+
+            - `purpose=link` only, the session's last full OAuth login is
+              more than 15 minutes old, checked BEFORE any transaction row
+              is created: to
+              `PublicOrigin + "/app/settings/sessions?error=reauth_required"`
+              — the settings page that initiated this flow already renders
+              this exact code and prompts for step-up.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
-              example: https://accounts.google.com/o/oauth2/v2/auth?...
-        "401":
-          description: "`purpose=link`/`reauth` only: missing or invalid
-            `__Host-session` cookie."
+              examples:
+                provider_authorize:
+                  summary: Success
+                  value: https://accounts.google.com/o/oauth2/v2/auth?...
+                session_required:
+                  summary: "purpose=link/reauth, no valid session"
+                  value: https://aboutme.vn/login
+                reauth_required:
+                  summary: "purpose=link, stale reauth window"
+                  value: https://aboutme.vn/app/settings/sessions?error=reauth_required
+        "403":
+          description: "`purpose=link`/`reauth` only: the request was not
+            same-site initiated (DD-C16). Deliberately NOT a redirect
+            (DD-C17, fix round 2) — see the `purpose` parameter's own
+            description for the full reasoning: a legitimate same-origin
+            navigation always carries `Sec-Fetch-Site` or a same-origin
+            `Referer`, so no genuine visitor reaches this branch; only a
+            cross-site request an attacker's own page is driving does, and
+            redirecting it would hand that page a same-origin navigation
+            primitive."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
               example:
                 error:
-                  code: session_required
-                  message: a valid session is required
-        "403":
-          description: "`purpose=link`/`reauth` only: the request was not
-            same-site initiated (DD-C16 — `csrf_rejected`, checked before
-            the session cookie is even read), OR (`purpose=link` only) the
-            session's last full OAuth login is more than 15 minutes old,
-            checked BEFORE any transaction row is created
-            (`reauth_required`) — two distinct codes under the same
-            status; the same-site check always runs first."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                csrf_rejected:
-                  value:
-                    error:
-                      code: csrf_rejected
-                      message: CSRF validation failed
-                reauth_required:
-                  value:
-                    error:
-                      code: reauth_required
-                      message: recent reauthentication is required
+                  code: csrf_rejected
+                  message: CSRF validation failed
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -388,47 +413,48 @@ paths:
         - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
-          description: Redirects to GitHub's own authorize endpoint.
+          description: >-
+            Always a redirect, but to one of three different targets —
+            see `GET /auth/google/start`'s own `302` response description
+            for the full DD-C17 reasoning shared by every provider's
+            `/start`.
+
+
+            - **Success**: to GitHub's own authorize endpoint.
+
+            - `purpose=link`/`reauth`, no valid `__Host-session` cookie:
+              to `PublicOrigin + "/login"`, no `?error=` code.
+
+            - `purpose=link` only, stale reauth window: to
+              `PublicOrigin + "/app/settings/sessions?error=reauth_required"`.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
-              example: https://github.com/login/oauth/authorize?...
-        "401":
-          description: "`purpose=link`/`reauth` only: missing or invalid
-            `__Host-session` cookie."
+              examples:
+                provider_authorize:
+                  summary: Success
+                  value: https://github.com/login/oauth/authorize?...
+                session_required:
+                  summary: "purpose=link/reauth, no valid session"
+                  value: https://aboutme.vn/login
+                reauth_required:
+                  summary: "purpose=link, stale reauth window"
+                  value: https://aboutme.vn/app/settings/sessions?error=reauth_required
+        "403":
+          description: "`purpose=link`/`reauth` only: the request was not
+            same-site initiated (DD-C16). Deliberately NOT a redirect
+            (DD-C17) — see `GET /auth/google/start`'s own `403` response
+            description for the full reasoning."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
               example:
                 error:
-                  code: session_required
-                  message: a valid session is required
-        "403":
-          description: "`purpose=link`/`reauth` only: the request was not
-            same-site initiated (DD-C16 — `csrf_rejected`, checked before
-            the session cookie is even read), OR (`purpose=link` only) the
-            session's last full OAuth login is more than 15 minutes old,
-            checked BEFORE any transaction row is created
-            (`reauth_required`) — two distinct codes under the same
-            status; the same-site check always runs first."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                csrf_rejected:
-                  value:
-                    error:
-                      code: csrf_rejected
-                      message: CSRF validation failed
-                reauth_required:
-                  value:
-                    error:
-                      code: reauth_required
-                      message: recent reauthentication is required
+                  code: csrf_rejected
+                  message: CSRF validation failed
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -506,47 +532,48 @@ paths:
         - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
-          description: Redirects to LinkedIn's own authorize endpoint.
+          description: >-
+            Always a redirect, but to one of three different targets —
+            see `GET /auth/google/start`'s own `302` response description
+            for the full DD-C17 reasoning shared by every provider's
+            `/start`.
+
+
+            - **Success**: to LinkedIn's own authorize endpoint.
+
+            - `purpose=link`/`reauth`, no valid `__Host-session` cookie:
+              to `PublicOrigin + "/login"`, no `?error=` code.
+
+            - `purpose=link` only, stale reauth window: to
+              `PublicOrigin + "/app/settings/sessions?error=reauth_required"`.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
-              example: https://www.linkedin.com/oauth/v2/authorization?...
-        "401":
-          description: "`purpose=link`/`reauth` only: missing or invalid
-            `__Host-session` cookie."
+              examples:
+                provider_authorize:
+                  summary: Success
+                  value: https://www.linkedin.com/oauth/v2/authorization?...
+                session_required:
+                  summary: "purpose=link/reauth, no valid session"
+                  value: https://aboutme.vn/login
+                reauth_required:
+                  summary: "purpose=link, stale reauth window"
+                  value: https://aboutme.vn/app/settings/sessions?error=reauth_required
+        "403":
+          description: "`purpose=link`/`reauth` only: the request was not
+            same-site initiated (DD-C16). Deliberately NOT a redirect
+            (DD-C17) — see `GET /auth/google/start`'s own `403` response
+            description for the full reasoning."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
               example:
                 error:
-                  code: session_required
-                  message: a valid session is required
-        "403":
-          description: "`purpose=link`/`reauth` only: the request was not
-            same-site initiated (DD-C16 — `csrf_rejected`, checked before
-            the session cookie is even read), OR (`purpose=link` only) the
-            session's last full OAuth login is more than 15 minutes old,
-            checked BEFORE any transaction row is created
-            (`reauth_required`) — two distinct codes under the same
-            status; the same-site check always runs first."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                csrf_rejected:
-                  value:
-                    error:
-                      code: csrf_rejected
-                      message: CSRF validation failed
-                reauth_required:
-                  value:
-                    error:
-                      code: reauth_required
-                      message: recent reauthentication is required
+                  code: csrf_rejected
+                  message: CSRF validation failed
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -1035,14 +1062,20 @@ components:
       type: string
       description: >-
         The closed vocabulary of `?error=` codes a `GET
-        /auth/{provider}/callback` rejection redirect can carry (DD-C3) —
-        no other value is ever produced; a client should treat an
-        unrecognized value the same as `auth_failed`. A `purpose=login`
-        rejection redirects to `/login?error=<code>`; a `purpose=link` or
-        `purpose=reauth` rejection redirects to
+        /auth/{provider}/callback` rejection redirect — and, as of DD-C17
+        (fix round 2), a `purpose=link` `GET /auth/{provider}/start`
+        rejection redirect — can carry (DD-C3): no other value is ever
+        produced; a client should treat an unrecognized value the same as
+        `auth_failed`. A `purpose=login` `/callback` rejection redirects to
+        `/login?error=<code>`; a `purpose=link` or `purpose=reauth`
+        `/callback` rejection redirects to
         `/app/settings/sessions?error=<code>` instead (DD-C15) — the
         settings page that initiated it, since that caller was already
-        authenticated.
+        authenticated. `/start` itself produces only ONE of these codes,
+        `reauth_required` (see below) — its other two rejection classes
+        (DD-C17) are a bare `/login` redirect with no code at all, and an
+        unchanged `403 csrf_rejected` JSON body, neither of which uses
+        this vocabulary.
 
 
         - `auth_failed`: the generic code for every rejection not
@@ -1081,12 +1114,26 @@ components:
           user. Kept distinct from `auth_failed` — unlike most rejections
           here — because the actor is authenticated and the condition is
           one they can act on.
+
+        - `reauth_required`: DD-C17 (fix round 2) — the ONLY code `GET
+          /auth/{provider}/start` itself ever produces (never `/callback`).
+          `purpose=link` only: the caller's session is valid, but its last
+          full OAuth login is more than 15 minutes old, checked BEFORE any
+          transaction row is created. Redirects to
+          `/app/settings/sessions?error=reauth_required` — the settings
+          page already renders this exact code and prompts for step-up.
+          The same wire value the session-management JSON API's own
+          `RequireRecentReauth` rejections use (`DELETE /sessions`,
+          `DELETE /sessions/{id}`), reused rather than reinvented so a
+          shared frontend prompt can key off one literal regardless of
+          which surface produced it.
       enum:
         - auth_failed
         - email_not_verified
         - cancelled
         - email_already_registered
         - identity_already_linked
+        - reauth_required
   parameters:
     AuthPurpose:
       name: purpose
@@ -1096,13 +1143,12 @@ components:
         Why this OAuth transaction is being started (Task 10, design
         decision 5). `link`/`reauth` additionally require (1) a
         SAME-SITE-INITIATED request (DD-C16, fix round 1) and (2) a valid
-        `sessionCookie` on `/start` (see the operation's own `401`/`403`
-        responses) — `/start`'s own default security scheme (none) applies
-        only to the default `login`. Any value other than the two literal
-        purposes below — including an absent parameter — is treated as
-        `login`: an unrecognized value is never a distinct error, the same
-        no-invented-oracle reasoning `OAuthCallbackErrorCode` documents for
-        `/callback`.
+        `sessionCookie` on `/start` — `/start`'s own default security
+        scheme (none) applies only to the default `login`. Any value other
+        than the two literal purposes below — including an absent
+        parameter — is treated as `login`: an unrecognized value is never a
+        distinct error, the same no-invented-oracle reasoning
+        `OAuthCallbackErrorCode` documents for `/callback`.
 
 
         - `login` (default): an ordinary, unauthenticated sign-in/
@@ -1114,8 +1160,9 @@ components:
           already-authenticated account. The request itself must be
           same-site (see below); once that passes, a session whose last
           full OAuth login (`reauthenticated_at`) is within the last 15
-          minutes is also required — `403 reauth_required` otherwise,
-          checked BEFORE any transaction row is created.
+          minutes is also required, checked BEFORE any transaction row is
+          created — a `302` redirect otherwise (DD-C17, see below), never
+          a raw JSON error.
 
         - `reauth`: refresh the CALLER's own session's
           `reauthenticated_at` via a fresh round trip against an
@@ -1136,7 +1183,36 @@ components:
         the request's `Origin` (or, failing that, `Referer`) must match
         this API's own origin exactly, the identical fail-closed check
         `csrfToken`-protected mutations already use. Neither signal present
-        fails closed. See the operation's own `403` response.
+        fails closed.
+
+
+        **Rejection shapes (DD-C17, fix round 2 — `/start` is a top-level
+        browser navigation exactly like `/callback`, so its own rejections
+        follow the identical "redirect, not raw JSON" reasoning EXCEPT
+        where redirecting would itself be unsafe):**
+
+
+        - Stale reauth window (`link` only): `302` to
+          `PublicOrigin + "/app/settings/sessions?error=reauth_required"` —
+          the settings page already renders this code and prompts for
+          step-up.
+
+        - No valid session (`link`/`reauth`): `302` to
+          `PublicOrigin + "/login"`, with NO `?error=` code — arriving at
+          the login page IS the message; a distinct code would announce
+          that a link/reauth attempt was in flight.
+
+        - Not same-site initiated (`link`/`reauth`, DD-C16): stays a flat
+          `403 csrf_rejected` JSON body, deliberately NOT a redirect — a
+          legitimate same-origin navigation always carries `Sec-Fetch-Site`
+          or a same-origin `Referer` (see above), so no genuine visitor
+          ever reaches this branch; only a cross-site request an attacker's
+          own page is driving does. Redirecting it would hand that
+          attacker's page a same-origin navigation primitive and dress an
+          attack up as an ordinary UX event — the one rejection this
+          operation deliberately does NOT reshape into a friendlier page.
+
+        See the operation's own `302`/`403` responses for the exact shapes.
       schema:
         type: string
         enum: [login, link, reauth]
