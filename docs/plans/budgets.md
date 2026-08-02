@@ -18,6 +18,23 @@ fails the gate; changing a number requires a reviewed commit citing evidence.
 | SSE heartbeat interval                   | 25 s (< CloudFront idle timeout)     | P6A, P9A       |
 | Request body                             | ≤ 256 KB                             | P0B middleware |
 | Resume document total                    | ≤ 512 KB                             | P2A store      |
+| Resume title length                      | ≤ 160 characters                     | P2A DB + store |
+| `lng` tag length                         | ≤ 35 characters                      | P2A DB         |
+| Idempotency record TTL                   | 24 h                                 | P2A store      |
+
+**Provenance of the P2A rows.** The 512 KB document total is spec §3. The other
+three are ratified plan decisions, not spec numbers, landed here 2026-08-02 so
+the DDL and the store constant cite one authority instead of forking it: **title
+≤ 160** matches the schema's `maxLength` class for the same kind of short
+display string (`fullName`, `headline`, `jobTitle`) and is enforced twice —
+`resumes_title_length_check` in the database and the store's validation
+pipeline; **`lng` ≤ 35** is the BCP 47 tag ceiling, a length bound only (the tag
+itself is unvalidated — the documented i18n boundary); **idempotency TTL 24 h**
+bounds how long a replayed key returns its stored response, and P2A enforces it
+opportunistically (each `Execute` reaps the calling user's expired rows in the
+same transaction) because `response_body` holds user content and a TTL nothing
+enforces is not a TTL. Changing any of them follows this file's rule: a reviewed
+commit citing evidence.
 
 ## Benchmark protocol (mandatory — a number without this is not a gate)
 
