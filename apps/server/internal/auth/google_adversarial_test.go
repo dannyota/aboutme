@@ -41,9 +41,10 @@
 //
 // Does NOT cover: the happy path (new-user create, existing-identity
 // login -- google_test.go's job), email-collision rejection (Task 10's
-// job; resolveGoogleUser is still Task 4's documented stub), router-level
-// concerns (router_test.go's job), or GitHub/LinkedIn (Task 5/6's own
-// copies of this same table against their own provider mechanics).
+// resolveLoginIdentity, handlers.go, and its own independent rejection
+// matrix), router-level concerns (router_test.go's job), or GitHub/
+// LinkedIn (Task 5/6's own copies of this same table against their own
+// provider mechanics).
 package auth_test
 
 import (

@@ -2,11 +2,8 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -129,28 +126,49 @@ func GoogleProviderCacheTryLockForTest(svc *Service) (unlock func(), ok bool) {
 	return svc.google.cache.mu.Unlock, true
 }
 
-// ResolveLinkedInUserForTest exposes resolveLinkedInUser (linkedin.go) to
-// package auth_test. It exists specifically so a test can exercise DD-C12's
-// defense-in-depth linkingUserID==uuid.Nil branch directly: the
-// oauth_transactions table's own CHECK constraint
-// (oauth_transactions_link_needs_user) already makes that state
-// impossible to reach through a real Begin-backed Transaction, so the
-// only way to prove the Go-level check exists and works is to call this
-// function directly with a hand-built purpose/linkingUserID pair, rather
-// than through the full /start-/callback HTTP round trip every other
-// test in this package drives.
-func ResolveLinkedInUserForTest(ctx context.Context, svc *Service, purpose Purpose, linkingUserID uuid.UUID, providerUserID, email string, emailVerified *bool, name string) (store.User, error) {
-	return svc.resolveLinkedInUser(ctx, purpose, linkingUserID, providerUserID, email, emailVerified, name)
+// ResolveLoginIdentityForTest exposes resolveLoginIdentity (handlers.go,
+// Task 10) to package auth_test, so a test can exercise the shared
+// login-resolution algorithm directly, once per provider, without driving
+// three separate providers' worth of OIDC/REST mechanics through the full
+// HTTP surface -- see handlers_test.go's
+// TestResolveLoginIdentity_NewThenExisting_AcrossProviders (task-10-brief.md
+// Step 1: "exercised once per provider to confirm wiring, not re-proving
+// provider mechanics").
+func ResolveLoginIdentityForTest(ctx context.Context, svc *Service, provider Provider, providerUserID, email, name string) (LoginResultForTest, error) {
+	result, err := svc.resolveLoginIdentity(ctx, provider, providerUserID, email, name)
+	return LoginResultForTest{Kind: int(result.Kind), User: result.User}, err
 }
 
-// IsLinkedInLinkRejectedForTest reports whether err is
-// errLinkedInLinkRejected (linkedin.go) -- DD-C12's interim link/reauth
-// safety-net sentinel -- so a test using ResolveLinkedInUserForTest can
-// assert a rejection happened for EXACTLY this reason, not some unrelated
-// database error.
-func IsLinkedInLinkRejectedForTest(err error) bool {
-	return errors.Is(err, errLinkedInLinkRejected)
+// LoginResultForTest mirrors handlers.go's unexported loginResult for
+// package auth_test's use via ResolveLoginIdentityForTest -- Kind is one
+// of the LoginResultXxxForTest constants below (loginResultKind's own
+// values are unexported, so this package cannot compare against them by
+// name).
+type LoginResultForTest struct {
+	Kind int
+	User store.User
 }
+
+// The LoginResultForTest.Kind values ResolveLoginIdentityForTest can
+// return, mirroring handlers.go's unexported loginResultKind constants
+// (loginResultNewUser, loginResultExistingIdentity,
+// loginResultEmailCollision) in the same iota order, so a test can
+// compare LoginResultForTest.Kind against these without importing an
+// unexported type.
+const (
+	LoginResultNewUserForTest int = iota
+	LoginResultExistingIdentityForTest
+	LoginResultEmailCollisionForTest
+)
+
+// resolveLinkedInUser and its DD-C12 interim link/reauth safety net
+// (errLinkedInLinkRejected) were removed by Task 10 -- replaced by
+// link.go's shared resolveLinkOrReauth, applied uniformly to all three
+// providers -- so the ResolveLinkedInUserForTest/IsLinkedInLinkRejectedForTest
+// seams that exposed them are gone too. linkedin_test.go's own DD-C12
+// tests were removed in the same change; Task 10's link algorithm gets
+// its own independent adversarial coverage instead (task-10-brief.md Step
+// 3).
 
 // SetSessionIssuerForTest replaces svc's session-issuance seam
 // (sessionIssuer, handlers.go) with si -- fix-round Important 1's seam,

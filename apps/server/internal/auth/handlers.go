@@ -70,8 +70,28 @@ const (
 //     §4.1.2.1 -- gets its own distinct code too: see cancelledErrorCode
 //     for the exact (ruling-specified, double-L) wire value.
 //   - email_already_registered: Task 10's cross-provider email-collision
-//     rejection -- not produced by this file yet; resolveGoogleUser is
-//     still Task 4's documented stub.
+//     rejection (resolveLoginIdentity's EmailCollision result,
+//     emailAlreadyRegisteredErrorCode below): a verified email presented
+//     by an unauthenticated login attempt already belongs to a DIFFERENT
+//     account. Carries a &provider=<p> query param naming ONLY the
+//     provider THIS callback is for (already public -- it's the URL
+//     path) -- never the existing account's provider, which design spec
+//     §3's email-collision contract forbids naming (a targeted-phishing
+//     hint).
+//   - identity_already_linked:  Task 10's link-algorithm rejection
+//     (identityAlreadyLinkedErrorCode below, link.go): a purpose=link or
+//     purpose=reauth transaction's provider identity is already claimed
+//     by a DIFFERENT user than the one who started the flow (DD-C15).
+//     Kept distinct from auth_failed, unlike most rejections, because the
+//     actor here IS authenticated and the condition is one they can act
+//     on (unlink it from the other account, or use a different provider
+//     identity) -- not a security-sensitive class DD-C3's no-oracle
+//     reasoning needs to hide.
+//
+// Link/reauth-purpose callback outcomes (success AND error alike) redirect
+// to PublicOrigin+"/app/settings/sessions" instead of "/login"/"/"
+// (DD-C15, settingsSessionsPath below) -- see callbackSuccessRedirect and
+// redirectWithError's purpose parameter.
 
 // authFailedErrorCode is the generic ?error= value every /callback
 // rejection not explicitly pinned a distinct code by the plan redirects
@@ -99,6 +119,31 @@ const emailNotVerifiedErrorCode = "email_not_verified"
 // own defenses, and lets the frontend show "you canceled" instead of a
 // generic failure message.
 const cancelledErrorCode = "cancelled" //nolint:misspell // exact, ruling-specified wire value (double-L "cancelled"), not a typo for "canceled"
+
+// emailAlreadyRegisteredErrorCode is Task 10's ?error= value for
+// resolveLoginIdentity's EmailCollision result (design decision 5,
+// AC-AUTH-001): an unauthenticated login attempt's verified email already
+// belongs to a DIFFERENT account, reached via a different provider (or,
+// same-provider with a different provider_user_id). See
+// redirectEmailAlreadyRegistered for the &provider=<p> query param this
+// carries in addition to ?error=.
+const emailAlreadyRegisteredErrorCode = "email_already_registered"
+
+// identityAlreadyLinkedErrorCode is Task 10's ?error= value for the link
+// algorithm's (link.go) rejection when a purpose=link or purpose=reauth
+// transaction's provider identity is already claimed by a user other than
+// the one who started the flow (DD-C15) -- see errIdentityAlreadyLinked's
+// own doc comment (link.go).
+const identityAlreadyLinkedErrorCode = "identity_already_linked"
+
+// settingsSessionsPath is DD-C15's redirect target for every link/reauth-
+// purpose /callback outcome, success and rejection alike: the settings
+// page that initiates a link/reauth flow (Task 11's job to build), so the
+// visitor lands back where they started rather than the app's ordinary
+// post-login page ("/") or the anonymous login screen ("/login") -- both
+// of which would be actively wrong for a caller who was already
+// authenticated when they began this flow.
+const settingsSessionsPath = "/app/settings/sessions"
 
 // sessionIssuer is the subset of *SessionManager handleGoogleCallback
 // needs to issue a session. Extracted as a seam (fix-round Important 1)
@@ -183,7 +228,7 @@ type Service struct {
 // calls q's CreateUser/GetUserByEmail/GetIdentityByProviderSubject/
 // CreateIdentity methods directly -- the same store.Queries surface
 // user.Store itself wraps, with equivalent pgx.ErrNoRows handling done
-// inline (see resolveGoogleUser).
+// inline (see resolveLoginIdentity).
 func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Service, error) {
 	if cfg.PublicOrigin == "" {
 		return nil, fmt.Errorf("auth: NewService: config.PublicOrigin is required")
@@ -333,13 +378,7 @@ const reauthRequiredCode = "reauth_required"
 func RequireSession(m *SessionManager) api.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie(sessionCookieName)
-			if err != nil {
-				rejectSession(w)
-				return
-			}
-
-			sess, rotated, err := m.Authenticate(r.Context(), cookie.Value)
+			sess, rotated, err := readAndAuthenticateSession(r, m)
 			if err != nil {
 				if errors.Is(err, ErrSessionInvalid) {
 					rejectSession(w)
@@ -356,6 +395,36 @@ func RequireSession(m *SessionManager) api.Middleware {
 			next.ServeHTTP(w, r.WithContext(ContextWithSession(r.Context(), sess)))
 		})
 	}
+}
+
+// readAndAuthenticateSession reads the __Host-session cookie from r and
+// authenticates it via m -- RequireSession's own logic (task-9-brief.md),
+// factored out so a caller that cannot use RequireSession as a route-level
+// http.Handler middleware can still reuse the identical read+authenticate
+// behavior. Task 10 has two such callers, neither of which can know
+// up front whether a session is even required:
+//
+//   - startPurposeAndLinkingUser (link.go): /start's purpose=link/reauth
+//     handling only needs a session for THOSE two purposes, decided from
+//     a runtime query parameter no route-level middleware registered at
+//     RegisterRoutes time can see -- the ordinary purpose=login start
+//     must keep working with no session at all.
+//   - resolveLinkOrReauth's reauth branch (link.go): /callback is a
+//     public route reachable by an anonymous purpose=login visitor too, so
+//     it cannot be wrapped in RequireSession either; only once a
+//     transaction's own Purpose is known (after Consume) does it become
+//     clear a session must be re-authenticated for THIS specific request.
+//
+// Returns ErrSessionInvalid verbatim (never written to w) for no cookie or
+// one that fails to authenticate for any reason -- callers decide how to
+// respond (RequireSession's own 401 JSON body, or a caller-appropriate
+// redirect).
+func readAndAuthenticateSession(r *http.Request, m *SessionManager) (sess store.Session, rotated string, err error) {
+	cookie, err := r.Cookie(sessionCookieName)
+	if err != nil {
+		return store.Session{}, "", ErrSessionInvalid
+	}
+	return m.Authenticate(r.Context(), cookie.Value)
 }
 
 // rejectSession writes RequireSession's single 401 rejection response and
@@ -410,6 +479,11 @@ func (s *Service) writeSessionAPIInternalError(w http.ResponseWriter, r *http.Re
 func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	purpose, linkingUserID, ok := s.startPurposeAndLinkingUser(w, r)
+	if !ok {
+		return
+	}
+
 	provider, err := s.googleProvider(ctx)
 	if err != nil {
 		s.writeInternalError(w, r, ProviderGoogle, "google_provider_discovery", err)
@@ -417,7 +491,7 @@ func (s *Service) handleGoogleStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectURI := s.googleRedirectURL()
-	handle, tx, err := s.tx.Begin(ctx, ProviderGoogle, PurposeLogin, uuid.Nil, redirectURI)
+	handle, tx, err := s.tx.Begin(ctx, ProviderGoogle, purpose, linkingUserID, redirectURI)
 	if err != nil {
 		s.writeInternalError(w, r, ProviderGoogle, "begin_transaction", err)
 		return
@@ -455,14 +529,14 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "missing or malformed __Host-oauth-tx cookie")
+		s.redirectAuthFailed(w, r, ProviderGoogle, PurposeLogin, "missing or malformed __Host-oauth-tx cookie")
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderGoogle)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, ProviderGoogle, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
+			s.redirectAuthFailed(w, r, ProviderGoogle, PurposeLogin, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
 			return
 		}
 		s.writeInternalError(w, r, ProviderGoogle, "consume_transaction", err)
@@ -478,7 +552,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// their own authorization code into the victim's transaction.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "state parameter mismatch")
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, "state parameter mismatch")
 		return
 	}
 
@@ -488,13 +562,13 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// access_denied carrying the wrong state still gets the generic
 	// rejection, never this friendlier one.
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, ProviderGoogle, cancelledErrorCode, "user denied consent (access_denied)")
+		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, cancelledErrorCode, "user denied consent (access_denied)")
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "callback missing code and no recognized error parameter")
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, "callback missing code and no recognized error parameter")
 		return
 	}
 
@@ -517,20 +591,20 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	oauth2Cfg := s.googleOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "token exchange failed")
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, "token exchange failed")
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "token response missing id_token")
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, "token response missing id_token")
 		return
 	}
 
 	verifier := provider.Verifier(&oidc.Config{ClientID: s.google.clientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "id_token verification failed (issuer, audience, signature, or expiry)")
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, "id_token verification failed (issuer, audience, signature, or expiry)")
 		return
 	}
 
@@ -538,28 +612,47 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// IDToken.Nonce) -- this is an application-level check and an easy
 	// one to accidentally skip.
 	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "nonce mismatch")
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, "nonce mismatch")
 		return
 	}
 
 	var claims googleClaims
 	if claimsErr := idToken.Claims(&claims); claimsErr != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, "id_token claims decode failed")
-		return
-	}
-	if claims.Email == "" || !claims.EmailVerified {
-		s.redirectWithError(w, r, ProviderGoogle, emailNotVerifiedErrorCode, "email absent or email_verified != true")
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, "id_token claims decode failed")
 		return
 	}
 
-	usr, err := s.resolveGoogleUser(ctx, idToken.Subject, claims.Email, claims.Name)
+	// purpose=link/reauth: resolved entirely by link.go's shared
+	// algorithm, off tx.LinkingUserID -- no email check at all (Task 10's
+	// link algorithm; see resolveLinkOrReauth's own doc comment), so the
+	// claims.EmailVerified check below never runs for this branch.
+	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
+		if linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGoogle, idToken.Subject); linkErr != nil {
+			s.redirectLinkOrReauthError(w, r, ProviderGoogle, tx.Purpose, linkErr)
+			return
+		}
+		ClearOAuthTxCookie(w)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		return
+	}
+
+	if claims.Email == "" || !claims.EmailVerified {
+		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, emailNotVerifiedErrorCode, "email absent or email_verified != true")
+		return
+	}
+
+	result, err := s.resolveLoginIdentity(ctx, ProviderGoogle, idToken.Subject, claims.Email, claims.Name)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderGoogle, "resolve_user", err)
+		s.writeInternalError(w, r, ProviderGoogle, "resolve_login_identity", err)
+		return
+	}
+	if result.Kind == loginResultEmailCollision {
+		s.redirectEmailAlreadyRegistered(w, r, ProviderGoogle)
 		return
 	}
 
 	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
-	rawSession, _, err := s.sessions.Issue(ctx, usr.ID, r.UserAgent(), clientIP)
+	rawSession, _, err := s.sessions.Issue(ctx, result.User.ID, r.UserAgent(), clientIP)
 	if err != nil {
 		s.writeInternalError(w, r, ProviderGoogle, "issue_session", err)
 		return
@@ -567,65 +660,111 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	SetSessionCookie(w, rawSession)
 	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.publicOrigin+"/", http.StatusFound)
+	http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
 }
 
-// resolveGoogleUser resolves the local user for a validated Google login:
-// an existing identity reuses its user; an unknown identity creates a new
-// user + identity.
+// loginResultKind is resolveLoginIdentity's own three-way outcome
+// (design decision 5, AC-AUTH-001).
+type loginResultKind int
+
+// The three outcomes resolveLoginIdentity can produce -- see its own doc
+// comment for the algorithm that decides between them.
+const (
+	loginResultNewUser loginResultKind = iota
+	loginResultExistingIdentity
+	loginResultEmailCollision
+)
+
+// loginResult is resolveLoginIdentity's return value: Kind identifies
+// which of the three outcomes occurred; User is set for
+// loginResultNewUser and loginResultExistingIdentity only (the zero
+// store.User for loginResultEmailCollision, which creates nothing and
+// must never be used to issue a session).
+type loginResult struct {
+	Kind loginResultKind
+	User store.User
+}
+
+// resolveLoginIdentity implements design decision 5 and AC-AUTH-001. It
+// never merges by email. Given a verified (provider, providerUserID,
+// email) from a successful token exchange -- and name, this
+// implementation's own necessary addition beyond the brief's illustrative
+// signature: users.name is NOT NULL, and every provider's own caller
+// already computes a non-empty display name (or "" to mean "no claim
+// carried one," triggering this function's own emailLocalPart fallback,
+// exactly like resolveGoogleUser's pre-Task-10 stub did) -- this is the
+// ONE shared function every provider's /callback calls for a
+// PurposeLogin transaction (never for PurposeLink/PurposeReauth, which
+// resolveLinkOrReauth in link.go handles instead, and never touches this
+// function at all):
 //
-// TODO(Task 10): this is Task 4's stub of the shared login-resolution
-// algorithm (task-10-brief.md's resolveLoginIdentity): on an unknown
-// identity it unconditionally creates a new user, without checking
-// whether email already belongs to a different account reached via
-// another provider. Task 10 replaces this with the real three-way branch
-// (NewUser | ExistingIdentity | EmailCollision) shared by all three
-// providers, per design decision 5 and AC-AUTH-001 (no automatic email
-// merge across providers).
-func (s *Service) resolveGoogleUser(ctx context.Context, providerUserID, email, name string) (store.User, error) {
+//  1. GetIdentityByProviderSubject(provider, providerUserID) -- found ->
+//     ExistingIdentity, done. NO email comparison at all: identities are
+//     keyed by provider+sub alone and are never touched again by email,
+//     so a returning visitor's login never re-derives, re-checks, or
+//     re-compares anything about their email.
+//  2. Not found -> GetUserByEmail(email) -- found (a DIFFERENT account
+//     already owns this verified email, reached via a different
+//     provider, or the same provider under a different sub) ->
+//     EmailCollision. Creates NOTHING -- no users row, no identities
+//     row -- and the pre-existing account's own row is never read for
+//     write, only looked up by unique index; its own columns (including
+//     updated_at) are provably untouched by this call.
+//  3. Not found either -> create a new users row + a new identities row,
+//     NewUser.
+//
+// The HTTP layer maps EmailCollision to
+// redirectEmailAlreadyRegistered's 302 ?error=email_already_registered
+// &provider=<p> -- a redirect, never a raw JSON 409, because /callback is
+// a top-level browser navigation (same reasoning as Task 4/5/6's
+// email_not_verified redirects).
+func (s *Service) resolveLoginIdentity(ctx context.Context, provider Provider, providerUserID, email, name string) (loginResult, error) {
 	identity, err := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
-		Provider:       string(ProviderGoogle),
+		Provider:       string(provider),
 		ProviderUserID: providerUserID,
 	})
 	if err == nil {
 		usr, getErr := s.q.GetUserByID(ctx, identity.UserID)
 		if getErr != nil {
-			return store.User{}, fmt.Errorf("auth: resolve google user: get user: %w", getErr)
+			return loginResult{}, fmt.Errorf("auth: resolve login identity: get user: %w", getErr)
 		}
-		return usr, nil
+		return loginResult{Kind: loginResultExistingIdentity, User: usr}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return store.User{}, fmt.Errorf("auth: resolve google user: get identity: %w", err)
+		return loginResult{}, fmt.Errorf("auth: resolve login identity: get identity: %w", err)
+	}
+
+	if _, getErr := s.q.GetUserByEmail(ctx, email); getErr == nil {
+		// A different account (there is no identity for provider+sub yet,
+		// so this can never be the SAME account looking itself up) already
+		// owns this verified email. Create nothing -- AC-AUTH-001's whole
+		// point.
+		return loginResult{Kind: loginResultEmailCollision}, nil
+	} else if !errors.Is(getErr, pgx.ErrNoRows) {
+		return loginResult{}, fmt.Errorf("auth: resolve login identity: get user by email: %w", getErr)
 	}
 
 	if name == "" {
-		// Google's "name" claim is requested (googleScopes includes
-		// oidc.ScopeProfile) but still not guaranteed -- the consent
-		// screen or the account itself can omit it -- and oidctest's
-		// Claims has no Name field at all (test infrastructure), so this
-		// fallback is exercised by every test. users.name is NOT NULL, so
-		// a real value is required; email is always present here (the
-		// caller already rejected an unverified/absent one). Fix-round
-		// ruling b1: fall back to the LOCAL PART of the email (before
-		// "@"), never the full address -- a later phase renders this
-		// value as a display name, and the full email would leak the
-		// visitor's address to anyone who can see it (their own resume
-		// page, an account-settings view shared with others, etc.).
+		// See resolveGoogleUser's identical pre-Task-10 fallback and its
+		// reasoning (fix-round ruling b1): the LOCAL PART of the email,
+		// never the full address -- a later phase renders this value as a
+		// display name, and the full email would leak the visitor's
+		// address to anyone who can see it.
 		name = emailLocalPart(email)
 	}
 
 	usr, err := s.q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: name})
 	if err != nil {
-		return store.User{}, fmt.Errorf("auth: resolve google user: create user: %w", err)
+		return loginResult{}, fmt.Errorf("auth: resolve login identity: create user: %w", err)
 	}
 	if _, err := s.q.CreateIdentity(ctx, store.CreateIdentityParams{
 		UserID:         usr.ID,
-		Provider:       string(ProviderGoogle),
+		Provider:       string(provider),
 		ProviderUserID: providerUserID,
 	}); err != nil {
-		return store.User{}, fmt.Errorf("auth: resolve google user: create identity: %w", err)
+		return loginResult{}, fmt.Errorf("auth: resolve login identity: create identity: %w", err)
 	}
-	return usr, nil
+	return loginResult{Kind: loginResultNewUser, User: usr}, nil
 }
 
 // emailLocalPart returns the portion of email before "@", or email
@@ -641,18 +780,28 @@ func emailLocalPart(email string) string {
 
 // redirectWithError clears the __Host-oauth-tx cookie (ruling 1), logs
 // the rejection server-side (fix-round Important 2), and redirects the
-// browser to the app's login page with ?error=code (DD-C7,
-// integration-owner ruling: distinct from the bare "/" a SUCCESSFUL
-// callback redirects to below -- a rejection's ?error= code is meant to
-// render on the login screen, not the app's post-login landing page) --
-// /callback is a top-level browser navigation, so every rejection is a
-// redirect the user actually sees, never a raw JSON error body. provider
-// identifies which provider's callback this is (see logRejection) -- it
-// is never echoed to the client, only logged.
-func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, provider Provider, code, reason string) {
+// browser to this rejection's error-display page with ?error=code (DD-C7,
+// integration-owner ruling: distinct from a SUCCESSFUL callback's own
+// target below -- a rejection's ?error= code is meant to render on an
+// error-display screen, never the app's post-login/post-link landing
+// page) -- /callback is a top-level browser navigation, so every
+// rejection is a redirect the user actually sees, never a raw JSON error
+// body. provider identifies which provider's callback this is (see
+// logRejection) -- it is never echoed to the client, only logged.
+//
+// purpose picks WHICH error-display page (DD-C15, corrected 2026-08-02):
+// PurposeLogin (also used for every rejection discovered before a
+// transaction has been consumed at all, so its real Purpose is still
+// unknown -- e.g. a missing/malformed __Host-oauth-tx cookie, or
+// ErrTransactionInvalid -- login is the safe default for an unrecoverable
+// unknown) redirects to PublicOrigin+"/login"; PurposeLink/PurposeReauth
+// redirect to PublicOrigin+settingsSessionsPath, the settings page that
+// initiated them, since that caller was already authenticated and never
+// belongs on the anonymous login screen.
+func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, provider Provider, purpose Purpose, code, reason string) {
 	ClearOAuthTxCookie(w)
 	s.logRejection(r, provider, code, reason)
-	http.Redirect(w, r, s.publicOrigin+"/login?error="+url.QueryEscape(code), http.StatusFound)
+	http.Redirect(w, r, s.callbackErrorRedirectBase(purpose)+"?error="+url.QueryEscape(code), http.StatusFound)
 }
 
 // redirectAuthFailed is redirectWithError's shorthand for the generic,
@@ -660,8 +809,54 @@ func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, prov
 // facing detail logged server-side only (see logRejection) -- it never
 // reaches the client, which always sees the same generic
 // authFailedErrorCode regardless of reason's value.
-func (s *Service) redirectAuthFailed(w http.ResponseWriter, r *http.Request, provider Provider, reason string) {
-	s.redirectWithError(w, r, provider, authFailedErrorCode, reason)
+func (s *Service) redirectAuthFailed(w http.ResponseWriter, r *http.Request, provider Provider, purpose Purpose, reason string) {
+	s.redirectWithError(w, r, provider, purpose, authFailedErrorCode, reason)
+}
+
+// redirectEmailAlreadyRegistered is resolveLoginIdentity's EmailCollision
+// outcome's own dedicated redirect (Task 10, design decision 5): unlike
+// every other rejection this package produces, it carries a SECOND query
+// param, &provider=<p> -- naming the provider THIS callback is for (never
+// the DIFFERENT provider the existing account was reached through, which
+// design spec §3's email-collision contract explicitly forbids naming, a
+// targeted-phishing hint). This leaks nothing new: the attempted provider
+// is already public from the URL path itself
+// (/api/v1/auth/<p>/callback). EmailCollision is reachable only from
+// PurposeLogin (resolveLoginIdentity is never called for a link/reauth
+// transaction), so this always targets "/login", never
+// settingsSessionsPath.
+func (s *Service) redirectEmailAlreadyRegistered(w http.ResponseWriter, r *http.Request, provider Provider) {
+	ClearOAuthTxCookie(w)
+	s.logRejection(r, provider, emailAlreadyRegisteredErrorCode, "verified email already registered via a different identity")
+	target := s.publicOrigin + "/login?error=" + url.QueryEscape(emailAlreadyRegisteredErrorCode) +
+		"&provider=" + url.QueryEscape(string(provider))
+	http.Redirect(w, r, target, http.StatusFound)
+}
+
+// callbackErrorRedirectBase returns the PublicOrigin-prefixed page a
+// /callback rejection redirects to, before its own ?error=code is
+// appended -- see redirectWithError's own doc comment for the DD-C15
+// purpose-based choice.
+func (s *Service) callbackErrorRedirectBase(purpose Purpose) string {
+	if purpose == PurposeLink || purpose == PurposeReauth {
+		return s.publicOrigin + settingsSessionsPath
+	}
+	return s.publicOrigin + "/login"
+}
+
+// callbackSuccessRedirect returns the PublicOrigin-prefixed page a
+// SUCCESSFUL /callback redirects to (DD-C15): PurposeLogin lands on the
+// app's own post-login landing page ("/", DD-C7's bare-origin pin,
+// unchanged from before Task 10); PurposeLink/PurposeReauth land back on
+// settingsSessionsPath, the settings page that initiated them, carrying
+// no query string either way -- a successful outcome has no ?error= to
+// report and Task 10's link algorithm never issues a new session a
+// query string would need to announce.
+func (s *Service) callbackSuccessRedirect(purpose Purpose) string {
+	if purpose == PurposeLink || purpose == PurposeReauth {
+		return s.publicOrigin + settingsSessionsPath
+	}
+	return s.publicOrigin + "/"
 }
 
 // writeInternalError clears the __Host-oauth-tx cookie (ruling 1: applies

@@ -58,15 +58,25 @@ tags:
     description: >-
       OAuth login (Google/GitHub/LinkedIn) and the session/
       device-management surface (design spec §3, AC-AUTH-005). The
-      `/auth/{provider}/start` and `.../callback` routes are unauthenticated
-      top-level browser redirects; every other operation here requires a
-      valid `sessionCookie`, and every mutation additionally requires
-      `csrfToken` (see `components.securitySchemes`). Session endpoints are
-      deliberately exempt from the `If-Match`/`Idempotency-Key` write-safety
-      envelope described above — plan design decision 6 — since they carry
-      no resume `revision`, and every mutation here is already safely
-      retryable on its own (revoking an already-revoked session is a
-      no-op).
+      `/auth/{provider}/start` and `.../callback` routes are top-level
+      browser redirects, not JSON calls a client parses; every other
+      operation here requires a valid `sessionCookie`, and every mutation
+      additionally requires `csrfToken` (see `components.securitySchemes`).
+      `/start`/`.../callback` are unauthenticated for the default
+      `?purpose=login` — the only purpose this document's request/response
+      bodies illustrate — but accept a `purpose=link` or `purpose=reauth`
+      query parameter (Task 10, design decision 5) that DOES require a
+      valid `sessionCookie` on `/start` (see each `/start` operation's own
+      `purpose` parameter and `401`/`403` responses); `.../callback` itself
+      is always reachable anonymously (an OAuth provider redirect carries
+      no cookie-forwarding guarantee of its own), and instead re-derives
+      the caller's session from the request's own `__Host-session` cookie
+      only when the transaction it is completing was itself begun for
+      `purpose=link`/`reauth`. Session endpoints are deliberately exempt
+      from the `If-Match`/`Idempotency-Key` write-safety envelope described
+      above — plan design decision 6 — since they carry no resume
+      `revision`, and every mutation here is already safely retryable on
+      its own (revoking an already-revoked session is a no-op).
 paths:
   /healthz:
     servers:
@@ -186,7 +196,11 @@ paths:
   # completes it. Both are top-level browser navigations (302), never a
   # JSON response — see each operation's own description for the shared
   # DD-C3/DD-C4/DD-C7 contract (closed ?error= vocabulary, always redirect,
-  # rejections go to /login?error=<code>, success goes to /).
+  # rejections go to /login?error=<code>, success goes to /) and DD-C15 for
+  # how a purpose=link/reauth transaction (Task 10, the `purpose` query
+  # parameter on every /start below) redirects to
+  # /app/settings/sessions?error=<code> instead, on success and rejection
+  # alike.
   /auth/google/start:
     get:
       operationId: getAuthGoogleStart
@@ -206,6 +220,19 @@ paths:
         side effect (a database-backed transaction row) on every request
         that reaches it, so a link-preview/prefetch crawler must never be
         able to trigger it.
+
+
+        `?purpose=link`/`reauth` (Task 10, see the `purpose` parameter)
+        requires a valid `sessionCookie` — `security: []` above describes
+        only the default `purpose=login`'s own requirement. No `csrfToken`
+        is required even then: `GET` is never a CSRF-checked method
+        anywhere in this API (only mutating methods are), and this route's
+        real side effect — creating the transaction row this description
+        opens with — is a deliberate, documented exception to that general
+        "GET has no side effect" rule, not one this contract protects with
+        a synchronizer token.
+      parameters:
+        - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
           description: Redirects to Google's own authorize endpoint.
@@ -215,6 +242,29 @@ paths:
                 type: string
                 format: uri
               example: https://accounts.google.com/o/oauth2/v2/auth?...
+        "401":
+          description: "`purpose=link`/`reauth` only: missing or invalid
+            `__Host-session` cookie."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: "`purpose=link` only: the session's last full OAuth
+            login is more than 15 minutes old, checked BEFORE any
+            transaction row is created."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: reauth_required
+                  message: recent reauthentication is required
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -231,23 +281,46 @@ paths:
         Consumes the pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (PKCE), verifies the ID
         token (issuer/audience/signature/expiry, plus the OIDC nonce),
-        requires `email_verified == true`, and resolves or creates the
-        local user.
+        and resolves or creates the local user or attaches the identity to
+        an already-authenticated one, depending on the transaction's own
+        `purpose` (set at `/auth/google/start`):
+
+
+        - `purpose=login` (default): requires `email_verified == true`,
+          then resolves the identity — an already-linked identity signs
+          straight back in with **no** email comparison at all; an unknown
+          identity whose email already belongs to a DIFFERENT account
+          rejects with `email_already_registered` and creates nothing (no
+          automatic email merge, AC-AUTH-001); otherwise creates a new
+          user + identity.
+
+        - `purpose=link`/`reauth`: no email check at all. Re-derives the
+          caller's own session from THIS request's `__Host-session`
+          cookie (the anonymous `security: []` above describes only the
+          `purpose=login` default) rather than from anything in the
+          transaction itself. `link` attaches the identity to that caller
+          (idempotent if already attached to them; `identity_already_linked`
+          if claimed by someone else) and issues NO new session — the
+          caller already has one. `reauth` refreshes that session's
+          `reauthenticated_at` against an ALREADY-linked identity only.
 
 
         Always redirects (DD-C4) — this is a top-level browser
         navigation, never a JSON response:
 
 
-        - **Success**: `302` to the app's own origin (`/`), with the
-          `__Host-session` cookie set.
+        - **Success**: `302` to the app's own origin (`/`) for
+          `purpose=login`, or to `/app/settings/sessions` for
+          `purpose=link`/`reauth` (DD-C15) — with the `__Host-session`
+          cookie set for `purpose=login` only.
 
-        - **Rejected**: `302` to `/login?error=<code>` (DD-C7), with one
-          of `OAuthCallbackErrorCode`'s codes and no session cookie set.
-          DD-C3's no-oracle contract means every internal rejection
-          reason not explicitly listed below collapses into the generic
-          `auth_failed` code — the response never lets a caller
-          distinguish which specific check failed.
+        - **Rejected**: `302` to `/login?error=<code>` for `purpose=login`,
+          or to `/app/settings/sessions?error=<code>` for `purpose=link`/
+          `reauth` (DD-C7/DD-C15), with one of `OAuthCallbackErrorCode`'s
+          codes and no session cookie set. DD-C3's no-oracle contract
+          means every internal rejection reason not explicitly listed
+          collapses into the generic `auth_failed` code — the response
+          never lets a caller distinguish which specific check failed.
 
 
         `__Host-oauth-tx` is cleared on every exit path, success or
@@ -297,7 +370,11 @@ paths:
         own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque
         transaction handle, 10-minute TTL) that the matching `GET
         /auth/github/callback` consumes. Same `HEAD`-rejected contract as
-        `GET /auth/google/start` (DD-C8).
+        `GET /auth/google/start` (DD-C8), and the same `?purpose=link`/
+        `reauth` session requirement — see that operation's own
+        description for both.
+      parameters:
+        - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
           description: Redirects to GitHub's own authorize endpoint.
@@ -307,6 +384,29 @@ paths:
                 type: string
                 format: uri
               example: https://github.com/login/oauth/authorize?...
+        "401":
+          description: "`purpose=link`/`reauth` only: missing or invalid
+            `__Host-session` cookie."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: "`purpose=link` only: the session's last full OAuth
+            login is more than 15 minutes old, checked BEFORE any
+            transaction row is created."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: reauth_required
+                  message: recent reauthentication is required
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -321,14 +421,17 @@ paths:
       summary: Complete "Sign in with GitHub"
       description: >-
         Consumes the pending OAuth transaction (`__Host-oauth-tx`
-        cookie), exchanges the authorization code, and fetches the
-        authenticated user's verified primary email from GitHub's REST
-        API (AC-AUTH-003) — deliberately plain OAuth2, never OIDC: no ID
-        token, no issuer/audience/signature/nonce to verify. Otherwise
-        follows the exact same always-redirect contract as `GET
-        /auth/google/callback` (DD-C3/DD-C4/DD-C7): success → `/` with
-        `__Host-session` set; rejection → `/login?error=<code>` with no
-        session cookie; `__Host-oauth-tx` cleared on every exit path.
+        cookie), exchanges the authorization code, and — for
+        `purpose=login` only — fetches the authenticated user's verified
+        primary email from GitHub's REST API (AC-AUTH-003) — deliberately
+        plain OAuth2, never OIDC: no ID token, no issuer/audience/
+        signature/nonce to verify. `purpose=link`/`reauth` never fetches
+        email at all (no email check for linking — see below). Otherwise
+        follows the exact same purpose-dependent resolution and
+        always-redirect contract as `GET /auth/google/callback`
+        (DD-C3/DD-C4/DD-C7/DD-C15) — see that operation's own description
+        for the full `purpose=login` vs `purpose=link`/`reauth` behavior
+        and redirect targets.
       parameters:
         - name: code
           in: query
@@ -374,7 +477,11 @@ paths:
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
         handle, 10-minute TTL) that the matching `GET
         /auth/linkedin/callback` consumes. Same `HEAD`-rejected contract
-        as `GET /auth/google/start` (DD-C8).
+        as `GET /auth/google/start` (DD-C8), and the same `?purpose=link`/
+        `reauth` session requirement — see that operation's own
+        description for both.
+      parameters:
+        - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
           description: Redirects to LinkedIn's own authorize endpoint.
@@ -384,6 +491,29 @@ paths:
                 type: string
                 format: uri
               example: https://www.linkedin.com/oauth/v2/authorization?...
+        "401":
+          description: "`purpose=link`/`reauth` only: missing or invalid
+            `__Host-session` cookie."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: "`purpose=link` only: the session's last full OAuth
+            login is more than 15 minutes old, checked BEFORE any
+            transaction row is created."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: reauth_required
+                  message: recent reauthentication is required
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -399,12 +529,20 @@ paths:
       description: >-
         Consumes the pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (PKCE), verifies the ID
-        token (issuer/audience/signature/expiry, plus the OIDC nonce),
-        requires a verified email, and resolves or creates the local
-        user. Otherwise follows the exact same always-redirect contract
-        as `GET /auth/google/callback` (DD-C3/DD-C4/DD-C7): success → `/`
-        with `__Host-session` set; rejection → `/login?error=<code>` with
-        no session cookie; `__Host-oauth-tx` cleared on every exit path.
+        token (issuer/audience/signature/expiry, plus the OIDC nonce), and
+        resolves the local user per `purpose`, exactly like `GET
+        /auth/google/callback` (DD-C3/DD-C4/DD-C7/DD-C15) — see that
+        operation's own description for the full `purpose=login` vs
+        `purpose=link`/`reauth` behavior and redirect targets, with ONE
+        LinkedIn-specific difference: `purpose=login`'s registration path
+        (an UNKNOWN identity only — an existing identity's repeat login
+        never re-checks email at all, matching every other provider)
+        requires a verified email exactly like Google, EXCEPT LinkedIn's
+        OIDC `email`/`email_verified` claims are OPTIONAL — an absent
+        `email_verified` claim is never treated as true (design spec §3,
+        AC-AUTH-002). `purpose=link`/`reauth` never checks email at all
+        (design spec §3: "linking to an existing account still allowed"
+        without a verified email).
       parameters:
         - name: code
           in: query
@@ -866,34 +1004,94 @@ components:
         The closed vocabulary of `?error=` codes a `GET
         /auth/{provider}/callback` rejection redirect can carry (DD-C3) —
         no other value is ever produced; a client should treat an
-        unrecognized value the same as `auth_failed`.
+        unrecognized value the same as `auth_failed`. A `purpose=login`
+        rejection redirects to `/login?error=<code>`; a `purpose=link` or
+        `purpose=reauth` rejection redirects to
+        `/app/settings/sessions?error=<code>` instead (DD-C15) — the
+        settings page that initiated it, since that caller was already
+        authenticated.
 
 
         - `auth_failed`: the generic code for every rejection not
           explicitly listed below (transaction invalid/expired/replayed,
           state mismatch, ID token verification failure, missing code,
           etc.) — deliberately no oracle distinguishing which check
-          failed.
+          failed. For `purpose=link`/`reauth`, this also covers a
+          `purpose=reauth` attempt against a provider identity that isn't
+          already linked (design spec: "no auto-link via reauth") and the
+          completing request's session no longer matching the one that
+          began the flow.
 
         - `email_not_verified`: the provider's own account has an
           unverified (or absent) email (design spec §3's Google/LinkedIn
-          rule).
+          rule). `purpose=login` only — linking never requires a verified
+          email (design spec §3).
 
         - `cancelled`: the visitor declined consent at the provider
           (`error=access_denied` echoed back on the callback, RFC 6749
           §4.1.2.1).
 
-        - `email_already_registered`: the verified email already belongs
-          to an existing account reached via a DIFFERENT provider — no
-          automatic cross-provider email merge (AC-AUTH-001). Introduced
-          by the cross-provider login-resolution algorithm; documented
-          here ahead of that landing.
+        - `email_already_registered`: `purpose=login` only. The verified
+          email already belongs to an existing account reached via a
+          DIFFERENT provider (or the same provider under a different
+          identity) — no automatic cross-provider email merge
+          (AC-AUTH-001, design decision 5). Carries an additional
+          `&provider=<p>` query param naming the provider THIS callback is
+          for (already public — it's the URL path) — never the existing
+          account's own provider, which the response must not name (a
+          targeted-phishing hint).
+
+        - `identity_already_linked`: `purpose=link`/`reauth` only (DD-C15,
+          design decision 5). The provider identity this callback resolved
+          is already claimed by a DIFFERENT user than the one who started
+          the flow. No row is mutated and no session is issued for either
+          user. Kept distinct from `auth_failed` — unlike most rejections
+          here — because the actor is authenticated and the condition is
+          one they can act on.
       enum:
         - auth_failed
         - email_not_verified
         - cancelled
         - email_already_registered
+        - identity_already_linked
   parameters:
+    AuthPurpose:
+      name: purpose
+      in: query
+      required: false
+      description: >-
+        Why this OAuth transaction is being started (Task 10, design
+        decision 5). `link`/`reauth` additionally require a valid
+        `sessionCookie` on `/start` (see the operation's own `401`/`403`
+        responses) — `/start`'s own default security scheme (none) applies
+        only to the default `login`. Any value other than the two literal
+        purposes below — including an absent parameter — is treated as
+        `login`: an unrecognized value is never a distinct error, the same
+        no-invented-oracle reasoning `OAuthCallbackErrorCode` documents for
+        `/callback`.
+
+
+        - `login` (default): an ordinary, unauthenticated sign-in/
+          registration attempt.
+
+        - `link`: attach this provider identity to the CALLER's own
+          already-authenticated account. Requires a session whose last
+          full OAuth login (`reauthenticated_at`) is within the last 15
+          minutes — `403 reauth_required` otherwise, checked BEFORE any
+          transaction row is created.
+
+        - `reauth`: refresh the CALLER's own session's
+          `reauthenticated_at` via a fresh round trip against an
+          ALREADY-linked provider (the compensating control the phase's
+          long idle/absolute session timeouts require before a sensitive
+          operation). Unlike `link`, this does NOT itself require a recent
+          reauthentication first — that would be circular, since its whole
+          point is to establish one.
+      schema:
+        type: string
+        enum: [login, link, reauth]
+        default: login
+      example: link
     IfMatch:
       name: If-Match
       in: header

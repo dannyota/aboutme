@@ -332,6 +332,109 @@ func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 	}
 }
 
+// ---- Task 10 Step 1: resolveLoginIdentity's shared new-account /
+// existing-identity happy path, exercised once per provider ------------
+
+// TestResolveLoginIdentity_NewThenExisting_AcrossProviders is
+// task-10-brief.md Step 1's required happy-path test: first-ever login
+// creates a users row + an identities row (NewUser); a second login with
+// the SAME (provider, providerUserID) reuses the existing user
+// (ExistingIdentity) and creates NO second identities row -- asserted on
+// the actual row count, not merely the absence of an error, since
+// identities_provider_subject_key's own UNIQUE constraint would catch a
+// naive re-insert bug just as well and this test must not be fooled by
+// that into passing for the wrong reason.
+//
+// Calls resolveLoginIdentity directly (auth.ResolveLoginIdentityForTest)
+// rather than driving three separate providers' worth of OIDC/OAuth2
+// mechanics through the full HTTP surface -- Google's own /start-/callback
+// round trip already covers the identical scenario
+// (TestGoogleCallback_NewUser_CreatesUserAndSession,
+// TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow,
+// google_test.go, Task 4), and Task 5/6 already proved LinkedIn/GitHub's
+// own provider mechanics -- so this test's whole job is confirming the
+// ONE shared function every provider's /callback now calls behaves
+// identically regardless of which Provider constant it's given, per
+// task-10-brief.md's own framing ("exercised once per provider to
+// confirm wiring, not re-proving provider mechanics").
+//
+// This is a genuine RED-before-GREEN test for Task 10 specifically (not
+// merely a refactor-preserving regression): auth.ResolveLoginIdentityForTest
+// and the loginResult/loginResultKind shape it exposes did not exist
+// before this task, so this test fails to even COMPILE against Task
+// 4/5/6's per-provider resolveXUser stubs -- see task-10-report.md for
+// the literal `go test` transcript.
+func TestResolveLoginIdentity_NewThenExisting_AcrossProviders(t *testing.T) {
+	t.Parallel()
+
+	providers := []auth.Provider{auth.ProviderGoogle, auth.ProviderGitHub, auth.ProviderLinkedIn}
+
+	for _, provider := range providers {
+		t.Run(string(provider), func(t *testing.T) {
+			t.Parallel()
+
+			q := newTestQueries(t)
+			svc, err := auth.NewServiceForTest(testLogger(), config.Config{
+				PublicOrigin:         testPublicOrigin,
+				GoogleClientID:       oidctest.DefaultClientID,
+				GoogleClientSecret:   "test-google-client-secret",
+				LinkedInClientID:     oidctest.DefaultClientID,
+				LinkedInClientSecret: "test-linkedin-client-secret",
+			}, q, "", "", "")
+			if err != nil {
+				t.Fatalf("NewServiceForTest() error = %v", err)
+			}
+
+			providerUserID := uuid.NewString()
+			email := uniqueEmail(t)
+			ctx := context.Background()
+
+			first, err := auth.ResolveLoginIdentityForTest(ctx, svc, provider, providerUserID, email, "Test User")
+			if err != nil {
+				t.Fatalf("resolveLoginIdentity() (first login) error = %v", err)
+			}
+			if first.Kind != auth.LoginResultNewUserForTest {
+				t.Fatalf("first login Kind = %d, want LoginResultNewUserForTest (%d)", first.Kind, auth.LoginResultNewUserForTest)
+			}
+			if first.User.Email != email {
+				t.Errorf("first login User.Email = %q, want %q", first.User.Email, email)
+			}
+
+			second, err := auth.ResolveLoginIdentityForTest(ctx, svc, provider, providerUserID, email, "Test User")
+			if err != nil {
+				t.Fatalf("resolveLoginIdentity() (second login) error = %v", err)
+			}
+			if second.Kind != auth.LoginResultExistingIdentityForTest {
+				t.Fatalf("second login Kind = %d, want LoginResultExistingIdentityForTest (%d)", second.Kind, auth.LoginResultExistingIdentityForTest)
+			}
+			if second.User.ID != first.User.ID {
+				t.Errorf("second login User.ID = %v, want %v (the SAME user, not a new one)", second.User.ID, first.User.ID)
+			}
+
+			inspector := newRowInspectorPool(t)
+			var identityCount int
+			if err := inspector.QueryRow(ctx,
+				`SELECT count(*) FROM identities WHERE provider = $1 AND provider_user_id = $2`, string(provider), providerUserID,
+			).Scan(&identityCount); err != nil {
+				t.Fatalf("count identities: %v", err)
+			}
+			if identityCount != 1 {
+				t.Errorf("identities row count for (%s, %q) = %d, want exactly 1 (no duplicate row from the second login)", provider, providerUserID, identityCount)
+			}
+
+			var userCount int
+			if err := inspector.QueryRow(ctx,
+				`SELECT count(*) FROM users WHERE email = $1`, email,
+			).Scan(&userCount); err != nil {
+				t.Fatalf("count users: %v", err)
+			}
+			if userCount != 1 {
+				t.Errorf("users row count for %q = %d, want exactly 1 (no duplicate user from the second login)", email, userCount)
+			}
+		})
+	}
+}
+
 // TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex proves the lazy OIDC
 // provider-discovery cache (provider_cache.go's oidcProviderCache, shared
 // by google.go and linkedin.go) does NOT hold its own mutex for the
@@ -785,73 +888,41 @@ func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *te
 	}
 }
 
-// TestGoogleCallback_ResolveUserConflict_LogsSQLSTATE forces a REAL
-// Postgres constraint violation (not a stub) through resolveGoogleUser's
-// CreateUser call: a first login seeds a users row for email, then a
-// SECOND login with a different subject but the SAME email hits
-// users_email_key's UNIQUE constraint -- resolveGoogleUser is still
-// task-4-brief.md's documented stub (no pre-check against an existing
-// email; Task 10 replaces this), so this is a completely ordinary way to
-// reach it. logInternalError must log the five-character SQLSTATE class
-// code (pgconn.PgError.Code -- "23505" for unique_violation) so an
-// operator can distinguish a real constraint failure from any other
-// internal error, but NEVER the raw postgres message/detail text or the
-// constraint name, both of which can embed the bound email value
-// (Postgres's own "Key (email)=(...) already exists" detail).
-func TestGoogleCallback_ResolveUserConflict_LogsSQLSTATE(t *testing.T) {
-	t.Parallel()
-
-	p := oidctest.NewProvider(t)
-	logger, logBuf := newCapturingLogger()
-	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLogger(logger))
-
-	email := uniqueEmail(t)
-
-	// Seed: an ordinary successful login creates the users row that the
-	// second login below collides with.
-	seedSubject := uniqueSubject(t)
-	seedTxCookie, seedState, seedNonce := beginGoogle(t, handler)
-	p.RegisterCode("code-sqlstate-seed", oidctest.Claims{
-		Subject:       seedSubject,
-		Email:         email,
-		EmailVerified: ptrTrue(),
-		Nonce:         seedNonce,
-	})
-	seedResp := doCallback(t, handler, "code-sqlstate-seed", seedState, seedTxCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
-	if seedResp.StatusCode != http.StatusFound || extractCookie(seedResp, auth.SessionCookieName) == nil {
-		t.Fatalf("seed login did not succeed (status=%d): setup is broken, not the code under test", seedResp.StatusCode)
-	}
-
-	// Collision: a different provider subject, but the SAME email --
-	// resolveGoogleUser's CreateUser hits users_email_key.
-	conflictSubject := uniqueSubject(t)
-	txCookie, state, nonce := beginGoogle(t, handler)
-	p.RegisterCode("code-sqlstate-conflict", oidctest.Claims{
-		Subject:       conflictSubject,
-		Email:         email,
-		EmailVerified: ptrTrue(),
-		Nonce:         nonce,
-	})
-	resp := doCallback(t, handler, "code-sqlstate-conflict", state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d (a unique-constraint violation is an internal error, not a rejected callback)", resp.StatusCode, http.StatusInternalServerError)
-	}
-
-	logged := logBuf.String()
-	if !strings.Contains(logged, `"sqlstate":"23505"`) {
-		t.Errorf("log record = %q, want it to contain the unique_violation SQLSTATE (\"sqlstate\":\"23505\")", logged)
-	}
-	if !strings.Contains(logged, `"provider":"google"`) {
-		t.Errorf("log record = %q, want a provider attribute identifying which provider's callback failed", logged)
-	}
-	if strings.Contains(logged, email) {
-		t.Errorf("log record = %q, leaked the colliding email -- SQLSTATE logging must never include raw postgres message/detail text", logged)
-	}
-	if strings.Contains(logged, "duplicate key") || strings.Contains(logged, "users_email_key") {
-		t.Errorf("log record = %q, leaked the raw postgres error message or constraint name -- want the SQLSTATE code only", logged)
-	}
-}
+// TestGoogleCallback_ResolveUserConflict_LogsSQLSTATE (removed 2026-08-02,
+// Task 10) used to force a REAL Postgres constraint violation through
+// resolveGoogleUser's CreateUser call: a first login seeded a users row
+// for email, then a SECOND login with a different subject but the SAME
+// email hit users_email_key's UNIQUE constraint -- a completely ordinary
+// way to reach it under Task 4's documented stub, which created a new
+// user unconditionally on any unknown identity with no pre-check against
+// an existing email.
+//
+// That repro no longer reaches the database at all: resolveLoginIdentity
+// (handlers.go, Task 10, AC-AUTH-001) checks GetUserByEmail BEFORE ever
+// calling CreateUser, so this exact scenario -- a second, different
+// provider subject presenting an email that already belongs to another
+// account -- is now the EmailCollision outcome: a 302
+// ?error=email_already_registered redirect with zero new rows, never a
+// 500. That is the intended fix, not a regression (Step 2's independent
+// rejection-matrix suite asserts the "zero new rows" outcome directly for
+// this and five sibling cases), but it also means this test's specific
+// mechanism for reaching writeInternalError/logInternalError's SQLSTATE-
+// extraction-and-redaction path (pgconn.PgError.Code logged, raw
+// message/detail/constraint-name text never logged) no longer applies: a
+// UNIQUE-constraint violation is now reachable only via a genuine
+// concurrent race between resolveLoginIdentity's own check and its
+// later write (two simultaneous first-ever registrations for the same
+// brand-new email), which cannot be forced deterministically without
+// either an artificial fault-injection seam this package doesn't have or
+// a real, inherently non-deterministic goroutine race -- CLAUDE.md's
+// "tests must be deterministic ... a flaky test is broken, not a
+// candidate for retries" rules out the latter. Removed rather than left
+// disabled or weakened to "eventually" pass; flagged in task-10-report.md
+// for the integration owner to decide whether dedicated SQLSTATE-
+// redaction coverage belongs at the internal/store layer instead, where
+// a genuine unique-violation is trivial to force deterministically
+// (two direct CreateUser calls with the same email, no HTTP layer or
+// race required).
 
 // TestGoogleCallback_RejectionLogsProviderAttribute proves logRejection's
 // output identifies WHICH provider's callback was rejected: the shared

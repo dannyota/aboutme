@@ -265,6 +265,21 @@ func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 // GET .../callback handling itself, including the purpose=link branch
 // under test -- IS Task 5's own scope and is driven for real, through the
 // same http.Handler every other test in this file uses.
+//
+// Success-shape assertions updated 2026-08-02 (Task 10, DD-C15): a link
+// success no longer redirects to the bare "/" or issues a session cookie
+// (this test's original assertions, written under DD-C12's interim
+// contract, before Task 10's link algorithm existed) -- it redirects to
+// PublicOrigin+"/app/settings/sessions" and issues NO session cookie at
+// all (the caller, already authenticated, keeps using the one they
+// arrived with). The underlying scenario this test proves -- an
+// unverified-email LinkedIn identity still succeeds for linking, and
+// attaches to the existing user rather than spawning a new one -- is
+// unchanged from original authorship; only the response shape a
+// SUCCESSFUL link produces was corrected. assertLinkedInLoginAccepted
+// (this file) stays exactly as authored -- it now documents a LOGIN
+// success shape specifically and remains correct for every other test in
+// this file that still uses it.
 func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	t.Parallel()
 
@@ -285,7 +300,23 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 
 	resp := doLinkedInCallback(t, handler, "code-link", tx.State, txCookie) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
 
-	assertLinkedInLoginAccepted(t, resp)
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("callback status = %d, want %d (redirect on a successful link)", resp.StatusCode, http.StatusFound)
+	}
+	wantLocation := testPublicOrigin + "/app/settings/sessions"
+	if got := resp.Header.Get("Location"); got != wantLocation {
+		t.Errorf("callback Location = %q, want %q (DD-C15: a link success redirects to the settings page that initiated it, never the bare origin)", got, wantLocation)
+	}
+	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
+		t.Errorf("callback set a %s cookie (value=%q) on a link success, want none -- the caller already has one", auth.SessionCookieName, sc.Value)
+	}
+	txCookieResp := extractCookie(resp, auth.OAuthTxCookieName)
+	if txCookieResp == nil {
+		t.Fatal("callback response missing a __Host-oauth-tx Set-Cookie header clearing it on success (ruling 1)")
+	}
+	if txCookieResp.MaxAge >= 0 {
+		t.Errorf("__Host-oauth-tx cookie MaxAge = %d on a successful callback, want negative (cleared)", txCookieResp.MaxAge)
+	}
 
 	identity, err := q.GetIdentityByProviderSubject(context.Background(), store.GetIdentityByProviderSubjectParams{
 		Provider:       string(auth.ProviderLinkedIn),
