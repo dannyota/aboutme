@@ -32,8 +32,14 @@ import (
 // helper, resume.Store opens its OWN transactions per write (B7), so tests
 // need a real pool, not a pre-opened tx -- isolation instead comes from
 // every test creating its own throwaway user (createTestUser) and scoping
-// all assertions to that user's own resumes.
-func newIntegrationStore(t *testing.T) (*resume.Store, *store.Queries, context.Context) {
+// all assertions to that user's own resumes. The pool itself is also
+// returned (fix round 1) for tests that need to reach the database
+// directly -- bypassing the store's own application-level checks on
+// purpose, e.g. to exercise the D7 trigger's OWN cap enforcement, or to
+// force two rows to share a created_at so the ListResumesForUser query's
+// `, id` tiebreak is actually exercised, not merely coincidentally
+// satisfied.
+func newIntegrationStore(t *testing.T) (*resume.Store, *store.Queries, *store.Pool, context.Context) {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
 
@@ -47,7 +53,7 @@ func newIntegrationStore(t *testing.T) (*resume.Store, *store.Queries, context.C
 	t.Cleanup(func() { pool.Close(context.Background()) })
 
 	s := resume.NewStore(pool, docmigrate.NewIdentityProjector())
-	return s, store.New(pool), ctx
+	return s, store.New(pool), pool, ctx
 }
 
 // createTestUser inserts a minimal users row and returns its ID, so tests
@@ -135,7 +141,7 @@ func assertResumeRowEqual(t *testing.T, got, want resume.Resume) {
 
 func TestStore_Integration_CreateGetRoundTrip(t *testing.T) {
 	t.Parallel()
-	s, q, ctx := newIntegrationStore(t)
+	s, q, _, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
 	doc := validDocForTest(t)
 
@@ -184,7 +190,7 @@ func TestStore_Integration_CreateGetRoundTrip(t *testing.T) {
 
 func TestStore_Integration_ListOrderingStable(t *testing.T) {
 	t.Parallel()
-	s, q, ctx := newIntegrationStore(t)
+	s, q, pool, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
 	doc := validDocForTest(t)
 
@@ -197,6 +203,22 @@ func TestStore_Integration_ListOrderingStable(t *testing.T) {
 		wantIDs = append(wantIDs, created.ID)
 	}
 
+	// Three sequential Create calls get three distinct created_at values
+	// on their own, so the query's `, id` tiebreak would never actually
+	// run -- the plain created_at order alone would already produce the
+	// right answer, and the assertion below would pass even if `, id`
+	// were accidentally dropped from ListResumesForUser. Force the first
+	// two rows to share the EXACT same created_at (fix round 1, finding
+	// 5) so the tiebreak is genuinely exercised: wantIDs[0] and
+	// wantIDs[1] are uuidv7 (monotonic with real creation time), so
+	// wantIDs[0] < wantIDs[1] -- with created_at tied, only the id
+	// tiebreak can produce creation order.
+	tiedAt := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, id := range wantIDs[:2] {
+		if _, err := pool.Exec(ctx, "UPDATE resumes SET created_at = $1 WHERE id = $2", tiedAt, id); err != nil {
+			t.Fatalf("force created_at tie for %v: %v", id, err)
+		}
+	}
 	list, err := s.List(ctx, userID)
 	if err != nil {
 		t.Fatalf("List() error: %v", err)
@@ -206,14 +228,14 @@ func TestStore_Integration_ListOrderingStable(t *testing.T) {
 	}
 	for i, r := range list {
 		if r.ID != wantIDs[i] {
-			t.Errorf("List()[%d].ID = %v, want %v (creation order: created_at, id)", i, r.ID, wantIDs[i])
+			t.Errorf("List()[%d].ID = %v, want %v (created_at, id -- the first two rows share created_at, so this order only holds if the id tiebreak actually fires)", i, r.ID, wantIDs[i])
 		}
 	}
 }
 
 func TestStore_Integration_DeleteThenGetNotFound(t *testing.T) {
 	t.Parallel()
-	s, q, ctx := newIntegrationStore(t)
+	s, q, _, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
 
 	created, err := s.Create(ctx, userID, "Doomed", validDocForTest(t))
@@ -237,7 +259,7 @@ func TestStore_Integration_DeleteThenGetNotFound(t *testing.T) {
 
 func TestStore_Integration_WrongUser_NotFoundAndRowUntouched(t *testing.T) {
 	t.Parallel()
-	s, q, ctx := newIntegrationStore(t)
+	s, q, _, ctx := newIntegrationStore(t)
 	ownerID := createTestUser(t, q)
 	otherID := createTestUser(t, q)
 
@@ -265,11 +287,39 @@ func TestStore_Integration_WrongUser_NotFoundAndRowUntouched(t *testing.T) {
 	assertResumeRowEqual(t, afterAttack, created)
 }
 
+// TestStore_Integration_Create_InvalidDoc (fix round 1, finding 4) proves
+// createTx's validation gate rejects an invalid document -- half of the
+// task's headline safety property (SaveDocument's mirror-image case was
+// already covered; Create's own gate was previously verified only by
+// reading the code, never by a test). No row must be created at all.
+func TestStore_Integration_Create_InvalidDoc(t *testing.T) {
+	t.Parallel()
+	s, q, _, ctx := newIntegrationStore(t)
+	userID := createTestUser(t, q)
+
+	invalidDoc := validDocForTest(t)
+	invalidDoc.PersonalDetails.Details[0].ID = "not-a-uuid"
+
+	_, err := s.Create(ctx, userID, "Should Never Land", invalidDoc)
+	var valErr *resume.ValidationError
+	if !errors.As(err, &valErr) {
+		t.Fatalf("Create() with invalid doc error = %v (%T), want *resume.ValidationError", err, err)
+	}
+
+	list, err := s.List(ctx, userID)
+	if err != nil {
+		t.Fatalf("List() after rejected Create() error: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("List() after rejected Create() = %d resumes, want 0 (no row should have been created)", len(list))
+	}
+}
+
 // --- Step 2: cap tests ---
 
 func TestStore_Integration_CapEnforcement(t *testing.T) {
 	t.Parallel()
-	s, q, ctx := newIntegrationStore(t)
+	s, q, _, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
 	doc := validDocForTest(t)
 
@@ -301,11 +351,71 @@ func TestStore_Integration_CapEnforcement(t *testing.T) {
 	}
 }
 
+// TestStore_Integration_CapEnforcement_TriggerBackstop (fix round 1,
+// finding 3) exercises the D7 DATABASE TRIGGER's own cap enforcement
+// directly: it inserts via q.CreateResume -- the same sqlc-generated
+// method createTx itself calls -- with none of the store's own
+// LockUserForResumeWrite/CountResumesForUser pre-insert check. Every
+// sequential path through the STORE always has that Go-level check
+// short-circuit before the insert (TestStore_Integration_CapEnforcement
+// above never reaches the trigger), so this is the only coverage of the
+// trigger's own SQLSTATE/message against a REAL Postgres-produced error,
+// rather than the synthetic pgconn.PgError double
+// TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage uses. Still
+// sequential -- the N-way race is Task 9's.
+func TestStore_Integration_CapEnforcement_TriggerBackstop(t *testing.T) {
+	t.Parallel()
+	s, q, _, ctx := newIntegrationStore(t)
+	userID := createTestUser(t, q)
+
+	doc := validDocForTest(t)
+	personalDetails, content, customization, err := resume.EncodePartsForTest(doc)
+	if err != nil {
+		t.Fatalf("EncodePartsForTest: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		_, err = q.CreateResume(ctx, store.CreateResumeParams{
+			UserID:          userID,
+			Title:           fmt.Sprintf("Bypass %d", i),
+			SchemaVersion:   docmigrate.CurrentVersion,
+			PersonalDetails: personalDetails,
+			Content:         content,
+			Customization:   customization,
+		})
+		if err != nil {
+			t.Fatalf("direct CreateResume #%d error: %v", i, err)
+		}
+	}
+
+	_, err = q.CreateResume(ctx, store.CreateResumeParams{
+		UserID:          userID,
+		Title:           "Bypass 4th (must hit the trigger, not a Go-level check)",
+		SchemaVersion:   docmigrate.CurrentVersion,
+		PersonalDetails: personalDetails,
+		Content:         content,
+		Customization:   customization,
+	})
+	if err == nil {
+		t.Fatal("4th direct CreateResume() error = nil, want the D7 trigger's cap violation")
+	}
+	if !resume.IsResumeCapExceededForTest(err) {
+		t.Errorf("4th direct CreateResume() error = %v, want it to match the D7 trigger's exact 23514/resumes_user_cap_exceeded mapping", err)
+	}
+
+	// The store's own Create, for the same now-at-3 user, must also see
+	// the cap as exceeded via its own count check -- the two enforcement
+	// layers agree.
+	if _, err := s.Create(ctx, userID, "Store-level create after bypass", doc); !errors.Is(err, resume.ErrCapExceeded) {
+		t.Errorf("Store.Create() after bypass-created rows error = %v, want resume.ErrCapExceeded", err)
+	}
+}
+
 // --- Step 3: CAS tests ---
 
 func TestStore_Integration_SaveDocument_CAS(t *testing.T) {
 	t.Parallel()
-	s, q, ctx := newIntegrationStore(t)
+	s, q, _, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
 
 	created, err := s.Create(ctx, userID, "CAS Doc", validDocForTest(t))
@@ -390,7 +500,7 @@ func TestStore_Integration_SaveDocument_CAS(t *testing.T) {
 
 func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
 	t.Parallel()
-	s, q, ctx := newIntegrationStore(t)
+	s, q, _, ctx := newIntegrationStore(t)
 	userID := createTestUser(t, q)
 
 	created, err := s.Create(ctx, userID, "Original Title", validDocForTest(t))

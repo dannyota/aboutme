@@ -35,9 +35,18 @@ const resumeCap = 3
 // Store is the resume-domain store: create (cap-enforced), get/list
 // (projected to docmigrate.CurrentVersion, D18), delete, and the two
 // revision-CAS writes (SaveDocument, SaveTitle). Every write passes
-// through ValidateForStore before EncodeParts ever marshals to jsonb --
-// this package is the single write-path choke point (D16); nothing else
-// in apps/server may call EncodeParts.
+// through ValidateForStore before encodeParts ever marshals to jsonb
+// (D16). encodeParts is package-private (fix round 1, owner ruling): no
+// package outside internal/resume can produce the three jsonb values at
+// all, so that half of the choke point is an enforced invariant, not just
+// a convention. The other half is NOT enforced by the compiler: the
+// sqlc-generated CreateResume/UpdateResumeDocumentCAS/UpdateResumeTitleCAS
+// methods remain exported (they are generated code, and Task 7's
+// IdempotencyStore.Execute composes createTx/saveDocumentTx/saveTitleTx
+// directly), so "only internal/resume calls them" is a convention this
+// comment must not overstate as more than that. A forbidigo lint rule
+// closing this second half is recorded as a phase-gate follow-up, not
+// built here.
 type Store struct {
 	pool *store.Pool
 	q    *store.Queries
@@ -112,7 +121,7 @@ func (s *Store) createTx(ctx context.Context, qtx *store.Queries, userID uuid.UU
 		return Resume{}, ErrCapExceeded
 	}
 
-	personalDetails, content, customization, err := EncodeParts(doc)
+	personalDetails, content, customization, err := encodeParts(doc)
 	if err != nil {
 		return Resume{}, fmt.Errorf("resume: create: encode document: %w", err)
 	}
@@ -218,7 +227,7 @@ func (s *Store) saveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 		return 0, err
 	}
 
-	personalDetails, content, customization, err := EncodeParts(doc)
+	personalDetails, content, customization, err := encodeParts(doc)
 	if err != nil {
 		return 0, fmt.Errorf("resume: save document: encode document: %w", err)
 	}
@@ -299,12 +308,23 @@ func (s *Store) afterCASMiss(ctx context.Context, qtx *store.Queries, userID, id
 	return &RevisionMismatchError{CurrentRevision: row.Revision, Current: current}
 }
 
-// projectRow assembles row's scalar columns with its three jsonb parts
-// projected to docmigrate.CurrentVersion (D18) into a Resume.
+// projectRow assembles row's scalar columns with its three jsonb parts,
+// lifted to docmigrate.CurrentVersion (D18), into a Resume.
+//
+// Project (fix round 1, owner ruling) returns the three CurrentVersion
+// PARTS, not a typed schema.Resume -- docmigrate has no typed-decode
+// dependency on this package (D13: a converter cannot decode a
+// not-yet-current document into the current Go struct at all), so the
+// one strict decode (DecodeParts, DisallowUnknownFields) happens here,
+// once, at the boundary, after projection.
 func (s *Store) projectRow(row store.Resume) (Resume, error) {
-	doc, err := s.proj.Project(row.PersonalDetails, row.Content, row.Customization, row.SchemaVersion)
+	pd, content, customization, err := s.proj.Project(row.PersonalDetails, row.Content, row.Customization, row.SchemaVersion)
 	if err != nil {
 		return Resume{}, fmt.Errorf("resume: project document: %w", err)
+	}
+	doc, err := DecodeParts(pd, content, customization, docmigrate.CurrentVersion)
+	if err != nil {
+		return Resume{}, fmt.Errorf("resume: decode projected document: %w", err)
 	}
 	return toDomain(row, doc), nil
 }

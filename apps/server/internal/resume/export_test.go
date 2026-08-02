@@ -6,7 +6,13 @@ package resume
 // actual public API. Compiled only into test binaries (the _test.go
 // suffix), never shipped.
 
-import "github.com/santhosh-tekuri/jsonschema/v6"
+import (
+	"encoding/json"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+)
 
 // CompileCountForTest reports how many times mustCompileSchema has run.
 // Package-level var initializers run exactly once, at package init, before
@@ -39,4 +45,14 @@ func NewSchemaCompilerForTest() *jsonschema.Compiler {
 // without going through a live database.
 func IsResumeCapExceededForTest(err error) bool {
 	return isResumeCapExceeded(err)
+}
+
+// EncodePartsForTest exposes encodeParts (codec.go), now package-private
+// (fix round 1, owner ruling: it is the function that actually produces
+// the three jsonb values a write persists, so it is the half of the D16
+// choke point the compiler can enforce), so tests can still exercise the
+// exact function ValidateForStore's own callers use, rather than a
+// reimplementation of it.
+func EncodePartsForTest(doc schema.Resume) (personalDetails, content, customization json.RawMessage, err error) {
+	return encodeParts(doc)
 }

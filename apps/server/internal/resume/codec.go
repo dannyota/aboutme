@@ -81,12 +81,19 @@ func DecodeParts(personalDetails, content, customization json.RawMessage, schema
 	return doc, nil
 }
 
-// EncodeParts is DecodeParts' inverse: it decomposes doc into the three
+// encodeParts is DecodeParts' inverse: it decomposes doc into the three
 // jsonb parts a caller persists into personal_details/content/customization
 // (D4). schemaVersion is deliberately dropped from all three -- it lives in
 // doc.SchemaVersion and belongs to the row's own schema_version column,
 // never inside a jsonb part.
-func EncodeParts(doc schema.Resume) (personalDetails, content, customization json.RawMessage, err error) {
+//
+// Package-private (fix round 1, owner ruling): this is the function that
+// actually produces the three jsonb values a write persists, so it is the
+// half of the D16 write-path choke point the compiler can enforce -- no
+// package outside internal/resume can call it. store.go's export_test.go
+// seam (EncodePartsForTest) re-exposes it for tests that need the exact
+// function ValidateForStore's own callers use.
+func encodeParts(doc schema.Resume) (personalDetails, content, customization json.RawMessage, err error) {
 	personalDetails, err = json.Marshal(doc.PersonalDetails)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("resume: encoding personalDetails: %w", err)

@@ -95,7 +95,7 @@ func TestCodec_RoundTrip_ByteStable(t *testing.T) {
 				t.Fatalf("AssembleCanonical(doc): %v", err)
 			}
 
-			pd1, c1, cu1, err := resume.EncodeParts(doc)
+			pd1, c1, cu1, err := resume.EncodePartsForTest(doc)
 			if err != nil {
 				t.Fatalf("EncodeParts (pass 1): %v", err)
 			}
@@ -113,7 +113,7 @@ func TestCodec_RoundTrip_ByteStable(t *testing.T) {
 				t.Errorf("EncodeParts/DecodeParts lost fidelity -- AssembleCanonical(doc) != AssembleCanonical(doc2):\n doc:  %s\n doc2: %s", docCanonical, doc2Canonical)
 			}
 
-			pd2, c2, cu2, err := resume.EncodeParts(doc2)
+			pd2, c2, cu2, err := resume.EncodePartsForTest(doc2)
 			if err != nil {
 				t.Fatalf("EncodeParts (pass 2): %v", err)
 			}
@@ -160,7 +160,7 @@ func TestCodec_PartsNeverContainSchemaVersion(t *testing.T) {
 		t.Fatalf("DecodeParts: %v", err)
 	}
 
-	pd, content, cu, err := resume.EncodeParts(doc)
+	pd, content, cu, err := resume.EncodePartsForTest(doc)
 	if err != nil {
 		t.Fatalf("EncodeParts: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestCodec_EncodeParts_Minimal_MatchesSchemaType(t *testing.T) {
 		},
 	}
 
-	pd, content, cu, err := resume.EncodeParts(doc)
+	pd, content, cu, err := resume.EncodePartsForTest(doc)
 	if err != nil {
 		t.Fatalf("EncodeParts: %v", err)
 	}
