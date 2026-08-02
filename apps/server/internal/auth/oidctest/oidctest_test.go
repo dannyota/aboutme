@@ -38,11 +38,21 @@ func generateTestKey(t *testing.T) *rsa.PrivateKey {
 	return key
 }
 
-// exchangeCode POSTs code to p's /token endpoint directly (no real
+// tokenResponseBody mirrors the /token endpoint's JSON success shape.
+// Shared by exchangeCode and tests that need fields beyond id_token (e.g.
+// expires_in).
+type tokenResponseBody struct {
+	IDToken     string `json:"id_token"`
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int64  `json:"expires_in"`
+}
+
+// exchangeCodeFull POSTs code to p's /token endpoint directly (no real
 // browser redirect, no oauth2.Config — this package's self-tests exercise
-// the HTTP surface and go-jose signing directly) and returns the raw
-// id_token from the JSON response.
-func exchangeCode(t *testing.T, p *oidctest.Provider, code string) (idToken string, status int) {
+// the HTTP surface and go-jose signing directly) and returns the decoded
+// response body. On a non-200 status it returns the zero body.
+func exchangeCodeFull(t *testing.T, p *oidctest.Provider, code string) (body tokenResponseBody, status int) {
 	t.Helper()
 
 	form := url.Values{
@@ -66,17 +76,24 @@ func exchangeCode(t *testing.T, p *oidctest.Provider, code string) (idToken stri
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", resp.StatusCode
+		return tokenResponseBody{}, resp.StatusCode
 	}
 
-	var body struct {
-		IDToken     string `json:"id_token"`
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
-		ExpiresIn   int64  `json:"expires_in"`
-	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decoding token response: %v", err)
+	}
+	return body, resp.StatusCode
+}
+
+// exchangeCode is exchangeCodeFull's common-case sibling: it also asserts
+// the wire-protocol fields every 200 response must carry, and returns just
+// the id_token most tests care about.
+func exchangeCode(t *testing.T, p *oidctest.Provider, code string) (idToken string, status int) {
+	t.Helper()
+
+	body, status := exchangeCodeFull(t, p, code)
+	if status != http.StatusOK {
+		return "", status
 	}
 	if body.AccessToken == "" {
 		t.Error("token response missing access_token")
@@ -84,7 +101,7 @@ func exchangeCode(t *testing.T, p *oidctest.Provider, code string) (idToken stri
 	if body.TokenType == "" {
 		t.Error("token response missing token_type")
 	}
-	return body.IDToken, resp.StatusCode
+	return body.IDToken, status
 }
 
 // TestProvider_DiscoveryAndTokenRoundTrip is the harness's own proof of
@@ -242,6 +259,45 @@ func TestClaims_ExpiresAtOverride(t *testing.T) {
 		t.Fatal("Verify succeeded for an expired token, want error")
 	} else if !strings.Contains(err.Error(), "expired") {
 		t.Errorf("Verify error = %q, want it to mention expiry", err.Error())
+	}
+}
+
+// TestProvider_ExpiresIn_IndependentOfIDTokenExpiry pins the seam between
+// the OAuth2 access token's expires_in and the ID token's own "exp" claim:
+// RFC 6749's access-token lifetime and OIDC's id_token expiry are two
+// different tokens' lifetimes and must not be derived from each other. A
+// Claims.ExpiresAt set in the past — exactly what an expired-ID-token
+// adversarial test registers — must still produce a positive, fixed
+// expires_in; the past exp lives only in the id_token itself, and
+// rejecting it is go-oidc's job at the Verify layer (proven separately by
+// TestClaims_ExpiresAtOverride), not something the token exchange
+// response should pre-empt.
+func TestProvider_ExpiresIn_IndependentOfIDTokenExpiry(t *testing.T) {
+	p := oidctest.NewProvider(t)
+	p.RegisterCode("code", oidctest.Claims{
+		Subject:   "user-1",
+		ExpiresAt: time.Now().Add(-1 * time.Hour),
+	})
+
+	body, status := exchangeCodeFull(t, p, "code")
+	if status != http.StatusOK {
+		t.Fatalf("token exchange status = %d, want %d", status, http.StatusOK)
+	}
+	if body.ExpiresIn <= 0 {
+		t.Errorf("ExpiresIn = %d, want a positive value independent of the past Claims.ExpiresAt", body.ExpiresIn)
+	}
+	if body.IDToken == "" {
+		t.Fatal("token response missing id_token")
+	}
+
+	ctx := context.Background()
+	provider, err := oidc.NewProvider(ctx, p.URL)
+	if err != nil {
+		t.Fatalf("oidc.NewProvider: %v", err)
+	}
+	verifier := provider.Verifier(&oidc.Config{ClientID: oidctest.DefaultClientID})
+	if _, err := verifier.Verify(ctx, body.IDToken); err == nil {
+		t.Fatal("Verify succeeded for an expired id_token despite a positive expires_in, want error")
 	}
 }
 

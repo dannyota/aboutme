@@ -212,6 +212,17 @@ type tokenResponse struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
+// accessTokenExpiresInSeconds is the OAuth2 access token's advertised
+// lifetime, deliberately fixed and independent of the ID token's own "exp"
+// claim: RFC 6749's access-token expires_in and OIDC's id_token exp are
+// two different tokens' lifetimes, set by the same server but not required
+// to agree, and a real IdP never derives one from the other. Deriving
+// expires_in from Claims.ExpiresAt would give an expired-ID-token test a
+// negative expires_in that no real IdP emits — a shape production code
+// could reject at the oauth2-token layer before ID-token verification ever
+// runs, making an expired-ID-token test pass for the wrong reason.
+const accessTokenExpiresInSeconds = 3600
+
 func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "oidctest: parsing token request: "+err.Error(), http.StatusBadRequest)
@@ -225,7 +236,7 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idToken, expiresAt, err := p.signIDToken(claims)
+	idToken, err := p.signIDToken(claims)
 	if err != nil {
 		http.Error(w, "oidctest: signing id token: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -235,7 +246,7 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 		IDToken:     idToken,
 		AccessToken: "oidctest-access-token",
 		TokenType:   "Bearer",
-		ExpiresIn:   int64(time.Until(expiresAt).Seconds()),
+		ExpiresIn:   accessTokenExpiresInSeconds,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil { //nolint:gosec // access_token here is a fixed placeholder string this mock always returns, not a real credential; the field name is the RFC 6749 §5.1 wire name go-oidc/oauth2 expects, not a leak of a real secret
@@ -245,8 +256,8 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 
 // signIDToken fills in claims' defaults (issuer, audience, expiry,
 // signing key — each per Claims' documented default) and returns a
-// signed, compact-serialized JWT plus the expiry it was signed with.
-func (p *Provider) signIDToken(claims Claims) (token string, expiresAt time.Time, err error) {
+// signed, compact-serialized JWT.
+func (p *Provider) signIDToken(claims Claims) (token string, err error) {
 	issuer := claims.Issuer
 	if issuer == "" {
 		issuer = p.URL
@@ -255,7 +266,7 @@ func (p *Provider) signIDToken(claims Claims) (token string, expiresAt time.Time
 	if audience == "" {
 		audience = p.ClientID
 	}
-	expiresAt = claims.ExpiresAt
+	expiresAt := claims.ExpiresAt
 	if expiresAt.IsZero() {
 		expiresAt = time.Now().Add(time.Hour)
 	}
@@ -283,7 +294,7 @@ func (p *Provider) signIDToken(claims Claims) (token string, expiresAt time.Time
 
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("marshaling claims: %w", err)
+		return "", fmt.Errorf("marshaling claims: %w", err)
 	}
 
 	signer, err := jose.NewSigner(
@@ -295,18 +306,18 @@ func (p *Provider) signIDToken(claims Claims) (token string, expiresAt time.Time
 		},
 	)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("creating signer: %w", err)
+		return "", fmt.Errorf("creating signer: %w", err)
 	}
 
 	sig, err := signer.Sign(raw)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("signing claims: %w", err)
+		return "", fmt.Errorf("signing claims: %w", err)
 	}
 
 	compact, err := sig.CompactSerialize()
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("serializing jwt: %w", err)
+		return "", fmt.Errorf("serializing jwt: %w", err)
 	}
 
-	return compact, expiresAt, nil
+	return compact, nil
 }
