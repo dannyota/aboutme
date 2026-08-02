@@ -5,11 +5,24 @@
 package store
 
 import (
+	"encoding/json"
 	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type IdempotencyRecord struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	Route          string
+	IdempotencyKey uuid.UUID
+	RequestHash    []byte
+	ResponseStatus int32
+	ResponseBody   json.RawMessage
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+}
 
 type Identity struct {
 	ID             uuid.UUID
@@ -34,6 +47,24 @@ type OAuthTransaction struct {
 	ConsumedAt    *time.Time
 }
 
+type Resume struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Title           string
+	Slug            *string
+	Live            bool
+	DownloadEnabled bool
+	SeoGeoEnabled   bool
+	SchemaVersion   int32
+	Revision        int64
+	Lng             *string
+	PersonalDetails json.RawMessage
+	Content         json.RawMessage
+	Customization   json.RawMessage
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type Session struct {
 	ID                 uuid.UUID
 	UserID             uuid.UUID
@@ -48,6 +79,13 @@ type Session struct {
 	UA                 *string
 	IP                 *netip.Addr
 	RotatedFrom        *uuid.UUID
+}
+
+type SlugTombstone struct {
+	ID               uuid.UUID
+	Slug             string
+	ReleasedByUserID *uuid.UUID
+	ReleasedAt       time.Time
 }
 
 type User struct {
