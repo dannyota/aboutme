@@ -373,15 +373,68 @@ func insertTombstone(ctx context.Context, db sqlExecer, slug string, releasedBy 
 	return err
 }
 
-func TestSlugTombstones_FormatCheckRejectsShortSlug(t *testing.T) {
+// TestSlugTombstones_ConstraintBoundaries mirrors
+// TestResumeSchema_ConstraintBoundaries' slug-format coverage in full,
+// rather than a single short-slug case. slug_tombstones_slug_format_check
+// is a textually independent second copy of resumes_slug_format_check's
+// rule (there is no shared constraint, no shared function -- just the same
+// regex and bounds typed twice), so a divergent bound or a mistyped regex
+// in this copy would otherwise sail through with no test ever noticing.
+func TestSlugTombstones_ConstraintBoundaries(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
-	userID := createTestUser(ctx, t, tx)
 
-	err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
-		return insertTombstone(ctx, sp, "ab", &userID)
-	})
-	requireConstraintViolation(t, err, "slug_tombstones_slug_format_check")
+	tests := []struct {
+		name           string
+		slug           string
+		wantConstraint string // "" means the insert must succeed
+	}{
+		{
+			name:           "slug length 3 rejected",
+			slug:           strings.Repeat("a", 3),
+			wantConstraint: "slug_tombstones_slug_format_check",
+		},
+		{
+			name: "slug length 4 accepted",
+			slug: strings.Repeat("a", 4),
+		},
+		{
+			name: "slug length 30 accepted",
+			slug: strings.Repeat("a", 30),
+		},
+		{
+			name:           "slug length 31 rejected",
+			slug:           strings.Repeat("a", 31),
+			wantConstraint: "slug_tombstones_slug_format_check",
+		},
+		{
+			name:           "slug leading hyphen rejected",
+			slug:           "-lead",
+			wantConstraint: "slug_tombstones_slug_format_check",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Each case gets its own user (released_by_user_id), same
+			// rationale as TestResumeSchema_ConstraintBoundaries: this
+			// matrix is unrelated to any per-user invariant, so nothing
+			// here should share state across cases.
+			userID := createTestUser(ctx, t, tx)
+
+			err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
+				return insertTombstone(ctx, sp, tt.slug, &userID)
+			})
+
+			if tt.wantConstraint == "" {
+				if err != nil {
+					t.Fatalf("insert failed: %v, want success", err)
+				}
+				return
+			}
+			requireConstraintViolation(t, err, tt.wantConstraint)
+		})
+	}
 }
 
 func TestSlugTombstones_DuplicateSlugRejected(t *testing.T) {
@@ -402,13 +455,21 @@ func TestSlugTombstones_DuplicateSlugRejected(t *testing.T) {
 // idempotency_records: (user_id, route, idempotency_key) duplicate.
 // -----------------------------------------------------------------------
 
+// idempotencyRecordExpiresAt is a fixed, deterministic expires_at for every
+// idempotency_records insert in this file (repo rule: injected clocks, not
+// the wall clock, in every test -- see the root CLAUDE.md's determinism
+// rule). No assertion here depends on its value, but a fixed literal costs
+// nothing and keeps this file consistent with that rule unconditionally
+// rather than only where a test happens to care.
+var idempotencyRecordExpiresAt = time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)
+
 func insertIdempotencyRecord(ctx context.Context, db sqlExecer, userID uuid.UUID, route string, key uuid.UUID) error {
 	_, err := db.Exec(ctx, `
 		INSERT INTO idempotency_records (
 			user_id, route, idempotency_key, request_hash, response_status,
 			response_body, expires_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, userID, route, key, []byte("test-request-hash"), 201, []byte(`{}`), time.Now().Add(24*time.Hour))
+	`, userID, route, key, []byte("test-request-hash"), 201, []byte(`{}`), idempotencyRecordExpiresAt)
 	return err
 }
 
@@ -541,5 +602,147 @@ func TestResumeCapTrigger_EnforcesThreePerUser(t *testing.T) {
 	// userA is currently sitting right back at 3 resumes.
 	if _, err := insertResumeReturningID(ctx, tx, defaultResumeRow(userB, "cap-b-01")); err != nil {
 		t.Errorf("insert for unrelated userB failed: %v, want success", err)
+	}
+}
+
+// updateResumeUserID reassigns an existing resume row to a new owner --
+// the trigger's second arm (BEFORE UPDATE OF user_id ON resumes), as
+// opposed to insertResume/insertResumeReturningID which only ever exercise
+// its BEFORE INSERT arm.
+func updateResumeUserID(ctx context.Context, db sqlExecer, resumeID, newUserID uuid.UUID) error {
+	_, err := db.Exec(ctx, `UPDATE resumes SET user_id = $1 WHERE id = $2`, newUserID, resumeID)
+	return err
+}
+
+// TestResumeCapTrigger_EnforcesCapOnUpdateOfUserID proves the trigger's
+// second arm, not just its first: nothing else in this file ever issues an
+// UPDATE that touches user_id, so changing the trigger definition from
+// "BEFORE INSERT OR UPDATE OF user_id ON resumes" to a bare
+// "BEFORE INSERT ON resumes" would leave every other test in this file
+// green. Moving an existing resume to a user already holding 3 must be
+// rejected exactly like a 4th INSERT would be.
+func TestResumeCapTrigger_EnforcesCapOnUpdateOfUserID(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	userA := createTestUser(ctx, t, tx)
+	userB := createTestUser(ctx, t, tx)
+
+	for i := range 3 {
+		if _, err := insertResumeReturningID(ctx, tx, defaultResumeRow(userA, fmt.Sprintf("update-cap-a-%02d", i))); err != nil {
+			t.Fatalf("insert %d/3 for userA: %v", i+1, err)
+		}
+	}
+	resumeB, err := insertResumeReturningID(ctx, tx, defaultResumeRow(userB, "update-cap-b-01"))
+	if err != nil {
+		t.Fatalf("insert for userB: %v", err)
+	}
+
+	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
+		return updateResumeUserID(ctx, sp, resumeB, userA)
+	})
+	if err == nil {
+		t.Fatal("moving userB's resume onto userA (already at cap) succeeded, want resumes_user_cap_exceeded")
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		t.Fatalf("update error = %v (%T), want a *pgconn.PgError", err, err)
+	}
+	if pgErr.Code != "23514" {
+		t.Errorf("update SQLSTATE = %q, want 23514 (check_violation)", pgErr.Code)
+	}
+	if pgErr.Message != "resumes_user_cap_exceeded" {
+		t.Errorf("update message = %q, want %q", pgErr.Message, "resumes_user_cap_exceeded")
+	}
+}
+
+// -----------------------------------------------------------------------
+// Foreign-key cascade / set-null semantics.
+// -----------------------------------------------------------------------
+
+// TestResumes_OwningUserDeletedCascades proves resumes.user_id ON DELETE
+// CASCADE: deleting a user must remove every resume that user owns, not
+// leave an orphaned row or raise a foreign-key violation.
+func TestResumes_OwningUserDeletedCascades(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	userID := createTestUser(ctx, t, tx)
+
+	resumeID, err := insertResumeReturningID(ctx, tx, defaultResumeRow(userID, "cascade-case"))
+	if err != nil {
+		t.Fatalf("insert resume: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("delete owning user: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM resumes WHERE id = $1`, resumeID).Scan(&count); err != nil {
+		t.Fatalf("count resumes: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("resumes row count after owning user deleted = %d, want 0 (ON DELETE CASCADE)", count)
+	}
+}
+
+// TestIdempotencyRecords_OwningUserDeletedCascades proves
+// idempotency_records.user_id ON DELETE CASCADE, the same way as resumes.
+func TestIdempotencyRecords_OwningUserDeletedCascades(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	userID := createTestUser(ctx, t, tx)
+
+	if err := insertIdempotencyRecord(ctx, tx, userID, "POST /v1/resumes", uuid.New()); err != nil {
+		t.Fatalf("insert idempotency record: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("delete owning user: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1`, userID).Scan(&count); err != nil {
+		t.Fatalf("count idempotency_records: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("idempotency_records row count after owning user deleted = %d, want 0 (ON DELETE CASCADE)", count)
+	}
+}
+
+// TestSlugTombstones_ReleasingUserDeletedSetsNullNotCascade proves the
+// deliberate spec asymmetry: a tombstone must outlive the user who
+// released it -- deleting that account must never free the tombstoned
+// slug early -- so released_by_user_id is ON DELETE SET NULL, unlike every
+// other user_id FK in this task's DDL, which is ON DELETE CASCADE. This is
+// exactly the kind of thing a later, careless "make the FKs consistent"
+// change would silently flip.
+func TestSlugTombstones_ReleasingUserDeletedSetsNullNotCascade(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	userID := createTestUser(ctx, t, tx)
+
+	slug := "outlives-releaser"
+	if err := insertTombstone(ctx, tx, slug, &userID); err != nil {
+		t.Fatalf("insert tombstone: %v", err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("delete releasing user: %v", err)
+	}
+
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM slug_tombstones WHERE slug = $1`, slug).Scan(&count); err != nil {
+		t.Fatalf("count slug_tombstones: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("slug_tombstones row count after releasing user deleted = %d, want 1 (a tombstone must outlive its releasing user)", count)
+	}
+
+	var releasedBy *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT released_by_user_id FROM slug_tombstones WHERE slug = $1`, slug).Scan(&releasedBy); err != nil {
+		t.Fatalf("select released_by_user_id: %v", err)
+	}
+	if releasedBy != nil {
+		t.Errorf("released_by_user_id = %v, want nil after releasing user deleted (ON DELETE SET NULL)", *releasedBy)
 	}
 }

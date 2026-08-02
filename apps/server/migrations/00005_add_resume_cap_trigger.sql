@@ -18,9 +18,15 @@
 CREATE FUNCTION enforce_resume_cap() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-    -- Serialize per-owner: race-proof even for writers that bypass the
-    -- store layer (D7). The store's create tx takes this same lock first
-    -- (spec: belt and suspenders); identical order, no deadlock.
+    -- Serialize per-owner (D7). The lock blocks a competing writer; the
+    -- count that follows then takes a FRESH snapshot and sees the row
+    -- that writer committed. This holds even for writers that bypass the
+    -- store layer -- but only under READ COMMITTED, which is Postgres's
+    -- default and which every aboutme transaction must keep. At
+    -- REPEATABLE READ the count would read a snapshot taken before the
+    -- lock was granted, still see 2 rows, and admit a 4th resume.
+    -- The store's create tx takes this same lock first (spec: belt and
+    -- suspenders); identical order, no deadlock.
     PERFORM 1 FROM users WHERE id = NEW.user_id FOR UPDATE;
     IF (SELECT count(*) FROM resumes WHERE user_id = NEW.user_id) >= 3 THEN
         RAISE EXCEPTION 'resumes_user_cap_exceeded'
