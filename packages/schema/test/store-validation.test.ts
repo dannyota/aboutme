@@ -178,12 +178,24 @@ describe("store-layer validator: entry-id uniqueness across the whole resume (AC
     expect(rules(issues)).toContain("duplicate-entry-id");
     // One issue per occurrence, sorted by path — "content.skill..." < "content.work...".
     const duplicateIssues = issues.filter((i) => i.rule === "duplicate-entry-id");
-    expect(duplicateIssues.map((i) => i.path)).toEqual([
-      "content.skill.entries[0].id",
-      "content.work.entries[0].id",
+    // Exact message text (not just a substring): the two halves' message
+    // text is part of the store layer's cross-language parity contract —
+    // gen/go/store_validate_test.go's TestValidateDocument_DuplicateEntryID
+    // asserts these same two strings.
+    expect(duplicateIssues).toEqual([
+      {
+        rule: "duplicate-entry-id",
+        path: "content.skill.entries[0].id",
+        message:
+          'content.skill.entries[0].id: entry id "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac" is not unique across the whole resume — also used at content.work.entries[0].id',
+      },
+      {
+        rule: "duplicate-entry-id",
+        path: "content.work.entries[0].id",
+        message:
+          'content.work.entries[0].id: entry id "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac" is not unique across the whole resume — also used at content.skill.entries[0].id',
+      },
     ]);
-    expect(duplicateIssues[0].message).toContain("content.work.entries[0].id");
-    expect(duplicateIssues[1].message).toContain("content.skill.entries[0].id");
   });
 
   it("accepts the same document shape when every entry id is unique", () => {
@@ -201,15 +213,89 @@ describe("store-layer validator: entry-id uniqueness across the whole resume (AC
       },
     };
     const issues = validateEntryIdUniqueness(doc.content);
-    expect(issues).toHaveLength(3);
-    for (const issue of issues) {
-      expect(issue.rule).toBe("duplicate-entry-id");
-    }
-    expect(issues.map((i) => i.path)).toEqual([
-      "content.a.entries[0].id",
-      "content.b.entries[0].id",
-      "content.c.entries[0].id",
+    expect(issues).toEqual([
+      {
+        rule: "duplicate-entry-id",
+        path: "content.a.entries[0].id",
+        message:
+          'content.a.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.b.entries[0].id, content.c.entries[0].id',
+      },
+      {
+        rule: "duplicate-entry-id",
+        path: "content.b.entries[0].id",
+        message:
+          'content.b.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.a.entries[0].id, content.c.entries[0].id',
+      },
+      {
+        rule: "duplicate-entry-id",
+        path: "content.c.entries[0].id",
+        message:
+          'content.c.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.a.entries[0].id, content.b.entries[0].id',
+      },
     ]);
+  });
+
+  // Minor 5: the case this rule's own doc comment names as the one
+  // uniqueItems could never cover — two entries in the SAME section's own
+  // entries array sharing an id — was previously untested in both
+  // languages. gen/go/store_validate_test.go has the mirror case.
+  it("rejects the same id used twice within a single section's own entries array", () => {
+    const doc = {
+      content: {
+        w: { sectionType: "work", entries: [{ id: "dup" }, { id: "dup" }] },
+      },
+    };
+    const issues = validateEntryIdUniqueness(doc.content);
+    expect(issues).toEqual([
+      {
+        rule: "duplicate-entry-id",
+        path: "content.w.entries[0].id",
+        message:
+          'content.w.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.w.entries[1].id',
+      },
+      {
+        rule: "duplicate-entry-id",
+        path: "content.w.entries[1].id",
+        message:
+          'content.w.entries[1].id: entry id "dup" is not unique across the whole resume — also used at content.w.entries[0].id',
+      },
+    ]);
+  });
+
+  // Important 2: the message must stay bounded even when an id is shared by
+  // far more than a handful of entries. resume.schema.json permits up to
+  // content.maxProperties=24 sections, so 50 sections sharing one id is a
+  // realistic stand-in for "many, not just a couple" without approaching
+  // the full 24 × entries.maxItems=64 = 1536-entry worst case this bound
+  // exists for.
+  it("caps the interpolated 'also used at' list and summarizes the rest as 'and N more'", () => {
+    const sectionCount = 50;
+    const content: Record<string, { sectionType: string; entries: { id: string }[] }> = {};
+    for (let i = 0; i < sectionCount; i++) {
+      const key = `s${String(i).padStart(2, "0")}`;
+      content[key] = { sectionType: "work", entries: [{ id: "dup" }] };
+    }
+
+    const issues = validateEntryIdUniqueness(content);
+    expect(issues).toHaveLength(sectionCount);
+
+    const first = issues[0];
+    expect(first.path).toBe("content.s00.entries[0].id");
+    expect(first.message).toBe(
+      'content.s00.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.s01.entries[0].id, content.s02.entries[0].id, content.s03.entries[0].id, and 46 more',
+    );
+
+    const last = issues[sectionCount - 1];
+    expect(last.path).toBe("content.s49.entries[0].id");
+    expect(last.message).toBe(
+      'content.s49.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.s00.entries[0].id, content.s01.entries[0].id, content.s02.entries[0].id, and 46 more',
+    );
+
+    // The whole point: message length must not scale with the number of
+    // occurrences (49 others here) — every message stays short and bounded.
+    for (const issue of issues) {
+      expect(issue.message.length).toBeLessThan(220);
+    }
   });
 
   it("validateEntryIdUniqueness accepts an empty or undefined content map without throwing", () => {

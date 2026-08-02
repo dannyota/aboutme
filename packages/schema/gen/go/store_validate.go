@@ -315,6 +315,44 @@ func entryIDs(section Section) []string {
 	return nil
 }
 
+// maxOtherPathsInMessage bounds how many OTHER occurrences' paths a
+// duplicate-entry-id message spells out (review finding "Important 2"):
+// resume.schema.json permits content.maxProperties=24 sections ×
+// entries.maxItems=64 entries/section = 1536 entries, all schema-valid while
+// sharing one id. Interpolating every other path into every occurrence's
+// message would be O(N²) — 1536 issues each carrying ~1535 paths — from a
+// single ~70 KB document. Anything beyond this bound is summarized as an
+// "and N more" suffix instead of spelled out.
+const maxOtherPathsInMessage = 3
+
+// formatOtherPaths formats the "also used at ..." clause for one occurrence
+// of a duplicated id, given every path that id occurs at (sortedPaths,
+// pre-sorted ONCE by the caller — see ValidateEntryIDUniqueness) and the
+// occurrence's own path (excluded from the list it names). Bounded to
+// maxOtherPathsInMessage entries plus an "and N more" suffix — see that
+// constant's comment. Runs in O(maxOtherPathsInMessage) per call, not O(N):
+// the loop below breaks as soon as it has collected enough paths to show,
+// rather than filtering the full slice first.
+func formatOtherPaths(sortedPaths []string, path string) string {
+	shown := make([]string, 0, maxOtherPathsInMessage)
+	for _, p := range sortedPaths {
+		if p == path {
+			continue
+		}
+		if len(shown) == maxOtherPathsInMessage {
+			break
+		}
+		shown = append(shown, p)
+	}
+	total := len(sortedPaths) - 1 // every path is unique, so exactly one entry equals path
+	remaining := total - len(shown)
+	suffix := ""
+	if remaining > 0 {
+		suffix = fmt.Sprintf(", and %d more", remaining)
+	}
+	return strings.Join(shown, ", ") + suffix
+}
+
 // ValidateEntryIDUniqueness enforces AC-DOC-002 (design spec §3): entry ids
 // are client-generated uuids that must be unique ACROSS THE WHOLE RESUME,
 // not merely within one section. resume.schema.json has no per-array
@@ -328,7 +366,8 @@ func entryIDs(section Section) []string {
 //
 // Reports one issue per OCCURRENCE of a duplicated id (not just the first
 // repeat), so a caller can point at every offending entry, not only the
-// second one found.
+// second one found. The "also used at ..." clause is bounded — see
+// formatOtherPaths and maxOtherPathsInMessage above.
 func ValidateEntryIDUniqueness(content map[string]Section) []ValidationIssue {
 	var issues []ValidationIssue
 
@@ -351,20 +390,18 @@ func ValidateEntryIDUniqueness(content map[string]Section) []ValidationIssue {
 		if len(paths) <= 1 {
 			continue
 		}
-		for _, path := range paths {
-			others := make([]string, 0, len(paths)-1)
-			for _, p := range paths {
-				if p != path {
-					others = append(others, p)
-				}
-			}
-			sort.Strings(others)
+		// Sorted ONCE per duplicated id, not once per occurrence — the
+		// per-occurrence-sort version this replaced re-sorted an
+		// (N-1)-element slice N times for an N-way duplicate.
+		sortedPaths := append([]string(nil), paths...)
+		sort.Strings(sortedPaths)
+		for _, path := range sortedPaths {
 			issues = append(issues, ValidationIssue{
 				Rule: "duplicate-entry-id",
 				Path: path,
 				Message: fmt.Sprintf(
 					"%s: entry id %q is not unique across the whole resume — also used at %s",
-					path, id, strings.Join(others, ", "),
+					path, id, formatOtherPaths(sortedPaths, path),
 				),
 			})
 		}

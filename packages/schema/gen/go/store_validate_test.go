@@ -8,8 +8,10 @@ package schema
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"testing"
 )
@@ -217,6 +219,11 @@ func contains(s, substr string) bool {
 // "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac" appears once in `work` and once in
 // `skill` — a single section's own entries array has no uniqueItems keyword
 // that could ever catch a cross-section collision like this one.
+//
+// Exact message text (not just a substring): the two halves' message text
+// is part of the store layer's cross-language parity contract —
+// test/store-validation.test.ts's mirror test asserts these same two
+// strings.
 func TestValidateDocument_DuplicateEntryID(t *testing.T) {
 	resume := loadResumeFixture(t, "store", "invalid-duplicate-entry-id.json")
 	issues := ValidateDocument(resume)
@@ -229,20 +236,20 @@ func TestValidateDocument_DuplicateEntryID(t *testing.T) {
 	}
 	// One issue per occurrence, sorted by path ("content.skill..." <
 	// "content.work..." per ValidateDocument's return-boundary sort).
-	if len(duplicateIssues) != 2 {
-		t.Fatalf("expected exactly 2 duplicate-entry-id issues (one per occurrence), got %d: %v", len(duplicateIssues), issues)
+	want := []ValidationIssue{
+		{
+			Rule:    "duplicate-entry-id",
+			Path:    "content.skill.entries[0].id",
+			Message: `content.skill.entries[0].id: entry id "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac" is not unique across the whole resume — also used at content.work.entries[0].id`,
+		},
+		{
+			Rule:    "duplicate-entry-id",
+			Path:    "content.work.entries[0].id",
+			Message: `content.work.entries[0].id: entry id "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac" is not unique across the whole resume — also used at content.skill.entries[0].id`,
+		},
 	}
-	if duplicateIssues[0].Path != "content.skill.entries[0].id" {
-		t.Fatalf("expected issue 0 at content.skill.entries[0].id, got: %v", duplicateIssues[0])
-	}
-	if duplicateIssues[1].Path != "content.work.entries[0].id" {
-		t.Fatalf("expected issue 1 at content.work.entries[0].id, got: %v", duplicateIssues[1])
-	}
-	if !contains(duplicateIssues[0].Message, "content.work.entries[0].id") {
-		t.Fatalf("expected issue 0's message to name the other occurrence, got: %s", duplicateIssues[0].Message)
-	}
-	if !contains(duplicateIssues[1].Message, "content.skill.entries[0].id") {
-		t.Fatalf("expected issue 1's message to name the other occurrence, got: %s", duplicateIssues[1].Message)
+	if !reflect.DeepEqual(duplicateIssues, want) {
+		t.Fatalf("got %#v, want %#v", duplicateIssues, want)
 	}
 }
 
@@ -268,20 +275,96 @@ func TestValidateEntryIDUniqueness_FlagsEveryOccurrenceOfAThreeWayDuplicate(t *t
 		"c": NewLanguageSection("", "", []LanguageEntry{{ID: dup}}),
 	}
 	issues := ValidateEntryIDUniqueness(content)
-	if len(issues) != 3 {
-		t.Fatalf("expected exactly 3 issues (one per occurrence), got %d: %v", len(issues), issues)
+	want := []ValidationIssue{
+		{
+			Rule:    "duplicate-entry-id",
+			Path:    "content.a.entries[0].id",
+			Message: `content.a.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.b.entries[0].id, content.c.entries[0].id`,
+		},
+		{
+			Rule:    "duplicate-entry-id",
+			Path:    "content.b.entries[0].id",
+			Message: `content.b.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.a.entries[0].id, content.c.entries[0].id`,
+		},
+		{
+			Rule:    "duplicate-entry-id",
+			Path:    "content.c.entries[0].id",
+			Message: `content.c.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.a.entries[0].id, content.b.entries[0].id`,
+		},
 	}
-	wantPaths := []string{
-		"content.a.entries[0].id",
-		"content.b.entries[0].id",
-		"content.c.entries[0].id",
+	if !reflect.DeepEqual(issues, want) {
+		t.Fatalf("got %#v, want %#v", issues, want)
 	}
-	for i, want := range wantPaths {
-		if issues[i].Path != want {
-			t.Fatalf("issue %d: expected path %q, got %q (full: %v)", i, want, issues[i].Path, issues)
-		}
-		if issues[i].Rule != "duplicate-entry-id" {
-			t.Fatalf("issue %d: expected rule duplicate-entry-id, got %q", i, issues[i].Rule)
+}
+
+// Minor 5: the case this rule's own doc comment names as the one
+// uniqueItems could never cover — two entries in the SAME section's own
+// entries array sharing an id — was previously untested in both languages.
+// test/store-validation.test.ts has the mirror case.
+func TestValidateEntryIDUniqueness_DetectsDuplicateWithinASingleSection(t *testing.T) {
+	content := map[string]Section{
+		"w": NewWorkSection("", "", []WorkEntry{{ID: "dup"}, {ID: "dup"}}),
+	}
+	issues := ValidateEntryIDUniqueness(content)
+	want := []ValidationIssue{
+		{
+			Rule:    "duplicate-entry-id",
+			Path:    "content.w.entries[0].id",
+			Message: `content.w.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.w.entries[1].id`,
+		},
+		{
+			Rule:    "duplicate-entry-id",
+			Path:    "content.w.entries[1].id",
+			Message: `content.w.entries[1].id: entry id "dup" is not unique across the whole resume — also used at content.w.entries[0].id`,
+		},
+	}
+	if !reflect.DeepEqual(issues, want) {
+		t.Fatalf("got %#v, want %#v", issues, want)
+	}
+}
+
+// Important 2: the message must stay bounded even when an id is shared by
+// far more than a handful of entries. resume.schema.json permits up to
+// content.maxProperties=24 sections, so 50 sections sharing one id is a
+// realistic stand-in for "many, not just a couple" without approaching the
+// full 24 × entries.maxItems=64 = 1536-entry worst case this bound exists
+// for.
+func TestValidateEntryIDUniqueness_CapsOtherPathsInMessage(t *testing.T) {
+	const sectionCount = 50
+	content := make(map[string]Section, sectionCount)
+	for i := 0; i < sectionCount; i++ {
+		key := fmt.Sprintf("s%02d", i)
+		content[key] = NewWorkSection("", "", []WorkEntry{{ID: "dup"}})
+	}
+
+	issues := ValidateEntryIDUniqueness(content)
+	if len(issues) != sectionCount {
+		t.Fatalf("expected %d issues, got %d", sectionCount, len(issues))
+	}
+
+	first := issues[0]
+	if first.Path != "content.s00.entries[0].id" {
+		t.Fatalf("expected first issue at content.s00.entries[0].id, got %q", first.Path)
+	}
+	wantFirst := `content.s00.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.s01.entries[0].id, content.s02.entries[0].id, content.s03.entries[0].id, and 46 more`
+	if first.Message != wantFirst {
+		t.Fatalf("first message:\n got: %s\nwant: %s", first.Message, wantFirst)
+	}
+
+	last := issues[sectionCount-1]
+	if last.Path != "content.s49.entries[0].id" {
+		t.Fatalf("expected last issue at content.s49.entries[0].id, got %q", last.Path)
+	}
+	wantLast := `content.s49.entries[0].id: entry id "dup" is not unique across the whole resume — also used at content.s00.entries[0].id, content.s01.entries[0].id, content.s02.entries[0].id, and 46 more`
+	if last.Message != wantLast {
+		t.Fatalf("last message:\n got: %s\nwant: %s", last.Message, wantLast)
+	}
+
+	// The whole point: message length must not scale with the number of
+	// occurrences (49 others here) — every message stays short and bounded.
+	for _, issue := range issues {
+		if len(issue.Message) >= 220 {
+			t.Fatalf("message for %s is %d bytes, expected < 220: %s", issue.Path, len(issue.Message), issue.Message)
 		}
 	}
 }

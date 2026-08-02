@@ -260,6 +260,33 @@ export function validateLayoutSections(
  * rather than picking an arbitrary TS-only tolerance for a case Go can
  * actually receive.
  */
+// Review finding (Important 2): resume.schema.json permits
+// content.maxProperties=24 sections × entries.maxItems=64 entries/section =
+// 1536 entries, all schema-valid while sharing one id. Interpolating every
+// OTHER occurrence's path into every occurrence's message would be O(N²) —
+// 1536 issues each carrying ~1535 paths — from a single ~70 KB document.
+// MAX_OTHER_PATHS_IN_MESSAGE bounds the interpolated list; anything beyond it
+// is summarized as "and N more" instead of spelled out.
+const MAX_OTHER_PATHS_IN_MESSAGE = 3;
+
+// Formats the "also used at ..." clause for one occurrence of a duplicated
+// id, given every path THAT id occurs at (sortedPaths, pre-sorted once by
+// the caller — see validateEntryIdUniqueness) and the occurrence's own path
+// (excluded from the list it names). Bounded to MAX_OTHER_PATHS_IN_MESSAGE
+// entries plus an "and N more" suffix — see that constant's comment.
+function formatOtherPaths(sortedPaths: string[], path: string): string {
+  const shown: string[] = [];
+  for (const p of sortedPaths) {
+    if (p === path) continue;
+    if (shown.length === MAX_OTHER_PATHS_IN_MESSAGE) break;
+    shown.push(p);
+  }
+  const total = sortedPaths.length - 1; // every path is unique, so exactly one entry equals `path`
+  const remaining = total - shown.length;
+  const suffix = remaining > 0 ? `, and ${remaining} more` : "";
+  return shown.join(", ") + suffix;
+}
+
 export function validateEntryIdUniqueness(
   content: Record<string, DocumentSection> | undefined,
 ): ValidationIssue[] {
@@ -276,14 +303,22 @@ export function validateEntryIdUniqueness(
     });
   }
 
-  for (const [id, paths] of pathsById) {
+  // Sorted so the emitted order (and, via formatOtherPaths, the exact
+  // message text) matches gen/go/store_validate.go's ValidateEntryIDUniqueness
+  // regardless of Map/property insertion order — the two halves' message
+  // text is part of the store layer's cross-language parity contract.
+  for (const id of [...pathsById.keys()].sort()) {
+    const paths = pathsById.get(id)!;
     if (paths.length <= 1) continue;
-    for (const path of paths) {
-      const others = paths.filter((p) => p !== path).sort();
+    // Sorted ONCE per duplicated id, not once per occurrence — the
+    // previous version re-sorted an (N-1)-element array N times for an
+    // N-way duplicate.
+    const sortedPaths = [...paths].sort();
+    for (const path of sortedPaths) {
       issues.push({
         rule: "duplicate-entry-id",
         path,
-        message: `${path}: entry id "${id}" is not unique across the whole resume — also used at ${others.join(", ")}`,
+        message: `${path}: entry id "${id}" is not unique across the whole resume — also used at ${formatOtherPaths(sortedPaths, path)}`,
       });
     }
   }
