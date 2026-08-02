@@ -76,6 +76,14 @@ type Config struct {
 	// GitHubClientID. Same required-in-prod/staging, optional-in-dev
 	// semantics.
 	GitHubClientSecret string
+	// LinkedInClientID is the OAuth2 client id for "Sign in with LinkedIn"
+	// (docs/specs/aboutme-design.md §3 OAuth). Same required-in-prod/
+	// staging, optional-in-dev semantics as GoogleClientID.
+	LinkedInClientID string
+	// LinkedInClientSecret is the OAuth2 client secret paired with
+	// LinkedInClientID. Same required-in-prod/staging, optional-in-dev
+	// semantics.
+	LinkedInClientSecret string
 }
 
 const (
@@ -158,18 +166,25 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	linkedInClientID, linkedInClientSecret, err := loadLinkedInCredentials(getenv("LINKEDIN_CLIENT_ID"), getenv("LINKEDIN_CLIENT_SECRET"), env)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
-		Port:               port,
-		ListenHost:         listenHost,
-		DatabaseURL:        databaseURL,
-		LogLevel:           logLevel,
-		Env:                env,
-		PublicOrigin:       publicOrigin,
-		TrustedProxyCIDRs:  trustedProxyCIDRs,
-		GoogleClientID:     googleClientID,
-		GoogleClientSecret: googleClientSecret,
-		GitHubClientID:     githubClientID,
-		GitHubClientSecret: githubClientSecret,
+		Port:                 port,
+		ListenHost:           listenHost,
+		DatabaseURL:          databaseURL,
+		LogLevel:             logLevel,
+		Env:                  env,
+		PublicOrigin:         publicOrigin,
+		TrustedProxyCIDRs:    trustedProxyCIDRs,
+		GoogleClientID:       googleClientID,
+		GoogleClientSecret:   googleClientSecret,
+		GitHubClientID:       githubClientID,
+		GitHubClientSecret:   githubClientSecret,
+		LinkedInClientID:     linkedInClientID,
+		LinkedInClientSecret: linkedInClientSecret,
 	}, nil
 }
 
@@ -435,6 +450,28 @@ func loadGitHubCredentials(rawClientID, rawClientSecret, env string) (clientID, 
 		if clientSecret == "" {
 			return "", "", fmt.Errorf("config: GITHUB_CLIENT_SECRET is required when ENV=%s: "+
 				"production and staging cannot offer GitHub login without real credentials", env)
+		}
+	}
+	return clientID, clientSecret, nil
+}
+
+// loadLinkedInCredentials validates LINKEDIN_CLIENT_ID/
+// LINKEDIN_CLIENT_SECRET. Same required-in-prod/staging,
+// optional-in-dev semantics as loadGoogleCredentials -- a production or
+// staging server cannot genuinely offer "Sign in with LinkedIn" without
+// real credentials.
+func loadLinkedInCredentials(rawClientID, rawClientSecret, env string) (clientID, clientSecret string, err error) {
+	clientID = strings.TrimSpace(rawClientID)
+	clientSecret = strings.TrimSpace(rawClientSecret)
+
+	if requiresProductionOAuthCredentials(env) {
+		if clientID == "" {
+			return "", "", fmt.Errorf("config: LINKEDIN_CLIENT_ID is required when ENV=%s: "+
+				"production and staging cannot offer LinkedIn login without real credentials", env)
+		}
+		if clientSecret == "" {
+			return "", "", fmt.Errorf("config: LINKEDIN_CLIENT_SECRET is required when ENV=%s: "+
+				"production and staging cannot offer LinkedIn login without real credentials", env)
 		}
 	}
 	return clientID, clientSecret, nil
