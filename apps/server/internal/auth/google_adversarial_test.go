@@ -41,9 +41,10 @@
 //
 // Does NOT cover: the happy path (new-user create, existing-identity
 // login -- google_test.go's job), email-collision rejection (Task 10's
-// job; resolveGoogleUser is still Task 4's documented stub), router-level
-// concerns (router_test.go's job), or GitHub/LinkedIn (Task 5/6's own
-// copies of this same table against their own provider mechanics).
+// resolveLoginIdentity, handlers.go, and its own independent rejection
+// matrix), router-level concerns (router_test.go's job), or GitHub/
+// LinkedIn (Task 5/6's own copies of this same table against their own
+// provider mechanics).
 package auth_test
 
 import (
@@ -189,7 +190,9 @@ func assertRejected(t *testing.T, resp *http.Response) (errorCode string) {
 		t.Fatalf("callback status = %d, want %d (every /callback rejection is a redirect, never a raw JSON error or a 200)", resp.StatusCode, http.StatusFound)
 	}
 
-	errorCode = mustQueryParam(t, resp.Header.Get("Location"), "error")
+	loc := resp.Header.Get("Location")
+	errorCode = mustQueryParam(t, loc, "error")
+	assertRedirectPath(t, loc, "/login") // DD-C7: every rejection targets PublicOrigin+"/login", never the bare "/"
 
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
 		t.Errorf("response set a %s cookie on a rejected callback (value=%q), want none -- a rejected callback must never authenticate the visitor", auth.SessionCookieName, sc.Value)

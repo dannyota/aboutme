@@ -44,15 +44,80 @@ type Querier interface {
 	// which passes the predecessor's user_id, reauthenticated_at,
 	// absolute_expires_at, ua, and ip through unchanged so a rotation never
 	// extends absolute expiry or silently satisfies the recent-reauth gate.
+	// rotated_from (fix round 3, DD-C14c) is NULL for Issue's own fresh-login
+	// insert, and the predecessor's own id for tryRotate's successor insert --
+	// the exact, database-enforced (sessions_rotated_from_key) lineage link
+	// FindLiveSuccessorSession below and the row's own rotated_from column
+	// (no query needed for the predecessor direction) both depend on.
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	// Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
 	// become type-safe Go methods in internal/store via `make generate`. See
 	// docs/specs/aboutme-design.md §3 "Schema management".
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	// Fix round 3, finding DD-C14c (owner ruling: schema change, replacing
+	// fix round 1/2's timestamp-reconstruction queries): given a session
+	// that may itself be a rotation PREDECESSOR, finds the exact successor
+	// row it was rotated INTO, if that successor is still live (revoked_at
+	// IS NULL). Exact by construction, not a heuristic: rotated_from is a
+	// foreign key tryRotate's successor insert (internal/auth/session.go)
+	// sets once, at INSERT time, to the predecessor's own id, and
+	// sessions_rotated_from_key (sql/schema.sql) is a partial UNIQUE index
+	// on it -- a predecessor has AT MOST ONE successor, enforced by the
+	// database itself, not merely by BeginSessionRotation's CAS. This
+	// replaces fix round 1/2's FindImmediatePredecessorSession/
+	// FindImmediateSuccessorSession, which reconstructed the link from
+	// rotation_grace_until/created_at timing alone: that approach was proven
+	// to silently match ANY same-user session sharing the same microsecond
+	// (pgx's :one takes the first row silently), which a frozen-clock test
+	// (or, in principle, sufficiently concurrent real traffic) can trigger --
+	// see task-9-report.md's fix round 3 section. The predecessor direction
+	// needs no equivalent query at all: a session's own rotated_from column,
+	// already in hand on any row already read, IS the answer.
+	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	// Fix round 2, finding DD-C14b: DELETE /sessions/{id}'s lineage sweep
+	// (sessions_handlers.go's revokeLineagePartners) needs the just-revoked
+	// TARGET session's own id/rotated_from/user_id to look up its rotation
+	// lineage partner(s) -- RevokeSessionForUser only reports a row count,
+	// not the row itself, and the target is not always the caller's own
+	// current session (sess, already fully in hand from context), so a
+	// second read is unavoidable here. revoked_at is already set to
+	// non-NULL by the time this runs (it always runs strictly after a
+	// successful RevokeForUser), but every other column this caller needs
+	// is untouched by that UPDATE.
+	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// Task 9's GET /me: every provider identity linked to user_id, oldest
+	// first (created_at) so the first-ever linked provider always sorts
+	// first.
+	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
+	// Task 9's GET /sessions device list (design spec §3): every session
+	// belonging to user_id that is still LIVE as of now -- mirrors
+	// session.go's sessionDead exactly, predicate for predicate (fix round 1,
+	// finding I1: the original version only excluded revoked/grace-dead rows,
+	// silently listing idle-expired and absolute-expired sessions as live
+	// devices with no GC to ever remove them):
+	//
+	//   - not explicitly revoked (revoked_at IS NULL);
+	//   - not idle-expired: last_seen_at >= idle_cutoff, where idle_cutoff =
+	//     now - idleTimeout is computed in GO (session.go's own constant) and
+	//     passed as a query arg, never re-literalled as a SQL interval here;
+	//   - not absolute-expired: absolute_expires_at >= now;
+	//   - not a grace-dead rotation predecessor: rotation_grace_until IS NULL
+	//     OR rotation_grace_until >= now -- a session rotation has already
+	//     superseded keeps revoked_at NULL but has rotation_grace_until in
+	//     the past, and that row must never appear in the caller's own
+	//     device list, exactly like an explicitly revoked one, just not
+	//     marked that way.
+	//
+	// sqlc.arg(...)::timestamptz casts are explicit so both parameters' Go
+	// types are plain (non-pointer) time.Time regardless of the nullable
+	// columns they're compared against. Ordered newest-created first, with id
+	// as a deterministic tiebreaker for two rows created in the same instant
+	// (fix round 1, M4).
+	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
@@ -62,11 +127,18 @@ type Querier interface {
 	// (design decision 1) -- this never touches that column.
 	RevokeSession(ctx context.Context, arg RevokeSessionParams) error
 	// Ownership-checked counterpart to RevokeSession: only revokes id if it
-	// also belongs to user_id. Returns the affected row count so a caller can
-	// distinguish "revoked" (1) from "no such session for this user" (0) --
-	// internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
+	// also belongs to user_id AND is still LIVE by the exact same predicates
+	// ListLiveSessionsForUser uses below (fix round 1, findings I1/M5): a
+	// session that is already idle-expired, absolute-expired, or a grace-dead
+	// rotation predecessor must revoke ZERO rows here too -- otherwise a
+	// caller could "revoke" a row GET /sessions' own device list already
+	// refuses to show them, which is exactly the self-inconsistency the
+	// review caught. Returns the affected row count so a caller can
+	// distinguish "revoked" (1) from "no such LIVE session for this user" (0)
+	// -- internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
 	// DELETE /sessions/{id}) turns 0 into a 404, not a 403, so it never
-	// confirms whether the id exists for someone else.
+	// confirms whether the id exists for someone else, is merely dead, or
+	// belongs to another user.
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
 	// Unconditional: callers throttle to at most once per lastSeenThrottle
 	// themselves (internal/auth.SessionManager.Authenticate) before issuing

@@ -51,7 +51,7 @@ func run() error {
 	}
 	defer pool.Close(context.Background())
 
-	authService, err := auth.NewService(cfg, store.New(pool))
+	authService, err := auth.NewService(logger, cfg, store.New(pool))
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
 	}
