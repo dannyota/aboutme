@@ -15,13 +15,13 @@ func TestSectionRoundTrip_EveryDiscriminator(t *testing.T) {
 	}{
 		{
 			"profile",
-			NewProfileSection("Summary", "user", []ProfileEntry{
+			NewProfileSection(ptr("Summary"), ptr("user"), []ProfileEntry{
 				{ID: "e1", IsHidden: ptr(false), Text: ptr("Backend engineer.")},
 			}),
 		},
 		{
 			"work",
-			NewWorkSection("Experience", "briefcase", []WorkEntry{
+			NewWorkSection(ptr("Experience"), ptr("briefcase"), []WorkEntry{
 				{
 					ID: "e1", IsHidden: ptr(false), JobTitle: ptr("Engineer"), Employer: ptr("Acme"),
 					EmployerLink: ptr(""), City: ptr("Hanoi"), Country: ptr("Vietnam"),
@@ -32,7 +32,7 @@ func TestSectionRoundTrip_EveryDiscriminator(t *testing.T) {
 		},
 		{
 			"education",
-			NewEducationSection("Education", "graduation-cap", []EducationEntry{
+			NewEducationSection(ptr("Education"), ptr("graduation-cap"), []EducationEntry{
 				{
 					ID: "e1", IsHidden: ptr(false), Degree: ptr("BSc"), School: ptr("MIT"),
 					SchoolLink: ptr(""), City: ptr("Cambridge"), Country: ptr("USA"),
@@ -44,19 +44,19 @@ func TestSectionRoundTrip_EveryDiscriminator(t *testing.T) {
 		},
 		{
 			"skill",
-			NewSkillSection("Skills", "star", []SkillEntry{
+			NewSkillSection(ptr("Skills"), ptr("star"), []SkillEntry{
 				{ID: "e1", IsHidden: ptr(false), Name: ptr("Go"), InfoHTML: ptr("")},
 			}),
 		},
 		{
 			"language",
-			NewLanguageSection("Languages", "globe", []LanguageEntry{
+			NewLanguageSection(ptr("Languages"), ptr("globe"), []LanguageEntry{
 				{ID: "e1", IsHidden: ptr(false), Name: ptr("English"), Level: ptr(int64(5))},
 			}),
 		},
 		{
 			"certificate",
-			NewCertificateSection("Certificates", "award", []CertificateEntry{
+			NewCertificateSection(ptr("Certificates"), ptr("award"), []CertificateEntry{
 				{
 					ID: "e1", IsHidden: ptr(false), Title: ptr("AWS SA"), TitleLink: ptr(""),
 					Issuer: ptr("AWS"), Date: &YearMonth{Y: 2023}, Description: ptr(""),
@@ -65,7 +65,7 @@ func TestSectionRoundTrip_EveryDiscriminator(t *testing.T) {
 		},
 		{
 			"project",
-			NewProjectSection("Projects", "folder", []ProjectEntry{
+			NewProjectSection(ptr("Projects"), ptr("folder"), []ProjectEntry{
 				{
 					ID: "e1", IsHidden: ptr(false), Title: ptr("aboutme"), Link: ptr(""),
 					Dates:       &DateRange{Start: YearMonth{Y: 2026}, End: nil, Present: true},
@@ -75,7 +75,7 @@ func TestSectionRoundTrip_EveryDiscriminator(t *testing.T) {
 		},
 		{
 			"custom",
-			NewCustomSection("Awards", "trophy", []CustomEntry{
+			NewCustomSection(ptr("Awards"), ptr("trophy"), []CustomEntry{
 				{
 					ID: "e1", IsHidden: ptr(false), Title: ptr("Hackathon"), TitleLink: ptr(""),
 					Subtitle: ptr("1st place"), City: ptr("Hanoi"),
@@ -122,7 +122,7 @@ func TestSectionRoundTrip_EveryDiscriminator(t *testing.T) {
 }
 
 func TestSectionMarshalJSON_WireShape(t *testing.T) {
-	section := NewWorkSection("Experience", "briefcase", []WorkEntry{
+	section := NewWorkSection(ptr("Experience"), ptr("briefcase"), []WorkEntry{
 		{
 			ID: "e1", IsHidden: ptr(false), JobTitle: ptr("Engineer"), Employer: ptr("Acme"),
 			EmployerLink: ptr(""), City: ptr("Hanoi"), Country: ptr("Vietnam"),
@@ -229,6 +229,54 @@ func TestSectionRoundTrip_ExplicitlyClearedDisplayNameStaysPresentAndEmpty(t *te
 	}
 	if string(raw) != `""` {
 		t.Errorf("displayName = %s, want \"\"", raw)
+	}
+}
+
+// TestNewWorkSection_DraftPermissive_AbsentDisplayNameAndIconKey proves the
+// SANCTIONED construction path (not just UnmarshalJSON) can build a section
+// with no displayName/iconKey set yet, and that doing so never re-marshals
+// to an invalid empty iconKey. Phase-gate re-review finding (Task 5 round
+// 2): the DisplayName/IconKey *string fix above closed the decode-side gap,
+// but NewWorkSection's own constructor still had a string-only signature
+// through v6.0.2 review, so a caller who wanted "not set yet" had no way to
+// express it except passing "" -- which produced exactly the same
+// schema-invalid `"iconKey":""` this file's other new tests exist to rule
+// out, through the ONE API this type's own doc comment sanctions.
+func TestNewWorkSection_DraftPermissive_AbsentDisplayNameAndIconKey(t *testing.T) {
+	section := NewWorkSection(nil, nil, []WorkEntry{{ID: "e1"}})
+	if section.DisplayName != nil {
+		t.Errorf("DisplayName: got %v, want nil (never set)", section.DisplayName)
+	}
+	if section.IconKey != nil {
+		t.Errorf("IconKey: got %v, want nil (never set)", section.IconKey)
+	}
+
+	data, err := json.Marshal(section)
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+	var wire map[string]json.RawMessage
+	if err := json.Unmarshal(data, &wire); err != nil {
+		t.Fatalf("unmarshal into map: %v", err)
+	}
+	if _, ok := wire["displayName"]; ok {
+		t.Errorf("re-marshaled wire has a displayName key, want it absent: %s", data)
+	}
+	if _, ok := wire["iconKey"]; ok {
+		t.Errorf("re-marshaled wire has an iconKey key, want it absent (an empty iconKey fails the schema's own iconKey pattern): %s", data)
+	}
+}
+
+// TestNewWorkSection_ExplicitDisplayNameAndIconKeyStillWork is the
+// contrast case: a caller who DOES have concrete values still gets them
+// through the constructor, unaffected by the *string signature change.
+func TestNewWorkSection_ExplicitDisplayNameAndIconKeyStillWork(t *testing.T) {
+	section := NewWorkSection(ptr("Experience"), ptr("briefcase"), []WorkEntry{{ID: "e1"}})
+	if section.DisplayName == nil || *section.DisplayName != "Experience" {
+		t.Errorf("DisplayName: got %v, want a pointer to \"Experience\"", section.DisplayName)
+	}
+	if section.IconKey == nil || *section.IconKey != "briefcase" {
+		t.Errorf("IconKey: got %v, want a pointer to \"briefcase\"", section.IconKey)
 	}
 }
 
@@ -392,7 +440,7 @@ func TestResumeContent_RoundTripsThroughSection(t *testing.T) {
 			Details:  []PersonalDetail{},
 		},
 		Content: map[string]Section{
-			"work": NewWorkSection("Experience", "briefcase", []WorkEntry{
+			"work": NewWorkSection(ptr("Experience"), ptr("briefcase"), []WorkEntry{
 				{
 					ID: "e1", IsHidden: ptr(false), JobTitle: ptr("Engineer"), Employer: ptr("Acme"),
 					EmployerLink: ptr(""), City: ptr("Hanoi"), Country: ptr("Vietnam"),

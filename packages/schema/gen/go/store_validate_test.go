@@ -128,9 +128,9 @@ func TestValidateDocument_LayoutAggregateInvariant(t *testing.T) {
 func TestValidateDocument_LayoutIssueOrderMatchesTS(t *testing.T) {
 	resume := Resume{
 		Content: map[string]Section{
-			"zebra":  NewWorkSection("", "", nil),
-			"alpha":  NewWorkSection("", "", nil),
-			"orphan": NewWorkSection("", "", nil),
+			"zebra":  NewWorkSection(nil, nil, nil),
+			"alpha":  NewWorkSection(nil, nil, nil),
+			"orphan": NewWorkSection(nil, nil, nil),
 		},
 		Customization: Customization{
 			Layout: Layout{
@@ -270,9 +270,9 @@ func TestValidateDocument_UniqueEntryIDsProduceNoDuplicateIssue(t *testing.T) {
 func TestValidateEntryIDUniqueness_FlagsEveryOccurrenceOfAThreeWayDuplicate(t *testing.T) {
 	dup := "dup"
 	content := map[string]Section{
-		"a": NewWorkSection("", "", []WorkEntry{{ID: dup}}),
-		"b": NewSkillSection("", "", []SkillEntry{{ID: dup}}),
-		"c": NewLanguageSection("", "", []LanguageEntry{{ID: dup}}),
+		"a": NewWorkSection(nil, nil, []WorkEntry{{ID: dup}}),
+		"b": NewSkillSection(nil, nil, []SkillEntry{{ID: dup}}),
+		"c": NewLanguageSection(nil, nil, []LanguageEntry{{ID: dup}}),
 	}
 	issues := ValidateEntryIDUniqueness(content)
 	want := []ValidationIssue{
@@ -303,7 +303,7 @@ func TestValidateEntryIDUniqueness_FlagsEveryOccurrenceOfAThreeWayDuplicate(t *t
 // test/store-validation.test.ts has the mirror case.
 func TestValidateEntryIDUniqueness_DetectsDuplicateWithinASingleSection(t *testing.T) {
 	content := map[string]Section{
-		"w": NewWorkSection("", "", []WorkEntry{{ID: "dup"}, {ID: "dup"}}),
+		"w": NewWorkSection(nil, nil, []WorkEntry{{ID: "dup"}, {ID: "dup"}}),
 	}
 	issues := ValidateEntryIDUniqueness(content)
 	want := []ValidationIssue{
@@ -334,7 +334,7 @@ func TestValidateEntryIDUniqueness_CapsOtherPathsInMessage(t *testing.T) {
 	content := make(map[string]Section, sectionCount)
 	for i := 0; i < sectionCount; i++ {
 		key := fmt.Sprintf("s%02d", i)
-		content[key] = NewWorkSection("", "", []WorkEntry{{ID: "dup"}})
+		content[key] = NewWorkSection(nil, nil, []WorkEntry{{ID: "dup"}})
 	}
 
 	issues := ValidateEntryIDUniqueness(content)

@@ -77,60 +77,60 @@ type Section struct {
 	CustomEntries      []CustomEntry
 }
 
-func NewProfileSection(displayName, iconKey string, entries []ProfileEntry) Section {
+func NewProfileSection(displayName, iconKey *string, entries []ProfileEntry) Section {
 	if entries == nil {
 		entries = []ProfileEntry{}
 	}
-	return Section{SectionType: Profile, DisplayName: &displayName, IconKey: &iconKey, ProfileEntries: entries}
+	return Section{SectionType: Profile, DisplayName: displayName, IconKey: iconKey, ProfileEntries: entries}
 }
 
-func NewWorkSection(displayName, iconKey string, entries []WorkEntry) Section {
+func NewWorkSection(displayName, iconKey *string, entries []WorkEntry) Section {
 	if entries == nil {
 		entries = []WorkEntry{}
 	}
-	return Section{SectionType: Work, DisplayName: &displayName, IconKey: &iconKey, WorkEntries: entries}
+	return Section{SectionType: Work, DisplayName: displayName, IconKey: iconKey, WorkEntries: entries}
 }
 
-func NewEducationSection(displayName, iconKey string, entries []EducationEntry) Section {
+func NewEducationSection(displayName, iconKey *string, entries []EducationEntry) Section {
 	if entries == nil {
 		entries = []EducationEntry{}
 	}
-	return Section{SectionType: Education, DisplayName: &displayName, IconKey: &iconKey, EducationEntries: entries}
+	return Section{SectionType: Education, DisplayName: displayName, IconKey: iconKey, EducationEntries: entries}
 }
 
-func NewSkillSection(displayName, iconKey string, entries []SkillEntry) Section {
+func NewSkillSection(displayName, iconKey *string, entries []SkillEntry) Section {
 	if entries == nil {
 		entries = []SkillEntry{}
 	}
-	return Section{SectionType: Skill, DisplayName: &displayName, IconKey: &iconKey, SkillEntries: entries}
+	return Section{SectionType: Skill, DisplayName: displayName, IconKey: iconKey, SkillEntries: entries}
 }
 
-func NewLanguageSection(displayName, iconKey string, entries []LanguageEntry) Section {
+func NewLanguageSection(displayName, iconKey *string, entries []LanguageEntry) Section {
 	if entries == nil {
 		entries = []LanguageEntry{}
 	}
-	return Section{SectionType: Language, DisplayName: &displayName, IconKey: &iconKey, LanguageEntries: entries}
+	return Section{SectionType: Language, DisplayName: displayName, IconKey: iconKey, LanguageEntries: entries}
 }
 
-func NewCertificateSection(displayName, iconKey string, entries []CertificateEntry) Section {
+func NewCertificateSection(displayName, iconKey *string, entries []CertificateEntry) Section {
 	if entries == nil {
 		entries = []CertificateEntry{}
 	}
-	return Section{SectionType: Certificate, DisplayName: &displayName, IconKey: &iconKey, CertificateEntries: entries}
+	return Section{SectionType: Certificate, DisplayName: displayName, IconKey: iconKey, CertificateEntries: entries}
 }
 
-func NewProjectSection(displayName, iconKey string, entries []ProjectEntry) Section {
+func NewProjectSection(displayName, iconKey *string, entries []ProjectEntry) Section {
 	if entries == nil {
 		entries = []ProjectEntry{}
 	}
-	return Section{SectionType: Project, DisplayName: &displayName, IconKey: &iconKey, ProjectEntries: entries}
+	return Section{SectionType: Project, DisplayName: displayName, IconKey: iconKey, ProjectEntries: entries}
 }
 
-func NewCustomSection(displayName, iconKey string, entries []CustomEntry) Section {
+func NewCustomSection(displayName, iconKey *string, entries []CustomEntry) Section {
 	if entries == nil {
 		entries = []CustomEntry{}
 	}
-	return Section{SectionType: SectionTypeCustom, DisplayName: &displayName, IconKey: &iconKey, CustomEntries: entries}
+	return Section{SectionType: SectionTypeCustom, DisplayName: displayName, IconKey: iconKey, CustomEntries: entries}
 }
 
 // Validate reports whether exactly one of Section's entries slices is
