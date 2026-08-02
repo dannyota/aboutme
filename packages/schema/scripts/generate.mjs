@@ -357,8 +357,80 @@ async function generateTs(sharedSchema, outFile) {
   writeFileSync(outFile, GENERATED_HEADER_TS + "\n" + ts);
 }
 
+// Splits a base64 string into fixed-width lines so the generated Go source
+// doesn't put resume.schema.json's ~29 KB of encoded bytes on a single line
+// (readability/diffability only — Go itself doesn't care about line length
+// here).
+function chunkBase64(base64, width = 96) {
+  const lines = [];
+  for (let i = 0; i < base64.length; i += width) {
+    lines.push(base64.slice(i, i + width));
+  }
+  return lines;
+}
+
+// Go-only (decision D2): resume.schema.json lives outside gen/go's own
+// module (see gen/go/go.mod), so go:embed cannot reach it — a Go source file
+// can only //go:embed a path inside (or below) its own module root. This
+// generates gen/go/rawschema.go instead: a plain Go source file exposing
+// schema.RawSchema []byte, base64-encoding resume.schema.json's exact bytes
+// at generation time.
+//
+// Base64, not a Go string literal: resume.schema.json contains a literal
+// backtick (inside a description string), which raw string literals cannot
+// contain at all, and non-ASCII bytes that would need per-rune escaping in
+// an interpreted string literal — both are exactly the kind of fragile,
+// easy-to-get-subtly-wrong transcription this generator should not need to
+// hand-roll. Base64's alphabet has neither problem, so the embedding is a
+// straight, deterministic transcoding of rawSchemaBytes with no escaping
+// logic at all.
+function generateRawSchema(rawSchemaBytes, outFile) {
+  const base64Lines = chunkBase64(rawSchemaBytes.toString("base64"));
+  const literal = base64Lines.map((line) => `\t"${line}" +\n`).join("");
+
+  const body = `${GENERATED_HEADER}
+
+package schema
+
+import "encoding/base64"
+
+// rawSchemaBase64 is resume.schema.json's exact bytes, base64-encoded at
+// generation time (decision D2) — see this file's generator
+// (scripts/generate.mjs's generateRawSchema) for why base64 instead of a
+// plain Go string literal.
+const rawSchemaBase64 = "" +
+${literal}\t""
+
+// RawSchema is resume.schema.json's exact byte content, decoded once at
+// package init from rawSchemaBase64 above. resume.schema.json lives outside
+// this module (gen/go/go.mod), so go:embed cannot reach it directly — this
+// generated constant is the substitute. rawschema_test.go asserts this
+// byte-equals ../../resume.schema.json read directly at test time, closing
+// the copy-drift loop from the Go side (the TypeScript side is
+// test/gen.test.ts's existing regenerate-and-byte-compare check, which
+// already exercises this file too).
+var RawSchema = mustDecodeRawSchemaBase64()
+
+func mustDecodeRawSchemaBase64() []byte {
+	decoded, err := base64.StdEncoding.DecodeString(rawSchemaBase64)
+	if err != nil {
+		// Unreachable for a generated, unedited file: rawSchemaBase64 above is
+		// produced by encoding/base64's own encoder in scripts/generate.mjs's
+		// generateRawSchema (Node's Buffer#toString("base64") — the same
+		// alphabet, no hand-editing in between).
+		panic("schema: rawSchemaBase64 failed to decode: " + err.Error())
+	}
+	return decoded
+}
+`;
+
+  writeFileSync(outFile, body);
+  execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
+}
+
 async function main() {
-  const schema = JSON.parse(readFileSync(schemaPath, "utf8"));
+  const schemaBytes = readFileSync(schemaPath);
+  const schema = JSON.parse(schemaBytes.toString("utf8"));
   const sharedSchema = buildSharedCodegenSchema(schema);
 
   const tmpDir = mkdtempSync(join(tmpdir(), "aboutme-schema-codegen-"));
@@ -370,11 +442,14 @@ async function main() {
 
     generateGo(sharedSchema, tmpDir, join(goDir, "resume.go"));
     await generateTs(sharedSchema, join(tsDir, "resume.ts"));
+    generateRawSchema(schemaBytes, join(goDir, "rawschema.go"));
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
 
-  console.log("Generated gen/go/resume.go and gen/ts/resume.ts from resume.schema.json");
+  console.log(
+    "Generated gen/go/resume.go, gen/ts/resume.ts, and gen/go/rawschema.go from resume.schema.json",
+  );
 }
 
 await main();
