@@ -20,16 +20,16 @@ const CSRFHeaderName = "X-CSRF-Token"
 // /auth/logout, most spec'd DELETEs) the moment they're wired, since a
 // bodiless request has no reason to ever set Content-Type. Corrected
 // rule: the Content-Type check (contentTypeAllowed) applies only when the
-// request actually carries a body (hasBody: ContentLength > 0, or a
-// Transfer-Encoding header present). A bodiless mutating request skips
-// the Content-Type check entirely but still must pass every other check
-// (session, Origin/Referer, token) unchanged -- this is not a CSRF
-// carve-out, only a Content-Type carve-out. When a body is present,
-// Content-Type must parse (mime.ParseMediaType) to media type
-// "application/json" with no parameters other than an optional charset
-// of any value/case -- accepting real clients' "application/json;
-// charset=UTF-8" and "application/json;charset=utf-8" variants alike,
-// while still rejecting an unrelated or malformed Content-Type.
+// request actually carries a body (hasBody, defined below). A bodiless
+// mutating request skips the Content-Type check entirely but still must
+// pass every other check (session, Origin/Referer, token) unchanged --
+// this is not a CSRF carve-out, only a Content-Type carve-out. When a
+// body is present, Content-Type must parse (mime.ParseMediaType) to
+// media type "application/json" with no parameters other than an
+// optional charset of any value/case -- accepting real clients'
+// "application/json;charset=UTF-8" and "application/json; charset=utf-8"
+// variants alike, while still rejecting an unrelated or malformed
+// Content-Type.
 
 // csrfRejectedCode is the single error code every CSRF rejection reason
 // returns -- missing/mismatched Origin or Referer, missing/wrong
@@ -134,12 +134,21 @@ func originAllowed(r *http.Request, allowedOrigin string) bool {
 	return u.Scheme+"://"+u.Host == allowedOrigin
 }
 
-// hasBody reports whether r carries a request body: a positive
-// Content-Length, or a Transfer-Encoding header (e.g. chunked) present.
-// RequireCSRF only enforces contentTypeAllowed when this is true --
-// DD-C6 above.
+// hasBody reports whether r carries a request body: a non-zero
+// Content-Length (this deliberately catches -1, net/http's "unknown
+// length" sentinel -- a real server strips the raw Transfer-Encoding
+// header off an incoming chunked or unknown-length request and reports
+// ContentLength == -1 rather than leaving a header for r.Header.Get to
+// see, so a bare ">0" check would wrongly treat a genuinely-bodied
+// chunked/h2 request as bodiless and skip the Content-Type gate below --
+// or r.TransferEncoding (the field Go's server actually populates for
+// chunked bodies, never the raw header) being non-empty. RequireCSRF only
+// enforces contentTypeAllowed when this is true -- DD-C6 above. One
+// accepted consequence: a zero-length chunked body (ContentLength == 0
+// but TransferEncoding present) with no Content-Type now also 403s --
+// fail-closed is the correct direction for an edge case that thin.
 func hasBody(r *http.Request) bool {
-	return r.ContentLength > 0 || r.Header.Get("Transfer-Encoding") != ""
+	return r.ContentLength != 0 || len(r.TransferEncoding) > 0
 }
 
 // contentTypeAllowed reports whether ct -- a Content-Type header value on
