@@ -502,7 +502,7 @@ func TestRequireSession_InvalidOrExpiredCookie_Returns401AndClearsCookie(t *test
 
 	t.Run("never issued token", func(t *testing.T) {
 		t.Parallel()
-		cookie := &http.Cookie{Name: auth.SessionCookieName, Value: randomHandle(t)}
+		cookie := requestCookie(auth.SessionCookieName, randomHandle(t))
 		resp := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", cookie) //nolint:bodyclose // doJSON closes the body itself before returning.
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)

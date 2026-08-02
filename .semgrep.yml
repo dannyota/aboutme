@@ -282,6 +282,24 @@ rules:
     paths:
       include:
         - "**/apps/server/**/*.go"
+      exclude:
+        # _test.go files in this codebase construct http.Cookie{...}
+        # literals for exactly one purpose: an outbound REQUEST cookie
+        # attached to a test's own *http.Request (via req.AddCookie, or
+        # doGet/doJSON's own cookies... parameters), never a real
+        # response Set-Cookie -- production Set-Cookie construction lives
+        # exclusively in cookie.go/session_cookie.go (non-test files,
+        # still covered by this rule), which is where a genuine
+        # Secure/HttpOnly/SameSite regression would actually matter.
+        # Secure/HttpOnly/SameSite are response-cookie attributes with no
+        # wire representation on a request's Cookie header (RFC 6265
+        # §5.4), so this rule has nothing meaningful to check on the
+        # request side at all -- narrowed here (fix round 1, Task 10)
+        # rather than papering over 8 false-positive sites with per-site
+        # suppressions. handlers_test.go's requestCookie is the one place
+        # left carrying nosemgrep for the two upstream registry rules
+        # that still fire there (p/gosec/p/golang, not ours to narrow).
+        - "**/apps/server/**/*_test.go"
     metadata:
       category: security
       confidence: HIGH

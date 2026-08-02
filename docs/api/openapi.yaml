@@ -254,17 +254,28 @@ paths:
                   code: session_required
                   message: a valid session is required
         "403":
-          description: "`purpose=link` only: the session's last full OAuth
-            login is more than 15 minutes old, checked BEFORE any
-            transaction row is created."
+          description: "`purpose=link`/`reauth` only: the request was not
+            same-site initiated (DD-C16 — `csrf_rejected`, checked before
+            the session cookie is even read), OR (`purpose=link` only) the
+            session's last full OAuth login is more than 15 minutes old,
+            checked BEFORE any transaction row is created
+            (`reauth_required`) — two distinct codes under the same
+            status; the same-site check always runs first."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-              example:
-                error:
-                  code: reauth_required
-                  message: recent reauthentication is required
+              examples:
+                csrf_rejected:
+                  value:
+                    error:
+                      code: csrf_rejected
+                      message: CSRF validation failed
+                reauth_required:
+                  value:
+                    error:
+                      code: reauth_required
+                      message: recent reauthentication is required
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -396,17 +407,28 @@ paths:
                   code: session_required
                   message: a valid session is required
         "403":
-          description: "`purpose=link` only: the session's last full OAuth
-            login is more than 15 minutes old, checked BEFORE any
-            transaction row is created."
+          description: "`purpose=link`/`reauth` only: the request was not
+            same-site initiated (DD-C16 — `csrf_rejected`, checked before
+            the session cookie is even read), OR (`purpose=link` only) the
+            session's last full OAuth login is more than 15 minutes old,
+            checked BEFORE any transaction row is created
+            (`reauth_required`) — two distinct codes under the same
+            status; the same-site check always runs first."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-              example:
-                error:
-                  code: reauth_required
-                  message: recent reauthentication is required
+              examples:
+                csrf_rejected:
+                  value:
+                    error:
+                      code: csrf_rejected
+                      message: CSRF validation failed
+                reauth_required:
+                  value:
+                    error:
+                      code: reauth_required
+                      message: recent reauthentication is required
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -503,17 +525,28 @@ paths:
                   code: session_required
                   message: a valid session is required
         "403":
-          description: "`purpose=link` only: the session's last full OAuth
-            login is more than 15 minutes old, checked BEFORE any
-            transaction row is created."
+          description: "`purpose=link`/`reauth` only: the request was not
+            same-site initiated (DD-C16 — `csrf_rejected`, checked before
+            the session cookie is even read), OR (`purpose=link` only) the
+            session's last full OAuth login is more than 15 minutes old,
+            checked BEFORE any transaction row is created
+            (`reauth_required`) — two distinct codes under the same
+            status; the same-site check always runs first."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-              example:
-                error:
-                  code: reauth_required
-                  message: recent reauthentication is required
+              examples:
+                csrf_rejected:
+                  value:
+                    error:
+                      code: csrf_rejected
+                      message: CSRF validation failed
+                reauth_required:
+                  value:
+                    error:
+                      code: reauth_required
+                      message: recent reauthentication is required
         "405":
           description: Any method other than `GET` (including `HEAD` — DD-C8).
           content:
@@ -1061,7 +1094,8 @@ components:
       required: false
       description: >-
         Why this OAuth transaction is being started (Task 10, design
-        decision 5). `link`/`reauth` additionally require a valid
+        decision 5). `link`/`reauth` additionally require (1) a
+        SAME-SITE-INITIATED request (DD-C16, fix round 1) and (2) a valid
         `sessionCookie` on `/start` (see the operation's own `401`/`403`
         responses) — `/start`'s own default security scheme (none) applies
         only to the default `login`. Any value other than the two literal
@@ -1072,13 +1106,16 @@ components:
 
 
         - `login` (default): an ordinary, unauthenticated sign-in/
-          registration attempt.
+          registration attempt. Reachable from anywhere — a bookmarked or
+          shared link, another site's "continue with aboutme" button —
+          with no same-site requirement at all.
 
         - `link`: attach this provider identity to the CALLER's own
-          already-authenticated account. Requires a session whose last
+          already-authenticated account. The request itself must be
+          same-site (see below); once that passes, a session whose last
           full OAuth login (`reauthenticated_at`) is within the last 15
-          minutes — `403 reauth_required` otherwise, checked BEFORE any
-          transaction row is created.
+          minutes is also required — `403 reauth_required` otherwise,
+          checked BEFORE any transaction row is created.
 
         - `reauth`: refresh the CALLER's own session's
           `reauthenticated_at` via a fresh round trip against an
@@ -1086,7 +1123,20 @@ components:
           long idle/absolute session timeouts require before a sensitive
           operation). Unlike `link`, this does NOT itself require a recent
           reauthentication first — that would be circular, since its whole
-          point is to establish one.
+          point is to establish one; same-site initiation (below) is what
+          makes that safe, closing the chain where a cross-site-forced
+          `reauth` round trip would otherwise silently refresh the window a
+          subsequent forced `link` request then relies on.
+
+
+        **Same-site initiation (DD-C16, `link`/`reauth` only):** the
+        browser's `Sec-Fetch-Site` header, when sent, must read exactly
+        `same-origin` (any other value — `cross-site`, `same-site`, `none`
+        — is rejected outright, no fallback); when that header is absent,
+        the request's `Origin` (or, failing that, `Referer`) must match
+        this API's own origin exactly, the identical fail-closed check
+        `csrfToken`-protected mutations already use. Neither signal present
+        fails closed. See the operation's own `403` response.
       schema:
         type: string
         enum: [login, link, reauth]

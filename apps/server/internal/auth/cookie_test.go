@@ -119,7 +119,7 @@ func TestReadOAuthTxCookie_RoundTripsSetValue(t *testing.T) {
 	t.Parallel()
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: auth.OAuthTxCookieName, Value: "round-trip-handle"})
+	req.AddCookie(requestCookie(auth.OAuthTxCookieName, "round-trip-handle"))
 
 	got, err := auth.ReadOAuthTxCookie(req)
 	if err != nil {

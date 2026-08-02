@@ -38,63 +38,55 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// ==== Why GET /start is never behind RequireCSRF, even for purpose=link
-// ==== (task-10-brief.md: "state the reasoning the reviewer will
-// interrogate") ====
+// ==== Why GET /start is never behind RequireCSRF -- and what DOES gate
+// ==== purpose=link/reauth instead (DD-C16, Task 10 fix round 1, C1) ====
 //
 // Every /start route (Google/GitHub/LinkedIn, all three, all purposes) is
 // registered as a bare GET via handlers.go's route() helper, never
 // wrapped in sessionChain/RequireCSRF the way Task 9's JSON API is
 // (RequireCSRF itself is a no-op on GET regardless -- csrf.go's
-// isMutatingMethod -- so wrapping it would change nothing even if we
-// did). The reasoning task-4-brief.md originally gave for the plain
-// PurposeLogin start -- "top-level navigation, no mutation the visitor
-// didn't ask for" -- does NOT fully carry over to purpose=link now that
-// /start can require an authenticated session and DOES have a real
-// server-side side effect for every purpose, login included: Begin's own
-// database INSERT (an oauth_transactions row) and a real
-// Set-Cookie (__Host-oauth-tx). That side effect was already judged
-// acceptable for an ANONYMOUS visitor (nothing sensitive to protect --
-// worst case, a stranger provokes a stray transaction row that expires
-// unconsumed in oauthTxTTL=10 minutes), which is why PurposeLogin's start
-// was never CSRF-protected in the first place.
+// isMutatingMethod). purpose=login must stay reachable from anywhere --
+// a bookmarked or shared "sign in" link, an email, another site's
+// "continue with aboutme" button -- so it carries no same-site
+// requirement at all, and none of what follows applies to it.
 //
-// purpose=link changes WHO can trigger that side effect (now an
-// authenticated caller, via RequireSession/startPurposeAndLinkingUser
-// above) but does not, by itself, change WHAT that side effect equals:
-// creating an oauth_transactions row bound to the caller's own user id.
-// The transaction row alone links nothing -- resolveLinkOrReauth only
-// ever runs once a REAL /callback arrives carrying a code a genuine
-// provider issued for a genuine consent grant, which an attacker forcing
-// a bare GET /start?purpose=link navigation cannot forge or predict (the
-// state/PKCE/nonce Begin generates are never visible to the page that
-// triggered the navigation). __Host-session is SameSite=Lax (design spec
-// §3, "Lax because visitors arrive via external links"), which DOES
-// permit an attacker's page to force this exact top-level GET navigation
-// with the victim's session cookie attached (Lax's own carve-out for
-// top-level, "safe" navigations) -- so a CSRF'd /start?purpose=link IS
-// reachable in principle. Its blast radius is bounded to "one unconsumed,
-// harmless transaction row plus a __Host-oauth-tx cookie the victim's
-// browser now holds" unless the victim ALSO completes a real consent
-// screen for a provider identity the attacker controls, which is a much
-// stronger precondition than the CSRF itself (session-fixation-adjacent,
-// on the PROVIDER's side, entirely outside this server's control) --
-// RequireRecentReauth's 15-minute gate (already required before this
-// point) narrows the exploit window further but does not remove it,
-// since it authenticates recency, not THIS request's own intent.
+// purpose=link/reauth is different, and the FIRST version of this
+// comment (superseded here) got the risk assessment wrong: it argued
+// RequireRecentReauth's 15-minute window "narrows the exploit window."
+// That reasoning is circular -- Opus review's fix-round-1 finding C1
+// traced the exact chain it missed: an attacker page top-level-navigates
+// the victim (SameSite=Lax permits this for a GET -- design spec §3,
+// "Lax because visitors arrive via external links") to
+// /start?purpose=reauth FIRST. That request has no reauth gate of its
+// own (reauth's whole point is to establish recency, not require it --
+// see startPurposeAndLinkingUser's own doc comment), and against an
+// already-consented provider it can complete with zero visible
+// interaction, REFRESHING reauthenticated_at. The attacker page then
+// navigates the victim to /start?purpose=link, which NOW passes
+// RequireRecentReauth -- because the previous step just refreshed the
+// very window that gate checks. A recent-reauth window can never gate an
+// attack that itself refreshes the window; no amount of narrowing that
+// window helps, because the attacker's own forced request is what resets
+// the clock. The chain's remaining step (getting the victim's browser to
+// complete a real provider consent grant for an identity the attacker
+// controls) is a separate, real precondition, but the reauth-priming step
+// removes the ONE thing this package could point to as already-mitigating
+// it -- so this is not a bounded, accepted residual risk. It is a real
+// gap, closed below.
 //
-// This implementation follows the brief's specification exactly (GET
-// /start carries no CSRF check, for any purpose) and does not
-// unilaterally add one -- a synchronizer-token check on a plain top-level
-// GET redirect has no conventional shape anyway (the token would need to
-// travel as a query parameter on a link an attacker's page could still
-// read/replay, or the route would need to become a form POST, a bigger
-// contract change than this task owns). Recorded here, per the brief's
-// own instruction, rather than silently decided either way: whether this
-// residual risk needs a stronger control (e.g. binding /start's
-// transaction to a fresh per-visit token the settings page itself
-// injects, not a cookie) is a design decision for the integration owner,
-// not a decision this implementation task makes unilaterally.
+// The fix (DD-C16) requires purpose=link/reauth's own /start request to
+// be SAME-SITE INITIATED -- sameSiteInitiated (csrf.go), checked first,
+// before any session read: Sec-Fetch-Site: same-origin when the browser
+// sends it (any other value rejects outright, no fallback), else
+// RequireCSRF's own Origin/Referer check (originAllowed, reused, not
+// reimplemented). A cross-site top-level navigation -- exactly the
+// attacker page's forced /start?purpose=reauth/link above -- now fails
+// this check before Begin ever runs, regardless of the visitor's own
+// session/reauth state, closing the chain at its first step rather than
+// trying to harden a later one. Rejected with 403 csrf_rejected
+// (rejectCSRF, csrf.go) -- this genuinely IS a cross-site-request
+// rejection, not a new failure class needing its own vocabulary entry.
+// purpose=login is deliberately untouched by this check (see above).
 
 // errIdentityAlreadyLinked is resolveLinkOrReauth's sentinel for DD-C15's
 // named rejection: a purpose=link or purpose=reauth transaction's
@@ -213,6 +205,27 @@ func (s *Service) resolveLinkOrReauth(ctx context.Context, r *http.Request, w ht
 			Provider:       string(provider),
 			ProviderUserID: providerUserID,
 		}); createErr != nil {
+			if isUniqueViolation(createErr) {
+				// Lost a race against a concurrent link attempt for this
+				// exact (provider, providerUserID) between the
+				// GetIdentityByProviderSubject check above and this INSERT
+				// (fix round 1, I3) -- an entirely ORDINARY outcome from the
+				// caller's perspective, not a server defect: re-read and
+				// re-decide exactly like the already-found branch above,
+				// rather than surfacing a raw 500 on what DD-C4 requires stay
+				// a redirect.
+				reread, getErr := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
+					Provider:       string(provider),
+					ProviderUserID: providerUserID,
+				})
+				if getErr != nil {
+					return fmt.Errorf("auth: resolve link or reauth: get identity after race: %w", getErr)
+				}
+				if reread.UserID != tx.LinkingUserID {
+					return errIdentityAlreadyLinked
+				}
+				return nil // idempotent success, same as the pre-race already-linked-to-self branch above.
+			}
 			return fmt.Errorf("auth: resolve link or reauth: create identity: %w", createErr)
 		}
 		return nil
@@ -309,21 +322,30 @@ func (s *Service) redirectLinkOrReauthError(w http.ResponseWriter, r *http.Reque
 // requiring no privilege and creating the least consequential transaction
 // row.
 //
-// For purpose=link/reauth: reads and authenticates the __Host-session
+// For purpose=link/reauth, in order: (1) sameSiteInitiated (csrf.go,
+// DD-C16, fix round 1 C1) -- checked FIRST, before any session read or
+// database access, rejecting with 403 csrf_rejected (rejectCSRF) on a
+// cross-site request. This is the control that actually closes the
+// reauth-then-link chain Opus review traced (see this file's top-of-file
+// comment) -- neither of the checks below can substitute for it, since
+// both operate on state an attacker's own forced request can manipulate
+// same as a legitimate one. (2) reads and authenticates the __Host-session
 // cookie via readAndAuthenticateSession (the same logic RequireSession
 // itself uses -- see that function's own doc comment for why this cannot
 // simply BE RequireSession, a route-level http.Handler middleware that
 // cannot vary by a runtime query parameter the way this per-request
 // dispatch does), responding exactly like RequireSession's own 401
-// rejectSession on no/invalid session. purpose=link additionally requires
-// RequireRecentReauth (Task 7) BEFORE any transaction row is created,
-// responding 403 reauthRequiredCode on a stale one -- task-10-brief.md's
-// binding requirement that this check happens at /start, never deferred
-// to /callback, so a stale-reauth caller's attempt never even creates a
-// database row. purpose=reauth deliberately has NO such gate: its entire
-// point is to let a caller with a stale (or never-yet-established)
-// recent reauthentication refresh it, so requiring a fresh one first
-// would be circular.
+// rejectSession on no/invalid session. (3) purpose=link additionally
+// requires RequireRecentReauth (Task 7) BEFORE any transaction row is
+// created, responding 403 reauthRequiredCode on a stale one --
+// task-10-brief.md's binding requirement that this check happens at
+// /start, never deferred to /callback, so a stale-reauth caller's attempt
+// never even creates a database row. purpose=reauth deliberately has NO
+// such gate: its entire point is to let a caller with a stale (or
+// never-yet-established) recent reauthentication refresh it, so requiring
+// a fresh one first would be circular -- DD-C16's same-site check above
+// is what makes that safe now, closing the exact gap a reauth round trip
+// with no reauth gate of its own used to leave open.
 //
 // ok reports whether the caller should proceed; on false the appropriate
 // response has already been written and the caller must return
@@ -336,6 +358,11 @@ func (s *Service) startPurposeAndLinkingUser(w http.ResponseWriter, r *http.Requ
 		purpose = PurposeReauth
 	default:
 		return PurposeLogin, uuid.Nil, true
+	}
+
+	if !sameSiteInitiated(r, s.publicOrigin) {
+		rejectCSRF(w)
+		return "", uuid.Nil, false
 	}
 
 	sess, rotated, err := readAndAuthenticateSession(r, s.sessionMgr)
