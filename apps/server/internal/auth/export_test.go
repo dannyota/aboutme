@@ -62,6 +62,21 @@ func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries,
 	return svc, nil
 }
 
+// GoogleProviderCacheTryLockForTest attempts to acquire svc's Google OIDC
+// provider-discovery cache mutex (see provider_cache.go's
+// oidcProviderCache) without blocking. It exists so a test can prove
+// googleProvider/discover does NOT hold this mutex for the duration of
+// the discovery network call: while a concurrent discovery is
+// deliberately kept in flight (oidctest.Provider.BlockDiscoveryForTest),
+// this must still succeed immediately. ok is false only if the mutex is
+// currently held by another goroutine, in which case unlock is nil.
+func GoogleProviderCacheTryLockForTest(svc *Service) (unlock func(), ok bool) {
+	if !svc.google.cache.mu.TryLock() {
+		return nil, false
+	}
+	return svc.google.cache.mu.Unlock, true
+}
+
 // SetSessionIssuerForTest replaces svc's session-issuance seam
 // (sessionIssuer, handlers.go) with si -- fix-round Important 1's seam,
 // so a test can inject a deterministic failure at the one point
