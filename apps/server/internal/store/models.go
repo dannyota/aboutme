@@ -3,3 +3,57 @@
 //   sqlc v1.31.1
 
 package store
+
+import (
+	"net/netip"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type Identity struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	Provider       string
+	ProviderUserID string
+	CreatedAt      time.Time
+}
+
+type OAuthTransaction struct {
+	ID            uuid.UUID
+	HandleHash    []byte
+	Provider      string
+	Purpose       string
+	LinkingUserID *uuid.UUID
+	State         string
+	PkceVerifier  string
+	Nonce         *string
+	RedirectUri   string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	ConsumedAt    *time.Time
+}
+
+type Session struct {
+	ID                 uuid.UUID
+	UserID             uuid.UUID
+	TokenHash          []byte
+	CsrfSecret         []byte
+	CreatedAt          time.Time
+	LastSeenAt         time.Time
+	ReauthenticatedAt  time.Time
+	AbsoluteExpiresAt  time.Time
+	RotationGraceUntil *time.Time
+	RevokedAt          *time.Time
+	UA                 *string
+	IP                 *netip.Addr
+}
+
+type User struct {
+	ID        uuid.UUID
+	Email     string
+	Name      string
+	AvatarKey *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
