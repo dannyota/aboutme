@@ -9,12 +9,15 @@ package auth_test
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
+	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -99,6 +102,12 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	cbResp := doGet(t, handler, auth.GoogleCallbackPath+"?code=code-new-user&state="+state, txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
 	if cbResp.StatusCode != 302 {
 		t.Fatalf("GET callback status = %d, want 302", cbResp.StatusCode)
+	}
+	// DD-C7: a SUCCESSFUL callback stays pinned to the bare origin ("/"),
+	// never "/login" -- that path is reserved for a rejection's ?error=
+	// redirect (see handlers_test.go's assertRedirectPath).
+	if got := cbResp.Header.Get("Location"); got != testPublicOrigin+"/" {
+		t.Errorf("successful callback Location = %q, want %q", got, testPublicOrigin+"/")
 	}
 
 	sessionCookie := extractCookie(cbResp, auth.SessionCookieName)
@@ -266,5 +275,125 @@ func TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail(t *te
 	}
 	if usr.Name == email {
 		t.Errorf("user.Name = %q, want it to NOT equal the full email %q", usr.Name, email)
+	}
+}
+
+// newServiceWithOrigin builds a Service backed by q (shared with the
+// caller, unlike newTestService's own fresh newTestQueries each time) at
+// a specific PublicOrigin -- for
+// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin's
+// two-Service scenario below, where /start and /callback deliberately run
+// against different PublicOrigin configurations sharing one database.
+func newServiceWithOrigin(t *testing.T, q *store.Queries, issuer, origin string) http.Handler {
+	t.Helper()
+
+	cfg := config.Config{
+		PublicOrigin:       origin,
+		GoogleClientID:     oidctest.DefaultClientID,
+		GoogleClientSecret: "test-google-client-secret",
+	}
+	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, issuer)
+	if err != nil {
+		t.Fatalf("NewServiceForTest() error = %v", err)
+	}
+	return api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+}
+
+// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin proves
+// handleGoogleCallback's token exchange uses the STORED transaction's own
+// RedirectURI (set once, at Begin) rather than rebuilding one from this
+// Service's own current PublicOrigin config. It simulates PUBLIC_ORIGIN
+// changing mid-flight (a real deploy scenario: an origin migration or
+// config change landing between when a visitor's browser fetched /start
+// and when they complete /callback) with two separate Service instances
+// sharing one database: /start runs against beginOrigin, /callback
+// against a DIFFERENT callbackOrigin. If the Exchange call rebuilt
+// redirect_uri from the CALLBACK Service's own config (the bug this
+// hardening fixes), oidctest.Provider.LastTokenRedirectURI would observe
+// callbackOrigin's callback URL instead of beginOrigin's -- and a real
+// provider, which enforces redirect_uri as an exact match against what it
+// issued the code for, would reject the exchange outright.
+func TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	q := newTestQueries(t)
+
+	const (
+		beginOrigin    = "https://begin.aboutme.example"
+		callbackOrigin = "https://callback.aboutme.example"
+	)
+	beginHandler := newServiceWithOrigin(t, q, p.URL, beginOrigin)
+	callbackHandler := newServiceWithOrigin(t, q, p.URL, callbackOrigin)
+
+	startResp := doGet(t, beginHandler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
+	if startResp.StatusCode != http.StatusFound {
+		t.Fatalf("GET %s status = %d, want %d", auth.GoogleStartPath, startResp.StatusCode, http.StatusFound)
+	}
+	loc, err := url.Parse(startResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse start redirect Location: %v", err)
+	}
+	state := loc.Query().Get("state")
+	nonce := loc.Query().Get("nonce")
+	txCookie := extractCookie(startResp, auth.OAuthTxCookieName)
+	if txCookie == nil {
+		t.Fatal("start response missing __Host-oauth-tx cookie")
+	}
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
+	p.RegisterCode("code-redirect-uri-origin-change", oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		Nonce:         nonce,
+	})
+
+	cbResp := doGet(t, callbackHandler, auth.GoogleCallbackPath+"?code=code-redirect-uri-origin-change&state="+state, txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
+	if cbResp.StatusCode != http.StatusFound {
+		t.Fatalf("GET callback status = %d, want %d", cbResp.StatusCode, http.StatusFound)
+	}
+	if extractCookie(cbResp, auth.SessionCookieName) == nil {
+		t.Fatal("callback did not authenticate -- want a successful login despite the origin change")
+	}
+
+	gotRedirectURI, seen := p.LastTokenRedirectURI()
+	if !seen {
+		t.Fatal("token endpoint was never exchanged")
+	}
+	wantRedirectURI := beginOrigin + auth.GoogleCallbackPath
+	if gotRedirectURI != wantRedirectURI {
+		t.Errorf("token exchange redirect_uri = %q, want %q (the transaction's own stored RedirectURI from Begin, not callbackOrigin=%q's current config)",
+			gotRedirectURI, wantRedirectURI, callbackOrigin)
+	}
+}
+
+// TestGoogleStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPath
+// asserts the one authorize-URL query parameter no existing test checked
+// directly: redirect_uri. Every other /start assertion (state,
+// code_challenge, code_challenge_method, nonce) already has coverage;
+// redirect_uri is what a real provider validates as an exact match
+// against what it has on file for this client, so a wrong value here
+// would silently break every real login while every hermetic test (which
+// never validates it) kept passing.
+func TestGoogleStart_AuthorizeURL_RedirectURIMatchesPublicOriginAndCallbackPath(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
+
+	startResp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
+	if startResp.StatusCode != http.StatusFound {
+		t.Fatalf("GET %s status = %d, want %d", auth.GoogleStartPath, startResp.StatusCode, http.StatusFound)
+	}
+	loc, err := url.Parse(startResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse start redirect Location: %v", err)
+	}
+
+	want := testPublicOrigin + auth.GoogleCallbackPath
+	if got := loc.Query().Get("redirect_uri"); got != want {
+		t.Errorf("authorize URL redirect_uri = %q, want %q (PublicOrigin + GoogleCallbackPath)", got, want)
 	}
 }

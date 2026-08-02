@@ -64,6 +64,26 @@ func mustQueryParam(t *testing.T, rawURL, name string) string {
 	return u.Query().Get(name)
 }
 
+// assertRedirectPath fails the test unless rawURL parses and its path
+// equals wantPath -- DD-C7 (integration-owner ruling, task-4-brief.md's
+// re-review) pins every /callback REJECTION's redirect target to
+// PublicOrigin+"/login" specifically so the frontend's login screen is
+// what renders the ?error= code, while a SUCCESSFUL callback keeps
+// redirecting to the bare PublicOrigin+"/" -- these two must never be
+// pinned to the same literal, or a future edit could silently merge them
+// back together.
+func assertRedirectPath(t *testing.T, rawURL, wantPath string) {
+	t.Helper()
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("parse redirect URL %q: %v", rawURL, err)
+	}
+	if u.Path != wantPath {
+		t.Errorf("redirect Location path = %q, want %q (rawURL=%q)", u.Path, wantPath, rawURL)
+	}
+}
+
 // testPublicOrigin is the PublicOrigin every test Service is configured
 // with -- an arbitrary, valid-per-config.loadPublicOrigin origin (scheme
 // + host, no path/trailing slash) these tests never actually dial.
@@ -81,7 +101,9 @@ func (noopPinger) Ping(context.Context) error { return nil }
 // fields; only the Google issuer override needs a seam, provided by
 // auth.NewServiceForTest.
 type testServiceConfig struct {
-	googleIssuer string
+	googleIssuer  string
+	logger        *slog.Logger
+	sessionIssuer sessionIssuerForTest
 }
 
 // testServiceOption configures newTestService.
@@ -93,6 +115,37 @@ type testServiceOption func(*testServiceConfig)
 // auth.NewServiceForTest's doc comment.
 func withGoogleIssuer(issuer string) testServiceOption {
 	return func(c *testServiceConfig) { c.googleIssuer = issuer }
+}
+
+// withLogger arranges for the returned Service's own logger (the one
+// logRejection/logInternalError write to -- NOT api.New's separate
+// request-logging middleware, which stays discarded regardless) to be
+// logger instead of a discarding testLogger(). It exists so a test that
+// needs to capture this Service's own log output (e.g.
+// newCapturingLogger's buffer) can still go through newTestService's
+// guarded construction instead of hand-building a Service directly and
+// bypassing the "every test Service must have a real issuer override"
+// guard below.
+func withLogger(logger *slog.Logger) testServiceOption {
+	return func(c *testServiceConfig) { c.logger = logger }
+}
+
+// sessionIssuerForTest structurally mirrors handlers.go's unexported
+// sessionIssuer interface (Go interface satisfaction needs no shared name
+// across packages -- failingSessionIssuer below already relies on this),
+// so withSessionIssuer can accept anything satisfying it without
+// importing the unexported type itself.
+type sessionIssuerForTest interface {
+	Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error)
+}
+
+// withSessionIssuer arranges for the returned Service's session-issuance
+// seam (auth.SetSessionIssuerForTest) to be si instead of a real
+// *SessionManager -- e.g. failingSessionIssuer, to deterministically force
+// the writeInternalError funnel (there is no realistic way to fail a real
+// *SessionManager.Issue without corrupting a live database mid-request).
+func withSessionIssuer(si sessionIssuerForTest) testServiceOption {
+	return func(c *testServiceConfig) { c.sessionIssuer = si }
 }
 
 // newTestService builds a Service backed by a fresh live-database
@@ -130,9 +183,17 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 		GoogleClientSecret: "test-google-client-secret",
 	}
 
-	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, sc.googleIssuer)
+	logger := sc.logger
+	if logger == nil {
+		logger = testLogger()
+	}
+
+	svc, err := auth.NewServiceForTest(logger, cfg, q, sc.googleIssuer)
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
+	}
+	if sc.sessionIssuer != nil {
+		auth.SetSessionIssuerForTest(svc, sc.sessionIssuer)
 	}
 
 	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
@@ -207,6 +268,67 @@ func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 	}
 }
 
+// TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex proves the lazy OIDC
+// provider-discovery cache (provider_cache.go's oidcProviderCache, shared
+// by google.go and linkedin.go) does NOT hold its own mutex for the
+// duration of the discovery network call -- an earlier version of this
+// pattern did, which meant every OTHER concurrent /start or /callback
+// request (for ANY purpose, not just ones needing this same provider)
+// blocked behind a single slow or hung discovery attempt against a real,
+// uncontrolled external dependency.
+//
+// oidctest.Provider.BlockDiscoveryForTest deterministically holds the
+// discovery HTTP response open (no sleep/timing race: `entered` closes
+// the instant the handler is reached, proving the dial is genuinely in
+// flight) while this test tries to acquire the SAME cache's mutex from a
+// second, independent goroutine via GoogleProviderCacheTryLockForTest --
+// under the old (buggy) pattern that acquisition would block until
+// discovery completed; under the fixed pattern it succeeds immediately.
+func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	q := newTestQueries(t)
+	cfg := config.Config{
+		PublicOrigin:       testPublicOrigin,
+		GoogleClientID:     oidctest.DefaultClientID,
+		GoogleClientSecret: "test-google-client-secret",
+	}
+	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, p.URL)
+	if err != nil {
+		t.Fatalf("NewServiceForTest() error = %v", err)
+	}
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+
+	entered, release := p.BlockDiscoveryForTest()
+	t.Cleanup(release) // in case the test fails before reaching the explicit release() below
+
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
+	}()
+
+	select {
+	case <-entered:
+		// Discovery is now genuinely blocked mid-flight (inside
+		// oidc.NewProvider's HTTP round trip); the assertion below
+		// happens exactly while that is true.
+	case <-requestDone:
+		t.Fatal("GET /start finished before discovery's blocked endpoint was ever entered -- test setup is broken, not the code under test")
+	}
+
+	unlock, ok := auth.GoogleProviderCacheTryLockForTest(svc)
+	if !ok {
+		t.Error("google provider cache mutex is held while discovery's network call is still in flight -- discover must not hold its mutex across oidc.NewProvider")
+	} else {
+		unlock()
+	}
+
+	release()
+	<-requestDone
+}
+
 func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T) {
 	t.Parallel()
 
@@ -229,8 +351,18 @@ func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T
 	if cbResp.StatusCode != http.StatusFound {
 		t.Errorf("GET %s (no cookie) status = %d, want %d", auth.GoogleCallbackPath, cbResp.StatusCode, http.StatusFound)
 	}
+	assertRedirectPath(t, cbResp.Header.Get("Location"), "/login") // DD-C7
 }
 
+// TestService_RegisterRoutes_WrongMethod_Returns405 covers POST (any
+// method net/http's own "GET /path" mux pattern would never let through
+// regardless) and, separately, HEAD -- DD-C8 (integration-owner ruling):
+// unlike internal/api's own route helper (and Go's stdlib ServeMux
+// pattern matching), which both let HEAD satisfy a registered GET route
+// per RFC 9110 §9.3.2, this package's own routes deliberately do NOT: see
+// TestService_HeadRequest_DoesNotBeginTransaction and
+// TestService_HeadRequest_DoesNotConsumeTransaction below for why (a HEAD
+// prefetcher must never create or burn a real OAuth transaction).
 func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 	t.Parallel()
 
@@ -238,12 +370,84 @@ func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
 	for _, path := range []string{auth.GoogleStartPath, auth.GoogleCallbackPath} {
-		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil)
-		rec := httptest.NewRecorder()
-		handler.ServeHTTP(rec, req)
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("POST %s status = %d, want %d", path, rec.Code, http.StatusMethodNotAllowed)
+		for _, method := range []string{http.MethodPost, http.MethodHead} {
+			req := httptest.NewRequestWithContext(context.Background(), method, path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusMethodNotAllowed {
+				t.Errorf("%s %s status = %d, want %d", method, path, rec.Code, http.StatusMethodNotAllowed)
+			}
 		}
+	}
+}
+
+// TestService_HeadRequest_DoesNotBeginTransaction is DD-C8's first half:
+// a HEAD /start request -- the shape a link-preview/prefetch crawler
+// sends without ever intending to complete the flow -- must be rejected
+// by the method check BEFORE handleGoogleStart ever runs, so it never
+// performs handleGoogleStart's real side effect (a database INSERT via
+// TransactionStore.Begin) or sets a real __Host-oauth-tx cookie. Proven
+// here by the absence of any Set-Cookie header for it at all -- a
+// well-formed GET always sets one (see beginGoogle).
+func TestService_HeadRequest_DoesNotBeginTransaction(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodHead, auth.GoogleStartPath, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("HEAD %s status = %d, want %d", auth.GoogleStartPath, rec.Code, http.StatusMethodNotAllowed)
+	}
+	if extractCookie(rec.Result(), auth.OAuthTxCookieName) != nil { //nolint:bodyclose // ResponseRecorder.Result()'s Body is an in-memory NopCloser; nothing to leak.
+		t.Error("HEAD /start set a __Host-oauth-tx cookie, want none -- it must never begin a real transaction")
+	}
+}
+
+// TestService_HeadRequest_DoesNotConsumeTransaction is DD-C8's second
+// half: begins a REAL transaction via a genuine GET /start, then sends a
+// HEAD /callback carrying that transaction's own cookie and a
+// plausible-looking code/state -- proving the method check rejects it
+// (405) BEFORE handleGoogleCallback ever calls TransactionStore.Consume,
+// by then completing the SAME transaction with a real GET /callback and
+// observing it still succeeds. TransactionStore.Consume is single-use
+// (transaction_test.go's own replay tests): if the earlier HEAD had
+// reached Consume, this second, real completion would fail with
+// ErrTransactionInvalid instead of succeeding.
+func TestService_HeadRequest_DoesNotConsumeTransaction(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
+	txCookie, state, nonce := beginGoogle(t, handler)
+	p.RegisterCode("code-head-does-not-consume", oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		Nonce:         nonce,
+	})
+
+	headPath := auth.GoogleCallbackPath + "?code=code-head-does-not-consume&state=" + state
+	headReq := httptest.NewRequestWithContext(context.Background(), http.MethodHead, headPath, nil)
+	headReq.AddCookie(txCookie)
+	headRec := httptest.NewRecorder()
+	handler.ServeHTTP(headRec, headReq)
+	if headRec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("HEAD %s status = %d, want %d", headPath, headRec.Code, http.StatusMethodNotAllowed)
+	}
+
+	realResp := doCallback(t, handler, "code-head-does-not-consume", state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	if realResp.StatusCode != http.StatusFound {
+		t.Fatalf("GET callback (after an earlier HEAD) status = %d, want %d", realResp.StatusCode, http.StatusFound)
+	}
+	if extractCookie(realResp, auth.SessionCookieName) == nil {
+		t.Error("GET callback (after an earlier HEAD) did not authenticate -- the earlier HEAD must not have burned the transaction")
 	}
 }
 
@@ -273,6 +477,7 @@ func TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed(t *testing.T) {
 	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q", got, "auth_failed")
 	}
+	assertRedirectPath(t, loc, "/login") // DD-C7
 	if extractCookie(resp, auth.SessionCookieName) != nil {
 		t.Error("a session cookie was set for a rejected callback, want none")
 	}
@@ -301,9 +506,11 @@ func TestGoogleCallback_StaleOrUnknownTxCookie_ClearsCookieAndRedirectsAuthFaile
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
-	if got := mustQueryParam(t, resp.Header.Get("Location"), "error"); got != "auth_failed" {
+	loc := resp.Header.Get("Location")
+	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q", got, "auth_failed")
 	}
+	assertRedirectPath(t, loc, "/login") // DD-C7
 
 	cleared := extractCookie(resp, auth.OAuthTxCookieName)
 	if cleared == nil {
@@ -352,9 +559,11 @@ func TestGoogleCallback_StateMismatch_ClearsCookieAndRedirectsAuthFailed(t *test
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
-	if got := mustQueryParam(t, resp.Header.Get("Location"), "error"); got != "auth_failed" {
+	loc := resp.Header.Get("Location")
+	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q", got, "auth_failed")
 	}
+	assertRedirectPath(t, loc, "/login") // DD-C7
 	cleared := extractCookie(resp, auth.OAuthTxCookieName)
 	if cleared == nil || cleared.MaxAge >= 0 {
 		t.Error("__Host-oauth-tx not cleared on a state-mismatch rejection")
@@ -390,21 +599,8 @@ func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *te
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	q := newTestQueries(t)
 	logger, logBuf := newCapturingLogger()
-
-	cfg := config.Config{
-		PublicOrigin:       testPublicOrigin,
-		GoogleClientID:     oidctest.DefaultClientID,
-		GoogleClientSecret: "test-google-client-secret",
-	}
-	svc, err := auth.NewServiceForTest(logger, cfg, q, p.URL)
-	if err != nil {
-		t.Fatalf("NewServiceForTest() error = %v", err)
-	}
-	auth.SetSessionIssuerForTest(svc, failingSessionIssuer{})
-
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLogger(logger), withSessionIssuer(failingSessionIssuer{}))
 
 	subject := uniqueSubject(t)
 	email := uniqueEmail(t)
@@ -465,6 +661,71 @@ func TestGoogleCallback_SessionIssuanceFails_Returns500ClearsCookieAndLogs(t *te
 	}
 }
 
+// TestGoogleCallback_ResolveUserConflict_LogsSQLSTATE forces a REAL
+// Postgres constraint violation (not a stub) through resolveGoogleUser's
+// CreateUser call: a first login seeds a users row for email, then a
+// SECOND login with a different subject but the SAME email hits
+// users_email_key's UNIQUE constraint -- resolveGoogleUser is still
+// task-4-brief.md's documented stub (no pre-check against an existing
+// email; Task 10 replaces this), so this is a completely ordinary way to
+// reach it. logInternalError must log the five-character SQLSTATE class
+// code (pgconn.PgError.Code -- "23505" for unique_violation) so an
+// operator can distinguish a real constraint failure from any other
+// internal error, but NEVER the raw postgres message/detail text or the
+// constraint name, both of which can embed the bound email value
+// (Postgres's own "Key (email)=(...) already exists" detail).
+func TestGoogleCallback_ResolveUserConflict_LogsSQLSTATE(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	logger, logBuf := newCapturingLogger()
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLogger(logger))
+
+	email := uniqueEmail(t)
+
+	// Seed: an ordinary successful login creates the users row that the
+	// second login below collides with.
+	seedSubject := uniqueSubject(t)
+	seedTxCookie, seedState, seedNonce := beginGoogle(t, handler)
+	p.RegisterCode("code-sqlstate-seed", oidctest.Claims{
+		Subject:       seedSubject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		Nonce:         seedNonce,
+	})
+	seedResp := doCallback(t, handler, "code-sqlstate-seed", seedState, seedTxCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	if seedResp.StatusCode != http.StatusFound || extractCookie(seedResp, auth.SessionCookieName) == nil {
+		t.Fatalf("seed login did not succeed (status=%d): setup is broken, not the code under test", seedResp.StatusCode)
+	}
+
+	// Collision: a different provider subject, but the SAME email --
+	// resolveGoogleUser's CreateUser hits users_email_key.
+	conflictSubject := uniqueSubject(t)
+	txCookie, state, nonce := beginGoogle(t, handler)
+	p.RegisterCode("code-sqlstate-conflict", oidctest.Claims{
+		Subject:       conflictSubject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+		Nonce:         nonce,
+	})
+	resp := doCallback(t, handler, "code-sqlstate-conflict", state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d (a unique-constraint violation is an internal error, not a rejected callback)", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	logged := logBuf.String()
+	if !strings.Contains(logged, `"sqlstate":"23505"`) {
+		t.Errorf("log record = %q, want it to contain the unique_violation SQLSTATE (\"sqlstate\":\"23505\")", logged)
+	}
+	if strings.Contains(logged, email) {
+		t.Errorf("log record = %q, leaked the colliding email -- SQLSTATE logging must never include raw postgres message/detail text", logged)
+	}
+	if strings.Contains(logged, "duplicate key") || strings.Contains(logged, "users_email_key") {
+		t.Errorf("log record = %q, leaked the raw postgres error message or constraint name -- want the SQLSTATE code only", logged)
+	}
+}
+
 // ---- fix-round ruling b2: provider-signaled cancel ---------------------
 
 // TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled proves a
@@ -488,9 +749,11 @@ func TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
 	const wantErrorCode = "cancelled" //nolint:misspell // exact, ruling-specified wire value (double-L "cancelled"), not a typo for "canceled"
-	if got := mustQueryParam(t, resp.Header.Get("Location"), "error"); got != wantErrorCode {
+	loc := resp.Header.Get("Location")
+	if got := mustQueryParam(t, loc, "error"); got != wantErrorCode {
 		t.Errorf("error param = %q, want %q (RFC 6749 access_denied maps to its own distinct code)", got, wantErrorCode)
 	}
+	assertRedirectPath(t, loc, "/login") // DD-C7
 	if extractCookie(resp, auth.SessionCookieName) != nil {
 		t.Error("a session cookie was set on a canceled login, want none")
 	}
