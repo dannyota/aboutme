@@ -102,6 +102,9 @@ func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip str
 		AbsoluteExpiresAt: now.Add(absoluteTimeout),
 		UA:                stringParam(ua),
 		IP:                ipParam,
+		// RotatedFrom is deliberately omitted (nil): a fresh login is
+		// never a rotation successor -- see tryRotate's own successor
+		// insert (below) for the one call site that sets it.
 	})
 	if err != nil {
 		return "", store.Session{}, fmt.Errorf("auth: issue session: %w", err)
@@ -126,7 +129,10 @@ func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip str
 // affects a row (wins); every other caller's affects zero rows (loses).
 // The winner inserts one successor row, copying user_id,
 // reauthenticated_at, absolute_expires_at, ua, and ip unchanged from the
-// predecessor -- rotation never extends absolute expiry, and never resets
+// predecessor, and recording the predecessor's own id in the successor's
+// rotated_from column (fix round 3, DD-C14c: the exact, database-enforced
+// lineage link sessions_handlers.go's revokeLineagePartners depends on) --
+// rotation never extends absolute expiry, and never resets
 // reauthenticated_at (it is not itself a fresh OAuth login: design
 // decision 2 tracks the session's whole *lineage*, and resetting it here
 // would silently satisfy the recent-reauth gate without a real
@@ -238,6 +244,14 @@ func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Sessio
 		AbsoluteExpiresAt: predecessor.AbsoluteExpiresAt,
 		UA:                predecessor.UA,
 		IP:                predecessor.IP,
+		// RotatedFrom (fix round 3, DD-C14c): the exact, database-
+		// enforced (sessions_rotated_from_key) lineage link back to
+		// predecessor -- sessions_handlers.go's revokeLineagePartners
+		// reads this straight off a row it already has in hand for the
+		// predecessor direction, and queries FindLiveSuccessorSession
+		// against it for the successor direction, with no timestamp
+		// reconstruction either way.
+		RotatedFrom: &predecessor.ID,
 	})
 	if err != nil {
 		return store.Session{}, "", false, fmt.Errorf("auth: rotate session: create successor: %w", err)
@@ -304,18 +318,27 @@ func (m *SessionManager) Revoke(ctx context.Context, sessionID uuid.UUID) error 
 }
 
 // RevokeForUser revokes the session identified by sessionID only if it
-// belongs to userID, and reports how many rows that affected: 1 if
-// sessionID existed, belonged to userID, and was not already revoked; 0
-// otherwise (unknown id, already revoked, or -- the ownership check this
-// method adds over Revoke -- belongs to a different user). Callers must
-// treat 0 as "no such session for this user" without distinguishing why,
-// the same no-oracle reasoning as ErrSessionInvalid: Task 9's
-// DELETE /sessions/{id} turns 0 into a 404, never a 403, so an attacker
-// probing session ids can't learn whether a given id belongs to someone
-// else versus not existing at all.
+// belongs to userID AND is still LIVE by sessionDead's exact predicates
+// (fix round 1, findings I1/M5), and reports how many rows that affected:
+// 1 if sessionID existed, belonged to userID, was not already revoked,
+// and was not idle-expired, absolute-expired, or a grace-dead rotation
+// predecessor; 0 otherwise. Callers must treat 0 as "no such LIVE session
+// for this user" without distinguishing why, the same no-oracle reasoning
+// as ErrSessionInvalid: Task 9's DELETE /sessions/{id} turns 0 into a
+// 404, never a 403, so an attacker probing session ids can't learn
+// whether a given id belongs to someone else, doesn't exist, or is
+// merely dead -- and a caller can never "revoke" a row GET /sessions'
+// own device list already refuses to show them (the self-inconsistency
+// the review caught before this fix).
 func (m *SessionManager) RevokeForUser(ctx context.Context, sessionID, userID uuid.UUID) (int64, error) {
 	now := m.now()
-	n, err := m.q.RevokeSessionForUser(ctx, store.RevokeSessionForUserParams{ID: sessionID, UserID: userID, RevokedAt: &now})
+	n, err := m.q.RevokeSessionForUser(ctx, store.RevokeSessionForUserParams{
+		ID:         sessionID,
+		UserID:     userID,
+		RevokedAt:  &now,
+		IdleCutoff: now.Add(-idleTimeout),
+		Now:        now,
+	})
 	if err != nil {
 		return 0, fmt.Errorf("auth: revoke session for user: %w", err)
 	}

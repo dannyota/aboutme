@@ -1,3 +1,4 @@
-h1:TZLPHop+P28b/9BFidiCFYqS+USTHMUaQk9Uwh6JqT4=
+h1:AjPTyWFPEp6mAW/VvaJfT7+CVp3ILN7c0VsuX7n7ILk=
 00001_extensions.sql h1:i/DrexuE4a+cpbhE8yyVE+gbaCv3d9fciU41gRYZ6CI=
 00002_add_auth_tables.sql h1:V7vMFtKmZ2YdAtBWJ4KBO5m3wn9JLe2bvs4IyyMxWE0=
+00003_add_sessions_rotated_from.sql h1:vFdHKmSfA/WA/ic+R0ulr1bpWoW/XVGhJBUr+RG1nAk=

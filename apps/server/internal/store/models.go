@@ -47,6 +47,7 @@ type Session struct {
 	RevokedAt          *time.Time
 	UA                 *string
 	IP                 *netip.Addr
+	RotatedFrom        *uuid.UUID
 }
 
 type User struct {

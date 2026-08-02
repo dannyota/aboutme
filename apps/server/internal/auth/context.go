@@ -20,6 +20,16 @@ type sessionCtxKey int
 // session's csrf_secret. Defined here, rather than in Task 9's own file,
 // because csrf.go depends on it and Task 9 has not landed yet -- this is
 // the seam Task 9's RequireSession is expected to populate.
+//
+// Fix rounds 1-2 briefly added a second key here
+// (predecessorSessionContextKey) as a fast path for finding a rotated-away
+// predecessor session, populated only when RequireSession's own
+// Authenticate call performed the rotation in-flight. Fix round 3
+// (DD-C14c) made that seam entirely redundant: sessions.rotated_from
+// (sql/schema.sql) now gives ANY session row's own predecessor id for
+// free, with no query and no context plumbing, whichever request actually
+// performed the rotation -- see sessions_handlers.go's
+// revokeLineagePartners. Removed rather than kept as inert dead code.
 const sessionContextKey sessionCtxKey = iota
 
 // ContextWithSession returns a copy of ctx carrying sess, retrievable via

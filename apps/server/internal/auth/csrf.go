@@ -48,11 +48,14 @@ const csrfRejectedMessage = "CSRF validation failed"
 // through untouched regardless of Origin, Referer, Content-Type, or
 // token, and without ever reading the session from context.
 //
-// Ordering in the chain (handlers.go): RequestID -> Logging -> BodyLimit
-// -> RequireSession -> RequireCSRF -> handler. RequireCSRF must run after
-// RequireSession because it reads the session's CSRFSecret from context;
-// running it earlier would always fail closed (SessionFromContext returns
-// ok=false), never a bypass.
+// Ordering in the chain (handlers.go's RegisterRoutes/sessionChain,
+// mirroring router.go's New): RequestID -> SecurityHeaders -> Logging ->
+// NoStoreCache -> RateLimit -> BodyLimit -> RequireSession -> RequireCSRF
+// -> handler (fix round 1, M1: corrected from an earlier version of this
+// comment that omitted SecurityHeaders, NoStoreCache, and RateLimit).
+// RequireCSRF must run after RequireSession because it reads the
+// session's CSRFSecret from context; running it earlier would always
+// fail closed (SessionFromContext returns ok=false), never a bypass.
 //
 // Every rejection path returns 403 with the single csrfRejectedCode via
 // api.WriteError -- fail closed, per AC-SEC-002.
@@ -99,6 +102,42 @@ func RequireCSRF(allowedOrigin string) api.Middleware {
 // through a distinct status or message.
 func rejectCSRF(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusForbidden, csrfRejectedCode, csrfRejectedMessage)
+}
+
+// sameSiteInitiated reports whether r was initiated same-site with
+// allowedOrigin (DD-C16, Task 10 fix round 1, C1): the compensating
+// control for GET /auth/{provider}/start's purpose=link/reauth requests,
+// which RequireCSRF itself cannot cover -- GET is never a CSRF-checked
+// method here (isMutatingMethod above), deliberately, because an ordinary
+// purpose=login start must stay reachable from anywhere (a bookmarked or
+// shared "sign in" link, an email, another site's "continue with
+// aboutme" button). purpose=link/reauth is different: Opus review traced
+// a working cross-site chain against the pre-fix-round version of this
+// package -- an attacker page top-level-navigates the victim (SameSite=Lax
+// permits this for a GET) to /start?purpose=reauth first (no reauth gate
+// of its own, and an already-consented provider can complete with zero
+// visible interaction), which REFRESHES reauthenticated_at, THEN to
+// /start?purpose=link, which now passes RequireRecentReauth -- the
+// recent-reauth window cannot gate an attack that itself refreshes the
+// window. Only requiring the *navigation itself* originate same-site
+// closes that chain; no downstream check can substitute for it.
+//
+// Sec-Fetch-Site (a Fetch Metadata request header the BROWSER sets,
+// unspoofable by page script) is checked first when present: exactly
+// "same-origin" accepts; any OTHER value (cross-site, same-site, none)
+// rejects immediately, never falling through to a weaker check -- a
+// browser that sends this header at all is giving a definitive answer.
+// Only when the header is ABSENT (an older browser, or a stripping
+// intermediary) does this fall back to originAllowed's own Origin/Referer
+// check -- RequireCSRF's exact fail-closed logic, reused rather than
+// reimplemented: no usable signal at all (no Sec-Fetch-Site, no Origin,
+// no Referer) fails closed via originAllowed's own "neither -> false"
+// rule.
+func sameSiteInitiated(r *http.Request, allowedOrigin string) bool {
+	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs != "" {
+		return sfs == "same-origin"
+	}
+	return originAllowed(r, allowedOrigin)
 }
 
 // isMutatingMethod reports whether method needs a CSRF check: everything

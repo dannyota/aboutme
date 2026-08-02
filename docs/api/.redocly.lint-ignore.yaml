@@ -1,0 +1,21 @@
+# This file instructs Redocly's linter to ignore the rules contained for specific parts of your API.
+# See https://redocly.com/docs/cli/ for more information.
+#
+# operation-2xx-response stays ON globally (docs/api/redocly.yaml) -- the
+# six operations below are the ONLY exemption, not a document-wide
+# disable: GET /auth/{google,github,linkedin}/start and .../callback
+# (Task 9, AC-AUTH-005) are top-level browser redirects by design
+# (DD-C4): their only real response is 302, whether the login succeeds or
+# is rejected, so there is genuinely no 2xx to document for them. Fix
+# round 1, finding I3: an earlier version of this exemption used a
+# document-wide `operation-2xx-response: off` in redocly.yaml with a
+# comment falsely claiming it only affected these six operations -- this
+# ignore file is the actual narrow mechanism that claim described.
+openapi.yaml:
+  operation-2xx-response:
+    - "#/paths/~1auth~1google~1start/get/responses"
+    - "#/paths/~1auth~1google~1callback/get/responses"
+    - "#/paths/~1auth~1github~1start/get/responses"
+    - "#/paths/~1auth~1github~1callback/get/responses"
+    - "#/paths/~1auth~1linkedin~1start/get/responses"
+    - "#/paths/~1auth~1linkedin~1callback/get/responses"
