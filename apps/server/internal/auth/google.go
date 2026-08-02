@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -37,15 +36,15 @@ type googleClaims struct {
 }
 
 // googleProviderConfig holds Google's OAuth2 client credentials and the
-// lazily-discovered, cached *oidc.Provider backing them. It is a distinct
-// type (rather than fields directly on Service) so its mutex only ever
-// guards the one thing it protects.
+// lazily-discovered, cached *oidc.Provider backing them, via the shared
+// oidcProviderCache (provider_cache.go) -- a distinct type (rather than
+// fields directly on Service) so the cache's mutex only ever guards the
+// one thing it protects.
 type googleProviderConfig struct {
 	clientID     string
 	clientSecret string
 
-	mu       sync.Mutex
-	provider *oidc.Provider // nil until first use; see (*Service).googleProvider
+	cache oidcProviderCache
 }
 
 // googleProvider returns the discovered Google OIDC provider, discovering
@@ -53,27 +52,19 @@ type googleProviderConfig struct {
 // NewService takes no context and must not perform network I/O of its
 // own (the same lazy-dial reasoning as store.NewPool not dialing the
 // database eagerly), so discovery happens the first time /start or
-// /callback actually needs it. A discovery failure is not cached, so a
-// transient network blip does not permanently break login until process
-// restart -- the next request simply retries.
+// /callback actually needs it. See oidcProviderCache.discover for the
+// caching/concurrency contract (and the mutex-across-network-call hazard
+// it fixes).
 func (s *Service) googleProvider(ctx context.Context) (*oidc.Provider, error) {
-	s.google.mu.Lock()
-	defer s.google.mu.Unlock()
-
-	if s.google.provider != nil {
-		return s.google.provider, nil
-	}
-
 	issuer := googleIssuer
 	if s.googleIssuerOverride != "" {
 		issuer = s.googleIssuerOverride
 	}
 
-	p, err := oidc.NewProvider(ctx, issuer)
+	p, err := s.google.cache.discover(ctx, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("auth: discover google oidc provider: %w", err)
 	}
-	s.google.provider = p
 	return p, nil
 }
 

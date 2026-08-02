@@ -1,8 +1,12 @@
 package auth
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -35,17 +39,22 @@ func NewSessionManagerForTest(q *store.Queries, now func() time.Time) *SessionMa
 const SessionCookieName = sessionCookieName
 
 // NewServiceForTest builds a Service exactly like NewService, but also
-// sets the unexported googleIssuerOverride field to googleIssuer --
-// task-4-brief.md Step 2's issuer-override seam: "the Service needs a way
-// to use a non-https://accounts.google.com issuer in tests ... add an
-// unexported googleIssuerOverride field". googleIssuer is NOT optional in
-// practice: every caller in this package's own test helper
-// (handlers_test.go's newTestService) is required to supply a non-empty
-// one and fails the test immediately otherwise -- a fix-round Critical
-// finding was exactly a test that omitted it and performed live OIDC
-// discovery against the real https://accounts.google.com. This
-// constructor itself stays permissive (an empty override still leaves
-// production's real issuer in place) so it also doubles as a direct,
+// sets the unexported googleIssuerOverride/linkedinIssuerOverride fields
+// to googleIssuer/linkedinIssuer -- task-4-brief.md Step 2's
+// issuer-override seam: "the Service needs a way to use a
+// non-https://accounts.google.com issuer in tests ... add an unexported
+// googleIssuerOverride field", extended here to LinkedIn's own discovery
+// issuer. Neither is optional in practice: every caller in this package's
+// own test helper (handlers_test.go's newTestService) is required to
+// supply a non-empty googleIssuer and fails the test immediately
+// otherwise -- a fix-round Critical finding was exactly a test that
+// omitted it and performed live OIDC discovery against the real
+// https://accounts.google.com. linkedinIssuer has no such forced guard
+// (see newTestService's own doc comment for why): unlike Google, no
+// existing test's default path reaches LinkedIn's discovery at all, so
+// only a test that actually drives a LinkedIn route needs to supply one.
+// This constructor itself stays permissive (an empty override leaves the
+// corresponding real issuer in place) so it also doubles as a direct,
 // deliberate way to test NewService's own no-override default if that's
 // ever needed.
 //
@@ -53,13 +62,52 @@ const SessionCookieName = sessionCookieName
 // constructor/option -- the same seam idiom NewSessionManagerForTest above
 // already established for this package -- so production code has no way
 // to point itself at an arbitrary issuer by accident.
-func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries, googleIssuer string) (*Service, error) {
+func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries, googleIssuer, linkedinIssuer string) (*Service, error) {
 	svc, err := NewService(logger, cfg, q)
 	if err != nil {
 		return nil, err
 	}
 	svc.googleIssuerOverride = googleIssuer
+	svc.linkedinIssuerOverride = linkedinIssuer
 	return svc, nil
+}
+
+// GoogleProviderCacheTryLockForTest attempts to acquire svc's Google OIDC
+// provider-discovery cache mutex (see provider_cache.go's
+// oidcProviderCache) without blocking. It exists so a test can prove
+// googleProvider/discover does NOT hold this mutex for the duration of
+// the discovery network call: while a concurrent discovery is
+// deliberately kept in flight (oidctest.Provider.BlockDiscoveryForTest),
+// this must still succeed immediately. ok is false only if the mutex is
+// currently held by another goroutine, in which case unlock is nil.
+func GoogleProviderCacheTryLockForTest(svc *Service) (unlock func(), ok bool) {
+	if !svc.google.cache.mu.TryLock() {
+		return nil, false
+	}
+	return svc.google.cache.mu.Unlock, true
+}
+
+// ResolveLinkedInUserForTest exposes resolveLinkedInUser (linkedin.go) to
+// package auth_test. It exists specifically so a test can exercise DD-C12's
+// defense-in-depth linkingUserID==uuid.Nil branch directly: the
+// oauth_transactions table's own CHECK constraint
+// (oauth_transactions_link_needs_user) already makes that state
+// impossible to reach through a real Begin-backed Transaction, so the
+// only way to prove the Go-level check exists and works is to call this
+// function directly with a hand-built purpose/linkingUserID pair, rather
+// than through the full /start-/callback HTTP round trip every other
+// test in this package drives.
+func ResolveLinkedInUserForTest(ctx context.Context, svc *Service, purpose Purpose, linkingUserID uuid.UUID, providerUserID, email string, emailVerified *bool, name string) (store.User, error) {
+	return svc.resolveLinkedInUser(ctx, purpose, linkingUserID, providerUserID, email, emailVerified, name)
+}
+
+// IsLinkedInLinkRejectedForTest reports whether err is
+// errLinkedInLinkRejected (linkedin.go) -- DD-C12's interim link/reauth
+// safety-net sentinel -- so a test using ResolveLinkedInUserForTest can
+// assert a rejection happened for EXACTLY this reason, not some unrelated
+// database error.
+func IsLinkedInLinkRejectedForTest(err error) bool {
+	return errors.Is(err, errLinkedInLinkRejected)
 }
 
 // SetSessionIssuerForTest replaces svc's session-issuance seam

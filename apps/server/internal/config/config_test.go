@@ -70,13 +70,15 @@ func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "staging",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32,::1/128",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32,::1/128",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -252,13 +254,17 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 			if envValue == "prod" || envValue == "staging" {
 				// prod and staging both require TRUSTED_PROXY_CIDRS (fail
 				// closed — see TestLoad_TrustedProxyCIDRs_RequiredInProd and
-				// TestLoad_TrustedProxyCIDRs_RequiredInStaging) and
+				// TestLoad_TrustedProxyCIDRs_RequiredInStaging),
 				// GOOGLE_CLIENT_ID/SECRET (see
-				// TestLoad_GoogleCredentials_RequiredInProd/Staging);
+				// TestLoad_GoogleCredentials_RequiredInProd/Staging), and
+				// LINKEDIN_CLIENT_ID/SECRET (see
+				// TestLoad_LinkedInCredentials_RequiredInProd/Staging);
 				// LISTEN_HOST is left at its loopback default.
 				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32,::1/128"
 				vars["GOOGLE_CLIENT_ID"] = "client-id"
 				vars["GOOGLE_CLIENT_SECRET"] = "client-secret"
+				vars["LINKEDIN_CLIENT_ID"] = "client-id"
+				vars["LINKEDIN_CLIENT_SECRET"] = "client-secret"
 			}
 
 			got, err := config.Load(env(vars))
@@ -349,13 +355,15 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "prod",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "prod",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -392,13 +400,15 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "staging",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -470,13 +480,15 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "prod",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  " 127.0.0.1/32 , ::1/128 ",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "prod",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    " 127.0.0.1/32 , ::1/128 ",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -739,6 +751,136 @@ func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID") {
 		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GOOGLE_CLIENT_ID")
+	}
+}
+
+// ---- LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET ----------------------
+
+func TestLoad_LinkedInCredentials_ValidConfig(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "dev",
+		"LINKEDIN_CLIENT_ID":     "test-client-id",
+		"LINKEDIN_CLIENT_SECRET": "test-client-secret",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.LinkedInClientID != "test-client-id" {
+		t.Errorf("LinkedInClientID = %q, want %q", got.LinkedInClientID, "test-client-id")
+	}
+	if got.LinkedInClientSecret != "test-client-secret" {
+		t.Errorf("LinkedInClientSecret = %q, want %q", got.LinkedInClientSecret, "test-client-secret")
+	}
+}
+
+// TestLoad_LinkedInCredentials_OptionalInDev mirrors
+// TestLoad_GoogleCredentials_OptionalInDev: a developer working on an
+// unrelated feature is never forced to obtain real LinkedIn OAuth
+// credentials just to start the server in dev.
+func TestLoad_LinkedInCredentials_OptionalInDev(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.LinkedInClientID != "" {
+		t.Errorf("LinkedInClientID = %q, want empty (optional in dev)", got.LinkedInClientID)
+	}
+	if got.LinkedInClientSecret != "" {
+		t.Errorf("LinkedInClientSecret = %q, want empty (optional in dev)", got.LinkedInClientSecret)
+	}
+}
+
+// TestLoad_LinkedInCredentials_RequiredInProd mirrors
+// TestLoad_GoogleCredentials_RequiredInProd: a production server cannot
+// offer "Sign in with LinkedIn" without real credentials, so Load must
+// refuse to start rather than silently booting with an empty client
+// id/secret that would only fail later, per-request, against the real
+// LinkedIn endpoint.
+func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		vars map[string]string
+	}{
+		{
+			name: "missing client id",
+			vars: map[string]string{"LINKEDIN_CLIENT_SECRET": "secret"},
+		},
+		{
+			name: "missing client secret",
+			vars: map[string]string{"LINKEDIN_CLIENT_ID": "client-id"},
+		},
+		{
+			name: "missing both",
+			vars: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Google credentials are set (valid) here so Load's earlier
+			// GOOGLE_CLIENT_ID/SECRET check never masks the LINKEDIN_CLIENT_*
+			// failure this test is actually targeting.
+			vars := map[string]string{
+				"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":        "https://aboutme.vn",
+				"ENV":                  "prod",
+				"LISTEN_HOST":          "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+				"GOOGLE_CLIENT_ID":     "google-client-id",
+				"GOOGLE_CLIENT_SECRET": "google-client-secret",
+			}
+			for k, v := range tt.vars {
+				vars[k] = v
+			}
+
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want error: LINKEDIN_CLIENT_ID/SECRET required when ENV=prod")
+			}
+			if !strings.Contains(err.Error(), "LINKEDIN_CLIENT_ID") && !strings.Contains(err.Error(), "LINKEDIN_CLIENT_SECRET") {
+				t.Errorf("Load() error = %q, want it to name LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_LinkedInCredentials_RequiredInStaging is the staging
+// counterpart of TestLoad_LinkedInCredentials_RequiredInProd — staging
+// shares prod's strictness so a misconfiguration is caught before it
+// reaches prod. Google credentials are set (valid) so Load's earlier
+// GOOGLE_CLIENT_ID/SECRET check never masks the LINKEDIN_CLIENT_* failure
+// this test is actually targeting.
+func TestLoad_LinkedInCredentials_RequiredInStaging(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "staging",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":     "google-client-id",
+		"GOOGLE_CLIENT_SECRET": "google-client-secret",
+	}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error: LINKEDIN_CLIENT_ID/SECRET required when ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "LINKEDIN_CLIENT_ID") {
+		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "LINKEDIN_CLIENT_ID")
 	}
 }
 
