@@ -161,10 +161,10 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 
 const createSession = `-- name: CreateSession :one
 INSERT INTO sessions (
-    user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, ua, ip
+    user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, ua, ip, rotated_from
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+) RETURNING id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from
 `
 
 type CreateSessionParams struct {
@@ -177,6 +177,7 @@ type CreateSessionParams struct {
 	AbsoluteExpiresAt time.Time
 	UA                *string
 	IP                *netip.Addr
+	RotatedFrom       *uuid.UUID
 }
 
 // Always inserts a brand-new row -- used both by Issue (fixation defense: a
@@ -185,6 +186,11 @@ type CreateSessionParams struct {
 // which passes the predecessor's user_id, reauthenticated_at,
 // absolute_expires_at, ua, and ip through unchanged so a rotation never
 // extends absolute expiry or silently satisfies the recent-reauth gate.
+// rotated_from (fix round 3, DD-C14c) is NULL for Issue's own fresh-login
+// insert, and the predecessor's own id for tryRotate's successor insert --
+// the exact, database-enforced (sessions_rotated_from_key) lineage link
+// FindLiveSuccessorSession below and the row's own rotated_from column
+// (no query needed for the predecessor direction) both depend on.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.UserID,
@@ -196,6 +202,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		arg.AbsoluteExpiresAt,
 		arg.UA,
 		arg.IP,
+		arg.RotatedFrom,
 	)
 	var i Session
 	err := row.Scan(
@@ -211,6 +218,7 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.RevokedAt,
 		&i.UA,
 		&i.IP,
+		&i.RotatedFrom,
 	)
 	return i, err
 }
@@ -243,43 +251,31 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
-const findImmediatePredecessorSession = `-- name: FindImmediatePredecessorSession :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions
-WHERE user_id = $1
-  AND revoked_at IS NULL
-  AND rotation_grace_until = $2::timestamptz
+const findLiveSuccessorSession = `-- name: FindLiveSuccessorSession :one
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE rotated_from = $1 AND revoked_at IS NULL
 `
 
-type FindImmediatePredecessorSessionParams struct {
-	UserID                uuid.UUID
-	PredecessorGraceUntil time.Time
-}
-
-// Fix round 1, finding I2 / design owner ruling DD-C14: given a session
-// that may itself be a rotation SUCCESSOR, finds the exact row it was
-// rotated FROM, if that predecessor is still live (revoked_at IS NULL).
-// Not a heuristic: session.go's tryRotate sets
-// predecessor.rotation_grace_until = now + rotationGrace and
-// successor.created_at = now from the SAME `now` value in the same
-// function call, so predecessor.rotation_grace_until always equals
-// successor.created_at + rotationGrace EXACTLY for a genuine
-// predecessor/successor pair, and essentially never coincidentally for
-// an unrelated row (rotation_grace_until is a random-offset instant, not
-// a value any other write path in this schema ever produces). The caller
-// computes successor.created_at + rotationGrace in Go (rotationGrace is
-// session.go's own constant) and passes it as the single timestamp
-// argument -- this exists specifically because RequireSession's
-// context-based predecessor seam (ContextWithPredecessorSessionID) only
-// covers the narrow case where the SAME request's own Authenticate call
-// performs the rotation, which a CSRF-gated mutating endpoint can never
-// observe in practice (RequireCSRF validates against the POST-rotation
-// session, which a client cannot have a correct token for on its very
-// first use) -- see task-9-report.md's fix-round-1 section for the full
-// reasoning. user_id scopes the match to the caller's own lineage only,
-// so a coincidental rotation_grace_until collision with a DIFFERENT
-// user's session can never cross-match.
-func (q *Queries) FindImmediatePredecessorSession(ctx context.Context, arg FindImmediatePredecessorSessionParams) (Session, error) {
-	row := q.db.QueryRow(ctx, findImmediatePredecessorSession, arg.UserID, arg.PredecessorGraceUntil)
+// Fix round 3, finding DD-C14c (owner ruling: schema change, replacing
+// fix round 1/2's timestamp-reconstruction queries): given a session
+// that may itself be a rotation PREDECESSOR, finds the exact successor
+// row it was rotated INTO, if that successor is still live (revoked_at
+// IS NULL). Exact by construction, not a heuristic: rotated_from is a
+// foreign key tryRotate's successor insert (internal/auth/session.go)
+// sets once, at INSERT time, to the predecessor's own id, and
+// sessions_rotated_from_key (sql/schema.sql) is a partial UNIQUE index
+// on it -- a predecessor has AT MOST ONE successor, enforced by the
+// database itself, not merely by BeginSessionRotation's CAS. This
+// replaces fix round 1/2's FindImmediatePredecessorSession/
+// FindImmediateSuccessorSession, which reconstructed the link from
+// rotation_grace_until/created_at timing alone: that approach was proven
+// to silently match ANY same-user session sharing the same microsecond
+// (pgx's :one takes the first row silently), which a frozen-clock test
+// (or, in principle, sufficiently concurrent real traffic) can trigger --
+// see task-9-report.md's fix round 3 section. The predecessor direction
+// needs no equivalent query at all: a session's own rotated_from column,
+// already in hand on any row already read, IS the answer.
+func (q *Queries) FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error) {
+	row := q.db.QueryRow(ctx, findLiveSuccessorSession, rotatedFrom)
 	var i Session
 	err := row.Scan(
 		&i.ID,
@@ -294,59 +290,7 @@ func (q *Queries) FindImmediatePredecessorSession(ctx context.Context, arg FindI
 		&i.RevokedAt,
 		&i.UA,
 		&i.IP,
-	)
-	return i, err
-}
-
-const findImmediateSuccessorSession = `-- name: FindImmediateSuccessorSession :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions
-WHERE user_id = $1
-  AND revoked_at IS NULL
-  AND created_at = $2::timestamptz
-`
-
-type FindImmediateSuccessorSessionParams struct {
-	UserID             uuid.UUID
-	SuccessorCreatedAt time.Time
-}
-
-// Fix round 2, finding DD-C14b (owner ruling, extends DD-C14): the exact
-// mirror of FindImmediatePredecessorSession above, in the other
-// direction. A rotation race-loser request (one that presents an old
-// token still within ITS OWN grace window, after some OTHER request
-// already won the rotation and minted a successor) authenticates AS THE
-// PREDECESSOR -- Authenticate's `sess.RotationGraceUntil == nil` guard
-// means it never re-attempts rotation for a row that's already rotating
-// -- so a caller can hold a fully legitimate session (and its own,
-// correct CSRF secret) for a row that is itself a predecessor with a
-// live, unrevoked successor. Logging out (or revoking) that predecessor
-// alone would leave the successor authenticating for its own full
-// idle/absolute lifetime -- logout claiming success without actually
-// ending the session. Given a session that may itself be a rotation
-// PREDECESSOR (rotation_grace_until IS NOT NULL), finds the exact
-// successor row it was rotated INTO, if that successor is still live
-// (revoked_at IS NULL): the same exact (not heuristic) timing identity as
-// the predecessor lookup, solved for the other variable --
-// successor.created_at = predecessor.rotation_grace_until - rotationGrace
-// -- computed in Go and passed as the single timestamp argument.
-// user_id-scoped for the same cross-user-collision reasoning as
-// FindImmediatePredecessorSession.
-func (q *Queries) FindImmediateSuccessorSession(ctx context.Context, arg FindImmediateSuccessorSessionParams) (Session, error) {
-	row := q.db.QueryRow(ctx, findImmediateSuccessorSession, arg.UserID, arg.SuccessorCreatedAt)
-	var i Session
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.TokenHash,
-		&i.CSRFSecret,
-		&i.CreatedAt,
-		&i.LastSeenAt,
-		&i.ReauthenticatedAt,
-		&i.AbsoluteExpiresAt,
-		&i.RotationGraceUntil,
-		&i.RevokedAt,
-		&i.UA,
-		&i.IP,
+		&i.RotatedFrom,
 	)
 	return i, err
 }
@@ -374,20 +318,19 @@ func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdent
 }
 
 const getSessionByID = `-- name: GetSessionByID :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions WHERE id = $1
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE id = $1
 `
 
 // Fix round 2, finding DD-C14b: DELETE /sessions/{id}'s lineage sweep
 // (sessions_handlers.go's revokeLineagePartners) needs the just-revoked
-// TARGET session's own created_at/rotation_grace_until/user_id to look up
-// its rotation lineage partner(s) -- RevokeSessionForUser only reports a
-// row count, not the row itself, and the target is not always the
-// caller's own current session (sess, already fully in hand from
-// context), so a second read is unavoidable here. revoked_at is already
-// set to non-NULL by the time this runs (it always runs strictly after a
+// TARGET session's own id/rotated_from/user_id to look up its rotation
+// lineage partner(s) -- RevokeSessionForUser only reports a row count,
+// not the row itself, and the target is not always the caller's own
+// current session (sess, already fully in hand from context), so a
+// second read is unavoidable here. revoked_at is already set to
+// non-NULL by the time this runs (it always runs strictly after a
 // successful RevokeForUser), but every other column this caller needs
-// (created_at, rotation_grace_until, user_id) is untouched by that
-// UPDATE.
+// is untouched by that UPDATE.
 func (q *Queries) GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByID, id)
 	var i Session
@@ -404,12 +347,13 @@ func (q *Queries) GetSessionByID(ctx context.Context, id uuid.UUID) (Session, er
 		&i.RevokedAt,
 		&i.UA,
 		&i.IP,
+		&i.RotatedFrom,
 	)
 	return i, err
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions WHERE token_hash = $1
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE token_hash = $1
 `
 
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error) {
@@ -428,6 +372,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.RevokedAt,
 		&i.UA,
 		&i.IP,
+		&i.RotatedFrom,
 	)
 	return i, err
 }
@@ -502,7 +447,7 @@ func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) 
 }
 
 const listLiveSessionsForUser = `-- name: ListLiveSessionsForUser :many
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions
 WHERE user_id = $1
   AND revoked_at IS NULL
   AND last_seen_at >= $2::timestamptz
@@ -563,6 +508,7 @@ func (q *Queries) ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessi
 			&i.RevokedAt,
 			&i.UA,
 			&i.IP,
+			&i.RotatedFrom,
 		); err != nil {
 			return nil, err
 		}

@@ -654,10 +654,7 @@ paths:
         be LIVE by the same rule `GET /sessions` excludes by (not
         revoked, not idle/absolute-expired, not a grace-dead rotation
         predecessor). Requires a RECENT reauthentication (see `DELETE
-        /sessions`), checked BEFORE any row is touched. Revoking the
-        CURRENT session (the one this request is itself authenticated
-        with) also clears its `__Host-session` cookie in this same
-        response.
+        /sessions`), checked BEFORE any row is touched.
 
 
         Also revokes the target's own rotation LINEAGE partner(s), if
@@ -669,6 +666,16 @@ paths:
         one of the two rows.
 
 
+        Clears the caller's own `__Host-session` cookie and sets
+        `Clear-Site-Data` whenever the caller's OWN current session dies
+        as part of this request — whether `id` named it directly, OR a
+        DIFFERENT id was named and the caller's current session turned
+        out to be THAT target's lineage partner (predecessor or
+        successor). Revoking a session unrelated to the caller's own
+        current one leaves both response artifacts, and the current
+        session itself, untouched.
+
+
         An `id` that doesn't exist, belongs to a DIFFERENT user, is
         already revoked, is idle-expired, is absolute-expired, or is a
         grace-dead rotation predecessor all return the exact same `404`
@@ -678,8 +685,14 @@ paths:
       responses:
         "204":
           description: Revoked. No response body. Also clears
-            `__Host-session` if `id` was the caller's own current
-            session.
+            `__Host-session` and sets `Clear-Site-Data` if the caller's
+            own current session died as part of this request (directly,
+            or via its rotation lineage — see the operation description).
+          headers:
+            Clear-Site-Data:
+              schema:
+                type: string
+              example: '"cookies", "storage"'
         "401":
           description: Missing or invalid `__Host-session` cookie.
           content:

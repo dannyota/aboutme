@@ -349,25 +349,11 @@ func RequireSession(m *SessionManager) api.Middleware {
 				return
 			}
 
-			ctx := ContextWithSession(r.Context(), sess)
 			if rotated != "" {
 				SetSessionCookie(w, rotated)
-				// DD-C14 (fix round 1, finding I2): this request's own
-				// Authenticate call just rotated a predecessor into sess.
-				// cookie.Value is still the PREDECESSOR's own raw token --
-				// Authenticate never mutates it in place, rotation mints a
-				// brand-new successor row and returns THAT as sess -- so
-				// hashing it again finds the exact predecessor row without
-				// changing Authenticate's own three-value return contract
-				// (many already-committed tests destructure it directly).
-				// See ContextWithPredecessorSessionID's own doc comment
-				// for why a handler needs this at all.
-				if predRow, lookupErr := m.q.GetSessionByTokenHash(r.Context(), hashSessionToken(cookie.Value)); lookupErr == nil {
-					ctx = ContextWithPredecessorSessionID(ctx, predRow.ID)
-				}
 			}
 
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(ContextWithSession(r.Context(), sess)))
 		})
 	}
 }

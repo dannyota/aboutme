@@ -57,11 +57,33 @@ CREATE TABLE sessions (
     -- set by rotation.
     revoked_at timestamptz,
     ua text,
-    ip inet
+    ip inet,
+    -- fix round 3, DD-C14c (owner ruling): the exact rotation-lineage link
+    -- a successor row carries back to the predecessor it was minted from
+    -- -- set once, at INSERT time, by tryRotate's successor insert
+    -- (internal/auth/session.go), never updated afterward. NULL for a
+    -- session that has never been rotated INTO (i.e. every session that
+    -- isn't itself a rotation successor: a fresh login, or a predecessor
+    -- that hasn't yet rotated). ON DELETE SET NULL rather than CASCADE:
+    -- this column only ever exists to let application code find a
+    -- session's own lineage partner(s) -- a successor row must never be
+    -- deleted just because its predecessor eventually is (predecessor
+    -- rows are never actually DELETEd by this application at all, only
+    -- revoked in place, but the constraint is written defensively rather
+    -- than assuming that always holds).
+    rotated_from uuid REFERENCES sessions (id) ON DELETE SET NULL
 );
 CREATE UNIQUE INDEX sessions_token_hash_key ON sessions (token_hash);
 CREATE INDEX sessions_user_id_active_idx ON sessions (user_id)
     WHERE revoked_at IS NULL;
+-- A predecessor has AT MOST ONE successor -- BeginSessionRotation's
+-- single-row conditional UPDATE (rotation_grace_until IS NULL AND
+-- revoked_at IS NULL) is the CAS that guarantees only one caller ever
+-- wins the right to mint a successor for a given predecessor; this
+-- partial unique index makes the database itself enforce that invariant
+-- too, rather than trusting the CAS alone.
+CREATE UNIQUE INDEX sessions_rotated_from_key ON sessions (rotated_from)
+    WHERE rotated_from IS NOT NULL;
 
 CREATE TABLE oauth_transactions (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
