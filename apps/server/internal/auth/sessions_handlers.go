@@ -319,6 +319,21 @@ const notFoundCode = "not_found"
 // successor). Revoking a session that has no relationship at all to the
 // caller's own current session leaves it, and these two response
 // artifacts, untouched.
+//
+// Ordering (cheap-win hardening, matching handleLogout's own documented
+// choice -- see that function's doc comment): for the DIRECT-target case
+// (targetID == sess.ID), the cookie clear and Clear-Site-Data are written
+// BEFORE the fallible lineage sweep runs, not after. RevokeForUser has
+// already durably revoked the caller's own session row by that point, so
+// the browser is safe to be told "that session is gone" regardless of
+// what the sweep does next; the OLD ordering instead left a caller with a
+// revoked-in-the-database, still-cookied session if the sweep's own
+// FindLiveSuccessorSession/Revoke calls failed (a genuine 500, but one
+// that -- unlike handleLogout's already-covered case -- previously left
+// the direct-target response cookie untouched too). The lineage-PARTNER
+// case (a different id was named and the caller's own session turns out
+// to be its rotation partner) is discovered only by the sweep itself, so
+// it cannot be moved earlier; that ordering is unchanged.
 func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
@@ -352,13 +367,22 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Direct-target case: the caller's own current session is already
+	// durably revoked above -- tell the browser now, before the fallible
+	// sweep below runs (see this function's own doc comment).
+	directTarget := targetID == sess.ID
+	if directTarget {
+		ClearSessionCookie(w)
+		w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)
+	}
+
 	// The row to sweep lineage FROM: the caller's own session (already in
 	// hand, no extra read) if that's what was targeted, otherwise the
 	// target itself, freshly read -- RevokeForUser only reports a row
 	// count, not the row, and a named target is not always the caller's
 	// own current session.
 	lineageRow := sess
-	if targetID != sess.ID {
+	if !directTarget {
 		lineageRow, err = s.q.GetSessionByID(ctx, targetID)
 		if err != nil {
 			s.writeSessionAPIInternalError(w, r, "get_revoked_session", err)
@@ -371,7 +395,9 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if targetID == sess.ID || slices.Contains(revokedIDs, sess.ID) {
+	// Lineage-partner case: only discoverable by the sweep just above, so
+	// it cannot be written any earlier than this.
+	if !directTarget && slices.Contains(revokedIDs, sess.ID) {
 		ClearSessionCookie(w)
 		w.Header().Set("Clear-Site-Data", clearSiteDataHeaderValue)
 	}

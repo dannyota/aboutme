@@ -681,8 +681,15 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 
 	// User B (the attacker/confused deputy) is a completely separate
 	// account, and starts a link transaction naming ITSELF as
-	// LinkingUserID.
+	// LinkingUserID. Also holds a live session for itself: resolveLinkOrReauth
+	// now re-authenticates the completing request against tx.LinkingUserID
+	// for purpose=link too (link.go's authenticateLinkOrReauthSession fix,
+	// gate hardening), so the attacker must be presenting ITS OWN valid
+	// session here for this test to reach (and prove) the
+	// identity-already-linked branch under test, rather than being rejected
+	// one step earlier for a missing session.
 	attackerUserID := createTestUser(t, q)
+	attackerRaw, _ := issueTestSession(t, q, attackerUserID)
 	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeLink, attackerUserID)
 
 	// The callback presents the VICTIM's own Google subject -- as if the
@@ -699,7 +706,7 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 		EmailVerified: ptrTrue(),
 		Nonce:         tx.Nonce,
 	})
-	resp := doCallback(t, handler, code, tx.State, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	resp := doCallback(t, handler, code, tx.State, txCookie, sessionRequestCookie(attackerRaw)) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
 
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("link-hijack attempt status = %d, want %d (DD-C15: 302, never a raw JSON 409)", resp.StatusCode, http.StatusFound)
@@ -753,11 +760,18 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 // their own success target). It ALSO sets NO session cookie at all on a
 // link success -- resolveLinkOrReauth's own idempotent-no-op branch (the
 // "already linked to the SAME user, purpose == PurposeLink" case) never
-// calls touchReauthenticatedForCurrentSession (that is reauth-only) or
+// calls SessionManager.TouchReauthenticated (that is reauth-only) or
 // SessionManager.Issue (that is PurposeLogin-only), so the caller simply
 // keeps whichever session cookie they already had; this suite's original
 // "must set a session cookie" assertion was wrong and is removed below,
 // not merely retargeted.
+//
+// Each linkOnce call carries a live __Host-session cookie for userID (fix,
+// gate hardening): resolveLinkOrReauth's purpose=link arm now
+// re-authenticates the completing request via authenticateLinkOrReauthSession
+// (link.go), exactly like purpose=reauth already did, so a link callback
+// with no session for userID would now be rejected before ever reaching
+// the idempotent-no-op branch this test exercises.
 func TestLink_IdempotentWhenAlreadyLinkedToSelf(t *testing.T) {
 	t.Parallel()
 
@@ -767,6 +781,7 @@ func TestLink_IdempotentWhenAlreadyLinkedToSelf(t *testing.T) {
 	pool := newRowInspectorPool(t)
 
 	userID := createTestUser(t, q)
+	raw, _ := issueTestSession(t, q, userID)
 	subject := uniqueSubject(t)
 
 	linkOnce := func(email string) *http.Response {
@@ -779,7 +794,7 @@ func TestLink_IdempotentWhenAlreadyLinkedToSelf(t *testing.T) {
 			EmailVerified: ptrTrue(),
 			Nonce:         tx.Nonce,
 		})
-		return doCallback(t, handler, code, tx.State, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+		return doCallback(t, handler, code, tx.State, txCookie, sessionRequestCookie(raw)) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
 	}
 
 	firstResp := linkOnce(uniqueEmail(t)) //nolint:bodyclose // linkOnce -> doCallback/doGet closes the body itself before returning.
