@@ -6,6 +6,7 @@
 package auth_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -93,6 +94,9 @@ func TestIssue_CreatesNewRowEachTime(t *testing.T) {
 	}
 	if sess1.ID == sess2.ID {
 		t.Error("Issue() returned the same session ID twice, want two distinct rows (fixation defense)")
+	}
+	if bytes.Equal(sess1.CSRFSecret, sess2.CSRFSecret) {
+		t.Error("Issue() returned the same csrf_secret twice, want two distinct CSPRNG secrets")
 	}
 
 	// Both rows must independently authenticate -- the second Issue() must
@@ -421,6 +425,65 @@ func TestRevoke_UnknownSessionID_IsNotAnError(t *testing.T) {
 	}
 }
 
+// TestRevokeForUser_AnotherUsersSessionID_AffectsZeroRowsAndStaysAuthenticating
+// is the ownership check RevokeForUser adds over Revoke: a caller naming a
+// session id that belongs to a different user must affect zero rows and
+// must not revoke it -- the id still authenticates afterward. This is what
+// lets Task 9's DELETE /sessions/{id} turn 0 into a 404 (never a 403)
+// without ever actually touching another user's session.
+func TestRevokeForUser_AnotherUsersSessionID_AffectsZeroRowsAndStaysAuthenticating(t *testing.T) {
+	q := newTestQueries(t)
+	userA := createTestUser(t, q)
+	userB := createTestUser(t, q)
+	sm := auth.NewSessionManager(q)
+	ctx := context.Background()
+
+	rawB, sessB, err := sm.Issue(ctx, userB, "ua", "203.0.113.22")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	n, err := sm.RevokeForUser(ctx, sessB.ID, userA)
+	if err != nil {
+		t.Fatalf("RevokeForUser(userB's session, as userA) error = %v, want nil", err)
+	}
+	if n != 0 {
+		t.Errorf("RevokeForUser(userB's session, as userA) affected %d rows, want 0", n)
+	}
+
+	if _, _, err := sm.Authenticate(ctx, rawB); err != nil {
+		t.Errorf("Authenticate(userB's token) after RevokeForUser(as userA) error = %v, want nil (must not have been revoked)", err)
+	}
+}
+
+// TestRevokeForUser_OwnSessionID_RevokesIt is RevokeForUser's positive
+// case, exercised directly rather than only inferred from the negative
+// one above: the caller's own session id, under the caller's own user id,
+// is revoked (1 row affected) and stops authenticating.
+func TestRevokeForUser_OwnSessionID_RevokesIt(t *testing.T) {
+	q := newTestQueries(t)
+	userID := createTestUser(t, q)
+	sm := auth.NewSessionManager(q)
+	ctx := context.Background()
+
+	raw, sess, err := sm.Issue(ctx, userID, "ua", "203.0.113.23")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	n, err := sm.RevokeForUser(ctx, sess.ID, userID)
+	if err != nil {
+		t.Fatalf("RevokeForUser() error = %v, want nil", err)
+	}
+	if n != 1 {
+		t.Errorf("RevokeForUser(own session) affected %d rows, want 1", n)
+	}
+
+	if _, _, err := sm.Authenticate(ctx, raw); !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate() after RevokeForUser(own session) error = %v, want ErrSessionInvalid", err)
+	}
+}
+
 // TestRevokeAll_RevokesOnlyThatUsersSessions guards RevokeAll's user
 // scoping and its int64 return count: two sessions for the target user
 // (both revoked, count=2) and one session for a different user (left
@@ -584,6 +647,18 @@ func TestAuthenticate_RotatesAfter24h_SequentialSingleRequest(t *testing.T) {
 	}
 	if !successor.ReauthenticatedAt.Equal(predecessor.ReauthenticatedAt) {
 		t.Errorf("successor.ReauthenticatedAt = %v, want %v (rotation is not itself a fresh OAuth login -- must not reset the recent-reauth gate)", successor.ReauthenticatedAt, predecessor.ReauthenticatedAt)
+	}
+	// Unlike user_id/absolute_expires_at/reauthenticated_at, csrf_secret
+	// must NOT be copied forward: rotation is exactly when a session's
+	// CSRF credential should refresh. A one-line refactor that copied
+	// predecessor.CSRFSecret into the successor (right next to the
+	// deliberate copies above) would defeat that silently -- nothing else
+	// in this test file would catch it.
+	if len(successor.CSRFSecret) != 32 {
+		t.Errorf("successor.CSRFSecret length = %d, want 32 (256-bit CSPRNG)", len(successor.CSRFSecret))
+	}
+	if bytes.Equal(successor.CSRFSecret, predecessor.CSRFSecret) {
+		t.Error("successor.CSRFSecret equals predecessor.CSRFSecret, want a fresh secret minted on rotation")
 	}
 
 	inspector := newRowInspectorPool(t)
