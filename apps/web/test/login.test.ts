@@ -67,4 +67,27 @@ describe('login.vue', () => {
         /google|github|linkedin/,
       );
     });
+
+  it('falls back to the generic message for an unknown error code',
+    async () => {
+      const wrapper = await mountSuspended(LoginPage, {
+        route: '/login?error=some_unrecognized_code',
+      });
+
+      const banner = wrapper.get('[data-testid="login-error"]');
+      expect(banner.text()).toContain('Something went wrong');
+    });
+
+  it('does not resolve a prototype property as a valid error code',
+    async () => {
+      // A plain `errorMessages[code]` lookup resolves inherited
+      // properties too — `?error=constructor` would otherwise render
+      // `Object`'s constructor function instead of falling back.
+      const wrapper = await mountSuspended(LoginPage, {
+        route: '/login?error=constructor',
+      });
+
+      const banner = wrapper.get('[data-testid="login-error"]');
+      expect(banner.text()).toContain('Something went wrong');
+    });
 });

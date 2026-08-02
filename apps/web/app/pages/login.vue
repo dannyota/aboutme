@@ -38,7 +38,14 @@ const errorCode = computed(() => {
 
 const errorMessage = computed(() => {
   if (!errorCode.value) return null;
-  return errorMessages[errorCode.value] ?? errorMessages.auth_failed;
+  // `errorMessages[code]` alone would resolve inherited properties too
+  // (`?error=constructor` renders `Object`'s constructor function,
+  // `?error=__proto__` renders `{}`) rather than falling back — restrict
+  // the lookup to the map's own keys, the actual closed vocabulary.
+  if (Object.hasOwn(errorMessages, errorCode.value)) {
+    return errorMessages[errorCode.value];
+  }
+  return errorMessages.auth_failed;
 });
 </script>
 
