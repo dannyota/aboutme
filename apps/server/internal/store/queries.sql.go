@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"net/netip"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,13 @@ type BeginSessionRotationParams struct {
 	RotationGraceUntil *time.Time
 }
 
+// Single-row conditional UPDATE that decides the >24h rotation winner: only
+// a row that has neither already started rotating (rotation_grace_until
+// still NULL) nor been revoked is claimed. Under concurrent callers racing
+// the same session id, exactly one UPDATE affects a row (returns its id);
+// every other caller's UPDATE affects zero rows and pgx reports
+// pgx.ErrNoRows -- that caller lost the race and must not mint a second
+// successor (see internal/auth.SessionManager.Authenticate).
 func (q *Queries) BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, beginSessionRotation, arg.ID, arg.RotationGraceUntil)
 	var id uuid.UUID
@@ -122,6 +130,62 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 	return i, err
 }
 
+const createSession = `-- name: CreateSession :one
+INSERT INTO sessions (
+    user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, ua, ip
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip
+`
+
+type CreateSessionParams struct {
+	UserID            uuid.UUID
+	TokenHash         []byte
+	CSRFSecret        []byte
+	CreatedAt         time.Time
+	LastSeenAt        time.Time
+	ReauthenticatedAt time.Time
+	AbsoluteExpiresAt time.Time
+	UA                *string
+	IP                *netip.Addr
+}
+
+// Always inserts a brand-new row -- used both by Issue (fixation defense: a
+// login never reuses an existing session row) and by the >24h rotation
+// winner's successor insert (internal/auth.SessionManager.Authenticate),
+// which passes the predecessor's user_id, reauthenticated_at,
+// absolute_expires_at, ua, and ip through unchanged so a rotation never
+// extends absolute expiry or silently satisfies the recent-reauth gate.
+func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
+	row := q.db.QueryRow(ctx, createSession,
+		arg.UserID,
+		arg.TokenHash,
+		arg.CSRFSecret,
+		arg.CreatedAt,
+		arg.LastSeenAt,
+		arg.ReauthenticatedAt,
+		arg.AbsoluteExpiresAt,
+		arg.UA,
+		arg.IP,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.CSRFSecret,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.ReauthenticatedAt,
+		&i.AbsoluteExpiresAt,
+		&i.RotationGraceUntil,
+		&i.RevokedAt,
+		&i.UA,
+		&i.IP,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 
 INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING id, email, name, avatar_key, created_at, updated_at
@@ -172,6 +236,30 @@ func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdent
 	return i, err
 }
 
+const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip FROM sessions WHERE token_hash = $1
+`
+
+func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByTokenHash, tokenHash)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.CSRFSecret,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.ReauthenticatedAt,
+		&i.AbsoluteExpiresAt,
+		&i.RotationGraceUntil,
+		&i.RevokedAt,
+		&i.UA,
+		&i.IP,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE email = $1
 `
@@ -206,4 +294,75 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const revokeAllSessions = `-- name: RevokeAllSessions :execrows
+UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+type RevokeAllSessionsParams struct {
+	UserID    uuid.UUID
+	RevokedAt *time.Time
+}
+
+// Logout-everywhere: revokes every one of the user's not-already-revoked
+// sessions and reports how many rows that affected.
+func (q *Queries) RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAllSessions, arg.UserID, arg.RevokedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeSession = `-- name: RevokeSession :exec
+UPDATE sessions SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL
+`
+
+type RevokeSessionParams struct {
+	ID        uuid.UUID
+	RevokedAt *time.Time
+}
+
+// Idempotent: revoking an already-revoked (or nonexistent) session id
+// affects zero rows rather than erroring, so logout/revoke can be retried
+// safely. revoked_at is immediate and orthogonal to rotation_grace_until
+// (design decision 1) -- this never touches that column.
+func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) error {
+	_, err := q.db.Exec(ctx, revokeSession, arg.ID, arg.RevokedAt)
+	return err
+}
+
+const touchLastSeenAt = `-- name: TouchLastSeenAt :exec
+UPDATE sessions SET last_seen_at = $2 WHERE id = $1
+`
+
+type TouchLastSeenAtParams struct {
+	ID         uuid.UUID
+	LastSeenAt time.Time
+}
+
+// Unconditional: callers throttle to at most once per lastSeenThrottle
+// themselves (internal/auth.SessionManager.Authenticate) before issuing
+// this write, so it is not itself CAS-guarded.
+func (q *Queries) TouchLastSeenAt(ctx context.Context, arg TouchLastSeenAtParams) error {
+	_, err := q.db.Exec(ctx, touchLastSeenAt, arg.ID, arg.LastSeenAt)
+	return err
+}
+
+const touchReauthenticatedAt = `-- name: TouchReauthenticatedAt :exec
+UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1
+`
+
+type TouchReauthenticatedAtParams struct {
+	ID                uuid.UUID
+	ReauthenticatedAt time.Time
+}
+
+// Records that this session's lineage just completed a full OAuth login
+// (design decision 2) -- called only after a real reauth round trip
+// (internal/auth.SessionManager.TouchReauthenticated), never by rotation.
+func (q *Queries) TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error {
+	_, err := q.db.Exec(ctx, touchReauthenticatedAt, arg.ID, arg.ReauthenticatedAt)
+	return err
 }
