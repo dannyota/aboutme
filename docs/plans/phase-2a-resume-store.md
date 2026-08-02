@@ -847,10 +847,17 @@ defines that contract).
       `store.Resume{ID, UserID uuid.UUID, Title string, Slug *string, Live,     DownloadEnabled, SeoGeoEnabled bool, SchemaVersion int32, Revision     int64, Lng *string, PersonalDetails, Content, Customization     json.RawMessage, CreatedAt, UpdatedAt time.Time}`
       and `store.IdempotencyRecord{…}` (per the committed sqlc.yaml overrides:
       pointers for nullables, `json.RawMessage` for jsonb). Run
-      `cd apps/server && go test ./internal/resume/...` → **FAIL**. If sqlc's
-      rename of `seo_geo_enabled` is awkward (e.g. `SeoGeoEnabled` vs
-      `SEOGeoEnabled`), add a `rename:` entry — decide in review, then pin it in
-      this test.
+      `cd apps/server && go test ./internal/resume/...` → **FAIL**. **Owner
+      decision (2026-08-03), replacing this step's open question:** sqlc emits
+      `SeoGeoEnabled`, which breaks the Go initialism rule and would disagree
+      with Task 6's domain field `SEOGeoEnabled` — two names for one concept
+      differing only in casing, meeting at the codec. Add
+      `seo_geo_enabled: "SEOGeoEnabled"` to `sqlc.yaml`'s existing `rename:`
+      block, which already carries exactly this correction for `ua`, `ip`,
+      `csrf_secret`, `pkce_verifier`, `redirect_uri` and `oauth_transaction`.
+      This regenerates `internal/store/models.go` a second time (Task 3 landed
+      it first under owner correction 1); `sqlc.yaml` and the regenerated output
+      are therefore in **this** task's scope and commit.
 - [ ] **Step 2: append queries, `make sqlc-gen`, commit generated output; Step 1
       compiles green.**
 - [ ] **Step 3: gate.** `make sqlc-check` (regenerate → no diff),
