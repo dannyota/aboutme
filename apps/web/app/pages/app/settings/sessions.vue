@@ -24,8 +24,11 @@ interface SessionInfo {
   id: string;
   createdAt: string;
   lastSeenAt: string;
-  ua: string;
-  ip: string;
+  // Go: `UA *string` / `IP *string`; OpenAPI: `type: [string, "null"]` —
+  // both nullable (e.g. a request that legitimately carried neither
+  // header), not always-present strings.
+  ua: string | null;
+  ip: string | null;
   current: boolean;
 }
 

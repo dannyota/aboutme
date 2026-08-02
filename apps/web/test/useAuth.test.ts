@@ -156,46 +156,11 @@ describe('useAuth', () => {
   });
 
   describe('CSRF x rotation self-heal (mutate())', () => {
-    it('refetches /me once and retries after a single csrf_rejected',
-      async () => {
-        let logoutCalls = 0;
-        registerEndpoint('/api/v1/auth/logout', {
-          method: 'POST',
-          handler: (event) => {
-            logoutCalls += 1;
-            if (logoutCalls === 1) {
-              setResponseStatus(event, 403);
-              return { error: { code: 'csrf_rejected', message: 'x' } };
-            }
-            setResponseStatus(event, 204);
-            return null;
-          },
-        });
-
-        let meGetCalls = 0;
-        registerEndpoint('/api/v1/me', {
-          method: 'GET',
-          handler: () => {
-            meGetCalls += 1;
-            return { data: meData };
-          },
-        });
-
-        const wrapper = await mountSuspended(Probe);
-        await flushPromises();
-        const meGetCallsAtMount = meGetCalls;
-
-        await wrapper.get('[data-testid="logout-button"]').trigger('click');
-        await flushPromises();
-        await flushPromises();
-
-        // One failed attempt, one refetch of /me to pick up the rotated
-        // secret, one retry that succeeds — not a hard logout for what is
-        // really just a same-day session rotation.
-        expect(logoutCalls).toBe(2);
-        expect(meGetCalls).toBe(meGetCallsAtMount + 1);
-        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
-      });
+    // "Refetches /me once and retries with the REFRESHED token" lives in
+    // its own file, `useAuth-csrf-rotation.test.ts` — it needs the very
+    // first resolution of /me in a fresh Nuxt app instance to be
+    // deterministic (see that file's own doc comment), which a shared
+    // instance with this file's other tests can't reliably guarantee.
 
     it('surfaces a second csrf_rejected instead of retrying forever',
       async () => {
@@ -221,5 +186,34 @@ describe('useAuth', () => {
         expect(logoutCalls).toBe(2);
         expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
       });
+
+    it('does not retry a 403 that is not csrf_rejected (e.g. '
+      + 'reauth_required) — a mutation the server already refused must '
+      + 'not be double-fired', async () => {
+      let logoutCalls = 0;
+      registerEndpoint('/api/v1/auth/logout', {
+        method: 'POST',
+        handler: (event) => {
+          logoutCalls += 1;
+          setResponseStatus(event, 403);
+          return { error: { code: 'reauth_required', message: 'x' } };
+        },
+      });
+
+      const wrapper = await mountSuspended(Probe);
+      await flushPromises();
+
+      await wrapper.get('[data-testid="logout-button"]').trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      // A boolean flag can't tell "called once" from "called twice" — a
+      // weakened guard checking the status code instead of the specific
+      // error code (`if (statusCode !== 403) throw`) would also retry
+      // this, silently double-firing a request the server already
+      // refused for a reason retrying can never fix.
+      expect(logoutCalls).toBe(1);
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    });
   });
 });
