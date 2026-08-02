@@ -7,9 +7,8 @@
 -- should not be hand-edited except through that pipeline.
 --
 -- Phase 1 (auth & sessions) tables — users, identities, sessions,
--- oauth_transactions — are defined below. Phase 2A's resume domain
--- (resumes, slug_tombstones) is NOT defined here yet; it lands per
--- docs/plans/implementation-plan.md.
+-- oauth_transactions — are defined below, followed by Phase 2A's resume
+-- domain (resumes, slug_tombstones, idempotency_records).
 --
 -- citext was enabled ahead of Phase 1 (in Phase 0B, tasks 0.3/0.3b)
 -- because it is infrastructure (an extension), not product schema:
@@ -109,3 +108,83 @@ CREATE TABLE oauth_transactions (
     )
 );
 CREATE INDEX oauth_transactions_expires_at_idx ON oauth_transactions (expires_at);
+
+CREATE TABLE resumes (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    user_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    title text NOT NULL,
+    slug text,
+    live boolean NOT NULL DEFAULT false,
+    download_enabled boolean NOT NULL DEFAULT true,
+    seo_geo_enabled boolean NOT NULL DEFAULT false,
+    schema_version integer NOT NULL,
+    revision bigint NOT NULL DEFAULT 1,
+    lng text,
+    personal_details jsonb NOT NULL,
+    content jsonb NOT NULL,
+    customization jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT resumes_slug_key UNIQUE (slug),
+    CONSTRAINT resumes_slug_format_check CHECK (
+        slug IS NULL
+        OR (char_length(slug) >= 4
+            AND char_length(slug) <= 30
+            AND slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$')
+    ),
+    CONSTRAINT resumes_live_requires_slug_check CHECK (NOT live OR slug IS NOT NULL),
+    CONSTRAINT resumes_seo_requires_live_check CHECK (NOT seo_geo_enabled OR live),
+    CONSTRAINT resumes_title_length_check CHECK (char_length(title) <= 160),
+    CONSTRAINT resumes_lng_length_check CHECK (lng IS NULL OR char_length(lng) <= 35),
+    CONSTRAINT resumes_schema_version_check CHECK (schema_version >= 1),
+    CONSTRAINT resumes_revision_check CHECK (revision >= 1)
+);
+CREATE INDEX resumes_user_id_idx ON resumes (user_id);
+
+CREATE TABLE slug_tombstones (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    slug text NOT NULL,
+    released_by_user_id uuid REFERENCES users (id) ON DELETE SET NULL,
+    released_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT slug_tombstones_slug_key UNIQUE (slug),
+    CONSTRAINT slug_tombstones_slug_format_check CHECK (
+        char_length(slug) >= 4
+        AND char_length(slug) <= 30
+        AND slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
+    )
+);
+
+CREATE TABLE idempotency_records (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    user_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    route text NOT NULL,
+    idempotency_key uuid NOT NULL,
+    request_hash bytea NOT NULL,
+    response_status integer NOT NULL,
+    response_body jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    CONSTRAINT idempotency_records_user_route_key_key
+        UNIQUE (user_id, route, idempotency_key)
+);
+CREATE INDEX idempotency_records_expires_at_idx
+    ON idempotency_records (expires_at);
+
+CREATE FUNCTION enforce_resume_cap() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    -- Serialize per-owner: race-proof even for writers that bypass the
+    -- store layer (D7). The store's create tx takes this same lock first
+    -- (spec: belt and suspenders); identical order, no deadlock.
+    PERFORM 1 FROM users WHERE id = NEW.user_id FOR UPDATE;
+    IF (SELECT count(*) FROM resumes WHERE user_id = NEW.user_id) >= 3 THEN
+        RAISE EXCEPTION 'resumes_user_cap_exceeded'
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER resumes_enforce_cap
+BEFORE INSERT OR UPDATE OF user_id ON resumes
+FOR EACH ROW EXECUTE FUNCTION enforce_resume_cap();
