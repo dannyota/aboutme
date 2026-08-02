@@ -97,7 +97,8 @@ describe('sessions.vue', () => {
       method: 'DELETE',
       handler: (event) => {
         receivedHeader = requestHeader(event, 'x-csrf-token');
-        return { data: { revoked: true } };
+        setResponseStatus(event, 204);
+        return null;
       },
     });
 
@@ -164,6 +165,40 @@ describe('sessions.vue', () => {
     );
   });
 
+  it(
+    'shows the reauth prompt (not a generic error) when a single-session '
+    + 'revoke requires recent reauth',
+    async () => {
+      registerEndpoint('/api/v1/sessions/sess-2', {
+        method: 'DELETE',
+        handler: (event) => {
+          setResponseStatus(event, 403);
+          return { error: { code: 'reauth_required', message: 'x' } };
+        },
+      });
+
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+
+      await wrapper
+        .get(
+          '[data-testid="session-row-sess-2"] [data-testid="revoke-button"]',
+        )
+        .trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
+        false,
+      );
+      const prompt = wrapper.get('[data-testid="reauth-prompt"]');
+      // "action" reason copy, not the link-specific wording — revoking a
+      // session has nothing to do with linking a provider.
+      expect(prompt.text()).toContain('then try again');
+      expect(prompt.text()).not.toContain('link a new provider');
+    },
+  );
+
   it('offers to link providers the user has not connected yet', async () => {
     let meCalls = 0;
     registerEndpoint('/api/v1/me', {
@@ -208,6 +243,7 @@ describe('sessions.vue', () => {
     expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
       false,
     );
+    expect(wrapper.find('[data-testid="link-error"]').exists()).toBe(false);
   });
 
   it(
@@ -220,7 +256,9 @@ describe('sessions.vue', () => {
       await flushPromises();
 
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
-      expect(prompt.text()).toContain('confirm it\'s you');
+      // "link" reason copy, distinct from the "action" copy the
+      // revoke/revoke-all tests above use.
+      expect(prompt.text()).toContain('link a new provider');
 
       // meData's only linked identity is `google` — reauth targets that
       // existing provider, never the not-yet-linked one being added.
@@ -231,15 +269,57 @@ describe('sessions.vue', () => {
     },
   );
 
+  it('shows a generic banner for ?error=identity_already_linked',
+    async () => {
+      const wrapper = await mountSuspended(SessionsPage, {
+        route: '/app/settings/sessions?error=identity_already_linked',
+      });
+      await flushPromises();
+
+      const banner = wrapper.get('[data-testid="link-error"]');
+      expect(banner.text()).toContain('already linked');
+      expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
+        false,
+      );
+    });
+
+  it(
+    'falls back to a generic link-error message for an unrecognized '
+    + 'code, and does not resolve a prototype property',
+    async () => {
+      const unrecognized = await mountSuspended(SessionsPage, {
+        route: '/app/settings/sessions?error=some_unrecognized_code',
+      });
+      await flushPromises();
+      expect(
+        unrecognized.get('[data-testid="link-error"]').text(),
+      ).toContain('Something went wrong');
+
+      // A plain `linkErrorMessages[code]` lookup resolves inherited
+      // properties too — `?error=constructor` would otherwise render
+      // `Object`'s constructor function instead of falling back.
+      const prototypeAttempt = await mountSuspended(SessionsPage, {
+        route: '/app/settings/sessions?error=constructor',
+      });
+      await flushPromises();
+      expect(
+        prototypeAttempt.get('[data-testid="link-error"]').text(),
+      ).toContain('Something went wrong');
+    },
+  );
+
   it('sends the CSRF header when logging out everywhere', async () => {
     let receivedHeader: string | undefined;
     let receivedMethod: string | undefined;
-    registerEndpoint('/api/v1/sessions/revoke-all', {
-      method: 'POST',
+    // DD-C11 (spec-corrected): logout-everywhere is DELETE /sessions —
+    // there is no POST /sessions/revoke-all.
+    registerEndpoint('/api/v1/sessions', {
+      method: 'DELETE',
       handler: (event) => {
         receivedMethod = event.method;
         receivedHeader = requestHeader(event, 'x-csrf-token');
-        return { data: { revoked: true } };
+        setResponseStatus(event, 204);
+        return null;
       },
     });
 
@@ -249,7 +329,7 @@ describe('sessions.vue', () => {
     await wrapper.get('[data-testid="revoke-all-button"]').trigger('click');
     await flushPromises();
 
-    expect(receivedMethod).toBe('POST');
+    expect(receivedMethod).toBe('DELETE');
     expect(receivedHeader).toBe('test-csrf-token');
   });
 
@@ -273,9 +353,12 @@ describe('sessions.vue', () => {
           return { data: sessionsData };
         },
       });
-      registerEndpoint('/api/v1/sessions/revoke-all', {
-        method: 'POST',
-        handler: () => ({ data: { revoked: true } }),
+      registerEndpoint('/api/v1/sessions', {
+        method: 'DELETE',
+        handler: (event) => {
+          setResponseStatus(event, 204);
+          return null;
+        },
       });
 
       const wrapper = await mountSuspended(SessionsPage);
@@ -301,8 +384,8 @@ describe('sessions.vue', () => {
     + 'without touching any session row',
     async () => {
       let revokeAllAttempted = false;
-      registerEndpoint('/api/v1/sessions/revoke-all', {
-        method: 'POST',
+      registerEndpoint('/api/v1/sessions', {
+        method: 'DELETE',
         handler: (event) => {
           revokeAllAttempted = true;
           setResponseStatus(event, 403);
@@ -322,7 +405,8 @@ describe('sessions.vue', () => {
 
       expect(revokeAllAttempted).toBe(true);
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
-      expect(prompt.text()).toContain('confirm it\'s you');
+      expect(prompt.text()).toContain('then try again');
+      expect(prompt.text()).not.toContain('link a new provider');
       expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
         false,
       );
@@ -334,8 +418,8 @@ describe('sessions.vue', () => {
 
   it('shows an error banner for a non-reauth revoke-all failure',
     async () => {
-      registerEndpoint('/api/v1/sessions/revoke-all', {
-        method: 'POST',
+      registerEndpoint('/api/v1/sessions', {
+        method: 'DELETE',
         handler: () => {
           throw createError({ statusCode: 500 });
         },

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { AuthProvider } from '../../../composables/useAuth';
-import { csrfHeaders } from '../../../composables/useAuth';
 
 /**
  * Session device management: list, per-session revoke, logout-everywhere,
@@ -13,10 +12,12 @@ import { csrfHeaders } from '../../../composables/useAuth';
  * Linking a new provider (`purpose=link`) is a real top-level navigation
  * (like the login page's provider buttons) — it is not a fetchable JSON
  * call, so a stale-reauth rejection can only be observed by the callback
- * landing back on this page with `?error=reauth_required`. When that
- * happens we show a "confirm it's you" prompt that re-triggers
- * `purpose=reauth` against one of the user's already-linked providers
- * before the link is retried.
+ * landing back on this page with `?error=reauth_required`. `DELETE
+ * /sessions/{id}` and `DELETE /sessions` (per-session revoke and
+ * logout-everywhere, DD-C11) can *also* return a live `403
+ * reauth_required` — the same "confirm it's you" prompt below handles
+ * both triggers, with reason-specific copy (`reauthReason`) since only
+ * one of them is actually about linking a provider.
  */
 
 interface SessionInfo {
@@ -35,7 +36,13 @@ interface SessionsEnvelope {
 const allProviders: AuthProvider[] = ['google', 'github', 'linkedin'];
 
 const route = useRoute();
-const { csrfToken, identities, logout, refresh: refreshMe } = useAuth();
+const {
+  csrfToken,
+  identities,
+  logout,
+  mutate,
+  refresh: refreshMe,
+} = useAuth();
 
 // DD-C9: same reasoning as useAuth's own `/me` call — this must not run
 // during SSR (no proxy, no cookies there), so the real fetch happens
@@ -64,7 +71,16 @@ async function refreshSessions(): Promise<void> {
   sessionsOverride.value = response.data;
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  const actual = (
+    error as { data?: { error?: { code?: string } } }
+  )?.data?.error?.code;
+  return actual === code;
+}
+
 function isNotFound(error: unknown): boolean {
+  // 404s carry no `{error:{code}}` body distinct from any other 404 in
+  // this app (DD-C5's no-oracle contract) — the status is the signal.
   return (
     typeof error === 'object'
     && error !== null
@@ -73,15 +89,38 @@ function isNotFound(error: unknown): boolean {
   );
 }
 
+// --- Reauth prompt (route-driven from a link/reauth redirect, or
+// live-triggered by a 403 from either DELETE endpoint below) ---
+
+type ReauthReason = 'link' | 'action';
+
+const reauthMessages: Record<ReauthReason, string> = {
+  link: 'Sign in again to confirm it\'s you before we link a new '
+    + 'provider.',
+  action: 'Sign in again to confirm it\'s you, then try again.',
+};
+
+const reauthRequired = ref(route.query.error === 'reauth_required');
+const reauthReason = ref<ReauthReason>(
+  route.query.error === 'reauth_required' ? 'link' : 'action',
+);
+const reauthMessage = computed(() => reauthMessages[reauthReason.value]);
+const reauthProvider = computed(() => identities.value[0]?.provider ?? null);
+
+function triggerReauthPrompt(reason: ReauthReason): void {
+  reauthRequired.value = true;
+  reauthReason.value = reason;
+}
+
 async function revokeSession(id: string): Promise<void> {
   revokeError.value = null;
   try {
-    await $fetch(`/api/v1/sessions/${id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: csrfHeaders(csrfToken.value),
-    });
+    await mutate(`/api/v1/sessions/${id}`, { method: 'DELETE' });
   } catch (error) {
+    if (hasErrorCode(error, 'reauth_required')) {
+      triggerReauthPrompt('action');
+      return;
+    }
     if (!isNotFound(error)) {
       revokeError.value = 'Could not revoke that session. Try again.';
       return;
@@ -89,6 +128,29 @@ async function revokeSession(id: string): Promise<void> {
     // 404: already gone (DD-C5) — not an error, just a stale list.
   }
   await refreshSessions();
+}
+
+async function revokeAll(): Promise<void> {
+  revokeError.value = null;
+  try {
+    // DD-C11 (spec-corrected): logout-everywhere is DELETE /sessions —
+    // there is no POST /sessions/revoke-all.
+    await mutate('/api/v1/sessions', { method: 'DELETE' });
+  } catch (error) {
+    if (hasErrorCode(error, 'reauth_required')) {
+      // Logout-everywhere requires recent reauth (spec: "sensitive
+      // operations require recent OAuth reauth"). Nothing was revoked —
+      // show the same "confirm it's you" prompt the link flow uses,
+      // rather than a generic error.
+      triggerReauthPrompt('action');
+      return;
+    }
+    revokeError.value = 'Could not log out everywhere. Try again.';
+    return;
+  }
+  // Success destroys the current session too (Clear-Site-Data) — there is
+  // nothing left here to refetch; leave for the login screen.
+  await navigateTo('/login');
 }
 
 // --- Provider linking (Step 3: minimal reauth-required UX) ---
@@ -109,45 +171,29 @@ async function openAddProvider(): Promise<void> {
   showAddProvider.value = true;
 }
 
-// Reachable two ways: (1) the callback landing on this page's URL with
-// `?error=reauth_required` after a `purpose=link` top-level navigation
-// bounced back, or (2) a same-page fetch (revoke-all below) getting a
-// live `403 reauth_required` — which never touches the URL, so this has
-// to be settable programmatically, not just derived from the route.
-const reauthRequired = ref(route.query.error === 'reauth_required');
-const reauthProvider = computed(() => identities.value[0]?.provider ?? null);
+// Closed vocabulary landing here from a rejected `?purpose=link`/`reauth`
+// callback (DD-C15/OAuthCallbackErrorCode) — `reauth_required` is handled
+// by the dedicated prompt above instead of this generic banner.
+const linkErrorMessages: Record<string, string> = {
+  auth_failed: 'Something went wrong. Please try again.',
+  cancelled: 'That was cancelled.',
+  identity_already_linked: 'That provider is already linked to a '
+    + 'different aboutme account.',
+};
 
-function isReauthRequiredError(error: unknown): boolean {
-  const code = (
-    error as { data?: { error?: { code?: string } } }
-  )?.data?.error?.code;
-  return code === 'reauth_required';
-}
+const linkErrorCode = computed(() => {
+  const value = route.query.error;
+  if (typeof value !== 'string' || value === 'reauth_required') return null;
+  return value;
+});
 
-async function revokeAll(): Promise<void> {
-  revokeError.value = null;
-  try {
-    await $fetch('/api/v1/sessions/revoke-all', {
-      method: 'POST',
-      credentials: 'include',
-      headers: csrfHeaders(csrfToken.value),
-    });
-  } catch (error) {
-    if (isReauthRequiredError(error)) {
-      // Logout-everywhere requires recent reauth (spec: "sensitive
-      // operations require recent OAuth reauth"). Nothing was revoked —
-      // show the same "confirm it's you" prompt the link flow uses,
-      // rather than a generic error.
-      reauthRequired.value = true;
-      return;
-    }
-    revokeError.value = 'Could not log out everywhere. Try again.';
-    return;
+const linkErrorMessage = computed(() => {
+  if (!linkErrorCode.value) return null;
+  if (Object.hasOwn(linkErrorMessages, linkErrorCode.value)) {
+    return linkErrorMessages[linkErrorCode.value];
   }
-  // Success destroys the current session too (Clear-Site-Data) — there is
-  // nothing left here to refetch; leave for the login screen.
-  await navigateTo('/login');
-}
+  return linkErrorMessages.auth_failed;
+});
 </script>
 
 <template>
@@ -163,11 +209,19 @@ async function revokeAll(): Promise<void> {
     </p>
 
     <p
+      v-if="linkErrorMessage"
+      data-testid="link-error"
+      role="alert"
+    >
+      {{ linkErrorMessage }}
+    </p>
+
+    <p
       v-if="reauthRequired && reauthProvider"
       data-testid="reauth-prompt"
       role="alert"
     >
-      Sign in again to confirm it's you before we link a new provider.
+      {{ reauthMessage }}
       <a
         :href="
           `/api/v1/auth/${reauthProvider}/start?purpose=reauth`
@@ -190,6 +244,7 @@ async function revokeAll(): Promise<void> {
           <span>This device</span>
           <button
             type="button"
+            :disabled="!csrfToken"
             @click="logout"
           >
             Log out
@@ -199,6 +254,7 @@ async function revokeAll(): Promise<void> {
           v-else
           type="button"
           data-testid="revoke-button"
+          :disabled="!csrfToken"
           @click="revokeSession(session.id)"
         >
           Revoke
@@ -209,6 +265,7 @@ async function revokeAll(): Promise<void> {
     <button
       type="button"
       data-testid="revoke-all-button"
+      :disabled="!csrfToken"
       @click="revokeAll"
     >
       Log out everywhere
