@@ -209,6 +209,7 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 
 	t.Setenv("DATABASE_URL", dsn)
 	t.Setenv("ENV", "dev")
+	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -299,6 +300,7 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 
 	t.Setenv("DATABASE_URL", dsn)
 	t.Setenv("ENV", "dev")
+	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

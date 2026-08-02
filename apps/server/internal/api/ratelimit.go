@@ -745,6 +745,26 @@ func resolveClientIP(r *http.Request, trusted TrustedProxies) (netip.Addr, bool)
 	return peerAddr(r.RemoteAddr)
 }
 
+// ClientIP returns r's resolved client IP as a bare address string (no
+// port), and whether one could be determined at all — the same trust
+// decision resolveClientIP/IPKeyFunc already make, exposed for a caller
+// outside this package that needs the address itself rather than a
+// rate-limit key derived from it. internal/auth's session issuance
+// (design spec §3's sessions.ip column) is the first such caller: it must
+// record the request's real, trust-boundary-resolved client IP — never a
+// raw r.RemoteAddr, which at a trusted proxy hop is Caddy's own address,
+// not the viewer's — and must never re-derive its own copy of this
+// decision (see TrustedClientIPHeader/TrustedProxies for why getting it
+// wrong is a spoofing bypass in one direction or a denial of service in
+// the other).
+func ClientIP(r *http.Request, trusted TrustedProxies) (string, bool) {
+	addr, ok := resolveClientIP(r, trusted)
+	if !ok {
+		return "", false
+	}
+	return addr.String(), true
+}
+
 // requestIsHTTPS reports whether r arrived over HTTPS: either TLS
 // terminated on this process directly, or r arrived via a trusted proxy
 // (see TrustedProxies) asserting X-Forwarded-Proto: https. Caddy

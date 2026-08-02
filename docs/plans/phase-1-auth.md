@@ -83,15 +83,15 @@ The spec (§3) states the OAuth/session **policy** precisely but leaves several
 explicit call for each and flags it so Fable/Opus 5 can challenge it in review
 instead of discovering it mid-implementation:
 
-| #   | Gap in the spec                                                                                                                                                                                      | Decision made here                                                                                                                                                                       |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `sessions` table lists 9 columns; none of them can express "old token still valid for a grace window after rotation" without conflating it with explicit revocation                                  | Add **one** column beyond the spec's list: `rotation_grace_until timestamptz NULL`, orthogonal to `revoked_at` (Task 1, Task 7)                                                          |
-| 2   | Spec doesn't say how "recent reauthentication" (required for linking, unlink, delete, logout-everywhere) is tracked                                                                                  | Add `sessions.reauthenticated_at`; sensitive ops require `now() - reauthenticated_at ≤ 15 min`; a step-up OAuth flow (`purpose=reauth`) refreshes it (Task 7, Task 10)                   |
-| 3   | Spec doesn't say whether the `__Host-oauth-tx` handle is hashed at rest like the session token                                                                                                       | Yes — it's a bearer credential (Task 2). `state` itself is stored in cleartext: it's a correlator already visible in the redirect URL, not an independent secret                         |
-| 4   | Spec's §4 API table doesn't list session-device-list / per-session-revoke / logout-everywhere endpoints, though the Phase 1 exit criteria require them                                               | Invented: `GET /api/v1/sessions`, `DELETE /api/v1/sessions/{id}`, `POST /api/v1/sessions/revoke-all` (Task 9) — implementer must add these to `docs/api/openapi.yaml`                    |
-| 5   | Spec doesn't define the mechanical response when an unauthenticated login attempt's verified email collides with an existing (different-provider) account                                            | `302` redirect with `?error=email_already_registered`; **no** user/identity row is created; the existing account is never touched by an unauthenticated request (Task 10)                |
-| 6   | Master-plan global constraint says every write carries `If-Match`/idempotency                                                                                                                        | Session endpoints are exempted: they aren't revision-tracked resources, and logout/revoke are naturally idempotent (repeat = no-op). Flagged for Opus 5 to confirm, not silently skipped |
-| 7   | `router.New` currently has zero internal-package dependencies; `internal/auth` needs `internal/api`'s `Middleware`/`WriteError` types, so `internal/api` **must not** import `internal/auth` (cycle) | `router.New` gains a variadic `register ...func(*http.ServeMux)` parameter; `cmd/server/main.go` (the composition root) passes `auth.RegisterRoutes(svc)` (Task 4)                       |
+| #   | Gap in the spec                                                                                                                                                                                                                                                                                                       | Decision made here                                                                                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `sessions` table lists 9 columns; none of them can express "old token still valid for a grace window after rotation" without conflating it with explicit revocation                                                                                                                                                   | Add **one** column beyond the spec's list: `rotation_grace_until timestamptz NULL`, orthogonal to `revoked_at` (Task 1, Task 7)                                                                                            |
+| 2   | Spec doesn't say how "recent reauthentication" (required for linking, unlink, delete, logout-everywhere) is tracked                                                                                                                                                                                                   | Add `sessions.reauthenticated_at`; sensitive ops require `now() - reauthenticated_at ≤ 15 min`; a step-up OAuth flow (`purpose=reauth`) refreshes it (Task 7, Task 10)                                                     |
+| 3   | Spec doesn't say whether the `__Host-oauth-tx` handle is hashed at rest like the session token                                                                                                                                                                                                                        | Yes — it's a bearer credential (Task 2). `state` itself is stored in cleartext: it's a correlator already visible in the redirect URL, not an independent secret                                                           |
+| 4   | ~~Spec's §4 API table doesn't list session endpoints~~ — FALSE PREMISE, corrected 2026-08-02: the spec's §4 table DOES list `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions` (rows added during P0 exit-gate spec corrections, after this plan was drafted), with recent reauth on both revoke operations | Follow the spec verbatim: `GET /api/v1/sessions`, `DELETE /api/v1/sessions/{id}`, `DELETE /api/v1/sessions` (Task 9) — implementer adds these to `docs/api/openapi.yaml`; the invented `POST /sessions/revoke-all` is void |
+| 5   | Spec doesn't define the mechanical response when an unauthenticated login attempt's verified email collides with an existing (different-provider) account                                                                                                                                                             | `302` redirect with `?error=email_already_registered`; **no** user/identity row is created; the existing account is never touched by an unauthenticated request (Task 10)                                                  |
+| 6   | Master-plan global constraint says every write carries `If-Match`/idempotency                                                                                                                                                                                                                                         | Session endpoints are exempted: they aren't revision-tracked resources, and logout/revoke are naturally idempotent (repeat = no-op). Flagged for Opus 5 to confirm, not silently skipped                                   |
+| 7   | `router.New` currently has zero internal-package dependencies; `internal/auth` needs `internal/api`'s `Middleware`/`WriteError` types, so `internal/api` **must not** import `internal/auth` (cycle)                                                                                                                  | `router.New` gains a variadic `register ...func(*http.ServeMux)` parameter; `cmd/server/main.go` (the composition root) passes `auth.RegisterRoutes(svc)` (Task 4)                                                         |
 
 ## File structure produced by this phase
 
@@ -901,9 +901,13 @@ interval").
   // Authenticate looks up rawToken, enforces idle/absolute/revoked, performs
   // >24h rotation if due (see algorithm below), and throttles the
   // last_seen_at write to at most once per lastSeenThrottle. Returns the
-  // *governing* session (the successor, if this call triggered or observed a
-  // rotation) and, when a rotation this call triggered mints a new raw
-  // token, that token for the caller to Set-Cookie.
+  // *governing* session — the successor only when THIS call won the
+  // rotation; a CAS loser gets the existing (predecessor) row, per the
+  // algorithm below. (Corrected 2026-08-02 at Task 7 review: the earlier
+  // "or observed a rotation" wording contradicted the algorithm and would
+  // break CSRF binding — a loser's client cannot hold the successor's
+  // secret.) When a rotation this call triggered mints a new raw token,
+  // that token is returned for the caller to Set-Cookie.
   func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (sess store.Session, rotatedToken string, err error)
 
   func (m *SessionManager) Revoke(ctx context.Context, sessionID uuid.UUID) error
@@ -1144,13 +1148,13 @@ Clear-Site-Data").
 - Produces HTTP surface (design decision 4 — none of these paths exist in the
   spec's §4 table):
 
-  | Method + path                      | Auth                           | Purpose                                                                                                                                                                                              |
-  | ---------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `GET /api/v1/me`                   | session                        | `{data:{user, csrfToken, identities:[{provider}]}}` — CSRF token **only** here, in the body, never cookie/URL/log (spec verbatim)                                                                    |
-  | `POST /api/v1/auth/logout`         | session + CSRF                 | revoke current session, clear `__Host-session`, `Clear-Site-Data: "cookies", "storage"`                                                                                                              |
-  | `GET /api/v1/sessions`             | session                        | list caller's non-revoked sessions: `id, createdAt, lastSeenAt, ua, ip, current:bool`                                                                                                                |
-  | `DELETE /api/v1/sessions/{id}`     | session + CSRF                 | revoke one session (must belong to caller — 404, not 403, if it belongs to someone else, to avoid confirming the id exists); revoking the **current** session also clears its cookie in the response |
-  | `POST /api/v1/sessions/revoke-all` | session + CSRF + recent reauth | logout-everywhere: `SessionManager.RevokeAll`; clears current cookie + `Clear-Site-Data`                                                                                                             |
+  | Method + path                  | Auth                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                             |
+  | ------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `GET /api/v1/me`               | session                        | `{data:{user, csrfToken, identities:[{provider}]}}` — CSRF token **only** here, in the body, never cookie/URL/log (spec verbatim)                                                                                                                                                                                                                                                                   |
+  | `POST /api/v1/auth/logout`     | session + CSRF                 | revoke current session, clear `__Host-session`, `Clear-Site-Data: "cookies", "storage"`                                                                                                                                                                                                                                                                                                             |
+  | `GET /api/v1/sessions`         | session                        | list caller's non-revoked sessions: `id, createdAt, lastSeenAt, ua, ip, current:bool`                                                                                                                                                                                                                                                                                                               |
+  | `DELETE /api/v1/sessions/{id}` | session + CSRF + recent reauth | revoke one session (must belong to caller — 404, not 403, if it belongs to someone else, to avoid confirming the id exists); revoking the **current** session also clears its cookie in the response. (Corrected 2026-08-02: spec §4 requires recent reauth on per-session revoke; the earlier session+CSRF-only row contradicted it — spec wins)                                                   |
+  | `DELETE /api/v1/sessions`      | session + CSRF + recent reauth | logout-everywhere: `SessionManager.RevokeAll`; clears current cookie + `Clear-Site-Data`. (Corrected 2026-08-02: the spec's §4 table lists `DELETE /sessions` — the previously invented `POST /sessions/revoke-all` rested on the false premise that the spec omitted these endpoints; the spec's session-endpoint rows were added during the P0 exit-gate corrections after this plan was drafted) |
 
   `RequireSession(m *SessionManager) api.Middleware` — the counterpart to Task
   8's ordering note — reads `__Host-session`, calls `m.Authenticate`, stores the
@@ -1211,6 +1215,20 @@ also write Step 2's rejection matrix.
   in Task 4 Step 2 is replaced with the real three-way branch below;
   `purpose=link`/`purpose=reauth` handling added to `start`)
 
+> **DD-C16 (2026-08-02, added at Task 10 review — security):** `/start` with
+> `purpose=link` or `purpose=reauth` **must require same-site initiation** —
+> `Sec-Fetch-Site: same-origin`, else an Origin/Referer same-origin check, else
+> reject `403 csrf_rejected`, **fail closed**. `purpose=login` is unaffected (it
+> must stay linkable from anywhere). Why: without it, an attacker page can
+> top-level-navigate a victim to `/start?purpose=reauth` — which completes with
+> no interaction for an already-consented provider and **refreshes the
+> recent-reauth window** — and then to `/start?purpose=link`, attaching the
+> attacker's provider identity to the victim's account for permanent takeover.
+> `SameSite=Lax` does **not** block top-level GET navigations, and the reauth
+> window cannot gate itself. The callback needs no equivalent gate: it requires
+> a `__Host-` transaction cookie only a gated same-origin `/start` can set, plus
+> a server-side `state` never exposed to the initiating page.
+
 **Interfaces:**
 
 - Consumes: `TransactionStore.Begin/Consume` (Task 2, `PurposeLink` /
@@ -1245,15 +1263,25 @@ also write Step 2's rejection matrix.
 
   **Link algorithm** (`link.go`, called only when the transaction's
   `Purpose == PurposeLink`): (1) `RequireRecentReauth` on the caller's current
-  session — `403 reauth_required` if stale. (2) `GetIdentityByProviderSubject` —
-  if it belongs to `tx.LinkingUserID` already, idempotent success (no-op). If it
-  belongs to a **different** user, reject (`409 identity_already_linked` — this
-  is the case that prevents hijacking someone else's already-claimed provider
-  identity by linking it onto your own account). If unclaimed, `CreateIdentity`
-  with `user_id = tx.LinkingUserID`. **No email check at all for linking** — per
-  spec, LinkedIn linking is allowed without a verified email, and nothing in the
-  spec restricts linking a provider identity whose email differs from the
-  account's registered email; `users.email` is never modified by a link.
+  session — if stale, `302` to `/app/settings/sessions?error=reauth_required`
+  (DD-C17: `/start` is a top-level navigation, so a raw JSON 403 would render a
+  JSON document to the user; the JSON-API endpoints in Task 9 keep their
+  `403 reauth_required`). (2) `GetIdentityByProviderSubject` — if it belongs to
+  `tx.LinkingUserID` already, idempotent success (no-op). If it belongs to a
+  **different** user, reject with `302 ?error=identity_already_linked`
+  (corrected 2026-08-02, DD-C15: the plan's own top-level-navigation reasoning —
+  a callback is a browser navigation, never a raw JSON 409 — applies to the link
+  callback too; the distinct code stays because the actor is authenticated and
+  the condition is user-actionable. This is the case that prevents hijacking
+  someone else's already-claimed provider identity by linking it onto your own
+  account). Link/reauth-purpose callback outcomes (success AND error) redirect
+  to `PublicOrigin + "/app/settings/sessions"` — the page that initiates them —
+  while login-purpose keeps `/login?error=` and `/`. If unclaimed,
+  `CreateIdentity` with `user_id = tx.LinkingUserID`. **No email check at all
+  for linking** — per spec, LinkedIn linking is allowed without a verified
+  email, and nothing in the spec restricts linking a provider identity whose
+  email differs from the account's registered email; `users.email` is never
+  modified by a link.
 
 - [ ] **Step 1: Write the failing new-account / existing-identity / no-merge
       happy-path tests**
@@ -1299,8 +1327,8 @@ also write Step 2's rejection matrix.
 
   | Test                                                                    | Setup                                                                          | Assert                                                                                                                |
   | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-  | `TestLink_RejectsWithoutRecentReauth`                                   | session with `reauthenticated_at` 20 minutes ago attempts `purpose=link` start | `403 reauth_required`, no transaction even created                                                                    |
-  | `TestLink_RejectsIdentityAlreadyClaimedByAnotherUser`                   | user B tries to link a `(provider, sub)` already owned by user A's identity    | `409`, no row mutated                                                                                                 |
+  | `TestLink_RejectsWithoutRecentReauth`                                   | session with `reauthenticated_at` 20 minutes ago attempts `purpose=link` start | `302` to `/app/settings/sessions?error=reauth_required` (DD-C17), no transaction even created                         |
+  | `TestLink_RejectsIdentityAlreadyClaimedByAnotherUser`                   | user B tries to link a `(provider, sub)` already owned by user A's identity    | `302 ?error=identity_already_linked` (DD-C15), no row mutated                                                         |
   | `TestLink_IdempotentWhenAlreadyLinkedToSelf`                            | user links the same identity twice                                             | second call succeeds as a no-op, no duplicate row (unique constraint would 500 a naive re-insert — assert it doesn't) |
   | `TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity` | a `purpose=reauth` round trip against an **already-linked** provider           | bumps `sessions.reauthenticated_at` and creates/touches nothing in `identities`                                       |
 
@@ -1364,14 +1392,14 @@ app-wide store) or any editor-related scaffolding.
 
   Add a minimal "confirm your identity" state to `sessions.vue`: an "add
   provider" action that first calls `GET /api/v1/me`, and — if the server's
-  `purpose=link` start would 403 with `reauth_required` (surfaced by attempting
-  the navigation and having the callback bounce back with an error query param,
-  since `start` for `purpose=link` is itself a top-level navigation, not a
-  fetchable JSON call) — shows a "sign in again to confirm it's you" prompt that
-  re-triggers `purpose=reauth` against one of the user's existing linked
-  providers before retrying the link. Keep this intentionally minimal (a single
-  component, no new route) — polish is P5B's register of "disclosure wording"
-  concerns, not this task's.
+  `purpose=link` start bounces back with `?error=reauth_required` (DD-C17;
+  surfaced by attempting the navigation and having the callback bounce back with
+  an error query param, since `start` for `purpose=link` is itself a top-level
+  navigation, not a fetchable JSON call) — shows a "sign in again to confirm
+  it's you" prompt that re-triggers `purpose=reauth` against one of the user's
+  existing linked providers before retrying the link. Keep this intentionally
+  minimal (a single component, no new route) — polish is P5B's register of
+  "disclosure wording" concerns, not this task's.
 
 - [ ] **Step 4: `npm run lint && npm run typecheck && npm test`, then commit**
 
@@ -1385,8 +1413,20 @@ app-wide store) or any editor-related scaffolding.
 ## Phase exit criteria
 
 - [ ] `go build ./... && go vet ./... && go test ./... -race` clean in
-      `apps/server`; `npm run lint && npm run typecheck && npm test` clean in
-      `apps/web`.
+      `apps/server` (hermetic; every DB-backed case in `internal/auth`,
+      `internal/store`, and `internal/user` self-skips here with no
+      `TEST_DATABASE_URL`, by design), AND, separately,
+      `make test-db-up && make server-test-db` clean against a live Postgres --
+      the DSN-bearing command that actually exercises every AC-AUTH acceptance
+      test, the 20-way rotation race, the six-pair merge matrix, and every
+      DD-C5/DD-C14 session test the bare `go test ./...` above only compiles,
+      never runs. `server-test-db` sets `REQUIRE_TEST_DB=1`, so it fails rather
+      than passing vacuously if `TEST_DATABASE_URL` ever ends up unset. A gate
+      run records the resulting non-skipped case count (`go test -v`'s
+      `--- PASS`/`--- SKIP` tally, or `go test -json` reduced the same way) as
+      evidence alongside the pass/fail result -- a green run with a suspiciously
+      low non-skipped count is itself a finding, not a pass;
+      `npm run lint &&     npm run typecheck && npm test` clean in `apps/web`.
 - [ ] Sign in with Google/GitHub/LinkedIn (mock providers in CI) issues a
       `__Host-session` cookie; `/me` returns the user + CSRF token.
 - [ ] Session list, per-session revoke, logout-everywhere, and `Clear-Site-Data`
@@ -1413,3 +1453,40 @@ app-wide store) or any editor-related scaffolding.
       10 diff specifically gets independent adversarial review per the master
       plan's workflow table (author never signs off its own correctness on the
       highest-risk task in the phase).
+
+---
+
+## Appendix — execution decision record (DD-C1 … DD-C17)
+
+Rulings the integration owner made during execution, when implementation or
+review exposed a contract the plan or spec left open. Recorded here because the
+phase gate's adversarial reviewer, UAT author, and evidence verifier must judge
+against them, and because the working ledger they were made in is git-ignored.
+Where a ruling corrected plan text, the correction is already applied inline
+above; this table is the index and the rationale.
+
+| ID      | Decision                                                                                                                                                                   | Why                                                                                                                     |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| DD-C1   | `Consume` is single-attempt fail-closed: any attempt on a valid handle burns it, including one that then fails the provider check                                          | "Atomically marks consumed and returns it" reads consume-then-validate; a mix-up attempt should kill the transaction    |
+| DD-C2   | Whether an expired `Consume` sets `consumed_at` is deliberately unpinned                                                                                                   | Unobservable through the contract; pinning it would over-constrain the implementation                                   |
+| DD-C3   | Every callback rejection not plan-pinned redirects `302` with one generic `?error=auth_failed`; `email_not_verified` and `email_already_registered` stay distinct          | No oracle across OIDC failure classes; the two exceptions are user-actionable                                           |
+| DD-C4   | `302` is the pinned status for all callback rejections, except genuinely local failures which are opaque `500`s                                                            | A callback is a top-level browser navigation, never a raw JSON consumer                                                 |
+| DD-C5   | `DELETE /sessions/{id}` returns a uniform `404` for any id not resolving to a live session owned by the caller                                                             | Other-user / unknown / already-revoked must be indistinguishable; effect stays idempotent                               |
+| DD-C6   | The CSRF `Content-Type` check applies only when the request carries a body; media type parsed, any charset accepted                                                        | Requiring it unconditionally would `403` every bodiless `DELETE` and logout                                             |
+| DD-C7   | Error redirects target `/login?error=`; success targets `/`                                                                                                                | The login page is what renders the error vocabulary                                                                     |
+| DD-C8   | `/start` and `/callback` reject non-`GET`, including `HEAD`, with `405`                                                                                                    | Go's `GET /path` pattern also matches `HEAD`; a prefetcher must not create or burn transactions                         |
+| DD-C9   | Authenticated `/api/v1` fetches in the web app are `server: false`                                                                                                         | SSR resolves them against Nitro with no cookies; auth-gated pages have no crawler value                                 |
+| DD-C10  | Provider-side failures (non-200 REST, malformed JSON) use the `302` funnel; `500` is reserved for local failures                                                           | A `500` on a top-level navigation is both bad UX and a response-shape oracle                                            |
+| DD-C11  | Both `DELETE /sessions/{id}` and `DELETE /sessions` require session + CSRF + recent reauth; logout-everywhere is `DELETE /sessions`                                        | Spec §4 requires reauth on both revokes; the plan's invented `POST /revoke-all` rested on a false premise               |
+| DD-C12  | (Superseded by Task 10) Interim link branch: never issue a session for anyone but the linking user                                                                         | Closed an account-switch hole in the interim LinkedIn implementation                                                    |
+| DD-C13  | `GET /sessions` → `200 {data:[…]}` flat array; mutating successes → `204 No Content`; RFC 3339 UTC timestamps                                                              | The `{data}` envelope applies to bodied responses only                                                                  |
+| DD-C14  | Logout and revoke-current kill the credential **lineage**, both directions (predecessor and successor)                                                                     | A rotation race-loser's logout otherwise returned `204` while a live successor survived                                 |
+| DD-C14c | Lineage is tracked by a `sessions.rotated_from` self-FK with a partial unique index, not reconstructed from timestamps                                                     | Timestamp reconstruction matched any same-user row sharing the microsecond; the FK makes the linkage exact              |
+| DD-C15  | Link-flow rejections redirect `302` with the distinct `?error=identity_already_linked`; link/reauth outcomes return to `/app/settings/sessions`                            | Same top-level-navigation reasoning as DD-C4; the actor is authenticated so distinctness is safe                        |
+| DD-C16  | `/start?purpose=link\|reauth` requires same-site initiation (`Sec-Fetch-Site: same-origin`, else Origin/Referer), fail closed, `403 csrf_rejected`; `purpose=login` exempt | Without it, a cross-site chain refreshes the reauth window and links an attacker's identity — permanent takeover        |
+| DD-C17  | `/start` link/reauth rejections redirect: `reauth_required` → settings with the code, `session_required` → `/login` with none; `csrf_rejected` stays `403` JSON            | A raw JSON body renders as a document on a navigation; the CSRF case stays opaque so an attack is not handed a redirect |
+
+Client contract recorded alongside these: on `403 csrf_rejected` from a mutating
+call, a client refetches `GET /me` once and retries before surfacing an error —
+sessions rotate after 24h and the rejecting response already carries the new
+cookie, so recovery is a single round trip.

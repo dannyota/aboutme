@@ -23,10 +23,11 @@ func TestLoad_ValidConfig(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"PORT":         "9090",
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "debug",
-		"ENV":          "dev",
+		"PORT":          "9090",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "debug",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -49,6 +50,9 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if got.Env != "dev" {
 		t.Errorf("Env = %q, want %q", got.Env, "dev")
 	}
+	if got.PublicOrigin != "https://aboutme.vn" {
+		t.Errorf("PublicOrigin = %q, want %q", got.PublicOrigin, "https://aboutme.vn")
+	}
 	if got.TrustedProxyCIDRs != nil {
 		t.Errorf("TrustedProxyCIDRs = %v, want nil (default outside prod/staging)", got.TrustedProxyCIDRs)
 	}
@@ -66,10 +70,17 @@ func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":                 "staging",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32,::1/128",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32,::1/128",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -90,9 +101,10 @@ func TestLoad_PortDefaultsTo8080(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "info",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "info",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -106,8 +118,9 @@ func TestLoad_LogLevelDefaultsToInfo(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -121,9 +134,10 @@ func TestLoad_LogLevelCaseInsensitive(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "WARN",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "WARN",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -151,9 +165,18 @@ func TestLoad_MissingRequiredVars(t *testing.T) {
 		{
 			name: "missing ENV",
 			vars: map[string]string{
-				"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": "https://aboutme.vn",
 			},
 			wantErr: "ENV",
+		},
+		{
+			name: "missing PUBLIC_ORIGIN",
+			vars: map[string]string{
+				"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
+				"ENV":          "dev",
+			},
+			wantErr: "PUBLIC_ORIGIN",
 		},
 	}
 
@@ -176,9 +199,10 @@ func TestLoad_InvalidValues(t *testing.T) {
 	t.Parallel()
 
 	base := map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"LOG_LEVEL":    "info",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"LOG_LEVEL":     "info",
+		"ENV":           "dev",
 	}
 
 	tests := []struct {
@@ -225,15 +249,28 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 			t.Parallel()
 
 			vars := map[string]string{
-				"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-				"ENV":          envValue,
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": "https://aboutme.vn",
+				"ENV":           envValue,
 			}
 			if envValue == "prod" || envValue == "staging" {
 				// prod and staging both require TRUSTED_PROXY_CIDRS (fail
 				// closed — see TestLoad_TrustedProxyCIDRs_RequiredInProd and
-				// TestLoad_TrustedProxyCIDRs_RequiredInStaging); LISTEN_HOST
-				// is left at its loopback default.
+				// TestLoad_TrustedProxyCIDRs_RequiredInStaging),
+				// GOOGLE_CLIENT_ID/SECRET (see
+				// TestLoad_GoogleCredentials_RequiredInProd/Staging),
+				// GITHUB_CLIENT_ID/SECRET (see
+				// TestLoad_GitHubCredentials_RequiredInProd/Staging), and
+				// LINKEDIN_CLIENT_ID/SECRET (see
+				// TestLoad_LinkedInCredentials_RequiredInProd/Staging);
+				// LISTEN_HOST is left at its loopback default.
 				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32,::1/128"
+				vars["GOOGLE_CLIENT_ID"] = "client-id"
+				vars["GOOGLE_CLIENT_SECRET"] = "client-secret"
+				vars["GITHUB_CLIENT_ID"] = "github-client-id"
+				vars["GITHUB_CLIENT_SECRET"] = "github-client-secret"
+				vars["LINKEDIN_CLIENT_ID"] = "client-id"
+				vars["LINKEDIN_CLIENT_SECRET"] = "client-secret"
 			}
 
 			got, err := config.Load(env(vars))
@@ -251,8 +288,9 @@ func TestLoad_ListenHostDefaultsToLoopback(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -266,9 +304,10 @@ func TestLoad_ListenHostCustomValueAcceptedOutsideProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
-		"LISTEN_HOST":  "0.0.0.0",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+		"LISTEN_HOST":   "0.0.0.0",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -282,9 +321,10 @@ func TestLoad_ListenHostInvalidValue(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
-		"LISTEN_HOST":  "not-an-ip",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+		"LISTEN_HOST":   "not-an-ip",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error for invalid LISTEN_HOST")
@@ -304,6 +344,7 @@ func TestLoad_ListenHostNonLoopbackRejectedInProd(t *testing.T) {
 
 	_, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "prod",
 		"LISTEN_HOST":         "0.0.0.0",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
@@ -320,10 +361,17 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":                 "prod",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "prod",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -343,6 +391,7 @@ func TestLoad_ListenHostNonLoopbackRejectedInStaging(t *testing.T) {
 
 	_, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "staging",
 		"LISTEN_HOST":         "0.0.0.0",
 		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
@@ -359,10 +408,17 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":                 "staging",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -381,8 +437,9 @@ func TestLoad_TrustedProxyCIDRs_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "prod",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "prod",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error: TRUSTED_PROXY_CIDRS is required when ENV=prod")
@@ -401,8 +458,9 @@ func TestLoad_TrustedProxyCIDRs_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "staging",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "staging",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error: TRUSTED_PROXY_CIDRS is required when ENV=staging")
@@ -416,8 +474,9 @@ func TestLoad_TrustedProxyCIDRs_OptionalOutsideProd(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL": "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":          "dev",
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -431,10 +490,17 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"ENV":                 "prod",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": " 127.0.0.1/32 , ::1/128 ",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "prod",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    " 127.0.0.1/32 , ::1/128 ",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
+		"LINKEDIN_CLIENT_ID":     "client-id",
+		"LINKEDIN_CLIENT_SECRET": "client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -464,6 +530,7 @@ func TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone(t *testing.T) {
 
 			_, err := config.Load(env(map[string]string{
 				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
 				"ENV":                 "dev",
 				"TRUSTED_PROXY_CIDRS": cidr,
 			}))
@@ -502,6 +569,7 @@ func TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix(t *testing.T) {
 
 			_, err := config.Load(env(map[string]string{
 				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
 				"ENV":                 "dev",
 				"TRUSTED_PROXY_CIDRS": cidr,
 			}))
@@ -525,6 +593,7 @@ func TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted(t *testing.T) {
 
 	got, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "dev",
 		"TRUSTED_PROXY_CIDRS": "10.0.0.0/8, 2001:db8::/48",
 	}))
@@ -560,6 +629,7 @@ func TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix(t *testing.T) {
 
 			_, err := config.Load(env(map[string]string{
 				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
 				"ENV":                 "dev",
 				"TRUSTED_PROXY_CIDRS": cidr,
 			}))
@@ -577,11 +647,520 @@ func TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix(t *testing.T) {
 	}
 }
 
+// ---- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET --------------------------
+
+func TestLoad_GoogleCredentials_ValidConfig(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "dev",
+		"GOOGLE_CLIENT_ID":     "test-client-id",
+		"GOOGLE_CLIENT_SECRET": "test-client-secret",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GoogleClientID != "test-client-id" {
+		t.Errorf("GoogleClientID = %q, want %q", got.GoogleClientID, "test-client-id")
+	}
+	if got.GoogleClientSecret != "test-client-secret" {
+		t.Errorf("GoogleClientSecret = %q, want %q", got.GoogleClientSecret, "test-client-secret")
+	}
+}
+
+// TestLoad_GoogleCredentials_OptionalInDev proves a developer working on an
+// unrelated feature is never forced to obtain real Google OAuth
+// credentials just to start the server in dev — the same
+// optional-outside-prod/staging shape TRUSTED_PROXY_CIDRS already has.
+func TestLoad_GoogleCredentials_OptionalInDev(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GoogleClientID != "" {
+		t.Errorf("GoogleClientID = %q, want empty (optional in dev)", got.GoogleClientID)
+	}
+	if got.GoogleClientSecret != "" {
+		t.Errorf("GoogleClientSecret = %q, want empty (optional in dev)", got.GoogleClientSecret)
+	}
+}
+
+// TestLoad_GoogleCredentials_RequiredInProd guards the fail-closed half: a
+// production server cannot offer "Sign in with Google" without real
+// credentials, so Load must refuse to start rather than silently booting
+// with an empty client id/secret that would only fail later, per-request,
+// against the real Google endpoint.
+func TestLoad_GoogleCredentials_RequiredInProd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		vars map[string]string
+	}{
+		{
+			name: "missing client id",
+			vars: map[string]string{"GOOGLE_CLIENT_SECRET": "secret"},
+		},
+		{
+			name: "missing client secret",
+			vars: map[string]string{"GOOGLE_CLIENT_ID": "client-id"},
+		},
+		{
+			name: "missing both",
+			vars: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := map[string]string{
+				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":       "https://aboutme.vn",
+				"ENV":                 "prod",
+				"LISTEN_HOST":         "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+			}
+			for k, v := range tt.vars {
+				vars[k] = v
+			}
+
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want error: GOOGLE_CLIENT_ID/SECRET required when ENV=prod")
+			}
+			if !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID") && !strings.Contains(err.Error(), "GOOGLE_CLIENT_SECRET") {
+				t.Errorf("Load() error = %q, want it to name GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_GoogleCredentials_RequiredInStaging is the staging counterpart
+// of TestLoad_GoogleCredentials_RequiredInProd — staging shares prod's
+// strictness so a misconfiguration is caught before it reaches prod.
+func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(env(map[string]string{
+		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
+		"ENV":                 "staging",
+		"LISTEN_HOST":         "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+	}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error: GOOGLE_CLIENT_ID/SECRET required when ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "GOOGLE_CLIENT_ID") {
+		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GOOGLE_CLIENT_ID")
+	}
+}
+
+// ---- GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET --------------------------
+//
+// GitHub login is plain OAuth2, not OIDC (AC-AUTH-003) -- no discovery, no
+// issuer, no nonce -- but its client credentials carry the identical
+// fail-closed requirement as Google's: same optional-in-dev,
+// required-in-prod/staging shape, mirrored test-for-test below.
+
+func TestLoad_GitHubCredentials_ValidConfig(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "dev",
+		"GITHUB_CLIENT_ID":     "test-github-client-id",
+		"GITHUB_CLIENT_SECRET": "test-github-client-secret",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GitHubClientID != "test-github-client-id" {
+		t.Errorf("GitHubClientID = %q, want %q", got.GitHubClientID, "test-github-client-id")
+	}
+	if got.GitHubClientSecret != "test-github-client-secret" {
+		t.Errorf("GitHubClientSecret = %q, want %q", got.GitHubClientSecret, "test-github-client-secret")
+	}
+}
+
+// TestLoad_GitHubCredentials_OptionalInDev proves a developer working on an
+// unrelated feature is never forced to obtain real GitHub OAuth
+// credentials just to start the server in dev — the same
+// optional-outside-prod/staging shape GOOGLE_CLIENT_ID/SECRET already has.
+func TestLoad_GitHubCredentials_OptionalInDev(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.GitHubClientID != "" {
+		t.Errorf("GitHubClientID = %q, want empty (optional in dev)", got.GitHubClientID)
+	}
+	if got.GitHubClientSecret != "" {
+		t.Errorf("GitHubClientSecret = %q, want empty (optional in dev)", got.GitHubClientSecret)
+	}
+}
+
+// TestLoad_GitHubCredentials_RequiredInProd guards the fail-closed half: a
+// production server cannot offer "Sign in with GitHub" without real
+// credentials, so Load must refuse to start rather than silently booting
+// with an empty client id/secret that would only fail later, per-request,
+// against the real GitHub endpoint. Every case also supplies valid Google
+// credentials, so the failure asserted here is unambiguously GitHub's own
+// (not Google's check firing first). LinkedIn credentials are NOT needed
+// here: Load checks GitHub before LinkedIn (see Load's own call order), so
+// a missing GitHub credential is always reported first regardless of
+// LinkedIn's state.
+func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		vars map[string]string
+	}{
+		{
+			name: "missing client id",
+			vars: map[string]string{"GITHUB_CLIENT_SECRET": "secret"},
+		},
+		{
+			name: "missing client secret",
+			vars: map[string]string{"GITHUB_CLIENT_ID": "client-id"},
+		},
+		{
+			name: "missing both",
+			vars: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := map[string]string{
+				"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":        "https://aboutme.vn",
+				"ENV":                  "prod",
+				"LISTEN_HOST":          "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+				"GOOGLE_CLIENT_ID":     "client-id",
+				"GOOGLE_CLIENT_SECRET": "client-secret",
+			}
+			for k, v := range tt.vars {
+				vars[k] = v
+			}
+
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want error: GITHUB_CLIENT_ID/SECRET required when ENV=prod")
+			}
+			if !strings.Contains(err.Error(), "GITHUB_CLIENT_ID") && !strings.Contains(err.Error(), "GITHUB_CLIENT_SECRET") {
+				t.Errorf("Load() error = %q, want it to name GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_GitHubCredentials_RequiredInStaging is the staging counterpart
+// of TestLoad_GitHubCredentials_RequiredInProd — staging shares prod's
+// strictness so a misconfiguration is caught before it reaches prod.
+func TestLoad_GitHubCredentials_RequiredInStaging(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "staging",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":     "client-id",
+		"GOOGLE_CLIENT_SECRET": "client-secret",
+	}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error: GITHUB_CLIENT_ID/SECRET required when ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "GITHUB_CLIENT_ID") {
+		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "GITHUB_CLIENT_ID")
+	}
+}
+
+// ---- LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET ----------------------
+
+func TestLoad_LinkedInCredentials_ValidConfig(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "dev",
+		"LINKEDIN_CLIENT_ID":     "test-client-id",
+		"LINKEDIN_CLIENT_SECRET": "test-client-secret",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.LinkedInClientID != "test-client-id" {
+		t.Errorf("LinkedInClientID = %q, want %q", got.LinkedInClientID, "test-client-id")
+	}
+	if got.LinkedInClientSecret != "test-client-secret" {
+		t.Errorf("LinkedInClientSecret = %q, want %q", got.LinkedInClientSecret, "test-client-secret")
+	}
+}
+
+// TestLoad_LinkedInCredentials_OptionalInDev mirrors
+// TestLoad_GoogleCredentials_OptionalInDev: a developer working on an
+// unrelated feature is never forced to obtain real LinkedIn OAuth
+// credentials just to start the server in dev.
+func TestLoad_LinkedInCredentials_OptionalInDev(t *testing.T) {
+	t.Parallel()
+
+	got, err := config.Load(env(map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
+	}))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.LinkedInClientID != "" {
+		t.Errorf("LinkedInClientID = %q, want empty (optional in dev)", got.LinkedInClientID)
+	}
+	if got.LinkedInClientSecret != "" {
+		t.Errorf("LinkedInClientSecret = %q, want empty (optional in dev)", got.LinkedInClientSecret)
+	}
+}
+
+// TestLoad_LinkedInCredentials_RequiredInProd mirrors
+// TestLoad_GoogleCredentials_RequiredInProd: a production server cannot
+// offer "Sign in with LinkedIn" without real credentials, so Load must
+// refuse to start rather than silently booting with an empty client
+// id/secret that would only fail later, per-request, against the real
+// LinkedIn endpoint. Google AND GitHub credentials are both set (valid)
+// here: Load checks Google, then GitHub, then LinkedIn (Load's own call
+// order), so both earlier checks must already pass or their own error
+// would mask the LINKEDIN_CLIENT_* failure this test is actually
+// targeting.
+func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		vars map[string]string
+	}{
+		{
+			name: "missing client id",
+			vars: map[string]string{"LINKEDIN_CLIENT_SECRET": "secret"},
+		},
+		{
+			name: "missing client secret",
+			vars: map[string]string{"LINKEDIN_CLIENT_ID": "client-id"},
+		},
+		{
+			name: "missing both",
+			vars: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := map[string]string{
+				"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":        "https://aboutme.vn",
+				"ENV":                  "prod",
+				"LISTEN_HOST":          "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+				"GOOGLE_CLIENT_ID":     "google-client-id",
+				"GOOGLE_CLIENT_SECRET": "google-client-secret",
+				"GITHUB_CLIENT_ID":     "github-client-id",
+				"GITHUB_CLIENT_SECRET": "github-client-secret",
+			}
+			for k, v := range tt.vars {
+				vars[k] = v
+			}
+
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want error: LINKEDIN_CLIENT_ID/SECRET required when ENV=prod")
+			}
+			if !strings.Contains(err.Error(), "LINKEDIN_CLIENT_ID") && !strings.Contains(err.Error(), "LINKEDIN_CLIENT_SECRET") {
+				t.Errorf("Load() error = %q, want it to name LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_LinkedInCredentials_RequiredInStaging is the staging
+// counterpart of TestLoad_LinkedInCredentials_RequiredInProd — staging
+// shares prod's strictness so a misconfiguration is caught before it
+// reaches prod. Google AND GitHub credentials are both set (valid) for
+// the same reason as TestLoad_LinkedInCredentials_RequiredInProd above.
+func TestLoad_LinkedInCredentials_RequiredInStaging(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Load(env(map[string]string{
+		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":        "https://aboutme.vn",
+		"ENV":                  "staging",
+		"LISTEN_HOST":          "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":     "google-client-id",
+		"GOOGLE_CLIENT_SECRET": "google-client-secret",
+		"GITHUB_CLIENT_ID":     "github-client-id",
+		"GITHUB_CLIENT_SECRET": "github-client-secret",
+	}))
+	if err == nil {
+		t.Fatal("Load() error = nil, want error: LINKEDIN_CLIENT_ID/SECRET required when ENV=staging")
+	}
+	if !strings.Contains(err.Error(), "LINKEDIN_CLIENT_ID") {
+		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "LINKEDIN_CLIENT_ID")
+	}
+}
+
+// ---- PUBLIC_ORIGIN format validation -----------------------------------
+
+// TestLoad_PublicOrigin_ValidFormats proves the format check accepts every
+// shape a real deployment's PUBLIC_ORIGIN legitimately takes: with and
+// without an explicit port, https and http (dev).
+func TestLoad_PublicOrigin_ValidFormats(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []string{
+		"https://aboutme.vn",
+		"https://aboutme.vn:8443",
+		"http://localhost:8080",
+		"http://localhost",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := config.Load(env(map[string]string{
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": origin,
+				"ENV":           "dev",
+			}))
+			if err != nil {
+				t.Fatalf("Load() unexpected error: %v", err)
+			}
+			if got.PublicOrigin != origin {
+				t.Errorf("PublicOrigin = %q, want %q", got.PublicOrigin, origin)
+			}
+		})
+	}
+}
+
+// TestLoad_PublicOrigin_InvalidFormats guards the fail-fast format
+// validation (task-4-brief.md integration-owner ruling): PUBLIC_ORIGIN must
+// parse as scheme://host[:port] only — no path, no trailing slash, no
+// query, no fragment — since it becomes the base of every absolute OAuth
+// redirect/callback URL this server builds (an unnoticed trailing slash or
+// path would silently double up or corrupt every one of them).
+func TestLoad_PublicOrigin_InvalidFormats(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"https://aboutme.vn/",         // trailing slash
+		"https://aboutme.vn/api",      // path
+		"https://aboutme.vn?x=1",      // query
+		"https://aboutme.vn#frag",     // fragment
+		"aboutme.vn",                  // no scheme
+		"ftp://aboutme.vn",            // unsupported scheme
+		"https://",                    // no host
+		"not a url at all : : spaces", // unparseable
+	}
+	for _, origin := range cases {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := config.Load(env(map[string]string{
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": origin,
+				"ENV":           "dev",
+			}))
+			if err == nil {
+				t.Fatalf("Load() error = nil, want error rejecting PUBLIC_ORIGIN %q", origin)
+			}
+			if !strings.Contains(err.Error(), "PUBLIC_ORIGIN") {
+				t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "PUBLIC_ORIGIN")
+			}
+		})
+	}
+}
+
+// TestLoad_PublicOrigin_Normalization is a security-relevant cheap-win
+// fix: PUBLIC_ORIGIN is compared by EXACT string match against every
+// request's Origin header (auth.originAllowed, csrf.go) and used verbatim
+// to build every absolute OAuth redirect/callback URL. Before this fix,
+// loadPublicOrigin validated the format but stored raw's scheme/host
+// verbatim -- so an operator-entered "https://ABOUTME.vn" (mixed case) or
+// "https://aboutme.vn:443" (an explicit, semantically-default port) passed
+// startup validation cleanly and then 403'd every mutating request in
+// production, because a real browser's Origin header is always
+// normalized (lowercase host, default port omitted) and would never
+// byte-match either shape. Table below proves: (1) scheme+host are
+// lowercased, (2) a DEFAULT port for the scheme (":80" on http, ":443" on
+// https) is stripped, (3) a NON-default port is preserved unchanged, (4)
+// an origin already in canonical form round-trips byte-identical.
+func TestLoad_PublicOrigin_Normalization(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"already canonical, unchanged", "https://aboutme.vn", "https://aboutme.vn"},
+		{"uppercase host lowercased", "https://ABOUTME.vn", "https://aboutme.vn"},
+		{"mixed-case scheme and host lowercased", "Https://Aboutme.VN", "https://aboutme.vn"},
+		{"https default port 443 stripped", "https://aboutme.vn:443", "https://aboutme.vn"},
+		{"http default port 80 stripped", "http://aboutme.vn:80", "http://aboutme.vn"},
+		{"https on port 80 is NOT the default for https, preserved", "https://aboutme.vn:80", "https://aboutme.vn:80"},
+		{"http on port 443 is NOT the default for http, preserved", "http://aboutme.vn:443", "http://aboutme.vn:443"},
+		{"non-default port preserved", "https://aboutme.vn:8443", "https://aboutme.vn:8443"},
+		{"uppercase host with non-default port", "https://ABOUTME.vn:8443", "https://aboutme.vn:8443"},
+		{"localhost with default http port stripped", "http://localhost:80", "http://localhost"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := config.Load(env(map[string]string{
+				"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN": tc.input,
+				"ENV":           "dev",
+			}))
+			if err != nil {
+				t.Fatalf("Load() unexpected error: %v", err)
+			}
+			if got.PublicOrigin != tc.want {
+				t.Errorf("PublicOrigin = %q, want %q (input %q)", got.PublicOrigin, tc.want, tc.input)
+			}
+		})
+	}
+}
+
 func TestLoad_TrustedProxyCIDRs_InvalidCIDR(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
 		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":       "https://aboutme.vn",
 		"ENV":                 "dev",
 		"TRUSTED_PROXY_CIDRS": "not-a-cidr",
 	}))

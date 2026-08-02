@@ -18,7 +18,24 @@ sql:
         sql_package: "pgx/v5"
         out: "internal/store"
         emit_interface: true
+        rename:
+          ua: "UA"
+          ip: "IP"
+          oauth_transaction: "OAuthTransaction"
+          csrf_secret: "CSRFSecret"
+          pkce_verifier: "PKCEVerifier"
+          redirect_uri: "RedirectURI"
         overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"
+              pointer: true
           - db_type: "jsonb"
             go_type:
               import: "encoding/json"
