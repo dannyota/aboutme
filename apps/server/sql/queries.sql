@@ -23,6 +23,12 @@ SELECT * FROM identities WHERE provider = $1 AND provider_user_id = $2;
 -- this insert to fail.
 INSERT INTO identities (user_id, provider, provider_user_id) VALUES ($1, $2, $3) RETURNING *;
 
+-- name: ListIdentitiesByUserID :many
+-- Task 9's GET /me: every provider identity linked to user_id, oldest
+-- first (created_at) so the first-ever linked provider always sorts
+-- first.
+SELECT * FROM identities WHERE user_id = $1 ORDER BY created_at;
+
 -- name: CreateSession :one
 -- Always inserts a brand-new row -- used both by Issue (fixation defense: a
 -- login never reuses an existing session row) and by the >24h rotation
@@ -83,6 +89,23 @@ UPDATE sessions SET revoked_at = $3 WHERE id = $1 AND user_id = $2 AND revoked_a
 -- Logout-everywhere: revokes every one of the user's not-already-revoked
 -- sessions and reports how many rows that affected.
 UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL;
+
+-- name: ListLiveSessionsForUser :many
+-- Task 9's GET /sessions device list (design spec §3): every session
+-- belonging to user_id that is still LIVE as of now -- explicitly revoked
+-- rows are excluded (revoked_at IS NULL), and so are Task 7's grace-dead
+-- rotation predecessors: a session rotation has already superseded keeps
+-- revoked_at NULL but has rotation_grace_until in the past, and that row
+-- must never appear in the caller's own device list -- it is unreachable
+-- by any client, exactly like an explicitly revoked one, just not marked
+-- that way. sqlc.arg(now) is cast explicitly so this parameter's Go type
+-- is a plain (non-pointer) time.Time regardless of rotation_grace_until's
+-- own nullability. Ordered newest-created first.
+SELECT * FROM sessions
+WHERE user_id = $1
+  AND revoked_at IS NULL
+  AND (rotation_grace_until IS NULL OR rotation_grace_until > sqlc.arg(now)::timestamptz)
+ORDER BY created_at DESC;
 
 -- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (

@@ -41,6 +41,20 @@ const (
 	LinkedInCallbackPath = "/api/v1/auth/linkedin/callback"
 )
 
+// MePath, LogoutPath, and SessionsPath are the literal routes Service
+// registers for Task 9's session-authenticated JSON API (design spec §3,
+// AC-AUTH-005): GET /me, POST /auth/logout, and GET+DELETE /sessions.
+// DELETE /sessions/{id} (per-session revoke) has no exported constant of
+// its own -- it is SessionsPath with a "/{id}" wildcard segment appended
+// where it is registered (RegisterRoutes) -- callers that need the literal
+// URL for a specific session build it themselves (SessionsPath + "/" +
+// id.String()).
+const (
+	MePath       = "/api/v1/me"
+	LogoutPath   = "/api/v1/auth/logout"
+	SessionsPath = "/api/v1/sessions"
+)
+
 // The full, closed vocabulary of ?error= codes a provider callback can
 // ever redirect the browser with (fix-round ruling b2). A new distinct
 // code is a deliberate, reviewed decision -- never something to add ad
@@ -106,7 +120,15 @@ type Service struct {
 	tx       *TransactionStore
 	q        *store.Queries
 	sessions sessionIssuer
-	logger   *slog.Logger
+	// sessionMgr is the same *SessionManager instance as sessions, kept as
+	// its own concrete-typed field (rather than widening the sessions
+	// interface itself) because Task 9's RequireSession middleware and
+	// session-management handlers (me.go, sessions_handlers.go) need the
+	// SessionManager's full surface -- Authenticate, Revoke, RevokeForUser,
+	// RevokeAll -- not just sessionIssuer's single Issue method that
+	// SetSessionIssuerForTest is deliberately scoped to fault-inject.
+	sessionMgr *SessionManager
+	logger     *slog.Logger
 
 	publicOrigin   string
 	trustedProxies api.TrustedProxies
@@ -166,10 +188,12 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 	if cfg.PublicOrigin == "" {
 		return nil, fmt.Errorf("auth: NewService: config.PublicOrigin is required")
 	}
+	sessionMgr := NewSessionManager(q)
 	return &Service{
 		tx:             NewTransactionStore(q),
 		q:              q,
-		sessions:       NewSessionManager(q),
+		sessions:       sessionMgr,
+		sessionMgr:     sessionMgr,
 		logger:         logger,
 		publicOrigin:   cfg.PublicOrigin,
 		trustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
@@ -199,6 +223,151 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(GitHubCallbackPath, route(http.MethodGet, s.handleGitHubCallback))
 	mux.Handle(LinkedInStartPath, route(http.MethodGet, s.handleLinkedInStart))
 	mux.Handle(LinkedInCallbackPath, route(http.MethodGet, s.handleLinkedInCallback))
+
+	// Session-authenticated JSON API (Task 9, AC-AUTH-005). Every route
+	// below is wired through sessionChain, so it always runs the same two
+	// layers, in order, before the handler: RequireSession, then
+	// RequireCSRF. Combined with api.New's own outer chain (applied
+	// identically to every route RegisterRoutes adds -- see router.go's
+	// New), the FULL order every request here passes through is:
+	//
+	//	RequestID -> SecurityHeaders -> Logging -> RateLimit -> BodyLimit
+	//	-> RequireSession -> RequireCSRF -> handler
+	//
+	// RequireCSRF only enforces on mutating methods (GET/HEAD/OPTIONS pass
+	// through untouched -- csrf.go's isMutatingMethod), so applying it
+	// unconditionally via sessionChain, even to GET /me and GET /sessions,
+	// costs nothing on those routes and keeps every protected route behind
+	// the identical two-layer stack rather than hand-picking per route.
+	mux.Handle(MePath, route(http.MethodGet, s.sessionChain(s.handleMe)))
+	mux.Handle(LogoutPath, route(http.MethodPost, s.sessionChain(s.handleLogout)))
+	// GET (device list) and DELETE (logout-everywhere) share one path, so
+	// they can't both go through route()'s single-method wrapper the way
+	// every other route here does; handleSessionsCollection does its own
+	// method dispatch, checking the method BEFORE either branch's
+	// sessionChain runs -- an unsupported method never reaches
+	// RequireSession, so it always cleanly 405s regardless of the caller's
+	// auth state, matching route()'s own method-before-side-effect
+	// ordering.
+	mux.Handle(SessionsPath, http.HandlerFunc(s.handleSessionsCollection))
+	mux.Handle(SessionsPath+"/{id}", route(http.MethodDelete, s.sessionChain(s.handleRevokeSession)))
+}
+
+// sessionRequiredCode is the single error code every RequireSession
+// rejection returns: no __Host-session cookie at all, and a cookie that
+// fails to authenticate (unknown, revoked, idle/absolute-expired, or an
+// old token past its rotation grace window) are indistinguishable from the
+// response alone -- the same no-oracle reasoning ErrSessionInvalid itself
+// already collapses those five cases behind.
+const sessionRequiredCode = "session_required"
+
+// reauthRequiredCode is the error code Task 9's two recent-reauth-gated
+// endpoints (DELETE /sessions/{id}, DELETE /sessions) return when
+// RequireRecentReauth rejects the caller's session -- the same wire value
+// the phase's other sensitive-operation flows (provider link/reauth) use,
+// so a shared frontend prompt can key off one literal regardless of which
+// endpoint produced it.
+const reauthRequiredCode = "reauth_required"
+
+// RequireSession wraps a handler that requires an authenticated session
+// (Task 9; the counterpart to Task 8's RequireCSRF, which documents this
+// exact ordering requirement): it reads the __Host-session cookie,
+// authenticates it via m, and -- on success -- stores the governing
+// session in the request context (ContextWithSession) before calling
+// next, so next (and, per the documented chain, RequireCSRF running
+// between this and next) can read it back via SessionFromContext.
+//
+// If Authenticate rotated the session (task-7-brief.md's >24h rotation:
+// rotatedToken is non-empty), the new session cookie is set on the
+// response before next runs, so this request's own response already
+// carries the caller's next credential -- no extra round trip.
+//
+// On ErrSessionInvalid -- no cookie, or one that fails to authenticate for
+// any reason -- responds 401 with sessionRequiredCode and clears the
+// __Host-session cookie (ClearSessionCookie), so a browser holding a
+// dead/invalid token doesn't keep resending it forever. Any OTHER error
+// (e.g. the database itself is unreachable) is a genuine internal failure,
+// not a verdict on the credential's own validity, and gets the standard
+// opaque 500 instead -- it must never be conflated with "session invalid"
+// or clear a cookie that might still be perfectly good once the outage
+// clears.
+//
+// Ordering (RegisterRoutes' sessionChain, matching csrf.go's own
+// documented chain): RequestID -> Logging -> BodyLimit -> RequireSession
+// -> RequireCSRF -> handler. RequireCSRF depends on RequireSession having
+// already populated the session in context.
+func RequireSession(m *SessionManager) api.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie(sessionCookieName)
+			if err != nil {
+				rejectSession(w)
+				return
+			}
+
+			sess, rotated, err := m.Authenticate(r.Context(), cookie.Value)
+			if err != nil {
+				if errors.Is(err, ErrSessionInvalid) {
+					rejectSession(w)
+					return
+				}
+				api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+				return
+			}
+
+			if rotated != "" {
+				SetSessionCookie(w, rotated)
+			}
+
+			next.ServeHTTP(w, r.WithContext(ContextWithSession(r.Context(), sess)))
+		})
+	}
+}
+
+// rejectSession writes RequireSession's single 401 rejection response and
+// clears the __Host-session cookie -- factored out so both of
+// RequireSession's own call sites and every Task 9 handler's
+// defense-in-depth "session missing from context" branch (which should
+// never be reachable in production wiring, but must still fail closed
+// rather than panic if it ever were) produce the exact same response.
+func rejectSession(w http.ResponseWriter) {
+	ClearSessionCookie(w)
+	api.WriteError(w, http.StatusUnauthorized, sessionRequiredCode, "a valid session is required")
+}
+
+// sessionChain wraps handler with the two layers every one of Task 9's
+// session-authenticated routes needs, in the documented order:
+// RequireSession, then RequireCSRF. See RegisterRoutes' own comment for
+// why applying RequireCSRF unconditionally (even to a read-only route) is
+// safe and deliberate.
+func (s *Service) sessionChain(handler http.HandlerFunc) http.HandlerFunc {
+	wrapped := RequireSession(s.sessionMgr)(RequireCSRF(s.publicOrigin)(handler))
+	return wrapped.ServeHTTP
+}
+
+// writeSessionAPIInternalError writes the standard opaque 500 for one of
+// Task 9's session-authenticated JSON endpoints and logs the failing
+// operation server-side -- me.go/sessions_handlers.go's counterpart to
+// this file's own writeInternalError, minus that funnel's OAuth-specific
+// concerns (no provider to log, no __Host-oauth-tx cookie to clear: these
+// routes never set one). Like logInternalError below, this logs err's
+// SQLSTATE class code when it is a *pgconn.PgError, and ONLY that --
+// deliberately never err's own message/detail text, which for a real
+// database error can embed a bound parameter value (e.g. an email
+// address).
+func (s *Service) writeSessionAPIInternalError(w http.ResponseWriter, r *http.Request, op string, err error) {
+	if s.logger != nil {
+		attrs := []any{
+			"request_id", api.RequestIDFromContext(r.Context()),
+			"op", op,
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			attrs = append(attrs, "sqlstate", pgErr.Code)
+		}
+		s.logger.ErrorContext(r.Context(), "auth: session api internal error", attrs...)
+	}
+	api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 }
 
 // handleGoogleStart begins a Google login transaction and redirects the

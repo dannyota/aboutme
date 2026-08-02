@@ -166,3 +166,18 @@ func IsLinkedInLinkRejectedForTest(err error) bool {
 func SetSessionIssuerForTest(svc *Service, si sessionIssuer) {
 	svc.sessions = si
 }
+
+// SetSessionManagerForTest replaces svc's session-management seam
+// (RequireSession, and every Task 9 handler that revokes/lists sessions
+// or checks recent reauth) with m, instead of the *SessionManager
+// NewService built internally with the real wall clock -- the same seam
+// idiom as SetSessionIssuerForTest above, but for sessionMgr rather than
+// the narrower sessionIssuer field. This lets a test inject a
+// SessionManager built via NewSessionManagerForTest (a fake, advanceable
+// clock) so it can drive Task 9's rotation-forwarding behavior, or a
+// recent-reauth boundary, deterministically through the REAL HTTP handler
+// chain (RequireSession -> RequireCSRF -> handler), instead of either
+// racing the real wall clock or reaching into the database directly.
+func SetSessionManagerForTest(svc *Service, m *SessionManager) {
+	svc.sessionMgr = m
+}
