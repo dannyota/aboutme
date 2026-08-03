@@ -25,19 +25,20 @@ const IdempotencyTTL = 24 * time.Hour // D11; flagged for review
 // idempotencyRecordUniqueViolationCode and idempotencyRecordUniqueConstraint
 // are the exact SQLSTATE and constraint name
 // idempotency_records_user_route_key_key (sql/schema.sql's UNIQUE (user_id,
-// route, idempotency_key)) raises when a concurrent Execute call for the
-// same (userID, route, key) commits its own record first. Checking both --
-// not the code alone -- distinguishes this from any other unique-constraint
-// violation the table might one day gain.
+// route, idempotency_key)) raises if a conflicting record reaches the insert
+// despite Execute's user-row serialization. Checking both -- not the code
+// alone -- distinguishes this defensive backstop from any other unique
+// constraint violation the table might one day gain.
 const (
 	idempotencyRecordUniqueViolationCode = "23505"
 	idempotencyRecordUniqueConstraint    = "idempotency_records_user_route_key_key"
 )
 
-// StoredResponse is the persisted result of one mutate call: the status and
-// body Execute's caller returns to its own caller, whether this Execute
-// call actually ran mutate or is replaying a previous call's committed
-// result.
+// StoredResponse is the result of one mutate call and the value persisted for
+// later replay. A fresh execution returns mutate's Body bytes unchanged. A
+// replay returns Postgres's persisted jsonb representation: it is the same JSON
+// value and is byte-identical to the stored row, but jsonb normalization means
+// it need not be byte-identical to mutate's original Body.
 type StoredResponse struct {
 	Status int
 	Body   json.RawMessage
@@ -53,10 +54,11 @@ var ErrIdempotencyKeyReuse = errors.New(
 	"resume: idempotency key reused with a different request body")
 
 // IdempotencyStore is the transactional idempotency-record primitive
-// implementing D11: it runs a caller-supplied mutation exactly once per
-// (userID, route, idempotencyKey), replaying the stored response on a
-// repeat and rejecting a reused key carrying a different request body. See
-// Execute's own doc comment for the full flow, and this package's own doc
+// implementing D11. Execute serializes a user's contenders on the same users-row
+// lock resume creation already uses, before it looks up the key or invokes
+// mutate. A committed same-key winner is therefore replayed (or rejected for a
+// different request hash) without invoking a waiting contender's callback. See
+// Execute's own doc comment for the callback contract, and this package's doc
 // comment (codec.go) for the forward contract this gives P2B/P4's
 // csrf_rejected retry.
 type IdempotencyStore struct {
@@ -71,51 +73,62 @@ func NewIdempotencyStore(pool *store.Pool) *IdempotencyStore {
 	return &IdempotencyStore{pool: pool, q: store.New(pool), now: time.Now}
 }
 
-// Execute runs mutate exactly once per (userID, route, key). mutate MUST
-// perform every write through the supplied qtx -- the rollback arm below
-// depends on it; a mutate that wrote through the pool instead would survive
-// a rollback that is supposed to undo it.
+// Execute ensures that only one transaction's database effects and response
+// record commit per (userID, route, key). Same-user calls serialize before the
+// key lookup and mutate, using the users-row lock already shared with Create.
+// Once a winner commits, a waiting same-key contender skips mutate and decides
+// replay versus key reuse from the stored record.
 //
-// Flow, all in one transaction (D11):
+// mutate MUST still perform every database write through the supplied qtx and
+// MUST NOT perform non-transactional side effects. Transaction errors,
+// connection loss around commit, and a caller retry can roll back or re-enter
+// the operation even though healthy same-key contenders are serialized. A write
+// through the pool, network call, file write, or other external effect would not
+// share the idempotency transaction's commit/rollback outcome.
 //
-//  1. Reap this user's own expired records (opportunistic: response_body
-//     holds user content, so this -- not a job that doesn't exist yet -- is
-//     what enforces IdempotencyTTL).
-//  2. Delete the same (route, key) row too, specifically, if it is expired.
-//  3. Look up a live record for (userID, route, key). If one exists: its
+// Flow (D11):
+//
+//  1. In one committed preflight statement, reap this user's own expired
+//     records. response_body holds user content, so this opportunistic delete
+//     enforces IdempotencyTTL even when the later replay/reuse decision or
+//     mutate returns an error. A reap failure aborts Execute before mutate.
+//  2. In the mutation transaction, lock the user's row FOR UPDATE before any
+//     key lookup or callback. This matches Create's lock order and serializes
+//     contenders before a stale CAS or other mutation can fail ahead of the
+//     idempotency decision.
+//  3. Defensively delete the same key if it is expired (covering a row inserted
+//     after the preflight), then look up a live record for (userID, route, key).
+//     If one exists: its
 //     hash equal to bodyHash means this is an ordinary replay (stored
 //     response returned, mutate never invoked, nothing written); its hash
 //     different means the key was reused for a different request
 //     (ErrIdempotencyKeyReuse, mutate never invoked, nothing written). No
-//     live record (never written, or just reaped above as expired) means
+//     live record (never written, or reaped above as expired) means
 //     this is treated as a fresh request: fall through to mutate.
 //  4. Run mutate, then insert its result as the new record.
 //
-// A genuinely concurrent duplicate call can still race between this
-// transaction's own step 3 and its own step 4's insert -- exactly the
-// window a second caller's insert can land in. That insert then hits the
-// unique index, and the ENTIRE transaction (including whatever mutate
-// itself wrote through qtx) rolls back. Execute detects that unique
-// violation, re-reads the now-committed winning record outside the rolled
-// back transaction, and either replays it (hash equal) or returns
-// ErrIdempotencyKeyReuse (hash different) -- in both cases with nothing
-// left over from the losing attempt. The true N-caller race is exercised
-// elsewhere (Task 9); this package only guarantees the outcome is correct
-// however the race resolves.
+// The unique constraint and post-conflict re-read remain a final database
+// backstop: if a conflicting record still wins the insert, the entire mutation
+// transaction rolls back before Execute replays or rejects from that committed
+// record.
 func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 	route string, key uuid.UUID, bodyHash [32]byte,
 	mutate func(qtx *store.Queries) (StoredResponse, error),
 ) (resp StoredResponse, replayed bool, err error) {
 	now := s.now()
 
+	if _, reapErr := s.q.DeleteExpiredIdempotencyRecordsForUser(ctx, store.DeleteExpiredIdempotencyRecordsForUserParams{
+		UserID:    userID,
+		ExpiresAt: now,
+	}); reapErr != nil {
+		return StoredResponse{}, false, fmt.Errorf("resume: idempotency: reap expired records: %w", reapErr)
+	}
+
 	txErr := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
 
-		if _, reapErr := qtx.DeleteExpiredIdempotencyRecordsForUser(ctx, store.DeleteExpiredIdempotencyRecordsForUserParams{
-			UserID:    userID,
-			ExpiresAt: now,
-		}); reapErr != nil {
-			return fmt.Errorf("resume: idempotency: reap expired records: %w", reapErr)
+		if _, lockErr := qtx.LockUserForResumeWrite(ctx, userID); lockErr != nil {
+			return fmt.Errorf("resume: idempotency: lock owner row: %w", lockErr)
 		}
 
 		if _, delErr := qtx.DeleteIdempotencyRecordIfExpired(ctx, store.DeleteIdempotencyRecordIfExpiredParams{
@@ -170,10 +183,10 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 
 	if txErr != nil {
 		if isIdempotencyKeyConflict(txErr) {
-			// A concurrent duplicate committed first; the transaction above
-			// has already rolled back in full, including anything mutate
-			// wrote through qtx. Re-read the committed winner outside that
-			// rolled-back transaction and decide replay vs. reuse from it.
+			// A conflicting record committed despite the user-row lock; the
+			// transaction above has already rolled back in full, including
+			// anything mutate wrote through qtx. Re-read the committed winner
+			// outside that rolled-back transaction and decide replay vs. reuse.
 			row, getErr := s.q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 				UserID:         userID,
 				Route:          route,
@@ -194,10 +207,9 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 }
 
 // isIdempotencyKeyConflict reports whether err is exactly the unique-index
-// violation on idempotency_records_user_route_key_key: the signal that a
-// concurrent Execute call already committed a record for this exact
-// (userID, route, key) between this call's own presence check and its own
-// insert attempt.
+// violation on idempotency_records_user_route_key_key: the defensive signal
+// that a record for this exact (userID, route, key) committed between this
+// call's presence check and insert despite its user-row serialization.
 func isIdempotencyKeyConflict(err error) bool {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {

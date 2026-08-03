@@ -272,8 +272,8 @@ WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
     AND expires_at <= $4;
 
 -- name: DeleteExpiredIdempotencyRecordsForUser :execrows
--- D11 opportunistic reaping (owner ruling): every Execute deletes the
--- calling user's expired rows in the same tx before inserting, so the TTL
--- is enforced by normal traffic, not by a job that doesn't exist yet.
+-- D11 opportunistic reaping: every Execute commits this per-user cleanup
+-- before its mutation transaction, so expiry enforcement survives a rejected
+-- key reuse or mutation error instead of depending on a future global job.
 DELETE FROM idempotency_records
 WHERE user_id = $1 AND expires_at <= $2;
