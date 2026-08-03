@@ -94,9 +94,10 @@ statement currently known. Header + first rows exactly:
 ```markdown
 # Spec traceability matrix
 
-One row per normative statement in `../specs/aboutme-design.md`. Every phase
-plan must resolve its rows (owning task + test reference) before Opus 5 approves
-it. Acceptance IDs are stable and referenced by the UAT report.
+**Completion target:** one row per normative statement in
+`../specs/aboutme-design.md`. Every phase plan must resolve its rows (owning
+task + test reference) before independent approval. Acceptance IDs are stable
+and referenced by the UAT report.
 
 | ID          | Spec clause | Statement                                                                         | Phase/task | Test / UAT reference |
 | ----------- | ----------- | --------------------------------------------------------------------------------- | ---------- | -------------------- |

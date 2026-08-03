@@ -24,6 +24,10 @@ Caddy routes `/api/v1/*` to the server — see spec §2 route table).
 
 ## Status
 
-C1 skeleton: SSR landing page (`/`) rendering a static placeholder component,
-ESLint + typecheck + Vitest wired. Editor, public resume pages, and the
-isolated `components/resume/` renderer arrive in later phases.
+Phase 0/1 slice: SSR landing page (`/`), provider login page (`/login`),
+client-only authenticated `/me` state, and session/device settings at
+`/app/settings/sessions` with CSRF-aware mutations. ESLint, typecheck, Vitest,
+and the production build are CI gates.
+
+The editor, public resume pages, and isolated `components/resume/` renderer
+arrive in later phases.

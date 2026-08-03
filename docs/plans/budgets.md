@@ -31,9 +31,11 @@ display string (`fullName`, `headline`, `jobTitle`) and is enforced twice —
 pipeline; **`lng` ≤ 35** is the BCP 47 tag ceiling, a length bound only (the tag
 itself is unvalidated — the documented i18n boundary); **idempotency TTL 24 h**
 bounds how long a replayed key returns its stored response, and P2A enforces it
-opportunistically (each `Execute` reaps the calling user's expired rows in the
-same transaction) because `response_body` holds user content and a TTL nothing
-enforces is not a TTL. Changing any of them follows this file's rule: a reviewed
+opportunistically: every `Execute` first commits a reap of the calling user's
+expired rows, even when key reuse or the later mutation is rejected, because
+`response_body` holds user content and a TTL nothing enforces is not a TTL. The
+mutation and its new idempotency record remain atomic in a following
+transaction. Changing any of these numbers follows this file's rule: a reviewed
 commit citing evidence.
 
 ## Benchmark protocol (mandatory — a number without this is not a gate)

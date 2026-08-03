@@ -1,47 +1,49 @@
 # apps/server
 
-Go API server — auth (Google/GitHub/LinkedIn OAuth), resume documents,
-publishing, SSE, PDF/og-image pipeline.
+Go API server, module `github.com/dannyota/aboutme/apps/server` (Go 1.26).
+Intended layout and responsibilities are in the
+[design spec](../../docs/specs/aboutme-design.md); the current repository state
+is in [`docs/architecture.md`](../../docs/architecture.md).
 
-Module `github.com/dannyota/aboutme/apps/server`, Go 1.26. Full layout and
-responsibilities: spec §7
-([`docs/specs/aboutme-design.md`](../../docs/specs/aboutme-design.md)).
+## Implemented surface
 
-## Current scaffold (Phase 0B — Task B1)
+- `/healthz` liveness and `/readyz` database readiness.
+- Google and LinkedIn OIDC plus GitHub OAuth2 login, explicit provider linking,
+  and verified-email collision protection.
+- Opaque PostgreSQL-backed sessions, rotation/grace handling, CSRF, `/me`,
+  logout, device listing, per-session revoke, and logout-everywhere.
+- Request/body bounds, trusted-proxy client-IP extraction, rate limiting,
+  security/cache headers, JSON envelopes, and structured logging.
+- Declarative SQL → sqlc, Atlas-authored/Goose-applied migrations, migration
+  locking, drift checks, and live-database test helpers.
 
-```text
-cmd/server/     main.go — wiring only: config -> store -> router -> HTTP
-                server with graceful shutdown on SIGINT/SIGTERM
-internal/config env parsing + validation (PORT, DATABASE_URL, LOG_LEVEL, ENV)
-internal/store  pgx/v5 pool (capped at 20 conns), Ping, context-aware Close
-internal/api    router, middleware (request ID, slog logging, 256 KB body
-                limit), response envelope, /healthz + /readyz
-```
+Resume storage is active Phase 2A work on an isolated branch and is not on
+`main` yet. Resume HTTP, publish, realtime, render, and media packages remain
+future phases.
 
-Everything else in spec §7 (`internal/auth`, `internal/resume`,
-`internal/publish`, `internal/realtime`, `internal/render`, `internal/media`,
-`cmd/migrate`, `sql/`, `migrations/`) lands in later tasks.
+## Configuration
 
-## Config
-
-| Var | Required | Default | Notes |
-| --- | --- | --- | --- |
-| `PORT` | no | `8080` | 1-65535 |
-| `DATABASE_URL` | yes | — | Postgres connection string |
-| `LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, `error` |
-| `ENV` | yes | — | `dev`, `staging`, `prod` |
+The server requires `DATABASE_URL`, `ENV`, and `PUBLIC_ORIGIN`. `PORT` defaults
+to `8080`, `LISTEN_HOST` to `127.0.0.1`, and `LOG_LEVEL` to `info`.
+`TRUSTED_PROXY_CIDRS` and all three provider credential pairs are required in
+staging/production and optional in development. See [`.env.example`](../../.env.example)
+and [`internal/config/config.go`](internal/config/config.go) for the complete,
+validated contract.
 
 ## Run locally
+
+Run Go commands from this directory so the root `go.work` supplies the schema
+module:
 
 ```sh
 go build ./...
 go vet ./...
 go test ./...
 
-PORT=8080 DATABASE_URL=postgres://user:pass@localhost:5432/aboutme \
-  LOG_LEVEL=info ENV=dev go run ./cmd/server
+PORT=8080 LISTEN_HOST=127.0.0.1 \
+  DATABASE_URL=postgres://user:pass@localhost:5432/aboutme \
+  PUBLIC_ORIGIN=http://localhost:8080 LOG_LEVEL=info ENV=dev \
+  go run ./cmd/server
 ```
 
-`GET /healthz` is liveness only (always 200, never touches the database).
-`GET /readyz` checks the database with a short timeout; 503 with the
-standard error envelope when it is unreachable.
+For the full one-origin stack, use `make dev` from the repository root.
