@@ -16,10 +16,14 @@ is in [`docs/architecture.md`](../../docs/architecture.md).
   security/cache headers, JSON envelopes, and structured logging.
 - Declarative SQL → sqlc, Atlas-authored/Goose-applied migrations, migration
   locking, drift checks, and live-database test helpers.
+- The reviewed Phase 2A checkpoint: resume/idempotency tables, schema-derived
+  bounds, validated CRUD store primitives, revision CAS, and convergent
+  transactional idempotency.
 
-Resume storage is active Phase 2A work on an isolated branch and is not on
-`main` yet. Resume HTTP, publish, realtime, render, and media packages remain
-future phases.
+Phase 2A is not complete: immutable version registries, cleared-contact proof,
+the generated-write restriction, doc-shape migration machinery, blind suites,
+and phase gates remain. Resume HTTP, publish, realtime, render, and media
+packages remain future phases.
 
 ## Configuration
 

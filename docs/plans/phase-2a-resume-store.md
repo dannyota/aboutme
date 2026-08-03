@@ -8,6 +8,11 @@
 > explicit. Acceptance rows `AC-DOC-010`, `AC-DOC-011`, `AC-DOC-012`, and
 > `AC-SAVE-003` already exist in `traceability.md`.
 >
+> **Checkpoint integration (owner direction, 2026-08-03):** reviewed Tasks 1–7
+> and their title/lint/idempotency corrections were integrated into `main` at
+> `5805ddc` before phase exit. This is a development checkpoint only: all open
+> tasks and every phase gate below remain binding, and P2B stays blocked.
+>
 > **For agentic workers (once adopted):** execute with
 > superpowers:subagent-driven-development, one task per fresh subagent, Opus 5
 > defect review between tasks. Steps use checkboxes: `[x]` records completed
@@ -25,62 +30,60 @@ machinery (projection-only on read, CAS on write, CAS backfill) — all proven
 against a live Postgres via the shared migration-applying test helper. No HTTP
 surface: P2B owns endpoints, media, and OpenAPI changes.
 
-**Base:** `main`, commit `ad357d3` ("Merge Phase 1: authentication and
-sessions", 2026-08-02). Workers must run `git rev-parse HEAD` and confirm their
-worktree is at this base or a descendant before starting — worktree agents have
-checked out stale commits before; verify, don't assume.
+**Execution base:** the phase started from `ad357d3` ("Merge Phase 1:
+authentication and sessions", 2026-08-02). Remaining workers start from current
+`main` at or after checkpoint `5805ddc`, run `git rev-parse HEAD`, and confirm
+that ancestry before starting — worktree agents have checked out stale commits
+before; verify, don't assume.
 
-**Migration head this plan targets: `00003_add_sessions_rotated_from`.** P2A
-migrations **append** (`00004…`) and never edit an existing migration file or
-`atlas.sum` by hand outside the pipeline described in Task 3. P1.1 missed its
-intended pre-P2A window and is now scheduled immediately after P2A, before P2B;
-it requires no migration, so P2A's migration numbers remain `00004`/`00005`.
-Schema-head changes are serialized through the integration owner; one merges at
-a time.
+**Migration head:** the phase targeted `00003_add_sessions_rotated_from` and the
+integrated checkpoint now carries `00004_add_resume_tables` plus
+`00005_add_resume_cap_trigger`. Remaining work treats `00005` as the current
+head and never edits a released migration or `atlas.sum` by hand outside the
+pipeline described in Task 3. P1.1 needs no migration. Schema-head changes are
+serialized through the integration owner; one merges at a time.
 
 ## Task status index
 
 This is the owner-facing execution ledger. A task is not complete until its
 independent defect review is green; implementation alone is reported separately.
 
-| Task | Deliverable                                    | State                                            |
-| ---- | ---------------------------------------------- | ------------------------------------------------ |
-| 1    | Drift-gate support for trigger/function DDL    | **Complete and independently reviewed** ✅       |
-| 2    | Shared validation + embedded current schema    | **Complete and independently reviewed** ✅       |
-| 2b   | Immutable `resume.v1.schema.json` foundation   | **Required before Task 8**                       |
-| 3    | Resume tables, cap trigger, migrations         | **Complete and independently reviewed** ✅       |
-| 4    | sqlc queries and generated store               | **Complete and independently reviewed** ✅       |
-| 5    | Codec and full-bounds validation               | **Complete and independently reviewed** ✅       |
-| 6    | Resume CRUD, ownership, cap, and revision CAS  | **Complete and independently reviewed** ✅       |
-| 6a   | Cleared-contact draft fixture + live roundtrip | **Required before phase gate**                   |
-| 6b   | Generated-write-method mechanical restriction  | **Required before phase gate**                   |
-| 7    | Transactional idempotency primitive            | **Corrective behavior reviewed; commit pending** |
-| 8    | Projection, bidirectional wire conversion, CAS | **Blocked on Task 2b**                           |
-| 9    | Blind write-safety/concurrency suite           | **Pending**                                      |
-| 10   | Blind projection/backfill race suite           | **Pending**                                      |
-| 11   | Blind independently derived bounds suite       | **Pending**                                      |
-| 12   | Traceability, docs, and integration handoffs   | **Pending**                                      |
-| Gate | Design, adversarial, UAT, and evidence reviews | **Pending**                                      |
+| Task | Deliverable                                    | State                                      |
+| ---- | ---------------------------------------------- | ------------------------------------------ |
+| 1    | Drift-gate support for trigger/function DDL    | **Complete and independently reviewed** ✅ |
+| 2    | Shared validation + embedded current schema    | **Complete and independently reviewed** ✅ |
+| 2b   | Immutable `resume.v1.schema.json` foundation   | **Required before Task 8**                 |
+| 3    | Resume tables, cap trigger, migrations         | **Complete and independently reviewed** ✅ |
+| 4    | sqlc queries and generated store               | **Complete and independently reviewed** ✅ |
+| 5    | Codec and full-bounds validation               | **Complete and independently reviewed** ✅ |
+| 6    | Resume CRUD, ownership, cap, and revision CAS  | **Complete and independently reviewed** ✅ |
+| 6a   | Cleared-contact draft fixture + live roundtrip | **Required before phase gate**             |
+| 6b   | Generated-write-method mechanical restriction  | **Required before phase gate**             |
+| 7    | Transactional idempotency primitive            | **Complete and independently reviewed** ✅ |
+| 8    | Projection, bidirectional wire conversion, CAS | **Blocked on Task 2b**                     |
+| 9    | Blind write-safety/concurrency suite           | **Pending**                                |
+| 10   | Blind projection/backfill race suite           | **Pending**                                |
+| 11   | Blind independently derived bounds suite       | **Pending**                                |
+| 12   | Traceability, docs, and integration handoffs   | **Pending**                                |
+| Gate | Design, adversarial, UAT, and evidence reviews | **Pending**                                |
 
 ### Immediate next-action order
 
-1. Synchronize this Rev 3 owner plan into the isolated branch, prove byte
-   identity, and commit the already reviewed title/lint/Task 7 corrective set in
-   intentional commits.
-2. Execute and independently review Task 2b (retained immutable v1 schema/types
+1. Execute and independently review Task 2b (retained immutable v1 schema/types
    and released-version registries).
-3. Execute and independently review Task 6a (cleared-contact shared fixture and
+2. Execute and independently review Task 6a (cleared-contact shared fixture and
    live round-trip).
-4. Execute integration-owner Task 6b and its independent security/defect review
+3. Execute integration-owner Task 6b and its independent security/defect review
    (mechanical generated-write choke point).
-5. Execute and independently review Task 8 (projection, adjacent conversion,
+4. Execute and independently review Task 8 (projection, adjacent conversion,
    wire declarations, and CAS backfill).
-6. Run Tasks 9, 10, and 11 with three separate fresh blind-test authors, then
+5. Run Tasks 9, 10, and 11 with three separate fresh blind-test authors, then
    route any product finding to a separate implementation author and re-review.
-7. Close Task 12 traceability, documentation, and P2B handoffs.
-8. Run the phase design/consistency review, traceability closure, fresh
+6. Close Task 12 traceability, documentation, and P2B handoffs.
+7. Run the phase design/consistency review, traceability closure, fresh
    adversarial review, immutable UAT catalog, and independent evidence
-   verification at the exact candidate commit. Only then merge P2A.
+   verification at the exact candidate commit. Only then mark P2A complete and
+   unlock dependent phases; checkpoint `5805ddc` did neither.
 
 **Spec:** `../specs/aboutme-design.md` §3 — the `resumes` and `slug_tombstones`
 rows of the data-model table; "Relational constraints & store-layer invariants"
@@ -144,8 +147,8 @@ The following boundary is intentionally deferred and must remain visible:
   integration owner to commit — never delete it.
 - `make server-test-db` is the DB-backed gate: it sets `REQUIRE_TEST_DB=1`
   (fails closed on a missing DSN), includes `./internal/resume/...`, and passes
-  `-race -count=1`. The integration-owner change landed on the isolated branch
-  in `6efd179`; retain it through integration.
+  `-race -count=1`. The integration-owner change landed in `6efd179` and is
+  retained in checkpoint `5805ddc`.
 - `go test` caches passing results — every ad-hoc live-DB invocation in this
   plan carries `-count=1`.
 - The migration harness (`make server-migration-test`) automatically covers new
@@ -1374,9 +1377,8 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
       lookup/mutate and adds real tx-scoped CAS race coverage.
 - [x] **Review follow-up 4b:** a new independent reviewer passes the result; the
       integration owner reruns the focused race test at `-race -count=10`.
-- [ ] **Review follow-up 4c:** after synchronizing this owner plan into the
-      isolated branch, integrate the reviewed corrective diff in a dedicated
-      commit.
+- [x] **Review follow-up 4c:** synchronize the owner plan, commit the corrective
+      diff (`22169e8`), and integrate the reviewed checkpoint (`5805ddc`).
 
 ---
 
