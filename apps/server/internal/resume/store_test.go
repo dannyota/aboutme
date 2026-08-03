@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -315,6 +316,62 @@ func TestStore_Integration_Create_InvalidDoc(t *testing.T) {
 	}
 }
 
+func TestStore_Integration_Create_TitleCharacterLimit(t *testing.T) {
+	t.Parallel()
+	s, q, _, ctx := newIntegrationStore(t)
+
+	tests := []struct {
+		name    string
+		title   string
+		wantErr bool
+	}{
+		{name: "empty", title: ""},
+		{name: "ASCII at limit", title: strings.Repeat("a", resume.MaxTitleCharacters)},
+		{name: "ASCII over limit", title: strings.Repeat("a", resume.MaxTitleCharacters+1), wantErr: true},
+		{name: "multibyte code points at limit", title: strings.Repeat("界", resume.MaxTitleCharacters)},
+		{name: "multibyte code points over limit", title: strings.Repeat("界", resume.MaxTitleCharacters+1), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		userID := createTestUser(t, q)
+		t.Run(tt.name, func(t *testing.T) {
+			before, err := s.List(ctx, userID)
+			if err != nil {
+				t.Fatalf("List() before Create(): %v", err)
+			}
+
+			created, err := s.Create(ctx, userID, tt.title, validDocForTest(t))
+			if tt.wantErr {
+				if !errors.Is(err, resume.ErrTitleTooLong) {
+					t.Fatalf("Create() error = %v, want resume.ErrTitleTooLong", err)
+				}
+				after, listErr := s.List(ctx, userID)
+				if listErr != nil {
+					t.Fatalf("List() after rejected Create(): %v", listErr)
+				}
+				if len(after) != len(before) {
+					t.Errorf("row count after rejected Create() = %d, want unchanged count %d", len(after), len(before))
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Create() error: %v", err)
+			}
+			if created.Title != tt.title {
+				t.Errorf("Create().Title = %q, want %q", created.Title, tt.title)
+			}
+			after, err := s.List(ctx, userID)
+			if err != nil {
+				t.Fatalf("List() after Create(): %v", err)
+			}
+			if len(after) != len(before)+1 {
+				t.Errorf("row count after Create() = %d, want %d", len(after), len(before)+1)
+			}
+		})
+	}
+}
+
 // --- Step 2: cap tests ---
 
 func TestStore_Integration_CapEnforcement(t *testing.T) {
@@ -544,6 +601,65 @@ func TestStore_Integration_SaveTitle_CAS(t *testing.T) {
 	// Unknown id -> ErrNotFound.
 	if _, err := s.SaveTitle(ctx, userID, uuid.New(), "Doesn't matter", 1); !errors.Is(err, resume.ErrNotFound) {
 		t.Errorf("SaveTitle() unknown id error = %v, want resume.ErrNotFound", err)
+	}
+}
+
+func TestStore_Integration_SaveTitle_TitleCharacterLimit(t *testing.T) {
+	t.Parallel()
+	s, q, _, ctx := newIntegrationStore(t)
+
+	tests := []struct {
+		name    string
+		title   string
+		wantErr bool
+	}{
+		{name: "empty", title: ""},
+		{name: "ASCII at limit", title: strings.Repeat("a", resume.MaxTitleCharacters)},
+		{name: "ASCII over limit", title: strings.Repeat("a", resume.MaxTitleCharacters+1), wantErr: true},
+		{name: "multibyte code points at limit", title: strings.Repeat("界", resume.MaxTitleCharacters)},
+		{name: "multibyte code points over limit", title: strings.Repeat("界", resume.MaxTitleCharacters+1), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		userID := createTestUser(t, q)
+		t.Run(tt.name, func(t *testing.T) {
+			created, err := s.Create(ctx, userID, "Original Title", validDocForTest(t))
+			if err != nil {
+				t.Fatalf("Create() error: %v", err)
+			}
+
+			before, err := s.Get(ctx, userID, created.ID)
+			if err != nil {
+				t.Fatalf("Get() before SaveTitle(): %v", err)
+			}
+
+			newRevision, err := s.SaveTitle(ctx, userID, created.ID, tt.title, before.Revision)
+			if tt.wantErr {
+				if !errors.Is(err, resume.ErrTitleTooLong) {
+					t.Fatalf("SaveTitle() error = %v, want resume.ErrTitleTooLong", err)
+				}
+				after, getErr := s.Get(ctx, userID, created.ID)
+				if getErr != nil {
+					t.Fatalf("Get() after rejected SaveTitle(): %v", getErr)
+				}
+				assertResumeRowEqual(t, after, before)
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("SaveTitle() error: %v", err)
+			}
+			if newRevision != before.Revision+1 {
+				t.Errorf("SaveTitle() revision = %d, want %d", newRevision, before.Revision+1)
+			}
+			after, err := s.Get(ctx, userID, created.ID)
+			if err != nil {
+				t.Fatalf("Get() after SaveTitle(): %v", err)
+			}
+			if after.Title != tt.title {
+				t.Errorf("title after SaveTitle() = %q, want %q", after.Title, tt.title)
+			}
+		})
 	}
 }
 

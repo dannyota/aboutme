@@ -10,6 +10,10 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
+// MaxTitleCharacters is the budgets.md resume-title limit. It is measured in
+// Unicode code points, matching PostgreSQL char_length(text), not UTF-8 bytes.
+const MaxTitleCharacters = 160
+
 // Resume is the store's domain shape for one resumes row: the row's own
 // scalar columns, plus Doc -- the three jsonb parts assembled and
 // projected to docmigrate.CurrentVersion (D18) -- rather than the four
@@ -56,6 +60,10 @@ var (
 	// SQLSTATE 23514 / "resumes_user_cap_exceeded" pair a cap violation
 	// raises).
 	ErrCapExceeded = errors.New("resume: user resume cap exceeded")
+
+	// ErrTitleTooLong is returned before a transaction or write when a title
+	// exceeds MaxTitleCharacters. Empty titles are valid for draft editing.
+	ErrTitleTooLong = errors.New("resume: title exceeds 160 characters")
 )
 
 // RevisionMismatchError is SaveDocument's and SaveTitle's failure mode
