@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -72,6 +73,10 @@ func NewStore(pool *store.Pool, proj *docmigrate.Projector) *Store {
 // build qtx := s.q.WithTx(tx), call createTx, and let pgx.BeginFunc commit
 // or roll back based on its returned error.
 func (s *Store) Create(ctx context.Context, userID uuid.UUID, title string, doc schema.Resume) (Resume, error) {
+	if err := validateTitle(title); err != nil {
+		return Resume{}, err
+	}
+
 	var created Resume
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
@@ -96,6 +101,12 @@ func (s *Store) Create(ctx context.Context, userID uuid.UUID, title string, doc 
 // cap-check/insert logic inside its own already-open transaction instead
 // of reimplementing it.
 func (s *Store) createTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID, title string, doc schema.Resume) (Resume, error) {
+	// Create validates before opening its transaction. Repeat the same check
+	// here because IdempotencyStore may call this core from an existing tx.
+	if err := validateTitle(title); err != nil {
+		return Resume{}, err
+	}
+
 	// ValidateForStore always validates at docmigrate.CurrentVersion
 	// (D19): force it here so a caller's zero-value or stale
 	// doc.SchemaVersion can never validate against the wrong schema.
@@ -253,6 +264,10 @@ func (s *Store) saveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 // SaveTitle is the CAS title write: UpdateResumeTitleCAS at the caller's
 // expectedRevision. Thin wrapper (B7) around saveTitleTx.
 func (s *Store) SaveTitle(ctx context.Context, userID, id uuid.UUID, title string, expectedRevision int64) (int64, error) {
+	if err := validateTitle(title); err != nil {
+		return 0, err
+	}
+
 	var newRevision int64
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
@@ -273,6 +288,12 @@ func (s *Store) SaveTitle(ctx context.Context, userID, id uuid.UUID, title strin
 // management of its own. Same 0-row CAS-miss handling as saveDocumentTx,
 // via the shared afterCASMiss helper.
 func (s *Store) saveTitleTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, title string, expectedRevision int64) (int64, error) {
+	// SaveTitle validates before opening its transaction. Repeat the same check
+	// here for callers composing this core inside an existing transaction.
+	if err := validateTitle(title); err != nil {
+		return 0, err
+	}
+
 	newRevision, err := qtx.UpdateResumeTitleCAS(ctx, store.UpdateResumeTitleCASParams{
 		ID:       id,
 		UserID:   userID,
@@ -286,6 +307,13 @@ func (s *Store) saveTitleTx(ctx context.Context, qtx *store.Queries, userID, id 
 		return 0, s.afterCASMiss(ctx, qtx, userID, id)
 	}
 	return newRevision, nil
+}
+
+func validateTitle(title string) error {
+	if utf8.RuneCountInString(title) > MaxTitleCharacters {
+		return ErrTitleTooLong
+	}
+	return nil
 }
 
 // afterCASMiss re-reads id inside the SAME transaction as a just-failed
