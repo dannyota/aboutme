@@ -13,15 +13,20 @@ negative controls.
 > audited). ADR 0008 is Accepted and Task 8 is unblocked; acceptance rows
 > `AC-REN-001`…`AC-REN-006` are minted and `AC-SEC-003` records the P3/P2B
 > split. Design decisions D1–D21 reflect the review-round-1 integration-owner
-> rulings and are written as ratified per the owner's B12 direction; the
-> owner-landing checklist (AC-REN rows, master-plan corrections, Make/CI
-> artifacts, `docs/plans/uat-phase-3.md`) is in the companion note
-> (`phase-3-draft-companion.md`). **Task 8's ADR 0008 block is satisfied**:
-> `docs/adr/0008-template-apply-semantics.md` is Accepted (committed at this
-> base) and its placement-rule semantics match D10 verbatim — verified during
-> this audit — so Task 8 may proceed without waiting on the owner.
+> rulings and are written as ratified per the owner's B12 direction. **Task 8's
+> ADR 0008 block is satisfied**: `docs/adr/0008-template-apply-semantics.md` is
+> Accepted (committed at this base) and its placement-rule semantics match D10
+> verbatim — verified during this audit — so Task 8 may proceed without waiting
+> on the owner.
 >
-> **For agentic workers (once ratified):** execute with
+> **Pre-execution hold (2026-08-03):** P3 is serialized behind P2A. Before
+> dispatch, the integration owner must reconcile D3 (SSR sanitizer authority)
+> and D12 (contact ordering) with the design through committed authority,
+> refresh the base/shared-file inventory, and author `uat-phase-3.md`. The
+> uncommitted `phase-3-draft-companion.md` named by earlier revisions is not
+> authority and must not be required to execute this plan.
+>
+> **For agentic workers (after that refresh):** execute with
 > superpowers:subagent-driven-development, one task per fresh subagent, Opus 5
 > review between tasks. Steps are `- [ ]`. Every task's tests are written
 > **before** its implementation (TDD): write the failing test, run it and see it
@@ -52,19 +57,11 @@ customization mirror. **Master plan:** `implementation-plan.md` "Phase 3 —
 Renderer, templates, fonts, sanitizer" (exit criteria + task list + the
 "thumbnails are NOT here" carve-out), "Global constraints", "Agent workflow",
 "Testing strategy" rows _Renderer golden_, _Visual regression_, _Security_.
-**Traceability:** `traceability.md` rows **AC-SEC-001** (hostile corpus
-neutralized by both sanitizers + browser — P3), **AC-SEC-003** (the "bluemonday
-
-- DOMPurify wiring" half is P3; the data artifacts landed in P0), and the
-  **NEW-M7** follow-up recorded inside AC-SEC-004 ("when the P3 renderer
-  linkifies chips, re-check that non-URL types cannot reintroduce the vector;
-  folds into AC-SEC-001"). **No AC rows exist for the renderer itself** — golden
-  determinism, pagination modes, fonts, templates, and the import rule have
-  normative spec statements but zero traceability rows, even though the master
-  plan's traceability section claims "pagination modes + fonts (P3)" were
-  assigned. Per the review-round-1 B12 ruling the integration owner is landing
-  rows AC-REN-001…006 (text in the companion note's landing checklist); this
-  plan cites them directly as ratified.
+**Traceability:** `traceability.md` rows **AC-SEC-001** (hostile corpus),
+**AC-SEC-003** (P3 sanitizer implementations, with endpoint wiring in P2B), the
+renderer-link follow-up inside **AC-SEC-004**, and the already-ratified
+**AC-REN-001…006** rows for deterministic rendering, pagination, fonts,
+templates, the import boundary, and renderer purity.
 
 **Not in this phase (explicit):** template **thumbnails are P7B** (they need the
 real print pipeline; P7A builds the print worker). P3 owns only a standalone
@@ -168,10 +165,11 @@ D20). Editor, Pinia store, autosave, ProseMirror are **P4**.
 ## Design decisions this plan makes beyond the spec
 
 The spec (§5) states the renderer/sanitizer **policy** precisely but leaves many
-**mechanisms** unspecified, and two spec statements conflict with the frozen
-schema (D10, D12 — see companion note). Rather than leaving TODOs, this plan
-makes an explicit call for each and flags it for Fable/Opus 5 to challenge in
-review instead of discovering it mid-implementation:
+**mechanisms** unspecified, and two spec statements conflict with the current
+schema/design contract (D10, D12 — see the pre-execution hold above). Rather
+than leaving TODOs, this plan makes an explicit call for each and flags it for
+Fable/Opus 5 to challenge in review instead of discovering it
+mid-implementation:
 
 | #   | Gap in the spec                                                                                                                                                                                                                    | Decision made here                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -194,7 +192,7 @@ review instead of discovering it mid-implementation:
 | D17 | The harness needs a page that renders arbitrary fixture×template×mode — which must not ship to production                                                                                                                          | `app/pages/_harness/render.vue`, registered only when the build runs with `NUXT_HARNESS=1` (Nuxt hook filtering the page in `nuxt.config.ts`). A build test asserts the route is absent from a normal `nuxt build` output                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | D18 | Draft-permissive docs mean half-empty content; spec doesn't say what renders                                                                                                                                                       | The renderer renders exactly what exists: absent `fullName` → header without a name (no placeholder text); empty sections render their heading only; entries with `isHidden: true` are excluded from output in **every** mode. Absence vs `""` never fabricates content (mirrors the schema's "never fabricate a sentinel" rule)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | D19 | "Lint rule enforcing editor→renderer one-way imports" — no mechanism, and the editor doesn't exist yet                                                                                                                             | ESLint flat-config override scoped to `app/components/resume/**`: `no-restricted-imports` forbidding `pinia`, `#app`/`#imports`/`nuxt`, `~/stores/**`, `~/composables/**`, `~/components/**` except `~/components/resume/**`, and any api/fetch module; plus `no-restricted-syntax`/`no-restricted-properties` banning `Date.now`, `new Date` (no-arg), `Math.random`, `Intl`, `toLocale*`. Proven by a negative-fixture lint test (Task 10). The reverse direction (editor imports renderer) is allowed by construction                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| D20 | AC-SEC-003 makes P3 own "bluemonday wiring" — but the write path (resume PATCH endpoints) is P2B and hasn't been built                                                                                                             | P3 delivers `apps/server/internal/sanitize` complete and conformance-tested, with a one-paragraph integration contract in its package doc ("every rich-text field passes through `sanitize.RichText` before store validation"). **Calling it is a P2B acceptance obligation**, and under D3's SSR-authority model the Go **public-read path re-sanitizes rich-text fields as defence in depth** (P2B/P5A) — both are owner-landing master-plan lines (companion note). AC-SEC-003's P3 half is the package + conformance, not the endpoint wiring                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| D20 | AC-SEC-003 makes P3 own "bluemonday wiring" — but the write path (resume PATCH endpoints) is P2B and hasn't been built                                                                                                             | P3 delivers `apps/server/internal/sanitize` complete and conformance-tested, with a one-paragraph integration contract in its package doc ("every rich-text field passes through `sanitize.RichText` before store validation"). **Calling it is a P2B acceptance obligation**. The SSR/public-read authority remains part of the pre-execution D3 reconciliation; its resolved contract must be written into the master/P2B/P5A plans before implementation. AC-SEC-003's P3 half is the package + conformance, not the endpoint wiring                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | D21 | Spec §5's guard "renderer handles current `schema_version` only (server projects first)" (spec line ~347) has no mapping anywhere in this plan — `ResumeDocument`'s props carry no `schemaVersion` signal and no fail-closed check | **Decision (B10): projection is server-side; the renderer documents the assumption rather than re-enforcing it.** The spec's own doc-migration architecture states the server projects every stored document to the current `schema_version` before it is served (migrate-on-read); every caller of `ResumeDocument` in this phase and its known P4/P5A/P6B/P7A consumers receives an already-projected document. Task 6 adds this to `ResumeDocument.vue`'s prop-block doc comment verbatim: "Callers MUST pass an already-projected, current-`schema_version` document — the renderer performs no migration and exposes no `schemaVersion` prop." No runtime prop or fail-closed check is added v1: there is no known call path today that can hand the renderer a stale-version document, so a check would have nothing live to catch. Flagged as an architecture call for the owner: if a client-side path is later found that can reach the renderer with an unprojected document (e.g. an offline-cached SW payload), add the prop and a fail-closed guard then, not preemptively                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## File structure produced by this phase
@@ -228,17 +226,18 @@ review instead of discovering it mid-implementation:
 | `apps/web/eslint.config.mjs` (modify)                                                                                  | Renderer purity + one-way import overrides (D19)                                                                      |
 | `apps/web/package.json` / `package-lock.json` (modify by Task 0 only — B8)                                             | New pinned deps: `dompurify`, `lucide-vue-next`; devDeps: `jsdom` (test env only — D3), `fontkit`, `@playwright/test` |
 | `apps/server/go.mod` / `go.sum` (modify)                                                                               | `github.com/microcosm-cc/bluemonday`, `golang.org/x/net` (html parser)                                                |
-| `docs/plans/traceability.md` (modify, after the owner lands the rows)                                                  | Fill AC-SEC-001/003 references and the AC-REN-001…006 rows the owner is landing (B12)                                 |
+| `docs/plans/traceability.md` (modify)                                                                                  | Fill AC-SEC-001/003 and already-ratified AC-REN-001…006 evidence references                                           |
 
 Requested from the integration owner (owner-only files — this plan must NOT edit
 them): Make targets `web-e2e` / `web-e2e-update` (exact recipes in Task 11), a
 `web-e2e` CI job that asserts `UPDATE_GOLDEN` and
 `--update-snapshots`/`PLAYWRIGHT_UPDATE_SNAPSHOTS` are unset before invoking it
 (B6), root `.gitattributes`/lint-ignore entries for goldens and font binaries if
-needed, ratification of the AC-REN rows, and `docs/plans/uat-phase-3.md`
-authored before this phase's UAT run and left unmodified during it (pattern:
-`docs/plans/uat-phase-1.md` — B1; the companion note's item 7 lists exactly what
-it must cover).
+needed, closure of the AC-REN evidence references, and
+`docs/plans/uat-phase-3.md` authored before this phase's UAT run and left
+unmodified during it (pattern: `docs/plans/uat-phase-1.md` — B1). Its exact
+scenarios are authored during the pre-execution refresh from the committed spec,
+ADRs, and traceability rows.
 
 ## Shared-file ownership (B8)
 
@@ -571,7 +570,7 @@ not weaken these tests without Opus 5 review.
 
 ### Task 5: Self-hosted Vietnamese-diacritic fonts
 
-Satisfies _(proposed)_ **AC-REN-003**.
+Satisfies **AC-REN-003**.
 
 **Files:** create `apps/web/app/assets/fonts/**` (20 woff2, `fonts.css`,
 `manifest.json`, `LICENSES/` with each family's OFL),
@@ -626,8 +625,8 @@ additions); general punctuation subset U+2018–201D, U+2026.
 
 ### Task 6: Renderer core (continuous mode)
 
-Satisfies _(proposed)_ **AC-REN-006** (purity) and the NEW-M7 re-check inside
-**AC-SEC-001**; structural prerequisite for AC-REN-001/002.
+Satisfies **AC-REN-006** (purity) and the NEW-M7 re-check inside **AC-SEC-001**;
+structural prerequisite for AC-REN-001/002.
 
 **Files:** create the renderer tree per the file-structure table
 (`ResumeDocument.vue`, `ResumeHeader.vue`, `LayoutColumns.vue`,
@@ -706,8 +705,8 @@ name only, never a zero-width bar — absence is meaningful).
 
 ### Task 7: Pagination — pure engine + editor paged mode
 
-Satisfies _(proposed)_ **AC-REN-002** (with Task 9's goldens and Task 11's
-real-browser measurement).
+Satisfies **AC-REN-002** (with Task 9's goldens and Task 11's real-browser
+measurement).
 
 **Files:** create
 `apps/web/app/components/resume/{paginate.ts,measure.ts, PagedResume.vue}`,
@@ -859,8 +858,8 @@ export function applyTemplate(
 
 ### Task 9: Golden snapshot harness (both modes × templates × fixtures)
 
-Satisfies _(proposed)_ **AC-REN-001** and the golden half of AC-REN-002; the
-master plan's "Renderer golden" CI row.
+Satisfies **AC-REN-001** and the golden half of AC-REN-002; the master plan's
+"Renderer golden" CI row.
 
 **Files:** create `apps/web/test/renderer/golden.test.ts`,
 `apps/web/test/renderer/golden/*.html` (committed),
@@ -922,7 +921,7 @@ master plan's "Renderer golden" CI row.
 
 ### Task 10: Editor→renderer one-way import lint rule + purity lint
 
-Satisfies _(proposed)_ **AC-REN-005**.
+Satisfies **AC-REN-005**.
 
 **Files:** modify `apps/web/eslint.config.mjs` (D19 override block); create
 `apps/web/test/import-rule.test.ts`.
@@ -949,8 +948,8 @@ Satisfies _(proposed)_ **AC-REN-005**.
 
 ### Task 11: Playwright harness — visual regression, offline fonts, browser corpus + CSP
 
-Satisfies **AC-SEC-001**'s real-browser + CSP legs, _(proposed)_ AC-REN-003's
-offline proof, and the master plan's "Visual regression" row.
+Satisfies **AC-SEC-001**'s real-browser + CSP legs, AC-REN-003's offline proof,
+and the master plan's "Visual regression" row.
 
 **Files:** create
 `apps/web/e2e/{playwright.config.ts,screenshot.spec.ts, fonts-offline.spec.ts,corpus.spec.ts,baselines/*.png}`,
@@ -1076,9 +1075,9 @@ rules.
       (Task 3), SSR (Task 9 Step 3), real browser + CSP (Task 11 Step 4) — the
       complete AC-SEC-001 evidence set.
 - [ ] `docs/plans/traceability.md`: AC-SEC-001 and AC-SEC-003 references filled;
-      AC-SEC-004's NEW-M7 note resolved to the Task 6 chip tests; AC-REN-001…006
-      rows ratified by the integration owner and filled (or the phase gate
-      records why not).
+      AC-SEC-004's NEW-M7 note resolved to the Task 6 chip tests;
+      already-ratified AC-REN-001…006 rows filled (or the phase gate records why
+      not).
 - [ ] Requested integration-owner artifacts resolved: `web-e2e`/`web-e2e-update`
       targets + CI job exist (or the gate records the standing exception).
 - [ ] Every task diff Opus 5-reviewed; blocking findings fixed and re-reviewed;

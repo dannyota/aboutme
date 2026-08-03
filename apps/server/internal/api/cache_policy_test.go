@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 func jsonHandler(status int, body string) http.Handler {
@@ -351,7 +352,8 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 	t.Run("429 rate limited", func(t *testing.T) {
 		t.Parallel()
 
-		handler := api.New(testLogger(), fakePinger{}, api.Options{})
+		clock := testutil.NewClockAtEpoch()
+		handler := api.New(testLogger(), fakePinger{}, api.Options{Clock: clock.Now})
 		var rec *httptest.ResponseRecorder
 		for i := 0; i < api.DefaultRateLimitRequests+1; i++ {
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/anything", nil)
