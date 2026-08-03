@@ -6,22 +6,19 @@
 > superpowers:writing-plans immediately before it is executed, then run with
 > superpowers:subagent-driven-development. Steps track with `- [ ]`.
 
-**Goal:** Build aboutme from the current skeleton to a deployed, well-tested v1
-on AWS ap-southeast-1, entirely with coding agents.
+**Goal:** Advance aboutme from the current Phase 2A checkpoint to a deployed,
+well-tested v1 on AWS ap-southeast-1.
 
 **Architecture:** Go API + Nuxt SSR sharing one Vue renderer; Postgres jsonb
 resume docs; SSE live refresh; chromedp PDF/og. Full design:
 [`../specs/aboutme-design.md`](../specs/aboutme-design.md).
 
 **Source of truth:** the spec. Where this plan and the spec disagree, the spec
-wins and the plan is corrected. Status: Rev 4 (2026-08-02) — Rev 3 added phase
-splits, the staging gate, the infrastructure phase (PI), fail-closed UAT with
-Opus 5 verification, and the traceability artifact. Rev 4 records execution
-corrections: P0 and P1 are complete and merged, PI is resequenced to after P7B
-(it blocks only P9A, and provisioning before the runtime shape settles means
-building it twice), and acceptance rows are minted at plan adoption rather than
-promised in prose — four consecutive phase plans found this paragraph's
-predecessor claiming rows the matrix did not contain.
+wins and the plan is corrected. Status: Rev 5 (2026-08-03) — P0 and P1 are
+complete; P2A is active. Rev 5 adds an owner-facing numbered delivery index,
+restores the missed P1.1 follow-up before P2B, records the exact P2A checkpoint,
+and makes pre-execution contract gaps visible instead of treating an adopted
+phase plan as authority over the design.
 
 ## Global constraints (apply to every task)
 
@@ -80,8 +77,8 @@ author cannot weaken an adversarial test without review.
 | Layer                    | Tooling                                                                                                                                                                          | Owner       | Gate              |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------- |
 | Unit                     | Go `testing` (table-driven); Vitest                                                                                                                                              | author, TDD | per task          |
-| Integration              | Go `httptest` vs ephemeral Postgres (testcontainers)                                                                                                                             | author      | per task          |
-| Contract                 | OpenAPI examples validated; generated TS client compiles; drift check                                                                                                            | P0          | CI                |
+| Integration              | Go `httptest` plus the explicit podman-managed Postgres test database and fail-closed live-DB helper                                                                             | author      | per task          |
+| Contract                 | OpenAPI examples validated and linted now; generated TS client compile + drift correction in P0F                                                                                 | P0/P0F      | CI                |
 | Migration                | empty→head, prev-release→head, concurrent advisory-lock, partial-failure recovery                                                                                                | P0          | CI                |
 | Write-safety/concurrency | If-Match matrix, idempotency replay/reject/rollback, CAS-vs-autosave races                                                                                                       | P2A         | CI + soak         |
 | Security                 | OAuth replay/mix-up/expiry, CSRF matrix, XSS hostile corpus (bluemonday+DOMPurify+SSR+real browser), spoofed-header rate limits                                                  | P1/P3/P5    | CI                |
@@ -115,10 +112,13 @@ provider accounts are used only for staging smoke.
 ```mermaid
 graph TD
     P0[P0 Foundations + frozen contracts] --> P1[P1 Auth & sessions]
+    P0 --> P0F[P0F OpenAPI TS client-generation correction]
+    P1 --> P1F[P1.1 Auth hardening follow-up]
     P0 --> P2A[P2A Resume domain/store]
-    P1 --> P2B[P2B Resume HTTP API + media]
+    P1F --> P2B[P2B Resume HTTP API + media]
+    P0F --> P2B
     P2A --> P2B
-    P0 --> P3[P3 Renderer + templates + fonts + sanitizer]
+    P2A --> P3[P3 Renderer + templates + fonts + sanitizer]
     P2A --> P4[P4 Editor + live preview]
     P2B --> P4
     P3 --> P4
@@ -162,18 +162,71 @@ server/data/migrations/security-middleware → **P0C** web/dev-stack/fixtures/CI
 
 ---
 
+## Numbered delivery index
+
+These step numbers are the owner-facing navigation order; they do not rename
+phase IDs. A row containing several phases is a parallel delivery wave once its
+incoming edges in the phase graph are satisfied. P8-sec continues inside every
+route-owning phase rather than appearing as a one-time step.
+
+| Step | Phase or wave                   | State                          | Completion / next gate                                                                                                            |
+| ---- | ------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| 01   | P0 foundations                  | **Complete** ✅                | P0A/P0B/P0C merged; all five phase gates passed                                                                                   |
+| 02   | P1 auth and sessions            | **Complete** ✅                | Merged; four exit gates passed                                                                                                    |
+| 03   | P2A resume domain/store         | **Current** ▶                  | Tasks 1–6 reviewed; Task 7's corrective behavior is independently green but uncommitted; Tasks 2b, 6a/6b, 8–12, and gates remain  |
+| 04   | P0F + P1.1 + P3 preflight/build | **Next**                       | After P2A: add missing OpenAPI TS client generation; close auth follow-ups; resolve P3 contracts, refresh its base, then build it |
+| 05   | P2B resume HTTP API/media       | **Waiting on 03 + P0F + P1.1** | Authenticated CRUD, write-safety HTTP contract, granular saves, and media                                                         |
+| 06   | P4 + P5A + P6A + P7A            | **Parallel feature wave**      | Editor, publish/public SSR, SSE transport, and bounded owner print worker after their graph dependencies                          |
+| 07   | P5B + P6B + P7B + P8-priv       | **Parallel closure wave**      | Publish UX/disclosure, live refetch, public render artifacts, and privacy lifecycle                                               |
+| 08   | PI infrastructure               | **Deferred until after P7B**   | Refresh the adopted Terraform plan against the final runtime shape, then resolve spend/credentials/naming before apply            |
+| 09   | P9 functional integration/UAT   | **Waiting**                    | Full local-stack acceptance catalog and accessibility gate                                                                        |
+| 10   | P9A staging rehearsal           | **Waiting on 08 + 09**         | Production-like AWS proof, real ops drills, and independent evidence verification                                                 |
+| 11   | Human launch checkpoint         | **Waiting**                    | Naming, disclosure, credentials, DNS timing, spend, and go/no-go                                                                  |
+| 12   | P10 production promotion        | **Waiting**                    | Promote staging-proven images/migrations; no new infrastructure authored here                                                     |
+| 13   | P11 Flutter                     | **Post-launch**                | Mobile client against the versioned API                                                                                           |
+
+### Current decision and quality blockers
+
+1. P2A's title-validation, clean-cache lint, callback/TTL, and serialized
+   CAS/idempotency convergence corrections now pass independent review. The
+   corrective diff is still uncommitted and the worktree's plan copy must be
+   synchronized first. Then execute Task 2b, Tasks 6a/6b and 8–12, and all phase
+   gates before merge.
+2. The design document still says `DRAFT v3`, while older narrative text calls
+   it approved/frozen. The design owner must explicitly approve/freeze it or
+   keep it draft; accepted ADRs remain authoritative for their individual
+   decisions either way.
+3. P0 claimed generated OpenAPI TypeScript client drift/compile coverage, but
+   only OpenAPI lint and conformance tests exist. P0F must add the pinned
+   generator, committed path/schema types, typed transport, request/response
+   proof, compile proof, and drift gate before P2B.
+4. P1.1 missed its intended pre-P2A window. It needs no migration, so it now
+   runs immediately after P2A and blocks P2B rather than being silently lost.
+5. Before P3 dispatch, resolve its two spec/plan disagreements (SSR sanitizer
+   authority and contact ordering), replace missing companion-note references
+   with committed authority, and refresh its base/shared-file inventory.
+6. Traceability is not yet one-row-per-normative-statement despite the target
+   claim below. At minimum mobile, template thumbnails, cache invalidation,
+   publish disclosure, media/avatar upload, and audit retention still need
+   acceptance rows during their owning phase-plan refresh; no affected phase may
+   dispatch with those rows absent.
+
+---
+
 ## Phase status (kept current by the integration owner)
 
-| Phase             | State                                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ----------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0A contracts     | **Implemented**                                   | Schema (draft-permissive, schema-derived codegen, conformance + hostile corpus), OpenAPI, budgets, traceability                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| P0B server + data | **Implemented**                                   | Go skeleton, rate-limit/security/cache middleware, sqlc + Atlas + goose, 4-scenario migration harness                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| P0C web + stack   | **Implemented**                                   | Nuxt 4 SSR, podman stack with migration service, full route table, client-IP trust boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **P0 exit gate**  | **5 of 5 passed** ✅ · **merged**                 | Design review ✅ · adversarial review ✅ · traceability closure ✅ · independent fail-closed UAT ✅ · Opus 5 evidence verification ✅ — corroborated at pre-squash pin `4e3a2b9` (local ledger `.superpowers/sdd/phase-0bc/gate-verification-final.txt`; not in public history). Merged to `main` as squashed public initial commit `9382c86` (2026-08-02); full gate suite re-run green at `9382c86`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| PI infrastructure | **Plan adopted; execution deferred to after P7B** | Two Opus review rounds applied; traceability rows AC-INF-001…008 + AC-OPS-015…019 ratified. Resequenced 2026-08-02: PI blocks only P9A, and building it before the runtime shape is settled (S3 media in P2B, the print worker's cgroup in P7A, SSE timeouts in P6A) would mean building it twice while paying for idle staging. Needs a refresh pass at execution time. Human-owner escalations (spend, credentials, naming) deferred with it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| P1 auth           | **4 of 4 exit gates passed** ✅ · **merged**      | Google/GitHub/LinkedIn OIDC+OAuth2 login, session lifecycle with FK-tracked rotation lineage, fail-closed CSRF, `/me` + session device management, explicit linking with email-merge rejection, web login/session pages. Six independent blind adversarial suites (AC-AUTH-001…005, AC-SEC-002); schema head `00003_add_sessions_rotated_from`; decisions DD-C1…DD-C17 recorded in the phase plan's appendix. Gates: whole-branch review ✅ (2 blocking findings fixed) · adversarial review ✅ (PROCEED WITH CHANGES; follow-ups scoped in `phase-1-deferred.md`) · independent fail-closed UAT ✅ (run 1 FAIL found a real gate-command defect; run 2 16/16 PASS at `2d17f77`) · Opus evidence verification ✅ (both runs; UPHELD WITH CORRECTIONS, corrections applied to future runs). Merged to `main` as `ad357d3` (2026-08-02). Deferred follow-ups: `phase-1-deferred.md` — P1.1 needs no migration, so it does not block P2A taking the head |
-| P2A resume store  | **Executing** (started 2026-08-02)                | Plan `phase-2a-resume-store.md` (Rev 2) adopted. Owner prerequisites landed first: ADR 0009 (D6 — section order authority is `customization.layout.sections`), `budgets.md` rows for the D5/D11 ratified numbers (title ≤ 160, `lng` ≤ 35, idempotency TTL 24 h), and traceability rows AC-DOC-010…012 + AC-SAVE-003. Targets migration head `00003`, appends `00004`/`00005`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| P3 renderer       | **Plan adopted; queued behind P2A**               | Plan `phase-3-renderer.md` adopted with ADR 0008. Sequenced after P2A rather than in parallel: the B10 ruling makes `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`, `packages/schema/test/gen.test.ts` and `apps/server/go.{mod,sum}` contested between P2A's T2/T5 and P3's T1/T8, and a single integration owner cannot grant two exclusive windows at once without serializing them anyway                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Phase                  | State                                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0A contracts          | **Implemented, with P0F correction queued**       | Schema (draft-permissive, schema-derived codegen, conformance + hostile corpus), OpenAPI lint/conformance, budgets, traceability. The audit found generated OpenAPI TS client/drift tooling was never implemented; P0F closes that gap before P2B                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| P0F API client tooling | **Queued; must precede P2B**                      | Pin OpenAPI TypeScript generation and typed transport, commit generated types, prove a request/response contract plus web compilation, and add a non-mutating drift check; no HTTP contract change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| P0B server + data      | **Implemented**                                   | Go skeleton, rate-limit/security/cache middleware, sqlc + Atlas + goose, 4-scenario migration harness                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| P0C web + stack        | **Implemented**                                   | Nuxt 4 SSR, podman stack with migration service, full route table, client-IP trust boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **P0 exit gate**       | **5 of 5 passed** ✅ · **merged**                 | Design review ✅ · adversarial review ✅ · traceability closure ✅ · independent fail-closed UAT ✅ · Opus 5 evidence verification ✅ — corroborated at pre-squash pin `4e3a2b9` (local ledger `.superpowers/sdd/phase-0bc/gate-verification-final.txt`; not in public history). Merged to `main` as squashed public initial commit `9382c86` (2026-08-02); full gate suite re-run green at `9382c86`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| PI infrastructure      | **Plan adopted; execution deferred to after P7B** | Two Opus review rounds applied; traceability rows AC-INF-001…008 + AC-OPS-015…019 ratified. Resequenced 2026-08-02: PI blocks only P9A, and building it before the runtime shape is settled (S3 media in P2B, the print worker's cgroup in P7A, SSE timeouts in P6A) would mean building it twice while paying for idle staging. Needs a refresh pass at execution time. Human-owner escalations (spend, credentials, naming) deferred with it                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| P1 auth                | **4 of 4 exit gates passed** ✅ · **merged**      | Google/GitHub/LinkedIn OIDC+OAuth2 login, session lifecycle with FK-tracked rotation lineage, fail-closed CSRF, `/me` + session device management, explicit linking with email-merge rejection, web login/session pages. Six independent blind adversarial suites (AC-AUTH-001…005, AC-SEC-002); schema head `00003_add_sessions_rotated_from`; decisions DD-C1…DD-C17 recorded in the phase plan's appendix. Gates: whole-branch review ✅ (2 blocking findings fixed) · adversarial review ✅ (PROCEED WITH CHANGES; follow-ups scoped in `phase-1-deferred.md`) · independent fail-closed UAT ✅ (run 1 FAIL found a real gate-command defect; run 2 16/16 PASS at `2d17f77`) · Opus evidence verification ✅ (both runs; UPHELD WITH CORRECTIONS, corrections applied to future runs). Merged to `main` as `ad357d3` (2026-08-02). Deferred follow-ups are preserved as P1.1 and must close before P2B |
+| P1.1 auth follow-up    | **Queued; must precede P2B**                      | Missed its intended pre-P2A window. Owns auth-route limits, opportunistic OAuth-transaction reaping, CSRF-protected link/reauth start, typed auth-funnel reasons, and the rotation single-delivery reliability fix; see `phase-1-deferred.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| P2A resume store       | **Executing** (started 2026-08-02)                | Isolated branch `worktree-phase-2a-resume-store`: Tasks 1–6 complete and independently reviewed. Title/lint plus Task 7 callback/TTL/CAS-convergence corrections pass fresh review and the owner's focused rerun; their corrective diff remains uncommitted. Task 2b, Tasks 6a/6b and 8–12, and all phase gates remain. Nothing from this branch is merged or pushed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| P3 renderer            | **Queued behind P2A; refresh required**           | Plan `phase-3-renderer.md` was adopted with ADR 0008 and serialized behind P2A because `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`, `packages/schema/test/gen.test.ts`, and `apps/server/go.{mod,sum}` are contested. Before dispatch, reconcile SSR sanitizer authority and contact ordering with the design/ADRs, remove missing companion-note dependencies, correct stale traceability prose, and refresh the base/shared-file inventory                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 Both exit-gate reviews returned no-ship on first run; every finding was applied
 to the spec and implemented. The corrected contract is recorded in
@@ -185,15 +238,19 @@ Executes as three sequential review units — **P0A** (0.1, 0.1b, 0.8, 0.11) →
 **P0B** (0.2, 0.3, 0.3b, 0.6) → **P0C** (0.4, 0.5, 0.7, 0.10) — each with its
 own Opus 5 review; P0A's contracts are frozen before P0B starts.
 
-**Exit:** `make dev` brings up the podman stack on one origin; `/healthz` +
-`/readyz` green; web renders a page; `packages/schema` + `docs/api/openapi.yaml`
-generate committed Go/TS/Dart types; rate-limit middleware, deterministic test
-factories, and numeric budgets exist; all CI jobs green on the empty slice.
+**Original exit contract:** `make dev` brings up the podman stack on one origin;
+`/healthz` + `/readyz` green; web renders a page; `packages/schema` generates
+committed Go/TS types; `docs/api/openapi.yaml` is linted, tested, and generates
+a committed TypeScript client (Dart is P11); rate-limit middleware,
+deterministic test factories, and numeric budgets exist; all CI jobs green on
+the empty slice. The 2026-08-03 audit found the OpenAPI
+client-generation/compile/drift part was never implemented. Historical P0 gate
+evidence remains unchanged; P0F below is the blocking corrective task.
 
 | Task                                 | Files                                                              | Deliverable / test                                                                                                                                                     |
 | ------------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0.1 schema contract                  | `packages/schema/resume.schema.json`, `gen/{go,ts}/`, generator    | doc shape + sanitizer-allowlist version; codegen committed; CI drift check (Dart in P11)                                                                               |
-| 0.1b OpenAPI contract                | `docs/api/openapi.yaml`, client-gen                                | `/api/v1` contract with examples; TS client compiles; CI drift check                                                                                                   |
+| 0.1b OpenAPI contract                | `docs/api/openapi.yaml`, client-gen                                | Contract/lint/conformance complete; generated TS client compile/drift was missed and is recovered by P0F                                                               |
 | 0.2 Go server skeleton               | `apps/server/{go.mod,cmd/server,internal/{config,store,api}}`      | pgx pool; `/healthz` (liveness) + `/readyz` (DB, no restart-loop); error envelope; slog; unit+httptest                                                                 |
 | 0.3 sqlc+Atlas+goose                 | `apps/server/{sql/schema.sql,sqlc.yaml,cmd/migrate}`, Make targets | `make generate`/`migrate-gen`/`migrate`; CI append-only check                                                                                                          |
 | 0.3b migration harness               | `apps/server/migrations/*_test.go`                                 | empty→head, prev→head, concurrent advisory-lock, partial-failure recovery                                                                                              |
@@ -204,6 +261,46 @@ factories, and numeric budgets exist; all CI jobs green on the empty slice.
 | 0.8 numeric budgets                  | `docs/plans/budgets.md`                                            | p95 latency, memory, render queue, pgx pool, SSE conn/fd targets (enforced P7A/P9A)                                                                                    |
 | 0.10 CI completion                   | `.github/workflows/ci.yml`                                         | server/web/schema/openapi/migration/semgrep/data-drift/route-table/docs jobs green                                                                                     |
 | 0.11 traceability matrix             | `docs/plans/traceability.md`                                       | **row per normative spec statement** with a stable acceptance ID (`AC-<area>-<nnn>`) → owning phase/task → test/UAT reference; seeded in P0A, kept current every phase |
+
+---
+
+## Phase 0F — OpenAPI TypeScript client-generation correction
+
+**Status:** queued in delivery step 04 and a hard predecessor of P2B. This is a
+correction to the P0 tooling gate, not a change to the existing HTTP contract.
+
+**Acceptance:** AC-API-001.
+
+**Exit:** a pinned generator produces a committed, versioned TypeScript API
+surface from `docs/api/openapi.yaml`; a pinned typed transport turns that
+surface into the Nuxt app's real API client and a mocked request/response
+contract test proves it; `make api-check` fails on generated drift without
+modifying the worktree; and a fresh independent review confirms the artifact,
+client, and gate cannot silently diverge.
+
+1. **0F.1 — Prove the gap first.** Add a failing contract/tooling test that
+   requires the expected generated file and a Nuxt compile-time import. Observe
+   failure before adding the generator or artifact.
+2. **0F.2 — Pin and generate.** Pin the latest stable `openapi-typescript` at
+   execution time exactly in the root tooling manifest and pin `openapi-fetch`
+   exactly in the web package. Add `make api-gen`, wire it into `.PHONY` and the
+   canonical `make generate` target, and commit
+   `apps/web/app/api/generated/openapi.ts` plus a small
+   `apps/web/app/api/client.ts` typed-client factory. A regression check must
+   fail if `api-gen` is later omitted from `generate`.
+3. **0F.3 — Make drift fail closed.** Extend `make api-check` with a script that
+   creates a directory via `mktemp -d`, traps its removal, generates to a file
+   there, and byte-compares it with the committed artifact. It must never
+   regenerate the tracked output in place, must leave dirty/shared worktrees
+   untouched, and must retain the current Redocly and Vitest checks.
+4. **0F.4 — Prove the client at the consumer.** With an injected mock fetch,
+   exercise a representative generated path through the typed client and assert
+   its method/path, envelope decoding, and error type; keep compile-time request
+   and response assertions beside it. Run
+   `make api-check web-typecheck web-test web-build`.
+5. **0F.5 — Review and integrate.** Run an independent defect review, fix and
+   freshly re-review any blocker, then update current documentation/evidence.
+   P2B cannot start until this exit is green.
 
 ---
 
@@ -272,17 +369,37 @@ no-provider-token-persistence invariant.
 
 ---
 
+## Phase 1.1 — Auth hardening follow-up
+
+**Exit:** the bounded follow-up in [`phase-1-deferred.md`](phase-1-deferred.md)
+is implemented, independently reviewed, and covered by the affected server/web
+gates before P2B adds more authenticated mutation paths. It requires no schema
+head change and may run in parallel with P3 once P2A is integrated.
+
+Scope: route-specific auth limits; opportunistic expiry reaping for
+`oauth_transactions`; CSRF-protected `POST` start for link/reauth; typed funnel
+reason constants; and the session-rotation single-delivery reliability fix.
+P8-priv still owns dead-session retention, the scheduled/global sweep, and audit
+retention; it does not duplicate P1.1's request-path transaction reaping.
+
+---
+
 ## Phase 2A — Resume domain & store
 
 **Exit:** store layer + migrations for resumes/slug_tombstones with all
-constraints/trigger; validated invariants; write-safety + doc-migration
-primitives — all covered by integration tests against ephemeral Postgres.
+constraints/trigger; title ≤160 Unicode-code-point enforcement in DB and store;
+validated invariants; write-safety + doc-migration primitives; immutable v1
+schema and retained versioned Go/TS types; declared accepted/emitted versions;
+and bidirectional adjacent conversion with synthetic old-client preparation and
+emission — all covered against the explicit podman-managed test Postgres.
 
 Tasks: resumes table + `slug_tombstones` + constraints + 3-resume trigger; sqlc
 queries; store invariants (entry-id uniqueness whole-resume, date-range rules,
-**all size bounds with limit+1 tests**); revision CAS + idempotency store;
-**doc-migration backfill = projection-only on read, CAS on write, with
-CAS-vs-autosave race tests**.
+cleared-contact draft round-trip, **all size bounds with limit+1 tests**);
+revision CAS + convergent idempotency store; mechanically restricted generated
+write methods; **doc-migration backfill = projection-only on read, CAS on write,
+with CAS-vs-autosave race tests**; immutable schema/type registry plus
+bidirectional converters.
 
 > **Carried from Phase 0 (drift-gate limitation):** the P0 data-drift gate only
 > fails _closed_ on undiffable object classes
@@ -301,9 +418,11 @@ CAS-vs-autosave race tests**.
 
 **Exit:** authenticated CRUD (≤3, DB-enforced); granular PATCH (entry/section/
 personal-details/customization deltas) with If-Match/412 + idempotency + size
-bounds; **avatar/photo upload API → storage** (per-resume photo per spec §3/§5).
-UAT: create/edit/delete via API; 4th resume rejected; concurrent-write 412;
-idempotent replay; oversized payload rejected.
+bounds; AC-SAVE-004 old-version accept→project→full-current-document persist and
+declared-version emit over the real HTTP/OpenAPI surface; **avatar/photo upload
+API → storage** (per-resume photo per spec §3/§5). UAT: create/edit/delete via
+API; 4th resume rejected; concurrent-write 412; idempotent replay; old-client
+write/emit; oversized payload rejected.
 
 Tasks: each endpoint TDD + integration; media upload endpoint + storage
 abstraction (local in dev, S3 in prod) — this covers the **per-resume photo**;
@@ -314,7 +433,7 @@ race test (`FOR UPDATE` + trigger).
 
 ---
 
-## Phase 3 — Renderer, templates, fonts, sanitizer (parallel with P1–P2)
+## Phase 3 — Renderer, templates, fonts, sanitizer (after P2A)
 
 **Exit:** pure Vue renderer → deterministic HTML across sections × templates ×
 **both pagination modes** (editor approximate vs continuous public); golden
@@ -477,33 +596,32 @@ verification**; publish the rollback runbook entry.
 ## Phase 11 — Mobile (Flutter) — after deployment
 
 Owner decision (2026-08-01): mobile compilation and release move **after** the
-web v1 deploy. P11 generates Dart types from the same `resume.schema.json`,
-scaffolds the Flutter app, implements the OAuth code + PKCE deep-link flow with
-bearer access/refresh tokens (the contract reserved in spec §1), and adds the
-Dart CI job. Nothing in P0–P10 depends on it.
+web v1 deploy. P11 generates Dart resume types from `resume.schema.json` and the
+AC-API-002 Dart API client from `docs/api/openapi.yaml`, with committed
+artifacts and drift/compile gates. It scaffolds the Flutter app, implements the
+OAuth authorization-code flow with PKCE deep linking and bearer access/refresh
+tokens (the contract reserved in spec §1), and adds the Dart CI job. Nothing in
+P0–P10 depends on it.
 
 ---
 
 ## Spec traceability (standing artifact — kept current every phase)
 
-`docs/plans/traceability.md` (created in task 0.11) maintains one row per
-normative spec statement → owning phase/task + acceptance ID. Opus 5 review
-rejects any phase plan leaving its rows unresolved. Items flagged in earlier
-reviews as previously unmapped are now assigned: mobile client (P11), session
-device list/revoke (P1), logout-everywhere + `Clear-Site-Data` (P1),
-doc-migration CAS race (P2A), pagination modes + fonts (P3), template thumbnails
+`docs/plans/traceability.md` (created in task 0.11) is the standing mapping from
+normative statements to owning phase/task, acceptance ID, and evidence. A phase
+plan is rejected if its own rows are absent or unresolved. The matrix is **not
+yet complete across future phases**: mobile client (P11), template thumbnails
 (P7B), cache-invalidation surfaces (P5A), disclosure wording (P5B), media/avatar
-upload (P2B), audit retention (P8-priv). **This paragraph has repeatedly claimed
-rows the matrix did not contain — four phase plans (PI, P2A, P3, and the
-infrastructure set) each found a claimed-but-absent row during review. Rows are
-now minted at plan adoption, and this paragraph names only rows that exist.**
-Infrastructure rows were ratified at Phase PI plan adoption: AC-INF-001…008 (PI
-— production client-IP boundary, CloudFront behavior matrix as code, env parity,
-secret scoping, alarm inventory, scheduled jobs, plus the PI-originated staging
-access gate and staging noindex controls per PI decision D25) and AC-OPS-015…019
-(P9A — live CloudFront matrix, origin-secret rotation drill, live two-runner
-migration, real restore, alarm receipt); live origin-bypass rejection remains
-AC-OPS-002 (P9A).
+upload (P2B), and audit retention (P8-priv) are named ownership gaps whose rows
+must be minted during each plan's refresh, before dispatch. Session device
+management is already AC-AUTH-005; doc-migration/wire compatibility is
+AC-DOC-010/012; pagination/fonts are AC-REN-002/003. Infrastructure rows were
+ratified at Phase PI plan adoption: AC-INF-001…008 (PI — production client-IP
+boundary, CloudFront behavior matrix as code, env parity, secret scoping, alarm
+inventory, scheduled jobs, plus the PI-originated staging access gate and
+staging noindex controls per PI decision D25) and AC-OPS-015…019 (P9A — live
+CloudFront matrix, origin-secret rotation drill, live two-runner migration, real
+restore, alarm receipt); live origin-bypass rejection remains AC-OPS-002 (P9A).
 
 ## Deferred (documented, not v1-blocking)
 

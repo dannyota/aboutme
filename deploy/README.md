@@ -5,8 +5,8 @@
 - `server.Dockerfile`, `web.Dockerfile` — multi-stage builds for the two apps.
   The server image also carries the `migrate` binary the `migrate` service runs.
 - `caddy/` — Caddyfile implementing the full spec §2 route table.
-- `aws/` — Terraform for ap-southeast-1 (ECS on Graviton, RDS, CloudFront) —
-  deploy phase.
+- `aws/` — **planned, not present yet**. The deferred PI phase will add
+  Terraform for ap-southeast-1 (ECS on Graviton, RDS, and CloudFront).
 
 See spec §6.
 
@@ -28,8 +28,7 @@ podman compose --env-file .env -f deploy/compose.yml up -d --build
 podman compose --env-file .env -f deploy/compose.yml down
 ```
 
-`make dev` / `make dev-down` wrap the same commands once wired into the root
-Makefile.
+`make dev` / `make dev-down` wrap the same commands from the root Makefile.
 
 On `up`, the one-shot `migrate` service runs first: it applies the embedded
 Goose migrations against Postgres and exits 0, and the `server` only starts once

@@ -5,11 +5,13 @@ git-ignored and dies with the phase worktree. Each item was raised by a task
 review, the whole-branch review, or the adversarial review, triaged, and
 deliberately not fixed in Phase 1.
 
-## P1.1 — a bounded follow-up, before P2A takes the migration head
+## P1.1 — bounded follow-up after P2A, before P2B
 
-Scheduled as one unit because the pieces are cheap only while the auth router
-and the phase's migration head are still open, and because three of them are one
-gap rather than three deferrals.
+This unit missed its original pre-P2A window; P2A has already appended migration
+heads `00004`/`00005` on its isolated branch. P1.1 needs no migration, so the
+integration owner now schedules it immediately after P2A and makes it a hard
+predecessor of P2B. The pieces remain one bounded auth hardening/reliability
+unit rather than four unowned deferrals.
 
 | #   | Item                                                                                                                                                                                                                                                                                                                                                                                     | Why it is not "later"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -76,9 +78,11 @@ design. It belongs in the spec and as a PI/P9A gate item.
 
 ## Correctly deferred to a named phase
 
-- `oauth_transactions` and dead-session GC; dead rows are invisible to
-  `GET /sessions` _and_ unrevokable through the API, so a sweep is the only
-  thing that will ever reclaim them → **P8-priv**.
+- Dead-session GC and the scheduled/global retention sweep remain **P8-priv**;
+  dead rows are invisible to `GET /sessions` and otherwise persist forever. P1.1
+  separately owns opportunistic request-path reaping of expired
+  `oauth_transactions`, so unauthenticated `/start` traffic cannot grow that
+  table unchecked before the scheduled job exists.
 - Session-lifecycle audit logging → **P8-priv** (which already owns the 180-day
   retention for a log that does not yet exist; its emission points are all in
   `internal/auth`). Needs a traceability row naming the owner.
