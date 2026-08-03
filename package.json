@@ -8,6 +8,7 @@
     "docs:fmt": "prettier --write \"**/*.md\" \"**/*.{yml,yaml}\" && markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\""
   },
   "devDependencies": {
+    "@playwright/mcp": "0.0.78",
     "@redocly/cli": "2.43.2",
     "markdownlint-cli2": "0.23.2",
     "prettier": "3.9.6",

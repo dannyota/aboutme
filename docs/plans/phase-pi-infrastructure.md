@@ -1,12 +1,17 @@
 # Phase PI — Infrastructure as code (implementation plan)
 
-> **Adopted Rev 3 (2026-08-02)** by the integration owner after two independent
-> Opus plan-review rounds plus a scoped verification pass (workspace record:
-> `phase-pi-review-r1.md` and the Rev 2/Rev 3 disposition maps). Traceability
-> rows AC-INF-001…008 and AC-OPS-015…019 were ratified into `traceability.md` at
-> adoption. **Execution is intentionally deferred until after P7B.** At dispatch
-> it also remains hard-blocked on the "Escalations pending human owner" section
-> below — spend authorization first.
+> **Adopted Rev 4 (2026-08-04)** by the integration owner. Rev 4 separates
+> code-only/local IaC work from real-cloud activation: no AWS or Cloudflare
+> mutation may occur until P9 local UAT and its independent evidence review pass
+> and the human owner records AWS resource-creation authorization.
+>
+> **Adopted Rev 3 (2026-08-02)** after two independent Opus plan-review rounds
+> plus a scoped verification pass (workspace record: `phase-pi-review-r1.md` and
+> the Rev 2/Rev 3 disposition maps). Traceability rows AC-INF-001…008 and
+> AC-OPS-015…019 were ratified into `traceability.md` at adoption. **Code-only
+> execution is intentionally deferred until after P7B.** Real-cloud work remains
+> hard-blocked on the P9 and human-authorization gate above plus the inputs
+> under "Escalations pending human owner."
 >
 > **Changelog Rev 3:** final-round amendments — custom `orp-auth-api` excluding
 > viewer-supplied `X-Origin-Secret`/`X-Real-IP`/`Forwarded` on `/api/v1/*`
@@ -76,17 +81,20 @@ in [`traceability.md`](traceability.md); PI sequencing and status are recorded
 directly in [`implementation-plan.md`](implementation-plan.md). Those two
 authority files, not nonexistent companion patches, are the dispatch inputs.
 
-**Scope boundaries (mandatory):** PI **builds**; P9A **exercises**; P10
-**promotes**. This plan provisions staging and produces production-parameterized
-modules, but performs **no production apply, no public DNS cutover, no ops
-drills** (those are P9A/P10). Deep Vietnam data-residency work and Flutter are
-out of scope. **No ALB** (owner decision, spec §10). The rootless-podman dev
-stack (`deploy/compose.yml`, dev `CADDY_HTTP_PORT` gotcha) is untouched except
-the explicitly flagged shared route-snippet extraction in Task 7 (which uses
-env-placeholder defaults so `compose.yml` itself needs no edit). Root
-`Makefile`, `.github/workflows/*`, and `.env.example` are integration-owned: PI
-workers author exact diffs and hand them to Fable rather than editing (Tasks 7,
-8, 12, 13).
+**Scope boundaries (mandatory):** PI authors and locally validates IaC before
+AWS authorization, then **builds** staging after authorization; P9A
+**exercises** it; P10 **promotes**. Before P9 local UAT and evidence review pass
+and human AWS authorization is recorded, PI performs no AWS API call, Cloudflare
+mutation, bootstrap apply, ECR push, DNS mutation, staging apply, or
+deployment-workflow dispatch. The plan performs **no production apply, no public
+DNS cutover, no ops drills** (those are P9A/P10). Deep Vietnam data-residency
+work and Flutter are out of scope. **No ALB** (owner decision, spec §10). The
+rootless-podman dev stack (`deploy/compose.yml`, dev `CADDY_HTTP_PORT` gotcha)
+is untouched except the explicitly flagged shared route-snippet extraction in
+Task 7 (which uses env-placeholder defaults so `compose.yml` itself needs no
+edit). Root `Makefile`, `.github/workflows/*`, and `.env.example` are
+integration-owned: PI workers author exact diffs and hand them to Fable rather
+than editing (Tasks 7, 8, 12, 13).
 
 **Shared-file serialization:** `.env.example`, `docs/plans/traceability.md`,
 `docs/architecture.md`, the root `Makefile`, and `.github/workflows/*` are
@@ -190,10 +198,11 @@ plan's 2026-08-02 snapshot and P7B.
   retries.
 - Conventional Commits; no AI/agent mentions; `make docs-fmt` before committing
   any touched `.md`.
-- Real-AWS work (bootstrap apply, staging apply, ACM issuance, cf DNS) is
-  **explicitly labeled** in its task, runs only from an operator/maintainer
-  context — never from a fork-PR CI job — and records evidence (redacted command
-  output) in the phase ledger under `.superpowers/`.
+- Real-AWS work (bootstrap apply, ECR push, staging apply, ACM issuance, and cf
+  DNS) is **explicitly labeled** in its task. It runs only after the recorded P9
+  PASS, independent evidence PASS, and human AWS authorization, from an
+  operator/maintainer context — never from a fork-PR CI job — and records
+  redacted evidence in the phase ledger under `.superpowers/`.
 
 ## Design decisions this plan makes beyond the spec
 
@@ -221,7 +230,7 @@ not treated as resolved by this table.
 | D14 | Port 80 in production                                                  | The prod security group admits **only 443 from the CloudFront origin-facing prefix list** (+ nothing else inbound; host access is SSM Session Manager, no SSH). Port 80 stays closed: DNS-01 removes the HTTP-ACME need and CloudFront speaks HTTPS-only to the origin. Corroborating constraint (Rev 2): a managed prefix list consumes SG rule quota equal to its MaxEntries — the CloudFront origin-facing list alone approaches the default 60-rules-per-SG limit, so one prefix-list port is also the quota-safe shape (a second port would require a quota increase). Spec §6 "Caddy 80/443" is read as the container's capability, not an ingress requirement — **owner escalation**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | D15 | EIP auto-reassociation                                                 | Single-node ASG (min=max=1) with launch-template user data that associates the tagged EIP at boot (instance role scoped to that allocation ID). Instance replacement therefore self-heals the origin address; failure to associate emits a CloudWatch metric the alarm inventory watches. This is the P9A "EIP recovery" drill's substrate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | D16 | Migration invocation in ECS                                            | Mirror compose exactly: the **server task definition carries a non-essential `migrate` init container** (same image, `migrate` entrypoint) with `dependsOn: [condition: SUCCESS]` on it from the server container. Advisory-lock safety across two concurrent deployments is already proven (AC-OPS-001). Failed migration ⇒ task fails ⇒ ECS deployment circuit breaker rolls back — fail-closed with zero bespoke pipeline orchestration. **Backup + rollback semantics (added Rev 2, spec §3):** the deploy workflow takes and verifies an RDS snapshot **before** `terraform apply` (Task 12) — with single-node min-healthy-0% deploys, the old task is stopped before the new task's migrate runs, so "stop writes → backup → lock → goose up" holds intrinsically; PITR covers the snapshot-to-migration gap. Deploy rollback is **code-back/schema-forward**: re-dispatching an older digest never downgrades schema (released migrations are append-only; a bad migration is repaired by a forward corrective migration, never by re-running an older image's migration state).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| D17 | CI credential posture                                                  | PR gate (fork-safe, no credentials): `terraform fmt -check`, per-root `init -backend=false` + `validate`, `terraform test` with **mock providers**, tflint, env-parity diff + tfvars key-set check, Caddy boundary e2e. Credentialed `terraform plan` against the real staging backend runs only on push-to-`main` and manual dispatch under the `ci-plan` OIDC role. `apply` is never automatic: staging deploys are `workflow_dispatch` by a maintainer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| D17 | CI credential posture                                                  | PR gate (fork-safe, no credentials): `terraform fmt -check`, per-root `init -backend=false` + `validate`, `terraform test` with **mock providers**, tflint, env-parity diff + tfvars key-set check, Caddy boundary e2e. Credentialed `terraform plan` against the real staging backend is manual `workflow_dispatch` only, under the `ci-plan` OIDC role and the recorded AWS-authorization gate. Image pushes and staging deploys are also manual dispatches behind that gate; no credentialed workflow runs on pull request, push, or tag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | D18 | Staging DNS naming                                                     | `staging.aboutme.vn` (CloudFront alias) and `origin-staging.aboutme.vn` (grey-cloud A → staging EIP), both in the existing `aboutme.vn` zone. Production names (`aboutme.vn`, `www`, `origin`) are variables in the same module; no new zone. Staging is **not public** — see D25.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | D19 | DNS execution path                                                     | Per CLAUDE.md, Cloudflare records are managed with the **`cf` CLI (v0.5+), not a Terraform provider**. Terraform _outputs_ the required records (origin A, ACM validation CNAMEs, CloudFront alias targets); `deploy/aws/scripts/dns-apply.sh` renders and applies them via `cf`, and `--check` mode diffs live DNS against the outputs. Caddy's transient DNS-01 TXT records via the Cloudflare API are the one exception, mandated by spec §6 itself.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | D20 | Scheduled jobs engine + overlap locking                                | **EventBridge Scheduler → `ecs:RunTask`** (no Lambda): retention jobs run the _server_ image with a subcommand (interface reserved for P8-priv — see "Interfaces left behind"); the restore-verification drill and the **prefix-list drift check (D6, added Rev 2)** run the _ops_ image scripts. Overlap locks: DB-touching retention jobs take a pg advisory lock (P8-priv's job code); the restore drill's deterministic restore-instance identifier is its natural mutex (script exits nonzero if the previous drill's instance still exists). Failures alarm via an EventBridge ECS task-state rule → SNS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -382,10 +391,12 @@ providers/backends at this point), `.gitignore` additions for `.terraform/`,
       Failing-first `terraform test` (mock provider) asserts the ECR properties
       and the bucket lifecycle rule; then `terraform fmt -check`,
       `terraform init -backend=false`, `terraform validate` all green.
-- [ ] **Real AWS (explicit, operator-run):** apply `bootstrap/` once with local
-      state; record redacted outputs (bucket name, role ARNs, repo URIs) in the
-      phase ledger, and the import-recovery commands in the module README. No CI
-      job ever applies bootstrap.
+- [ ] **Real AWS activation (explicit, operator-run, deferred):** only after the
+      P9 local-UAT report and independent evidence verdict are both `PASS` at
+      the candidate commit and human AWS authorization is recorded, apply
+      `bootstrap/` once with local state. Record redacted outputs (bucket name,
+      role ARNs, repo URIs) in the phase ledger, and the import-recovery
+      commands in the module README. No CI job ever applies bootstrap.
 - [ ] Env roots: identical `main.tf` (module calls arrive in later tasks),
       `variables.tf`, `backend.hcl` per env, `staging.auto.tfvars` /
       `production.auto.tfvars` skeletons with identical key sets.
@@ -394,10 +405,10 @@ providers/backends at this point), `.gitignore` additions for `.terraform/`,
 
 **Verification:** `terraform fmt -check -recursive deploy/aws`; per-root
 `init -backend=false` + `validate`; `terraform test` in `bootstrap/`;
-`bash deploy/aws/scripts/parity-check.sh`. Real-AWS portion: bootstrap apply
-evidence in the ledger (unavoidable — this is the only path to a remote state
-backend; the cheapest safe check is that `terraform plan` on a second run
-reports zero changes).
+`bash deploy/aws/scripts/parity-check.sh`. After the activation gate, the
+real-AWS portion records bootstrap-apply evidence in the ledger (this is the
+only path to a remote state backend); a second `terraform plan` reports zero
+changes.
 
 ### Task 2: Network module — VPC, prefix-list ingress, private DB subnets, EIP auto-reassociation
 
@@ -516,7 +527,8 @@ seed, `.env.example` diff (names only) for the integration owner
       drill hook — AC-OPS-016). Docs gates green.
 
 **Verification:** `terraform test`, `validate`, shellcheck, parity, docs gates.
-Real-AWS bootstrap-write happens in Task 14's staging bring-up.
+After authorization and Task 1's bootstrap apply, the real-AWS bootstrap-write
+and `--check` complete before Task 14 starts.
 
 ### Task 5: Compute module — ECS cluster, arm64 capacity, task definitions (D24 topology)
 
@@ -800,17 +812,20 @@ diff for the integration owner. (ECR repositories live in
       baked in; non-root. Failing-first: a trivial structure check (scripts
       present + executable + shellcheck run during build) that fails before the
       Dockerfile exists.
-- [ ] Author `images.yml`: on tag/dispatch, `runs-on: ubuntu-24.04-arm`, builds
-      all four images (server, web, caddy — Task 7's Dockerfile — and ops)
-      natively for arm64, pushes to the bootstrap-owned ECR **by digest** via
-      the `ci-deploy-staging` OIDC role, emits a digest manifest artifact (JSON:
-      image → digest) consumed by Task 12's deploy workflow and, later, by P10's
-      promotion (same digests, per the master plan). No QEMU/buildx multi-arch
-      matrix (D12). Hand the workflow diff to the integration owner; run
-      `actionlint` on it before handoff.
+- [ ] Author `images.yml`: manual `workflow_dispatch` only,
+      `runs-on: ubuntu-24.04-arm`, builds all four images (server, web, caddy —
+      Task 7's Dockerfile — and ops) natively for arm64, pushes to the
+      bootstrap-owned ECR **by digest** via the `ci-deploy-staging` OIDC role,
+      emits a digest manifest artifact (JSON: image → digest) consumed by Task
+      12's deploy workflow and, later, by P10's promotion (same digests, per the
+      master plan). The workflow requires the AWS-authorized staging environment
+      gate and cannot run on a tag, push, or pull request. No QEMU/buildx
+      multi-arch matrix (D12). Hand the workflow diff to the integration owner;
+      run `actionlint` on it before handoff.
 
 **Verification:** podman builds succeed locally; `actionlint` clean. The actual
-ECR push is exercised on first staging deploy (Task 14) — real AWS, stated.
+ECR push is exercised only after the activation gate, during the first staging
+deploy in Task 14.
 
 ### Task 9: Observability module — alarms (with default thresholds), dashboards, SNS
 
@@ -972,7 +987,7 @@ integration owner; `docs/runbooks/deploy-rollback.md` seed.
       interface P10 consumes; PI does not create a production workflow run.
 
 **Verification:** `actionlint`; the workflow's first real execution is Task 14's
-staging bring-up (real AWS, stated). Docs gates on the runbook.
+staging bring-up after the activation gate. Docs gates on the runbook.
 
 ### Task 13: CI integration — `terraform validate`/`plan`/test, parity, boundary job
 
@@ -993,10 +1008,12 @@ for the integration owner; Makefile diff (`iac-fmt`, `iac-validate`, `iac-test`,
       (diff + tfvars key-set); shellcheck on `deploy/aws/scripts`;
       `route-table-test-prod` (Task 7's e2e job with the pinned caddy binary,
       alongside the existing `route-table` job).
-- [ ] Author the credentialed `staging-plan` job: push-to-`main` +
-      `workflow_dispatch` only, OIDC → `ci-plan` (read-only),
+- [ ] Author the credentialed `staging-plan` job: manual `workflow_dispatch`
+      only, after the AWS-authorization gate; OIDC → `ci-plan` (read-only),
       `terraform     plan -lock=false` against the staging backend, plan summary
-      posted; **never** on `pull_request` (public repo, fork secrets).
+      posted; **never** on `push` or `pull_request` (public repo, fork secrets).
+      Author and lint the workflow before AWS authorization, but do not dispatch
+      it or make any AWS API call until the activation gate is recorded.
 - [ ] Locally verify everything the worker _can_ verify: `actionlint` on both
       workflow files; run each PR-gate command directly in the worktree and
       record green output; deliberately mis-format one `.tf` file, run
@@ -1013,18 +1030,20 @@ workflow triggers.
 **Verification:** worker: local command runs + `actionlint` output recorded.
 Owner: the applied workflows' red-then-green observation.
 
-### Task 14: Staging bring-up (real AWS), runbooks complete, evidence
+### Task 14: Authorized staging bring-up (real AWS), runbooks complete, evidence
 
 Closes "modules apply cleanly to a staging environment". **This task is
-explicitly real-AWS**, operator-run, with spend visibility (D21 sizing).
+explicitly real-AWS**, operator-run after the human AWS-authorization
+checkpoint, with spend visibility (D21 sizing).
 
-**Preconditions (hard gate — do not start without all three):**
+**Preconditions (hard gate — do not start without all four):**
 
-- [ ] **Recorded human-owner spend authorization** for staging-scale AWS spend
-      (see "Escalations pending human owner" #2 — the master plan's only spend
-      gate sits after P9A, so Task 14 must not create recurring spend on the
-      integration owner's authority alone). **No apply without the authorization
-      recorded in the phase ledger.**
+- [ ] P9 local-UAT report is `PASS` at the exact candidate commit, and a fresh
+      independent evidence reviewer returned `PASS` for that same commit.
+- [ ] **Recorded human-owner AWS resource-creation authorization**, including
+      staging-scale spend and approved AWS/Cloudflare mutation scope (see
+      "Escalations pending human owner" #2). **No bootstrap apply, ECR push, DNS
+      mutation, staging apply, or workflow dispatch without it.**
 - [ ] Owner-provided inputs in hand: AWS account/role access, Cloudflare API
       token (Zone:DNS:Edit, `aboutme.vn` only), `var.oncall_email` value.
 - [ ] Base commit + image digests from Task 8's first build recorded;
@@ -1100,16 +1119,16 @@ These are **not** resolved by the design-decisions table; each lists the default
 this plan assumes if approved. The integration owner routes them; the human
 owner decides.
 
-| #   | Escalation                                                                                                         | Default assumed if approved                                                                                                                         |
-| --- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | D21 sizing — recurring real-money commitment with no budget row                                                    | Staging `t4g.small`/`db.t4g.micro`; production `t4g.medium`/`db.t4g.small`; tfvars-only change if overturned                                        |
-| 2   | Task 14 creates ongoing AWS spend **before** the master plan's only spend gate (human launch checkpoint, post-P9A) | Owner records a staging-scale spend authorization at Task 14 dispatch — **an explicit Task 14 precondition; no apply without it**                   |
-| 3   | AWS account, Cloudflare API token, `var.oncall_email` — human-provided inputs with no acquisition path in-plan     | Owner supplies via `.env`/`secrets-bootstrap.sh` before Task 1's real-AWS step (account) and Task 14 (token, email)                                 |
-| 4   | D1 — Terraform (BUSL) tooling in an AGPL-3.0 public repo                                                           | Terraform retained: repo ships only HCL (no BUSL binaries); OpenTofu fallback preserved by plain-HCL constraint                                     |
-| 5   | D14 — closing port 80 deviates from spec §6's literal "Caddy 80/443"                                               | 443-only ingress from the CloudFront prefix list; port 80 closed                                                                                    |
-| 6   | Web-tier trust posture (review blocking 5)                                                                         | The D24 redesign (web outside the host namespace; no risk acceptance) — approving D24 closes this                                                   |
-| 7   | D9 — origin secret unavoidably in CloudFront distribution config + TF state                                        | Accepted with mitigations: SSE-KMS state + noncurrent expiration, scoped state-read role, rotation runbook                                          |
-| 8   | Public `staging.aboutme.vn` + ACM cert in CT logs while the spec §10 trademark item is open                        | Staging gated (D25: basic auth + blanket noindex); CT-log residue accepted — owner may instead direct a neutral staging domain (tfvars-only change) |
+| #   | Escalation                                                                                                     | Default assumed if approved                                                                                                                               |
+| --- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | D21 sizing — recurring real-money commitment with no budget row                                                | Staging `t4g.small`/`db.t4g.micro`; production `t4g.medium`/`db.t4g.small`; tfvars-only change if overturned                                              |
+| 2   | AWS/Cloudflare resource creation, mutation scope, and recurring staging spend                                  | After P9 and independent evidence verification pass, the owner records one explicit AWS resource-creation authorization; no real-cloud action precedes it |
+| 3   | AWS account, Cloudflare API token, `var.oncall_email` — human-provided inputs with no acquisition path in-plan | Owner supplies via `.env`/`secrets-bootstrap.sh` only after the AWS authorization checkpoint                                                              |
+| 4   | D1 — Terraform (BUSL) tooling in an AGPL-3.0 public repo                                                       | Terraform retained: repo ships only HCL (no BUSL binaries); OpenTofu fallback preserved by plain-HCL constraint                                           |
+| 5   | D14 — closing port 80 deviates from spec §6's literal "Caddy 80/443"                                           | 443-only ingress from the CloudFront prefix list; port 80 closed                                                                                          |
+| 6   | Web-tier trust posture (review blocking 5)                                                                     | The D24 redesign (web outside the host namespace; no risk acceptance) — approving D24 closes this                                                         |
+| 7   | D9 — origin secret unavoidably in CloudFront distribution config + TF state                                    | Accepted with mitigations: SSE-KMS state + noncurrent expiration, scoped state-read role, rotation runbook                                                |
+| 8   | Public `staging.aboutme.vn` + ACM cert in CT logs while the spec §10 trademark item is open                    | Staging gated (D25: basic auth + blanket noindex); CT-log residue accepted — owner may instead direct a neutral staging domain (tfvars-only change)       |
 
 ## Interfaces PI leaves behind (consumed by later phases)
 
@@ -1137,13 +1156,15 @@ owner decides.
       the entrypoint-guard unit test passes; the dev route-table test is green
       **unmodified**; `Caddyfile.prod` validates inside the Task 7 custom Caddy
       image.
-- [ ] `envs/staging` applied cleanly to real AWS **after recorded owner spend
-      authorization**: services stable, synthetic CloudFront→Caddy→app→DB smoke
-      green (through the D25 gate), post-apply `plan` shows zero changes,
-      destroy/re-apply cycle proven once, direct-to-origin no-secret request
-      rejected, gate challenge + noindex headers observed, bridge gateway
-      address verified live, and the SSR chain (web → internal listener → Go)
-      exercised end to end with log evidence — all in the phase ledger.
+- [ ] `envs/staging` applied cleanly to real AWS **after P9 local UAT and
+      independent evidence verification passed at the candidate commit and human
+      AWS resource-creation authorization was recorded**: services stable,
+      synthetic CloudFront→Caddy→app→DB smoke green (through the D25 gate),
+      post-apply `plan` shows zero changes, destroy/re-apply cycle proven once,
+      direct-to-origin no-secret request rejected, gate challenge + noindex
+      headers observed, bridge gateway address verified live, and the SSR chain
+      (web → internal listener → Go) exercised end to end with log evidence —
+      all in the phase ledger.
 - [ ] Secrets: `secrets-bootstrap.sh --check` green; no secret value in repo,
       tfvars, outputs, or workflow logs; no plan-time reads of secret values
       except the two consuming sites (D10 ephemeral, D9 sensitive data source);

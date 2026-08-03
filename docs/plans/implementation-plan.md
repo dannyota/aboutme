@@ -14,13 +14,14 @@ resume docs; SSE live refresh; chromedp PDF/og. Full design:
 [`../specs/aboutme-design.md`](../specs/aboutme-design.md).
 
 **Source of truth:** the spec. Where this plan and the spec disagree, the spec
-wins and the plan is corrected. Status: Rev 5 (2026-08-03) — P0 and P1 are
-complete; P2A is active. Rev 5 adds an owner-facing numbered delivery index,
-restores the missed P1.1 follow-up before P2B, records the exact P2A checkpoint,
-and makes pre-execution contract gaps visible instead of treating an adopted
-phase plan as authority over the design. Owner direction on 2026-08-03
-integrated the independently reviewed Tasks 1–7 checkpoint into `main` before
-phase exit; this does not mark P2A complete or unlock any dependent phase.
+wins and the plan is corrected. Status: Rev 6 (2026-08-04) — P0 and P1 are
+complete; P2A is active. Rev 6 reserves **UAT** for user-like browser validation
+of a complete deployment: the main-session UAT executor (GPT-5.6 Sol) runs it
+locally through Playwright MCP before any request for AWS authorization. Earlier
+`uat-phase-*` names are retained as immutable history but mean automated phase
+acceptance, not manual browser UAT. Rev 5 added the numbered delivery index,
+restored P1.1, and recorded the P2A checkpoint. The Tasks 1–7 checkpoint on
+`main` does not mark P2A complete or unlock any dependent phase.
 
 ## Global constraints (apply to every task)
 
@@ -46,20 +47,37 @@ phase exit; this does not mark P2A complete or unlock any dependent phase.
 
 ## Agent workflow (who does what)
 
-| Step                                    | Agent                                                                                            | Rule                                                                                                                                                                                                                                                    |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Write failing test → minimal impl (TDD) | **Sonnet 5 (xhigh)**                                                                             | author writes unit tests for its own code, test-first                                                                                                                                                                                                   |
-| Independent adversarial tests           | a second, fresh **Sonnet 5 (xhigh)** instance                                                    | for high-risk areas (auth, authz, concurrency, migrations, sanitizer, publish/cache, SSE, render bounds) derive **black-box/property/fuzz tests from the spec acceptance IDs BEFORE reading the impl diff**; low-risk scaffold/UI needs only author TDD |
-| Per-task code review                    | **Opus 5 (xhigh)**                                                                               | reviews diff before merge; blocking findings fixed first                                                                                                                                                                                                |
-| Per-phase design/consistency review     | **Fable**                                                                                        | slice matches spec; interfaces stable; traceability rows resolved                                                                                                                                                                                       |
-| Per-phase adversarial review            | **Fresh Fable or Opus 5 instance**                                                               | challenges the approach, tradeoffs and assumptions (not defects) before a phase's decisions are frozen and built upon                                                                                                                                   |
-| Per-phase + pre-deploy UAT              | **dedicated UAT agent** (fresh context, cannot edit product code/tests/snapshots/seeds/criteria) | runs the acceptance catalog, emits a machine-readable fail-closed report                                                                                                                                                                                |
-| UAT verification                        | **Opus 5 (xhigh)**                                                                               | samples the report's evidence artifacts AND reruns a deterministic subset of scenarios; any mismatch with the report fails the gate                                                                                                                     |
-| Deploy                                  | **Fable** or **Opus (xhigh)**                                                                    | only after the P9A staging gate AND the human launch checkpoint                                                                                                                                                                                         |
+| Step                                    | Agent                                                                                        | Rule                                                                                                                                                                                                                                                    |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Write failing test → minimal impl (TDD) | **Sonnet 5 (xhigh)**                                                                         | author writes unit tests for its own code, test-first                                                                                                                                                                                                   |
+| Independent adversarial tests           | a second, fresh **Sonnet 5 (xhigh)** instance                                                | for high-risk areas (auth, authz, concurrency, migrations, sanitizer, publish/cache, SSE, render bounds) derive **black-box/property/fuzz tests from the spec acceptance IDs BEFORE reading the impl diff**; low-risk scaffold/UI needs only author TDD |
+| Per-task code review                    | **Opus 5 (xhigh)**                                                                           | reviews diff before merge; blocking findings fixed first                                                                                                                                                                                                |
+| Per-phase design/consistency review     | **Fable**                                                                                    | slice matches spec; interfaces stable; traceability rows resolved                                                                                                                                                                                       |
+| Per-phase adversarial review            | **Fresh Fable or Opus 5 instance**                                                           | challenges the approach, tradeoffs and assumptions (not defects) before a phase's decisions are frozen and built upon                                                                                                                                   |
+| Per-phase automated acceptance          | **fresh acceptance worker** (cannot edit product code, tests, snapshots, seeds, or criteria) | runs the phase acceptance catalog and emits a machine-readable fail-closed report                                                                                                                                                                       |
+| Phase-acceptance evidence review        | **fresh independent evidence reviewer**                                                      | samples artifacts and reruns a deterministic subset; any mismatch fails the phase gate                                                                                                                                                                  |
+| P9 local manual UAT                     | **main-session UAT executor (GPT-5.6 Sol)**                                                  | autonomously exercises the full local Podman deployment through the project-scoped Playwright MCP server; the human owner does not execute UAT                                                                                                          |
+| P9 local-UAT evidence review            | **fresh independent reviewer**                                                               | verifies the frozen report and artifacts without editing the candidate or UAT criteria                                                                                                                                                                  |
+| AWS activation and staging deployment   | **main-session integration owner or delegate**                                               | only after P9 local UAT and evidence review pass and the human owner records AWS resource-creation authorization                                                                                                                                        |
+| Production promotion                    | **main-session integration owner or delegate**                                               | only after P9A passes and the human owner separately approves production launch                                                                                                                                                                         |
 
 Independence rule: the code author never signs off its own correctness. Every
-task is gated by Opus 5 review; every phase by an independent UAT agent; the
-author cannot weaken an adversarial test without review.
+task gets independent defect review; every phase gets independent automated
+acceptance and evidence verification; the author cannot weaken an adversarial
+test without review. P9 UAT is a separate user-workflow gate over the complete
+deployed application.
+
+### Acceptance and UAT terminology
+
+- **Automated phase acceptance** proves a bounded implementation slice. Legacy
+  `uat-phase-*` catalogs and completed `UAT` records keep their filenames and
+  verdicts, but they are interpreted this way.
+- **Local manual UAT** means the main-session UAT executor (GPT-5.6 Sol)
+  operates the product like a user through Playwright MCP against the full
+  Podman Compose deployment at `http://localhost:8080`. It is not delegated to
+  the human owner and is not a substitute for scripted Playwright E2E tests.
+- **Staging rehearsal** reruns applicable UAT scenarios and infrastructure
+  drills on AWS only after the human owner authorizes AWS resource creation.
 
 ## Integration discipline (all-agent, parallel execution)
 
@@ -76,38 +94,48 @@ author cannot weaken an adversarial test without review.
 
 ## Testing strategy (pyramid + gates)
 
-| Layer                    | Tooling                                                                                                                                                                          | Owner       | Gate              |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------- |
-| Unit                     | Go `testing` (table-driven); Vitest                                                                                                                                              | author, TDD | per task          |
-| Integration              | Go `httptest` plus the explicit podman-managed Postgres test database and fail-closed live-DB helper                                                                             | author      | per task          |
-| Contract                 | OpenAPI examples validated and linted now; generated TS client compile + drift correction in P0F                                                                                 | P0/P0F      | CI                |
-| Migration                | empty→head, prev-release→head, concurrent advisory-lock, partial-failure recovery                                                                                                | P0          | CI                |
-| Write-safety/concurrency | If-Match matrix, idempotency replay/reject/rollback, CAS-vs-autosave races                                                                                                       | P2A         | CI + soak         |
-| Security                 | OAuth replay/mix-up/expiry, CSRF matrix, XSS hostile corpus (bluemonday+DOMPurify+SSR+real browser), spoofed-header rate limits                                                  | P1/P3/P5    | CI                |
-| Renderer golden          | SSR string snapshots (fixtures × templates × pagination modes)                                                                                                                   | P3          | CI diff = review  |
-| Visual regression        | Playwright screenshot diff per template on a standalone renderer harness in P3 (pinned browser image/platform + fonts); `/print` itself is P7A's artifact and is diffed from P7B | P3/P7       | CI                |
-| Resource bounds          | chromedp in production cgroup: 512 MiB, bounded queue, kill-on-timeout, readiness-on-saturation, no outbound                                                                     | P7A         | CI + P9A          |
-| E2E                      | Playwright full flows                                                                                                                                                            | P4+         | per phase from P5 |
-| Accessibility            | axe + keyboard-nav on editor + public page                                                                                                                                       | P4/P5       | per phase + P9    |
-| UAT (acceptance)         | UAT agent, machine-readable report                                                                                                                                               | UAT agent   | phase gate + P9A  |
-| Ops drills               | real RDS restore, SSE soak under proxy, deploy/rollback, EIP recovery, secret rotation, alarm-fires-and-received                                                                 | P9A         | pre-deploy        |
+| Layer                      | Tooling                                                                                                                                                                          | Owner             | Gate              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ----------------- |
+| Unit                       | Go `testing` (table-driven); Vitest                                                                                                                                              | author, TDD       | per task          |
+| Integration                | Go `httptest` plus the explicit podman-managed Postgres test database and fail-closed live-DB helper                                                                             | author            | per task          |
+| Contract                   | OpenAPI examples validated and linted now; generated TS client compile + drift correction in P0F                                                                                 | P0/P0F            | CI                |
+| Migration                  | empty→head, prev-release→head, concurrent advisory-lock, partial-failure recovery                                                                                                | P0                | CI                |
+| Write-safety/concurrency   | If-Match matrix, idempotency replay/reject/rollback, CAS-vs-autosave races                                                                                                       | P2A               | CI + soak         |
+| Security                   | OAuth replay/mix-up/expiry, CSRF matrix, XSS hostile corpus (bluemonday+DOMPurify+SSR+real browser), spoofed-header rate limits                                                  | P1/P3/P5          | CI                |
+| Renderer golden            | SSR string snapshots (fixtures × templates × pagination modes)                                                                                                                   | P3                | CI diff = review  |
+| Visual regression          | Playwright screenshot diff per template on a standalone renderer harness in P3 (pinned browser image/platform + fonts); `/print` itself is P7A's artifact and is diffed from P7B | P3/P7             | CI                |
+| Resource bounds            | chromedp in production cgroup: 512 MiB, bounded queue, kill-on-timeout, readiness-on-saturation, no outbound                                                                     | P7A               | CI + P9A          |
+| E2E                        | Playwright full flows                                                                                                                                                            | P4+               | per phase from P5 |
+| Accessibility              | axe + keyboard-nav on editor + public page                                                                                                                                       | P4/P5             | per phase + P9    |
+| Automated phase acceptance | Fresh worker, immutable catalog, machine-readable evidence                                                                                                                       | fresh worker      | phase gate        |
+| Local manual UAT           | Main-session UAT executor through project-scoped Playwright MCP against the complete Podman deployment                                                                           | integration owner | P9                |
+| Staging rehearsal          | Applicable browser UAT plus production-like infrastructure and operations checks                                                                                                 | integration owner | P9A               |
+| Ops drills                 | real RDS restore, SSE soak under proxy, deploy/rollback, EIP recovery, secret rotation, alarm-fires-and-received                                                                 | P9A               | pre-deploy        |
 
 Coverage target: ≥80% lines on Go domain packages and web composables/stores;
 renderer covered by golden snapshots. Coverage is necessary, not sufficient —
-the UAT acceptance catalog is the real bar. **Numeric budgets** (API p95
-latency, memory, render queue depth, pgx pool ceiling, SSE connections/fd) are
-defined in P0 and enforced in P7A/P9A.
+the automated phase-acceptance catalog and later local UAT are both required.
+**Numeric budgets** (API p95 latency, memory, render queue depth, pgx pool
+ceiling, SSE connections/fd) are defined in P0 and enforced in P7A/P9A.
 
-### UAT report contract (fail-closed)
+### Automated phase-acceptance report contract (fail-closed)
 
-Each run: clean deterministic seed; records commit SHA, image digests, migration
-head, config fingerprint, browser version, exact commands, timestamps, retry
-count. One row per acceptance criterion: expected / observed /
-**PASS|FAIL|BLOCKED**, each linked to a Playwright trace + screenshots + HAR +
-request IDs + server logs + DB verification query. **BLOCKED counts as FAIL.**
-Missing evidence, undisclosed retries, or any console/server error fails the
-gate. Auth acceptance uses mock providers for repeatability; dedicated real-
-provider accounts are used only for staging smoke.
+Each run records the commit, exact commands, timestamps, state changes, retry
+count, and one expected/observed/**PASS|FAIL|BLOCKED** row per frozen criterion.
+Evidence is appropriate to the slice: command output, test reports, database
+queries, logs, or browser artifacts when a browser surface exists. `BLOCKED`
+counts as failure. Missing evidence or undisclosed retries fails the gate.
+
+### Local-UAT report contract (fail-closed)
+
+P9 records the exact commit, image IDs, migration head, configuration names
+without values, Podman/Chrome/Playwright-MCP versions, commands, timestamps, and
+state changes. Each frozen scenario links its expected and observed result to
+accessibility snapshots, screenshots, trace or video, console and network
+evidence, request IDs, relevant server logs, and database verification where
+needed. `BLOCKED` counts as failure; missing evidence, undisclosed retries, or
+unexplained console/server errors fails the gate. Mock providers and fake users
+make local auth deterministic. Real-provider smoke is staging-only.
 
 ## Phase graph
 
@@ -147,19 +175,23 @@ graph TD
     P6B --> P9
     P7B --> P9
     P8P --> P9
-    P9 --> P9A[P9A Production-like staging rehearsal]
-    P7B --> PI[PI Infrastructure as code]
-    PI --> P9A
-    P9A --> HC{Human launch checkpoint}
-    HC --> P10[P10 Promote to production]
+    P7B --> PIC[PI code-only + local IaC validation]
+    PIC --> P9
+    P9 --> EV[P9 independent evidence verification]
+    EV --> AWSAUTH
+    AWSAUTH --> PIA[PI AWS activation + staging creation]
+    PIA --> P9A[P9A Production-like staging rehearsal]
+    P9A --> PRODAUTH{Human approves production launch}
+    PRODAUTH --> P10[P10 Promote to production]
 ```
 
 Security infra (P8-sec) starts at P0 as middleware; each route adds its policy
-in its owning phase. **PI (infrastructure as code) runs after P7B** — early
-enough to build and refresh staging for the P9A gate, late enough that the
-runtime shape it provisions (S3 media, the print worker's cgroup, SSE origin
-timeouts) is already settled; P10 only promotes. P0 executes as three review
-units: **P0A** contracts/budgets/mobile → **P0B**
+in its owning phase. **PI code-only work starts after P7B** so the runtime shape
+is settled, and completes before the P9 candidate is frozen. No AWS or
+Cloudflare mutation occurs until P9 local UAT and independent evidence
+verification pass and the human owner authorizes AWS resource creation. PI then
+activates staging for P9A; P10 only promotes. P0 executes as three review units:
+**P0A** contracts/budgets/mobile → **P0B**
 server/data/migrations/security-middleware → **P0C** web/dev-stack/fixtures/CI.
 
 ---
@@ -180,12 +212,14 @@ route-owning phase rather than appearing as a one-time step.
 | 05   | P2B resume HTTP API/media       | **Waiting on 03 + P0F + P1.1** | Authenticated CRUD, write-safety HTTP contract, granular saves, and media                                                         |
 | 06   | P4 + P5A + P6A + P7A            | **Parallel feature wave**      | Editor, publish/public SSR, SSE transport, and bounded owner print worker after their graph dependencies                          |
 | 07   | P5B + P6B + P7B + P8-priv       | **Parallel closure wave**      | Publish UX/disclosure, live refetch, public render artifacts, and privacy lifecycle                                               |
-| 08   | PI infrastructure               | **Deferred until after P7B**   | Refresh the adopted Terraform plan against the final runtime shape, then resolve spend/credentials/naming before apply            |
-| 09   | P9 functional integration/UAT   | **Waiting**                    | Full local-stack acceptance catalog and accessibility gate                                                                        |
-| 10   | P9A staging rehearsal           | **Waiting on 08 + 09**         | Production-like AWS proof, real ops drills, and independent evidence verification                                                 |
-| 11   | Human launch checkpoint         | **Waiting**                    | Naming, disclosure, credentials, DNS timing, spend, and go/no-go                                                                  |
-| 12   | P10 production promotion        | **Waiting**                    | Promote staging-proven images/migrations; no new infrastructure authored here                                                     |
-| 13   | P11 Flutter                     | **Post-launch**                | Mobile client against the versioned API                                                                                           |
+| 08   | PI code-only infrastructure     | **Deferred until after P7B**   | Refresh and validate IaC locally with mock providers; no AWS or Cloudflare mutation                                               |
+| 09   | P9 local manual UAT             | **Waiting on 08**              | Main-session UAT executor (GPT-5.6 Sol) validates the full Podman deployment through Playwright MCP                               |
+| 10   | P9 evidence verification        | **Waiting on 09**              | Fresh independent reviewer verifies artifacts and reruns a deterministic subset                                                   |
+| 11   | Human AWS authorization         | **Waiting on 08 + 10**         | Human authorizes resource creation, credentials, naming, DNS scope, and staging spend; the human does not run UAT                 |
+| 12   | PI AWS activation + P9A         | **Waiting on 11**              | Create staging, then prove the production-like topology and real operations drills                                                |
+| 13   | Human production approval       | **Waiting on 12**              | Separate go/no-go for public production launch                                                                                    |
+| 14   | P10 production promotion        | **Waiting on 13**              | Promote staging-proven images/migrations; no new infrastructure authored here                                                     |
+| 15   | P11 Flutter                     | **Post-launch**                | Mobile client against the versioned API                                                                                           |
 
 ### Current decision and quality blockers
 
@@ -215,18 +249,18 @@ route-owning phase rather than appearing as a one-time step.
 
 ## Phase status (kept current by the integration owner)
 
-| Phase                  | State                                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0A contracts          | **Implemented, with P0F correction queued**       | Schema (draft-permissive, schema-derived codegen, conformance + hostile corpus), OpenAPI lint/conformance, budgets, traceability. The audit found generated OpenAPI TS client/drift tooling was never implemented; P0F closes that gap before P2B                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| P0F API client tooling | **Queued; must precede P2B**                      | Pin OpenAPI TypeScript generation and typed transport, commit generated types, prove a request/response contract plus web compilation, and add a non-mutating drift check; no HTTP contract change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| P0B server + data      | **Implemented**                                   | Go skeleton, rate-limit/security/cache middleware, sqlc + Atlas + goose, 4-scenario migration harness                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| P0C web + stack        | **Implemented**                                   | Nuxt 4 SSR, podman stack with migration service, full route table, client-IP trust boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **P0 exit gate**       | **5 of 5 passed** ✅ · **merged**                 | Design review ✅ · adversarial review ✅ · traceability closure ✅ · independent fail-closed UAT ✅ · Opus 5 evidence verification ✅ — corroborated at pre-squash pin `4e3a2b9` (local ledger `.superpowers/sdd/phase-0bc/gate-verification-final.txt`; not in public history). Merged to `main` as squashed public initial commit `9382c86` (2026-08-02); full gate suite re-run green at `9382c86`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| PI infrastructure      | **Plan adopted; execution deferred to after P7B** | Two Opus review rounds applied; traceability rows AC-INF-001…008 + AC-OPS-015…019 ratified. Resequenced 2026-08-02: PI blocks only P9A, and building it before the runtime shape is settled (S3 media in P2B, the print worker's cgroup in P7A, SSE timeouts in P6A) would mean building it twice while paying for idle staging. Needs a refresh pass at execution time. Human-owner escalations (spend, credentials, naming) deferred with it                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| P1 auth                | **4 of 4 exit gates passed** ✅ · **merged**      | Google/GitHub/LinkedIn OIDC+OAuth2 login, session lifecycle with FK-tracked rotation lineage, fail-closed CSRF, `/me` + session device management, explicit linking with email-merge rejection, web login/session pages. Six independent blind adversarial suites (AC-AUTH-001…005, AC-SEC-002); schema head `00003_add_sessions_rotated_from`; decisions DD-C1…DD-C17 recorded in the phase plan's appendix. Gates: whole-branch review ✅ (2 blocking findings fixed) · adversarial review ✅ (PROCEED WITH CHANGES; follow-ups scoped in `phase-1-deferred.md`) · independent fail-closed UAT ✅ (run 1 FAIL found a real gate-command defect; run 2 16/16 PASS at `2d17f77`) · Opus evidence verification ✅ (both runs; UPHELD WITH CORRECTIONS, corrections applied to future runs). Merged to `main` as `ad357d3` (2026-08-02). Deferred follow-ups are preserved as P1.1 and must close before P2B |
-| P1.1 auth follow-up    | **Queued; must precede P2B**                      | Missed its intended pre-P2A window. Owns auth-route limits, opportunistic OAuth-transaction reaping, CSRF-protected link/reauth start, typed auth-funnel reasons, and the rotation single-delivery reliability fix; see `phase-1-deferred.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| P2A resume store       | **Executing on `main`** (checkpoint integrated)   | Owner-directed checkpoint `5805ddc` integrates independently reviewed Tasks 1–7, including title/lint and callback/TTL/CAS-convergence corrections. Task 2b, Tasks 6a/6b and 8–12, independent suites, and all phase gates remain; this partial integration is not phase completion and does not unlock P2B                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| P3 renderer            | **Queued behind P2A; refresh required**           | Plan `phase-3-renderer.md` was adopted with ADR 0008 and serialized behind P2A because `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`, `packages/schema/test/gen.test.ts`, and `apps/server/go.{mod,sum}` are contested. Before dispatch, reconcile SSR sanitizer authority and contact ordering with the design/ADRs, remove missing companion-note dependencies, correct stale traceability prose, and refresh the base/shared-file inventory                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Phase                  | State                                             | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0A contracts          | **Implemented, with P0F correction queued**       | Schema (draft-permissive, schema-derived codegen, conformance + hostile corpus), OpenAPI lint/conformance, budgets, traceability. The audit found generated OpenAPI TS client/drift tooling was never implemented; P0F closes that gap before P2B                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| P0F API client tooling | **Queued; must precede P2B**                      | Pin OpenAPI TypeScript generation and typed transport, commit generated types, prove a request/response contract plus web compilation, and add a non-mutating drift check; no HTTP contract change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| P0B server + data      | **Implemented**                                   | Go skeleton, rate-limit/security/cache middleware, sqlc + Atlas + goose, 4-scenario migration harness                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| P0C web + stack        | **Implemented**                                   | Nuxt 4 SSR, podman stack with migration service, full route table, client-IP trust boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **P0 exit gate**       | **5 of 5 passed** ✅ · **merged**                 | Design review ✅ · adversarial review ✅ · traceability closure ✅ · independent fail-closed automated phase acceptance ✅ · Opus 5 evidence verification ✅ — the historical report retains its `UAT` label. Corroborated at pre-squash pin `4e3a2b9` (local ledger `.superpowers/sdd/phase-0bc/gate-verification-final.txt`; not in public history). Merged to `main` as squashed public initial commit `9382c86` (2026-08-02); full gate suite re-run green at `9382c86`                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| PI infrastructure      | **Plan adopted; execution deferred to after P7B** | Two Opus review rounds applied; traceability rows AC-INF-001…008 + AC-OPS-015…019 ratified. Resequenced 2026-08-02: PI blocks only P9A, and building it before the runtime shape is settled (S3 media in P2B, the print worker's cgroup in P7A, SSE timeouts in P6A) would mean building it twice while paying for idle staging. Needs a refresh pass at execution time. Human-owner escalations (spend, credentials, naming) deferred with it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| P1 auth                | **4 of 4 exit gates passed** ✅ · **merged**      | Google/GitHub/LinkedIn OIDC+OAuth2 login, session lifecycle with FK-tracked rotation lineage, fail-closed CSRF, `/me` + session device management, explicit linking with email-merge rejection, web login/session pages. Six independent blind adversarial suites (AC-AUTH-001…005, AC-SEC-002); schema head `00003_add_sessions_rotated_from`; decisions DD-C1…DD-C17 recorded in the phase plan's appendix. Gates: whole-branch review ✅ (2 blocking findings fixed) · adversarial review ✅ (PROCEED WITH CHANGES; follow-ups scoped in `phase-1-deferred.md`) · independent fail-closed automated phase acceptance ✅ (historical `UAT` run 1 FAIL found a real gate-command defect; run 2 16/16 PASS at `2d17f77`) · Opus evidence verification ✅ (both runs; UPHELD WITH CORRECTIONS, corrections applied to future runs). Merged to `main` as `ad357d3` (2026-08-02). Deferred follow-ups are preserved as P1.1 and must close before P2B |
+| P1.1 auth follow-up    | **Queued; must precede P2B**                      | Missed its intended pre-P2A window. Owns auth-route limits, opportunistic OAuth-transaction reaping, CSRF-protected link/reauth start, typed auth-funnel reasons, and the rotation single-delivery reliability fix; see `phase-1-deferred.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| P2A resume store       | **Executing on `main`** (checkpoint integrated)   | Owner-directed checkpoint `5805ddc` integrates independently reviewed Tasks 1–7, including title/lint and callback/TTL/CAS-convergence corrections. Task 2b, Tasks 6a/6b and 8–12, independent suites, and all phase gates remain; this partial integration is not phase completion and does not unlock P2B                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| P3 renderer            | **Queued behind P2A; refresh required**           | Plan `phase-3-renderer.md` was adopted with ADR 0008 and serialized behind P2A because `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`, `packages/schema/test/gen.test.ts`, and `apps/server/go.{mod,sum}` are contested. Before dispatch, reconcile SSR sanitizer authority and contact ordering with the design/ADRs, remove missing companion-note dependencies, correct stale traceability prose, and refresh the base/shared-file inventory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 Both exit-gate reviews returned no-ship on first run; every finding was applied
 to the spec and implemented. The corrected contract is recorded in
@@ -304,10 +338,13 @@ client, and gate cannot silently diverge.
 
 ---
 
-## Phase PI — Infrastructure as code (runs after P7B, before P9A)
+## Phase PI — Infrastructure as code (code-only after P7B; AWS after P9)
 
 **Why before P9A:** P9A's staging gate can only exist if the infrastructure
-exists first. PI **builds** it; P9A **exercises** it; P10 **promotes**.
+exists first. PI code and mock-provider validation run after P7B and complete
+before the P9 candidate freeze. Real AWS activation starts only after P9 local
+UAT and evidence verification pass and the human owner authorizes resource
+creation. PI then **builds** staging; P9A **exercises** it; P10 **promotes**.
 
 > **Sequencing corrected 2026-08-02 (owner decision).** Rev 3 scheduled PI to
 > start immediately after P0. That was a hedge against late-deployment risk, and
@@ -317,12 +354,12 @@ exists first. PI **builds** it; P9A **exercises** it; P10 **promotes**.
 > shape that is not settled — P2B adds S3 media, P7A adds the chromedp worker
 > with a hard 512 MiB cgroup and no outbound network, P6A adds long-lived SSE
 > connections with their own origin timeouts. Each would force a rewrite. **PI
-> now executes after P7B**, when the runtime shape is known, and still lands
-> before P9A. The adopted plan (`phase-pi-infrastructure.md`) is held as-is; it
-> will need a refresh pass against whatever the app actually needs by then, and
-> its human-owner escalations — AWS spend, credentials, the naming decision —
-> are deferred with it. Local development runs on the podman compose stack
-> throughout and needs no cloud account.
+> code-only work now executes after P7B**, when the runtime shape is known. The
+> adopted plan (`phase-pi-infrastructure.md`) needs a refresh pass at dispatch.
+> Bootstrap apply, ECR push, AWS/Cloudflare mutation, DNS mutation, staging
+> apply, and deployment-workflow dispatch remain locked until P9 passes, its
+> evidence is independently verified, and the human owner records AWS
+> authorization. Local development and P9 use Podman and need no cloud account.
 
 **BLOCKING (from the Phase 0 security review):** the production Caddy config
 **must** derive the viewer address from CloudFront's validated inbound chain
@@ -353,7 +390,8 @@ environment-parameterized so staging and production differ only by variables.
 **Exit:** sign in with Google/GitHub/LinkedIn; `__Host-` session; `/me` returns
 user + CSRF token; **session list + per-session revoke + logout-everywhere +
 `Clear-Site-Data`**; explicit provider-linking (recent-reauth); no-email
-LinkedIn rejected. UAT: all providers login/logout, link, revoke a device.
+LinkedIn rejected. Phase acceptance: all providers login/logout, link, revoke a
+device.
 
 Tasks: users/identities/sessions migrations; OAuth core (`x/oauth2` +
 `coreos/go-oidc/v3`), server-side transaction store + `__Host-oauth-tx`, PKCE
@@ -420,9 +458,9 @@ bidirectional converters.
 personal-details/customization deltas) with If-Match/412 + idempotency + size
 bounds; AC-SAVE-004 old-version accept→project→full-current-document persist and
 declared-version emit over the real HTTP/OpenAPI surface; **avatar/photo upload
-API → storage** (per-resume photo per spec §3/§5). UAT: create/edit/delete via
-API; 4th resume rejected; concurrent-write 412; idempotent replay; old-client
-write/emit; oversized payload rejected.
+API → storage** (per-resume photo per spec §3/§5). Phase acceptance:
+create/edit/delete via API; 4th resume rejected; concurrent-write 412;
+idempotent replay; old-client write/emit; oversized payload rejected.
 
 Tasks: each endpoint TDD + integration; media upload endpoint + storage
 abstraction (local in dev, S3 in prod) — this covers the **per-resume photo**;
@@ -439,8 +477,8 @@ race test (`FOR UPDATE` + trigger).
 **both pagination modes** (editor approximate vs continuous public); golden
 snapshots committed; **self-hosted VN-diacritic fonts** load offline
 deterministically; sanitizer enforced both sides against a shared hostile
-corpus. UAT: render every template; verify golden snapshots, screenshot diffs,
-and hostile-corpus neutralization.
+corpus. Phase acceptance: render every template; verify golden snapshots,
+screenshot diffs, and hostile-corpus neutralization.
 
 Tasks: sanitizer allowlist module (shared w/ bluemonday config) + **versioned
 hostile corpus** run through bluemonday+DOMPurify+SSR+real browser + CSP
@@ -459,8 +497,8 @@ pipeline.
 
 **Exit:** instant zero-network preview; debounced coalesced PATCH; retry queue +
 idempotency + 412 rebase; customize panel; ProseMirror sanitized; **core a11y
-(semantics/keyboard/contrast)**. UAT: full edit session, offline/reconnect,
-conflict rebase, unsaved indicator, axe + keyboard pass.
+(semantics/keyboard/contrast)**. Phase acceptance: full edit session,
+offline/reconnect, conflict rebase, unsaved indicator, axe + keyboard pass.
 
 Tasks: Pinia doc store (single source of truth); `useAutosave` (debounce,
 coalesce, queue, idempotency, 412); `useApi`; editor forms + ProseMirror;
@@ -475,14 +513,15 @@ rate-limited, advisory-lock reclaim); public SSR `/[slug]` + JSON-LD +
 OG/Twitter + canonical; `/{slug}.md`, sitemap, robots, llms.txt honor toggles;
 `X-Robots-Tag: noindex` when SEO off; **cache-invalidation abstraction
 enumerating all surfaces** (old+new HTML, .md, og, public PDF, sitemap, llms).
-UAT: publish/unpublish/rename; crawler-visible HTML + headers + robots correct;
-schema.org validates.
+Phase acceptance: publish/unpublish/rename; crawler-visible HTML + headers +
+robots correct; schema.org validates.
 
 ## Phase 5B — Publish dialog + disclosure
 
 **Exit:** publish dialog drives the 3-toggle state matrix with **explicit
-defaults** and **CDN/crawler disclosure wording** (spec §6). UAT: each toggle
-combination yields correct availability; disclosure copy asserted present.
+defaults** and **CDN/crawler disclosure wording** (spec §6). Phase acceptance:
+each toggle combination yields correct availability; disclosure copy asserted
+present.
 
 ---
 
@@ -495,8 +534,8 @@ budget + slow-client eviction + restart behavior**; reconnect always refetches
 ## Phase 6B — Public/preview refetch + unpublish
 
 **Exit:** open public/preview tab auto-refreshes on save; conditional-polling
-fallback; **stream closes immediately on unpublish**. UAT: two-tab refresh; kill
-stream → polling; unpublish closes stream.
+fallback; **stream closes immediately on unpublish**. Phase acceptance: two-tab
+refresh; kill stream → polling; unpublish closes stream.
 
 ---
 
@@ -505,15 +544,15 @@ stream → polling; unpublish closes stream.
 **Exit:** chromedp bounded per spec §2 proven **in the production cgroup** (512
 MiB, 1 concurrent, kill-on-timeout, readiness-on-saturation, **no outbound
 network**); `/print` internal-only + single-audience token; owner PDF export
-matches web layout. UAT: export PDF; saturation → readiness unhealthy; outbound
-blocked.
+matches web layout. Phase acceptance: export PDF; saturation → readiness
+unhealthy; outbound blocked.
 
 ## Phase 7B — Public PDF + og-image + template thumbnails
 
 **Exit:** public PDF gated by `download_enabled` (else 404); og-image 1200×630;
 **template thumbnails generated at build time through the real print pipeline**
-(moved here from P3 — the print worker only exists from P7A). UAT: gating
-correct; og-image valid; every template has a current thumbnail.
+(moved here from P3 — the print worker only exists from P7A). Phase acceptance:
+gating correct; og-image valid; every template has a current thumbnail.
 
 ---
 
@@ -528,18 +567,31 @@ verified end-to-end in P9/P9A.
 **Exit:** `DELETE /me` (recent reauth) purges account+resumes+media+sessions +
 tombstones + invalidation; `GET /me/export` full bundle; **audit retention
 (180d) + session ip/ua redaction + orphan-media sweep** as idempotent jobs
-(overlap-locked); metrics + audit events emitted. UAT: delete → public pages
-404 + data gone; export complete.
+(overlap-locked); metrics + audit events emitted. Phase acceptance: delete →
+public pages 404 + data gone; export complete.
 
 ---
 
-## Phase 9 — Integration & UAT (functional gate)
+## Phase 9 — Main-session local manual UAT (functional gate)
 
-**Exit:** full Playwright E2E green; UAT agent runs the acceptance catalog
-against the podman stack producing a fail-closed machine-readable report; a11y
-suite green. Reviewed by Fable and Opus 5.
+Detailed execution authority: [`phase-9-local-uat.md`](phase-9-local-uat.md).
 
-Acceptance catalog (each item → an acceptance ID + evidence):
+**Role boundary:** the main-session UAT executor (GPT-5.6 Sol) autonomously
+performs user-like browser UAT on this laptop against the complete image-based
+Podman Compose deployment at `http://localhost:8080`, using the project-scoped
+Playwright MCP server. The human owner does not execute UAT. Scripted Playwright
+E2E, accessibility, and all automated development/phase gates must already be
+green.
+
+**Exit:** every frozen scenario below is `PASS` with a fail-closed report and
+complete evidence; a fresh independent reviewer verifies the artifacts and
+reruns a deterministic subset. `FAIL`, `BLOCKED`, missing evidence, unavailable
+MCP tooling, or changed product code keeps the gate closed. The integration
+owner preserves failure evidence, delegates diagnosis to a fresh agent rather
+than guessing, implements reviewed fixes with TDD, recreates the local
+deployment, and reruns every affected scenario.
+
+Local UAT catalog (each item → an acceptance ID + evidence):
 
 1. Auth: each provider login/logout; link second provider; **email-merge
    rejected**; device list + per-session revoke + logout-everywhere.
@@ -557,26 +609,46 @@ Acceptance catalog (each item → an acceptance ID + evidence):
    under spoofed headers.
 10. A11y: axe clean + keyboard-only edit and publish.
 
+Only after this UAT and its independent evidence review pass does the
+integration owner ask the human owner to authorize AWS resource creation. P9
+performs no AWS or Cloudflare mutation.
+
+## Human AWS resource-creation authorization checkpoint
+
+After the integration owner reports the exact P9 candidate and independent
+evidence verdict, the human owner decides whether the integration owner may
+create or change AWS/Cloudflare resources for staging. Until that authorization
+is recorded, bootstrap apply, ECR push, ACM/DNS mutation, staging apply, and
+deployment-workflow dispatch are forbidden. The human owner reviews the evidence
+and deployment scope; the human owner does not run UAT. A later production
+launch still needs its own approval.
+
 ## Phase 9A — Production-like staging rehearsal (pre-deploy gate)
 
-**Exit (the real deploy gate):** the **same Terraform modules and ARM64 image
-digests** intended for production are deployed to a staging environment; the UAT
-agent + ops drills pass there. Gate on: CloudFront behavior matrix
-(cookie/cache/origin per spec §6); origin-bypass rejection + secret rotation;
-SSE heartbeat/reconnect **through CloudFront**; chromedp under production
-cgroup; **two-runner advisory-lock migration**; **real RDS snapshot restore**
-into an isolated instance; EIP recovery; drain/deploy/rollback; **each critical
-alarm deliberately triggered and receipt proven**; CloudFront→Caddy→app→DB
-synthetic check. No promotion to P10 until this report is green.
+**Precondition:** the human owner has recorded AWS resource-creation
+authorization after P9 and its evidence review passed. That authorization is not
+production-launch approval.
+
+**Exit (the staging deploy gate):** the **same Terraform modules and ARM64 image
+digests** intended for production are deployed to a staging environment; the
+integration owner reruns applicable browser UAT and the ops drills pass there.
+Gate on: CloudFront behavior matrix (cookie/cache/origin per spec §6);
+origin-bypass rejection + secret rotation; SSE heartbeat/reconnect **through
+CloudFront**; chromedp under production cgroup; **two-runner advisory-lock
+migration**; **real RDS snapshot restore** into an isolated instance; EIP
+recovery; drain/deploy/rollback; **each critical alarm deliberately triggered
+and receipt proven**; CloudFront→Caddy→app→DB synthetic check. No promotion to
+P10 until this report is green.
 
 ---
 
-## Human launch checkpoint (between P9A and P10)
+## Human production launch checkpoint (between P9A and P10)
 
-A human go/no-go decision — cannot waive a failed technical gate, but is
-required before public DNS cutover for: naming/trademark resolution (spec §10
-open item), CDN/crawler disclosure wording sign-off, real production
-credentials, DNS cutover timing, and cloud spend authorization.
+A separate human go/no-go decision — it cannot waive a failed technical gate,
+and it is not the earlier AWS resource-creation authorization. It is required
+before public DNS cutover for naming/trademark resolution (spec §10 open item),
+CDN/crawler disclosure wording sign-off, production credentials, DNS cutover
+timing, and production spend.
 
 ## Phase 10 — Promote to production (AWS ap-southeast-1)
 
