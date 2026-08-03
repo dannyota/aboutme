@@ -1,39 +1,19 @@
 # Phase 2A — Resume domain & store (implementation plan)
 
-> **Adopted Rev 2 (2026-08-02)** by the integration owner after an independent
-> adversarial plan review (ADOPT WITH CHANGES, 13 blocking findings applied and
-> audited). Acceptance rows `AC-DOC-010`, `AC-DOC-011`, `AC-DOC-012` and
-> `AC-SAVE-003` are minted in `traceability.md`. Originally — revision after the
-> independent adversarial review (ADOPT WITH CHANGES) and the integration
-> owner's rulings. Changelog: D1 hardened (compiler conditions, verdict-parity
-> corpus, rejected-alternative recorded), D2 → generated Go source constant,
-> D5/D11 constants ratified (owner lands them in `budgets.md`), D6 →
-> owner-authored ADR prerequisite, D11 + opportunistic reaping in-phase, D12
-> argument replaced + two binding conditions, new D19 (schema validation is
-> CurrentVersion-only; no `resume.v<N>.schema.json` convention yet), blind Suite
-> C added (Task 11) + D17 row added to Suite A, serialized-artifact list
-> extended for P3 collisions, `server-test-db`+CI made a hard exit criterion,
-> traceability IDs minted by the owner at adoption. Also: D9 hardened (statement
-> extraction scoped to `-- +goose Up` only; the normalization pipeline pinned as
-> five ordered, individually-tested stages; `ALTER FUNCTION/TRIGGER`,
-> `ALTER TABLE … {ENABLE|DISABLE} TRIGGER`, `PROCEDURE`, `RULE`, `POLICY` added
-> to the unconditional-reject net); Task 3's DDL landing split into tables-first
-> (Step 2a) then function+trigger+ `00005` together (Step 2b) — the only order
-> Task 1's own gate permits; `BackfillLostRace` redefined as retryable
-> everywhere it's described (comment, mermaid diagram, a new Task 8 test); Task
-> 6 gained tx-scoped store cores (`createTx`/`saveDocumentTx`/`saveTitleTx`) so
-> Task 7's `Execute` composes with the real `Create`; D12's two binding
-> conditions now have an actual Task 8 test and a package-doc-recorded binding,
-> not just prose; traceability closure renumbered Task 11 → Task 12 to make room
-> for Suite C. Nothing here is authorized for execution until the plan is
-> adopted into `docs/plans/` (where it must pass `make docs-fmt` /
-> `make docs-lint`).
+> **Adopted Rev 3 (2026-08-03).** Rev 2's independent adversarial findings and
+> owner corrections remain binding. Rev 3 is the execution-status and
+> spec-consistency correction: it records Tasks 1–6 as reviewed and Task 7's
+> review/re-review findings, restores the immutable v1 schema plus bidirectional
+> adjacent-converter contract required by design §3, and makes the phase gates
+> explicit. Acceptance rows `AC-DOC-010`, `AC-DOC-011`, `AC-DOC-012`, and
+> `AC-SAVE-003` already exist in `traceability.md`.
 >
 > **For agentic workers (once adopted):** execute with
 > superpowers:subagent-driven-development, one task per fresh subagent, Opus 5
-> defect review between tasks. Steps are `- [ ]`. Every task's tests are written
-> **before** its implementation (TDD): write the failing test, run it and see it
-> fail, implement, run it and see it pass, commit.
+> defect review between tasks. Steps use checkboxes: `[x]` records completed
+> author work and `[ ]` remains an open action/gate. Every task's tests are
+> written **before** implementation (TDD): write the failing test, observe the
+> failure, implement, observe the pass, then review and commit.
 
 **Goal:** the resume domain's data layer — `resumes`, `slug_tombstones`, and
 `idempotency_records` tables with every spec §3 constraint and the DB-enforced
@@ -52,58 +32,90 @@ checked out stale commits before; verify, don't assume.
 
 **Migration head this plan targets: `00003_add_sessions_rotated_from`.** P2A
 migrations **append** (`00004…`) and never edit an existing migration file or
-`atlas.sum` by hand outside the pipeline described in Task 3.
-`docs/plans/phase-1-deferred.md` §P1.1 wants a bounded auth follow-up landed
-"before P2A takes the migration head"; as scoped there it needs **no
-migration**, but if the integration owner lands one first, this plan's migration
-numbers shift by one and Task 3 rebases and re-runs `make server-migration-test`
-— the plan text is otherwise unaffected. Schema-head changes are serialized
-through the integration owner; one merges at a time.
+`atlas.sum` by hand outside the pipeline described in Task 3. P1.1 missed its
+intended pre-P2A window and is now scheduled immediately after P2A, before P2B;
+it requires no migration, so P2A's migration numbers remain `00004`/`00005`.
+Schema-head changes are serialized through the integration owner; one merges at
+a time.
+
+## Task status index
+
+This is the owner-facing execution ledger. A task is not complete until its
+independent defect review is green; implementation alone is reported separately.
+
+| Task | Deliverable                                    | State                                            |
+| ---- | ---------------------------------------------- | ------------------------------------------------ |
+| 1    | Drift-gate support for trigger/function DDL    | **Complete and independently reviewed** ✅       |
+| 2    | Shared validation + embedded current schema    | **Complete and independently reviewed** ✅       |
+| 2b   | Immutable `resume.v1.schema.json` foundation   | **Required before Task 8**                       |
+| 3    | Resume tables, cap trigger, migrations         | **Complete and independently reviewed** ✅       |
+| 4    | sqlc queries and generated store               | **Complete and independently reviewed** ✅       |
+| 5    | Codec and full-bounds validation               | **Complete and independently reviewed** ✅       |
+| 6    | Resume CRUD, ownership, cap, and revision CAS  | **Complete and independently reviewed** ✅       |
+| 6a   | Cleared-contact draft fixture + live roundtrip | **Required before phase gate**                   |
+| 6b   | Generated-write-method mechanical restriction  | **Required before phase gate**                   |
+| 7    | Transactional idempotency primitive            | **Corrective behavior reviewed; commit pending** |
+| 8    | Projection, bidirectional wire conversion, CAS | **Blocked on Task 2b**                           |
+| 9    | Blind write-safety/concurrency suite           | **Pending**                                      |
+| 10   | Blind projection/backfill race suite           | **Pending**                                      |
+| 11   | Blind independently derived bounds suite       | **Pending**                                      |
+| 12   | Traceability, docs, and integration handoffs   | **Pending**                                      |
+| Gate | Design, adversarial, UAT, and evidence reviews | **Pending**                                      |
+
+### Immediate next-action order
+
+1. Synchronize this Rev 3 owner plan into the isolated branch, prove byte
+   identity, and commit the already reviewed title/lint/Task 7 corrective set in
+   intentional commits.
+2. Execute and independently review Task 2b (retained immutable v1 schema/types
+   and released-version registries).
+3. Execute and independently review Task 6a (cleared-contact shared fixture and
+   live round-trip).
+4. Execute integration-owner Task 6b and its independent security/defect review
+   (mechanical generated-write choke point).
+5. Execute and independently review Task 8 (projection, adjacent conversion,
+   wire declarations, and CAS backfill).
+6. Run Tasks 9, 10, and 11 with three separate fresh blind-test authors, then
+   route any product finding to a separate implementation author and re-review.
+7. Close Task 12 traceability, documentation, and P2B handoffs.
+8. Run the phase design/consistency review, traceability closure, fresh
+   adversarial review, immutable UAT catalog, and independent evidence
+   verification at the exact candidate commit. Only then merge P2A.
 
 **Spec:** `../specs/aboutme-design.md` §3 — the `resumes` and `slug_tombstones`
 rows of the data-model table; "Relational constraints & store-layer invariants"
 (all bullets); "Entry fields per sectionType"; "Optionality: draft-permissive,
 publish-strict"; the aggregate invariant bullet; the doc-shape-migrations
 bullet; "Schema management" (declarative pattern + the **wire-version
-compatibility** row: "the machinery is built in P2A alongside doc migrations,
-before a second version exists"); §4 "Write-safety" (revision CAS + idempotency
-semantics — the HTTP surface itself is P2B). **Master plan:**
-`implementation-plan.md` "Phase 2A — Resume domain & store" including the
-carried drift-gate limitation note, plus "Global constraints", "Agent workflow",
-"Integration discipline", "Testing strategy" (the Write-safety/concurrency row
-is owned here). **Budgets:** `budgets.md` — request body ≤ 256 KB (P0B
-middleware, already enforced, not re-implemented here) and **resume document
-total ≤ 512 KB (P2A store)**. **Traceability:** claims and gaps in the table
-below.
+compatibility** row: P2A owns both adjacent conversion directions and synthetic
+old-client preparation/emission; P2B owns the real HTTP persistence proof); §4
+"Write-safety" (revision CAS + idempotency semantics — the HTTP surface itself
+is P2B). **Master plan:** `implementation-plan.md` "Phase 2A — Resume domain &
+store" including the carried drift-gate limitation note, plus "Global
+constraints", "Agent workflow", "Integration discipline", "Testing strategy"
+(the Write-safety/concurrency row is owned here). **Budgets:** `budgets.md` —
+request body ≤ 256 KB (P0B middleware, already enforced, not re-implemented
+here) and **resume document total ≤ 512 KB (P2A store)**. **Traceability:**
+claims and gaps in the table below.
 
 ## Traceability rows claimed by this phase
 
-| ID         | Statement                                                        | Claimed by      |
-| ---------- | ---------------------------------------------------------------- | --------------- |
-| AC-DOC-001 | Max 3 resumes per user, DB-enforced                              | Tasks 3, 6, 9   |
-| AC-DOC-002 | Entry ids unique across the whole resume                         | Tasks 2, 5      |
-| AC-DOC-003 | Date ranges (start ≤ end) — "not yet wired into live writes"     | Task 5 (wiring) |
-| AC-DOC-007 | Rich text ≤ 16 KB UTF-8 bytes — "not yet wired into live writes" | Task 5 (wiring) |
-| AC-DOC-008 | Layout exactly-once aggregate — "not yet wired into live writes" | Task 5 (wiring) |
+| ID          | Statement                                                        | Claimed by      |
+| ----------- | ---------------------------------------------------------------- | --------------- |
+| AC-DOC-001  | Max 3 resumes per user, DB-enforced                              | Tasks 3, 6, 9   |
+| AC-DOC-002  | Entry ids unique across the whole resume                         | Tasks 2, 5      |
+| AC-DOC-003  | Date ranges (start ≤ end) — "not yet wired into live writes"     | Task 5 (wiring) |
+| AC-DOC-004  | Every document bound has a limit+1 test                          | Tasks 5, 11     |
+| AC-DOC-007  | Rich text ≤ 16 KB UTF-8 bytes — "not yet wired into live writes" | Task 5 (wiring) |
+| AC-DOC-008  | Layout exactly-once aggregate — "not yet wired into live writes" | Task 5 (wiring) |
+| AC-DOC-009  | Cleared contact value remains draft-valid and round-trips        | Task 6a         |
+| AC-DOC-010  | Projection-only read, CAS write/backfill                         | Task 8          |
+| AC-DOC-011  | Resume document total ≤ 512 KB at the store                      | Tasks 5, 11     |
+| AC-DOC-012  | Immutable schemas + bidirectional wire compatibility             | Tasks 2b, 8     |
+| AC-SAVE-003 | Idempotency store replay/reject/rollback                         | Tasks 7, 9      |
 
-**Rows this scope needs that do not exist.** Per the owner's B12 ruling, the
-integration owner **mints the four IDs at plan adoption**; Task 12 then only
-fills their test references. Until adoption they are referenced below as
-`AC-P2A-NEW-1…4` placeholders (replace at adoption; never commit a placeholder
-to `traceability.md`):
+The following boundary is intentionally deferred and must remain visible:
 
-- **AC-P2A-NEW-1** — Doc-shape migration is projection-only on read / CAS on
-  write / CAS backfill (spec §3). The master plan's "Spec traceability" section
-  _says_ "doc-migration CAS race (P2A)" is assigned, but `traceability.md` has
-  no such row — a master-plan/traceability disagreement to repair together.
-- **AC-P2A-NEW-2** — Resume document total ≤ 512 KB enforced at the store
-  (budgets row exists; no AC row).
-- **AC-P2A-NEW-3** — Wire-version compatibility machinery (spec §3 "Schema
-  management" table row) — accepted/emitted version declarations + converter
-  registry.
-- **AC-P2A-NEW-4** — Idempotency **store primitive** semantics
-  (replay/reject/rollback at the data layer). AC-SAVE-002 exists but is
-  P2B/HTTP-scoped; the owner may extend its row or mint this one.
 - Customization delta paths from a fixed allowlist (spec §3 size-bounds bullet)
   — deferred to P2B with the delta-applying endpoint (decision D14); it has no
   row either way. Flagged so it is not lost.
@@ -131,12 +143,9 @@ to `traceability.md`):
   packages). If any command materializes a root `go.work.sum`, hand it to the
   integration owner to commit — never delete it.
 - `make server-test-db` is the DB-backed gate: it sets `REQUIRE_TEST_DB=1`
-  (fails closed on a missing DSN) and passes `-race -count=1`. **Its package
-  list is currently
-  `./internal/auth/... ./internal/store/... ./internal/user/...` and does not
-  include `./internal/resume/...`** — the Makefile is an integration-owner-only
-  file, so Task 12 reports the exact one-line change instead of editing it (see
-  "Integration handoffs").
+  (fails closed on a missing DSN), includes `./internal/resume/...`, and passes
+  `-race -count=1`. The integration-owner change landed on the isolated branch
+  in `6efd179`; retain it through integration.
 - `go test` caches passing results — every ad-hoc live-DB invocation in this
   plan carries `-count=1`.
 - The migration harness (`make server-migration-test`) automatically covers new
@@ -215,122 +224,118 @@ challenge in review — never a TODO.
 >    `UpdateResumeDocumentCAS`/`UpdateResumeTitleCAS` already exclude it; this
 >    records that as a requirement rather than an accident.
 
-| D7 | Trigger mechanics: `AFTER` vs `BEFORE`, race-safety, error surfacing |
-`BEFORE INSERT OR UPDATE OF user_id` trigger whose function **first locks the
-owner row** (`PERFORM 1 FROM users WHERE id = NEW.user_id FOR UPDATE`) then
-counts — the trigger alone is race-proof even for writers that bypass the store;
-the store's create tx takes the same user-row `FOR UPDATE` first anyway (spec:
-belt and suspenders; identical lock order, no deadlock). Cap violation raises
-`ERRCODE 'check_violation'` (23514) with `MESSAGE 'resumes_user_cap_exceeded'`;
-the store maps exactly that (code + message) to `ErrResumeCapExceeded` | | D8 |
-Migration authorship for DDL Atlas community silently drops | Two files:
-`00004_add_resume_tables.sql` **generated** by `make migrate-gen`
-(tables/constraints/indexes — all Atlas-diffable), then
-`00005_add_resume_cap_trigger.sql` **hand-written** goose SQL (function +
-trigger), following `00001_extensions.sql`'s precedent; `atlas.sum` refreshed
-via the pinned Atlas `migrate hash` (Task 3). Task 1's cross-check is what makes
-the hand-written file drift-safe | | D9 | The drift-gate extension's shape
-(master plan: keyword-reject → "real cross-check") | In `cmd/migrate/gen`: (a)
-broaden the keyword net to modifier variants (`MATERIALIZED`, `CONSTRAINT`,
-`TEMP`/`TEMPORARY`, `UNLOGGED`, `RECURSIVE`); (b) for **FUNCTION and TRIGGER
-only** (the classes P2A introduces), replace unconditional rejection with a
-statement-level cross-check: whitespace-normalized
-`CREATE [OR REPLACE] FUNCTION/TRIGGER` statements declared in `schema.sql` must
-each match the **last** occurrence of that object's statement across ordered
-migrations, and every such migration statement's name must exist in
-`schema.sql`; any `DROP FUNCTION/TRIGGER` in a migration stays rejected until a
-phase needs it. VIEW/SEQUENCE/materialized/temp/unlogged/recursive remain
-unconditionally rejected, per `checkNoUndiffableObjects`'s recorded intent
-("extend … for the object it introduces") | | D10 | Where the ≤ 512 KB
-total-document bound is measured | On the **canonical assembled JSON** (the
-marshaled full document including the injected `schemaVersion`), byte length ≤
-`512 * 1024`. Deterministic, independent of jsonb's internal representation, and
-covers growth via future granular PATCHes that the 256 KB request-body cap
-cannot (a doc can legally exceed one request's size) | | D11 | Idempotency
-record shape and semantics (spec gives keying + replay/reject, not mechanics) |
-Table `idempotency_records`, `UNIQUE (user_id, route, idempotency_key)`,
-`request_hash` = SHA-256 of the raw request body, stored `response_status int` +
-`response_body jsonb`, `expires_at` = `created_at` + **24 h TTL (ratified
-2026-08-02; owner lands it in `budgets.md`)**. Execution contract: run the
-mutation and insert the record **in one tx**; a concurrent duplicate hits the
-unique index at commit, **rolls back its entire tx** (mutation included), then
-re-reads: hash match → replay stored response; hash mismatch →
-`ErrIdempotencyKeyReuse`, no write. Expired rows are deleted-then-reinserted
-in-tx (treated as absent). **Retention (owner ruling — not deferred):
-`response_body` holds user content, materially unlike `oauth_transactions`, so a
-TTL nothing enforces is not a TTL. P2A adds opportunistic reaping — every
-`Execute` deletes the calling user's expired rows in the same tx before
-inserting** (Task 7); a global sweep can still join P8-priv's jobs later | | D12
-| Backfill CAS: does persisting a doc-shape migration bump `revision`? | **No**
-(owner-upheld, with the argument replaced per the review). The decisive reason:
-under D18 every read is projected to `CurrentVersion`, and under D16 every write
-re-serializes the whole document — so a backfill changes storage to something
-**byte-identical to what every reader was already being served**. Nothing
-observable changes; there is nothing to signal, so `revision` (and `updated_at`)
-must not move. Guarded by
-`WHERE id=$1 AND schema_version=$old AND revision=$observed`. Two attached
-conditions, both mandatory: **(i)** Task 8 asserts `Get(id)` returns a
-**byte-identical projected document before and after `BackfillOne`** — that
-assertion is the actual proof of the argument; **(ii)** P2B is **bound in
-writing** (Integration handoffs + `internal/resume` package doc): every write
-path must persist the full document through the codec — a granular
-`jsonb_set`-style PATCH would let old-shape content re-enter storage where the
-backfill CAS cannot see it | | D13 | Converter representation when only v1
-exists | Converters are `func(json.RawMessage) (json.RawMessage, error)` over
-the full assembled doc (version-agnostic — typed structs only exist for the
-current version), held in a `Projector` built by constructor injection.
-Production wiring passes an **empty** table + `CurrentVersion = 1`; tests inject
-synthetic converters to prove the machinery. Accepted/emitted version
-declarations (spec §3 wire-version row) are exported constants/functions with
-tests, so P2B's content negotiation and any future v2 build on a written
-contract | | D14 | "Customization delta paths from a fixed allowlist" — store
-layer or request layer? | Deferred to **P2B** with the `PATCH …/customization`
-endpoint: the allowlist bounds _request shape_ (delta paths), while the stored
-aggregate is already fully validated here on every write (schema
-`additionalProperties: false` + bounds via D1). Flagged as a scope boundary, and
-as a traceability gap (see above) so P2B cannot silently drop it | | D15 |
-`slug_tombstones` columns vs the repo's surrogate-PK convention; re-release
-semantics | Surrogate `id uuid PRIMARY KEY DEFAULT uuidv7()` + `UNIQUE (slug)`
-(conventions: natural key = UNIQUE),
-`released_by_user_id uuid NULL REFERENCES users ON DELETE SET NULL`
-(spec-mandated), `released_at timestamptz NOT NULL DEFAULT now()`. **No
-`expires_at` column** — the 180-day window is claim-time logic owned by P5A;
-storing a precomputed expiry would fork that constant. P2A ships the table +
-constraint tests only; tombstone _queries_ (incl. the re-release upsert) are
-P5A's contract to define — not invented here | | D16 | Store validation entry
-point: raw bytes or typed value? | The store's write API takes a typed
-`schema.Resume`; the store **re-marshals to canonical JSON** and runs the full
-pipeline (D1 schema validation → size bound → `schema.ValidateDocument` →
-entry-id uniqueness) on that canonical form. One choke point regardless of how a
-caller decoded its input; strict decode (`DisallowUnknownFields`) remains the
-ingress guard for P2B | | D17 | Ownership scoping at the data layer | Every
-per-resume query is keyed `WHERE id = $1 AND user_id = $2` (`GetResumeForUser`,
-`DeleteResumeForUser`, CAS updates) — an authorization mistake in P2B cannot
-reach another user's row through this layer; "not yours" and "not found" are the
-same `ErrNotFound` (no existence oracle, matching DD-C5's reasoning) | | D18 |
-Doc reads of not-yet-backfilled rows | `Get`/`List` return the doc **projected
-to `CurrentVersion`** (pure, never writes — verified by test asserting row bytes
-and `revision`/`updated_at` unchanged after a read) plus the row's stored
-`schema_version` so callers can observe backfill progress. The renderer contract
-(§5: "renderer handles current schema_version only; server projects first") is
-what this satisfies | | D19 | `resume.schema.json` pins
-`schemaVersion: {"const": 1}` — what does JSON-Schema validation mean for a
-not-yet-current stored doc, and does P2A establish the spec's immutable
-`resume.v<N>.schema.json` file convention? (owner ruling on B5, option a) |
-**`ValidateForStore` validates at `CurrentVersion` only.** Its input is always a
-document the store is about to persist at `CurrentVersion` (D16 create/save) or
-a projector output already lifted to `CurrentVersion` (D18 reads, Task 8
-backfill) — so the single embedded schema is, by construction, always the right
-one, which is why D2's one embedded constant is sufficient. A projector's
-**pre-current intermediate output is explicitly outside the schema-validation
-path**; the seam that proves this is Task 8's synthetic-converter tests
-(`NewProjector` injection in `docmigrate/export_test.go`), which exercise stored
-versions the schema would reject. The `resume.v<N>.schema.json` per-version
-immutable-file convention is **deliberately not established now**: there is no
-version 2 to serve, and inventing the file convention before a real second
-version exists is speculative contract-writing — it is recorded here as the
-decision the first v2 change must make, alongside extending `AcceptedVersions()`
-|
+### D7 — Trigger mechanics and race safety
+
+Use a `BEFORE INSERT OR UPDATE OF user_id` trigger. Its function first locks the
+owner row (`PERFORM 1 FROM users WHERE id = NEW.user_id FOR UPDATE`) and then
+counts, so it remains race-safe for writers bypassing the store. Store creates
+take the same lock in the same order. A cap violation raises SQLSTATE `23514`
+with message `resumes_user_cap_exceeded`; the store maps only that exact pair to
+`ErrResumeCapExceeded`.
+
+### D8 — Migration authorship
+
+Generate `00004_add_resume_tables.sql` with `make migrate-gen`; hand-author
+`00005_add_resume_cap_trigger.sql` for function/trigger DDL Atlas Community
+cannot diff, following `00001_extensions.sql`; refresh `atlas.sum` with the
+pinned Atlas. D9 makes the hand-authored object drift-safe.
+
+### D9 — Drift-gate extension
+
+`cmd/migrate/gen` broadens its unconditional keyword net, but permits FUNCTION
+and TRIGGER only when each normalized declaration in `schema.sql` matches the
+last same-object declaration in ordered migration `Up` sections, in both
+directions. Drops, alters, views, sequences, procedures, rules, policies, and
+all unsupported variants still fail closed. Task 1 pins statement extraction and
+normalization details.
+
+### D10 — Total-document measurement
+
+Measure the 512 KB limit on canonical assembled JSON, including the injected
+`schemaVersion`. This is deterministic, independent of jsonb representation, and
+protects later granular writes even when each HTTP body is below 256 KB.
+
+### D11 — Idempotency record and retention
+
+Use `UNIQUE (user_id, route, idempotency_key)`, SHA-256 of the raw request body,
+`response_status`, jsonb `response_body`, and a 24-hour expiry. The mutation and
+record insert share one transaction. After the expiry preflight, take the
+existing user-row transaction lock before the live-record lookup; same-user
+contenders serialize in the same order as resume Create, so a same-key follower
+observes and replays/rejects the winner before invoking its callback. The unique
+constraint remains a fail-closed backstop. Callbacks may use only the supplied
+transaction and must have no non-transactional side effects: a callback can run
+again after a rolled-back/crashed attempt even though concurrent committed
+duplicates are prevented.
+
+Every `Execute` first commits an opportunistic reap of the calling user's
+expired rows so cleanup survives key-reuse and mutation errors. The mutation
+transaction repeats the same-key expiry check to close the race. A global sweep
+may join P8-priv later.
+
+### D12 — CAS backfill visibility
+
+Backfill changes neither `revision` nor `updated_at`: all readers already see
+the projected current document, so the storage rewrite is not observable. Its
+predicate is `id + old schema_version + observed revision`. Task 8 must prove
+byte-identical projected reads before/after backfill. P2B must persist the full
+document through the codec; granular `jsonb_set` writes are forbidden because
+they could reintroduce old shape outside the backfill CAS.
+
+### D13 — Bidirectional adjacent converters
+
+Each adjacent pair registers explicit `Up` and `Down` functions over full
+canonical JSON. Production v1 has no pair; synthetic v1⇄v2 tests prove both
+directions, old-client preparation to the current canonical shape,
+supported-version emission, and fail-closed missing paths. Accepted input and
+emitted output version sets are declared separately. Real HTTP persistence is
+P2B's AC-SAVE-004 gate.
+
+### D14 — Customization delta boundary
+
+P2B owns the fixed allowlist for `PATCH …/customization` because it bounds the
+request delta. P2A still validates the complete stored aggregate on every write.
+The P2B handoff and traceability gap remain explicit.
+
+### D15 — Slug tombstones
+
+Use a uuidv7 surrogate primary key, unique slug, nullable
+`released_by_user_id … ON DELETE SET NULL`, and `released_at`. Do not store
+`expires_at`; P5A applies the authoritative 180-day claim-time rule and owns
+tombstone queries/re-release behavior.
+
+### D16 — Store validation choke point
+
+Write APIs take typed `schema.Resume`, re-marshal canonical JSON, then run
+JSON-Schema validation, the total-size bound, and aggregate validation. Strict
+decode remains P2B's ingress guard. Generated sqlc write methods remain a
+convention until the phase-exit lint restriction lands.
+
+### D17 — Ownership scoping
+
+Every per-resume query includes `id + user_id`. Wrong-owner and missing rows map
+to the same `ErrNotFound`, including CAS methods, so the store exposes no
+existence oracle.
+
+### D18 — Pure projected reads
+
+`Get` and `List` project stored documents to `CurrentVersion` without writes and
+also expose the stored version for backfill progress. Tests pin unchanged row
+bytes, revision, and `updated_at`; one unprojectable List row fails the whole
+operation with no partial result.
+
+### D19 — Immutable released schemas
+
+`resume.v1.schema.json` is the immutable released contract. `resume.schema.json`
+remains the current generation entry point and is byte-identical while
+`CurrentVersion == 1`; generated code exposes raw schemas and retained Go/TS
+type namespaces by released version. Store validation accepts only a document
+already projected to current, while conversion validates both source and target
+schemas. CI rejects modification/deletion/rename of released schema files and
+requires every released schema to retain derived version-scoped types. Generated
+bytes may change only through reviewed generator fixes and regeneration; a new
+schema version is append-only and requires an adjacent `Up`/`Down` pair plus
+declaration changes.
 
 ## File structure produced by this phase
 
@@ -339,6 +344,7 @@ decision the first v2 change must make, alongside extending `AcceptedVersions()`
 | `apps/server/cmd/migrate/gen/main.go` (modify) + tests                                                                | D9 drift-gate extension (Task 1)                                                                                              |
 | `packages/schema/validation/store.ts`, `gen/go/store_validate.go` (+tests) (modify)                                   | Entry-id uniqueness validator, both halves (Task 2)                                                                           |
 | `packages/schema/scripts/generate.mjs` (modify), `gen/go/rawschema.go` (generated)                                    | D2 raw-schema Go source constant (Task 2); byte-compare coverage via existing `packages/schema/test/gen.test.ts`              |
+| `packages/schema/resume.v1.schema.json`, `gen/{go,ts}/v1/**`, registries/tests                                        | Immutable v1 schema and retained generated types (Task 2b)                                                                    |
 | `packages/schema/fixtures/bounds/` (generated corpus + `manifest.json`), `packages/schema/test/bounds-parity.test.ts` | D1(e) cross-language verdict-parity corpus: ajv and jsonschema/v6 must agree on every fixture + bounds document (Tasks 5, 11) |
 | `apps/server/sql/schema.sql` (append)                                                                                 | `resumes`, `slug_tombstones`, `idempotency_records`, cap function + trigger (Task 3)                                          |
 | `apps/server/migrations/00004_add_resume_tables.sql` (generated)                                                      | Tables/constraints/indexes (Task 3)                                                                                           |
@@ -346,6 +352,8 @@ decision the first v2 change must make, alongside extending `AcceptedVersions()`
 | `apps/server/migrations/resume_schema_test.go`                                                                        | Migrated-DB constraint/trigger existence + behavior tests (Task 3)                                                            |
 | `apps/server/sql/queries.sql` (append), `apps/server/internal/store/*.go` (regenerated)                               | sqlc queries + generated types (Task 4)                                                                                       |
 | `apps/server/internal/resume/{resume.go,codec.go,validate.go,store.go}` + tests                                       | Domain type, codec (D4), validation pipeline (D16), store API (Tasks 5–6)                                                     |
+| cleared-contact fixture + Go/TS/store tests                                                                           | Close AC-DOC-009 at shared validation and live-write boundaries (Task 6a)                                                     |
+| `.semgrep.yml`, policy regression script, root `Makefile`                                                             | Mechanically restrict generated resume/idempotency writes to `internal/resume` (Task 6b)                                      |
 | `apps/server/internal/resume/bounds_test.go`                                                                          | The schema-driven limit+1 harness (Task 5)                                                                                    |
 | `apps/server/internal/resume/idempotency.go` + tests                                                                  | D11 idempotency primitive (Task 7)                                                                                            |
 | `apps/server/internal/resume/docmigrate/{docmigrate.go,backfill.go}` + tests                                          | D12/D13/D18 projection + CAS backfill + wire-version declarations (Task 8)                                                    |
@@ -353,9 +361,11 @@ decision the first v2 change must make, alongside extending `AcceptedVersions()`
 | `apps/server/go.mod`/`go.sum` (modify)                                                                                | `santhosh-tekuri/jsonschema/v6` pin (Task 5; serialized per B10)                                                              |
 | `docs/plans/traceability.md` (modify)                                                                                 | Row closure against owner-minted IDs (Task 12)                                                                                |
 
-Not touched by this phase: root `Makefile` (owner-only; Task 12 reports the
-needed edit), `docs/api/openapi.yaml`, `apps/web/**`, `deploy/**`,
-`packages/schema/resume.schema.json` itself (frozen).
+Not touched by this phase: `docs/api/openapi.yaml`, `apps/web/**`, and
+`deploy/**`. The integration owner already landed the root `Makefile` change
+that adds the resume package to `server-test-db`. Task 2b copies the
+already-frozen current schema into the first immutable released-version file; it
+does not change the schema contract.
 
 ## The write path this phase builds
 
@@ -457,14 +467,14 @@ e2e harness fits).
   dollar-quoted body (`$$ … $$ LANGUAGE plpgsql;`) — a naive split-on-semicolon
   truncates inside the body; write the failing test for that first.
 
-- [ ] **Step 1: failing tests for the broadened keyword net.** Table-driven over
+- [x] **Step 1: failing tests for the broadened keyword net.** Table-driven over
       schema texts containing each M-NEW variant → all must be detected (today
       `CREATE MATERIALIZED VIEW x` passes silently — assert the red). Extend the
       table with the B4 additions, each asserted unconditionally rejected with
       no cross-check path: `CREATE PROCEDURE`, `CREATE RULE`, `CREATE POLICY`,
       `ALTER FUNCTION`, `ALTER TRIGGER`, `ALTER TABLE …     ENABLE TRIGGER …`,
       `ALTER TABLE … DISABLE TRIGGER …`.
-- [ ] **Step 2: failing tests for the FUNCTION/TRIGGER cross-check.** Cases:
+- [x] **Step 2: failing tests for the FUNCTION/TRIGGER cross-check.** Cases:
       schema declares fn+trigger, no migration → FAIL; matching hand-written
       migration → PASS; migration present but schema body edited (one token) →
       FAIL (the body-drift case name-set comparison would miss — this is what
@@ -492,14 +502,14 @@ e2e harness fits).
       name in one location vs the bare name in the other, same object → PASS
       (name capture anchored correctly, not string-matched against the first
       identifier-shaped token).
-- [ ] **Step 3: implement; all red tests green.** Keep
+- [x] **Step 3: implement; all red tests green.** Keep
       `checkExtensionDeclarations` untouched.
-- [ ] **Step 4: gate.**
+- [x] **Step 4: gate.**
       `cd apps/server && go build ./... && go vet ./... &&     go test ./cmd/migrate/gen/... -count=1`;
       then `make test-db-up &&     make data-drift` (must still pass clean at
       head — the check is a no-op until Task 3 adds objects) and
       `make server-migration-test`.
-- [ ] **Step 5: commit** —
+- [x] **Step 5: commit** —
       `git commit -m "feat(migrate): cross-check trigger and function DDL the Atlas differ cannot see" -- apps/server/cmd/migrate/gen`
 
 ---
@@ -528,7 +538,7 @@ aggregate entry point; `schema.RawSchema []byte` in generated `rawschema.go` (D2
 — a Go source constant with the `DO NOT EDIT` header, not an embedded `.json`
 file).
 
-- [ ] **Step 1: failing conformance tests, both languages.** Go:
+- [x] **Step 1: failing conformance tests, both languages.** Go:
       `TestValidateDocument_DuplicateEntryID` consuming
       `fixtures/store/invalid-duplicate-entry-id.json` (duplicate ids in
       **different sections** — the whole-resume rule, not per-section); TS: the
@@ -538,20 +548,61 @@ file).
       add a second fixture rather than editing it. Run
       `cd packages/schema && npm test` and
       `cd packages/schema/gen/go && go test ./...` → **FAIL**.
-- [ ] **Step 2: implement both halves; green.** Deterministic issue ordering
+- [x] **Step 2: implement both halves; green.** Deterministic issue ordering
       (sort by path) like the existing validators.
-- [ ] **Step 3: failing raw-schema test.** `rawschema_test.go`: read
+- [x] **Step 3: failing raw-schema test.** `rawschema_test.go`: read
       `../../resume.schema.json` at test time and assert `schema.RawSchema`
       byte-equals it — this one test closes the copy-drift loop from the Go
       side; the existing `gen.test.ts` byte-compare covers it from the generator
       side unchanged. Run → **FAIL** (`RawSchema` undefined). Extend
       `generate.mjs` to emit `rawschema.go` (generated header, `DO NOT EDIT`);
       run `make schema-gen`; commit generated output; green.
-- [ ] **Step 4: gate.** `make schema-check` (regenerates via npm ci + vitest,
+- [x] **Step 4: gate.** `make schema-check` (regenerates via npm ci + vitest,
       incl. `gen.test.ts`; proves no drift) and
       `cd packages/schema/gen/go && go test ./...`.
-- [ ] **Step 5: commit** —
+- [x] **Step 5: commit** —
       `git commit -m "feat(schema): enforce whole-resume entry-id uniqueness and generate the raw-schema Go constant" -- packages/schema`
+
+---
+
+### Task 2b: Establish the immutable v1 schema and released-version registry (AC-DOC-012)
+
+This correction is required by design §3 before Task 8. It does not invent v2;
+it preserves the already released v1 bytes and makes the append-only policy
+enforceable from the first version.
+
+**Files:** create `packages/schema/resume.v1.schema.json`, retained
+version-scoped generated types under `packages/schema/gen/go/v1/**` and
+`packages/schema/gen/ts/v1/**`, plus released-version manifests/registries;
+modify `packages/schema/scripts/generate.mjs` and generator/drift tests. The
+integration owner adds a `released-schema-append-only` job beside
+`.github/workflows/ci.yml`'s existing `migrations-append-only` job.
+
+- [ ] **Step 1: failing immutability/derivation tests.** Assert the current
+      `resume.schema.json` and `resume.v1.schema.json` are byte-identical while
+      `CurrentVersion == 1`; current Go/TS outputs and `RawSchema` derive from
+      v1; independently import/compile the retained versioned Go v1 and TS v1
+      types; a raw-schema/type-manifest registry contains exactly version 1; and
+      unknown versions fail closed.
+- [ ] **Step 2: add the immutable snapshot and version-aware generator input;
+      regenerate; green.** The generator takes an explicit released-schema path
+      rather than discovering the newest filename implicitly. It emits both the
+      current convenience outputs and version-scoped snapshots; future releases
+      add a new namespace, while any regeneration of an old namespace remains
+      mechanically derived from its immutable schema.
+- [ ] **Step 3: add the exact append-only CI job.** In
+      `.github/workflows/ci.yml`, parallel the name-status logic at lines
+      141–156: allow only `A` for `packages/schema/resume.v*.schema.json` and
+      reject `M`, `D`, and `R` against the PR base/before SHA. A shell-level
+      negative test proves each rejected status and one added-version success.
+      Separately, `schema-check` fails if any released schema lacks its
+      version-scoped Go/TS output or if regeneration drifts; generated types are
+      retained but may be regenerated by a reviewed generator/toolchain fix.
+- [ ] **Step 4: gate.** `make schema-check`; Go tests for the generated schema
+      package; fresh-cache lint for touched Go; `make docs-fmt docs-lint` if the
+      shared gate or its documentation changes.
+- [ ] **Step 5: independent defect review, then commit** —
+      `git commit -m "feat(schema): preserve the immutable v1 resume contract" -- packages/schema`
 
 ---
 
@@ -685,14 +736,14 @@ BEFORE INSERT OR UPDATE OF user_id ON resumes
 FOR EACH ROW EXECUTE FUNCTION enforce_resume_cap();
 ```
 
-- [ ] **Step 0 (spike, minutes, before anything):** append a minimal
+- [x] **Step 0 (spike, minutes, before anything):** append a minimal
       `CREATE FUNCTION … $$…$$; CREATE TRIGGER …` pair to a scratch copy of
       `schema.sql` and run `sqlc generate` against it. sqlc's pg_query-based
       parser is expected to accept plpgsql DDL and ignore it; **if it errors,
       STOP** — that is a missing tooling decision for the integration owner
       (splitting schema.sql would fork the single source of truth and is not
       this plan's call). Do not improvise.
-- [ ] **Step 1: failing migrated-DB tests.** `resume_schema_test.go`, using
+- [x] **Step 1: failing migrated-DB tests.** `resume_schema_test.go`, using
       `testutil.RequireMigratedTestDatabaseURL` (skip/fail-closed pattern): -
       Constraint boundary matrix via direct SQL: slug length 3 → rejected, 4 →
       accepted, 30 → accepted, 31 → rejected; `-lead`, `trail-`, `dou--ble`,
@@ -724,14 +775,14 @@ FOR EACH ROW EXECUTE FUNCTION enforce_resume_cap();
       **together, in the same edit**, so the cross-check always sees a
       schema.sql declaration and a migration statement appear atomically.
 
-- [ ] **Step 2a: append tables + indexes only; generate `00004`.** Append just
+- [x] **Step 2a: append tables + indexes only; generate `00004`.** Append just
       the three `CREATE TABLE …`/`CREATE INDEX …` statements above (no function,
       no trigger) to `sql/schema.sql`. `make test-db-up` then `make migrate-gen`
       — inspect the generated `00004_add_resume_tables.sql`: it must contain the
       three tables, constraints, and indexes, and there is nothing else in
       `schema.sql` yet for it to omit. Rename per the tool's output convention
       (the pipeline numbers it).
-- [ ] **Step 2b: append function + trigger, and hand-write `00005`, in the same
+- [x] **Step 2b: append function + trigger, and hand-write `00005`, in the same
       edit.** Append `CREATE FUNCTION enforce_resume_cap` and
       `CREATE TRIGGER resumes_enforce_cap` to `sql/schema.sql`, **and** in the
       same edit hand-write `00005_add_resume_cap_trigger.sql` (goose
@@ -748,15 +799,15 @@ FOR EACH ROW EXECUTE FUNCTION enforce_resume_cap();
       `cd apps/server && atlas migrate hash --dir file://migrations     --dir-format goose`
       (pinned v1.2.0). `atlas.sum` is a serialized artifact — this task's commit
       is its one legitimate change.
-- [ ] **Step 3: green.** Step 1's tests pass. Then the full data gates:
+- [x] **Step 3: green.** Step 1's tests pass. Then the full data gates:
       `make sqlc-check` (no query changes yet — must stay clean),
       `make server-migration-test` (harness picks up 00004/00005 in all four
       scenarios), `make data-drift` (Task 1's cross-check now proves
       schema.sql's fn/trigger match 00005 — also run the red case once locally:
       perturb one token of the function body in `schema.sql`, confirm
       `make data-drift` fails, revert).
-- [ ] **Step 4: commit** —
-      `git commit -m "feat(resume): add resumes, slug_tombstones, idempotency_records tables and 3-resume cap trigger" -- apps/server/sql/schema.sql apps/server/migrations`
+- [x] **Step 4: commit** —
+      `git commit -m "feat(resume): add resumes, slug_tombstones, idempotency_records tables and 3-resume cap trigger" -- apps/server/sql/schema.sql apps/server/migrations apps/server/internal/store/models.go`
 
 ---
 
@@ -844,9 +895,9 @@ WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
     AND expires_at <= $4;
 
 -- name: DeleteExpiredIdempotencyRecordsForUser :execrows
--- D11 opportunistic reaping (owner ruling): every Execute deletes the
--- calling user's expired rows in the same tx before inserting, so the TTL
--- is enforced by normal traffic, not by a job that doesn't exist yet.
+-- D11 opportunistic reaping: every Execute commits this per-user cleanup
+-- before its mutation transaction, so expiry enforcement survives a rejected
+-- key reuse or mutation error instead of depending on a future global job.
 DELETE FROM idempotency_records
 WHERE user_id = $1 AND expires_at <= $2;
 ```
@@ -856,7 +907,7 @@ Note `BackfillResumeDocumentCAS` deliberately does **not** touch `revision` or
 and is not user-scoped (a system job). No `slug_tombstones` queries (D15 — P5A
 defines that contract).
 
-- [ ] **Step 1: failing compile-time shape test** pinning the generated contract
+- [x] **Step 1: failing compile-time shape test** pinning the generated contract
       later tasks build on:
       `store.Resume{ID, UserID uuid.UUID, Title string, Slug *string, Live,     DownloadEnabled, SeoGeoEnabled bool, SchemaVersion int32, Revision     int64, Lng *string, PersonalDetails, Content, Customization     json.RawMessage, CreatedAt, UpdatedAt time.Time}`
       and `store.IdempotencyRecord{…}` (per the committed sqlc.yaml overrides:
@@ -872,11 +923,11 @@ defines that contract).
       This regenerates `internal/store/models.go` a second time (Task 3 landed
       it first under owner correction 1); `sqlc.yaml` and the regenerated output
       are therefore in **this** task's scope and commit.
-- [ ] **Step 2: append queries, `make sqlc-gen`, commit generated output; Step 1
+- [x] **Step 2: append queries, `make sqlc-gen`, commit generated output; Step 1
       compiles green.**
-- [ ] **Step 3: gate.** `make sqlc-check` (regenerate → no diff),
+- [x] **Step 3: gate.** `make sqlc-check` (regenerate → no diff),
       `make server-build server-vet server-test`, `make data-drift`.
-- [ ] **Step 4: commit** —
+- [x] **Step 4: commit** —
       `git commit -m "feat(resume): add resume and idempotency sqlc queries" -- apps/server/sql/queries.sql apps/server/sqlc.yaml apps/server/internal/store apps/server/internal/resume`
       (`sqlc.yaml` added 2026-08-03: the `SEOGeoEnabled` rename above lives
       there, and omitting it from the commit would leave `make sqlc-check`
@@ -887,8 +938,8 @@ defines that contract).
 ### Task 5: Document codec + validation pipeline — every size bound with a limit+1 test
 
 Wires AC-DOC-003 / AC-DOC-007 / AC-DOC-008 into live writes; closes AC-DOC-002
-at the write path; enforces the budgets 512 KB row and every schema bound (the
-master plan's "**all size bounds with limit+1 tests**").
+at the write path; and closes AC-DOC-004 / AC-DOC-011 by enforcing the 512 KB
+store budget and every schema bound with a limit+1 test.
 
 **Files:** create `apps/server/internal/resume/{codec.go,validate.go}`,
 `codec_test.go`, `validate_test.go`, `bounds_test.go`, `export_test.go`; modify
@@ -951,16 +1002,16 @@ func (e *ValidationError) Error() string
 func ValidateForStore(doc schema.Resume) error
 ```
 
-- [ ] **Step 1: failing codec round-trip tests.** Parts→doc→parts byte-stable
+- [x] **Step 1: failing codec round-trip tests.** Parts→doc→parts byte-stable
       for `packages/schema/fixtures/{minimal,full,draft-*}.json`
       (draft-permissiveness preserved: absent vs `""` distinguishable after a
       round trip — the spec's "never fabricate a sentinel" rule as a test);
       parts never contain a `schemaVersion` key (D4); unknown field in a stored
       part → decode error (strict).
-- [ ] **Step 2: failing pipeline tests.** Every `fixtures/store/invalid-*`
+- [x] **Step 2: failing pipeline tests.** Every `fixtures/store/invalid-*`
       fixture rejected by `ValidateForStore` with a matching issue; every valid
       fixture accepted; issues deterministic across runs.
-- [ ] **Step 3: the bounds harness (`bounds_test.go`) — failing first.** Two
+- [x] **Step 3: the bounds harness (`bounds_test.go`) — failing first.** Two
       layers: 1. **Named-bound matrix**, one limit / limit+1 pair per bound:
       total doc `512*1024` bytes (construct via rich-text padding; +1 byte →
       rejected); 24 sections / 25; 64 entries in one section / 65; 16 personal
@@ -976,7 +1027,7 @@ func ValidateForStore(doc schema.Resume) error
       silently shipping unenforced. This also closes AC-DOC-004's recorded
       partial-coverage note at the live-write layer (the P0 ajv fixture gap
       itself stays P0's row — see the companion note).
-- [ ] **Step 3b: the cross-language verdict-parity corpus (D1(e)) — failing
+- [x] **Step 3b: the cross-language verdict-parity corpus (D1(e)) — failing
       first.** The Go bounds harness **emits its generated matrix documents** as
       a committed corpus: `packages/schema/fixtures/bounds/*.json` plus
       `manifest.json` rows
@@ -994,15 +1045,15 @@ func ValidateForStore(doc schema.Resume) error
       aggregate — are marked `expect: "valid"` at the JSON-Schema layer in the
       manifest, with the store verdict as a separate column, so the two layers
       can never be conflated.)
-- [ ] **Step 4: implement (`jsonschema/v6` compiled once at init from
+- [x] **Step 4: implement (`jsonschema/v6` compiled once at init from
       `schema.RawSchema` per the D1 conditions, package-level, immutable); all
       green.** These are pure unit tests — no DB. Record the `go mod     graph`
       delta in the task report.
-- [ ] **Step 5: gate.**
+- [x] **Step 5: gate.**
       `cd apps/server && go build ./... && go vet ./... &&     go test ./internal/resume/... -count=1`;
       `make server-build server-vet     server-test`; `make schema-check` (the
       parity vitest rides in it).
-- [ ] **Step 6: commit** —
+- [x] **Step 6: commit** —
       `git commit -m "feat(resume): add document codec and full-bounds store validation pipeline" -- apps/server/internal/resume apps/server/go.mod apps/server/go.sum packages/schema/fixtures/bounds packages/schema/test/bounds-parity.test.ts`
 
 ---
@@ -1060,7 +1111,10 @@ type Resume struct {
 var (
     ErrNotFound       = errors.New("resume: not found") // D17: also "not yours"
     ErrCapExceeded    = errors.New("resume: user resume cap exceeded")
+    ErrTitleTooLong   = errors.New("resume: title exceeds 160 characters")
 )
+
+const MaxTitleCharacters = 160 // budgets.md; Unicode code points
 
 type RevisionMismatchError struct {
     CurrentRevision int64
@@ -1078,6 +1132,8 @@ func NewStore(pool *store.Pool, proj *docmigrate.Projector) *Store
 
 // Create validates doc, then in one tx: LockUserForResumeWrite (spec's
 // FOR UPDATE), CountResumesForUser >= 3 → ErrCapExceeded, else insert.
+// Title validation runs before opening the transaction and defensively in the
+// tx-scoped core; empty is allowed and 161 Unicode code points fail closed.
 // The D7 trigger backstops it; a 23514 'resumes_user_cap_exceeded' from
 // the insert also maps to ErrCapExceeded. Thin wrapper (B7): begin tx,
 // build qtx := s.q.WithTx(tx), call createTx, commit.
@@ -1117,24 +1173,24 @@ independently landable, Task 6 defines a minimal
 version passthrough, `CurrentVersion = 1`) that Task 8 completes — declared here
 so file ownership stays disjoint-by-time, not overlapping.
 
-- [ ] **Step 1: failing happy-path integration tests** (all via
+- [x] **Step 1: failing happy-path integration tests** (all via
       `testutil.RequireMigratedTestDatabaseURL`, table-driven): create → get
       round-trip (doc byte-stable through codec; revision 1; defaults
       live=false/download=true/seo=false); list ordering stable
       (`created_at, id`); delete → `ErrNotFound` on re-get; get/delete with the
       wrong user → `ErrNotFound` (D17 — the other user's row untouched, assert
       full-row equality before/after).
-- [ ] **Step 2: failing cap tests.** 3 creates succeed, 4th → `ErrCapExceeded`;
+- [x] **Step 2: failing cap tests.** 3 creates succeed, 4th → `ErrCapExceeded`;
       delete one → create succeeds again; a second user is unaffected. (The
       N-way concurrency race is Suite A's, Task 9 — the author writes the
       sequential cases only; do not pre-empt the blind suite.)
-- [ ] **Step 3: failing CAS tests.** Save with correct revision → revision 2,
+- [x] **Step 3: failing CAS tests.** Save with correct revision → revision 2,
       doc updated; stale revision → `*RevisionMismatchError` with current
       revision + current doc (assert the doc is the _winning_ content); unknown
       id → `ErrNotFound`; invalid doc → `*ValidationError`, row untouched
       (full-row comparison — validation must run before any write); `SaveTitle`
       same matrix.
-- [ ] **Step 4: implement; green.** Implement the `…Tx` cores first (B7:
+- [x] **Step 4: implement; green.** Implement the `…Tx` cores first (B7:
       `createTx`/`saveDocumentTx`/`saveTitleTx` — no tx management inside them),
       then `Create`/`SaveDocument`/`SaveTitle` as thin begin-tx/`WithTx`/commit
       wrappers around them; re-run Steps 1–3's tests unmodified against the
@@ -1142,7 +1198,7 @@ so file ownership stays disjoint-by-time, not overlapping.
       not a behavior change). pgx error mapping via
       `pgconn.PgError{Code: "23514", Message: "resumes_user_cap_exceeded"}`
       (exact match on both — D7).
-- [ ] **Step 5: gate (dev-loop evidence, not phase-exit evidence — B11).**
+- [x] **Step 5: gate (dev-loop evidence, not phase-exit evidence — B11).**
       `make test-db-up && make server-test-db` — note `internal/resume` is not
       yet in that target's package list; the Makefile handoff (Integration
       handoffs table; owner applies it once this task lands, formally reported
@@ -1153,19 +1209,84 @@ so file ownership stays disjoint-by-time, not overlapping.
       exit-criteria convention) — per the owner's B11 ruling this local
       invocation is never a substitute for the landed Makefile edit plus a green
       CI run at phase exit.
-- [ ] **Step 6: commit** —
+- [x] **Step 6: commit** —
       `git commit -m "feat(resume): add resume store with cap enforcement and revision CAS" -- apps/server/internal/resume`
+
+---
+
+### Task 6a: Preserve a cleared contact value through validation and live writes (AC-DOC-009)
+
+The traceability row still records this specific draft-permissive case as
+missing. Close it before v1's released artifacts are declared complete.
+
+**Files:** create `packages/schema/fixtures/draft-cleared-contact-value.json`;
+modify the explicit Go/TS schema/store-validation tests and
+`apps/server/internal/resume/{codec_test.go,store_test.go}`.
+
+- [ ] **Step 1: failing shared-contract tests.** The fixture contains one valid
+      contact/detail entry whose `value` is `""`; JSON Schema and both aggregate
+      validators accept it, and Go/TS decoding preserves the entry rather than
+      treating it as absent.
+- [ ] **Step 2: failing codec/live-store tests.** Parts→document→parts preserves
+      the present cleared contact exactly. Create, Get, SaveDocument, and Get
+      against live Postgres preserve the item and empty value without
+      fabricating a sentinel or dropping the array element.
+- [ ] **Step 3: implement the smallest fixture/test wiring; green.** No schema
+      rule changes are expected; a red production path is routed back to its
+      owning implementation author.
+- [ ] **Step 4: gate.** `make schema-check`; focused live resume tests with
+      `-race -count=1`; `make server-build server-vet server-test`.
+- [ ] **Step 5: independent defect review, then commit** the fixture and its
+      explicit conformance/live-write tests.
+
+---
+
+### Task 6b: Mechanically restrict generated resume writes to the domain store
+
+Closes owner correction 5's unenforced choke-point convention before phase exit.
+This is an integration-owner task because it touches root policy/gates.
+
+**Files:** modify `.semgrep.yml`, the root `Makefile`, and
+`.github/workflows/ci.yml`; create `scripts/test-resume-write-chokepoint.sh`. Do
+not edit generated sqlc code.
+
+- [ ] **Step 1: failing policy regression.** The script creates temporary Go
+      files (never tracked): an outside `apps/server/internal/api` caller of
+      each forbidden generated method must initially pass, proving the gap; the
+      same calls under `internal/resume` are the allowed control.
+- [ ] **Step 2: add a project Semgrep rule** covering `CreateResume`,
+      `DeleteResumeForUser`, `UpdateResumeDocumentCAS`, `UpdateResumeTitleCAS`,
+      `BackfillResumeDocumentCAS`, `CreateIdempotencyRecord`,
+      `DeleteIdempotencyRecordIfExpired`, and
+      `DeleteExpiredIdempotencyRecordsForUser`, plus the lock-bearing
+      `LockUserForResumeWrite`. Include `apps/server/**/*.go`; exclude only
+      generated definitions in `internal/store/**` and authorized calls in
+      `internal/resume/**`. Method-name additions in `queries.sql` must extend
+      this list in the same reviewed change.
+- [ ] **Step 3: make the regression executable.** Add an owner-applied
+      `semgrep-policy-test` target that asserts the temporary outside fixture
+      fails with the new rule and the inside fixture passes; leave no temporary
+      file behind. The script also parses named blocks in `sql/queries.sql` and
+      fails if any `INSERT`/`UPDATE`/`DELETE` targeting `resumes` or
+      `idempotency_records`, or the resume-user `FOR UPDATE` lock, is absent
+      from the rule's covered-method manifest. Run it in CI beside the offline
+      Semgrep gate.
+- [ ] **Step 4: gate.** `make semgrep-policy-test semgrep`; fresh repository
+      scan proves no outside production/test caller; `make docs-lint` if policy
+      documentation changes.
+- [ ] **Step 5: independent security/defect review, then commit** only the
+      policy, regression script, Makefile, and CI wiring.
 
 ---
 
 ### Task 7: Idempotency record store (replay / reject / rollback primitive)
 
-Store-level substrate for AC-SAVE-002 (P2B closes the HTTP row). Implements D11.
-Also the forward contract from `phase-1-deferred.md`: the client's
-`csrf_rejected` retry **reuses the same `Idempotency-Key`** — this primitive is
-what makes that retry safe (same key + same body ⇒ replay, never a double
-mutation); record that sentence in the package doc so P2B/P4 inherit it as
-written contract, not accident.
+Closes the store primitive in AC-SAVE-003 and supplies the substrate for
+AC-SAVE-002, whose HTTP behavior P2B closes. Implements D11. Also the forward
+contract from `phase-1-deferred.md`: the client's `csrf_rejected` retry **reuses
+the same `Idempotency-Key`** — this primitive is what makes that retry safe
+(same key + same body ⇒ replay, never a double mutation); record that sentence
+in the package doc so P2B/P4 inherit it as written contract, not accident.
 
 **Files:** create `apps/server/internal/resume/idempotency.go`,
 `idempotency_test.go`.
@@ -1191,51 +1312,71 @@ type IdempotencyStore struct {
     now  func() time.Time
 }
 
-// Execute runs mutate exactly once per (userID, route, key). mutate MUST
-// perform every write through the supplied tx — the rollback arm depends
-// on it. Flow (D11): tx { reap this user's expired rows (opportunistic,
-// owner ruling — response_body holds user content, so the TTL is enforced
-// by normal traffic, not a future job); delete-if-expired same-key row;
-// mutate; insert record }; unique violation on insert → ROLL BACK
-// EVERYTHING, re-read committed record: hash equal → (stored,
-// replayed=true, nil); else → ErrIdempotencyKeyReuse.
+// Execute serializes all of a user's mutation transactions on the existing
+// user-row lock before the live-key lookup. For concurrent committed same-key
+// calls, only the leader invokes mutate; a follower replays or rejects the
+// committed record. mutate may run again only after an earlier attempt rolled
+// back or crashed, so it MUST perform every database write through the supplied
+// qtx and MUST NOT perform non-transactional side effects. Flow (D11): committed
+// preflight { reap this user's expired rows }; tx { lock user; delete-if-expired
+// same-key row; lookup live record: matching hash → replay, different hash →
+// key reuse, absent → mutate then insert record }. The unique constraint
+// remains a fail-closed backstop.
 func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
     route string, key uuid.UUID, bodyHash [32]byte,
     mutate func(qtx *store.Queries) (StoredResponse, error),
 ) (resp StoredResponse, replayed bool, err error)
 ```
 
-- [ ] **Step 1: failing sequential tests.** First call runs `mutate`, stores +
-      returns response; second call same key+hash → replayed=true, stored
-      response byte-identical, `mutate` NOT invoked (spy counter), no new row;
+- [x] **Step 1: failing sequential tests.** First call runs `mutate`, stores +
+      returns response; second call same key+hash → replayed=true, returns bytes
+      identical to the persisted PostgreSQL `jsonb` representation, `mutate` NOT
+      invoked (spy counter), no new row. Because PostgreSQL normalizes `jsonb`,
+      the first mutation result and replay must be JSON-semantically equivalent;
+      byte identity is required between the stored row and every replay, not
+      between an arbitrary caller-formatted first body and normalized storage;
       same key different hash → `ErrIdempotencyKeyReuse`, `mutate` not invoked,
       zero writes; `mutate` returning an error → nothing persisted (record row
       absent, mutation rolled back); expired record (injected clock past TTL) +
-      same key → treated as fresh: old row replaced, new execution.
-- [ ] **Step 2: failing rollback test.** `mutate` inserts a real resume row by
-      calling **`(*resume.Store).createTx(ctx, qtx, …)` directly (B7's tx-scoped
-      core — not a hand-rolled `INSERT` stand-in)**, proving `Execute` actually
-      composes with Task 6's real `Create` logic, cap check included, inside one
-      transaction; force the duplicate-insert path (pre-seed the record from a
-      competing connection mid-flight or sequentially construct the conflict);
-      assert the loser's resume insert is **gone** after rollback and the
-      returned response is the winner's. (The true concurrent race is Suite
-      A's.)
-- [ ] **Step 2b: failing composition test (B7).** A second case building
-      directly on Step 2's wiring: two `Execute` calls with different
-      idempotency keys, same user, each `mutate` calling `createTx`, back to
-      back — both resumes exist, cap accounting is correct (this is
-      `resume.Store`'s real cap check running inside `IdempotencyStore`'s tx,
-      not a bypass), and a call that would be a 4th resume for that user still
-      surfaces `ErrCapExceeded` from inside `mutate`, which `Execute` propagates
-      without inserting an idempotency record (nothing to replay for a rejected
-      mutation).
-- [ ] **Step 3: implement; green.** Injected `now` for TTL; SHA-256 is the
+      same key → treated as fresh: old row replaced, new execution. Seed an
+      unrelated expired record and prove the committed preflight removes it even
+      when the current attempt ends in key reuse or a mutation error.
+- [x] **Step 2: failing real-CAS convergence tests.** Two same-key callers start
+      from the same resume revision and each callback invokes Task 6's real
+      transaction-scoped SaveDocument core. Before the fix, the loser callback
+      ran and surfaced `RevisionMismatch`; after locking, a same-hash follower
+      skips its callback and replays the winner, while a different-hash follower
+      skips its callback and returns `ErrIdempotencyKeyReuse`. Both cases prove
+      exactly one document mutation and one idempotency record commit. Ordinary
+      callback-error rollback remains covered by Step 1.
+- [x] **Step 2b: failing composition test (B7).** A separate case runs two
+      `Execute` calls with different idempotency keys for the same user, each
+      `mutate` calling `createTx`, back to back — both resumes exist, cap
+      accounting is correct (this is `resume.Store`'s real cap check running
+      inside `IdempotencyStore`'s tx, not a bypass), and a call that would be a
+      4th resume for that user still surfaces `ErrCapExceeded` from inside
+      `mutate`, which `Execute` propagates without inserting an idempotency
+      record (nothing to replay for a rejected mutation).
+- [x] **Step 3: implement; green.** Injected `now` for TTL; SHA-256 is the
       caller's job (P2B hashes the raw body — keep the primitive
       transport-agnostic).
-- [ ] **Step 4: gate.** Same live-DB command + tally as Task 6 Step 5.
-- [ ] **Step 5: commit** —
+- [x] **Step 4: gate.** Same live-DB command + tally as Task 6 Step 5.
+- [x] **Step 5: initial implementation commit** —
       `git commit -m "feat(resume): add transactional idempotency record store" -- apps/server/internal/resume`
+- [x] **Review follow-up 1:** first independent review found the callback
+      exactly-once overclaim and rollback-prone expiry reap.
+- [x] **Review follow-up 2:** a fresh author added committed preflight reaping,
+      error-path tests, and the transaction-only callback contract.
+- [x] **Review follow-up 3:** fresh re-review confirmed those fixes but found
+      that a concurrent real CAS callback can fail before the unique-insert
+      replay path, so callers do not converge.
+- [x] **Review follow-up 4a:** a fresh author serializes contenders before
+      lookup/mutate and adds real tx-scoped CAS race coverage.
+- [x] **Review follow-up 4b:** a new independent reviewer passes the result; the
+      integration owner reruns the focused race test at `-race -count=10`.
+- [ ] **Review follow-up 4c:** after synchronizing this owner plan into the
+      isolated branch, integrate the reviewed corrective diff in a dedicated
+      commit.
 
 ---
 
@@ -1264,15 +1405,15 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 
 ### Task 8: Doc-shape migration machinery — projection-only read, CAS write persistence, CAS backfill, wire-version declarations
 
-Implements the spec §3 doc-migrations bullet and the wire-version machinery row
-("built in P2A … before a second version exists"). No traceability row exists
-yet — see the gap table; do not invent an ID. **D12(ii) binding:**
-`docmigrate.go`'s package doc records, verbatim, that every write path must
-persist the full document through the codec — never a granular `jsonb_set`-style
-PATCH, which would let old-shape content re-enter storage where the backfill CAS
-cannot see it. This is P2B's binding-in-writing condition from D12; Task 12
-forwards the sentence to the owner alongside the other P2B forward-binding notes
-(as Task 7 does for the idempotency retry contract).
+Implements AC-DOC-010 and AC-DOC-012: the spec §3 doc-migration behavior and
+wire-version machinery ("built in P2A … before a second version exists"). Task
+2b is a hard prerequisite. **D12(ii) binding:** `docmigrate.go`'s package doc
+records, verbatim, that every write path must persist the full document through
+the codec — never a granular `jsonb_set`-style PATCH, which would let old-shape
+content re-enter storage where the backfill CAS cannot see it. This is P2B's
+binding-in-writing condition from D12; Task 12 forwards the sentence to the
+owner alongside the other P2B forward-binding notes (as Task 7 does for the
+idempotency retry contract).
 
 **Files:** create
 `apps/server/internal/resume/docmigrate/{docmigrate.go,backfill.go}`,
@@ -1287,25 +1428,47 @@ package docmigrate
 
 const CurrentVersion int32 = 1
 
-// AcceptedVersions / EmittedVersion are the spec's wire-version
-// declarations: which stored/wire doc versions this server accepts and
-// which it emits. With one released version both are {1}/1; adding v2
-// extends these + registers a converter — a written contract, tested, so
-// the machinery exists before it is needed.
+// AcceptedVersions and EmittedVersions are distinct declared sets. With one
+// released version both are {1}; a future release changes them deliberately.
+// Callers receive copies so they cannot mutate the production declaration.
 func AcceptedVersions() []int32
-func EmittedVersion() int32
+func EmittedVersions() []int32
 
-// ConvertFunc lifts a FULL canonical document from version N to N+1 (D13).
+// ConvertFunc converts one FULL canonical document by exactly one version.
 type ConvertFunc func(doc json.RawMessage) (json.RawMessage, error)
 
-type Projector struct { /* convs map[int32]ConvertFunc; current int32 */ }
+// AdjacentConverters is keyed by its lower version N and supplies N→N+1 and
+// N+1→N. Both functions are mandatory for every registered pair (D13).
+type AdjacentConverters struct {
+    Up   ConvertFunc
+    Down ConvertFunc
+}
 
-func NewProjector(convs map[int32]ConvertFunc, current int32) (*Projector, error)
-func NewIdentityProjector() *Projector // production wiring today: no convs
+// ValidateFunc validates one released-version document against that version's
+// immutable schema. Production validators come from schema.RawSchemas.
+type ValidateFunc func(doc json.RawMessage) error
 
-// Project is PURE (D18): parts+version in, current-version PARTS out.
-// It never touches the database, and it never decodes into schema types --
-// see owner correction 4. internal/resume owns the one strict decode.
+type Projector struct { /* pairs, validators, accepted, emitted, current */ }
+
+func NewProjector(pairs map[int32]AdjacentConverters,
+    validators map[int32]ValidateFunc, accepted, emitted []int32,
+    current int32) (*Projector, error)
+func NewIdentityProjector() *Projector // production v1: no adjacent pairs
+
+// Convert validates the source, walks adjacent pairs in either direction,
+// validates each target, and fails closed on an unknown/undeclared version,
+// missing direction, invalid converter result, or unavailable schema.
+func (p *Projector) Convert(doc json.RawMessage, from, to int32) (json.RawMessage, error)
+
+// AcceptWire projects a declared accepted wire version to CurrentVersion.
+// EmitWire projects a current document to a declared emitted version.
+func (p *Projector) AcceptWire(doc json.RawMessage, version int32) (
+    current json.RawMessage, currentVersion int32, err error)
+func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessage, error)
+
+// Project is PURE (D18): stored parts+version in, current-version parts out.
+// It never touches the database or decodes into schema types; internal/resume
+// owns the one strict current-version decode (owner correction 4).
 func (p *Projector) Project(personalDetails, content, customization json.RawMessage,
     storedVersion int32) (pd, c, cu json.RawMessage, err error)
 ```
@@ -1337,20 +1500,25 @@ const (
 func (s *Store) BackfillOne(ctx context.Context, id uuid.UUID) (BackfillResult, error)
 ```
 
-- [ ] **Step 1: failing projection tests.** Identity projector: v1 parts →
-      identical doc. Synthetic converter (test-only, injected via
-      `NewProjector`): register a fake `1→2` converter with `current=2`, feed v1
-      parts, assert converted output; chain `1→2→3`; missing converter for a
-      stored version → error (fail closed, never a silent passthrough);
-      converter returning invalid JSON → error. **Projection purity:** run `Get`
-      against a live row seeded at a synthetic old version (insert the row with
-      `schema_version` overridden via direct SQL), assert the returned doc is
-      projected AND the row's bytes, `revision`, and `updated_at` are
-      bit-identical before/after (D18) — the "projection-only on read, never
-      writes during GET" clause as a test.
-- [ ] **Step 2: failing write-persist test.** `SaveDocument` on that old-version
-      row persists at `CurrentVersion` (per spec: "persisted only when a user
-      write occurs, transactional") and bumps revision once.
+- [ ] **Step 1: failing conversion/projection tests.** Identity v1 conversion
+      and projection are byte-stable. With injected synthetic schemas and pairs,
+      test `1→2`, `2→1`, `1→2→3`, and `3→2→1`; every step validates both its
+      source and output. Constructor and conversion fail closed for a missing
+      `Up` or `Down`, missing schema validator, unknown/undeclared version,
+      invalid source, invalid JSON output, or output invalid for the target
+      schema. Returned accepted/emitted slices cannot mutate internal state.
+      **Projection purity:** run `Get` against a live row seeded at a synthetic
+      old version, assert the returned doc is projected and the row's bytes,
+      `revision`, and `updated_at` are bit-identical before/after (D18).
+- [ ] **Step 2: failing old-client preparation and emission tests.** Against a
+      synthetic current-v2 projector, `AcceptWire` accepts a v1 document and
+      returns canonical target-validated v2 bytes plus the current version;
+      `EmitWire` converts those same bytes to declared v1, validates immutable
+      v1, and proves round-trip preservation of all v1 fields. Undeclared
+      input/output versions and lossy conversion fail closed. This is the exact
+      transport-agnostic boundary P2B consumes. P2B-owned AC-SAVE-004 adds the
+      real HTTP/OpenAPI convert→full-document persist→emit proof; P2A does not
+      invent a fake v2 store codec or bypass the typed v1 store to simulate it.
 - [ ] **Step 3: failing backfill tests.** Old-version row → `BackfillApplied`:
       `schema_version` now current, parts rewritten, **revision and updated_at
       unchanged** (D12); already-current → `BackfillSkippedCurrent`, zero
@@ -1383,13 +1551,12 @@ func (s *Store) BackfillOne(ctx context.Context, id uuid.UUID) (BackfillResult, 
       unguarded.
 - [ ] **Step 4: implement; green.** `Store.Get`/`List` now project;
       `SaveDocument` persists current version (Task 6's tests still green — run
-      them). **Carried from Task 6's review:** `List` currently returns
-      `nil, err` on the first projection failure, so one row at an unknown
-      `schema_version` makes the whole list unreadable. Unreachable while
-      `CurrentVersion` is the only version — but this task is what makes it
-      reachable. Decide deliberately whether that stays fail-closed.
+      them). **Owner ruling:** `List` is fail-closed and atomic: if any row
+      cannot be projected or decoded, return `nil` plus a deterministic error
+      and expose no partial list. Add the mixed-valid/corrupt-row test; a silent
+      omission or partial result would make corruption look like user deletion.
 - [ ] **Step 5: gate.** Live-DB command + tally (Task 6 Step 5's form), plus
-      `make server-build server-vet server-test`.
+      `make server-build server-vet server-test schema-check`.
 - [ ] **Step 6: commit** —
       `git commit -m "feat(resume): add doc-shape projection, CAS backfill, and wire-version declarations" -- apps/server/internal/resume`
 
@@ -1401,28 +1568,29 @@ Mandated by the master plan's independence rule for concurrency: a **second,
 fresh Sonnet 5 instance** derives these from the written contracts **before
 reading any `internal/resume` implementation diff or author test**. Inputs the
 blind author gets: spec §3 (cap + invariants bullets), §4 (write-safety
-paragraph), `budgets.md`, traceability AC-DOC-001/AC-SAVE-001/AC-SAVE-002
-statements, and this plan's **Interfaces blocks only** (Tasks 6–7 signatures +
-typed errors). Inputs withheld: `internal/resume/*.go`, `store_test.go`,
-`idempotency_test.go`, `sql/queries.sql`. The author of Tasks 5–8 must not edit
-this suite; weakening any assertion requires Opus 5 review by name.
+paragraph), `budgets.md`, traceability AC-DOC-001/AC-SAVE-003 plus the
+data-layer substrate portions of P2B-owned AC-SAVE-001/002, D11, and this plan's
+**Interfaces blocks only** (Tasks 6–7 signatures + typed errors). Inputs
+withheld: `internal/resume/*.go`, `store_test.go`, `idempotency_test.go`,
+`sql/queries.sql`. The author of Tasks 5–8 must not edit this suite; weakening
+any assertion requires Opus 5 review by name.
 
 **Files:** create `apps/server/internal/resume/writesafety_adversarial_test.go`.
 
 Minimum matrix (the blind author may add, never subtract):
 
-| Test                                                 | Assert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TestCreate_Concurrent_ExactlyThreeSucceed`          | 20 concurrent `Create` for one user → exactly 3 succeed, 17 `ErrCapExceeded`, row count 3; deterministic under `-race -count=20`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `TestCreate_RawSQLBypass_StillCapped`                | 3 rows via store, 4th via raw `INSERT` → SQLSTATE 23514 (the trigger is the enforcement, not the Go code)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `TestCreate_ConcurrentRawSQLBypass_StillCapped`      | **The trigger's own `FOR UPDATE` under concurrency, added 2026-08-03 (owner).** Two raw-SQL connections, no store layer: tx1 inserts the 3rd resume and holds; tx2's 4th insert must **block** (poll `pg_locks`/`pg_stat_activity` until observed blocked — no `time.Sleep`); tx1 commits; tx2 then fails `23514`/`resumes_user_cap_exceeded`. Deleting the trigger's `PERFORM … FOR UPDATE` line must make this test fail. Task 3's review found that line had **zero** behavioral coverage — the store's own lock masks it in every store-mediated test, so only a bypassing concurrent writer exercises it |
-| `TestSaveDocument_ConcurrentSameRevision_OneWinner`  | N concurrent CAS at revision R → exactly one new revision R+1; every loser gets `*RevisionMismatchError` whose `Current` equals the winner's doc                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `TestSaveDocument_MismatchCarriesWinningDoc`         | loser's error payload byte-matches a fresh `Get` (the 412-body contract P2B will serialize)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `TestIdempotency_ConcurrentSameKey_MutationRunsOnce` | N concurrent `Execute` same key+hash → one mutation execution observable in the DB; all callers converge on one stored response                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `TestIdempotency_LoserMutationRolledBack`            | after the race, exactly ONE resume row exists from the mutations (the rollback arm — no orphan writes)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `TestIdempotency_DifferentBodyNeverExecutes`         | reuse with a different hash: `ErrIdempotencyKeyReuse` and zero DB deltas, even interleaved with valid replays                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `TestValidation_RejectionWritesNothing`              | oversized/invalid doc through `Create` and `SaveDocument` → full-row/rowcount equality before vs after (limit+1 at the transaction boundary, not just the validator)                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `TestNoExistenceOracle_WrongUserSameAsNotFound`      | across `Get`, `Delete`, `SaveDocument`, `SaveTitle`: calling with a real id owned by a different user returns byte-identical `ErrNotFound` (or, for the CAS methods, the same not-found path — never a distinguishable `*RevisionMismatchError`) as calling with a wholly nonexistent id — no response-shape difference an attacker could use as an existence oracle (D17)                                                                                                                                                                                                                                    |
+| Test                                                   | Assert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestCreate_Concurrent_ExactlyThreeSucceed`            | 20 concurrent `Create` for one user → exactly 3 succeed, 17 `ErrCapExceeded`, row count 3; deterministic under `-race -count=20`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `TestCreate_RawSQLBypass_StillCapped`                  | 3 rows via store, 4th via raw `INSERT` → SQLSTATE 23514 (the trigger is the enforcement, not the Go code)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `TestCreate_ConcurrentRawSQLBypass_StillCapped`        | **The trigger's own `FOR UPDATE` under concurrency, added 2026-08-03 (owner).** Two raw-SQL connections, no store layer: tx1 inserts the 3rd resume and holds; tx2's 4th insert must **block** (poll `pg_locks`/`pg_stat_activity` until observed blocked — no `time.Sleep`); tx1 commits; tx2 then fails `23514`/`resumes_user_cap_exceeded`. Deleting the trigger's `PERFORM … FOR UPDATE` line must make this test fail. Task 3's review found that line had **zero** behavioral coverage — the store's own lock masks it in every store-mediated test, so only a bypassing concurrent writer exercises it |
+| `TestSaveDocument_ConcurrentSameRevision_OneWinner`    | N concurrent CAS at revision R → exactly one new revision R+1; every loser gets `*RevisionMismatchError` whose `Current` equals the winner's doc                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `TestSaveDocument_MismatchCarriesWinningDoc`           | loser's error payload byte-matches a fresh `Get` (the 412-body contract P2B will serialize)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `TestIdempotency_ConcurrentSameKey_OneMutationCommits` | N concurrent `Execute` same key+hash → the user-row lock admits one callback; followers replay its committed response; exactly one mutation is observable; no callback has a non-transactional side effect                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `TestIdempotency_MutationErrorRollsBack`               | a callback that performs a real transaction-scoped resume mutation and then returns an error leaves neither that mutation nor an idempotency record                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `TestIdempotency_DifferentBodyNeverExecutes`           | reuse with a different hash: `ErrIdempotencyKeyReuse` and zero DB deltas, even interleaved with valid replays                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `TestValidation_RejectionWritesNothing`                | oversized/invalid doc through `Create` and `SaveDocument` → full-row/rowcount equality before vs after (limit+1 at the transaction boundary, not just the validator)                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `TestNoExistenceOracle_WrongUserSameAsNotFound`        | across `Get`, `Delete`, `SaveDocument`, `SaveTitle`: calling with a real id owned by a different user returns byte-identical `ErrNotFound` (or, for the CAS methods, the same not-found path — never a distinguishable `*RevisionMismatchError`) as calling with a wholly nonexistent id — no response-shape difference an attacker could use as an existence oracle (D17)                                                                                                                                                                                                                                    |
 
 - [ ] **Step 1 (blind author): write the suite from the contracts; run** —
       expected mostly green if Tasks 5–8 are correct; **any red is a real
@@ -1454,6 +1622,8 @@ Minimum matrix:
 | `TestBackfill_ConcurrentWithItself_AppliesOnce`  | N concurrent `BackfillOne` on one row → one `BackfillApplied`, rest skipped/lost; final state valid, revision unchanged                                   |
 | `TestBackfill_NeverPersistsInvalidProjection`    | synthetic converter emitting an invalid doc → error, row untouched                                                                                        |
 | `TestProjection_UnknownStoredVersionFailsClosed` | stored version with no converter path → error from `Get`, never a silently un-projected doc                                                               |
+| `TestList_OneBadProjectionFailsAtomically`       | one unprojectable row among valid rows → `nil, err`; no partial list or silent omission                                                                   |
+| `TestWireConverters_BothDirectionsFailClosed`    | independently exercise synthetic v1⇄v2, old-client preparation, down-emission, source/target validation, and every missing-path arm                       |
 
 - [ ] **Step 1 (blind author): write from the contracts; run; findings to the
       implementer.**
@@ -1513,23 +1683,26 @@ reconciles unilaterally.
 
 ### Task 12: Traceability closure, docs, and integration handoffs
 
-**Files:** modify `docs/plans/traceability.md` (claimed rows only; new rows as
-proposals to the owner); no other doc edits without owner direction.
+**Files:** modify `docs/plans/traceability.md` (claimed rows only) and the
+current-state architecture/runbook references affected by the landed store;
+integration-owner-only shared-file edits remain handoffs.
 
 - [ ] **Step 1:** fill test references for AC-DOC-001 (trigger + store + Suite A
       tests), AC-DOC-002 (Task 2 conformance + Task 5 pipeline),
-      AC-DOC-003/007/008 (append the live-write wiring references to the
-      existing P0 references; the rows' "not yet wired, P2A" annotations come
-      out).
-- [ ] **Step 2:** hand the integration owner, in one report: (a) the proposed
-      new traceability rows (doc-migration CAS, 512 KB store bound, wire-version
-      machinery, store-level idempotency — exact statement text drafted, IDs
-      left to the owner); (b) the Makefile edit — `server-test-db`'s package
-      list gains `./internal/resume/...`; (c) the master-plan correction
-      (drift-gate location is `cmd/migrate/gen`, not the shell script); (d) the
-      P2B forward-binding notes (D14 customization allowlist; the idempotency
-      retry contract sentence from Task 7; the D12(ii) full-document-persistence
-      binding recorded in Task 8's `docmigrate.go` package doc).
+      AC-DOC-003/004/007/008/009 (append live-write, limit+1, and
+      cleared-contact references to the existing P0 evidence), AC-DOC-010
+      (projection/CAS/backfill + Suite B), AC-DOC-011 (canonical 512 KB
+      boundary + Suite C), AC-DOC-012 (immutable v1/types, both converter
+      directions, old-client preparation/emission), and AC-SAVE-003 (Task 7 +
+      Suite A). Remove every stale "not yet wired" annotation.
+- [ ] **Step 2:** hand the integration owner, in one report: (a) any owner-only
+      CI/Makefile edit still required for `server-test-db`, immutable released
+      schemas, or generated-write-method restriction; (b) the P2B
+      forward-binding notes: D14 customization allowlist, the idempotency retry
+      contract, D12(ii) full-document persistence, and the real HTTP/OpenAPI
+      AC-SAVE-004 old-client persist/emission test that consumes Task 8 rather
+      than reimplementing it; (c) the global P8 retention sweep remains additive
+      to Task 7's opportunistic per-user reap.
 - [ ] **Step 3: gate.** `make docs-fmt && make docs-lint`.
 - [ ] **Step 4: commit** —
       `git commit -m "docs(plans): close Phase 2A traceability rows" -- docs/plans/traceability.md`
@@ -1538,12 +1711,14 @@ proposals to the owner); no other doc edits without owner direction.
 
 ## Integration handoffs (owner-applied, not worker-applied)
 
-| Shared file                           | Needed change                                                                                | When          |
-| ------------------------------------- | -------------------------------------------------------------------------------------------- | ------------- |
-| root `Makefile`                       | `server-test-db` package list += `./internal/resume/...`                                     | with Task 6   |
-| `docs/plans/implementation-plan.md`   | Drift-gate wording correction (script → `cmd/migrate/gen`); phase-status row when gates pass | Task 1 / gate |
-| `docs/plans/traceability.md` new rows | Four proposed rows (Task 12 Step 2(a))                                                       | Task 12       |
-| root `go.work.sum` (if materialized)  | commit as lockfile                                                                           | whenever      |
+| Shared file                          | Needed change                                                                                            | When          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- | ------------- |
+| `.github/workflows/ci.yml`           | Add exact released-schema/type append-only job beside migrations; add Semgrep policy regression          | Tasks 2b/6b   |
+| root `Makefile`                      | Retain landed resume DB coverage; add `semgrep-policy-test`                                              | Task 6b/gate  |
+| `docs/plans/implementation-plan.md`  | Drift-gate wording correction (script → `cmd/migrate/gen`); phase-status row when gates pass             | Task 1 / gate |
+| `.semgrep.yml` + policy script       | Restrict direct use of named generated write methods to `internal/resume` and prove the negative control | Task 6b       |
+| P2B plan/OpenAPI tests               | Full-document writes plus old-client accept/project/persist/emit behavior                                | P2B planning  |
+| root `go.work.sum` (if materialized) | commit as lockfile                                                                                       | whenever      |
 
 ## Phase exit criteria
 
@@ -1567,21 +1742,32 @@ proposals to the owner); no other doc edits without owner direction.
       Atlas; the migration harness's four scenarios green over the new head.
 - [ ] 4th-resume insert rejected by the **database** (raw-SQL test) and by the
       store; 20-way concurrent create yields exactly 3, under `-race`.
+- [ ] Resume titles accept empty and exactly 160 Unicode code points, reject 161
+      before any transaction or write, and leave the row unchanged on rejection.
 - [ ] Every size bound in the named-bound matrix has a passing limit and failing
       limit+1 case, and the schema-walk completeness guard passes (no schema
       bound unexercised).
 - [ ] Entry-id uniqueness enforced whole-resume in Go and TS against the shared
       fixture; `make schema-check` proves no generated drift.
+- [ ] The cleared-contact-value fixture is valid in Go/TS and round-trips
+      unchanged through live Create/Get/SaveDocument/Get, closing AC-DOC-009.
 - [ ] CAS mismatch returns the current revision + winning doc; concurrent
       same-revision writers produce exactly one winner (Suite A green).
 - [ ] Idempotency: replay returns the stored response without re-execution;
-      different body rejected with zero writes; the rollback race leaves exactly
-      one mutation (Suite A green).
+      same-key concurrent CAS calls invoke one callback and converge on replay
+      or key reuse; different body rejected with zero loser writes; an ordinary
+      callback error rolls back its mutation and record (Suite A green).
 - [ ] Reads never write (purity test green under concurrency); backfill CAS
       loses cleanly to autosave; autosave after backfill does not 412; a
       title-only write between read and CAS also yields a retryable
       `BackfillLostRace` with `schema_version` still old, and a second
       `BackfillOne` then applies (Suite B green; B6).
+- [ ] `resume.v1.schema.json` is immutable and byte-equal to the current v1
+      source; generated raw-schema registries cover each released version;
+      accepted/emitted declarations and adjacent `Up`/`Down` conversion are
+      tested, including synthetic old-client preparation to the current
+      canonical shape and supported-version emission. Real HTTP persistence is
+      P2B's AC-SAVE-004 gate.
 - [ ] Suite C (Task 11) independently derived the same size-bound limit+1 matrix
       from `budgets.md`/spec §3/`resume.schema.json`/Task 5's Interfaces block
       alone, without reading `bounds_test.go` or `validate.go`; any disagreement
@@ -1591,6 +1777,18 @@ proposals to the owner); no other doc edits without owner direction.
       written contracts before reading implementation diffs, and were not edited
       by any implementation author; Opus 5 reviewed every task diff, blocking
       findings fixed and re-reviewed.
-- [ ] Traceability rows AC-DOC-001/002/003/007/008 closed; the four new-row
-      proposals and the Makefile/master-plan handoffs delivered to the
-      integration owner.
+- [ ] Fresh-cache `golangci-lint run ./...`, `govulncheck ./...`, and offline
+      Semgrep are green; direct calls to the generated resume write methods are
+      mechanically restricted to `internal/resume`.
+- [ ] Traceability rows AC-DOC-001/002/003/004/007/008/009/010/011/012 and
+      AC-SAVE-003 are closed at the phase commit; integration handoffs are
+      applied or explicitly assigned with an owner and downstream gate.
+- [ ] The integration owner completes a design/implementation consistency review
+      and records any contract correction before the phase is frozen.
+- [ ] A fresh adversarial reviewer challenges the phase's assumptions and
+      tradeoffs after implementation; blocking findings are fixed and reviewed.
+- [ ] A fresh UAT worker runs `uat-phase-2a.md` at the exact candidate commit,
+      edits no product/test/criteria files, and reports no FAIL or BLOCKED rows.
+- [ ] A separate evidence reviewer samples artifacts and reruns a deterministic
+      subset at the same commit. Any later product-code change invalidates every
+      affected UAT row and triggers a rerun.
