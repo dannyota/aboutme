@@ -72,6 +72,14 @@ func (s *Store) CreateTxForTest(ctx context.Context, qtx *store.Queries, userID 
 	return s.createTx(ctx, qtx, userID, title, doc)
 }
 
+// SaveDocumentTxForTest exposes (*Store).saveDocumentTx solely so Task 7's
+// idempotency contention tests can compose Execute with the real revision-CAS
+// write inside Execute's supplied transaction. Production callers use
+// SaveDocument; this test-only seam does not widen the shipped API.
+func (s *Store) SaveDocumentTxForTest(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (int64, error) {
+	return s.saveDocumentTx(ctx, qtx, userID, id, doc, expectedRevision)
+}
+
 // NewIdempotencyStoreForTest builds an IdempotencyStore backed by pool that
 // uses now instead of the real wall clock, so tests in package resume_test
 // (which, by this package's own convention, cannot reach IdempotencyStore's

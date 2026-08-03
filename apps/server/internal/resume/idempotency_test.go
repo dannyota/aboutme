@@ -1,16 +1,14 @@
 // idempotency_test.go exercises resume.IdempotencyStore against a live
 // Postgres database (task-7-brief.md, D11): first-run, replay, rejected
-// key reuse, mutate-error rollback, expiry-as-absence (Step 1); the
-// concurrent-duplicate rollback arm, proven by forcing the loser's own
-// resume insert to disappear rather than assuming it (Step 2); and
-// composition with resume.Store's real cap-checked createTx across
-// multiple keys, including cap rejection surfacing from inside mutate
-// (Step 2b). Every DB-backed test here goes through the same
+// key reuse, mutate-error rollback, expiry-as-absence (Step 1); deterministic
+// same-key contention around the real saveDocumentTx CAS core (Step 2); and
+// composition with resume.Store's real cap-checked createTx across multiple
+// keys, including cap rejection surfacing from inside mutate (Step 2b). Every
+// DB-backed test here goes through the same
 // internal/testutil helper internal/auth, internal/user, internal/store,
 // and resume's own store_test.go use, so it never depends on another
-// package's test binary having applied migrations first. The true
-// concurrent race (N callers, same key) is deliberately NOT tested here --
-// it belongs to Task 9's independent blind adversarial suite.
+// package's test binary having applied migrations first. Task 9 retains the
+// independent blind N-caller adversarial suite.
 package resume_test
 
 import (
@@ -21,11 +19,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
@@ -83,6 +83,63 @@ func assertJSONEqual(t *testing.T, got, want json.RawMessage) {
 	if !reflect.DeepEqual(gotVal, wantVal) {
 		t.Errorf("JSON mismatch: got %s, want %s", got, want)
 	}
+}
+
+func createIdempotencyRecord(ctx context.Context, t *testing.T, q *store.Queries,
+	userID uuid.UUID, route string, key uuid.UUID, hash [32]byte, expiresAt time.Time,
+) {
+	t.Helper()
+	if err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
+		UserID:         userID,
+		Route:          route,
+		IdempotencyKey: key,
+		RequestHash:    hash[:],
+		ResponseStatus: 200,
+		ResponseBody:   json.RawMessage(`{"seeded":true}`),
+		ExpiresAt:      expiresAt,
+	}); err != nil {
+		t.Fatalf("CreateIdempotencyRecord() error = %v", err)
+	}
+}
+
+func assertIdempotencyRecordAbsent(ctx context.Context, t *testing.T, q *store.Queries,
+	userID uuid.UUID, route string, key uuid.UUID,
+) {
+	t.Helper()
+	if _, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+		UserID: userID, Route: route, IdempotencyKey: key,
+	}); !errors.Is(err, pgx.ErrNoRows) {
+		t.Errorf("GetIdempotencyRecord(%q, %v) error = %v, want pgx.ErrNoRows", route, key, err)
+	}
+}
+
+type idempotencyExecuteResult struct {
+	resp     resume.StoredResponse
+	replayed bool
+	err      error
+}
+
+// userRowLockedForResumeWrite reports whether another transaction already
+// holds the users-row lock that serializes resume/idempotency writes. NOWAIT
+// makes the observation deterministic: the probe either acquires and
+// immediately releases the row lock, or PostgreSQL returns lock_not_available;
+// it never waits for a scheduling-dependent interval.
+func userRowLockedForResumeWrite(ctx context.Context, pool *store.Pool, userID uuid.UUID) (bool, error) {
+	var got uuid.UUID
+	err := pool.QueryRow(ctx,
+		"SELECT id FROM users WHERE id = $1 FOR UPDATE NOWAIT", userID,
+	).Scan(&got)
+	if err == nil {
+		if got != userID {
+			return false, fmt.Errorf("owner-row lock probe returned id %v, want %v", got, userID)
+		}
+		return false, nil
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "55P03" {
+		return true, nil
+	}
+	return false, fmt.Errorf("owner-row lock probe: %w", err)
 }
 
 // --- Step 1: sequential semantics ---
@@ -240,6 +297,44 @@ func TestIdempotencyStore_Execute_DifferentHash_RejectsReuse(t *testing.T) {
 	}
 }
 
+func TestIdempotencyStore_Execute_DifferentHash_ReapPersistsOnRejectedReuse(t *testing.T) {
+	t.Parallel()
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+
+	targetRoute := idempotencyTestRoute
+	targetKey := uuid.New()
+	firstHash := sha256.Sum256([]byte("original body"))
+	createIdempotencyRecord(ctx, t, q, userID, targetRoute, targetKey, firstHash, clock.Now().Add(time.Hour))
+
+	expiredRoute := "PATCH /api/v1/resumes/{id}/title"
+	expiredKey := uuid.New()
+	expiredHash := sha256.Sum256([]byte("expired unrelated request"))
+	createIdempotencyRecord(ctx, t, q, userID, expiredRoute, expiredKey, expiredHash, clock.Now().Add(-time.Second))
+
+	otherHash := sha256.Sum256([]byte("different body"))
+	_, replayed, err := idem.Execute(ctx, userID, targetRoute, targetKey, otherHash,
+		func(qtx *store.Queries) (resume.StoredResponse, error) {
+			t.Fatal("mutate called for a live key with a different request hash")
+			return resume.StoredResponse{}, nil
+		},
+	)
+	if !errors.Is(err, resume.ErrIdempotencyKeyReuse) {
+		t.Fatalf("Execute() error = %v, want resume.ErrIdempotencyKeyReuse", err)
+	}
+	if replayed {
+		t.Errorf("Execute() replayed = true, want false")
+	}
+
+	assertIdempotencyRecordAbsent(ctx, t, q, userID, expiredRoute, expiredKey)
+	if _, getErr := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+		UserID: userID, Route: targetRoute, IdempotencyKey: targetKey,
+	}); getErr != nil {
+		t.Errorf("GetIdempotencyRecord(target) after rejected reuse error = %v, want target record preserved", getErr)
+	}
+}
+
 func TestIdempotencyStore_Execute_MutateError_RollsBackWriteAndPersistsNothing(t *testing.T) {
 	t.Parallel()
 	idem, rs, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
@@ -276,6 +371,46 @@ func TestIdempotencyStore_Execute_MutateError_RollsBackWriteAndPersistsNothing(t
 		UserID: userID, Route: idempotencyTestRoute, IdempotencyKey: key,
 	}); !errors.Is(getErr, pgx.ErrNoRows) {
 		t.Errorf("GetIdempotencyRecord() after mutate error = %v, want pgx.ErrNoRows (nothing persisted)", getErr)
+	}
+}
+
+func TestIdempotencyStore_Execute_MutateError_ReapPersistsWhileMutationRollsBack(t *testing.T) {
+	t.Parallel()
+	clock := testutil.NewClockAtEpoch()
+	idem, rs, q, _, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	doc := validDocForTest(t)
+
+	expiredRoute := "PATCH /api/v1/resumes/{id}/personal-details"
+	expiredKey := uuid.New()
+	expiredHash := sha256.Sum256([]byte("expired unrelated request"))
+	createIdempotencyRecord(ctx, t, q, userID, expiredRoute, expiredKey, expiredHash, clock.Now().Add(-time.Second))
+
+	failedKey := uuid.New()
+	failedHash := sha256.Sum256([]byte("request whose mutation fails"))
+	errMutateFailed := errors.New("test: mutation failed after writing")
+	var writtenID uuid.UUID
+	_, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, failedKey, failedHash,
+		func(qtx *store.Queries) (resume.StoredResponse, error) {
+			created, createErr := rs.CreateTxForTest(ctx, qtx, userID, "Must Roll Back", doc)
+			if createErr != nil {
+				return resume.StoredResponse{}, createErr
+			}
+			writtenID = created.ID
+			return resume.StoredResponse{}, errMutateFailed
+		},
+	)
+	if !errors.Is(err, errMutateFailed) {
+		t.Fatalf("Execute() error = %v, want errMutateFailed", err)
+	}
+	if replayed {
+		t.Errorf("Execute() replayed = true, want false")
+	}
+
+	assertIdempotencyRecordAbsent(ctx, t, q, userID, expiredRoute, expiredKey)
+	assertIdempotencyRecordAbsent(ctx, t, q, userID, idempotencyTestRoute, failedKey)
+	if _, getErr := rs.Get(ctx, userID, writtenID); !errors.Is(getErr, resume.ErrNotFound) {
+		t.Errorf("Get(writtenID) after mutate error = %v, want resume.ErrNotFound", getErr)
 	}
 }
 
@@ -338,88 +473,186 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 	assertJSONEqual(t, secondRow.ResponseBody, secondResp.Body)
 }
 
-// --- Step 2: rollback arm, forced deterministically ---
-
-// TestIdempotencyStore_Execute_ConflictRollsBackMutateAndReplaysWinner forces
-// the D11 unique-violation rollback arm WITHOUT true concurrency (no
-// goroutines -- the genuine concurrent race is Task 9's): mutate itself, in
-// the middle of Execute's still-open transaction, uses a SEPARATE
-// connection from the same pool to commit a competing idempotency record
-// for the SAME (userID, route, key) before returning. When Execute's own
-// transaction then tries to insert its own record, it hits the unique
-// index, and the WHOLE transaction -- including mutate's own resume insert,
-// performed through the supplied qtx -- rolls back. Execute must then
-// re-read the committed (winning) record and replay it, never the loser's
-// own in-memory response.
-func TestIdempotencyStore_Execute_ConflictRollsBackMutateAndReplaysWinner(t *testing.T) {
-	t.Parallel()
-	idem, rs, q, pool, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
-	userID := createTestUser(t, q)
-	doc := validDocForTest(t)
-
-	key := uuid.New()
-	hash := sha256.Sum256([]byte("shared request body"))
-	winnerResp := resume.StoredResponse{Status: 201, Body: json.RawMessage(`{"winner":true}`)}
-	loserResp := resume.StoredResponse{Status: 201, Body: json.RawMessage(`{"loser":true}`)}
-
-	var loserID uuid.UUID
-	calls := 0
-	mutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
-		calls++
-
-		// Simulate a competing Execute call that already committed, using a
-		// SEPARATE connection from the same pool -- not qtx, and not a
-		// goroutine: this statement runs to completion (and commits) before
-		// control returns to Execute, deterministically. This must happen
-		// BEFORE this mutate's own createTx call below: createTx takes
-		// LockUserForResumeWrite (SELECT ... FOR UPDATE on the users row),
-		// which this transaction would then hold for its own remaining
-		// duration -- and idempotency_records.user_id is a foreign key to
-		// that same row, so a competing insert issued AFTER the lock is
-		// held would block on it forever (this is one single goroutine,
-		// nothing will ever release it). Seeding first, before the lock is
-		// taken, avoids that self-deadlock entirely.
-		competing := store.New(pool)
-		if err := competing.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
-			UserID:         userID,
-			Route:          idempotencyTestRoute,
-			IdempotencyKey: key,
-			RequestHash:    hash[:],
-			ResponseStatus: int32(winnerResp.Status),
-			ResponseBody:   winnerResp.Body,
-			ExpiresAt:      testutil.Epoch.Add(resume.IdempotencyTTL),
-		}); err != nil {
-			return resume.StoredResponse{}, fmt.Errorf("pre-seed winner record: %w", err)
-		}
-
-		created, err := rs.CreateTxForTest(ctx, qtx, userID, "Loser", doc)
-		if err != nil {
-			return resume.StoredResponse{}, fmt.Errorf("loser CreateTxForTest(): %w", err)
-		}
-		loserID = created.ID
-
-		return loserResp, nil
+// TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges covers the
+// regression where two same-key Execute calls both reached a real CAS mutation
+// before either inserted its idempotency row. The loser could then surface
+// RevisionMismatch from saveDocumentTx and never reach the unique insert whose
+// conflict path was supposed to converge it on the winner. The channels below
+// hold the winning transaction open after its CAS write and start the contender
+// while that write is uncommitted; no sleeps or scheduler timing assumptions
+// are involved.
+func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) {
+	tests := []struct {
+		name                  string
+		contenderUsesSameHash bool
+	}{
+		{name: "same hash replays winning stored response", contenderUsesSameHash: true},
+		{name: "different hash rejects reuse without loser effects", contenderUsesSameHash: false},
 	}
 
-	got, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash, mutate)
-	if err != nil {
-		t.Fatalf("Execute() error = %v, want nil (should replay the winner)", err)
-	}
-	if !replayed {
-		t.Errorf("Execute() replayed = false, want true")
-	}
-	if got.Status != winnerResp.Status {
-		t.Errorf("Execute() Status = %d, want the WINNER's %d (not the loser's own)", got.Status, winnerResp.Status)
-	}
-	assertJSONEqual(t, got.Body, winnerResp.Body)
-	if calls != 1 {
-		t.Errorf("mutate called %d times, want exactly 1", calls)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			clock := testutil.NewClockAtEpoch()
+			winnerStore, rs, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+			userID := createTestUser(t, q)
+			created, err := rs.Create(ctx, userID, "CAS idempotency contention", validDocForTest(t))
+			if err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
 
-	// The loser's resume insert must be rolled back along with the rest of
-	// its transaction: proven by re-reading, not assumed.
-	if _, getErr := rs.Get(ctx, userID, loserID); !errors.Is(getErr, resume.ErrNotFound) {
-		t.Errorf("Get(loserID) after conflict = %v, want resume.ErrNotFound (the loser's insert must not survive the rollback)", getErr)
+			winnerDoc := validDocForTest(t)
+			winnerDoc.PersonalDetails.FullName = strp("Idempotency Winner")
+			contenderDoc := validDocForTest(t)
+			contenderDoc.PersonalDetails.FullName = strp("Must Never Commit")
+
+			key := uuid.New()
+			winnerHash := sha256.Sum256([]byte("winning request body"))
+			contenderHash := winnerHash
+			if !tt.contenderUsesSameHash {
+				contenderHash = sha256.Sum256([]byte("different request body"))
+			}
+
+			type mutationReady struct {
+				resp resume.StoredResponse
+				err  error
+			}
+			winnerReady := make(chan mutationReady, 1)
+			releaseWinner := make(chan struct{})
+			winnerResult := make(chan idempotencyExecuteResult, 1)
+			var winnerCalls atomic.Int32
+			go func() {
+				resp, replayed, executeErr := winnerStore.Execute(ctx, userID, idempotencyTestRoute, key, winnerHash,
+					func(qtx *store.Queries) (resume.StoredResponse, error) {
+						winnerCalls.Add(1)
+						revision, saveErr := rs.SaveDocumentTxForTest(ctx, qtx, userID, created.ID, winnerDoc, created.Revision)
+						stored := resume.StoredResponse{
+							Status: 200,
+							Body:   json.RawMessage(fmt.Sprintf(`{"revision":%d,"winner":true}`, revision)),
+						}
+						winnerReady <- mutationReady{resp: stored, err: saveErr}
+						if saveErr != nil {
+							return resume.StoredResponse{}, saveErr
+						}
+						<-releaseWinner
+						return stored, nil
+					},
+				)
+				winnerResult <- idempotencyExecuteResult{resp: resp, replayed: replayed, err: executeErr}
+			}()
+
+			ready := <-winnerReady
+			if ready.err != nil {
+				close(releaseWinner)
+				got := <-winnerResult
+				t.Fatalf("winner SaveDocumentTxForTest() error = %v; Execute result = %+v", ready.err, got)
+			}
+
+			// Execute must hold the same users-row lock Create uses before it
+			// invokes mutate. This is both the serialization invariant and a
+			// deterministic way for the test to distinguish the pre-fix path
+			// while still releasing every goroutine after an assertion failure.
+			ownerLocked, probeErr := userRowLockedForResumeWrite(ctx, pool, userID)
+			if probeErr != nil {
+				close(releaseWinner)
+				got := <-winnerResult
+				t.Fatalf("owner-row lock probe error = %v; winner Execute result = %+v", probeErr, got)
+			}
+			if !ownerLocked {
+				t.Error("Execute invoked mutate without first locking the user's row")
+			}
+
+			contenderStarted := make(chan struct{})
+			contenderStore := resume.NewIdempotencyStoreForTest(pool, func() time.Time {
+				close(contenderStarted)
+				return clock.Now()
+			})
+			contenderEnteredMutate := make(chan struct{})
+			contenderResult := make(chan idempotencyExecuteResult, 1)
+			var contenderCalls atomic.Int32
+			go func() {
+				resp, replayed, executeErr := contenderStore.Execute(ctx, userID, idempotencyTestRoute, key, contenderHash,
+					func(qtx *store.Queries) (resume.StoredResponse, error) {
+						contenderCalls.Add(1)
+						close(contenderEnteredMutate)
+						revision, saveErr := rs.SaveDocumentTxForTest(ctx, qtx, userID, created.ID, contenderDoc, created.Revision)
+						return resume.StoredResponse{
+							Status: 200,
+							Body:   json.RawMessage(fmt.Sprintf(`{"revision":%d,"winner":false}`, revision)),
+						}, saveErr
+					},
+				)
+				contenderResult <- idempotencyExecuteResult{resp: resp, replayed: replayed, err: executeErr}
+			}()
+
+			<-contenderStarted
+			if !ownerLocked {
+				// Before serialization existed, waiting here forced the old CAS
+				// loser path deterministically: it entered mutate and then blocked
+				// on the winner's uncommitted resume-row update. With the required
+				// owner lock, the contender cannot reach this callback at all.
+				<-contenderEnteredMutate
+			}
+			close(releaseWinner)
+
+			gotWinner := <-winnerResult
+			gotContender := <-contenderResult
+			if gotWinner.err != nil || gotWinner.replayed {
+				t.Errorf("winner Execute() = {replayed:%v err:%v}, want {false nil}", gotWinner.replayed, gotWinner.err)
+			}
+			if gotWinner.resp.Status != ready.resp.Status || !bytes.Equal(gotWinner.resp.Body, ready.resp.Body) {
+				t.Errorf("winner Execute() response = %+v, want callback response %+v", gotWinner.resp, ready.resp)
+			}
+			if winnerCalls.Load() != 1 {
+				t.Errorf("winner mutate calls = %d, want 1", winnerCalls.Load())
+			}
+			if contenderCalls.Load() != 0 {
+				t.Errorf("contender mutate calls = %d, want 0 (serialized contender must decide from winner's record)", contenderCalls.Load())
+			}
+
+			record, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+				UserID: userID, Route: idempotencyTestRoute, IdempotencyKey: key,
+			})
+			if err != nil {
+				t.Fatalf("GetIdempotencyRecord() error = %v", err)
+			}
+			if !bytes.Equal(record.RequestHash, winnerHash[:]) {
+				t.Errorf("stored request hash = %x, want winning hash %x", record.RequestHash, winnerHash)
+			}
+			assertJSONEqual(t, record.ResponseBody, ready.resp.Body)
+
+			if tt.contenderUsesSameHash {
+				if gotContender.err != nil || !gotContender.replayed {
+					t.Errorf("same-hash contender Execute() = {replayed:%v err:%v}, want {true nil}", gotContender.replayed, gotContender.err)
+				}
+				if gotContender.resp.Status != int(record.ResponseStatus) || !bytes.Equal(gotContender.resp.Body, record.ResponseBody) {
+					t.Errorf("same-hash contender response = %+v, want stored winner {Status:%d Body:%s}", gotContender.resp, record.ResponseStatus, record.ResponseBody)
+				}
+			} else {
+				if !errors.Is(gotContender.err, resume.ErrIdempotencyKeyReuse) || gotContender.replayed {
+					t.Errorf("different-hash contender Execute() = {replayed:%v err:%v}, want {false ErrIdempotencyKeyReuse}", gotContender.replayed, gotContender.err)
+				}
+			}
+
+			current, err := rs.Get(ctx, userID, created.ID)
+			if err != nil {
+				t.Fatalf("Get() after contention error = %v", err)
+			}
+			if current.Revision != created.Revision+1 {
+				t.Errorf("revision after contention = %d, want %d (exactly one mutation)", current.Revision, created.Revision+1)
+			}
+			gotDoc, err := resume.AssembleCanonical(current.Doc)
+			if err != nil {
+				t.Fatalf("AssembleCanonical(current.Doc) error = %v", err)
+			}
+			wantDoc, err := resume.AssembleCanonical(winnerDoc)
+			if err != nil {
+				t.Fatalf("AssembleCanonical(winnerDoc) error = %v", err)
+			}
+			if !bytes.Equal(gotDoc, wantDoc) {
+				t.Errorf("document after contention = %s, want winner %s", gotDoc, wantDoc)
+			}
+		})
 	}
 }
 

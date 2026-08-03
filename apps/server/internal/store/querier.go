@@ -68,9 +68,9 @@ type Querier interface {
 	// become type-safe Go methods in internal/store via `make generate`. See
 	// docs/specs/aboutme-design.md §3 "Schema management".
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	// D11 opportunistic reaping (owner ruling): every Execute deletes the
-	// calling user's expired rows in the same tx before inserting, so the TTL
-	// is enforced by normal traffic, not by a job that doesn't exist yet.
+	// D11 opportunistic reaping: every Execute commits this per-user cleanup
+	// before its mutation transaction, so expiry enforcement survives a rejected
+	// key reuse or mutation error instead of depending on a future global job.
 	DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (int64, error)
 	DeleteIdempotencyRecordIfExpired(ctx context.Context, arg DeleteIdempotencyRecordIfExpiredParams) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)

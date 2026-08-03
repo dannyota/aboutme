@@ -10,15 +10,17 @@
 // back into the four columns (D4) -- callers never do this by hand.
 //
 // Task 7's IdempotencyStore (idempotency.go) is this package's transactional
-// idempotency-record primitive (D11): it runs a caller-supplied mutation
-// exactly once per (userID, route, idempotencyKey), replaying the stored
-// response on a repeat and rejecting a reused key carrying a different
-// request body. This is the written contract -- not an accident -- that
-// makes the web client's csrf_rejected retry (docs/plans/phase-1-deferred.md)
-// safe: that retry reuses the same Idempotency-Key by construction, so
-// IdempotencyStore.Execute is what guarantees it replays the first
-// mutation's response rather than running a second one. P2B and P4 build on
-// this guarantee; they do not need to re-derive it.
+// idempotency-record primitive (D11): same-user contenders serialize on the
+// users row before lookup or mutation. After one same-key call commits, waiting
+// contenders skip their callback and replay its stored response, while a reused
+// key carrying a different request body is rejected. Callbacks must nevertheless
+// use only their supplied transaction and have no external side effects: a
+// transaction error or uncertain commit can still require a safe retry. This is
+// the written contract -- not an accident -- that makes the web client's
+// csrf_rejected retry (docs/plans/phase-1-deferred.md) safe: that retry reuses
+// the same Idempotency-Key by construction, so a committed first mutation is
+// replayed rather than committed a second time. P2B and P4 build on this
+// guarantee; they do not need to re-derive it.
 package resume
 
 import (
