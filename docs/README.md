@@ -37,8 +37,16 @@ Root-level (not in `docs/`, added at scaffold): `README.md`, `CONTRIBUTING.md`,
   architecture (`DRAFT v3`; two independent review rounds applied).
 - [Numbered implementation roadmap](plans/implementation-plan.md#numbered-delivery-index)
   — done/current/next delivery waves and phase gates.
-- [Phase 2A UAT catalog](plans/uat-phase-2a.md) — immutable fail-closed criteria
-  for the current data-layer phase gate.
+- [Phase 2A automated acceptance catalog](plans/uat-phase-2a.md) — immutable
+  fail-closed criteria for the current data-layer phase gate; the historical
+  filename retains the older `UAT` terminology.
+- [Phase 9 local manual UAT plan](plans/phase-9-local-uat.md) — main-session
+  user validation of the complete Podman deployment through Playwright MCP
+  before AWS authorization.
 - [OpenAPI contract](api/openapi.yaml) — current health, auth, identity, and
   session HTTP surface.
 - [Self-hosting guide](self-hosting.md) — the runnable podman compose stack.
+
+`UAT` is reserved for the P9 local and P9A staging user-workflow gates. Earlier
+`uat-phase-*` catalogs and reports are immutable automated phase-acceptance
+history; their filenames, criteria, corrections, and verdicts are not rewritten.
