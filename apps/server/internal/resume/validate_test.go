@@ -2,6 +2,7 @@ package resume_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -47,8 +48,8 @@ func TestD1a_FormatAssertion_MatchesAjvPosture(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ValidateForStore to reject an invalid uuid format, got nil (format assertion is not enabled)")
 	}
-	ve, ok := err.(*resume.ValidationError)
-	if !ok {
+	var ve *resume.ValidationError
+	if !errors.As(err, &ve) {
 		t.Fatalf("expected *resume.ValidationError, got %T: %v", err, err)
 	}
 	found := false
@@ -85,8 +86,8 @@ func TestD1a_FormatAssertion_URI(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected ValidateForStore to reject an invalid uri format, got nil")
 	}
-	ve, ok := err.(*resume.ValidationError)
-	if !ok {
+	var ve *resume.ValidationError
+	if !errors.As(err, &ve) {
 		t.Fatalf("expected *resume.ValidationError, got %T: %v", err, err)
 	}
 	found := false
@@ -352,8 +353,8 @@ func TestValidateForStore_IssuesSortedPathFirstAcrossLayers(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	ve, ok := err.(*resume.ValidationError)
-	if !ok {
+	var ve *resume.ValidationError
+	if !errors.As(err, &ve) {
 		t.Fatalf("expected *resume.ValidationError, got %T", err)
 	}
 	if len(ve.Issues) < 2 {
@@ -459,8 +460,8 @@ func TestValidateForStore_SingleChokePoint(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	ve, ok := err.(*resume.ValidationError)
-	if !ok {
+	var ve *resume.ValidationError
+	if !errors.As(err, &ve) {
 		t.Fatalf("expected *resume.ValidationError, got %T", err)
 	}
 	joined := strings.Join(ve.Issues, "\n")
