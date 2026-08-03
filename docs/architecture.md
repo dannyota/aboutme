@@ -8,7 +8,8 @@
 
 ## Implemented on `main`
 
-Phase 0 foundations and Phase 1 authentication/sessions are merged:
+Phase 0 foundations, Phase 1 authentication/sessions, and the reviewed Phase 2A
+checkpoint through Task 7 are on `main`:
 
 - Caddy fronts one local origin and routes the Nuxt SSR app and Go API. The
   podman compose stack includes PostgreSQL and a fail-closed one-shot migration
@@ -17,9 +18,13 @@ Phase 0 foundations and Phase 1 authentication/sessions are merged:
   `/api/v1/me`, logout, session listing, per-session revoke, and
   logout-everywhere. Request bounds, cache/security headers, CSRF, trusted-proxy
   client-IP handling, and rate limiting wrap the routes.
-- PostgreSQL stores users, identities, OAuth transactions, and opaque sessions.
-  Declarative SQL, sqlc output, and append-only Goose migrations are guarded by
-  live-database drift and migration tests.
+- PostgreSQL stores users, identities, OAuth transactions, opaque sessions,
+  resumes, slug tombstones, and idempotency records. Declarative SQL, sqlc
+  output, and append-only Goose migrations are guarded by live-database drift
+  and migration tests.
+- The resume domain validates schema and aggregate bounds, preserves ownership
+  boundaries, enforces the three-resume cap, performs revision CAS, and
+  serializes idempotent mutations transactionally. It has no HTTP surface yet.
 - Nuxt serves the landing/login pages and session settings UI. Resume-schema
   generation, OpenAPI lint/conformance tests, linting, typechecking,
   vulnerability scanning, and builds are wired into CI. Generated OpenAPI
@@ -34,16 +39,14 @@ graph LR
     G --> O[Google / GitHub / LinkedIn]
 ```
 
-## Active but not merged
+## Active Phase 2A remainder
 
-Phase 2A is being built on the isolated `worktree-phase-2a-resume-store` branch.
-Tasks 1–6 are implemented and independently reviewed. The audit's title-bound,
-clean-cache lint, callback-contract, TTL-reaping, and concurrent
-CAS/idempotency-convergence corrections pass fresh independent review. The
-corrective diff is not committed yet. Immutable v1 schema and bidirectional wire
-compatibility (Task 2b/8), blind suites, and phase gates remain. The branch is
-not part of `main` or the remote yet, so resume tables/store behavior must not
-be described as shipped.
+Tasks 1–7 and their corrective reviews are integrated. Immutable v1 schema and
+bidirectional wire compatibility (Task 2b/8), the cleared-contact proof, the
+mechanical generated-write restriction, blind suites, traceability closure, and
+all phase gates remain. This checkpoint makes the data-layer primitives
+available for continued development; it does not mark P2A complete or unlock
+P2B.
 
 ## Not implemented yet
 

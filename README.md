@@ -6,9 +6,9 @@ in a live editor, then publish it at a clean, memorable URL —
 support.
 
 **Status: Phase 2A (resume domain/store) is in progress.** Phase 0 foundations
-and Phase 1 authentication/session work are merged. The Phase 2A implementation
-is still isolated from `main` while its remaining compatibility, review,
-adversarial-test, and UAT gates run. Follow the
+and Phase 1 authentication/session work are merged. The reviewed Phase 2A
+checkpoint through Task 7 is now integrated into `main`; Tasks 2b, 6a/6b, 8–12,
+adversarial suites, and phase gates still remain. Follow the
 [numbered delivery index](docs/plans/implementation-plan.md#numbered-delivery-index)
 for the current checkpoint and next work.
 
@@ -27,6 +27,9 @@ clauses.
   device/session management, explicit account linking, and matching Nuxt pages.
 - Health/readiness endpoints, trusted-proxy client-IP handling, rate limiting,
   security/cache headers, and the Caddy route boundary.
+- Resume tables, schema-derived validation, bounded codec/store operations,
+  revision CAS, and transactional idempotency primitives. No resume HTTP route
+  is exposed yet.
 
 Resume CRUD HTTP endpoints, the editor/renderer, publishing, realtime, print,
 cloud infrastructure, and production deployment remain planned work.
