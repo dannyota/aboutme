@@ -2,6 +2,7 @@ package resume
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -56,8 +57,8 @@ func mustCompileSchema() *jsonschema.Schema {
 	}
 
 	c := newSchemaCompiler()
-	if err := c.AddResource(resumeSchemaID, doc); err != nil {
-		panic("resume: registering embedded resume schema: " + err.Error())
+	if addErr := c.AddResource(resumeSchemaID, doc); addErr != nil {
+		panic("resume: registering embedded resume schema: " + addErr.Error())
 	}
 	sch, err := c.Compile(resumeSchemaID)
 	if err != nil {
@@ -158,8 +159,8 @@ type issueEntry struct {
 // violations, each already formatted as "at '/instance/location': message"
 // by the leaf ValidationError's own Error() method.
 func schemaIssueEntries(err error) []issueEntry {
-	ve, ok := err.(*jsonschema.ValidationError)
-	if !ok {
+	var ve *jsonschema.ValidationError
+	if !errors.As(err, &ve) {
 		return []issueEntry{{text: err.Error()}}
 	}
 	var out []issueEntry

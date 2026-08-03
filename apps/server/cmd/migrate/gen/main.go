@@ -667,7 +667,6 @@ func scanSQLSegments(sql string) []sqlSegment {
 		if i+1 < len(sql) && sql[i] == '/' && sql[i+1] == '*' {
 			end := strings.Index(sql[i+2:], "*/")
 			if end == -1 {
-				i = len(sql)
 				break
 			}
 			i = i + 2 + end + 2
@@ -844,8 +843,8 @@ func captureParenSpan(s string, start int) (span string, ok bool) {
 	openAt := i
 	depth := 0
 	for i < len(s) {
-		switch {
-		case s[i] == '\'':
+		switch s[i] {
+		case '\'':
 			j := i + 1
 			for j < len(s) {
 				if s[j] == '\'' {
@@ -860,9 +859,9 @@ func captureParenSpan(s string, start int) (span string, ok bool) {
 			}
 			i = j
 			continue
-		case s[i] == '(':
+		case '(':
 			depth++
-		case s[i] == ')':
+		case ')':
 			depth--
 			if depth == 0 {
 				return s[openAt : i+1], true

@@ -1423,7 +1423,7 @@ func TestCrossCheck_SameTriggerNameOnDifferentTables_BothDeclaredMatch(t *testin
 }
 
 // TestCrossCheck_OverloadedFunctionName_DifferentArgListsAreDistinctIdentities
-// is the FUNCTION-side analogue: two overloads of to_label sharing a name
+// is the FUNCTION-side analog: two overloads of to_label sharing a name
 // but differing argument lists are distinct objects in Postgres. schema.sql
 // declares only the text overload, so the int overload the migration
 // hand-writes is an orphan a bare-name key would hide.
