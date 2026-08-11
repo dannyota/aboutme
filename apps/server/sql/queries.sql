@@ -66,16 +66,18 @@ RETURNING id;
 -- P1.1 item 4 (docs/plans/phase-1-deferred.md): starts a rotation
 -- PREDECESSOR's grace countdown, called when its successor is first used
 -- (internal/auth.SessionManager.Authenticate). BeginSessionRotation above
--- parks the predecessor's rotation_grace_until at its own
--- absolute_expires_at -- non-NULL, so the rotation CAS still admits
--- exactly one winner, but far enough out that a successor whose one and
--- only raw-token delivery was lost never orphans the lineage. This is the
--- statement that converts that parked value into a real, short deadline
--- once the successor's token has provably reached a client.
+-- parks the predecessor's rotation_grace_until at min(now + rotationAge,
+-- its own absolute_expires_at) -- non-NULL, so the rotation CAS still
+-- admits exactly one winner, far enough out that a successor whose one and
+-- only raw-token delivery was lost never orphans the lineage, and bounded
+-- so a predecessor that is never superseded in practice still expires on a
+-- credential's timescale rather than the session's. This is the statement
+-- that converts that parked value into a real, short deadline once the
+-- successor's token has provably reached a client.
 --
 -- The `rotation_grace_until > grace_until` predicate makes it
 -- monotonically SHRINKING and idempotent: the first call moves the
--- deadline in from absolute_expires_at to first-use + rotationGrace;
+-- deadline in from the parked bound to first-use + rotationGrace;
 -- every later call (the same successor's second, third, ... request, or a
 -- concurrent one racing it) proposes a LATER deadline and therefore
 -- matches no row. A predecessor's grace can never be pushed back out by

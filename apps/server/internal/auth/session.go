@@ -225,30 +225,54 @@ func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (ses
 //     never extends it). P1.1 item 4 is what keeps that orphan from
 //     taking the whole session down with it: see graceUntil below.
 //
-// graceUntil (P1.1 item 4, docs/plans/phase-1-deferred.md): the
-// predecessor's rotation_grace_until is parked at its OWN
-// absolute_expires_at here, not at now+rotationGrace. The column still
-// goes non-NULL -- BeginSessionRotation's CAS above depends on that to
-// admit exactly one winner, and it is what stops this lineage from ever
-// minting a second successor (which sessions_rotated_from_key's partial
-// UNIQUE index independently forbids too) -- but the predecessor is no
-// longer scheduled to die 60 seconds from THIS instant. It dies 60
-// seconds from the successor's FIRST USE instead
-// (startPredecessorGrace).
+// graceUntil (P1.1 item 4, docs/plans/phase-1-deferred.md; bound added
+// for phase gate finding B4): the predecessor's rotation_grace_until is
+// parked at min(now+rotationAge, predecessor.AbsoluteExpiresAt) here, not
+// at now+rotationGrace. The column still goes non-NULL --
+// BeginSessionRotation's CAS above depends on that to admit exactly one
+// winner, and it is what stops this lineage from ever minting a second
+// successor (which sessions_rotated_from_key's partial UNIQUE index
+// independently forbids too) -- but the predecessor is no longer
+// scheduled to die 60 seconds from THIS instant. It dies 60 seconds from
+// the successor's FIRST USE instead (startPredecessorGrace), or at the
+// parked deadline if that first use never comes.
 //
-// Why: the successor's raw token is delivered on exactly one response and
-// is never stored (only its sha256 is). Killing the predecessor on a
-// timer started by the rotation means a single lost response orphans the
-// whole session -- the predecessor dies while the client still holds it,
-// and the live successor is unreachable by anyone. Over ~90 rotations in
-// a 90-day lifetime, a 0.1% per-response loss rate strands ~9% of
-// sessions. Deferring costs nothing in the ordinary case (the successor's
-// first use is the very next request, so the observable window is the
-// same 60 seconds it always was) and costs, in the lost-response case, a
-// lineage that stays un-rotated until its natural absolute expiry --
-// availability preserved, one credential live, never two.
+// Why defer at all: the successor's raw token is delivered on exactly one
+// response and is never stored (only its sha256 is). Killing the
+// predecessor on a timer started by the rotation means a single lost
+// response orphans the whole session -- the predecessor dies while the
+// client still holds it, and the live successor is unreachable by anyone.
+// Over ~90 rotations in a 90-day lifetime, a 0.1% per-response loss rate
+// strands ~9% of sessions.
+//
+// Why the bound: the deferred window exists to survive a LOST RESPONSE,
+// and a client that has not used its successor within one full rotation
+// interval is not mid-request, it is gone. Extending past that buys no
+// availability and only extends theft exposure -- a STOLEN predecessor
+// token stays usable for the whole parked window, so an unbounded park
+// (the original absolute_expires_at, up to 90 days) is exactly the
+// unbounded credential lifetime RFC 9700 §4.14 and OWASP's session
+// guidance forbid: rotation's security value IS that the old credential
+// stops working promptly. The min() also never exceeds the inherited
+// absolute expiry -- rotation must not extend a session's life by even
+// the grace window, for a session with under a rotation interval left.
+//
+// What this costs, stated plainly: between the rotation and the
+// successor's first use, BOTH rows are live. Both authenticate, and both
+// appear in the user's own device list (ListLiveSessionsForUser and
+// RevokeSessionForUser, sql/queries.sql, read rotation_grace_until as a
+// liveness predicate exactly as sessionDead does) -- so one physical
+// device shows two entries for that window. In the ordinary case the
+// window is the same ~60 seconds it always was, because the successor's
+// first use is the very next request. In the lost-response case it is now
+// bounded by one rotation interval, after which the predecessor dies and
+// the duplicate entry disappears with no request from anyone; before the
+// bound it stood until absolute expiry.
 func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Session, now time.Time) (successor store.Session, raw string, won bool, err error) {
-	graceUntil := predecessor.AbsoluteExpiresAt
+	graceUntil := now.Add(rotationAge)
+	if graceUntil.After(predecessor.AbsoluteExpiresAt) {
+		graceUntil = predecessor.AbsoluteExpiresAt
+	}
 	_, err = m.q.BeginSessionRotation(ctx, store.BeginSessionRotationParams{
 		ID:                 predecessor.ID,
 		RotationGraceUntil: &graceUntil,
