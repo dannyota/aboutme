@@ -21,6 +21,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -466,6 +468,79 @@ func TestStore_Integration_CapEnforcement_TriggerBackstop(t *testing.T) {
 	if _, err := s.Create(ctx, userID, "Store-level create after bypass", doc); !errors.Is(err, resume.ErrCapExceeded) {
 		t.Errorf("Store.Create() after bypass-created rows error = %v, want resume.ErrCapExceeded", err)
 	}
+}
+
+// --- AC-DOC-009: cleared contact value survives the live store ---
+
+// TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet
+// closes the AC-DOC-009 traceability gap (docs/plans/traceability/ac-doc.md)
+// at the live-store layer: a personalDetails.details entry that is PRESENT
+// with its own value explicitly cleared to "" must survive a real write to
+// and read from Postgres, without the entry being dropped from the array or
+// its empty value being fabricated into something else (design spec §3:
+// absence means "never entered", "" means "explicitly cleared" -- neither may
+// be faked).
+//
+// The row is created with the value POPULATED and only then cleared by a
+// SaveDocument, so the assertions distinguish "the store persisted the
+// clearing" from "the row happened to be created that way": with a cleared
+// document on both legs, a SaveDocument that silently wrote nothing at all
+// would still pass.
+func TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet(t *testing.T) {
+	t.Parallel()
+	s, q, _, ctx := newIntegrationStore(t)
+	userID := createTestUser(t, q)
+
+	parts := splitFixture(t, "draft-cleared-contact-value.json")
+	cleared, err := resume.DecodeParts(parts.PersonalDetails, parts.Content, parts.Customization, parts.SchemaVersion)
+	if err != nil {
+		t.Fatalf("DecodeParts: %v", err)
+	}
+	if n := len(cleared.PersonalDetails.Details); n != 1 {
+		t.Fatalf("fixture has %d personal-detail entries, want 1", n)
+	}
+
+	const populatedValue = "https://www.linkedin.com/in/ada"
+	populated := cleared
+	populated.PersonalDetails.Details = append([]schema.PersonalDetail(nil), cleared.PersonalDetails.Details...)
+	populated.PersonalDetails.Details[0].Value = populatedValue
+
+	assertDetailValue := func(t *testing.T, label, want string, got schema.Resume) {
+		t.Helper()
+		if n := len(got.PersonalDetails.Details); n != 1 {
+			t.Fatalf("%s: len(PersonalDetails.Details) = %d, want 1 (the entry must not be dropped)", label, n)
+		}
+		if v := got.PersonalDetails.Details[0].Value; v != want {
+			t.Errorf("%s: Details[0].Value = %q, want %q", label, v, want)
+		}
+	}
+
+	created, err := s.Create(ctx, userID, "Cleared Contact", populated)
+	if err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	got, err := s.Get(ctx, userID, created.ID)
+	if err != nil {
+		t.Fatalf("Get() error: %v", err)
+	}
+	assertDetailValue(t, "Get() before clearing", populatedValue, got.Doc)
+
+	// Now clear it: the write path must persist "" as an explicit value, not
+	// drop the key, drop the entry, or leave the previous value standing.
+	newRev, err := s.SaveDocument(ctx, userID, created.ID, cleared, created.Revision)
+	if err != nil {
+		t.Fatalf("SaveDocument() error: %v", err)
+	}
+	if newRev != created.Revision+1 {
+		t.Errorf("SaveDocument() newRevision = %d, want %d", newRev, created.Revision+1)
+	}
+
+	gotAfterSave, err := s.Get(ctx, userID, created.ID)
+	if err != nil {
+		t.Fatalf("Get() after SaveDocument() error: %v", err)
+	}
+	assertDetailValue(t, "Get() after SaveDocument()", "", gotAfterSave.Doc)
 }
 
 // --- Step 3: CAS tests ---

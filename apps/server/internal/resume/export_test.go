@@ -89,3 +89,13 @@ func (s *Store) SaveDocumentTxForTest(ctx context.Context, qtx *store.Queries, u
 func NewIdempotencyStoreForTest(pool *store.Pool, now func() time.Time) *IdempotencyStore {
 	return &IdempotencyStore{pool: pool, q: store.New(pool), now: now}
 }
+
+// BackfillOneForTest exposes (*Store).backfillOne's pause seam, so Task 8's
+// backfill_test.go can stage the read/CAS interleavings D12 depends on
+// deterministically instead of racing them. pause runs after the document has
+// been read, projected, validated and re-encoded, and immediately before the
+// CAS -- exactly the window a concurrent autosave or title write occupies.
+// Production callers use BackfillOne, which passes a nil pause.
+func (s *Store) BackfillOneForTest(ctx context.Context, id uuid.UUID, pause func()) (BackfillResult, error) {
+	return s.backfillOne(ctx, id, pause)
+}

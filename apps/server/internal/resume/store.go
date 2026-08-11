@@ -209,13 +209,16 @@ func (s *Store) Delete(ctx context.Context, userID, id uuid.UUID) error {
 // UpdateResumeDocumentCAS at schema_version = docmigrate.CurrentVersion.
 // Thin wrapper (B7) around saveDocumentTx -- see createTx's doc comment
 // for the split's rationale.
-func (s *Store) SaveDocument(ctx context.Context, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (int64, error) {
-	var newRevision int64
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		qtx := s.q.WithTx(tx)
-		rev, err := s.saveDocumentTx(ctx, qtx, userID, id, doc, expectedRevision)
-		if err != nil {
-			return err
+//
+// The returned int64 is the NEW revision, not expectedRevision. A CAS miss
+// is never reported as a zero revision: it surfaces as
+// *RevisionMismatchError (the row exists, expectedRevision was stale) or
+// ErrNotFound (no such resume for this user, D17).
+func (s *Store) SaveDocument(ctx context.Context, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (newRevision int64, err error) {
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		rev, txErr := s.saveDocumentTx(ctx, s.q.WithTx(tx), userID, id, doc, expectedRevision)
+		if txErr != nil {
+			return txErr
 		}
 		newRevision = rev
 		return nil
@@ -263,17 +266,22 @@ func (s *Store) saveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 
 // SaveTitle is the CAS title write: UpdateResumeTitleCAS at the caller's
 // expectedRevision. Thin wrapper (B7) around saveTitleTx.
-func (s *Store) SaveTitle(ctx context.Context, userID, id uuid.UUID, title string, expectedRevision int64) (int64, error) {
-	if err := validateTitle(title); err != nil {
+//
+// The returned int64 is the NEW revision, not expectedRevision. A CAS miss
+// is never reported as a zero revision: it surfaces as
+// *RevisionMismatchError (the row exists, expectedRevision was stale) or
+// ErrNotFound (no such resume for this user, D17). It never touches
+// schema_version, which is why a backfill racing it loses on the revision
+// leg alone (backfill.go, B6).
+func (s *Store) SaveTitle(ctx context.Context, userID, id uuid.UUID, title string, expectedRevision int64) (newRevision int64, err error) {
+	if err = validateTitle(title); err != nil {
 		return 0, err
 	}
 
-	var newRevision int64
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		qtx := s.q.WithTx(tx)
-		rev, err := s.saveTitleTx(ctx, qtx, userID, id, title, expectedRevision)
-		if err != nil {
-			return err
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		rev, txErr := s.saveTitleTx(ctx, s.q.WithTx(tx), userID, id, title, expectedRevision)
+		if txErr != nil {
+			return txErr
 		}
 		newRevision = rev
 		return nil
@@ -337,20 +345,29 @@ func (s *Store) afterCASMiss(ctx context.Context, qtx *store.Queries, userID, id
 }
 
 // projectRow assembles row's scalar columns with its three jsonb parts,
-// lifted to docmigrate.CurrentVersion (D18), into a Resume.
+// lifted to the projector's current version (D18), into a Resume.
 //
-// Project (fix round 1, owner ruling) returns the three CurrentVersion
+// Project (fix round 1, owner ruling) returns the three current-version
 // PARTS, not a typed schema.Resume -- docmigrate has no typed-decode
 // dependency on this package (D13: a converter cannot decode a
 // not-yet-current document into the current Go struct at all), so the
 // one strict decode (DecodeParts, DisallowUnknownFields) happens here,
 // once, at the boundary, after projection.
+//
+// The decode version comes from s.proj.CurrentVersion(), not from the
+// docmigrate.CurrentVersion constant: it must be the version the parts were
+// actually projected TO, or a Store and its projector could silently
+// disagree about what the bytes in hand are. In production the two are the
+// same value by construction (NewIdentityProjector projects to the
+// constant). The WRITE path stays on the constant deliberately -- writes
+// validate against the compiled-in current schema and decompose the current
+// Go types, both of which move only when the constant does.
 func (s *Store) projectRow(row store.Resume) (Resume, error) {
 	pd, content, customization, err := s.proj.Project(row.PersonalDetails, row.Content, row.Customization, row.SchemaVersion)
 	if err != nil {
 		return Resume{}, fmt.Errorf("resume: project document: %w", err)
 	}
-	doc, err := DecodeParts(pd, content, customization, docmigrate.CurrentVersion)
+	doc, err := DecodeParts(pd, content, customization, s.proj.CurrentVersion())
 	if err != nil {
 		return Resume{}, fmt.Errorf("resume: decode projected document: %w", err)
 	}

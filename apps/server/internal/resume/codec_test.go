@@ -66,6 +66,7 @@ var roundTripFixtures = []string{
 	"full.json",
 	"draft-partial.json",
 	"draft-cleared-name-empty-section.json",
+	"draft-cleared-contact-value.json",
 }
 
 func TestCodec_RoundTrip_ByteStable(t *testing.T) {
@@ -240,6 +241,91 @@ func TestCodec_DraftPermissive_AbsentVsEmptyDistinguishable(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestCodec_ClearedContactValue_Preserved is AC-DOC-009's remaining gap
+// (docs/plans/traceability/ac-doc.md, design spec §3: "Fixtures must cover a
+// cleared name, cleared contact values, and a freshly created empty
+// section"). draft-cleared-name-empty-section.json already exercises a
+// cleared fullName and an empty section; this fixture is the "cleared
+// contact values" case -- a personalDetails.details entry that IS present
+// (id/type/isHidden all set) with its own Value field explicitly cleared to
+// "". Because PersonalDetail.Value is a plain (non-pointer) string, absence
+// vs. "cleared" is not distinguishable at the FIELD level the way e.g.
+// WorkEntry.Employer's *string is -- the thing that must survive the codec
+// is the ENTRY itself: it must neither be dropped from the details array nor
+// have its value fabricated into something other than "".
+func TestCodec_ClearedContactValue_Preserved(t *testing.T) {
+	parts := splitFixture(t, "draft-cleared-contact-value.json")
+	doc, err := resume.DecodeParts(parts.PersonalDetails, parts.Content, parts.Customization, parts.SchemaVersion)
+	if err != nil {
+		t.Fatalf("DecodeParts: %v", err)
+	}
+
+	if got := len(doc.PersonalDetails.Details); got != 1 {
+		t.Fatalf("len(PersonalDetails.Details) = %d, want 1 (the entry must not be dropped)", got)
+	}
+	entry := doc.PersonalDetails.Details[0]
+	if entry.Value != "" {
+		t.Errorf("Details[0].Value = %q, want \"\" (explicitly cleared, not fabricated)", entry.Value)
+	}
+	if entry.Type != schema.Linkedin {
+		t.Errorf("Details[0].Type = %q, want %q", entry.Type, schema.Linkedin)
+	}
+
+	// Round trip through EncodeParts and back: the cleared entry must still
+	// be there afterward, at the same length and with the same empty value --
+	// not silently omitted by an incorrect omitempty on a required field.
+	pd, content, cu, err := resume.EncodePartsForTest(doc)
+	if err != nil {
+		t.Fatalf("EncodeParts: %v", err)
+	}
+	roundTripped, err := resume.DecodeParts(pd, content, cu, parts.SchemaVersion)
+	if err != nil {
+		t.Fatalf("DecodeParts (round trip): %v", err)
+	}
+	if got := len(roundTripped.PersonalDetails.Details); got != 1 {
+		t.Fatalf("after round trip: len(PersonalDetails.Details) = %d, want 1", got)
+	}
+	if roundTripped.PersonalDetails.Details[0].Value != "" {
+		t.Errorf("after round trip: Details[0].Value = %q, want \"\"", roundTripped.PersonalDetails.Details[0].Value)
+	}
+	if !reflect.DeepEqual(doc.PersonalDetails, roundTripped.PersonalDetails) {
+		t.Errorf("PersonalDetails changed across a round trip:\n before=%#v\n after=%#v", doc.PersonalDetails, roundTripped.PersonalDetails)
+	}
+
+	// personalDetails must literally contain the entry with its cleared value
+	// in the encoded jsonb part -- not merely in the decoded struct -- so a
+	// bug that only manifests in JSON marshaling (e.g. a stray omitempty)
+	// would still be caught here.
+	//
+	// Read through the RAW key, not a typed `Value string`: decoded into a
+	// typed field, an OMITTED "value" and a key present as "" are
+	// indistinguishable, since both leave the field at "". Omitting the key
+	// is precisely the bug this assertion exists to catch, so a missing key
+	// is a failure and the value must be literally the two-byte JSON string.
+	var encoded map[string]json.RawMessage
+	if err := json.Unmarshal(pd, &encoded); err != nil {
+		t.Fatalf("unmarshaling encoded personalDetails: %v", err)
+	}
+	rawDetails, ok := encoded["details"]
+	if !ok {
+		t.Fatalf("encoded personalDetails has no \"details\" key: %s", pd)
+	}
+	var detailEntries []map[string]json.RawMessage
+	if err := json.Unmarshal(rawDetails, &detailEntries); err != nil {
+		t.Fatalf("unmarshaling encoded personalDetails.details: %v", err)
+	}
+	if len(detailEntries) != 1 {
+		t.Fatalf("encoded personalDetails.details has %d entries, want 1", len(detailEntries))
+	}
+	rawValue, ok := detailEntries[0]["value"]
+	if !ok {
+		t.Fatalf("encoded personalDetails.details[0] has no \"value\" key; the cleared value was omitted, not preserved: %s", rawDetails)
+	}
+	if got := string(rawValue); got != `""` {
+		t.Errorf("encoded personalDetails.details[0].value = %s, want %s", got, `""`)
+	}
 }
 
 // TestCodec_UnknownField_StrictDecodeError proves DecodeParts strict-decodes
