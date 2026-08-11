@@ -1,8 +1,15 @@
-# sqlc generates type-safe Go from sql/{schema,queries}.sql into
-# internal/store (package store — the same package as the hand-written pgx
-# pool in store.go). pgx/v5 driver, native Go types with pointers for
-# nullable columns, json.RawMessage for jsonb, time.Time (pointer when
-# nullable) for timestamptz. Run `make generate` after editing sql/*.sql.
+# sqlc generates type-safe Go from the goose migrations plus
+# sql/queries.sql into internal/store (package store — the same package as
+# the hand-written pgx pool in store.go). pgx/v5 driver, native Go types
+# with pointers for nullable columns, json.RawMessage for jsonb, time.Time
+# (pointer when nullable) for timestamptz. Run `make generate` after
+# editing migrations/ or sql/queries.sql.
+#
+# `schema:` points at the migrations directory, not a separate declarative
+# schema file: apps/server/migrations/ is the single source of truth for
+# both what is applied to a database (goose) and what sqlc generates from.
+# sqlc replays the migrations' "-- +goose Up" sections itself to derive the
+# schema, so there is no second file that can drift from them.
 #
 # Simplified from an earlier multi-schema pattern that used five
 # medallion-layer schemas, each with its own sqlc config block and output
@@ -10,7 +17,7 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    schema: "sql/schema.sql"
+    schema: "migrations"
     queries: "sql/queries.sql"
     gen:
       go:
@@ -70,4 +77,20 @@ sql:
             nullable: true
             go_type:
               type: "int64"
+              pointer: true
+          # 00002_add_auth_tables.sql declares users.email as
+          # `public.citext` (schema-qualified). sqlc maps a BARE `citext` to
+          # string by default, but does NOT recognize the qualified form and
+          # silently degrades it to interface{} — which still compiles here
+          # and then breaks every call site that treats the column as a
+          # string. These two overrides restore the intended mapping; do not
+          # drop them without first checking whether the qualified spelling
+          # is still present in migrations/.
+          - db_type: "public.citext"
+            go_type:
+              type: "string"
+          - db_type: "public.citext"
+            nullable: true
+            go_type:
+              type: "string"
               pointer: true

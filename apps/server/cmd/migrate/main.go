@@ -4,9 +4,10 @@
 // It is the runtime half of docs/specs/aboutme-design.md §3's "Schema
 // management" contract: migration SQL is embedded via go:embed
 // (github.com/dannyota/aboutme/apps/server/migrations), so this binary
-// needs no external files, network access beyond the database, or the
-// Atlas CLI to run — Atlas is a contributor-only tool for generating new
-// migrations (see cmd/migrate/gen), never a runtime dependency.
+// needs no external files, no migration tooling on PATH, and no network
+// access beyond the database. New migrations are hand-written into
+// apps/server/migrations, which is the single source of truth for both
+// what goose applies and what sqlc generates internal/store from.
 //
 // Concurrent safety: Apply acquires a Postgres session-level advisory
 // lock before applying anything and releases it after, via goose's own

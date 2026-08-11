@@ -548,8 +548,9 @@ func TestResumeCapTrigger_ExistsOnResumesTable(t *testing.T) {
 // consistent), deleting one row frees a slot for a new insert, and a
 // second, unrelated user is completely unaffected by the first user's
 // cap. Every step is raw SQL against the goose-migrated database -- this
-// is what "the trigger survives the migration path, not just schema.sql"
-// means in practice.
+// is what "the trigger survives the migration path" means in practice: the
+// trigger is proven against a database built by replaying migrations/, the
+// same path production takes.
 func TestResumeCapTrigger_EnforcesThreePerUser(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)

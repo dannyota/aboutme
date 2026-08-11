@@ -14,8 +14,9 @@ is in [`docs/architecture.md`](../../docs/architecture.md).
   logout, device listing, per-session revoke, and logout-everywhere.
 - Request/body bounds, trusted-proxy client-IP extraction, rate limiting,
   security/cache headers, JSON envelopes, and structured logging.
-- Declarative SQL → sqlc, Atlas-authored/Goose-applied migrations, migration
-  locking, drift checks, and live-database test helpers.
+- Hand-written goose migrations as the single schema source for both goose and
+  sqlc (ADR 0010), migration locking, drift checks, and live-database test
+  helpers.
 - The reviewed Phase 2A checkpoint: resume/idempotency tables, schema-derived
   bounds, validated CRUD store primitives, revision CAS, and convergent
   transactional idempotency.

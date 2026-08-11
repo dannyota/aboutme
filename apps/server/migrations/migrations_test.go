@@ -36,14 +36,28 @@ func TestFS_EmbedsAtLeastOneMigration(t *testing.T) {
 	}
 }
 
-// TestFS_ExcludesNonSQLFiles guards the "goose-only at runtime" design
-// decision (package doc comment): atlas.sum is a dev-time Atlas artifact
-// and must never be embedded into the server binary or read by it.
-func TestFS_ExcludesNonSQLFiles(t *testing.T) {
+// TestFS_EmbedsOnlySQLFiles guards the embed pattern's narrowness (see
+// migrations.FS's doc comment): this directory also holds the package's own
+// Go sources and test files, so a pattern any looser than "*.sql" would
+// bake non-migration files into the shipped server binary. Asserting on the
+// whole embedded set, rather than probing one known filename, keeps the
+// guard meaningful as the directory's non-SQL contents change.
+func TestFS_EmbedsOnlySQLFiles(t *testing.T) {
 	t.Parallel()
 
-	if _, err := migrations.FS.Open("atlas.sum"); err == nil {
-		t.Error("migrations.FS embeds atlas.sum, but only *.sql should be embedded")
+	entries, err := migrations.FS.ReadDir(".")
+	if err != nil {
+		t.Fatalf("ReadDir(.) error: %v", err)
+	}
+
+	for _, e := range entries {
+		if e.IsDir() {
+			t.Errorf("migrations.FS embeds directory %q, but only *.sql files should be embedded", e.Name())
+			continue
+		}
+		if filepath.Ext(e.Name()) != ".sql" {
+			t.Errorf("migrations.FS embeds %q, but only *.sql files should be embedded", e.Name())
+		}
 	}
 }
 
