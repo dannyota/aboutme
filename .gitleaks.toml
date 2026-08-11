@@ -1,0 +1,35 @@
+# gitleaks configuration.
+#
+# The pre-commit hook (.githooks/pre-commit, installed by `make hooks-install`)
+# scans staged content on every commit; `make scan` additionally sweeps full
+# history at a phase gate. This repository is public, so a secret that reaches
+# history is exposed on push and cannot be recalled -- rotation is the only real
+# remedy. That is why the per-commit check exists at all.
+#
+# Allowlists below are deliberately narrow: each one pins a single rule to a
+# single path with a stated reason. Never widen one to a bare path or a whole
+# rule -- that is how a real credential slips through behind a false positive.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+False positive: gitleaks' linkedin-client-id heuristic fires on the Go
+identifiers linkedinIssuerOverride / linkedinIssuer in the OAuth test seam.
+These are struct field and variable names for injecting a non-production
+issuer URL into tests -- there is no credential on the line. Verified
+2026-08-11 against commit 0bd77c0.
+"""
+targetRules = ["linkedin-client-id"]
+paths = ['''apps/server/internal/auth/export_test\.go$''']
+
+[[allowlists]]
+description = """
+False positive: generic-api-key fires on the h1: content hashes in the Atlas
+migration checksum file. These are integrity digests of migration SQL, not
+credentials. The file itself is deleted now that migrations are goose-only,
+but it remains in history, so the allowlist stays for full-history sweeps.
+"""
+targetRules = ["generic-api-key"]
+paths = ['''apps/server/migrations/atlas\.sum$''']

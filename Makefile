@@ -1,8 +1,21 @@
 # aboutme — repo-level targets. App-specific targets arrive with the apps.
-.PHONY: help docs-lint docs-fmt generate schema-gen schema-check api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check migrate-gen server-migration-test data-drift route-table-test
+.PHONY: help ci check scan hooks-install docs-lint docs-fmt generate schema-gen schema-check api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test
 
 help: ## List targets
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-16s %s\n", $$1, $$2}'
+
+ci: ## Full local gate — every check GitHub CI runs, including DB-backed suites. Run before any handoff instead of waiting on Actions
+	bash scripts/ci.sh
+
+check: ## Fast gate — the same checks minus the web build and DB-backed suites; for the inner development loop
+	bash scripts/ci.sh --fast
+
+scan: ## Batched security scan for a phase gate: Semgrep (SAST + Supply Chain SCA + secrets) then gitleaks over full history
+	bash scripts/scan.sh
+
+hooks-install: ## Point git at .githooks so pre-commit runs gitleaks on staged content
+	git config core.hooksPath .githooks
+	@echo "core.hooksPath = .githooks (pre-commit runs gitleaks protect --staged)"
 
 docs-lint: ## Check markdown formatting + lint
 	npm run docs:lint
@@ -85,14 +98,14 @@ semgrep: ## Offline SAST scan with registry packs + project rules (no account ne
 semgrep-ci: ## Connected Semgrep — Code (Pro rules) + Supply Chain (SCA) + Secrets; free for public repos. Needs SEMGREP_APP_TOKEN in the environment. This is what CI runs.
 	semgrep ci
 
-sqlc-gen: ## Regenerate the typed data layer from sql/ (sqlc)
+sqlc-gen: ## Regenerate the typed data layer (sqlc reads migrations/ for the schema and sql/queries.sql for the queries)
 	cd apps/server && sqlc generate
 
-sqlc-check: ## Fail if the generated data layer drifts from sql/
-	cd apps/server && sqlc generate && git diff --exit-code -- internal/store
-
-migrate-gen: ## Author a migration from sql/schema.sql (contributors only; needs Atlas)
-	cd apps/server && go run ./cmd/migrate/gen
+sqlc-check: ## Fail if the generated data layer drifts from migrations/ (uses --porcelain so a NEW untracked generated file is caught too; plain `git diff` misses those)
+	cd apps/server && sqlc generate && \
+	  { [ -z "$$(git status --porcelain -- internal/store)" ] || \
+	    { echo "generated data layer drifts from migrations/ — run 'make sqlc-gen' and commit:"; \
+	      git status --porcelain -- internal/store; exit 1; }; }
 
 migrate: ## Apply pending migrations
 	cd apps/server && go run ./cmd/migrate
@@ -100,13 +113,9 @@ migrate: ## Apply pending migrations
 migrate-check: ## Report pending migrations without applying them
 	cd apps/server && go run ./cmd/migrate -check
 
-server-migration-test: ## Run the migration harness + migrate CLI (needs test-db-up or TEST_DATABASE_URL; the gen suite self-skips without Atlas)
+server-migration-test: ## Run the migration harness + migrate CLI (needs test-db-up or TEST_DATABASE_URL)
 	cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable} \
 	  go test ./migrations/... ./cmd/migrate/... -count=1 -v
-
-data-drift: ## Fail if sqlc output or migrations drift from sql/schema.sql (needs the pinned Atlas, sqlc, and a disposable DB)
-	DATABASE_URL=$${DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable} \
-	  bash scripts/check-data-drift.sh
 
 route-table-test: ## Run the Caddy route-table integration test (needs a caddy binary; set CADDY_BIN or have caddy on PATH)
 	cd apps/server && CADDY_BIN=$${CADDY_BIN:-caddy} go test ./internal/routetable/... -run RouteTable -count=1 -v
