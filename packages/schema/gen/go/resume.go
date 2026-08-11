@@ -18,6 +18,22 @@ type Customization struct {
 	Colors     Colors     `json:"colors"`
 	DateFormat DateFormat `json:"dateFormat"`
 	Font       Font       `json:"font"`
+	// Presentation of the RESUME HEADER — the top block ResumeHeader renders: photo,
+	// personalDetails.fullName, headline, then the contact details (contract.md §5.1). NAMING
+	// HAZARD — distinct from customization.heading, which styles the per-SECTION headings (a
+	// section's displayName plus its rule) and has nothing to do with this block. Optional, and
+	// complete-or-absent: all three fields are required once the object is present, matching
+	// every other nested object under customization (font, colors, spacing, heading, layout,
+	// sectionDisplay). Absent means the renderer's pre-2026-08-11 header — left-aligned,
+	// details inline, outline icons — applied at the point of use; nothing writes that fallback
+	// into the document. This object controls presentation only: it never adds, removes,
+	// reorders, or reveals a detail, and personalDetails.details keeps its array order and its
+	// per-detail isHidden in every combination (contract.md §5.1, §6).
+	Header *HeaderClass `json:"header,omitempty"`
+	// Presentation of the per-SECTION headings: each section's displayName and its optional
+	// divider rule (contract.md §5.3). NAMING HAZARD — distinct from customization.header,
+	// which is the resume's top block (fullName, headline, contact details). The two names are
+	// one letter apart; check which block you are editing before changing either.
 	Heading    Heading    `json:"heading"`
 	Layout     Layout     `json:"layout"`
 	PageFormat PageFormat `json:"pageFormat"`
@@ -31,7 +47,25 @@ type Colors struct {
 	Accent     *string `json:"accent,omitempty"`
 	Background string  `json:"background"`
 	Primary    string  `json:"primary"`
-	Text       string  `json:"text"`
+	// Fill colour for the ONE tinted region customization.layout.surfaceTarget selects — a
+	// header band or a sidebar panel, instead of ink on white. NOT the page background: that is
+	// colors.background, which the renderer exposes as the --color-surface role
+	// (docs/specs/templates/tokens.md §4). This value feeds --color-surface-header /
+	// --color-surface-sidebar, whichever the effective target resolves to; when the effective
+	// target is "none" (see surfaceTarget) it feeds nothing and the region keeps
+	// colors.background. Optional — the second optional colour after accent — and like accent
+	// it has no cleared form, because hexColor's pattern forbids "": absence is the only unset
+	// state (contract.md §6), and the fallback is colors.background, never a hard-coded tint.
+	// ACCESSIBILITY: a second surface creates a second text-on-surface pair, and tokens.md §5's
+	// OKLCH lightness clamp is evaluated PER SURFACE, so every text role painted on the tinted
+	// region is clamped against THIS colour — 4.5:1 for body/heading/meta/link, 3:1 for
+	// --fs-name and for non-text marks that carry meaning — exactly as the same roles are
+	// clamped against colors.background elsewhere. The clamp is hue-preserving, deterministic,
+	// and non-destructive (it never writes back here), so an arbitrary user-chosen surface,
+	// including a very dark or very light one, cannot produce unreadable text; it only moves
+	// the derived role's lightness far enough to pass. See tokens.md §4 for the derived roles.
+	Surface *string `json:"surface,omitempty"`
+	Text    string  `json:"text"`
 }
 
 type Font struct {
@@ -39,6 +73,38 @@ type Font struct {
 	Family     Family `json:"family"`
 }
 
+// Presentation of the RESUME HEADER — the top block ResumeHeader renders: photo,
+// personalDetails.fullName, headline, then the contact details (contract.md §5.1). NAMING
+// HAZARD — distinct from customization.heading, which styles the per-SECTION headings (a
+// section's displayName plus its rule) and has nothing to do with this block. Optional, and
+// complete-or-absent: all three fields are required once the object is present, matching
+// every other nested object under customization (font, colors, spacing, heading, layout,
+// sectionDisplay). Absent means the renderer's pre-2026-08-11 header — left-aligned,
+// details inline, outline icons — applied at the point of use; nothing writes that fallback
+// into the document. This object controls presentation only: it never adds, removes,
+// reorders, or reveals a detail, and personalDetails.details keeps its array order and its
+// per-detail isHidden in every combination (contract.md §5.1, §6).
+type HeaderClass struct {
+	// Horizontal alignment of the whole top block — photo, name, headline, and the contact
+	// details move together. No "right" value and no per-element alignment: a resume header
+	// aligned one way per line is a layout the renderer has no measure for.
+	Align Align `json:"align"`
+	// How personalDetails.details are arranged. "inline" flows them onto one wrapping line
+	// separated by --gap-inline; "stacked" gives each its own line. Array order is the display
+	// order in both, and separators are still emitted only BETWEEN two present values
+	// (contract.md §5.1, §6).
+	DetailsLayout DetailsLayout `json:"detailsLayout"`
+	// The lucide icon before each contact detail: "none" omits contact icons entirely,
+	// "outline" is the stroked glyph, "solid" is the filled one. Scoped to the header's contact
+	// details ONLY — it does not govern a section's iconKey, which every template renders
+	// (contract.md §9.5), and it never suppresses the detail's own label or value.
+	IconStyle IconStyle `json:"iconStyle"`
+}
+
+// Presentation of the per-SECTION headings: each section's displayName and its optional
+// divider rule (contract.md §5.3). NAMING HAZARD — distinct from customization.header,
+// which is the resume's top block (fullName, headline, contact details). The two names are
+// one letter apart; check which block you are editing before changing either.
 type Heading struct {
 	ShowRule bool         `json:"showRule"`
 	Style    HeadingStyle `json:"style"`
@@ -57,6 +123,23 @@ type Layout struct {
 	// fixtures/store/invalid-layout-missing-content-key.json,
 	// fixtures/store/invalid-layout-orphan-content-key.json.
 	Sections Sections `json:"sections"`
+	// Which region customization.colors.surface fills: "none" (ink on the page background — the
+	// rendering every document had before 2026-08-11), "header" (a full-width band behind the
+	// resume header), or "sidebar" (the sidebar column's panel). Optional; absent renders
+	// identically to "none", the same absent-versus-explicitly-cleared relationship the rest of
+	// the document has — the distinction is meaningful in storage and in the editor and is
+	// deliberately not observable in output (contract.md §6). DEGRADATION IS A RENDER RULE,
+	// never an error. The renderer resolves an EFFECTIVE target as a total function over the
+	// stored values and rejects nothing: "sidebar" while layout.columns is 1 has no sidebar
+	// region to fill, so it renders as "none" (contract.md §7: "In one-column mode any
+	// sidebar-specific treatment (tint, narrower measure) degrades to the main treatment"); and
+	// any target other than "none" while colors.surface is absent has no colour to fill with,
+	// so it also renders as "none". Both combinations stay stored exactly as typed, so toggling
+	// columns 1 ↔ 2 or re-picking a colour restores the tint with no rewrite of this field.
+	// That is why the combination is not expressed here as an if/then: making it invalid would
+	// make a document the user reaches in one click unsaveable, which design spec §3's
+	// draft-permissive rule forbids.
+	SurfaceTarget *SurfaceTarget `json:"surfaceTarget,omitempty"`
 }
 
 // Placement of content's section keys into the two layout columns. JSON Schema bounds each
@@ -92,7 +175,51 @@ type SkillClass struct {
 type Spacing struct {
 	EntryGap   float64 `json:"entryGap"`
 	LineHeight float64 `json:"lineHeight"`
-	SectionGap float64 `json:"sectionGap"`
+	// Page margin in MILLIMETRES as an {x, y} pair: x is the left and right margin, y is the
+	// top and bottom one. Optional (design spec §3: "New fields are always introduced optional,
+	// so adding one never becomes an all-document migration"). Absent means the renderer keeps
+	// its fixed 15 mm on all four sides — the --page-margin geometry every document had before
+	// this field existed (tokens.md §6, print.md §2). That fallback is applied by
+	// useResumeStyles at the point of use and must never be materialised into stored jsonb:
+	// absence means "never entered" and no sentinel may be fabricated (design spec §3), which
+	// is also why this field carries no JSON Schema `default` keyword — no field in this file
+	// does, and there is no canonical default customization in code (tokens.md §2). Bounds are
+	// 0–40 mm on both axes, explicit min/max in the same style as the sibling spacing fields
+	// (0–64 px gaps, 1–2.5 line height). 0 is legal and explicit; the renderer must not
+	// silently override it, exactly as tokens.md §5 says of spacing.* at 0, and an editor
+	// warning — not a schema rejection — is the containment for a margin small enough to fall
+	// inside a printer's unprintable edge. 40 mm is under a fifth of A4's 210 mm short edge, so
+	// even the maximum on both sides leaves well over half the sheet for content on the
+	// narrower of the two supported pageFormats. Both axes are required once the object is
+	// present, matching every other nested object in this schema (photoCrop, dateRange,
+	// layout.sections): a margin has no half-specified form, so the real choice is the pair or
+	// absence.
+	PageMargin *PageMargin `json:"pageMargin,omitempty"`
+	SectionGap float64     `json:"sectionGap"`
+}
+
+// Page margin in MILLIMETRES as an {x, y} pair: x is the left and right margin, y is the
+// top and bottom one. Optional (design spec §3: "New fields are always introduced optional,
+// so adding one never becomes an all-document migration"). Absent means the renderer keeps
+// its fixed 15 mm on all four sides — the --page-margin geometry every document had before
+// this field existed (tokens.md §6, print.md §2). That fallback is applied by
+// useResumeStyles at the point of use and must never be materialised into stored jsonb:
+// absence means "never entered" and no sentinel may be fabricated (design spec §3), which
+// is also why this field carries no JSON Schema `default` keyword — no field in this file
+// does, and there is no canonical default customization in code (tokens.md §2). Bounds are
+// 0–40 mm on both axes, explicit min/max in the same style as the sibling spacing fields
+// (0–64 px gaps, 1–2.5 line height). 0 is legal and explicit; the renderer must not
+// silently override it, exactly as tokens.md §5 says of spacing.* at 0, and an editor
+// warning — not a schema rejection — is the containment for a margin small enough to fall
+// inside a printer's unprintable edge. 40 mm is under a fifth of A4's 210 mm short edge, so
+// even the maximum on both sides leaves well over half the sheet for content on the
+// narrower of the two supported pageFormats. Both axes are required once the object is
+// present, matching every other nested object in this schema (photoCrop, dateRange,
+// layout.sections): a margin has no half-specified form, so the real choice is the pair or
+// absence.
+type PageMargin struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 // Draft-permissive (design spec §3, revised 2026-08-01): fullName and details are both
@@ -328,12 +455,69 @@ const (
 	SourceSans3  Family = "Source Sans 3"
 )
 
+// Horizontal alignment of the whole top block — photo, name, headline, and the contact
+// details move together. No "right" value and no per-element alignment: a resume header
+// aligned one way per line is a layout the renderer has no measure for.
+type Align string
+
+const (
+	Center Align = "center"
+	Left   Align = "left"
+)
+
+// How personalDetails.details are arranged. "inline" flows them onto one wrapping line
+// separated by --gap-inline; "stacked" gives each its own line. Array order is the display
+// order in both, and separators are still emitted only BETWEEN two present values
+// (contract.md §5.1, §6).
+type DetailsLayout string
+
+const (
+	Inline  DetailsLayout = "inline"
+	Stacked DetailsLayout = "stacked"
+)
+
+// The lucide icon before each contact detail: "none" omits contact icons entirely,
+// "outline" is the stroked glyph, "solid" is the filled one. Scoped to the header's contact
+// details ONLY — it does not govern a section's iconKey, which every template renders
+// (contract.md §9.5), and it never suppresses the detail's own label or value.
+type IconStyle string
+
+const (
+	IconStyleNone IconStyle = "none"
+	Outline       IconStyle = "outline"
+	Solid         IconStyle = "solid"
+)
+
 type HeadingStyle string
 
 const (
 	Normal    HeadingStyle = "normal"
 	Titlecase HeadingStyle = "titlecase"
 	Uppercase HeadingStyle = "uppercase"
+)
+
+// Which region customization.colors.surface fills: "none" (ink on the page background — the
+// rendering every document had before 2026-08-11), "header" (a full-width band behind the
+// resume header), or "sidebar" (the sidebar column's panel). Optional; absent renders
+// identically to "none", the same absent-versus-explicitly-cleared relationship the rest of
+// the document has — the distinction is meaningful in storage and in the editor and is
+// deliberately not observable in output (contract.md §6). DEGRADATION IS A RENDER RULE,
+// never an error. The renderer resolves an EFFECTIVE target as a total function over the
+// stored values and rejects nothing: "sidebar" while layout.columns is 1 has no sidebar
+// region to fill, so it renders as "none" (contract.md §7: "In one-column mode any
+// sidebar-specific treatment (tint, narrower measure) degrades to the main treatment"); and
+// any target other than "none" while colors.surface is absent has no colour to fill with,
+// so it also renders as "none". Both combinations stay stored exactly as typed, so toggling
+// columns 1 ↔ 2 or re-picking a colour restores the tint with no rewrite of this field.
+// That is why the combination is not expressed here as an if/then: making it invalid would
+// make a document the user reaches in one click unsaveable, which design spec §3's
+// draft-permissive rule forbids.
+type SurfaceTarget string
+
+const (
+	Header            SurfaceTarget = "header"
+	Sidebar           SurfaceTarget = "sidebar"
+	SurfaceTargetNone SurfaceTarget = "none"
 )
 
 type PageFormat string

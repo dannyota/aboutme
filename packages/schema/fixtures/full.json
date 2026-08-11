@@ -228,19 +228,27 @@
       "primary": "#0f172a",
       "text": "#1a1a1a",
       "background": "#ffffff",
-      "accent": "#2563eb"
+      "accent": "#2563eb",
+      "surface": "#f1f5f9"
     },
     "spacing": {
       "sectionGap": 20,
       "entryGap": 10,
-      "lineHeight": 1.5
+      "lineHeight": 1.5,
+      "pageMargin": { "x": 18, "y": 12 }
     },
     "heading": {
       "style": "uppercase",
       "showRule": true
     },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
     "layout": {
       "columns": 2,
+      "surfaceTarget": "sidebar",
       "sections": {
         "main": ["profile", "work", "education"],
         "sidebar": [

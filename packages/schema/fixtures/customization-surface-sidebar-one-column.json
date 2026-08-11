@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "personalDetails": {
+    "fullName": "Ada Lovelace",
+    "details": []
+  },
+  "content": {},
+  "customization": {
+    "font": {
+      "family": "Inter",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#1a1a1a",
+      "text": "#1a1a1a",
+      "background": "#ffffff",
+      "surface": "#eef2ff"
+    },
+    "spacing": {
+      "sectionGap": 16,
+      "entryGap": 8,
+      "lineHeight": 1.4,
+      "pageMargin": { "x": 40, "y": 0 }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": false
+    },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": [],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": { "style": "text" },
+      "language": { "style": "text" }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

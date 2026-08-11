@@ -341,4 +341,277 @@ describe("resume schema", () => {
       expect(validate(withPhotoKey("a/../b.jpg"))).toBe(true);
     });
   });
+
+  // The three owner-approved customization additions (2026-08-11):
+  //   1. spacing.pageMargin {x, y} in millimetres
+  //   2. colors.surface + layout.surfaceTarget (a fillable tinted region)
+  //   3. customization.header (the resume's top block, NOT section headings)
+  //
+  // Every one of them is introduced OPTIONAL. Design spec §3 states the rule
+  // outright — "New fields are always introduced optional, so adding one
+  // never becomes an all-document migration" — and the required-key
+  // assertions below are what enforces it: they pin the exact required sets
+  // that existed before this change, so a later commit that promotes any of
+  // these to `required` fails here instead of silently invalidating every
+  // stored document.
+  describe("customization additions: pageMargin, surface, header", () => {
+    const customization = () => fixture("minimal.json").customization;
+
+    // Merges a patch into minimal.json's customization. Nested one level,
+    // which is all these three additions need (spacing.*, colors.*,
+    // layout.*, and the new top-level `header`).
+    const withCustomization = (
+      patch: Record<string, unknown>,
+    ): Record<string, unknown> => {
+      const base = customization();
+      const merged: Record<string, unknown> = { ...base };
+      for (const [key, value] of Object.entries(patch)) {
+        const existing = merged[key];
+        merged[key] =
+          existing &&
+          typeof existing === "object" &&
+          !Array.isArray(existing) &&
+          value &&
+          typeof value === "object" &&
+          !Array.isArray(value)
+            ? { ...(existing as object), ...(value as object) }
+            : value;
+      }
+      return { ...fixture("minimal.json"), customization: merged };
+    };
+
+    const custProps = () => schema.$defs.customization.properties;
+
+    describe("optional-by-default (design spec §3: no all-document migration)", () => {
+      it("customization still requires exactly the original eight keys", () => {
+        expect([...schema.$defs.customization.required].sort()).toEqual(
+          [
+            "colors",
+            "dateFormat",
+            "font",
+            "heading",
+            "layout",
+            "pageFormat",
+            "sectionDisplay",
+            "spacing",
+          ].sort(),
+        );
+      });
+
+      it("spacing.required does not include pageMargin", () => {
+        expect([...custProps().spacing.required].sort()).toEqual(
+          ["entryGap", "lineHeight", "sectionGap"].sort(),
+        );
+      });
+
+      it("colors.required does not include surface", () => {
+        expect([...custProps().colors.required].sort()).toEqual(
+          ["background", "primary", "text"].sort(),
+        );
+      });
+
+      it("layout.required does not include surfaceTarget", () => {
+        expect([...custProps().layout.required].sort()).toEqual(
+          ["columns", "sections"].sort(),
+        );
+      });
+
+      it("a document carrying none of the three additions is still valid", () => {
+        expect(validate(fixture("minimal.json")), ajv.errorsText(validate.errors)).toBe(true);
+      });
+    });
+
+    // 1. spacing.pageMargin — bounded millimetres, both axes present or the
+    // whole object absent.
+    describe("spacing.pageMargin", () => {
+      const margin = (value: unknown) =>
+        withCustomization({ spacing: { pageMargin: value } });
+
+      // Read at collection time to build the it.each matrix below, so the
+      // bounds the cases probe are always the schema's own. The `??`
+      // fallbacks only keep collection alive while the fields don't exist
+      // yet (TDD red); the shape assertion right below is what proves they
+      // really are declared.
+      const axis = custProps().spacing.properties?.pageMargin?.properties?.x;
+      const min: number = axis?.minimum ?? 0;
+      const max: number = axis?.maximum ?? 40;
+
+      it("declares an explicit min/max on both axes, like every other spacing field", () => {
+        const pageMargin = custProps().spacing.properties.pageMargin;
+        for (const axis of ["x", "y"]) {
+          expect(pageMargin.properties[axis].type).toBe("number");
+          expect(typeof pageMargin.properties[axis].minimum).toBe("number");
+          expect(typeof pageMargin.properties[axis].maximum).toBe("number");
+        }
+        expect(pageMargin.properties.y.minimum).toBe(min);
+        expect(pageMargin.properties.y.maximum).toBe(max);
+        expect(pageMargin.additionalProperties).toBe(false);
+        expect([...pageMargin.required].sort()).toEqual(["x", "y"]);
+      });
+
+      it("names the renderer's 15 mm fallback in its description (no schema-level default)", () => {
+        const pageMargin = custProps().spacing.properties.pageMargin;
+        expect(pageMargin).not.toHaveProperty("default");
+        expect(pageMargin.description).toContain("15");
+      });
+
+      it.each([
+        [{ x: 15, y: 15 }, true], // the renderer's current fixed value, stated
+        [{ x: min, y: min }, true], // explicit zero is legal, like spacing.* at 0
+        [{ x: max, y: max }, true], // at limit
+        [{ x: 12.5, y: 20 }, true], // fractional millimetres
+        [{ x: max + 1, y: 15 }, false], // over the limit on x
+        [{ x: 15, y: max + 1 }, false], // over the limit on y
+        [{ x: min - 1, y: 15 }, false], // negative margin
+        [{ x: 15 }, false], // both axes required once the object is present
+        [{ y: 15 }, false],
+        [{ x: 15, y: 15, z: 15 }, false], // additionalProperties: false
+        [{ x: "15", y: "15" }, false], // millimetres are numbers, not strings
+        ["15mm", false], // not a scalar with a unit suffix
+      ])("%o -> valid=%s", (value, expected) => {
+        expect(validate(margin(value))).toBe(expected);
+      });
+    });
+
+    // 2. colors.surface + layout.surfaceTarget — a fillable colour region.
+    describe("colors.surface and layout.surfaceTarget", () => {
+      it("colors.surface reuses the hexColor $def", () => {
+        expect(custProps().colors.properties.surface).toEqual({
+          description: expect.any(String),
+          $ref: "#/$defs/hexColor",
+        });
+      });
+
+      it.each([
+        ["#f4f4f5", true],
+        ["#FFF", false], // hexColor is six digits
+        ["", false], // no cleared form for a colour (contract.md §6)
+        ["rebeccapurple", false],
+      ])("colors.surface %s -> valid=%s", (value, expected) => {
+        expect(validate(withCustomization({ colors: { surface: value } }))).toBe(
+          expected,
+        );
+      });
+
+      it("surfaceTarget is exactly none | header | sidebar", () => {
+        expect(custProps().layout.properties.surfaceTarget.enum).toEqual([
+          "none",
+          "header",
+          "sidebar",
+        ]);
+      });
+
+      it.each([
+        ["none", true],
+        ["header", true],
+        ["sidebar", true],
+        ["main", false],
+        ["Header", false],
+        ["", false],
+      ])("surfaceTarget %s -> valid=%s", (value, expected) => {
+        expect(
+          validate(withCustomization({ layout: { surfaceTarget: value } })),
+        ).toBe(expected);
+      });
+
+      // The degradation rule is a RENDER rule, so the schema must accept
+      // every combination the renderer has to degrade — a document the user
+      // can reach by toggling columns must never become unsaveable.
+      it('accepts surfaceTarget "sidebar" with columns: 1 (degrades to "none" at render time, never an error)', () => {
+        expect(
+          validate(
+            withCustomization({
+              colors: { surface: "#eef2ff" },
+              layout: { columns: 1, surfaceTarget: "sidebar" },
+            }),
+          ),
+          ajv.errorsText(validate.errors),
+        ).toBe(true);
+      });
+
+      it("accepts a surfaceTarget with no colors.surface, and a colors.surface with no surfaceTarget", () => {
+        expect(
+          validate(withCustomization({ layout: { surfaceTarget: "header" } })),
+          ajv.errorsText(validate.errors),
+        ).toBe(true);
+        expect(
+          validate(withCustomization({ colors: { surface: "#eef2ff" } })),
+          ajv.errorsText(validate.errors),
+        ).toBe(true);
+      });
+
+      it("states the columns: 1 degradation rule in surfaceTarget's own description", () => {
+        const description: string =
+          custProps().layout.properties.surfaceTarget.description;
+        expect(description).toMatch(/columns/);
+        expect(description).toMatch(/sidebar/);
+        expect(description).toMatch(/renders? as .?none.?/i);
+        expect(description).toMatch(/never an error|rather than erroring|not an error/i);
+      });
+    });
+
+    // 3. customization.header — the resume's TOP BLOCK, not section headings.
+    describe("customization.header", () => {
+      const header = (value: unknown) => withCustomization({ header: value });
+      const complete = {
+        align: "left",
+        detailsLayout: "inline",
+        iconStyle: "outline",
+      };
+
+      it("is a closed object whose three fields are all required once it is present", () => {
+        const def = custProps().header;
+        expect(def.type).toBe("object");
+        expect(def.additionalProperties).toBe(false);
+        expect([...def.required].sort()).toEqual(
+          ["align", "detailsLayout", "iconStyle"].sort(),
+        );
+        expect(def.properties.align.enum).toEqual(["left", "center"]);
+        expect(def.properties.detailsLayout.enum).toEqual(["inline", "stacked"]);
+        expect(def.properties.iconStyle.enum).toEqual([
+          "none",
+          "outline",
+          "solid",
+        ]);
+      });
+
+      it.each([
+        [complete, true],
+        [{ ...complete, align: "center" }, true],
+        [{ ...complete, detailsLayout: "stacked" }, true],
+        [{ ...complete, iconStyle: "none" }, true],
+        [{ ...complete, iconStyle: "solid" }, true],
+        [{ align: "left", detailsLayout: "inline" }, false], // missing iconStyle
+        [{ align: "left", iconStyle: "outline" }, false], // missing detailsLayout
+        [{ detailsLayout: "inline", iconStyle: "outline" }, false], // missing align
+        [{}, false],
+        [{ ...complete, style: "uppercase" }, false], // heading's field, not header's
+        [{ ...complete, align: "right" }, false],
+        [{ ...complete, align: "justify" }, false],
+        [{ ...complete, detailsLayout: "grid" }, false],
+        [{ ...complete, iconStyle: "filled" }, false],
+      ])("%o -> valid=%s", (value, expected) => {
+        expect(validate(header(value))).toBe(expected);
+      });
+    });
+
+    // NAMING HAZARD: customization.heading means SECTION headings;
+    // customization.header means the resume's top block (name, headline,
+    // contact details). Both descriptions must state the distinction, or the
+    // next person to read the schema conflates them.
+    describe("heading vs header: both descriptions state the distinction", () => {
+      it("heading's description scopes it to section headings and points at header", () => {
+        const description: string = custProps().heading.description;
+        expect(description).toMatch(/section/i);
+        expect(description).toContain("customization.header");
+      });
+
+      it("header's description scopes it to the resume's top block and points at heading", () => {
+        const description: string = custProps().header.description;
+        expect(description).toContain("customization.heading");
+        expect(description).toMatch(/section headings/i);
+        expect(description).toMatch(/fullName|name/);
+      });
+    });
+  });
 });
