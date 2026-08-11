@@ -29,7 +29,7 @@
     "header": {
       "align": "left",
       "detailsLayout": "stacked",
-      "iconStyle": "solid"
+      "iconStyle": "outline"
     },
     "layout": {
       "columns": 1,

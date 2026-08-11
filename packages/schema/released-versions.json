@@ -1,0 +1,12 @@
+{
+  "$comment": "Released document-shape versions (design spec §3, 'Wire-version compatibility'; AC-DOC-012). This file is the ONLY place scripts/generate.mjs learns which schemas exist and where they live -- it never scans a directory or picks the newest resume.v*.schema.json, because implicit discovery would silently adopt a stray or half-finished file as a release. APPEND-ONLY: a released entry and the schema file it names are immutable, enforced by .github/workflows/ci.yml's released-schema-append-only job and by packages/schema/test/released-versions.test.ts. Releasing version N+1 adds resume.v<N+1>.schema.json, appends its entry here, bumps currentVersion, and regenerates -- it never edits an existing entry. While currentVersion is N, resume.schema.json (the working file every generated convenience output and the server's RawSchema derive from) must byte-equal resume.v<N>.schema.json.",
+  "currentVersion": 1,
+  "versions": [
+    {
+      "version": 1,
+      "schema": "resume.v1.schema.json",
+      "goPackage": "gen/go/v1",
+      "tsTypes": "gen/ts/v1/resume.ts"
+    }
+  ]
+}

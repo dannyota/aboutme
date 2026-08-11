@@ -29,6 +29,7 @@ describe("store-layer validator: clean documents produce zero issues", () => {
     "full.json",
     "draft-partial.json",
     "draft-cleared-name-empty-section.json",
+    "draft-cleared-contact-value.json",
   ];
 
   for (const name of cleanFixtures) {
@@ -534,5 +535,27 @@ describe("store-layer validator: photo.key path-traversal guard (NEW-M3)", () =>
     };
     const issues = validateDocument(doc);
     expect(rules(issues)).toContain("photo-key-path-traversal");
+  });
+});
+
+// AC-DOC-009 traceability gap (docs/plans/traceability/ac-doc.md, design spec
+// §3: "Fixtures must cover a cleared name, cleared contact values, and a
+// freshly created empty section"). draft-cleared-name-empty-section.json
+// covers the first and third; until this fixture, nothing covered a
+// personalDetails.details ENTRY that is present with its own `value`
+// explicitly cleared to "" -- distinct from an absent details array
+// (draft-cleared-name-empty-section.json) or a details array that was never
+// populated. The cleanFixtures loop above already proves this fixture trips
+// no store-layer rule; this block additionally proves the entry itself
+// survives JSON.parse exactly as authored -- present, not dropped, and not
+// fabricated back to some other value -- so the "preserved" half of AC-DOC-009
+// is asserted directly, not merely inferred from a zero-issues result.
+describe("store-layer validator: a present personal-detail entry with an explicitly cleared value (AC-DOC-009)", () => {
+  it('draft-cleared-contact-value.json preserves the entry with value === "", not absent or fabricated', () => {
+    const doc = fixture("draft-cleared-contact-value.json");
+    expect(doc.personalDetails.details).toHaveLength(1);
+    expect(doc.personalDetails.details[0].value).toBe("");
+    expect(doc.personalDetails.details[0].type).toBe("linkedin");
+    expect(validateDocument(doc)).toEqual([]);
   });
 });

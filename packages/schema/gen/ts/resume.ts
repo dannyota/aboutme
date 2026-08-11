@@ -300,9 +300,9 @@ export interface Customization {
      */
     detailsLayout: "inline" | "stacked";
     /**
-     * The lucide icon before each contact detail: "none" omits contact icons entirely, "outline" is the stroked glyph, "solid" is the filled one. Scoped to the header's contact details ONLY — it does not govern a section's iconKey, which every template renders (contract.md §9.5), and it never suppresses the detail's own label or value.
+     * The lucide icon before each contact detail: "none" omits contact icons entirely, "outline" is the stroked glyph at --icon-size. There is no filled value: a third member "solid" was defined as the FILLED lucide glyph and removed by owner ruling 2026-08-11 (tokens.md §3.4) because lucide ships no filled family — lucide-vue-next is stroke-only, so "solid" could only have been rendered by adding a second icon dependency or by forcing fill: currentColor, which turns most lucide marks into blobs. Do not re-add it without a spec/ADR decision that also names the icon source. Scoped to the header's contact details ONLY — it does not govern a section's iconKey, which every template renders (contract.md §9.5), and it never suppresses the detail's own label or value.
      */
-    iconStyle: "none" | "outline" | "solid";
+    iconStyle: "none" | "outline";
   };
   layout: {
     columns: 1 | 2;

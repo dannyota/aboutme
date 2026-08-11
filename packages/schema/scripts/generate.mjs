@@ -72,7 +72,7 @@
 //     fixed it — see generateGo's pointerFiles construction.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,10 +80,16 @@ import { compile as compileTypeScript } from "json-schema-to-typescript";
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const schemaPath = join(packageRoot, "resume.schema.json");
+const manifestPath = join(packageRoot, "released-versions.json");
 const quicktypeBin = join(packageRoot, "node_modules", ".bin", "quicktype");
 
-const GENERATED_HEADER = "// Code generated from resume.schema.json. DO NOT EDIT.";
-const GENERATED_HEADER_TS = "// Code generated from resume.schema.json. DO NOT EDIT.\n";
+// The Go import path of the module gen/go/go.mod declares. The released-schema
+// registry (gen/go/released.go) imports one retained package per released
+// version from underneath it — they are packages inside that same module, not
+// modules of their own, so nothing in go.work changes when a version is added.
+const GO_MODULE_PATH = "github.com/dannyota/aboutme/packages/schema/gen/go";
+
+const generatedHeader = (sourceName) => `// Code generated from ${sourceName}. DO NOT EDIT.`;
 
 // The $def backing the (otherwise-unreferenced) SectionType enum — see
 // deriveSectionVariants for the per-sectionType entry list, which is
@@ -303,7 +309,23 @@ function runQuicktype(args) {
   execFileSync(quicktypeBin, args, { stdio: "inherit" });
 }
 
-function generateGo(sharedSchema, tmpDir, outFile) {
+// `sectionMode` decides what happens to the placeholder `type Section
+// struct{}` quicktype emits for buildGoCodegenSchema's stand-in:
+//
+//   "dispatch"  — the CURRENT convenience output (gen/go/resume.go): strip the
+//                 placeholder, because the hand-written gen/go/section.go in
+//                 the same package declares the real typed-dispatch Section.
+//   "rawSection" — a RETAINED released snapshot (gen/go/v<N>/resume.go):
+//                 replace the placeholder with `type Section =
+//                 json.RawMessage`. A retained package holds only generated
+//                 files, so there is no hand-written dispatch to point at, and
+//                 raw JSON is the honest representation anyway: D13 defines a
+//                 converter as func(json.RawMessage) (json.RawMessage, error)
+//                 over the full document precisely because typed dispatch only
+//                 exists for the current version. Keeping the empty struct
+//                 instead would compile while silently claiming a v<N> section
+//                 has no fields.
+function generateGo(sharedSchema, tmpDir, outFile, { packageName, sourceName, sectionMode }) {
   const goSchema = buildGoCodegenSchema(sharedSchema);
   const id = goSchema.$id;
   const variants = deriveSectionVariants(sharedSchema);
@@ -332,7 +354,7 @@ function generateGo(sharedSchema, tmpDir, outFile) {
     "--lang",
     "go",
     "--package",
-    "schema",
+    packageName,
     "--top-level",
     "Resume",
     "--just-types-and-package",
@@ -349,9 +371,9 @@ function generateGo(sharedSchema, tmpDir, outFile) {
 
   let raw = readFileSync(outFile, "utf8");
 
-  // Drop the placeholder's empty struct (see buildGoCodegenSchema) — the
-  // real Section lives in section.go. Matched exactly (not a general regex)
-  // so a future schema change that breaks this assumption fails loudly
+  // Deal with the placeholder's empty struct (see buildGoCodegenSchema and
+  // this function's sectionMode comment). Matched exactly (not a general
+  // regex) so a future schema change that breaks this assumption fails loudly
   // (the drift test's byte-compare, or this replace() finding nothing changed).
   const placeholderStruct = "\ntype Section struct {\n}\n";
   if (!raw.includes(placeholderStruct)) {
@@ -361,7 +383,25 @@ function generateGo(sharedSchema, tmpDir, outFile) {
   }
   raw = raw.replace(placeholderStruct, "");
 
-  const body = `${GENERATED_HEADER}\n\npackage schema\n\n${raw.replace(/^package schema\n\n/, "")}`;
+  let preamble = "";
+  if (sectionMode === "rawSection") {
+    preamble =
+      'import "encoding/json"\n\n' +
+      "// Section is this released version's `content[key]` value: an eight-way\n" +
+      "// oneOf on sectionType that Go cannot express as a type. The CURRENT\n" +
+      "// package's hand-written section.go supplies a typed dispatch for it; a\n" +
+      "// retained snapshot holds generated files only, and raw JSON matches how\n" +
+      "// an adjacent-version converter actually handles a non-current document\n" +
+      "// (D13: converters are func(json.RawMessage) (json.RawMessage, error) over\n" +
+      "// the whole document, never a typed decode).\n" +
+      "type Section = json.RawMessage\n\n";
+  } else if (sectionMode !== "dispatch") {
+    throw new Error(`generate.mjs: unknown sectionMode ${JSON.stringify(sectionMode)}.`);
+  }
+
+  const body =
+    `${generatedHeader(sourceName)}\n\npackage ${packageName}\n\n${preamble}` +
+    raw.replace(new RegExp(`^package ${packageName}\\n\\n`), "");
   writeFileSync(outFile, body);
 
   // quicktype's Go column-alignment pass misaligns struct fields when an
@@ -370,7 +410,7 @@ function generateGo(sharedSchema, tmpDir, outFile) {
   execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
 }
 
-async function generateTs(sharedSchema, outFile) {
+async function generateTs(sharedSchema, outFile, { sourceName }) {
   const ts = await compileTypeScript(buildTsCodegenSchema(sharedSchema), "Resume", {
     bannerComment: "",
     style: { semi: true },
@@ -390,7 +430,7 @@ async function generateTs(sharedSchema, outFile) {
     unknownAny: true,
   });
 
-  writeFileSync(outFile, GENERATED_HEADER_TS + "\n" + ts);
+  writeFileSync(outFile, `${generatedHeader(sourceName)}\n\n${ts}`);
 }
 
 // Splits a base64 string into fixed-width lines so the generated Go source
@@ -420,31 +460,27 @@ function chunkBase64(base64, width = 96) {
 // hand-roll. Base64's alphabet has neither problem, so the embedding is a
 // straight, deterministic transcoding of rawSchemaBytes with no escaping
 // logic at all.
-function generateRawSchema(rawSchemaBytes, outFile) {
+function generateRawSchema(rawSchemaBytes, outFile, { packageName, sourceName, verifiedBy }) {
   const base64Lines = chunkBase64(rawSchemaBytes.toString("base64"));
   const literal = base64Lines.map((line) => `\t"${line}" +\n`).join("");
 
-  const body = `${GENERATED_HEADER}
+  const body = `${generatedHeader(sourceName)}
 
-package schema
+package ${packageName}
 
 import "encoding/base64"
 
-// rawSchemaBase64 is resume.schema.json's exact bytes, base64-encoded at
+// rawSchemaBase64 is ${sourceName}'s exact bytes, base64-encoded at
 // generation time (decision D2) — see this file's generator
 // (scripts/generate.mjs's generateRawSchema) for why base64 instead of a
 // plain Go string literal.
 const rawSchemaBase64 = "" +
 ${literal}\t""
 
-// RawSchema is resume.schema.json's exact byte content, decoded once at
-// package init from rawSchemaBase64 above. resume.schema.json lives outside
+// RawSchema is ${sourceName}'s exact byte content, decoded once at
+// package init from rawSchemaBase64 above. ${sourceName} lives outside
 // this module (gen/go/go.mod), so go:embed cannot reach it directly — this
-// generated constant is the substitute. rawschema_test.go asserts this
-// byte-equals ../../resume.schema.json read directly at test time, closing
-// the copy-drift loop from the Go side (the TypeScript side is
-// test/gen.test.ts's existing regenerate-and-byte-compare check, which
-// already exercises this file too).
+// generated constant is the substitute. ${verifiedBy}
 var RawSchema = mustDecodeRawSchemaBase64()
 
 func mustDecodeRawSchemaBase64() []byte {
@@ -464,28 +500,323 @@ func mustDecodeRawSchemaBase64() []byte {
   execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
 }
 
+// Reads released-versions.json — the ONLY thing that tells this script which
+// released schemas exist and where each one lives. Deliberately no directory
+// scan and no "highest resume.v*.schema.json wins" rule (design spec §3,
+// "Wire-version compatibility"): implicit discovery would quietly promote a
+// stray, half-finished, or reverted file to a released contract, and it would
+// make "which schema did this build generate from?" depend on the working
+// tree's filenames rather than on a reviewed, append-only declaration.
+//
+// Everything structural is validated here rather than assumed, because a
+// malformed manifest would otherwise surface as confusing codegen output
+// instead of an error naming the actual problem.
+function readReleasedManifest() {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const versions = manifest.versions;
+  if (!Array.isArray(versions) || versions.length === 0) {
+    throw new Error("generate.mjs: released-versions.json's `versions` is missing or empty.");
+  }
+
+  let previous = 0;
+  for (const entry of versions) {
+    const { version, schema, goPackage, tsTypes } = entry ?? {};
+    if (!Number.isInteger(version) || version < 1) {
+      throw new Error(
+        `generate.mjs: released-versions.json has a non-integer or non-positive version ${JSON.stringify(version)}.`,
+      );
+    }
+    if (version <= previous) {
+      throw new Error(
+        `generate.mjs: released-versions.json's versions must ascend; ${version} follows ${previous}.`,
+      );
+    }
+    previous = version;
+
+    // The conventional paths are asserted, not derived: a released entry
+    // states its own file explicitly, and this catches a typo pointing an
+    // entry at another version's schema (which would silently regenerate v<N>
+    // from v<M>'s bytes — the exact drift the immutability policy forbids).
+    const expected = {
+      schema: `resume.v${version}.schema.json`,
+      goPackage: `gen/go/v${version}`,
+      tsTypes: `gen/ts/v${version}/resume.ts`,
+    };
+    for (const [field, want] of Object.entries(expected)) {
+      const got = { schema, goPackage, tsTypes }[field];
+      if (got !== want) {
+        throw new Error(
+          `generate.mjs: released-versions.json version ${version} declares ${field} ${JSON.stringify(got)}, want ${JSON.stringify(want)}.`,
+        );
+      }
+    }
+    if (!existsSync(join(packageRoot, schema))) {
+      throw new Error(
+        `generate.mjs: released-versions.json version ${version} names ${schema}, which does not exist.`,
+      );
+    }
+  }
+
+  if (!versions.some((entry) => entry.version === manifest.currentVersion)) {
+    throw new Error(
+      `generate.mjs: released-versions.json's currentVersion ${JSON.stringify(manifest.currentVersion)} is not one of the released versions.`,
+    );
+  }
+
+  return manifest;
+}
+
+// The Go half of the released-version registry. It lives in the CURRENT
+// package (gen/go, package schema) and imports one retained package per
+// released version, so `go build ./...` in that module is itself the proof
+// that every retained snapshot still compiles.
+//
+// Lookup fails closed: an unreleased version returns ErrUnknownSchemaVersion
+// rather than the nearest or newest match, mirroring docmigrate's identity
+// projector, which errors on a stored schema_version it has no converter for
+// instead of passing the document through unconverted.
+function generateReleasedGo(manifest, outFile) {
+  const imports = manifest.versions
+    .map((entry) => `\tschemav${entry.version} "${GO_MODULE_PATH}/v${entry.version}"`)
+    .join("\n");
+
+  const entries = manifest.versions
+    .map(
+      (entry) => `\t{
+\t\tVersion:   ${entry.version},
+\t\tSchema:    "${entry.schema}",
+\t\tGoPackage: "${entry.goPackage}",
+\t\tTSTypes:   "${entry.tsTypes}",
+\t\tRawSchema: schemav${entry.version}.RawSchema,
+\t},`,
+    )
+    .join("\n");
+
+  const body = `${generatedHeader("released-versions.json")}
+
+package schema
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+
+${imports}
+)
+
+// CurrentVersion is the document-shape version resume.schema.json currently
+// describes, and the version every stored resume is projected to on read and
+// persisted at on write. It matches apps/server's docmigrate.CurrentVersion
+// by construction: both move only when a new version is released here.
+const CurrentVersion = ${manifest.currentVersion}
+
+// ReleasedSchema is one released document-shape version: its immutable schema
+// file and the retained generated types derived from that file. Released
+// entries are append-only (design spec §3, "Wire-version compatibility"), so
+// a value of this type describes a contract that can never change, only be
+// superseded.
+type ReleasedSchema struct {
+	// Version is the released schema_version this entry describes.
+	Version int
+	// Schema is the immutable schema file's path, relative to packages/schema.
+	Schema string
+	// GoPackage is the retained Go types' path, relative to packages/schema.
+	GoPackage string
+	// TSTypes is the retained TypeScript types' path, relative to
+	// packages/schema.
+	TSTypes string
+	// RawSchema is the schema file's exact byte content.
+	RawSchema []byte
+}
+
+// ErrUnknownSchemaVersion is returned for a version this build has no
+// released schema for. Callers must treat it as a hard failure: a document
+// claiming an unreleased version cannot be validated, converted, or emitted,
+// and guessing a nearby version would persist a document under a contract
+// nothing describes.
+var ErrUnknownSchemaVersion = errors.New("schema: unknown released schema version")
+
+// releasedSchemas is generated from released-versions.json, ascending by
+// version.
+var releasedSchemas = []ReleasedSchema{
+${entries}
+}
+
+// ReleasedVersions returns every released document-shape version in
+// ascending order. The returned slice is freshly allocated, so a caller
+// cannot reorder or truncate the registry for everyone else.
+func ReleasedVersions() []int {
+	versions := make([]int, len(releasedSchemas))
+	for i, released := range releasedSchemas {
+		versions[i] = released.Version
+	}
+	return versions
+}
+
+// ReleasedSchemaFor returns the released schema for version. It fails closed:
+// an unreleased version yields an error wrapping ErrUnknownSchemaVersion and
+// a zero ReleasedSchema, never a fallback to the current or nearest version.
+// The returned RawSchema is a copy, so a caller cannot mutate the immutable
+// bytes the retained package holds.
+func ReleasedSchemaFor(version int) (ReleasedSchema, error) {
+	for _, released := range releasedSchemas {
+		if released.Version == version {
+			released.RawSchema = bytes.Clone(released.RawSchema)
+			return released, nil
+		}
+	}
+	return ReleasedSchema{}, fmt.Errorf("%w: %d", ErrUnknownSchemaVersion, version)
+}
+`;
+
+  writeFileSync(outFile, body);
+  execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
+}
+
+// The TypeScript half of the released-version registry. It carries the
+// manifest rather than the schema bytes: apps/web imports this package for
+// types, and inlining every released schema's ~36 KB into the bundle to
+// satisfy a build-time registry would be a real cost for no runtime gain. The
+// Go side (gen/go/released.go) is where the bytes live, because that is the
+// side that actually compiles and validates documents.
+function generateReleasedTs(manifest, outFile) {
+  const entries = manifest.versions
+    .map(
+      (entry) => `  Object.freeze({
+    version: ${entry.version},
+    schema: "${entry.schema}",
+    goPackage: "${entry.goPackage}",
+    tsTypes: "${entry.tsTypes}",
+  }),`,
+    )
+    .join("\n");
+
+  const body = `${generatedHeader("released-versions.json")}
+
+/**
+ * One released document-shape version: its immutable schema file and the
+ * retained generated types derived from that file. Paths are relative to
+ * packages/schema. Released entries are append-only (design spec §3,
+ * "Wire-version compatibility").
+ */
+export interface ReleasedSchema {
+  readonly version: number;
+  readonly schema: string;
+  readonly goPackage: string;
+  readonly tsTypes: string;
+}
+
+/**
+ * The document-shape version resume.schema.json currently describes.
+ */
+export const CURRENT_VERSION = ${manifest.currentVersion};
+
+/**
+ * Every released version, ascending. Frozen: the registry is a contract, not
+ * a mutable cache.
+ */
+export const RELEASED_SCHEMAS: readonly ReleasedSchema[] = Object.freeze([
+${entries}
+]);
+
+/**
+ * Reports whether \`version\` has been released. Non-integer, negative, and
+ * NaN inputs are simply not released, so callers need no separate guard.
+ */
+export function isReleasedVersion(version: number): boolean {
+  return RELEASED_SCHEMAS.some((released) => released.version === version);
+}
+
+/**
+ * Resolves a released version. Fails closed: an unreleased version throws
+ * rather than falling back to the current or nearest one, because a document
+ * claiming an unreleased version cannot be validated or converted at all.
+ * The result is a copy, so a caller cannot retarget the registry.
+ */
+export function releasedSchema(version: number): ReleasedSchema {
+  const released = RELEASED_SCHEMAS.find((candidate) => candidate.version === version);
+  if (released === undefined) {
+    throw new Error(\`schema: unknown released schema version \${version}\`);
+  }
+  return { ...released };
+}
+`;
+
+  writeFileSync(outFile, body);
+}
+
 async function main() {
+  const manifest = readReleasedManifest();
   const schemaBytes = readFileSync(schemaPath);
   const schema = JSON.parse(schemaBytes.toString("utf8"));
   const sharedSchema = buildSharedCodegenSchema(schema);
 
   const tmpDir = mkdtempSync(join(tmpdir(), "aboutme-schema-codegen-"));
+  const written = [];
   try {
     const goDir = join(packageRoot, "gen", "go");
     const tsDir = join(packageRoot, "gen", "ts");
     mkdirSync(goDir, { recursive: true });
     mkdirSync(tsDir, { recursive: true });
 
-    generateGo(sharedSchema, tmpDir, join(goDir, "resume.go"));
-    await generateTs(sharedSchema, join(tsDir, "resume.ts"));
-    generateRawSchema(schemaBytes, join(goDir, "rawschema.go"));
+    // The current convenience outputs: what apps/server and apps/web actually
+    // compile against today, generated from the working resume.schema.json.
+    generateGo(sharedSchema, tmpDir, join(goDir, "resume.go"), {
+      packageName: "schema",
+      sourceName: "resume.schema.json",
+      sectionMode: "dispatch",
+    });
+    await generateTs(sharedSchema, join(tsDir, "resume.ts"), {
+      sourceName: "resume.schema.json",
+    });
+    generateRawSchema(schemaBytes, join(goDir, "rawschema.go"), {
+      packageName: "schema",
+      sourceName: "resume.schema.json",
+      verifiedBy:
+        "rawschema_test.go asserts this\n// byte-equals ../../resume.schema.json read directly at test time, closing\n// the copy-drift loop from the Go side (the TypeScript side is\n// test/gen.test.ts's existing regenerate-and-byte-compare check, which\n// already exercises this file too).",
+    });
+    written.push("gen/go/resume.go", "gen/ts/resume.ts", "gen/go/rawschema.go");
+
+    // The retained per-version snapshots. Each one is regenerated from its
+    // OWN immutable schema file, never from resume.schema.json — that is what
+    // makes regenerating an old namespace mechanically derived rather than a
+    // silent re-cut against whatever the contract has since become.
+    for (const entry of manifest.versions) {
+      const versionSchemaPath = join(packageRoot, entry.schema);
+      const versionBytes = readFileSync(versionSchemaPath);
+      const versionShared = buildSharedCodegenSchema(JSON.parse(versionBytes.toString("utf8")));
+      const versionGoDir = join(packageRoot, entry.goPackage);
+      const versionTsFile = join(packageRoot, entry.tsTypes);
+      mkdirSync(versionGoDir, { recursive: true });
+      mkdirSync(dirname(versionTsFile), { recursive: true });
+
+      const versionTmpDir = mkdtempSync(join(tmpdir(), `aboutme-schema-codegen-v${entry.version}-`));
+      try {
+        generateGo(versionShared, versionTmpDir, join(versionGoDir, "resume.go"), {
+          packageName: `schemav${entry.version}`,
+          sourceName: entry.schema,
+          sectionMode: "rawSection",
+        });
+      } finally {
+        rmSync(versionTmpDir, { recursive: true, force: true });
+      }
+      await generateTs(versionShared, versionTsFile, { sourceName: entry.schema });
+      generateRawSchema(versionBytes, join(versionGoDir, "rawschema.go"), {
+        packageName: `schemav${entry.version}`,
+        sourceName: entry.schema,
+        verifiedBy: `gen/go/released_test.go asserts this\n// byte-equals ../../../${entry.schema} read directly at test time, and\n// test/gen.test.ts's regenerate-and-byte-compare check covers this file\n// too.`,
+      });
+      written.push(`${entry.goPackage}/resume.go`, `${entry.goPackage}/rawschema.go`, entry.tsTypes);
+    }
+
+    generateReleasedGo(manifest, join(goDir, "released.go"));
+    generateReleasedTs(manifest, join(tsDir, "released.ts"));
+    written.push("gen/go/released.go", "gen/ts/released.ts");
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
 
-  console.log(
-    "Generated gen/go/resume.go, gen/ts/resume.ts, and gen/go/rawschema.go from resume.schema.json",
-  );
+  console.log(`Generated ${written.join(", ")}`);
 }
 
 await main();

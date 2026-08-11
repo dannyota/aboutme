@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 // validation/sanitizer-allowlist.v1.json and validation/hostile-corpus.json
 // (design spec §5 sanitizer contract) are the data both bluemonday
-// (apps/server, write path) and DOMPurify (apps/web, render path) will be
+// (apps/server, write path) and DOMPurify (apps/web, client-render path) will be
 // generated/conformance-tested against — that wiring lives outside
 // packages/schema, but the data itself, and its shape, lives here. These
 // tests guard the shape so a future edit can't silently drop a required

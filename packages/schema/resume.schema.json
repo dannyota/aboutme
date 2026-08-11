@@ -464,7 +464,7 @@
       "additionalProperties": false,
       "allOf": [
         {
-          "description": "URL-scheme hardening for the four chip types that render as a clickable <a href> in ResumeHeader (design spec §5: contacts per detailsOrder) — website/linkedin/github/twitter. Phase-gate review finding C1: the commit that scoped $defs/link down to https/mailto/tel (employerLink, schoolLink, titleLink, project link) missed this array, which the repo's own fixtures/full.json fixture populates with live URLs. Scoped to https:// only, not $defs/link's full https/mailto/tel set, since a linkedin/github/twitter/website chip is never a mailto: or tel: target. Every other detail type (email, phone, location, custom) has no design-spec-defined value format, so it is intentionally left as the plain bounded string above — do not extend this without a spec/ADR decision (CLAUDE.md: 'do not invent a contract').",
+          "description": "URL-scheme hardening for the four chip types that render as a clickable <a href> in ResumeHeader (ADR 0013: the details render in personalDetails.details array order; there is no detailsOrder field, and design spec §5's reference to one is superseded for the ordering claim) — website/linkedin/github/twitter. Phase-gate review finding C1: the commit that scoped $defs/link down to https/mailto/tel (employerLink, schoolLink, titleLink, project link) missed this array, which the repo's own fixtures/full.json fixture populates with live URLs. Scoped to https:// only, not $defs/link's full https/mailto/tel set, since a linkedin/github/twitter/website chip is never a mailto: or tel: target. Every other detail type (email, phone, location, custom) has no design-spec-defined value format, so it is intentionally left as the plain bounded string above — do not extend this without a spec/ADR decision (CLAUDE.md: 'do not invent a contract').",
           "if": {
             "properties": { "type": { "enum": ["website", "linkedin", "github", "twitter"] } },
             "required": ["type"]
@@ -591,9 +591,9 @@
               "enum": ["inline", "stacked"]
             },
             "iconStyle": {
-              "description": "The lucide icon before each contact detail: \"none\" omits contact icons entirely, \"outline\" is the stroked glyph, \"solid\" is the filled one. Scoped to the header's contact details ONLY — it does not govern a section's iconKey, which every template renders (contract.md §9.5), and it never suppresses the detail's own label or value.",
+              "description": "The lucide icon before each contact detail: \"none\" omits contact icons entirely, \"outline\" is the stroked glyph at --icon-size. There is no filled value: a third member \"solid\" was defined as the FILLED lucide glyph and removed by owner ruling 2026-08-11 (tokens.md §3.4) because lucide ships no filled family — lucide-vue-next is stroke-only, so \"solid\" could only have been rendered by adding a second icon dependency or by forcing fill: currentColor, which turns most lucide marks into blobs. Do not re-add it without a spec/ADR decision that also names the icon source. Scoped to the header's contact details ONLY — it does not govern a section's iconKey, which every template renders (contract.md §9.5), and it never suppresses the detail's own label or value.",
               "type": "string",
-              "enum": ["none", "outline", "solid"]
+              "enum": ["none", "outline"]
             }
           },
           "required": ["align", "detailsLayout", "iconStyle"],
