@@ -2,15 +2,17 @@
 
 Map of `docs/` — what lives where, and the rules for each kind of document.
 
-| Directory                               | Contents                                                                                                                                                           | Mutability                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| [`specs/`](specs/)                      | Design specs (`<topic>-design.md`). A spec is a decision record of _what we intend to build_ and why; approval dates live inside the doc.                          | Frozen once approved; corrections go in a new spec or an ADR |
-| [`plans/`](plans/)                      | Implementation plans: master `implementation-plan.md` (phases, gates, agent workflow) + per-phase task plans (`phase-N-<name>.md`).                                | Living until executed; checkbox tasks tracked during run     |
-| [`adr/`](adr/)                          | Architecture Decision Records, numbered `NNNN-<slug>.md`. One decision per file: context → decision → consequences.                                                | Immutable; superseding requires a new ADR that links back    |
-| [`api/`](api/)                          | `openapi.yaml` — the `/api/v1` contract, lint, and conformance tests. Generated TypeScript client tooling is a queued pre-P2B correction; Dart is deferred to P11. | Living; changes reviewed like code                           |
-| [`runbooks/`](runbooks/)                | Operational procedures: deploy, rollback, restore drill, EIP recovery, secret rotation.                                                                            | Living                                                       |
-| `architecture.md` _(added at scaffold)_ | Current-state system overview reconciled with code, deployment configuration, and OpenAPI.                                                                         | Living                                                       |
-| `self-hosting.md` _(added at scaffold)_ | Operator guide for self-hosters (podman compose); linked from the root README.                                                                                     | Living                                                       |
+| Directory                                    | Contents                                                                                                                                                                  | Mutability                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [`specs/`](specs/)                           | Design specs. A spec is a decision record of _what we intend to build_ and why; approval dates live inside the doc. A large spec is a directory with a `README.md` index. | Frozen once approved; corrections go in a new spec or an ADR |
+| [`plans/`](plans/)                           | Implementation plans: master `implementation-plan.md` (phases, gates, agent workflow) plus one directory per phase (`plans/phase-<id>/`).                                 | Living until executed; checkbox tasks tracked during run     |
+| [`plans/traceability/`](plans/traceability/) | The acceptance-criteria matrix, split into one file per acceptance-ID prefix (`ac-auth.md`, `ac-doc.md`, …).                                                              | Living; rows closed by their owning phase                    |
+| [`adr/`](adr/)                               | Architecture Decision Records, numbered `NNNN-<slug>.md`. One decision per file: context → decision → consequences.                                                       | Immutable; superseding requires a new ADR that links back    |
+| [`api/`](api/)                               | `openapi.yaml` — the `/api/v1` contract, lint, and conformance tests. Generated TypeScript client tooling is a queued pre-P2B correction; Dart is deferred to P11.        | Living; changes reviewed like code                           |
+| [`research/`](research/)                     | External-product research notes gathered as evidence. **Not project authority** — findings become authoritative only when adopted into a spec, ADR, plan, or runbook.     | Living; superseded by re-research                            |
+| [`runbooks/`](runbooks/)                     | Operational procedures: deploy, rollback, restore drill, EIP recovery, secret rotation.                                                                                   | Living                                                       |
+| `architecture.md` _(added at scaffold)_      | Current-state system overview reconciled with code, deployment configuration, and OpenAPI.                                                                                | Living                                                       |
+| `self-hosting.md` _(added at scaffold)_      | Operator guide for self-hosters (podman compose); linked from the root README.                                                                                            | Living                                                       |
 
 Root-level (not in `docs/`, added at scaffold): `README.md`, `CONTRIBUTING.md`,
 `SECURITY.md`, `LICENSE`.
@@ -35,6 +37,13 @@ Root-level (not in `docs/`, added at scaffold): `README.md`, `CONTRIBUTING.md`,
   now.
 - [aboutme design](specs/aboutme-design.md) — intended v1 product and
   architecture (`DRAFT v3`; two independent review rounds applied).
+- [Template system spec](specs/templates/README.md) — the contract, design
+  tokens, and print behavior every resume template implements (`DRAFT v1`);
+  per-preset rationale docs live in
+  [`specs/templates/presets/`](specs/templates/presets/), and the committed
+  presets themselves in `packages/schema/templates/`.
+- [FlowCV research](research/flowcv/README.md) — reference evidence from a
+  comparable product; not project authority.
 - [Numbered implementation roadmap](plans/implementation-plan.md#numbered-delivery-index)
   — done/current/next delivery waves and phase gates.
 - [Phase 2A automated acceptance catalog](plans/uat-phase-2a.md) — immutable
