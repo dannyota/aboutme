@@ -1,0 +1,13 @@
+# AC-AUTH traceability rows
+
+5 acceptance-criterion rows with the `AC-AUTH-` prefix, in their original matrix
+order. See [README.md](./README.md) for the matrix purpose, maintenance rules,
+and the full prefix index.
+
+| ID          | Spec clause | Statement                                                           | Phase/task | Test / UAT reference                                                                                                                                                                                                               |
+| ----------- | ----------- | ------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-AUTH-001 | §3          | No automatic email merge across providers                           | P1         | `internal/auth/link_adversarial_test.go` TestCallback_EmailMergeRejectionMatrix (6 cross-provider pairs + different-email + same-provider), TestLink_* suite; `link_test.go`                                                       |
+| AC-AUTH-002 | §3          | LinkedIn registration without verified email rejected               | P1         | `internal/auth/linkedin_adversarial_test.go` TestLinkedInCallback_RegistrationEmailRuleAdversarial (4-case matrix), TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail; `linkedin_test.go`                                     |
+| AC-AUTH-003 | §3          | GitHub receives no OIDC nonce/iss checks                            | P1         | `internal/auth/github_adversarial_test.go` TestGitHubCallback_NoOIDCImportInPackage (static go/parser check), TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider; `github_test.go`                                     |
+| AC-AUTH-004 | §3          | Session rotation >24h is atomic with grace interval                 | P1         | `internal/auth/session_adversarial_test.go` TestAuthenticate_ConcurrentRotation_MintsExactlyOneSuccessor (20-way race, -race), grace/expiry table; `session_test.go` (lineage FK, DD-C14c)                                         |
+| AC-AUTH-005 | §3          | Device list, per-session revoke, logout-everywhere, Clear-Site-Data | P1         | `internal/auth/sessions_adversarial_test.go` TestSessionsList_NeverLeaksOtherUsersSessions, TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes, TestLogout_ClearsSiteDataHeader; `sessions_handlers_test.go`, `me_test.go` |

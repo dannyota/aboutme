@@ -1,6 +1,6 @@
 // Package resume is the P2A document codec and store-layer validation
 // pipeline: the single write-path choke point every resume write passes
-// through (docs/plans/phase-2a-resume-store.md, decisions D1/D4/D16/D19).
+// through (docs/plans/phase-2a/, decisions D1/D4/D16/D19).
 //
 // A stored resume is four Postgres columns: schema_version (int) plus three
 // jsonb columns (personal_details, content, customization). The wire/domain
