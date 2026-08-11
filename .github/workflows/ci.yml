@@ -47,7 +47,15 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
       - run: npm ci
+      # The drift gate in `make api-check` runs the generator pinned in
+      # apps/web. --ignore-scripts skips `nuxt prepare`; the gate needs only
+      # the generator binary.
+      - run: npm ci --ignore-scripts
+        working-directory: apps/web
       - run: make api-check
 
   server:
@@ -148,6 +156,36 @@ jobs:
             exit 1
           fi
 
+  # Released resume schemas are immutable (design spec §3, "Wire-version
+  # compatibility"): a released resume.v<N>.schema.json is the contract stored
+  # documents and adjacent-version converters are pinned to, so editing one
+  # rewrites history for data already on disk. Parallels
+  # migrations-append-only above; the same name-status logic, a different
+  # immutable artifact. packages/schema/test/released-append-only.test.ts
+  # proves each rejected status against throwaway repositories and pins this
+  # script's text.
+  released-schema-append-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Reject modified or deleted released schemas
+        env:
+          # Passed through the environment rather than interpolated directly
+          # into the script, for the same reason migrations-append-only does
+          # it: `${{ }}` expansion happens before the shell sees the line.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base="$BASE_SHA"
+          changed=$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json' \
+            | grep -E '^(M|D|R)' || true)
+          if [ -n "$changed" ]; then
+            echo "Released schemas are immutable; only a new version file may be added:"
+            echo "$changed"
+            exit 1
+          fi
+
   # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
   # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
   # It replaces the separate osv-scanner job: Supply Chain covers dependency
@@ -168,6 +206,21 @@ jobs:
       - run: semgrep ci
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # Mechanical enforcement of the resume write choke point (phase 2A task 6b):
+  # only apps/server/internal/resume may reach the generated resume/idempotency
+  # write methods. Separate from the `semgrep` job because that one needs
+  # SEMGREP_APP_TOKEN and is skipped on fork PRs — this gate must run there too.
+  # Offline rules only: no account, no database.
+  semgrep-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - run: pip install semgrep==1.172.0
+      - run: make semgrep-policy-test
 
   # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005) through a
   # live caddy process fronting stub backends. Needs a caddy binary but no
