@@ -36,8 +36,8 @@ at 21.6 px, so a section break is 1.4 line boxes and an entry break 0.46.
 3.6 against 19.7, read as density rather than colour. `accent` is omitted, so
 `--color-accent` falls back to `primary` (`tokens.md` §4) and the dots land as
 near-black marks on a pale track: punctuation, not a meter. `dots` on skill
-_and_ language is one widget vocabulary; `iconStyle: "solid"` is the one place a
-400 line gains mass without a weight; `dateFormat: "YYYY"` keeps meta short.
+_and_ language is one widget vocabulary; `iconStyle: "outline"` is line where
+`solid` promised mass (`tokens.md` §3.4); `dateFormat: "YYYY"` keeps meta short.
 
 ## Contrast
 
@@ -63,8 +63,8 @@ are ink, not colour: hue alone would fail WCAG 1.4.1 anyway.
 
 - **creative-accent** leads with colour; this has no `accent` at all. It spends
   a hue where this spends cap height and gap.
-- **modern-sidebar** is two columns of Be Vietnam Pro 14 with a tinted rail,
-  outline icons, `bar` skills; this is one full-measure column, no panel.
+- **modern-sidebar** is two columns of Be Vietnam Pro 14 with a tinted rail and
+  `bar` skills; this is one full-measure column, no panel.
 - **executive-band** is the real collision — one column, uppercase, rule-free —
   but its authority is a dark header fill, not 2 px of base and 30/10 gaps.
 - **minimal-air** is achromatic and rule-free in the opposite register: 1.65

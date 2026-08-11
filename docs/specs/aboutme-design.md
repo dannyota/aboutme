@@ -309,11 +309,12 @@ Envelope: `{data}` / `{error:{code,message}}`. OpenAPI spec maintained in
 - Contract: `(personalDetails, content, customization) → deterministic HTML`; no
   store/API/editor imports, no `Date.now()`/locale calls; all styling via CSS
   custom properties computed by `useResumeStyles(customization)`.
-- Tree: `ResumeDocument` → `ResumeHeader` (contacts per `detailsOrder`, CSS
-  photo crop) → `LayoutColumns` (placement from `customization.layout.sections`)
-  → `SectionRenderer` (dispatch by `sectionType`) → `sections/*` +
-  `primitives/*` (`EntryHeader`, `DateRange`, `RichText` w/ DOMPurify
-  re-sanitize, `SectionHeading`, `Icon`).
+- Tree: `ResumeDocument` → `ResumeHeader` (contacts in `details[]` array order —
+  ADR 0013, CSS photo crop) → `LayoutColumns` (placement from
+  `customization.layout.sections`) → `SectionRenderer` (dispatch by
+  `sectionType`) → `sections/*` + `primitives/*` (`EntryHeader`, `DateRange`,
+  `RichText` w/ **client-side** DOMPurify re-sanitize — Go is the SSR
+  sanitization authority, ADR 0012 — `SectionHeading`, `Icon`).
 - One-column placement (design decision, 2026-08-01): `columns: 1` with a
   populated `sidebar` array is **valid by design**. The renderer emits `main`
   followed by `sidebar` sections in order, so the exactly-once placement
@@ -336,16 +337,19 @@ Envelope: `{data}` / `{error:{code,message}}`. OpenAPI spec maintained in
   `document.fonts.ready` before chromedp prints. Icons: tree-shaken inline SVG
   (lucide) via `iconKey`.
 - **Sanitizer contract (round-2)**: ONE versioned allowlist (tags, attributes,
-  URL schemes) defined in `packages/schema`; bluemonday (write) and DOMPurify
-  (render) are both generated/conformance-tested against it with a shared
-  hostile corpus. Forbidden outright: inline event handlers, SVG, iframes,
-  external images, non-https(+mailto/tel) schemes. External links get
+  URL schemes) defined in `packages/schema`; bluemonday and DOMPurify are both
+  generated/conformance-tested against it with a shared hostile corpus. They do
+  not both execute everywhere: bluemonday owns the write path and is the sole
+  authority for anything SSR renders, DOMPurify runs client-side only (ADR
+  0012), and "SSR" is a corpus surface to prove neutralization on rather than a
+  place DOMPurify executes. Forbidden outright: inline event handlers, SVG,
+  iframes, external images, non-https(+mailto/tel) schemes. External links get
   `rel="noopener noreferrer"`. Backstop: strict CSP; the print browser has no
   general outbound network access.
-- Guards: golden HTML snapshots (fixtures × templates) in CI; Playwright
-  screenshot diff of `/print` per template; renderer handles current
-  `schema_version` only (server projects first); lint rule enforcing
-  editor→renderer one-way imports.
+- Guards: golden HTML snapshots (all presets × both pagination modes) in CI;
+  Playwright screenshot diff of `/print` for the named representative subset
+  (`tokens.md` §4.2); renderer handles current `schema_version` only (server
+  projects first); lint rule enforcing editor→renderer one-way imports.
 - Public page freshness (round-2): pages cached at CloudFront ~60 s for normal
   edits. Unpublish / delete / slug rename trigger CloudFront invalidation of
   **all** affected surfaces — old+new HTML URL, `/{slug}.md`, og-image, public

@@ -129,14 +129,18 @@ the store rejects that state on write, and the renderer must not crash on it.
 `ResumeHeader` renders, in this order: photo (if present), `fullName`,
 `headline`, then `personalDetails.details`. Detail order is the **array order**
 of `details`; the schema carries no separate order field, which supersedes §5's
-reference to a `detailsOrder`. A detail with `isHidden: true` is omitted
-entirely. `isHidden` is required on a detail and optional on an entry; an entry
-without the key is visible.
+reference to a `detailsOrder` — ratified by ADR 0013. A detail with
+`isHidden: true` is omitted entirely. `isHidden` is required on a detail and
+optional on an entry; an entry without the key is visible.
 
-Details of type `website`, `linkedin`, `github`, `twitter` render as an anchor
-with `rel="noopener noreferrer"`; `email` and `phone` may render as `mailto:` /
-`tel:`; `location` and `custom` render as text. `label`, when present and
-non-empty, replaces the type's default label.
+Details of type `website`, `linkedin`, `github`, `twitter` render as an
+**underlined** anchor with `rel="noopener noreferrer"`, and the renderer
+re-checks the exact lowercase `https://` prefix itself — a value that fails
+renders as text. The underline is renderer-fixed on every inline link
+(`tokens.md` §6, §9.8 below). `email`, `phone`, `location`, and `custom` render
+as **plain text** in v1: no `mailto:` and no `tel:` links from values the schema
+defines no format for (ADR 0013). `label`, when present and non-empty, replaces
+the type's default label.
 
 ### 5.2 Entry anatomy
 
@@ -193,9 +197,12 @@ render if the section itself renders.
 ### 5.5 Rich text
 
 `description` / `text` / `infoHtml` are the sanitized HTML subset. The renderer
-re-sanitizes with DOMPurify against the same versioned allowlist and styles only
-the permitted tags. It never rewrites, truncates, or reflows the markup. Anchors
-inside rich text get `rel="noopener noreferrer"`.
+re-sanitizes with DOMPurify **on the client only**, against the same versioned
+allowlist and before any `innerHTML` assignment; on SSR it passes the string
+through, because Go (bluemonday) is the sole sanitization authority for anything
+SSR renders (ADR 0012). Either way the renderer styles only the permitted tags.
+It never rewrites, truncates, or reflows the markup. Anchors inside rich text
+get `rel="noopener noreferrer"`.
 
 ### 5.6 Level widgets
 
@@ -272,7 +279,7 @@ Rules the above encodes:
 | ------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `packages/schema/templates/<id>.json` | validates against the preset schema; all eight customization keys plus `layout.placement` |
 | golden HTML snapshots                 | every fixture × this preset, per §5's guard list                                          |
-| print screenshot diff                 | `/print` per preset, per §5                                                               |
+| print screenshot diff                 | `/print`, but only for the named representative subset — `tokens.md` §4.2                 |
 | one- and two-column fixtures          | ADR 0008 requires both, so an empty-sidebar regression shows in a diff                    |
 | contrast check                        | the preset's own colors satisfy `tokens.md` §5 before clamping                            |
 
@@ -281,8 +288,9 @@ change, not as a template.
 
 ## 9. Contract pressure
 
-Open questions for the design owner. None is worked around in this spec, and
-none requires a change to the §3 entry-field contract.
+Open questions for the design owner, with the rulings already made marked inline
+(items 6 and 8). None is worked around in this spec, and none requires a change
+to the §3 entry-field contract.
 
 1. **No template identity in the document.** `customization` is
    `additionalProperties: false` and stores no `templateId`, so two templates
@@ -323,13 +331,15 @@ none requires a change to the §3 entry-field contract.
    The template cannot override it without breaking the user-owns-base-size
    boundary. _Cost of leaving it out:_ a user can publish an unreadable resume;
    the containment is an editor-side warning, not a contract change.
-8. **Links are distinguishable only by color, and no preset can fix it.** The
-   renderer owns `text-decoration`, so an inline link is separable from body
-   text solely by `--color-link`. Two independent preset designs proved the
-   consequences: on a monochrome print a link is indistinguishable from body
-   ink, and a preset targeting WCAG AAA text contrast cannot simultaneously
-   satisfy G183's 3:1 link-versus-body distinction — the two constraints are
-   arithmetically incompatible on a white page. _Open question for the design
-   owner:_ adopt a renderer-wide link underline (the standard resolution, and
-   what G183 exists to avoid needing), accepting that it changes every
-   template's look; until decided, presets should not claim AAA-plus-G183.
+8. **Link distinguishability — RESOLVED 2026-08-11 (owner ruling).** The
+   renderer owns `text-decoration`, and two independent preset designs proved
+   that color alone cannot carry the distinction: on a monochrome print a link
+   is indistinguishable from body ink, and a preset targeting WCAG AAA text
+   contrast cannot simultaneously satisfy G183's 3:1 link-versus-body
+   requirement — the two constraints are arithmetically incompatible on a white
+   page. **Adopted: a renderer-wide underline on every inline link**, fixed in
+   the codebase and unsettable by any preset (`tokens.md` §6). Rationale: it is
+   the standard resolution G183 exists to avoid needing, it costs one CSS
+   declaration, and it makes AAA-plus-G183 reachable instead of arithmetically
+   impossible. Every template's look changes slightly, which is why this was
+   ruled before the first golden was committed rather than after.
