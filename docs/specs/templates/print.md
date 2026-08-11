@@ -128,9 +128,13 @@ Behavior required across a page break:
   `--column-gutter` and do not change between pages.
 - Any surface tint on a column must be painted by the fragmenting element
   itself, so it repeats on every page rather than ending where the first
-  fragment ends. `--color-surface-sidebar` is an alias of `--color-surface` in
-  v1, so nothing tints today, and the requirement is recorded for when it does
-  (`contract.md` §9.1).
+  fragment ends. `--color-surface-sidebar` and `--color-surface-header` are
+  **not** unconditional aliases of `--color-surface`: each resolves to
+  `colors.surface` when `effectiveSurfaceTarget` (`tokens.md` §4.1) names that
+  region, and falls back to `--color-surface` otherwise (`tokens.md` §4). The
+  tint is live today — `modern-sidebar.json` sets `surfaceTarget: "sidebar"`,
+  `executive-band.json` sets `"header"` — so a fragmenting sidebar column with
+  an active tint must repaint it on every page, not only the first.
 - In one-column mode there is no fragmentation question: `main` sections are
   emitted in order, then `sidebar` sections, in one flow.
 

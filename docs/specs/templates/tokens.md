@@ -50,7 +50,7 @@ not this document's.
 | `heading.showRule`              | boolean                                                            | `false`                            | user, preset |
 | `header.align`                  | enum: `left`, `center`, **optional object**                        | absent (renderer `left`)           | user, preset |
 | `header.detailsLayout`          | enum: `inline`, `stacked`, **optional object**                     | absent (renderer `inline`)         | user, preset |
-| `header.iconStyle`              | enum: `none`, `outline`, `solid`, **optional object**              | absent (renderer `outline`)        | user, preset |
+| `header.iconStyle`              | enum: `none`, `outline`, **optional object**                       | absent (renderer `outline`)        | user, preset |
 | `layout.columns`                | enum: 1, 2                                                         | `1`                                | user, preset |
 | `layout.surfaceTarget`          | enum: `none`, `header`, `sidebar`, **optional**                    | absent (renders as `none`)         | user, preset |
 | `layout.sections.main/.sidebar` | arrays of section keys                                             | `[]`, `[]`                         | derived      |
@@ -148,10 +148,18 @@ reveals a detail, and `isHidden` still wins in every combination.
 |                        | `stacked` | each detail takes its own line, separated by `--gap-block`                       |
 | `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone                 |
 |                        | `outline` | the stroked lucide glyph at `--icon-size`                                        |
-|                        | `solid`   | the filled lucide glyph at `--icon-size`                                         |
 
 Absent `header` renders `left` / `inline` / `outline`, which is what every
 document rendered before the token existed.
+
+**`solid` is removed from the enum** (owner ruling, 2026-08-11). This document
+defined it as "the filled lucide glyph", and lucide ships no filled family —
+`lucide-vue-next` is stroke-only, so `solid` was unimplementable without either
+a second icon dependency or a `fill: currentColor` hack that renders most lucide
+marks as blobs. The enum is `none` | `outline`. The two presets that set `solid`
+— `packages/schema/templates/high-contrast.json` and
+`packages/schema/templates/startup-bold.json` — are re-authored to `outline`,
+and the schema enum drops the value with them.
 
 Two boundaries this token must not cross. `header.iconStyle` covers the header's
 contact icons only — it never suppresses a section's `iconKey`, which every
@@ -193,6 +201,9 @@ Notes:
   which is why an absent `level` renders no widget at all rather than an empty
   track (contract §5.6) — an empty track that might not be visible cannot be the
   difference between "rated 0" and "unrated".
+- `--color-link` is the link's **color** role only. Its underline is
+  renderer-fixed (§6) and no preset can remove it, so a link is separable from
+  body text even where the two colors are close.
 - `colors.accent` and `colors.surface` are the only optional colors and neither
   can be cleared to `""` — `hexColor`'s pattern forbids it. Absent is the only
   unset state; the accent falls back to `colors.primary` and the surface to
@@ -277,6 +288,25 @@ Three consequences worth stating outright:
   root, and golden snapshots must cover a document with a tinted region so the
   second resolution is pinned too — `fixtures/full.json` carries one
   (`surfaceTarget: "sidebar"` over two columns).
+
+**Golden and screenshot coverage under twenty presets** (owner ruling,
+2026-08-11). The two artifacts are scoped differently, because they cost
+differently:
+
+- **SSR string goldens: every preset, both pagination modes.** They are cheap,
+  deterministic, and byte-diffable, and they are what pins the per-surface
+  resolution above for the presets that tint.
+- **Screenshot baselines: a named representative subset, roughly six presets,
+  plus the continuous-mode case.** The subset is named explicitly in the phase-3
+  golden and Playwright tasks — not derived at run time — and is chosen against
+  `contract.md` §8 so that it covers at minimum one one-column preset, one
+  two-column preset, one tinted sidebar (`fixtures/full.json`,
+  `surfaceTarget: "sidebar"`), one tinted header (`surfaceTarget: "header"`),
+  one `pageFormat: "letter"`, and one dense/small-type preset. A preset outside
+  the subset is still covered by string goldens; what it loses is pixel-level
+  regression detection.
+- P9's manual browser UAT exercises **the same named subset**, not all twenty
+  presets, so the three coverage surfaces cannot drift apart.
 
 ## 5. Accessibility floor
 
@@ -370,8 +400,8 @@ absence means "never entered"). Margins are the primary lever for fitting a
 resume onto one page, so this is the first token a page-count problem should
 reach for, ahead of `baseSizePx`.
 
-Renderer-fixed geometry. None of it varies by template in v1; changing a value
-here changes every template at once.
+Renderer-fixed geometry and inline-link styling. None of it varies by template
+in v1; changing a value here changes every template at once.
 
 | Property          | Value                        | Rationale                                                                |
 | ----------------- | ---------------------------- | ------------------------------------------------------------------------ |
@@ -384,13 +414,30 @@ here changes every template at once.
 | `--dot-size`      | `7px`, `4px` gap             | level widget, 5 dots                                                     |
 | `--tag-padding`   | `0.15em 0.5em`, `3px` radius | level widget, `tag` style                                                |
 | `--icon-size`     | `1em`                        | lucide inline SVG, aligned to heading cap height                         |
+| `text-decoration` | `underline` on inline links  | a link stays identifiable without color — see below                      |
 
 Rule visibility follows `heading.showRule`: false removes the rule and its
 `--rule-gap` together, so no empty band is left behind.
 
+**Inline links are underlined, in every template** (owner ruling, 2026-08-11).
+`text-decoration: underline` is renderer-fixed on every inline link the renderer
+emits: the header's contact anchors (`contract.md` §5.1), the entry link slots
+(`employerLink`, `schoolLink`, `titleLink`, project `link` — `contract.md`
+§5.2), and anchors inside sanitized rich text. It is not a token, no preset can
+remove it, and it applies identically in preview, SSR, and print. `--color-link`
+stays the link's color role and nothing else.
+
+This dissolves the conflict `contract.md` §9.8 recorded. With the underline
+present, a link no longer needs a 3:1 color separation from body text to satisfy
+WCAG G183, so a preset may target AAA text contrast and still distinguish its
+links, and a monochrome print keeps them identifiable. The cost is that every
+template now looks slightly more "web": accepted deliberately, because the
+alternative was a constraint no preset could satisfy.
+
 ## 7. What a preset may not do
 
 - Introduce a token. `customization` is `additionalProperties: false`.
+- Remove the inline-link underline. It is renderer-fixed (§6).
 - Ship CSS, a component, or a class hook. Nothing records which preset produced
   a document's values, so nothing can key styling off it.
 - Set `layout.sections`. ADR 0008 computes it.
