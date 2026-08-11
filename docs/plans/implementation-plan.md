@@ -14,29 +14,44 @@ resume docs; SSE live refresh; chromedp PDF/og. Full design:
 [`../specs/aboutme-design.md`](../specs/aboutme-design.md).
 
 **Source of truth:** the spec. Where this plan and the spec disagree, the spec
-wins and the plan is corrected. Status: Rev 6 (2026-08-04) — P0 and P1 are
-complete; P2A is active. Rev 6 reserves **UAT** for user-like browser validation
-of a complete deployment: the main-session UAT executor (GPT-5.6 Sol) runs it
-locally through Playwright MCP before any request for AWS authorization. Earlier
-`uat-phase-*` names are retained as immutable history but mean automated phase
-acceptance, not manual browser UAT. Rev 5 added the numbered delivery index,
-restored P1.1, and recorded the P2A checkpoint. The Tasks 1–7 checkpoint on
-`main` does not mark P2A complete or unlock any dependent phase.
+wins and the plan is corrected. Status: Rev 7 (2026-08-11) — P0 and P1 are
+complete; P2A is active.
+
+Rev 7 adopts ADR 0011: delivery gates are risk-tiered, phases carry two gates
+rather than five, `make ci` is the local gate of record, `gitleaks` runs per
+commit while Semgrep batches to phase gates, browser checks move earlier, and
+design work runs parallel to implementation. It also adopts ADR 0010: migrations
+are goose-only, with `apps/server/migrations/` as the single schema source for
+both goose and sqlc. Roles are named by capability, not by model or harness.
+
+Rev 6 reserved **UAT** for user-like browser validation of a complete
+deployment, run locally through Playwright MCP before any request for AWS
+authorization. Earlier `uat-phase-*` names are retained as immutable history but
+mean automated phase acceptance, not manual browser UAT. Rev 5 added the
+numbered delivery index, restored P1.1, and recorded the P2A checkpoint. The
+Tasks 1–7 checkpoint on `main` does not mark P2A complete or unlock any
+dependent phase.
 
 ## Global constraints (apply to every task)
 
 - **Versions:** latest stable at scaffold, then pinned exactly (toolchain +
   image digests). Go, Node LTS, Nuxt 4/Vue 3, Postgres 18.x, Flutter latest.
 - **Style:** Google style guides (Go; Google TS via ESLint). gofmt/goimports
-  mandatory. Data layer = sqlc (`pgx/v5`), migrations = Atlas-diff → goose
-  (declarative-schema pattern, one migration dir, CI append-only).
+  mandatory. Data layer = sqlc (`pgx/v5`); migrations = hand-written goose, one
+  migration dir, CI append-only. `apps/server/migrations/` is the single schema
+  source for both goose and sqlc (ADR 0010) — there is no `sql/schema.sql` and
+  no Atlas.
 - **Security defaults:** sanitized rich text (one versioned allowlist,
   bluemonday + DOMPurify), CSRF (header + Origin), `__Host-` cookies, rate
   limits, CSP, no secrets in repo (`.env` git-ignored).
-- **Quality gates (CI, must pass to merge):** golangci-lint, govulncheck,
-  ESLint, `vue-tsc --noEmit`, Semgrep (connected: SAST + Supply Chain SCA +
-  secrets), unit+integration tests, golden/snapshot tests, OpenAPI + schema
-  drift, migration harness, docs-lint.
+- **Quality gates:** `make ci` is the gate of record and runs locally —
+  golangci-lint, govulncheck, ESLint, `vue-tsc --noEmit`, unit + integration
+  tests, golden/snapshot tests, OpenAPI + schema drift, sqlc drift, migration
+  harness, append-only check, route table, docs-lint. It must pass before any
+  handoff. Push once per phase; GitHub Actions covers fork PRs and jobs needing
+  repository secrets. `gitleaks` runs per commit via `.githooks/pre-commit`
+  (`make hooks-install`); `make scan` runs connected Semgrep (SAST + Supply
+  Chain SCA + secrets) plus full-history gitleaks at each phase gate.
 - **Determinism (mandatory for agent-run tests):** inject clock/RNG/UUID; pin
   container + Chromium + font + timezone + locale versions; no assertion
   retries. Flaky = broken.
@@ -47,35 +62,52 @@ restored P1.1, and recorded the P2A checkpoint. The Tasks 1–7 checkpoint on
 
 ## Agent workflow (who does what)
 
-| Step                                    | Agent                                                                                        | Rule                                                                                                                                                                                                                                                    |
-| --------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Write failing test → minimal impl (TDD) | **Sonnet 5 (xhigh)**                                                                         | author writes unit tests for its own code, test-first                                                                                                                                                                                                   |
-| Independent adversarial tests           | a second, fresh **Sonnet 5 (xhigh)** instance                                                | for high-risk areas (auth, authz, concurrency, migrations, sanitizer, publish/cache, SSE, render bounds) derive **black-box/property/fuzz tests from the spec acceptance IDs BEFORE reading the impl diff**; low-risk scaffold/UI needs only author TDD |
-| Per-task code review                    | **Opus 5 (xhigh)**                                                                           | reviews diff before merge; blocking findings fixed first                                                                                                                                                                                                |
-| Per-phase design/consistency review     | **Fable**                                                                                    | slice matches spec; interfaces stable; traceability rows resolved                                                                                                                                                                                       |
-| Per-phase adversarial review            | **Fresh Fable or Opus 5 instance**                                                           | challenges the approach, tradeoffs and assumptions (not defects) before a phase's decisions are frozen and built upon                                                                                                                                   |
-| Per-phase automated acceptance          | **fresh acceptance worker** (cannot edit product code, tests, snapshots, seeds, or criteria) | runs the phase acceptance catalog and emits a machine-readable fail-closed report                                                                                                                                                                       |
-| Phase-acceptance evidence review        | **fresh independent evidence reviewer**                                                      | samples artifacts and reruns a deterministic subset; any mismatch fails the phase gate                                                                                                                                                                  |
-| P9 local manual UAT                     | **main-session UAT executor (GPT-5.6 Sol)**                                                  | autonomously exercises the full local Podman deployment through the project-scoped Playwright MCP server; the human owner does not execute UAT                                                                                                          |
-| P9 local-UAT evidence review            | **fresh independent reviewer**                                                               | verifies the frozen report and artifacts without editing the candidate or UAT criteria                                                                                                                                                                  |
-| AWS activation and staging deployment   | **main-session integration owner or delegate**                                               | only after P9 local UAT and evidence review pass and the human owner records AWS resource-creation authorization                                                                                                                                        |
-| Production promotion                    | **main-session integration owner or delegate**                                               | only after P9A passes and the human owner separately approves production launch                                                                                                                                                                         |
+Roles are named by capability, not by model or harness. Use the strongest
+available reasoning for defect, adversarial, and evidence work.
 
-Independence rule: the code author never signs off its own correctness. Every
-task gets independent defect review; every phase gets independent automated
-acceptance and evidence verification; the author cannot weaken an adversarial
-test without review. P9 UAT is a separate user-workflow gate over the complete
-deployed application.
+**Per task — classify by risk first (ADR 0011).**
+
+| Tier          | Applies to                                                                                                                                                                                       | Passes                                                                                                                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **High risk** | auth, authorization, sessions, CSRF; concurrency, CAS, idempotency; migrations and schema; sanitizer; publish and cache invalidation; SSE; render and resource bounds; any code handling secrets | 1. Author TDD. 2. A fresh worker derives black-box, property, or fuzz tests from the spec acceptance IDs **before reading the implementation diff**. 3. A fresh reviewer reads the diff for defects; blocking findings are fixed and re-reviewed. |
+| **Normal**    | everything else: UI, editor surfaces, docs, refactors, scaffolding, configuration, tooling                                                                                                       | Author TDD, then `make ci`. No second worker.                                                                                                                                                                                                     |
+
+Ambiguous cases are classified high risk. The tier list is deliberately concrete
+so that classification is a lookup rather than a judgment call.
+
+**Per phase — two gates.**
+
+| Gate                | Who                                                                                | Contents                                                                                                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase defect review | a fresh reviewer that authored none of the phase                                   | Defects in the phase diff, plus spec consistency, interface stability, traceability closure, and adversarial challenge of the phase's assumptions and tradeoffs — one reading, not four separate passes. |
+| Phase acceptance    | a fresh worker that cannot edit product code, tests, snapshots, seeds, or criteria | Runs the immutable criteria catalog and emits the machine-readable fail-closed report defined below.                                                                                                     |
+
+**Deployment steps.**
+
+| Step                                  | Who                           | Rule                                                                                                                                           |
+| ------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| P9 local manual UAT                   | main-session UAT executor     | autonomously exercises the full local Podman deployment through the project-scoped Playwright MCP server; the human owner does not execute UAT |
+| P9 local-UAT evidence review          | fresh independent reviewer    | verifies the frozen report and artifacts without editing the candidate or UAT criteria                                                         |
+| AWS activation and staging deployment | integration owner or delegate | only after P9 local UAT and evidence review pass and the human owner records AWS resource-creation authorization                               |
+| Production promotion                  | integration owner or delegate | only after P9A passes and the human owner separately approves production launch                                                                |
+
+Independence rule: in the high-risk tier the code author never signs off its own
+correctness, and cannot weaken an adversarial test without review. Every phase
+gets an independent defect review and independent fail-closed acceptance. P9 UAT
+remains a separate user-workflow gate over the complete deployed application.
+
+Before accepting any worker's result, re-run its key claim and read the diff. A
+worker's report states what was attempted; it is not a review.
 
 ### Acceptance and UAT terminology
 
 - **Automated phase acceptance** proves a bounded implementation slice. Legacy
   `uat-phase-*` catalogs and completed `UAT` records keep their filenames and
   verdicts, but they are interpreted this way.
-- **Local manual UAT** means the main-session UAT executor (GPT-5.6 Sol)
-  operates the product like a user through Playwright MCP against the full
-  Podman Compose deployment at `http://localhost:8080`. It is not delegated to
-  the human owner and is not a substitute for scripted Playwright E2E tests.
+- **Local manual UAT** means the main-session UAT executor operates the product
+  like a user through Playwright MCP against the full Podman Compose deployment
+  at `http://localhost:8080`. It is not delegated to the human owner and is not
+  a substitute for scripted Playwright E2E tests.
 - **Staging rehearsal** reruns applicable UAT scenarios and infrastructure
   drills on AWS only after the human owner authorizes AWS resource creation.
 
@@ -89,8 +121,8 @@ deployed application.
 - **One schema-head change merges at a time**; later work rebases and re-runs
   the migration harness.
 - Each phase plan states: base commit, spec clauses + acceptance IDs it
-  implements, and the migration head it targets. Opus 5 review rejects a phase
-  plan with unresolved traceability rows.
+  implements, and the migration head it targets. The phase defect review rejects
+  a phase plan with unresolved traceability rows.
 
 ## Testing strategy (pyramid + gates)
 
@@ -148,7 +180,9 @@ graph TD
     P1F --> P2B[P2B Resume HTTP API + media]
     P0F --> P2B
     P2A --> P2B
-    P2A --> P3[P3 Renderer + templates + fonts + sanitizer]
+    P0 --> P3D[P3-design Template contract + presets, docs only]
+    P3D --> P3[P3 Renderer + templates + fonts + sanitizer]
+    P2A --> P3
     P2A --> P4[P4 Editor + live preview]
     P2B --> P4
     P3 --> P4
@@ -185,6 +219,14 @@ graph TD
     PRODAUTH --> P10[P10 Promote to production]
 ```
 
+**P3-design runs in parallel with P2A and P2B.** It depends only on the frozen
+document contract, so the template system contract (`docs/specs/templates/`) and
+the committed presets in `packages/schema/templates/` are authored while the
+store and API phases are built. P3 itself stays serialized behind P2A because it
+contests `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`,
+`packages/schema/test/gen.test.ts`, and `apps/server/go.{mod,sum}`. Design work
+is docs and data, not code, so it contests nothing.
+
 Security infra (P8-sec) starts at P0 as middleware; each route adds its policy
 in its owning phase. **PI code-only work starts after P7B** so the runtime shape
 is settled, and completes before the P9 candidate is frozen. No AWS or
@@ -213,7 +255,7 @@ route-owning phase rather than appearing as a one-time step.
 | 06   | P4 + P5A + P6A + P7A            | **Parallel feature wave**      | Editor, publish/public SSR, SSE transport, and bounded owner print worker after their graph dependencies                          |
 | 07   | P5B + P6B + P7B + P8-priv       | **Parallel closure wave**      | Publish UX/disclosure, live refetch, public render artifacts, and privacy lifecycle                                               |
 | 08   | PI code-only infrastructure     | **Deferred until after P7B**   | Refresh and validate IaC locally with mock providers; no AWS or Cloudflare mutation                                               |
-| 09   | P9 local manual UAT             | **Waiting on 08**              | Main-session UAT executor (GPT-5.6 Sol) validates the full Podman deployment through Playwright MCP                               |
+| 09   | P9 local manual UAT             | **Waiting on 08**              | Main-session UAT executor validates the full Podman deployment through Playwright MCP                                             |
 | 10   | P9 evidence verification        | **Waiting on 09**              | Fresh independent reviewer verifies artifacts and reruns a deterministic subset                                                   |
 | 11   | Human AWS authorization         | **Waiting on 08 + 10**         | Human authorizes resource creation, credentials, naming, DNS scope, and staging spend; the human does not run UAT                 |
 | 12   | PI AWS activation + P9A         | **Waiting on 11**              | Create staging, then prove the production-like topology and real operations drills                                                |
@@ -260,7 +302,7 @@ route-owning phase rather than appearing as a one-time step.
 | P1 auth                | **4 of 4 exit gates passed** ✅ · **merged**      | Google/GitHub/LinkedIn OIDC+OAuth2 login, session lifecycle with FK-tracked rotation lineage, fail-closed CSRF, `/me` + session device management, explicit linking with email-merge rejection, web login/session pages. Six independent blind adversarial suites (AC-AUTH-001…005, AC-SEC-002); schema head `00003_add_sessions_rotated_from`; decisions DD-C1…DD-C17 recorded in the phase plan's appendix. Gates: whole-branch review ✅ (2 blocking findings fixed) · adversarial review ✅ (PROCEED WITH CHANGES; follow-ups scoped in `phase-1-deferred.md`) · independent fail-closed automated phase acceptance ✅ (historical `UAT` run 1 FAIL found a real gate-command defect; run 2 16/16 PASS at `2d17f77`) · Opus evidence verification ✅ (both runs; UPHELD WITH CORRECTIONS, corrections applied to future runs). Merged to `main` as `ad357d3` (2026-08-02). Deferred follow-ups are preserved as P1.1 and must close before P2B |
 | P1.1 auth follow-up    | **Queued; must precede P2B**                      | Missed its intended pre-P2A window. Owns auth-route limits, opportunistic OAuth-transaction reaping, CSRF-protected link/reauth start, typed auth-funnel reasons, and the rotation single-delivery reliability fix; see `phase-1-deferred.md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | P2A resume store       | **Executing on `main`** (checkpoint integrated)   | Owner-directed checkpoint `5805ddc` integrates independently reviewed Tasks 1–7, including title/lint and callback/TTL/CAS-convergence corrections. Task 2b, Tasks 6a/6b and 8–12, independent suites, and all phase gates remain; this partial integration is not phase completion and does not unlock P2B                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| P3 renderer            | **Queued behind P2A; refresh required**           | Plan `phase-3-renderer.md` was adopted with ADR 0008 and serialized behind P2A because `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`, `packages/schema/test/gen.test.ts`, and `apps/server/go.{mod,sum}` are contested. Before dispatch, reconcile SSR sanitizer authority and contact ordering with the design/ADRs, remove missing companion-note dependencies, correct stale traceability prose, and refresh the base/shared-file inventory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| P3 renderer            | **Queued behind P2A; refresh required**           | Plan `phase-3/` was adopted with ADR 0008 and serialized behind P2A because `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`, `packages/schema/test/gen.test.ts`, and `apps/server/go.{mod,sum}` are contested. Before dispatch, reconcile SSR sanitizer authority and contact ordering with the design/ADRs, remove missing companion-note dependencies, correct stale traceability prose, and refresh the base/shared-file inventory                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Both exit-gate reviews returned no-ship on first run; every finding was applied
 to the spec and implemented. The corrected contract is recorded in
@@ -294,7 +336,7 @@ evidence remains unchanged; P0F below is the blocking corrective task.
 | 0.7 test factories + fixtures        | `apps/server/internal/testutil`, `apps/web/test/factories`         | deterministic seed + reset command used by all later tests/UAT                                                                                                         |
 | 0.8 numeric budgets                  | `docs/plans/budgets.md`                                            | p95 latency, memory, render queue, pgx pool, SSE conn/fd targets (enforced P7A/P9A)                                                                                    |
 | 0.10 CI completion                   | `.github/workflows/ci.yml`                                         | server/web/schema/openapi/migration/semgrep/data-drift/route-table/docs jobs green                                                                                     |
-| 0.11 traceability matrix             | `docs/plans/traceability.md`                                       | **row per normative spec statement** with a stable acceptance ID (`AC-<area>-<nnn>`) → owning phase/task → test/UAT reference; seeded in P0A, kept current every phase |
+| 0.11 traceability matrix             | `docs/plans/traceability/`                                         | **row per normative spec statement** with a stable acceptance ID (`AC-<area>-<nnn>`) → owning phase/task → test/UAT reference; seeded in P0A, kept current every phase |
 
 ---
 
@@ -355,11 +397,11 @@ creation. PI then **builds** staging; P9A **exercises** it; P10 **promotes**.
 > with a hard 512 MiB cgroup and no outbound network, P6A adds long-lived SSE
 > connections with their own origin timeouts. Each would force a rewrite. **PI
 > code-only work now executes after P7B**, when the runtime shape is known. The
-> adopted plan (`phase-pi-infrastructure.md`) needs a refresh pass at dispatch.
-> Bootstrap apply, ECR push, AWS/Cloudflare mutation, DNS mutation, staging
-> apply, and deployment-workflow dispatch remain locked until P9 passes, its
-> evidence is independently verified, and the human owner records AWS
-> authorization. Local development and P9 use Podman and need no cloud account.
+> adopted plan (`phase-pi/`) needs a refresh pass at dispatch. Bootstrap apply,
+> ECR push, AWS/Cloudflare mutation, DNS mutation, staging apply, and
+> deployment-workflow dispatch remain locked until P9 passes, its evidence is
+> independently verified, and the human owner records AWS authorization. Local
+> development and P9 use Podman and need no cloud account.
 
 **BLOCKING (from the Phase 0 security review):** the production Caddy config
 **must** derive the viewer address from CloudFront's validated inbound chain
@@ -576,12 +618,11 @@ public pages 404 + data gone; export complete.
 
 Detailed execution authority: [`phase-9-local-uat.md`](phase-9-local-uat.md).
 
-**Role boundary:** the main-session UAT executor (GPT-5.6 Sol) autonomously
-performs user-like browser UAT on this laptop against the complete image-based
-Podman Compose deployment at `http://localhost:8080`, using the project-scoped
-Playwright MCP server. The human owner does not execute UAT. Scripted Playwright
-E2E, accessibility, and all automated development/phase gates must already be
-green.
+**Role boundary:** the main-session UAT executor autonomously performs user-like
+browser UAT on this laptop against the complete image-based Podman Compose
+deployment at `http://localhost:8080`, using the project-scoped Playwright MCP
+server. The human owner does not execute UAT. Scripted Playwright E2E,
+accessibility, and all automated development/phase gates must already be green.
 
 **Exit:** every frozen scenario below is `PASS` with a fail-closed report and
 complete evidence; a fresh independent reviewer verifies the artifacts and
@@ -654,7 +695,7 @@ timing, and production spend.
 
 **Exit:** the **staging-proven image + migration digests** are promoted to
 production behind CloudFront at aboutme.vn; post-deploy smoke green; rollback
-rehearsed. Deployed by Fable/Opus.
+rehearsed. Deployed by the integration owner or a delegate.
 
 Infrastructure is **built in PI and proven in P9A** — P10 does not author new
 Terraform. Tasks: apply PI modules with production variables; promote the exact
@@ -679,7 +720,7 @@ P0–P10 depends on it.
 
 ## Spec traceability (standing artifact — kept current every phase)
 
-`docs/plans/traceability.md` (created in task 0.11) is the standing mapping from
+`docs/plans/traceability/` (created in task 0.11) is the standing mapping from
 normative statements to owning phase/task, acceptance ID, and evidence. A phase
 plan is rejected if its own rows are absent or unresolved. The matrix is **not
 yet complete across future phases**: mobile client (P11), template thumbnails
