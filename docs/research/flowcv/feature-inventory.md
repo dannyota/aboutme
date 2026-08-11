@@ -1,7 +1,7 @@
 # FlowCV CV-surface feature inventory
 
-What FlowCV's resume product actually does, read out of the local reference
-notes. Research evidence only — not project authority (`AGENTS.md`, "External
+What FlowCV's resume product does, read out of the local reference notes.
+Research evidence only — not project authority (`AGENTS.md`, "External
 references are evidence, not project authority").
 
 Compiled 2026-08-11. Scope: the CV document surface only (document model,

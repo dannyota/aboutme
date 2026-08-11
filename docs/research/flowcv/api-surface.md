@@ -1,8 +1,8 @@
 # FlowCV live API surface — read-only probe
 
 Purpose: find resume/CV capabilities in the live FlowCV product that the local
-notes at `/home/danny/src/flowcv/docs/API.md` and `PULLPUSH.md` do not document,
-and record the real shape of a FlowCV resume document.
+notes at `/home/danny/src/flowcv/docs/API.md` and `PULLPUSH.md` do not document.
+Record the real shape of a FlowCV resume document.
 
 Every statement below is tagged **OBSERVED** (seen in a response) or
 **INFERRED** (reasoned from what was seen). External behaviour is evidence, not
@@ -30,7 +30,7 @@ script; no credential, cookie, token, share URL, or personal value appears here.
 | `flowcv resumes --json`                  | 1 record: `{id, title, webToken, live}`          |
 
 OBSERVED: the CLI authenticates from `.env` (email/password) via a cached
-session file and every command above returned successfully. Mutating subcommands
+session file. Every command above returned successfully. Mutating subcommands
 (`new`, `add`, `rm`, `field`, `pd`, `customize <path> <value>`, `publish`,
 `unpublish`, `push`, `import`, `apply-template`, `download`) were **not run**.
 `download` is nominally a GET but appends to the server-side `downloads`
@@ -120,8 +120,7 @@ OBSERVED, per entry, for `startDate` / `endDate`:
 Alongside them, `startDateNew` / `endDateNew` are flat display strings —
 OBSERVED as `"YYYY"` and as a 7-character non-numeric token. INFERRED: the flat
 pair is a denormalized render cache holding either `MM/YYYY`, `YYYY`, or the
-ongoing word, and both representations must be written together to stay
-consistent.
+ongoing word. Both representations must be written together to stay consistent.
 
 ### `personalDetails`
 
@@ -143,7 +142,7 @@ server reconciles on save.
 OBSERVED: array of 39 records, each
 `{date: <iso8601-ish string>, type: string}`. Only enum value seen for `type`:
 `"direct"`. INFERRED: other values exist for the email-delivery and public-link
-paths, and every PDF render appends a record.
+paths. Every PDF render appends a record.
 
 ## Customization tree
 
@@ -298,7 +297,7 @@ Contract-level comparisons:
   INFERRED that FlowCV lets its two representations drift.
 - **Absence is meaningful.** aboutme's "a missing key means never entered"
   matches FlowCV's OBSERVED behaviour: unset domain fields and `isHidden` are
-  simply absent from the response.
+  absent from the response.
 - **Entry ids.** aboutme requires UUIDs unique across the document; FlowCV mixes
   UUIDs and 21-character tokens. aboutme is stricter — no change needed, but an
   importer must accept non-UUID ids.
@@ -317,7 +316,7 @@ Contract-level comparisons:
 - **Section metadata.** Both use `displayName` + `iconKey`. FlowCV's empty
   string meaning "built-in default" fits aboutme's draft-permissive rule.
 - **Limits.** FlowCV free tier is one resume; aboutme allows three with a DB
-  trigger. No FlowCV size bounds were observable read-only.
+  trigger. No FlowCV size bounds were observable via the read-only probe.
 
 ## Limitations
 

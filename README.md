@@ -28,8 +28,8 @@ clauses.
 - Health/readiness endpoints, trusted-proxy client-IP handling, rate limiting,
   security/cache headers, and the Caddy route boundary.
 - Resume tables, schema-derived validation, bounded codec/store operations,
-  revision CAS, and transactional idempotency primitives. No resume HTTP route
-  is exposed yet.
+  revision CAS (compare-and-swap), and transactional idempotency primitives. No
+  resume HTTP route is exposed yet.
 
 Resume CRUD HTTP endpoints, the editor/renderer, publishing, realtime, print,
 cloud infrastructure, and production deployment remain planned work.
