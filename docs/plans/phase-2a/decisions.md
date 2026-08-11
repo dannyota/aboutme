@@ -117,8 +117,10 @@ tombstone queries/re-release behavior.
 
 Write APIs take typed `schema.Resume`, re-marshal canonical JSON, then run
 JSON-Schema validation, the total-size bound, and aggregate validation. Strict
-decode remains P2B's ingress guard. Generated sqlc write methods remain a
-convention until the phase-exit lint restriction lands.
+decode remains P2B's ingress guard. Generated sqlc write methods are exported
+and cannot encode this boundary in their API. The owner ruled on 2026-08-11 that
+caller placement remains an architecture and code-review concern rather than a
+custom Semgrep policy.
 
 ## D17 — Ownership scoping
 
