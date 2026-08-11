@@ -40,7 +40,7 @@ interface MeEnvelope {
 
 export interface MutateOptions {
   method: 'POST' | 'DELETE';
-  body?: unknown;
+  body?: Record<string, unknown>;
 }
 
 export interface UseAuthReturn {
