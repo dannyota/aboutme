@@ -36,7 +36,8 @@
   `docs, schema, api, server, web, server-integration, migrations-append-only, semgrep, route-table, sqlc-drift`
   (`.github/workflows/ci.yml`). Makefile targets relevant here: `docs-fmt`,
   `docs-lint`, `route-table-test`, `dev`, `test-db-up/down`,
-  `server-migration-test`.
+  `server-migration-test`, plus `ci`, `check`, `scan` (`make ci` is the ADR 0011
+  gate of record, run locally before any handoff).
 - Two-runner migration safety is already implemented and tested (AC-OPS-001):
   goose Provider with Postgres session advisory lock,
   `apps/server/migrations/harness_test.go::TestHarness_ConcurrentRunners_ExactlyOneApplies`.

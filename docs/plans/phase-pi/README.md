@@ -37,9 +37,14 @@
 > human-owner section; shared-file serialization note.
 >
 > **For agentic workers:** execute with superpowers:subagent-driven-development,
-> one task per fresh subagent, Opus 5 review between tasks. Steps are `- [ ]`.
-> Every task's tests are written **before** its implementation (TDD): write the
-> failing check, run it and see it fail, implement, see it pass, commit.
+> one task per fresh subagent, each task delivered per its ADR 0011 risk tier —
+> high-risk: author TDD, then a fresh worker deriving tests from the spec before
+> reading the diff, then a fresh reviewer; normal: author TDD plus `make ci`.
+> Tasks 4 (secrets/IAM), 7 (client-IP boundary), and 12 (deploy/ migration
+> sequence) are high-risk; the module-authoring tasks (2, 3, 5, 6, 9, 10) are
+> normal. Steps are `- [ ]`. Every task's tests are written **before** its
+> implementation (TDD): write the failing check, run it and see it fail,
+> implement, see it pass, commit.
 
 **Goal:** Terraform modules that apply cleanly to a **staging** environment
 mirroring the production topology (VPC, ECS on EC2 Graviton with host networking
@@ -60,11 +65,14 @@ one simulated edge plus forged and duplicated forwarding headers.
 **Base:** the then-current integrated `main` descendant after P7B. Commit
 `9382c86` is the historical minimum ancestry point, not an executable base: PI
 must refresh this adopted plan against the final P2B/P6A/P7A/P7B runtime shape
-before dispatch. PI executes in its **own isolated worktree** branched from
-`main`. Workers must run `git rev-parse HEAD` and
-`git merge-base --is-ancestor 9382c86 HEAD` and confirm both before starting
-(worktree-isolated agents have checked out stale bases before; this check is
-mandatory, not advisory).
+before dispatch, and the refresh must record that it checked ADR 0010
+(goose-only migrations — no consequence expected for PI; a tree-wide grep for
+Atlas/schema.sql/data-drift references across `phase-pi/` returns zero hits) and
+ADR 0011 (risk-tiered gates — real consequences, applied above). PI executes in
+its **own isolated worktree** branched from `main`. Workers must run
+`git rev-parse HEAD` and `git merge-base --is-ancestor 9382c86 HEAD` and confirm
+both before starting (worktree-isolated agents have checked out stale bases
+before; this check is mandatory, not advisory).
 
 **Spec:** `../../specs/aboutme-design.md` §2 (system architecture, authoritative
 route table, health-endpoint contract), §3 "Schema management" (prod migration
@@ -93,8 +101,8 @@ rootless-podman dev stack (`deploy/compose.yml`, dev `CADDY_HTTP_PORT` gotcha)
 is untouched except the explicitly flagged shared route-snippet extraction in
 Task 7 (which uses env-placeholder defaults so `compose.yml` itself needs no
 edit). Root `Makefile`, `.github/workflows/*`, and `.env.example` are
-integration-owned: PI workers author exact diffs and hand them to Fable rather
-than editing (Tasks 7, 8, 12, 13).
+integration-owned: PI workers author exact diffs and hand them to the
+integration owner rather than editing (Tasks 7, 8, 12, 13).
 
 **Shared-file serialization:** `.env.example`, `docs/plans/traceability/`,
 `docs/architecture.md`, the root `Makefile`, and `.github/workflows/*` are

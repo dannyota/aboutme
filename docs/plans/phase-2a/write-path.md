@@ -8,10 +8,10 @@ flowchart TD
     D --> E[total doc &le; 512 KB - D10]
     E --> F[schema.ValidateDocument: rich-text bytes, layout, dates, URL schemes + entry-id uniqueness - D3]
     F --> G{valid?}
-    G -->|no| H[ErrDocumentInvalid with issues]
+    G -->|no| H["*resume.ValidationError carrying every issue"]
     G -->|yes| I[tx: CAS UPDATE ... WHERE id AND user_id AND revision = expected]
     I -->|1 row| J[revision + 1 returned]
-    I -->|0 rows| K[re-read: ErrNotFound or ErrRevisionMismatch with current doc + revision]
+    I -->|0 rows| K["re-read: ErrNotFound or *resume.RevisionMismatchError with current doc + revision"]
 ```
 
 Backfill vs autosave (the D12 race, proven in Tasks 8/10):

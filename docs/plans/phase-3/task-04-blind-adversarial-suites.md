@@ -1,7 +1,7 @@
 # Task 4: Blind adversarial sanitizer + render-bounds suites (independent author)
 
 The master plan's independence rule names the sanitizer and render bounds as
-high-risk. A **second, fresh Sonnet 5 instance** authors these suites. Its
+high-risk (ADR 0011). A **second, fresh worker** authors these suites. Its
 inputs are **only**: spec §5 (sanitizer contract + renderer detail),
 `validation/sanitizer-allowlist.v1.json`, `validation/hostile-corpus.json`,
 `resume.schema.json` (bounds), acceptance IDs AC-SEC-001/AC-SEC-003/AC-SEC-004
@@ -9,7 +9,7 @@ inputs are **only**: spec §5 (sanitizer contract + renderer detail),
 `sanitizeRichText`, `ResumeDocument` props). It must **not** read Task 2/3/6
 implementation diffs — **or the author-side `sanitizetest` predicate helpers**
 (B4) — before its tests are authored and committed. The implementing authors may
-not weaken these tests without Opus 5 review.
+not weaken these tests without a fresh reviewer's review.
 
 **Files:** `apps/server/internal/sanitize/adversarial_test.go`,
 `apps/web/test/sanitizer/adversarial.test.ts`,
@@ -47,5 +47,5 @@ not weaken these tests without Opus 5 review.
       finite and recorded (no numeric budget exists for renderer output —
       deliberately not invented; the recorded number goes to the integration
       owner).
-- [ ] **Step 4: hand findings to the implementers** (never fix in-suite); Opus 5
-      adjudicates disputes.
+- [ ] **Step 4: hand findings to the implementers** (never fix in-suite); the
+      phase reviewer adjudicates disputes.

@@ -481,18 +481,20 @@ write methods; **doc-migration backfill = projection-only on read, CAS on write,
 with CAS-vs-autosave race tests**; immutable schema/type registry plus
 bidirectional converters.
 
-> **Carried from Phase 0 (drift-gate limitation):** the P0 data-drift gate only
-> fails _closed_ on undiffable object classes
-> (`CREATE TRIGGER|FUNCTION|VIEW| SEQUENCE`) because Atlas community silently
-> drops them from a diff. **Location correction (verified 2026-08-02):** that
-> keyword-reject is `undiffableObjectPattern`/`checkNoUndiffableObjects` in
-> `apps/server/cmd/migrate/gen/main.go`, which `scripts/check-data-drift.sh`
-> invokes via `go run ./cmd/migrate/gen -check` — the script itself needs no
-> change. Adding the 3-resume trigger therefore requires extending that Go check
-> from a keyword-reject to a real cross-check for those classes, and broadening
-> its keyword net (it currently misses `CREATE MATERIALIZED VIEW`,
-> `CONSTRAINT TRIGGER`, and `TEMP`/`UNLOGGED`/`RECURSIVE` variants — review
-> finding M-NEW). Until then the trigger cannot be migrated through the gate.
+> **Carried from Phase 0 (drift-gate limitation), superseded by ADR 0010:** the
+> P0 data-drift gate originally only failed _closed_ on undiffable object
+> classes (`CREATE TRIGGER|FUNCTION|VIEW|SEQUENCE`) because Atlas community
+> silently dropped them from a diff, and closing that gap for the 3-resume
+> trigger would have meant extending the keyword-reject in
+> `apps/server/cmd/migrate/gen/main.go` (invoked by
+> `scripts/check-data-drift.sh`) into a real cross-check. **ADR 0010
+> (2026-08-11) removed that whole mechanism**: `sql/schema.sql`,
+> `cmd/migrate/gen`, `migrations/atlas.sum`, and `scripts/check-data-drift.sh`
+> are deleted, and `apps/server/migrations/` is now the single schema source for
+> both goose and sqlc, with `make sqlc-check` as the only drift gate. The
+> 3-resume trigger landed as hand-written DDL in migration
+> `00005_add_resume_cap_trigger.sql`, reviewed under ADR 0011's high-risk tier
+> (migrations and schema) rather than through the retired Atlas cross-check.
 
 ## Phase 2B — Resume HTTP API + media
 

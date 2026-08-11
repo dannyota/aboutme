@@ -2,6 +2,34 @@
 
 Satisfies **AC-REN-003**.
 
+**Owner ruling 2026-08-11 — language scope, cost, and why not the CDN.** The
+product targets **Vietnamese and English only**. The subset ranges below are
+therefore already correct and are not widened: Latin Extended-A (Polish,
+Turkish, Czech) stays out, and the earlier open question about it is closed.
+
+All five families are Google Fonts under the **SIL Open Font License 1.1** —
+free for commercial use, self-hosting, modification, subsetting, and embedding
+in a PDF, with no fee and no usage reporting, in perpetuity. The only OFL
+obligation is to ship each family's licence text, which `LICENSES/` does. The
+owner cannot be billed for these fonts by any route.
+
+Self-hosting is **not** a cost decision — it is free, exactly like the CDN — so
+the CDN's permission does not change the plan, for three independent reasons:
+
+1. **The print path has no outbound network** (design spec §2). Chromium renders
+   the PDF with egress denied, so a CDN `@font-face` cannot resolve there; every
+   PDF would silently fall back to a container font.
+2. **Determinism.** Goldens and pinned-tolerance screenshots require the exact
+   same bytes on every run; a CDN can reship a family at any time. The committed
+   woff2 files plus their `manifest.json` sha256 entries are what make the
+   visual gates meaningful.
+3. **Privacy.** A Google Fonts CDN request discloses each visitor's IP to a
+   third party, which conflicts with this project's privacy posture and has been
+   held to breach the GDPR in at least one EU ruling.
+
+Google remains the **source**: fetch from the `google/fonts` repository at the
+recorded commit (Step 2), then subset and commit the result.
+
 **Files:** create `apps/web/app/assets/fonts/**` (20 woff2, `fonts.css`,
 `manifest.json`, `LICENSES/` with each family's OFL),
 `apps/web/app/utils/ fontsReady.ts`, `apps/web/test/fonts.test.ts`,
@@ -31,8 +59,12 @@ determinism; U+2014 rides along for rich-text prose.)
       (exported as a constant in the test file, derived from the ranges — write
       it out, don't compute it from the manifest, so the manifest can't
       self-certify). Also assert the set of `font-family` names in `fonts.css`
-      equals the schema's `customization.font.family` enum exactly. Run →
-      **FAIL** (nothing exists).
+      equals the schema's `customization.font.family` enum exactly, and that
+      **every family ships both weight 400 and weight 700** — `tokens.md` §3.2
+      makes this a hard build requirement, because a missing cut makes Chromium
+      synthesize the bold and destroys golden determinism. A family missing
+      either weight fails the build, it does not warn. Run → **FAIL** (nothing
+      exists).
 - [ ] **Step 2: Vendor + subset.** Fetch each family from its upstream source
       (google/fonts repo at a recorded commit), subset with pinned fonttools to
       the ranges above, four instances per family (400/700 × roman/italic —

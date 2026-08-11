@@ -40,7 +40,7 @@ owner row (`PERFORM 1 FROM users WHERE id = NEW.user_id FOR UPDATE`) and then
 counts, so it remains race-safe for writers bypassing the store. Store creates
 take the same lock in the same order. A cap violation raises SQLSTATE `23514`
 with message `resumes_user_cap_exceeded`; the store maps only that exact pair to
-`ErrResumeCapExceeded`.
+`ErrCapExceeded`.
 
 ## D8 — Migration authorship
 

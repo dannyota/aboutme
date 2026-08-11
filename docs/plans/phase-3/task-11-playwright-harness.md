@@ -38,15 +38,38 @@ architecture.
 
 `playwright.config.ts` (D16/B6) defines: a `webServer` block that runs
 `nuxt build` followed by `nuxt preview` — never `nuxt dev` — inside the pinned
-container before tests start; a fixed `use:` context
-(`timezoneId: 'Asia/Ho_Chi_Minh'`, `locale: 'en-US'`, `viewport` per D7 page
-geometry, `deviceScaleFactor: 1`, `colorScheme: 'light'`,
-`reducedMotion: 'reduce'`); and Chromium launch args
+container before tests start; a fixed `use:` context (`timezoneId: 'UTC'` — the
+same value `print.md` §7 pins as `TZ=UTC` for the print container, so the two
+rendering paths cannot disagree about which is authoritative (D16);
+`locale: 'en-US'`, `viewport` per D7 page geometry, `deviceScaleFactor: 1`,
+`colorScheme: 'light'`, `reducedMotion: 'reduce'`); and Chromium launch args
 `--force-color-profile=srgb --font-render-hinting=none --disable-lcd-text`. A
 global setup step asserts `process.env.UPDATE_GOLDEN` and
 `process.env.PLAYWRIGHT_UPDATE_SNAPSHOTS` are both unset and throws if either is
 set, so a local `web-e2e` run gets the same protection as the requested CI job
 even before that job exists (B6).
+
+## Screenshot subset — 7 baselines, named here (owner ruling 2026-08-11)
+
+Pixel baselines are the scarce artifact: string goldens cover all 20 presets
+(Task 9), screenshots cover a named six-preset subset plus the continuous-mode
+case (`tokens.md` §4.2). The subset is **named, not derived at run time**, and
+each entry earns its place by a property no other entry covers:
+
+| Preset              | Cell                    | Property it pins                                                                                                                 |
+| ------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `classic-serif`     | `vn-full` × paged       | one column, `placement: "keep"`, untinted, serif — the plain baseline                                                            |
+| `engineer-compact`  | `vn-full` × paged       | two columns, `placement: "byType"`, untinted — a column regression cannot hide behind a fill                                     |
+| `modern-sidebar`    | `vn-full` × paged       | two columns with `surfaceTarget: "sidebar"` — per-surface clamp, and a tint that must repaint across the flow (`print.md` §5)    |
+| `executive-band`    | `vn-full` × paged       | `surfaceTarget: "header"` at `#16273d`, the darkest surface in the set — the clamp's direction flip to light text on a dark band |
+| `consulting-formal` | `vn-full` × paged       | `pageFormat: "letter"` — the only page geometry A4 cannot show                                                                   |
+| `academic-dense`    | `vn-full` × paged       | base 13 px, `lineHeight` 1.3, `entryGap` 6 — dense small type, where line-height and gap rounding shows first                    |
+| `modern-sidebar`    | `full` × **continuous** | the continuous-mode case; the other six run paged                                                                                |
+
+The other fourteen presets get no pixel baseline; Task 9's string goldens cover
+them. P9's manual browser UAT exercises this same six-preset subset
+(`../phase-9-local-uat.md`), so the three coverage surfaces cannot drift apart —
+changing the subset changes all three at once.
 
 Harness page contract: `/_harness/render?fixture=<id>&template=<id>&mode=<m>`
 renders `ResumeDocument` from the named fixture (served from
@@ -64,13 +87,12 @@ rules.
       the vn-full harness page; await `fontsReady()`; assert
       `document.fonts.check()` true for all five families; assert zero blocked
       external requests — the self-hosted/offline proof (AC-REN-003).
-- [ ] **Step 3: Screenshot baselines.** `screenshot.spec.ts`: vn-full × 4
-      templates × both modes (8 baselines) + `full` × `classic` × continuous (9
-      total), full-page screenshots after `fontsReady()`, compared with **zero**
-      tolerance against committed baselines. First run generates via the update
-      target; committed; CI compares. Vietnamese diacritic fidelity is judged in
-      baseline review (tofu/misplaced marks in a baseline = task failure, not a
-      later discovery).
+- [ ] **Step 3: Screenshot baselines.** `screenshot.spec.ts` renders the seven
+      cells of the named subset above, full-page after `fontsReady()`, compared
+      with **zero** tolerance against committed baselines. First run generates
+      via the update target; committed; CI compares. Vietnamese diacritic
+      fidelity is judged in baseline review (tofu/misplaced marks in a baseline
+      = task failure, not a later discovery).
 - [ ] **Step 4: Browser corpus + CSP conformance.** `corpus.spec.ts`, per corpus
       payload: (a) sanitized page (`?payload=`) — collect `page.on('dialog')`,
       `pageerror`, console errors, and `securitypolicyviolation` events; assert
