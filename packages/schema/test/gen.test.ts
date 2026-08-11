@@ -26,4 +26,26 @@ describe("generated code", () => {
       expect(readFileSync(f, "utf8")).toContain("DO NOT EDIT");
     }
   });
+
+  // json-schema-to-typescript names a schema node it cannot recognise as an
+  // already-seen $def by appending a counter: `HexColor1` beside `HexColor`,
+  // `Link1` beside `Link`. Both are dangling exported aliases for one type,
+  // and a property pointed at the duplicate reads as if it were a different
+  // type than its siblings. Two separate schema shapes have caused this so
+  // far — `link`'s `type`-plus-`anyOf` pair (buildSharedCodegenSchema fix 3)
+  // and a `$ref` carrying a sibling `description` (buildTsCodegenSchema) —
+  // so this asserts the *class* is absent rather than either instance.
+  it("declares no counter-suffixed duplicate of another generated TS type", () => {
+    const ts = readFileSync("gen/ts/resume.ts", "utf8");
+    const declared = new Set(
+      [...ts.matchAll(/^export (?:type|interface) ([A-Za-z][A-Za-z0-9]*)\b/gm)].map(
+        (m) => m[1],
+      ),
+    );
+    const duplicates = [...declared].filter((name) => {
+      const stem = name.replace(/\d+$/, "");
+      return stem !== name && declared.has(stem);
+    });
+    expect(duplicates, `duplicate aliases in gen/ts/resume.ts: ${duplicates.join(", ")}`).toEqual([]);
+  });
 });

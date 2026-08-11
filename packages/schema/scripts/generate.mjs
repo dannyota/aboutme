@@ -263,6 +263,42 @@ function buildGoCodegenSchema(sharedSchema) {
   return clone;
 }
 
+// TypeScript-only: a `$ref` carrying a sibling `description` (added
+// 2026-08-11 by customization.colors.surface, the schema's first documented
+// reference) is an annotation on the *use site*, not a different shape. jstt
+// treats such a node as its own schema, so it emits a SECOND alias for the
+// referenced $def and points the property at the duplicate — `surface?:
+// HexColor1` beside `accent?: HexColor`, with `export type HexColor1 =
+// string` dangling next to the identical `HexColor`. That is the same wart
+// buildSharedCodegenSchema's fix 3 removes for `link`, arriving by a
+// different route. quicktype has no such problem: it resolves the $ref to
+// the same Go type and keeps the description as the field's doc comment, so
+// this strip is deliberately TS-only and the Go output stays documented.
+// Dropping an annotation cannot change a type, and resume.schema.json keeps
+// the description either way — ajv validates the real file, and
+// gen/go/rawschema.go embeds it verbatim.
+function buildTsCodegenSchema(sharedSchema) {
+  const clone = structuredClone(sharedSchema);
+
+  const stripDescriptionBesideRef = (node) => {
+    if (Array.isArray(node)) {
+      node.forEach(stripDescriptionBesideRef);
+      return;
+    }
+    if (node && typeof node === "object") {
+      if (typeof node.$ref === "string" && "description" in node) {
+        delete node.description;
+      }
+      for (const value of Object.values(node)) {
+        stripDescriptionBesideRef(value);
+      }
+    }
+  };
+  stripDescriptionBesideRef(clone);
+
+  return clone;
+}
+
 function runQuicktype(args) {
   execFileSync(quicktypeBin, args, { stdio: "inherit" });
 }
@@ -335,7 +371,7 @@ function generateGo(sharedSchema, tmpDir, outFile) {
 }
 
 async function generateTs(sharedSchema, outFile) {
-  const ts = await compileTypeScript(sharedSchema, "Resume", {
+  const ts = await compileTypeScript(buildTsCodegenSchema(sharedSchema), "Resume", {
     bannerComment: "",
     style: { semi: true },
     // Every object $def in resume.schema.json except entryBase (folded away
