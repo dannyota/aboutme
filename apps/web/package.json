@@ -7,14 +7,17 @@
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
+    "api:gen": "bash scripts/openapi-gen.sh app/api/generated/openapi.ts",
+    "api:drift": "bash scripts/api-drift-check.sh",
     "lint": "eslint .",
-    "typecheck": "vue-tsc --noEmit",
+    "typecheck": "vue-tsc --build --noEmit",
     "test": "vitest run",
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
     "@aboutme/schema": "file:../../packages/schema",
     "nuxt": "4.5.1",
+    "openapi-fetch": "0.17.0",
     "vue": "3.5.40",
     "vue-router": "5.2.0"
   },
@@ -24,8 +27,15 @@
     "@vue/test-utils": "2.4.11",
     "eslint": "10.8.0",
     "happy-dom": "20.11.1",
+    "openapi-typescript": "7.13.0",
     "typescript": "6.0.3",
     "vitest": "4.1.10",
-    "vue-tsc": "3.3.9"
+    "vue-tsc": "3.3.9",
+    "yaml": "2.9.0"
+  },
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
   }
 }
