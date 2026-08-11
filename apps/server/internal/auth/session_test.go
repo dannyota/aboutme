@@ -762,12 +762,17 @@ func TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace(t *testi
 		t.Errorf("Authenticate(predecessor token) rotatedToken = %q, want empty (already rotated once; a second successor would multiply live credentials from one lineage)", rotatedAgain)
 	}
 
-	// Still true much later: the deferral is not a longer fixed window, it
-	// is a window that has not started at all.
-	clk.Advance(30 * 24 * time.Hour / 2) // 15 days, far past any grace
+	// Still true many hours later, anywhere inside the deferral window:
+	// the 60-second countdown has not started at all, because nothing has
+	// proven the successor reachable. The window is bounded (phase gate
+	// finding B4 -- see
+	// TestAuthenticate_UndeliveredSuccessor_PredecessorDiesAtBoundedWindow
+	// for the far side of it), so this walks to just inside the bound
+	// rather than to the absolute expiry the original P1.1 fix allowed.
+	clk.Advance(rotationAge - 2*rotationGrace)
 	setSessionRowLastSeenAt(ctx, t, newRowInspectorPool(t), predecessor.ID, clk.Now())
 	if _, _, err := sm.Authenticate(ctx, oldRaw); err != nil {
-		t.Errorf("Authenticate(predecessor token) 15 days after an undelivered rotation error = %v, want nil", err)
+		t.Errorf("Authenticate(predecessor token) just inside the deferral bound after an undelivered rotation error = %v, want nil", err)
 	}
 
 	// The successor row itself is untouched and still live -- the fix must
@@ -845,4 +850,294 @@ func TestAuthenticate_SuccessorFirstUse_StartsPredecessorGrace(t *testing.T) {
 	if got := sessionRowRotationGraceUntil(ctx, t, inspector, predecessor.ID); got == nil || !got.Equal(firstUse.Add(rotationGrace)) {
 		t.Errorf("predecessor rotation_grace_until after further successor use = %v, want it pinned at %v", got, firstUse.Add(rotationGrace))
 	}
+}
+
+// ---- the deferral's upper bound (phase gate finding B4) --------------------
+//
+// P1.1 item 4's deferral is an availability fix, and an unbounded one is a
+// security defect: RFC 9700 (OAuth 2.0 Security BCP) and OWASP's session
+// guidance both rest rotation's value on the superseded credential
+// ceasing to work PROMPTLY. Parking the predecessor at its own
+// absolute_expires_at gave a stolen predecessor token up to 90 days of
+// life. The bound is one rotation interval: a client that has not used
+// its successor within rotationAge is not mid-request, it is gone, so
+// nothing past that buys availability -- it only buys an attacker time.
+
+// TestAuthenticate_UndeliveredSuccessor_PredecessorDiesAtBoundedWindow is
+// that bound, stated as the property: after a rotation whose successor is
+// never used, the predecessor survives the whole deferral window and then
+// dies -- it does NOT stay alive to its absolute expiry.
+func TestAuthenticate_UndeliveredSuccessor_PredecessorDiesAtBoundedWindow(t *testing.T) {
+	q := newTestQueries(t)
+	userID := createTestUser(t, q)
+	clk := testutil.NewClockAtEpoch()
+	sm := auth.NewSessionManagerForTest(q, clk.Now)
+	ctx := context.Background()
+	inspector := newRowInspectorPool(t)
+
+	oldRaw, predecessor, err := sm.Issue(ctx, userID, "ua", "203.0.113.33")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	clk.Advance(rotationAge + time.Hour)
+	rotatedAt := clk.Now()
+
+	_, newRaw, err := sm.Authenticate(ctx, oldRaw)
+	if err != nil {
+		t.Fatalf("Authenticate() at 25h error = %v", err)
+	}
+	if newRaw == "" {
+		t.Fatal("Authenticate() at 25h returned no rotatedToken, want rotation to have occurred")
+	}
+	// newRaw is deliberately never presented: this test IS the lost
+	// response, exactly like the survival test above.
+
+	parked := sessionRowRotationGraceUntil(ctx, t, inspector, predecessor.ID)
+	if parked == nil {
+		t.Fatal("predecessor rotation_grace_until is NULL immediately after rotation, want the deferred deadline (BeginSessionRotation's CAS depends on it being non-NULL)")
+	}
+	if want := rotatedAt.Add(rotationAge); !parked.Equal(want) {
+		t.Errorf("predecessor rotation_grace_until = %v, want %v (rotation instant + one rotation interval)", parked, want)
+	}
+	if parked.After(predecessor.AbsoluteExpiresAt) {
+		t.Errorf("predecessor rotation_grace_until = %v is later than its absolute_expires_at %v -- rotation must never extend a session's life", parked, predecessor.AbsoluteExpiresAt)
+	}
+
+	// The whole point of the deferral still holds inside the bound: a
+	// client whose successor cookie was lost keeps working, far past the
+	// 60 seconds the pre-P1.1 implementation allowed it.
+	clk.Advance(rotationAge - time.Second)
+	if _, _, err := sm.Authenticate(ctx, oldRaw); err != nil {
+		t.Errorf("Authenticate(predecessor token) one second before the bound error = %v, want nil (the deferral must still cover a lost response)", err)
+	}
+
+	// Past the bound it is dead -- this is the assertion the gate finding
+	// says nothing covered: before the bound existed, this call succeeded.
+	clk.Advance(2 * time.Second)
+	if _, _, err := sm.Authenticate(ctx, oldRaw); !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate(predecessor token) past the bounded deferral window error = %v, want ErrSessionInvalid (a superseded credential must stop working promptly)", err)
+	}
+
+	// And it stays dead: a fresh last_seen_at (the one thing that could
+	// plausibly revive a row) does not resurrect it.
+	clk.Advance(30 * 24 * time.Hour / 2) // 15 days, the span the old unbounded park allowed.
+	setSessionRowLastSeenAt(ctx, t, inspector, predecessor.ID, clk.Now())
+	if _, _, err := sm.Authenticate(ctx, oldRaw); !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate(predecessor token) 15 days after an undelivered rotation error = %v, want ErrSessionInvalid (the old behavior kept this token alive to absolute expiry)", err)
+	}
+
+	// The successor is unaffected by its predecessor's death: bounding the
+	// deferral must not damage the row that is supposed to take over.
+	setSessionRowLastSeenAt(ctx, t, inspector, successorOf(ctx, t, q, predecessor.ID), clk.Now())
+	if _, _, err := sm.Authenticate(ctx, newRaw); err != nil {
+		t.Errorf("Authenticate(successor token) after the predecessor's bounded window elapsed error = %v, want nil", err)
+	}
+}
+
+// successorOf returns the id of the live successor row predecessorID was
+// rotated into, failing the test if there is none.
+func successorOf(ctx context.Context, t *testing.T, q *store.Queries, predecessorID uuid.UUID) uuid.UUID {
+	t.Helper()
+	succ, err := q.FindLiveSuccessorSession(ctx, &predecessorID)
+	if err != nil {
+		t.Fatalf("FindLiveSuccessorSession(%s) error: %v", predecessorID, err)
+	}
+	return succ.ID
+}
+
+// TestAuthenticate_RotationGracePark_CappedAtAbsoluteExpiry is the other
+// half of the bound: min(now+rotationAge, absolute_expires_at), never the
+// bare rotationAge offset. A session with less than one rotation interval
+// of life left must park at its own ceiling -- rotation is not allowed to
+// hand a superseded credential even one second past the absolute expiry
+// the original login fixed.
+func TestAuthenticate_RotationGracePark_CappedAtAbsoluteExpiry(t *testing.T) {
+	q := newTestQueries(t)
+	userID := createTestUser(t, q)
+	clk := testutil.NewClockAtEpoch()
+	sm := auth.NewSessionManagerForTest(q, clk.Now)
+	ctx := context.Background()
+	inspector := newRowInspectorPool(t)
+
+	oldRaw, predecessor, err := sm.Issue(ctx, userID, "ua", "203.0.113.34")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	// Walk to 12h before the absolute ceiling -- half a rotation interval
+	// of life left. last_seen_at is patched forward rather than walked
+	// there by repeated Authenticate calls, for session_adversarial_test.go's
+	// stated reason: re-entering Authenticate every 24h across a 90-day
+	// span would rotate repeatedly and confound the one property here.
+	const remaining = 12 * time.Hour
+	clk.Advance(absoluteTimeout - remaining)
+	setSessionRowLastSeenAt(ctx, t, inspector, predecessor.ID, clk.Now())
+	rotatedAt := clk.Now()
+
+	_, newRaw, err := sm.Authenticate(ctx, oldRaw)
+	if err != nil {
+		t.Fatalf("Authenticate() 12h before absolute expiry error = %v, want nil", err)
+	}
+	if newRaw == "" {
+		t.Fatal("Authenticate() 12h before absolute expiry returned no rotatedToken, want rotation to have occurred")
+	}
+
+	parked := sessionRowRotationGraceUntil(ctx, t, inspector, predecessor.ID)
+	if parked == nil {
+		t.Fatal("predecessor rotation_grace_until is NULL after rotation, want the capped deadline")
+	}
+	if !parked.Equal(predecessor.AbsoluteExpiresAt) {
+		t.Errorf("predecessor rotation_grace_until = %v, want %v (its own absolute_expires_at -- the nearer of the two bounds)", parked, predecessor.AbsoluteExpiresAt)
+	}
+	if uncapped := rotatedAt.Add(rotationAge); !parked.Before(uncapped) {
+		t.Errorf("predecessor rotation_grace_until = %v, want strictly before the uncapped bound %v (this session has less than one rotation interval of life left)", parked, uncapped)
+	}
+
+	// Dead at the ceiling, not one rotation interval later.
+	clk.Advance(remaining + time.Second)
+	setSessionRowLastSeenAt(ctx, t, inspector, predecessor.ID, clk.Now())
+	if _, _, err := sm.Authenticate(ctx, oldRaw); !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate(predecessor token) past the absolute ceiling error = %v, want ErrSessionInvalid", err)
+	}
+}
+
+// ---- the device list across a rotation -------------------------------------
+
+// liveSessionIDsForUser returns the ids GET /api/v1/sessions would list
+// for userID at now. It calls ListLiveSessionsForUser with exactly the
+// arguments handleSessionsList builds (sessions_handlers.go: UserID,
+// IdleCutoff = now - idleTimeout, Now = now), so what it reports is the
+// device list itself, not an approximation of it.
+func liveSessionIDsForUser(ctx context.Context, t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) map[uuid.UUID]bool {
+	t.Helper()
+	rows, err := q.ListLiveSessionsForUser(ctx, store.ListLiveSessionsForUserParams{
+		UserID:     userID,
+		IdleCutoff: now.Add(-idleTimeout),
+		Now:        now,
+	})
+	if err != nil {
+		t.Fatalf("ListLiveSessionsForUser error: %v", err)
+	}
+	ids := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		ids[row.ID] = true
+	}
+	return ids
+}
+
+// TestSessionsDeviceList_AcrossRotation pins what the user's own device
+// list shows at every point in a rotation's life -- the gap the phase gate
+// named. The listing rule itself (ListLiveSessionsForUser, sql/queries.sql)
+// is unchanged and not under test here; what is under test is how long the
+// deferral keeps a predecessor inside it.
+//
+// A predecessor still inside its grace window IS live and IS listed, by
+// design (design decision 1: rotation_grace_until being non-NULL is not a
+// death sentence -- sessions_adversarial_test.go's
+// TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace
+// pins that directly). So one physical device does show two entries for
+// the length of that window. That is correct but must be SHORT: before
+// the bound, an undelivered successor left the duplicate standing for up
+// to 90 days.
+func TestSessionsDeviceList_AcrossRotation(t *testing.T) {
+	t.Run("successor first used", func(t *testing.T) {
+		q := newTestQueries(t)
+		userID := createTestUser(t, q)
+		clk := testutil.NewClockAtEpoch()
+		sm := auth.NewSessionManagerForTest(q, clk.Now)
+		ctx := context.Background()
+
+		oldRaw, predecessor, err := sm.Issue(ctx, userID, "ua", "203.0.113.35")
+		if err != nil {
+			t.Fatalf("Issue() error = %v", err)
+		}
+
+		clk.Advance(rotationAge + time.Hour)
+		successor, newRaw, err := sm.Authenticate(ctx, oldRaw)
+		if err != nil {
+			t.Fatalf("Authenticate() at 25h error = %v", err)
+		}
+
+		// Immediately after the rotation: BOTH rows are live and listed --
+		// two entries for one device.
+		listed := liveSessionIDsForUser(ctx, t, q, userID, clk.Now())
+		if !listed[predecessor.ID] {
+			t.Error("predecessor absent from the device list immediately after rotation, want present (its grace window is still open, so it is still LIVE and still authenticates)")
+		}
+		if !listed[successor.ID] {
+			t.Error("successor absent from the device list immediately after rotation, want present")
+		}
+		if len(listed) != 2 {
+			t.Errorf("device list size immediately after rotation = %d, want 2 (one device, two live rows -- the rotation window's known cost)", len(listed))
+		}
+
+		// The successor's first use starts the real 60s countdown; the
+		// predecessor is still listed inside it.
+		if _, _, err := sm.Authenticate(ctx, newRaw); err != nil {
+			t.Fatalf("Authenticate(successor token) first use error = %v", err)
+		}
+		listed = liveSessionIDsForUser(ctx, t, q, userID, clk.Now())
+		if !listed[predecessor.ID] || !listed[successor.ID] || len(listed) != 2 {
+			t.Errorf("device list at the successor's first use = %v, want both rows (the started grace window has not elapsed yet)", listed)
+		}
+
+		// Past the started window the duplicate is gone: one device, one
+		// entry, and it is the successor.
+		clk.Advance(rotationGrace + time.Second)
+		listed = liveSessionIDsForUser(ctx, t, q, userID, clk.Now())
+		if listed[predecessor.ID] {
+			t.Error("predecessor still listed after its started grace window elapsed, want absent")
+		}
+		if !listed[successor.ID] || len(listed) != 1 {
+			t.Errorf("device list after the grace window = %v, want exactly the successor %s", listed, successor.ID)
+		}
+	})
+
+	t.Run("successor never used", func(t *testing.T) {
+		q := newTestQueries(t)
+		userID := createTestUser(t, q)
+		clk := testutil.NewClockAtEpoch()
+		sm := auth.NewSessionManagerForTest(q, clk.Now)
+		ctx := context.Background()
+
+		oldRaw, predecessor, err := sm.Issue(ctx, userID, "ua", "203.0.113.36")
+		if err != nil {
+			t.Fatalf("Issue() error = %v", err)
+		}
+
+		clk.Advance(rotationAge + time.Hour)
+		successor, newRaw, err := sm.Authenticate(ctx, oldRaw)
+		if err != nil {
+			t.Fatalf("Authenticate() at 25h error = %v", err)
+		}
+		if newRaw == "" {
+			t.Fatal("Authenticate() at 25h returned no rotatedToken, want rotation to have occurred")
+		}
+		// newRaw is never presented: the lost response again.
+
+		listed := liveSessionIDsForUser(ctx, t, q, userID, clk.Now())
+		if !listed[predecessor.ID] || !listed[successor.ID] || len(listed) != 2 {
+			t.Errorf("device list immediately after an undelivered rotation = %v, want both rows", listed)
+		}
+
+		// Still both just inside the bound -- the client is still using
+		// the predecessor, so it must still be a revocable device.
+		clk.Advance(rotationAge - time.Second)
+		listed = liveSessionIDsForUser(ctx, t, q, userID, clk.Now())
+		if !listed[predecessor.ID] || !listed[successor.ID] || len(listed) != 2 {
+			t.Errorf("device list one second before the bound = %v, want both rows", listed)
+		}
+
+		// Past the bound the duplicate self-heals with no request from
+		// anyone. Before the bound existed it stood for up to 90 days.
+		clk.Advance(2 * time.Second)
+		listed = liveSessionIDsForUser(ctx, t, q, userID, clk.Now())
+		if listed[predecessor.ID] {
+			t.Error("predecessor still listed past the bounded deferral window, want absent (the duplicate device entry must not outlive the bound)")
+		}
+		if !listed[successor.ID] || len(listed) != 1 {
+			t.Errorf("device list past the bounded deferral window = %v, want exactly the successor %s", listed, successor.ID)
+		}
+	})
 }
