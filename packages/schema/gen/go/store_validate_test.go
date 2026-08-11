@@ -49,7 +49,13 @@ func TestValidateDocument_CleanFixturesProduceNoIssues(t *testing.T) {
 	// Every one of these is schema-valid AND store-valid — draft
 	// permissiveness (design spec §3, revised 2026-08-01) must never trip
 	// these rules on a half-typed document.
-	for _, name := range []string{"minimal.json", "full.json", "draft-partial.json", "draft-cleared-name-empty-section.json"} {
+	for _, name := range []string{
+		"minimal.json",
+		"full.json",
+		"draft-partial.json",
+		"draft-cleared-name-empty-section.json",
+		"draft-cleared-contact-value.json",
+	} {
 		t.Run(name, func(t *testing.T) {
 			resume := loadResumeFixture(t, name)
 			if issues := ValidateDocument(resume); len(issues) != 0 {

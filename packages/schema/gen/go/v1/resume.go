@@ -1,6 +1,17 @@
-// Code generated from resume.schema.json. DO NOT EDIT.
+// Code generated from resume.v1.schema.json. DO NOT EDIT.
 
-package schema
+package schemav1
+
+import "encoding/json"
+
+// Section is this released version's `content[key]` value: an eight-way
+// oneOf on sectionType that Go cannot express as a type. The CURRENT
+// package's hand-written section.go supplies a typed dispatch for it; a
+// retained snapshot holds generated files only, and raw JSON matches how
+// an adjacent-version converter actually handles a non-current document
+// (D13: converters are func(json.RawMessage) (json.RawMessage, error) over
+// the whole document, never a typed decode).
+type Section = json.RawMessage
 
 // The resume document jsonb shape: personalDetails, content, customization plus
 // schemaVersion. Single source of truth for generated Go/TS/Dart types and store-layer

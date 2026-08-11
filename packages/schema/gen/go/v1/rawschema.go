@@ -1,10 +1,10 @@
-// Code generated from resume.schema.json. DO NOT EDIT.
+// Code generated from resume.v1.schema.json. DO NOT EDIT.
 
-package schema
+package schemav1
 
 import "encoding/base64"
 
-// rawSchemaBase64 is resume.schema.json's exact bytes, base64-encoded at
+// rawSchemaBase64 is resume.v1.schema.json's exact bytes, base64-encoded at
 // generation time (decision D2) — see this file's generator
 // (scripts/generate.mjs's generateRawSchema) for why base64 instead of a
 // plain Go string literal.
@@ -531,14 +531,13 @@ const rawSchemaBase64 = "" +
 	"b25hbFByb3BlcnRpZXMiOiBmYWxzZQogICAgfQogIH0KfQo=" +
 	""
 
-// RawSchema is resume.schema.json's exact byte content, decoded once at
-// package init from rawSchemaBase64 above. resume.schema.json lives outside
+// RawSchema is resume.v1.schema.json's exact byte content, decoded once at
+// package init from rawSchemaBase64 above. resume.v1.schema.json lives outside
 // this module (gen/go/go.mod), so go:embed cannot reach it directly — this
-// generated constant is the substitute. rawschema_test.go asserts this
-// byte-equals ../../resume.schema.json read directly at test time, closing
-// the copy-drift loop from the Go side (the TypeScript side is
-// test/gen.test.ts's existing regenerate-and-byte-compare check, which
-// already exercises this file too).
+// generated constant is the substitute. gen/go/released_test.go asserts this
+// byte-equals ../../../resume.v1.schema.json read directly at test time, and
+// test/gen.test.ts's regenerate-and-byte-compare check covers this file
+// too.
 var RawSchema = mustDecodeRawSchemaBase64()
 
 func mustDecodeRawSchemaBase64() []byte {

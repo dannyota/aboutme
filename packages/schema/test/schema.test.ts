@@ -568,11 +568,10 @@ describe("resume schema", () => {
         );
         expect(def.properties.align.enum).toEqual(["left", "center"]);
         expect(def.properties.detailsLayout.enum).toEqual(["inline", "stacked"]);
-        expect(def.properties.iconStyle.enum).toEqual([
-          "none",
-          "outline",
-          "solid",
-        ]);
+        // "solid" was removed by owner ruling 2026-08-11 (tokens.md §3.4):
+        // it was defined as the FILLED lucide glyph, and lucide ships no
+        // filled family.
+        expect(def.properties.iconStyle.enum).toEqual(["none", "outline"]);
       });
 
       it.each([
@@ -580,7 +579,7 @@ describe("resume schema", () => {
         [{ ...complete, align: "center" }, true],
         [{ ...complete, detailsLayout: "stacked" }, true],
         [{ ...complete, iconStyle: "none" }, true],
-        [{ ...complete, iconStyle: "solid" }, true],
+        [{ ...complete, iconStyle: "solid" }, false], // removed from the enum, 2026-08-11
         [{ align: "left", detailsLayout: "inline" }, false], // missing iconStyle
         [{ align: "left", iconStyle: "outline" }, false], // missing detailsLayout
         [{ detailsLayout: "inline", iconStyle: "outline" }, false], // missing align

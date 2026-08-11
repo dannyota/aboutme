@@ -2,9 +2,28 @@
   "schemaVersion": 1,
   "personalDetails": {
     "fullName": "Ada Lovelace",
-    "details": []
+    "details": [
+      {
+        "id": "018f0000-0000-7000-8000-000000000801",
+        "type": "linkedin",
+        "value": "",
+        "isHidden": false
+      }
+    ]
   },
-  "content": {},
+  "content": {
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac",
+          "jobTitle": "Engineer"
+        }
+      ]
+    }
+  },
   "customization": {
     "font": {
       "family": "Inter",
@@ -13,29 +32,21 @@
     "colors": {
       "primary": "#1a1a1a",
       "text": "#1a1a1a",
-      "background": "#ffffff",
-      "surface": "#0b1120"
+      "background": "#ffffff"
     },
     "spacing": {
       "sectionGap": 16,
       "entryGap": 8,
-      "lineHeight": 1.4,
-      "pageMargin": { "x": 0, "y": 40 }
+      "lineHeight": 1.4
     },
     "heading": {
       "style": "normal",
       "showRule": false
     },
-    "header": {
-      "align": "left",
-      "detailsLayout": "stacked",
-      "iconStyle": "outline"
-    },
     "layout": {
-      "columns": 2,
-      "surfaceTarget": "main",
+      "columns": 1,
       "sections": {
-        "main": [],
+        "main": ["work"],
         "sidebar": []
       }
     },

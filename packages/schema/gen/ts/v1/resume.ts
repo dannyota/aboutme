@@ -1,4 +1,4 @@
-// Code generated from resume.schema.json. DO NOT EDIT.
+// Code generated from resume.v1.schema.json. DO NOT EDIT.
 
 /**
  * Doc-shape version. This schema file validates schemaVersion 1 only; a future shape bump ships as resume/v2.
