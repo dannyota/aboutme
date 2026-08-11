@@ -57,7 +57,10 @@ api() { make api-check; }
 
 go_build() { make server-build server-vet server-test; }
 
-go_lint() { cd "$ROOT/apps/server" && golangci-lint run; }
+# GOGC=50 halves golangci-lint's peak heap (it is the single largest memory
+# consumer in the gate) at a small time cost -- this machine has been OOM
+# killed under concurrent gate runs before.
+go_lint() { cd "$ROOT/apps/server" && GOGC=50 golangci-lint run; }
 
 go_tidy() {
   cd "$ROOT/apps/server"
@@ -99,6 +102,25 @@ migrations_append_only() {
   fi
 }
 
+released_schema_append_only() {
+  # Mirrors ci.yml's released-schema-append-only job: released resume schemas
+  # are immutable; only a new version file may be added.
+  local base
+  base="$(git rev-parse --verify --quiet origin/main || true)"
+  if [ -z "$base" ]; then
+    echo "no origin/main to compare against; skipped"
+    return 0
+  fi
+  local changed
+  changed="$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json' |
+    grep -E '^(M|D|R|T)' || true)"
+  if [ -n "$changed" ]; then
+    echo "Released schemas are immutable; only a new version file may be added:" >&2
+    echo "$changed" >&2
+    return 1
+  fi
+}
+
 db_suites() {
   cd "$ROOT"
   make server-test-integration
@@ -117,6 +139,7 @@ run "go mod tidy" go_tidy
 run "govulncheck" go_vuln
 run "sqlc drift" sqlc_drift
 run "migrations append-only" migrations_append_only
+run "released schemas append-only" released_schema_append_only
 
 if [ "$FAST" = "1" ]; then
   echo
@@ -125,8 +148,17 @@ else
   run "web" web
   echo
   echo "=== starting test database"
+  # The container is shared with concurrently running workers. Only tear it
+  # down at exit if THIS run started it -- `make test-db-up` is idempotent and
+  # succeeds on an already-running container, so track prior existence
+  # explicitly rather than inferring it from the target's exit code.
+  if podman ps --format '{{.Names}}' | grep -qx aboutme-test-db; then
+    STARTED_DB=0
+    echo "aboutme-test-db already running (shared); this run will not stop it."
+  else
+    STARTED_DB=1
+  fi
   make test-db-up
-  STARTED_DB=1
   run "database suites" db_suites
   run "route table" route_table
 fi
