@@ -31,21 +31,21 @@ podman compose --env-file .env -f deploy/compose.yml down
 `make dev` / `make dev-down` wrap the same commands from the root Makefile.
 
 On `up`, the one-shot `migrate` service runs first: it applies the embedded
-Goose migrations against Postgres and exits 0, and the `server` only starts once
-it has (compose `depends_on: condition: service_completed_successfully`). If a
-migration fails the `migrate` service exits non-zero and the server never
-starts, so a bad migration fails the whole stack closed rather than booting a
-server against an unmigrated database. The service has no healthcheck (a
-run-to-completion container has no steady state to probe) and reuses the server
+goose migrations against PostgreSQL and exits 0. The `server` only starts once
+it has, via compose's `depends_on: condition: service_completed_successfully`.
+If a migration fails, the `migrate` service exits non-zero and the server never
+starts. A bad migration therefore fails the whole stack closed, rather than
+booting a server against an unmigrated database. The service has no healthcheck:
+a run-to-completion container has no steady state to probe. It reuses the server
 image with the `migrate` entrypoint.
 
 The database password is supplied to both `migrate` and `server` as
 `PGPASSWORD`, never spliced into `DATABASE_URL` — a `/`, `@`, `:` or `=` in a
 generated password would otherwise corrupt the connection URI. The three compose
-networks are isolated: only Caddy shares the `edge` network with the server, so
-the SSR web container cannot reach the Go server directly and only Caddy's
-address is a trusted proxy.
+networks are isolated: only Caddy shares the `edge` network with the server. As
+a result, the SSR web container cannot reach the Go server directly, and only
+Caddy's address is a trusted proxy.
 
-Serves on `http://localhost` (port 80). Rootless Podman without a
+Serves on `http://localhost` (port 80). Rootless podman without a
 `sysctl net.ipv4.ip_unprivileged_port_start` adjustment can't bind port 80; set
 `CADDY_HTTP_PORT` (e.g. `8080`) in `.env` in that case.

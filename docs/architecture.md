@@ -20,11 +20,12 @@ checkpoint through Task 7 are on `main`:
   client-IP handling, and rate limiting wrap the routes.
 - PostgreSQL stores users, identities, OAuth transactions, opaque sessions,
   resumes, slug tombstones, and idempotency records. Declarative SQL, sqlc
-  output, and append-only Goose migrations are guarded by live-database drift
+  output, and append-only goose migrations are guarded by live-database drift
   and migration tests.
 - The resume domain validates schema and aggregate bounds, preserves ownership
-  boundaries, enforces the three-resume cap, performs revision CAS, and
-  serializes idempotent mutations transactionally. It has no HTTP surface yet.
+  boundaries, enforces the three-resume cap, performs revision CAS
+  (compare-and-swap), and serializes idempotent mutations transactionally. It
+  has no HTTP surface yet.
 - Nuxt serves the landing/login pages and session settings UI. Resume-schema
   generation, OpenAPI lint/conformance tests, linting, typechecking,
   vulnerability scanning, and builds are wired into CI. Generated OpenAPI

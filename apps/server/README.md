@@ -18,8 +18,8 @@ is in [`docs/architecture.md`](../../docs/architecture.md).
   sqlc (ADR 0010), migration locking, drift checks, and live-database test
   helpers.
 - The reviewed Phase 2A checkpoint: resume/idempotency tables, schema-derived
-  bounds, validated CRUD store primitives, revision CAS, and convergent
-  transactional idempotency.
+  bounds, validated CRUD store primitives, revision CAS (compare-and-swap), and
+  convergent transactional idempotency.
 
 Phase 2A is not complete: immutable version registries, cleared-contact proof,
 the generated-write restriction, doc-shape migration machinery, blind suites,
