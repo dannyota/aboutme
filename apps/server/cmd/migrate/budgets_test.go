@@ -124,9 +124,9 @@ func TestBudgets_ValidateRejectsNegativeSlack(t *testing.T) {
 }
 
 // TestRun_InvalidBudgets_FailsFastWithoutDatabaseURL proves run() checks
-// budgets.validate() before even requiring DATABASE_URL/ENV, mirroring
-// cmd/migrate/gen's checkExtensionDeclarations-before-Atlas-lookup
-// ordering: the cheapest, dependency-free check goes first.
+// budgets.validate() before even requiring DATABASE_URL/ENV: the cheapest,
+// dependency-free check goes first, so an invalid configuration reports
+// itself rather than hiding behind a connection error.
 func TestRun_InvalidBudgets_FailsFastWithoutDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	t.Setenv("ENV", "")

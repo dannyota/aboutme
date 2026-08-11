@@ -110,19 +110,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.26.5"
-      # The migration harness now also runs ./cmd/migrate/..., whose generator
-      # e2e suite drives the pinned Atlas CLI. Install it explicitly and assert
-      # the version, because that suite self-skips (silently) when Atlas is
-      # absent — a silent skip would let the item-1 dir-format regression back in.
-      - name: Install the pinned Atlas CLI (v1.2.0)
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL -o "$HOME/.local/bin/atlas" \
-            https://release.ariga.io/atlas/atlas-community-linux-amd64-v1.2.0
-          chmod +x "$HOME/.local/bin/atlas"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Assert Atlas is present and pinned
-        run: atlas version | grep -q 'v1.2.0'
       - run: make server-test-integration
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
@@ -145,8 +132,14 @@ jobs:
         with:
           fetch-depth: 0
       - name: Reject modified or deleted migrations
+        env:
+          # Passed through the environment rather than interpolated directly
+          # into the script: `${{ }}` expansion happens before the shell sees
+          # the line, so event-derived values belong in env: as a rule, even
+          # when — as here — they are commit SHAs.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          base="$BASE_SHA"
           changed=$(git diff --name-status "$base"...HEAD -- apps/server/migrations \
             | grep -E '^(M|D|R)' | grep -E '\.sql$' || true)
           if [ -n "$changed" ]; then
@@ -194,27 +187,19 @@ jobs:
         env:
           CADDY_BIN: caddy
 
-  # Enforces the single-source-of-truth contract: sql/schema.sql is the only
-  # declared source for BOTH sqlc's generated data layer and the Goose
-  # migrations. Fails on any sqlc drift (including untracked files, which
-  # `make sqlc-check`'s plain `git diff` misses) and on any schema<->migration
-  # divergence Atlas would emit. Both tools are pinned: an unpinned sqlc or
-  # Atlas would make this gate flap on generator formatting rather than real
-  # drift.
-  data-drift:
+  # Enforces the single-source-of-truth contract (ADR 0010): apps/server/
+  # migrations/ is the only declared source for BOTH goose and sqlc's generated
+  # data layer. Fails on any drift, including untracked generated files — which
+  # is why `make sqlc-check` uses `git status --porcelain` rather than
+  # `git diff --exit-code`.
+  #
+  # This needs no database and no DATABASE_URL: sqlc parses the migration files
+  # statically. It replaces the former data-drift job, whose other half diffed
+  # sql/schema.sql against the migrations through Atlas — with one source there
+  # is nothing left to diff. sqlc stays pinned so the gate flags real drift
+  # rather than generator formatting changes.
+  sqlc-drift:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18.4-alpine
-        env:
-          POSTGRES_USER: aboutme
-          POSTGRES_PASSWORD: aboutme_dev
-          POSTGRES_DB: aboutme
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U aboutme"
-          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -224,17 +209,6 @@ jobs:
         run: |
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Install the pinned Atlas CLI (v1.2.0)
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL -o "$HOME/.local/bin/atlas" \
-            https://release.ariga.io/atlas/atlas-community-linux-amd64-v1.2.0
-          chmod +x "$HOME/.local/bin/atlas"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Assert both tools are present and pinned
-        run: |
-          atlas version | grep -q 'v1.2.0'
-          sqlc version | grep -q 'v1.31.1'
-      - run: make data-drift
-        env:
-          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+      - name: Assert sqlc is present and pinned
+        run: sqlc version | grep -q 'v1.31.1'
+      - run: make sqlc-check

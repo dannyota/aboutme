@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/netip"
-	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +16,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 	"github.com/dannyota/aboutme/apps/server/internal/user"
+	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 // Compile-time assertions that the generated shapes match what internal/user
@@ -50,29 +51,83 @@ var (
 )
 
 // TestSchema_PreservesAuthConstraints is a unit test (no database) that
-// guards two constraints load-bearing for later auth tasks: an accidental
-// drop of either from sql/schema.sql would silently defeat "one identity
-// per provider subject" (AC-AUTH-004/005) or the link/reauth-must-name-a-
-// user invariant, without any compile-time or generated-code signal (sqlc
-// generates fine either way; only a live constraint violation would catch
-// it, and only if a test happens to exercise that exact path).
+// guards two constraints load-bearing for later auth tasks: losing either
+// would silently defeat "one identity per provider subject"
+// (AC-AUTH-004/005) or the link/reauth-must-name-a-user invariant, without
+// any compile-time or generated-code signal (sqlc generates fine either
+// way; only a live constraint violation would catch it, and only if a test
+// happens to exercise that exact path).
+//
+// It reads the embedded goose migrations, which are the single source of
+// truth for the schema. Because migrations are immutable and append-only,
+// the constraint can no longer be edited out of the migration that created
+// it -- the remaining way to lose it is a LATER migration dropping it, so
+// this checks both that some migration creates it and that no migration's
+// "-- +goose Up" section drops it. Only Up sections are scanned:
+// migrations.Apply never runs a Down section (see its doc comment), so a
+// Down section's own reversing DROP is not a real loss.
+//
+// This is a text-level guard, not a semantic one. The database-backed
+// proof that the migrated schema really carries these constraints lives in
+// the DSN-gated tests below and in the migrations package's own harness.
 func TestSchema_PreservesAuthConstraints(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile("../../sql/schema.sql")
-	if err != nil {
-		t.Fatalf("ReadFile(sql/schema.sql) error: %v", err)
-	}
-	schema := string(data)
+	up := migrationUpSections(t)
 
 	for _, constraint := range []string{
 		"identities_provider_subject_key",
 		"oauth_transactions_link_needs_user",
 	} {
-		if !strings.Contains(schema, constraint) {
-			t.Errorf("sql/schema.sql missing constraint %q", constraint)
+		if !strings.Contains(up, constraint) {
+			t.Errorf("no migration creates constraint %q", constraint)
+		}
+		if strings.Contains(up, `DROP CONSTRAINT "`+constraint+`"`) ||
+			strings.Contains(up, "DROP CONSTRAINT "+constraint) {
+			t.Errorf("a migration's \"-- +goose Up\" section drops constraint %q", constraint)
 		}
 	}
+}
+
+// migrationUpSections returns the concatenation of every embedded
+// migration's "-- +goose Up" section, in filename order.
+func migrationUpSections(t *testing.T) string {
+	t.Helper()
+
+	entries, err := migrations.FS.ReadDir(".")
+	if err != nil {
+		t.Fatalf("read embedded migrations: %v", err)
+	}
+
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			names = append(names, e.Name())
+		}
+	}
+	if len(names) == 0 {
+		t.Fatal("no embedded migrations found")
+	}
+	sort.Strings(names)
+
+	var combined strings.Builder
+	for _, name := range names {
+		data, readErr := migrations.FS.ReadFile(name)
+		if readErr != nil {
+			t.Fatalf("read embedded migration %s: %v", name, readErr)
+		}
+		content := string(data)
+		_, after, found := strings.Cut(content, "-- +goose Up")
+		if !found {
+			t.Fatalf("embedded migration %s has no \"-- +goose Up\" marker", name)
+		}
+		if before, _, hasDown := strings.Cut(after, "-- +goose Down"); hasDown {
+			after = before
+		}
+		combined.WriteString(after)
+		combined.WriteString("\n")
+	}
+	return combined.String()
 }
 
 // newIntegrationStore returns a user.Store backed by a fresh transaction

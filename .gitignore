@@ -17,7 +17,3 @@ coverage/
 .DS_Store
 .playwright-mcp/
 
-# apps/server/cmd/migrate/gen temp generation dir + publish backup (see gen/main.go
-# publish doc): normally auto-removed, but a SIGINT/SIGKILL mid-run can leave one
-# as untracked clutter next to apps/server/migrations/ — never a partial migrations/.
-apps/server/migrations.gen-*

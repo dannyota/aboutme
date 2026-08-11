@@ -3,21 +3,29 @@
 // double-apply — see docs/specs/aboutme-design.md §3 "Schema management"
 // and its "Prod migration sequence" row.
 //
-// Simplified from an earlier hand-rolled migration pattern: that pattern
-// hand-rolls advisory locking with a raw pg_advisory_lock/unlock
-// pair around goose's legacy global API, and separately verifies
-// atlas.sum checksums at runtime before applying. aboutme uses goose's own
+// The *.sql files in this directory are the single source of truth for
+// aboutme's schema. goose applies them; sqlc also reads this directory
+// directly as its `schema:` input (see ../sqlc.yaml) to generate
+// internal/store. There is no separate declarative schema file that could
+// drift from what is actually applied.
+//
+// Migrations here are immutable and append-only: an already-released file
+// is never edited, and a correction is always a new forward migration.
+// That rule is enforced once, in CI, as an append-only check on this
+// directory — not on every server boot. goose tracks applied versions in
+// the database itself, so there is no runtime checksum verification of
+// this directory at all.
+//
+// Simplified from an earlier hand-rolled migration pattern that hand-rolls
+// advisory locking with a raw pg_advisory_lock/unlock pair around goose's
+// legacy global API. aboutme uses goose's own
 // [github.com/pressly/goose/v3.Provider] with
 // [github.com/pressly/goose/v3.WithSessionLocker] instead: the Provider
 // acquires the session-level Postgres advisory lock, re-checks which
 // migrations are actually still pending against the database (not the
 // stale pending-list computed before the lock was acquired), applies
 // them, and releases the lock — all inside goose's own well-tested code,
-// not reimplemented here. Runtime atlas.sum verification is dropped
-// entirely per the spec: goose tracks applied versions in the database
-// itself, so migration immutability only needs to be enforced once, in
-// CI, as an append-only check on this directory — not on every server
-// boot.
+// not reimplemented here.
 package migrations
 
 import (
@@ -31,10 +39,10 @@ import (
 	"github.com/pressly/goose/v3/lock"
 )
 
-// FS embeds every migration in this directory. Only *.sql files are
-// embedded (not atlas.sum, which is a dev-time-only artifact consumed by
-// `make migrate-gen`/Atlas, never by the running server — see the package
-// doc comment).
+// FS embeds every migration in this directory. The pattern is deliberately
+// *.sql and nothing looser: this directory also holds this package's own
+// Go sources and test files, and a broader pattern would embed those into
+// the shipped server binary. TestFS_EmbedsOnlySQLFiles guards that.
 //
 //go:embed *.sql
 var FS embed.FS
@@ -124,12 +132,11 @@ func newLockFreeProvider(db *sql.DB, fsys fs.FS) (*goose.Provider, error) {
 //
 // Only ever runs each migration's "-- +goose Up" section: this calls
 // [*goose.Provider.Up], never Down/DownTo, and neither this package nor
-// cmd/migrate exposes any rollback path at all. A generated migration's
-// "-- +goose Down" section (Atlas emits one with real reverse DDL — see
-// cmd/migrate/gen's package doc comment) is therefore inert cargo that
-// ships in the file but is never executed by this runner: per this
-// repo's append-only migration rule, rollback is always a new forward
-// corrective migration, not a Down run against a released one.
+// cmd/migrate exposes any rollback path at all. A migration's
+// "-- +goose Down" section is therefore inert cargo that ships in the file
+// but is never executed by this runner: per this repo's append-only
+// migration rule, rollback is always a new forward corrective migration,
+// not a Down run against a released one.
 func Apply(ctx context.Context, db *sql.DB, lockOpts ...lock.SessionLockerOption) ([]*goose.MigrationResult, error) {
 	p, err := NewProvider(db, FS, lockOpts...)
 	if err != nil {
