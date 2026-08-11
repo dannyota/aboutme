@@ -1,0 +1,51 @@
+{
+  "id": "one-page-tight",
+  "name": "One-Page Tight",
+  "description": "A4 two-column tuned to land a full senior career on a single sheet: cut margins, disciplined leading, no level widgets.",
+  "customization": {
+    "font": {
+      "family": "Source Sans 3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#22303c",
+      "text": "#1c2126",
+      "background": "#ffffff",
+      "accent": "#2f4858"
+    },
+    "spacing": {
+      "sectionGap": 10,
+      "entryGap": 6,
+      "lineHeight": 1.25,
+      "pageMargin": {
+        "x": 12,
+        "y": 11
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "placement": "byType",
+      "sidebarSectionTypes": ["skill", "language", "certificate"],
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

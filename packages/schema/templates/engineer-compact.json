@@ -1,0 +1,51 @@
+{
+  "id": "engineer-compact",
+  "name": "Engineer Compact",
+  "description": "Dense two-column engineering CV: skill bars in an untinted sidebar, petrol accents on white, numeric dates.",
+  "customization": {
+    "font": {
+      "family": "Source Sans 3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#10394d",
+      "text": "#1a1f24",
+      "background": "#ffffff",
+      "accent": "#0d5a73"
+    },
+    "spacing": {
+      "sectionGap": 12,
+      "entryGap": 6,
+      "lineHeight": 1.3,
+      "pageMargin": {
+        "x": 11,
+        "y": 12
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "placement": "byType",
+      "sidebarSectionTypes": ["skill", "certificate", "language", "education"],
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "bar"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "id": "classic-serif",
+  "name": "Classic Serif",
+  "description": "Traditional one-column serif document: centred letterhead, ruled uppercase section headings, no fills or tints.",
+  "customization": {
+    "font": {
+      "family": "Roboto Serif",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#12151a",
+      "text": "#23262c",
+      "background": "#ffffff",
+      "accent": "#1f3864"
+    },
+    "spacing": {
+      "sectionGap": 22,
+      "entryGap": 12,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 25,
+        "y": 20
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

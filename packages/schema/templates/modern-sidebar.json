@@ -1,0 +1,52 @@
+{
+  "id": "modern-sidebar",
+  "name": "Modern Sidebar",
+  "description": "Two-column contemporary sans with a tinted sidebar carrying skills, languages and certificates.",
+  "customization": {
+    "font": {
+      "family": "Be Vietnam Pro",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#0e3f52",
+      "text": "#1c2b33",
+      "background": "#ffffff",
+      "accent": "#0f6b7d",
+      "surface": "#e3ecf0"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 14,
+        "y": 13
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "placement": "byType",
+      "sidebarSectionTypes": ["skill", "language", "certificate"],
+      "surfaceTarget": "sidebar"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "bar"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

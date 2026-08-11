@@ -1,0 +1,49 @@
+{
+  "id": "minimal-air",
+  "name": "Minimal Air",
+  "description": "One column, no rules and no fills: wide margins and one spacing ladder carry the hierarchy.",
+  "customization": {
+    "font": {
+      "family": "Inter",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#14161a",
+      "text": "#24272c",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 36,
+      "entryGap": 16,
+      "lineHeight": 1.65,
+      "pageMargin": {
+        "x": 30,
+        "y": 24
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

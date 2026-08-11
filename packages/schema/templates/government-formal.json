@@ -1,0 +1,49 @@
+{
+  "id": "government-formal",
+  "name": "Government Formal",
+  "description": "Single-column compliance document: one ink, a stacked contact block, ruled uppercase headings, Letter page at 25 mm margins and numeric MM/YYYY dates.",
+  "customization": {
+    "font": {
+      "family": "Source Sans 3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 14,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 25,
+        "y": 25
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "letter",
+    "dateFormat": "MM/YYYY"
+  }
+}

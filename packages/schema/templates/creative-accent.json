@@ -1,0 +1,51 @@
+{
+  "id": "creative-accent",
+  "name": "Creative Accent",
+  "description": "One column under a tinted header block, with a single deep vermilion carrying the name, section headings, rules, links, and skill tags.",
+  "customization": {
+    "font": {
+      "family": "Source Sans 3",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#c23a14",
+      "text": "#1f1a17",
+      "background": "#ffffff",
+      "accent": "#c23a14",
+      "surface": "#fff0eb"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 22,
+        "y": 18
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "header"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "tag"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

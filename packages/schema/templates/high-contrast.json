@@ -1,0 +1,50 @@
+{
+  "id": "high-contrast",
+  "name": "High Contrast",
+  "description": "Maximum legibility: near-black on white at 13.5 pt, one AAA-contrast blue accent, one column.",
+  "customization": {
+    "font": {
+      "family": "Inter",
+      "baseSizePx": 18
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#141414",
+      "background": "#ffffff",
+      "accent": "#0b3fd6"
+    },
+    "spacing": {
+      "sectionGap": 36,
+      "entryGap": 20,
+      "lineHeight": 1.6,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "solid"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}
