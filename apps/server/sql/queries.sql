@@ -62,6 +62,32 @@ UPDATE sessions SET rotation_grace_until = $2
 WHERE id = $1 AND rotation_grace_until IS NULL AND revoked_at IS NULL
 RETURNING id;
 
+-- name: StartSessionRotationGrace :exec
+-- P1.1 item 4 (docs/plans/phase-1-deferred.md): starts a rotation
+-- PREDECESSOR's grace countdown, called when its successor is first used
+-- (internal/auth.SessionManager.Authenticate). BeginSessionRotation above
+-- parks the predecessor's rotation_grace_until at its own
+-- absolute_expires_at -- non-NULL, so the rotation CAS still admits
+-- exactly one winner, but far enough out that a successor whose one and
+-- only raw-token delivery was lost never orphans the lineage. This is the
+-- statement that converts that parked value into a real, short deadline
+-- once the successor's token has provably reached a client.
+--
+-- The `rotation_grace_until > grace_until` predicate makes it
+-- monotonically SHRINKING and idempotent: the first call moves the
+-- deadline in from absolute_expires_at to first-use + rotationGrace;
+-- every later call (the same successor's second, third, ... request, or a
+-- concurrent one racing it) proposes a LATER deadline and therefore
+-- matches no row. A predecessor's grace can never be pushed back out by
+-- continued use of the successor, which would otherwise keep a superseded
+-- credential alive indefinitely.
+UPDATE sessions
+SET rotation_grace_until = sqlc.arg(grace_until)::timestamptz
+WHERE id = sqlc.arg(id)
+  AND revoked_at IS NULL
+  AND rotation_grace_until IS NOT NULL
+  AND rotation_grace_until > sqlc.arg(grace_until)::timestamptz;
+
 -- name: TouchLastSeenAt :exec
 -- Unconditional: callers throttle to at most once per lastSeenThrottle
 -- themselves (internal/auth.SessionManager.Authenticate) before issuing
@@ -200,6 +226,35 @@ SET consumed_at = $2
 WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
 RETURNING *;
 
+-- name: DeleteExpiredOAuthTransactions :execrows
+-- P1.1 item 1 (docs/plans/phase-1-deferred.md): opportunistic
+-- request-path reaping, the same shape D11 already uses for
+-- idempotency_records. GET /auth/{provider}/start is unauthenticated and
+-- writes one row here per request; nothing reaps them, and the scheduled
+-- global sweep belongs to P8-priv, which does not exist yet. Every start
+-- therefore clears a bounded batch of already-expired rows before
+-- creating its own.
+--
+-- Bounded by an explicit LIMIT rather than an unqualified DELETE: this
+-- runs on a request path, so its worst case must be a constant, not a
+-- function of however large the table grew during an outage of whatever
+-- eventually reaps it. The inner SELECT drives the index
+-- oauth_transactions_expires_at_idx directly, oldest first, so repeated
+-- calls make monotonic progress instead of rescanning the same rows.
+--
+-- expires_at alone is the predicate: a consumed transaction still carries
+-- its original expires_at, so consumed and abandoned rows alike leave on
+-- the same schedule, and a row is never removed while it could still be
+-- validly consumed (ConsumeOAuthTransaction's own WHERE requires
+-- expires_at > now).
+DELETE FROM oauth_transactions
+WHERE id IN (
+    SELECT id FROM oauth_transactions
+    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY expires_at
+    LIMIT sqlc.arg(max_rows)::int
+);
+
 -- name: LockUserForResumeWrite :one
 SELECT id FROM users WHERE id = $1 FOR UPDATE;
 
@@ -221,6 +276,10 @@ SELECT count(*) FROM resumes WHERE user_id = $1;
 DELETE FROM resumes WHERE id = $1 AND user_id = $2;
 
 -- name: UpdateResumeDocumentCAS :one
+-- The returned revision is the NEW revision (revision + 1), never the
+-- caller's expected one. A stale or non-matching $3 updates zero rows and
+-- surfaces as pgx.ErrNoRows, which internal/resume turns into
+-- *RevisionMismatchError or ErrNotFound.
 UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
     schema_version = $7, revision = revision + 1, updated_at = now()
@@ -228,6 +287,10 @@ WHERE id = $1 AND user_id = $2 AND revision = $3
 RETURNING revision;
 
 -- name: UpdateResumeTitleCAS :one
+-- The returned revision is the NEW revision (revision + 1), never the
+-- caller's expected one. A stale or non-matching $3 updates zero rows and
+-- surfaces as pgx.ErrNoRows, which internal/resume turns into
+-- *RevisionMismatchError or ErrNotFound.
 UPDATE resumes
 SET title = $4, revision = revision + 1, updated_at = now()
 WHERE id = $1 AND user_id = $2 AND revision = $3
@@ -255,6 +318,15 @@ WHERE id = sqlc.arg(id)
 
 -- name: ListResumeIDsBelowSchemaVersion :many
 SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2;
+
+-- name: GetResumeByID :one
+-- System-job read for the D12 CAS backfill (Task 8). BackfillOne is not
+-- user-scoped -- exactly like BackfillResumeDocumentCAS and
+-- ListResumeIDsBelowSchemaVersion, which pages its candidates -- so it
+-- cannot use the D17 ownership-scoped GetResumeForUser. Read-only: it adds
+-- no write path, so it needs no entry in the
+-- go-resume-write-outside-domain-store manifest.
+SELECT * FROM resumes WHERE id = $1;
 
 -- name: CreateIdempotencyRecord :exec
 INSERT INTO idempotency_records

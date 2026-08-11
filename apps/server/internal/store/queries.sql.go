@@ -408,6 +408,49 @@ func (q *Queries) DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, ar
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredOAuthTransactions = `-- name: DeleteExpiredOAuthTransactions :execrows
+DELETE FROM oauth_transactions
+WHERE id IN (
+    SELECT id FROM oauth_transactions
+    WHERE expires_at <= $1::timestamptz
+    ORDER BY expires_at
+    LIMIT $2::int
+)
+`
+
+type DeleteExpiredOAuthTransactionsParams struct {
+	Cutoff  time.Time
+	MaxRows int32
+}
+
+// P1.1 item 1 (docs/plans/phase-1-deferred.md): opportunistic
+// request-path reaping, the same shape D11 already uses for
+// idempotency_records. GET /auth/{provider}/start is unauthenticated and
+// writes one row here per request; nothing reaps them, and the scheduled
+// global sweep belongs to P8-priv, which does not exist yet. Every start
+// therefore clears a bounded batch of already-expired rows before
+// creating its own.
+//
+// Bounded by an explicit LIMIT rather than an unqualified DELETE: this
+// runs on a request path, so its worst case must be a constant, not a
+// function of however large the table grew during an outage of whatever
+// eventually reaps it. The inner SELECT drives the index
+// oauth_transactions_expires_at_idx directly, oldest first, so repeated
+// calls make monotonic progress instead of rescanning the same rows.
+//
+// expires_at alone is the predicate: a consumed transaction still carries
+// its original expires_at, so consumed and abandoned rows alike leave on
+// the same schedule, and a row is never removed while it could still be
+// validly consumed (ConsumeOAuthTransaction's own WHERE requires
+// expires_at > now).
+func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredOAuthTransactions, arg.Cutoff, arg.MaxRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteIdempotencyRecordIfExpired = `-- name: DeleteIdempotencyRecordIfExpired :execrows
 DELETE FROM idempotency_records
 WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
@@ -541,6 +584,39 @@ func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdent
 		&i.Provider,
 		&i.ProviderUserID,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getResumeByID = `-- name: GetResumeByID :one
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE id = $1
+`
+
+// System-job read for the D12 CAS backfill (Task 8). BackfillOne is not
+// user-scoped -- exactly like BackfillResumeDocumentCAS and
+// ListResumeIDsBelowSchemaVersion, which pages its candidates -- so it
+// cannot use the D17 ownership-scoped GetResumeForUser. Read-only: it adds
+// no write path, so it needs no entry in the
+// go-resume-write-outside-domain-store manifest.
+func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error) {
+	row := q.db.QueryRow(ctx, getResumeByID, id)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -943,6 +1019,43 @@ func (q *Queries) RevokeSessionForUser(ctx context.Context, arg RevokeSessionFor
 	return result.RowsAffected(), nil
 }
 
+const startSessionRotationGrace = `-- name: StartSessionRotationGrace :exec
+UPDATE sessions
+SET rotation_grace_until = $1::timestamptz
+WHERE id = $2
+  AND revoked_at IS NULL
+  AND rotation_grace_until IS NOT NULL
+  AND rotation_grace_until > $1::timestamptz
+`
+
+type StartSessionRotationGraceParams struct {
+	GraceUntil time.Time
+	ID         uuid.UUID
+}
+
+// P1.1 item 4 (docs/plans/phase-1-deferred.md): starts a rotation
+// PREDECESSOR's grace countdown, called when its successor is first used
+// (internal/auth.SessionManager.Authenticate). BeginSessionRotation above
+// parks the predecessor's rotation_grace_until at its own
+// absolute_expires_at -- non-NULL, so the rotation CAS still admits
+// exactly one winner, but far enough out that a successor whose one and
+// only raw-token delivery was lost never orphans the lineage. This is the
+// statement that converts that parked value into a real, short deadline
+// once the successor's token has provably reached a client.
+//
+// The `rotation_grace_until > grace_until` predicate makes it
+// monotonically SHRINKING and idempotent: the first call moves the
+// deadline in from absolute_expires_at to first-use + rotationGrace;
+// every later call (the same successor's second, third, ... request, or a
+// concurrent one racing it) proposes a LATER deadline and therefore
+// matches no row. A predecessor's grace can never be pushed back out by
+// continued use of the successor, which would otherwise keep a superseded
+// credential alive indefinitely.
+func (q *Queries) StartSessionRotationGrace(ctx context.Context, arg StartSessionRotationGraceParams) error {
+	_, err := q.db.Exec(ctx, startSessionRotationGrace, arg.GraceUntil, arg.ID)
+	return err
+}
+
 const touchLastSeenAt = `-- name: TouchLastSeenAt :exec
 UPDATE sessions SET last_seen_at = $2 WHERE id = $1
 `
@@ -995,6 +1108,10 @@ type UpdateResumeDocumentCASParams struct {
 	SchemaVersion   int32
 }
 
+// The returned revision is the NEW revision (revision + 1), never the
+// caller's expected one. A stale or non-matching $3 updates zero rows and
+// surfaces as pgx.ErrNoRows, which internal/resume turns into
+// *RevisionMismatchError or ErrNotFound.
 func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error) {
 	row := q.db.QueryRow(ctx, updateResumeDocumentCAS,
 		arg.ID,
@@ -1024,6 +1141,10 @@ type UpdateResumeTitleCASParams struct {
 	Title    string
 }
 
+// The returned revision is the NEW revision (revision + 1), never the
+// caller's expected one. A stale or non-matching $3 updates zero rows and
+// surfaces as pgx.ErrNoRows, which internal/resume turns into
+// *RevisionMismatchError or ErrNotFound.
 func (q *Queries) UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error) {
 	row := q.db.QueryRow(ctx, updateResumeTitleCAS,
 		arg.ID,

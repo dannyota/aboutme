@@ -222,3 +222,38 @@ func SetSessionManagerForTest(svc *Service, m *SessionManager) {
 	svc.sessionMgr = m
 	svc.sessions = m
 }
+
+// RejectReasonTokensForTest returns the operator-facing token of every
+// reason in reason.go's closed vocabulary, in declaration order, so
+// package auth_test can prove the vocabulary is exhaustive (every declared
+// value has a token), unique, and machine-usable without naming the
+// unexported rejectReason type itself.
+func RejectReasonTokensForTest() []string {
+	tokens := make([]string, 0, int(numRejectReasons)-1)
+	for r := reasonUnspecified + 1; r < numRejectReasons; r++ {
+		tokens = append(tokens, r.String())
+	}
+	return tokens
+}
+
+// ZeroRejectReasonTokenForTest returns what the ZERO rejectReason renders
+// as -- the placeholder that must never be empty (an empty attribute is
+// indistinguishable from a missing one in a log pipeline) and must never
+// collide with a real declared reason.
+func ZeroRejectReasonTokenForTest() string {
+	return reasonUnspecified.String()
+}
+
+// SetStartRateLimitForTest shrinks svc's /start rate-limit budget (P1.1
+// item 1) to requests per window, so a test can exhaust it in a handful
+// of requests instead of driving the production default (30/minute)
+// through a live database.
+//
+// Must be called BEFORE RegisterRoutes: that is where the limiter is
+// actually constructed from these fields, and a limiter already built
+// holds its own copy. handlers_test.go's newTestService does both, in
+// that order.
+func SetStartRateLimitForTest(svc *Service, requests int, window time.Duration) {
+	svc.startRateLimitRequests = requests
+	svc.startRateLimitWindow = window
+}
