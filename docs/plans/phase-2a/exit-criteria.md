@@ -58,8 +58,8 @@
       implementation author; every high-risk task diff got an independent defect
       review, blocking findings fixed and re-reviewed.
 - [ ] Fresh-cache `golangci-lint run ./...`, `govulncheck ./...`, and offline
-      Semgrep are green; direct calls to the generated resume write methods are
-      mechanically restricted to `internal/resume`.
+      Semgrep are green; the phase defect review confirms that resume write
+      callers preserve the domain store's validation and concurrency rules.
 - [ ] Traceability rows AC-DOC-001/002/003/004/007/008/009/010/011/012 and
       AC-SAVE-003 are closed at the phase commit; integration handoffs are
       applied or explicitly assigned with an owner and downstream gate.

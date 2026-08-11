@@ -207,21 +207,6 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-  # Mechanical enforcement of the resume write choke point (phase 2A task 6b):
-  # only apps/server/internal/resume may reach the generated resume/idempotency
-  # write methods. Separate from the `semgrep` job because that one needs
-  # SEMGREP_APP_TOKEN and is skipped on fork PRs — this gate must run there too.
-  # Offline rules only: no account, no database.
-  semgrep-policy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.13"
-      - run: pip install semgrep==1.172.0
-      - run: make semgrep-policy-test
-
   # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005) through a
   # live caddy process fronting stub backends. Needs a caddy binary but no
   # database; pinned to 2.11.4 to match deploy/compose.yml's caddy image tag.

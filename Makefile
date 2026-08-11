@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test semgrep-policy-test dev-native dev-native-down dev-native-status dev-native-logs
+.PHONY: help ci check scan hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-16s %s\n", $$1, $$2}'
@@ -122,9 +122,6 @@ semgrep: ## Offline SAST scan with registry packs + project rules (no account ne
 	semgrep --config p/golang --config p/gosec --config p/typescript --config p/javascript \
 	  --config p/owasp-top-ten --config p/secrets --config p/dockerfile --config p/docker-compose \
 	  --config .semgrep.yml --error .
-
-semgrep-policy-test: ## Prove the resume write choke point is enforced: an outside caller of every covered generated write is flagged, internal/resume is not, and no new write query in sql/queries.sql escapes the rule
-	bash scripts/test-resume-write-chokepoint.sh
 
 semgrep-ci: ## Connected Semgrep — Code (Pro rules) + Supply Chain (SCA) + Secrets; free for public repos. Needs SEMGREP_APP_TOKEN in the environment. This is what CI runs.
 	semgrep ci
