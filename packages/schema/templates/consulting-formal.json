@@ -1,0 +1,50 @@
+{
+  "id": "consulting-formal",
+  "name": "Consulting Formal",
+  "description": "One-column Letter document in navy and grey: left title block, title-case ruled headings, tight vertical rhythm, no fills.",
+  "customization": {
+    "font": {
+      "family": "Inter",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#14304f",
+      "text": "#33383d",
+      "background": "#ffffff",
+      "accent": "#1c4e80"
+    },
+    "spacing": {
+      "sectionGap": 15,
+      "entryGap": 9,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 25,
+        "y": 15
+      }
+    },
+    "heading": {
+      "style": "titlecase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "letter",
+    "dateFormat": "MM/YYYY"
+  }
+}

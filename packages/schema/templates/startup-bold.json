@@ -1,0 +1,49 @@
+{
+  "id": "startup-bold",
+  "name": "Startup Bold",
+  "description": "Type-led one column for product, growth, and founding-team roles: the largest base in the set, uppercase black labels instead of rules, a 1:2.5:7.5 spacing ladder, and monochrome dot proficiency.",
+  "customization": {
+    "font": {
+      "family": "Inter",
+      "baseSizePx": 16
+    },
+    "colors": {
+      "primary": "#0b0d10",
+      "text": "#2b3038",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 30,
+      "entryGap": 10,
+      "lineHeight": 1.35,
+      "pageMargin": {
+        "x": 26,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "solid"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "dots"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "letter",
+    "dateFormat": "YYYY"
+  }
+}

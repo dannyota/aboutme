@@ -1,0 +1,52 @@
+{
+  "id": "international-lang",
+  "name": "International Languages",
+  "description": "Cross-border CV: languages lead an untinted rail as five-step bars, year-only dates, warm-neutral ink under a soft header band.",
+  "customization": {
+    "font": {
+      "family": "Be Vietnam Pro",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#191614",
+      "text": "#2a2724",
+      "background": "#ffffff",
+      "accent": "#5a4a3a",
+      "surface": "#f0ede7"
+    },
+    "spacing": {
+      "sectionGap": 18,
+      "entryGap": 9,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 16,
+        "y": 14
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "placement": "byType",
+      "sidebarSectionTypes": ["language", "skill", "certificate"],
+      "surfaceTarget": "header"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "bar"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "YYYY"
+  }
+}

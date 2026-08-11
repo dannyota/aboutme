@@ -1,0 +1,52 @@
+{
+  "id": "nordic-muted",
+  "name": "Nordic Muted",
+  "description": "Cool blue-grey ink on white with a faint tinted sidebar panel, uppercase labels, and hairline rules.",
+  "customization": {
+    "font": {
+      "family": "Source Sans 3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#2f4557",
+      "text": "#333a42",
+      "background": "#ffffff",
+      "accent": "#4a6b80",
+      "surface": "#f1f3f5"
+    },
+    "spacing": {
+      "sectionGap": 22,
+      "entryGap": 11,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "placement": "byType",
+      "sidebarSectionTypes": ["skill", "language", "certificate"],
+      "surfaceTarget": "sidebar"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

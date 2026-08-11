@@ -1,0 +1,49 @@
+{
+  "id": "ats-plain",
+  "name": "ATS Plain",
+  "description": "One column, black on white, no icons or level widgets — what a text extractor reads is what the document stores.",
+  "customization": {
+    "font": {
+      "family": "Source Sans 3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

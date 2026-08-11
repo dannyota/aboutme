@@ -1,0 +1,50 @@
+{
+  "id": "designer-tag",
+  "name": "Designer Tag",
+  "description": "One-column portfolio sheet on bone paper: centred nameplate, no rules, and olive chips for skills and languages as the page's only fills.",
+  "customization": {
+    "font": {
+      "family": "Be Vietnam Pro",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#2f3a1e",
+      "text": "#242220",
+      "background": "#f4f1ea",
+      "accent": "#54692a"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 12,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 26,
+        "y": 22
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "none"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "tag"
+      },
+      "language": {
+        "style": "tag"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "YYYY"
+  }
+}

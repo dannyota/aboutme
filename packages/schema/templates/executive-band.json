@@ -1,0 +1,51 @@
+{
+  "id": "executive-band",
+  "name": "Executive Band",
+  "description": "A filled navy masthead plate across the top of page one carries a large name and title; the pages below stay plain, uppercase-led, and ruleless.",
+  "customization": {
+    "font": {
+      "family": "Be Vietnam Pro",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#16273d",
+      "text": "#1f2937",
+      "background": "#ffffff",
+      "accent": "#8a5a1e",
+      "surface": "#16273d"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 12,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 18,
+        "y": 14
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "placement": "keep",
+      "surfaceTarget": "header"
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}
