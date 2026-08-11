@@ -387,9 +387,21 @@ func TestAuthenticate_RotationDoesNotExtendAbsoluteExpiry(t *testing.T) {
 }
 
 // TestAuthenticate_OldTokenRejectedAfterGraceWindow is Step 3 row 4: once
-// rotationGrace has elapsed since a rotation, the predecessor's raw token
-// must stop authenticating -- the successor's token must still work
-// (sanity: rejection isn't just "everything is broken").
+// rotationGrace has elapsed, the predecessor's raw token must stop
+// authenticating -- the successor's token must still work (sanity:
+// rejection isn't just "everything is broken").
+//
+// Amended for P1.1 item 4 (docs/plans/phase-1-deferred.md): the window
+// this test walks past now starts at the successor's FIRST USE, not at
+// the rotation itself, so the successor's token is presented once before
+// the clock is advanced. The property under test is unchanged -- a
+// superseded predecessor dies exactly rotationGrace after the successor
+// takes over, and never lingers beyond it. What changed is only WHEN that
+// clock starts: a successor whose single token delivery was lost has
+// never taken over, and killing the predecessor on a timer the client
+// never learned about is what orphaned whole sessions (see
+// TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace,
+// session_test.go, for that companion case).
 func TestAuthenticate_OldTokenRejectedAfterGraceWindow(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	q := newTestQueries(t)
@@ -409,6 +421,12 @@ func TestAuthenticate_OldTokenRejectedAfterGraceWindow(t *testing.T) {
 	}
 	if rotatedToken == "" {
 		t.Fatal("Authenticate() at 25h returned no rotatedToken, want rotation to have occurred")
+	}
+
+	// P1.1 item 4: first use of the successor is what starts the
+	// predecessor's grace countdown (see this test's own doc comment).
+	if _, _, err := m.Authenticate(ctx, rotatedToken); err != nil {
+		t.Fatalf("Authenticate(successor token) first use error = %v", err)
 	}
 
 	clock.Advance(rotationGrace + time.Second) // past grace
@@ -583,8 +601,17 @@ func TestAuthenticate_NoOracleAcrossFailureModes(t *testing.T) {
 			t.Fatalf("old-token-post-grace setup: Issue() error: %v", err)
 		}
 		clk.Advance(rotationAge + time.Hour)
-		if _, _, rotateErr := m.Authenticate(ctx, raw); rotateErr != nil {
+		_, successorRaw, rotateErr := m.Authenticate(ctx, raw)
+		if rotateErr != nil {
 			t.Fatalf("old-token-post-grace setup: rotating Authenticate() error: %v", rotateErr)
+		}
+		// P1.1 item 4: the predecessor's grace countdown starts at the
+		// successor's FIRST USE, not at the rotation, so the successor
+		// must actually be used here or the predecessor would still be
+		// alive below -- deliberately, since an unused successor means
+		// its one-shot token delivery was lost.
+		if _, _, useErr := m.Authenticate(ctx, successorRaw); useErr != nil {
+			t.Fatalf("old-token-post-grace setup: successor first use error: %v", useErr)
 		}
 		clk.Advance(rotationGrace + time.Second)
 		_, _, err = m.Authenticate(ctx, raw)

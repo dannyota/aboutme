@@ -104,41 +104,19 @@ func rejectCSRF(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusForbidden, csrfRejectedCode, csrfRejectedMessage)
 }
 
-// sameSiteInitiated reports whether r was initiated same-site with
-// allowedOrigin (DD-C16, Task 10 fix round 1, C1): the compensating
-// control for GET /auth/{provider}/start's purpose=link/reauth requests,
-// which RequireCSRF itself cannot cover -- GET is never a CSRF-checked
-// method here (isMutatingMethod above), deliberately, because an ordinary
-// purpose=login start must stay reachable from anywhere (a bookmarked or
-// shared "sign in" link, an email, another site's "continue with
-// aboutme" button). purpose=link/reauth is different: Opus review traced
-// a working cross-site chain against the pre-fix-round version of this
-// package -- an attacker page top-level-navigates the victim (SameSite=Lax
-// permits this for a GET) to /start?purpose=reauth first (no reauth gate
-// of its own, and an already-consented provider can complete with zero
-// visible interaction), which REFRESHES reauthenticated_at, THEN to
-// /start?purpose=link, which now passes RequireRecentReauth -- the
-// recent-reauth window cannot gate an attack that itself refreshes the
-// window. Only requiring the *navigation itself* originate same-site
-// closes that chain; no downstream check can substitute for it.
-//
-// Sec-Fetch-Site (a Fetch Metadata request header the BROWSER sets,
-// unspoofable by page script) is checked first when present: exactly
-// "same-origin" accepts; any OTHER value (cross-site, same-site, none)
-// rejects immediately, never falling through to a weaker check -- a
-// browser that sends this header at all is giving a definitive answer.
-// Only when the header is ABSENT (an older browser, or a stripping
-// intermediary) does this fall back to originAllowed's own Origin/Referer
-// check -- RequireCSRF's exact fail-closed logic, reused rather than
-// reimplemented: no usable signal at all (no Sec-Fetch-Site, no Origin,
-// no Referer) fails closed via originAllowed's own "neither -> false"
-// rule.
-func sameSiteInitiated(r *http.Request, allowedOrigin string) bool {
-	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs != "" {
-		return sfs == "same-origin"
-	}
-	return originAllowed(r, allowedOrigin)
-}
+// DD-C16's sameSiteInitiated used to live here: a same-site-initiation
+// check (Sec-Fetch-Site: same-origin, else originAllowed) that gated
+// GET /auth/{provider}/start?purpose=link|reauth, the one flow this
+// package could not protect with RequireCSRF because GET is never a
+// CSRF-checked method. P1.1 item 2 (docs/plans/phase-1-deferred.md) moved
+// that flow to a CSRF-protected POST, so the check has no caller left and
+// is gone rather than kept as an unused second authorization primitive.
+// The protection it provided is not: the GET refuses those two purposes
+// for every caller now, same-site included. See start.go's top-of-file
+// comment for the full reasoning, including why the fallback this helper
+// depended on (a same-origin Referer, for browsers without Fetch
+// Metadata) was itself the reason to replace it -- P8-sec's standard
+// `Referrer-Policy: no-referrer` would have silently broken linking.
 
 // isMutatingMethod reports whether method needs a CSRF check: everything
 // except GET, HEAD, and OPTIONS.

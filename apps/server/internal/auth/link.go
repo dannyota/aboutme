@@ -16,8 +16,8 @@ package auth
 // recent reauthentication ... Linking happens only from an authenticated
 // session, never from the callback." The "authenticated session" that
 // authorizes a link is captured ONCE, server-side, at Begin time
-// (startPurposeAndLinkingUser below, called from every provider's own
-// /start handler) -- tx.LinkingUserID is the resulting, trusted user id.
+// (start.go's handleLinkStart, from the session RequireSession already
+// authenticated) -- tx.LinkingUserID is the resulting, trusted user id.
 // A /callback can never be reached with a forged or substituted
 // LinkingUserID: it isn't a request parameter at all, only a column on
 // the server-side oauth_transactions row Consume looks up by the opaque,
@@ -40,64 +40,30 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// ==== Why GET /start is never behind RequireCSRF -- and what DOES gate
-// ==== purpose=link/reauth instead (DD-C16, Task 10 fix round 1, C1) ====
+// ==== What gates a link/reauth flow, and where that gate now lives ====
 //
-// Every /start route (Google/GitHub/LinkedIn, all three, all purposes) is
-// registered as a bare GET via handlers.go's route() helper, never
-// wrapped in sessionChain/RequireCSRF the way Task 9's JSON API is
-// (RequireCSRF itself is a no-op on GET regardless -- csrf.go's
-// isMutatingMethod). purpose=login must stay reachable from anywhere --
-// a bookmarked or shared "sign in" link, an email, another site's
-// "continue with aboutme" button -- so it carries no same-site
-// requirement at all, and none of what follows applies to it.
+// Nothing in THIS file gates the start of a link/reauth flow any more.
+// P1.1 item 2 (docs/plans/phase-1-deferred.md) moved that start to
+// POST /auth/{provider}/start, behind RequireSession + RequireCSRF, and
+// start.go owns it end to end -- including the recent-reauth gate on
+// purpose=link, which still runs at /start so a stale caller never
+// creates a transaction row. See start.go's own top-of-file comment for
+// why a CSRF-protected POST replaced DD-C16's same-site check on a GET,
+// and why the GET now refuses those two purposes outright rather than
+// merely refusing them cross-site.
 //
-// purpose=link/reauth is different, and the FIRST version of this
-// comment (superseded here) got the risk assessment wrong: it argued
-// RequireRecentReauth's 15-minute window "narrows the exploit window."
-// That reasoning is circular -- Opus review's fix-round-1 finding C1
-// traced the exact chain it missed: an attacker page top-level-navigates
-// the victim (SameSite=Lax permits this for a GET -- design spec §3,
-// "Lax because visitors arrive via external links") to
-// /start?purpose=reauth FIRST. That request has no reauth gate of its
-// own (reauth's whole point is to establish recency, not require it --
-// see startPurposeAndLinkingUser's own doc comment), and against an
-// already-consented provider it can complete with zero visible
-// interaction, REFRESHING reauthenticated_at. The attacker page then
-// navigates the victim to /start?purpose=link, which NOW passes
-// RequireRecentReauth -- because the previous step just refreshed the
-// very window that gate checks. A recent-reauth window can never gate an
-// attack that itself refreshes the window; no amount of narrowing that
-// window helps, because the attacker's own forced request is what resets
-// the clock. The chain's remaining step (getting the victim's browser to
-// complete a real provider consent grant for an identity the attacker
-// controls) is a separate, real precondition, but the reauth-priming step
-// removes the ONE thing this package could point to as already-mitigating
-// it -- so this is not a bounded, accepted residual risk. It is a real
-// gap, closed below.
-//
-// The fix (DD-C16) requires purpose=link/reauth's own /start request to
-// be SAME-SITE INITIATED -- sameSiteInitiated (csrf.go), checked first,
-// before any session read: Sec-Fetch-Site: same-origin when the browser
-// sends it (any other value rejects outright, no fallback), else
-// RequireCSRF's own Origin/Referer check (originAllowed, reused, not
-// reimplemented). A cross-site top-level navigation -- exactly the
-// attacker page's forced /start?purpose=reauth/link above -- now fails
-// this check before Begin ever runs, regardless of the visitor's own
-// session/reauth state, closing the chain at its first step rather than
-// trying to harden a later one. Rejected with 403 csrf_rejected
-// (rejectCSRF, csrf.go) -- this genuinely IS a cross-site-request
-// rejection, not a new failure class needing its own vocabulary entry.
-// purpose=login is deliberately untouched by this check (see above).
+// What remains here is the /callback half, which never had a start-side
+// gate to lose: resolveLinkOrReauth below re-authenticates the completing
+// request's own session against tx.LinkingUserID, because Begin-time
+// trust establishes WHO asked and only this check establishes that the
+// same authenticated session is still live now.
 
 // errIdentityAlreadyLinked is resolveLinkOrReauth's sentinel for DD-C15's
 // named rejection: a purpose=link or purpose=reauth transaction's
@@ -276,8 +242,8 @@ func (s *Service) resolveLinkOrReauth(ctx context.Context, r *http.Request, w ht
 // (reachable by an anonymous purpose=login visitor too, so it can never be
 // wrapped in route-level RequireSession the way sessionChain's JSON API
 // is), but the SAME browser that began this purpose=link/reauth flow at
-// /start (RequireSession-wrapped there, via startPurposeAndLinkingUser)
-// is, in the ordinary case, still carrying that exact session cookie when
+// POST /start (RequireSession-wrapped there -- start.go) is, in the
+// ordinary case, still carrying that exact session cookie when
 // the provider redirects it back here, up to oauthTxTTL=10 minutes later.
 //
 // Re-authenticates independently (readAndAuthenticateSession, the same
@@ -330,157 +296,11 @@ func (s *Service) redirectLinkOrReauthError(w http.ResponseWriter, r *http.Reque
 	switch {
 	case errors.Is(err, errIdentityAlreadyLinked):
 		s.redirectWithError(w, r, provider, purpose, identityAlreadyLinkedErrorCode,
-			"link/reauth identity already claimed by a different user")
+			reasonLinkIdentityAlreadyClaimed)
 	case errors.Is(err, errLinkOrReauthRejected):
 		s.redirectAuthFailed(w, r, provider, purpose,
-			"link/reauth transaction rejected (unclaimed identity via reauth, or the completing request's session no longer matches the linking user)")
+			reasonLinkOrReauthRejected)
 	default:
 		s.writeInternalError(w, r, provider, "resolve_link_or_reauth", err)
 	}
-}
-
-// startPurposeAndLinkingUser resolves a /start request's ?purpose= query
-// parameter (task-10-brief.md: "Start routes gain ?purpose=link|reauth
-// handling (login default)") and, for purpose=link/reauth only,
-// authenticates the caller's current session -- the one and only place
-// tx.LinkingUserID is ever decided (see this file's own top-of-file doc
-// comment on why that makes it trustworthy at /callback time).
-//
-// Any query value other than the literal "link" or "reauth" -- absent,
-// "login", or an unrecognized string -- resolves to an ordinary,
-// unauthenticated PurposeLogin start: the brief's own "(login default)"
-// parenthetical, chosen deliberately over inventing a new, unreviewed
-// "invalid purpose" error code for a bad value (this package's own
-// documented convention, handlers.go's closed ?error= vocabulary comment:
-// "A new distinct code is a deliberate, reviewed decision -- never
-// something to add ad hoc at a new call site"). The safest, least
-// surprising interpretation of a value nobody asked for is the one
-// requiring no privilege and creating the least consequential transaction
-// row.
-//
-// For purpose=link/reauth, in order: (1) sameSiteInitiated (csrf.go,
-// DD-C16, fix round 1 C1) -- checked FIRST, before any session read or
-// database access, rejecting with 403 csrf_rejected (redirectStartCSRFRejected)
-// on a cross-site request. This is the control that actually closes the
-// reauth-then-link chain Opus review traced (see this file's top-of-file
-// comment) -- neither of the checks below can substitute for it, since
-// both operate on state an attacker's own forced request can manipulate
-// same as a legitimate one. (2) reads and authenticates the __Host-session
-// cookie via readAndAuthenticateSession (the same logic RequireSession
-// itself uses -- see that function's own doc comment for why this cannot
-// simply BE RequireSession, a route-level http.Handler middleware that
-// cannot vary by a runtime query parameter the way this per-request
-// dispatch does); on no/invalid session, redirectStartSessionRequired
-// (DD-C17, fix round 2 -- see that function's own doc comment for why
-// this is a 302, not RequireSession's own 401 JSON). (3) purpose=link
-// additionally requires RequireRecentReauth (Task 7) BEFORE any
-// transaction row is created; on a stale one, redirectStartReauthRequired
-// (DD-C17) -- task-10-brief.md's binding requirement that this check
-// happens at /start, never deferred to /callback, so a stale-reauth
-// caller's attempt never even creates a database row. purpose=reauth
-// deliberately has NO such gate: its entire point is to let a caller with
-// a stale (or never-yet-established) recent reauthentication refresh it,
-// so requiring a fresh one first would be circular -- DD-C16's same-site
-// check above is what makes that safe now, closing the exact gap a reauth
-// round trip with no reauth gate of its own used to leave open.
-//
-// ok reports whether the caller should proceed; on false the appropriate
-// response has already been written and the caller must return
-// immediately without ever calling TransactionStore.Begin.
-func (s *Service) startPurposeAndLinkingUser(w http.ResponseWriter, r *http.Request) (purpose Purpose, linkingUserID uuid.UUID, ok bool) {
-	switch Purpose(r.URL.Query().Get("purpose")) {
-	case PurposeLink:
-		purpose = PurposeLink
-	case PurposeReauth:
-		purpose = PurposeReauth
-	default:
-		return PurposeLogin, uuid.Nil, true
-	}
-
-	if !sameSiteInitiated(r, s.publicOrigin) {
-		s.redirectStartCSRFRejected(w)
-		return "", uuid.Nil, false
-	}
-
-	sess, rotated, err := readAndAuthenticateSession(r, s.sessionMgr)
-	if err != nil {
-		if errors.Is(err, ErrSessionInvalid) {
-			s.redirectStartSessionRequired(w, r)
-			return "", uuid.Nil, false
-		}
-		api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
-		return "", uuid.Nil, false
-	}
-	if rotated != "" {
-		SetSessionCookie(w, rotated)
-	}
-
-	if purpose == PurposeLink {
-		if err := RequireRecentReauth(sess, s.sessionMgr.now()); err != nil {
-			s.redirectStartReauthRequired(w, r)
-			return "", uuid.Nil, false
-		}
-	}
-
-	return purpose, sess.UserID, true
-}
-
-// ==== DD-C17 (owner ruling, fix round 2): /start's own rejection shapes,
-// by class -- GET /auth/{provider}/start is a TOP-LEVEL BROWSER
-// NAVIGATION exactly like /callback (DD-C4's own reasoning), one step
-// earlier in the flow. A visitor whose reauth window lapsed while sitting
-// on the settings page, or who arrives here with no session at all, must
-// see a page, not a raw JSON error document -- but WHICH class of
-// rejection determines whether that page can safely be a redirect at all.
-// ====
-
-// redirectStartSessionRequired redirects a purpose=link/reauth /start
-// request that carries no valid __Host-session cookie to
-// PublicOrigin + "/login" (DD-C17): no ?error= code at all -- arriving at
-// the login page IS the message, and a distinct code here would announce
-// to anyone reading the redirect (a browser history entry, a referrer
-// header on whatever page loads next) that a link/reauth attempt was in
-// flight for a specific provider, which is exactly the kind of detail
-// design spec §3's email-collision contract already treats as forbidden
-// to leak in an adjacent context. Clears the __Host-session cookie first
-// (ClearSessionCookie) -- the same hygiene RequireSession's own JSON-API
-// rejectSession already applies: a browser holding a dead/invalid token
-// must not keep resending it forever.
-func (s *Service) redirectStartSessionRequired(w http.ResponseWriter, r *http.Request) {
-	ClearSessionCookie(w)
-	http.Redirect(w, r, s.publicOrigin+"/login", http.StatusFound)
-}
-
-// redirectStartReauthRequired redirects a purpose=link /start request
-// whose session's last full OAuth login is stale to
-// PublicOrigin + settingsSessionsPath + "?error=reauth_required" (DD-C17,
-// the important case this ruling exists for): the settings page that
-// would have initiated this flow already renders this exact code and
-// prompts the visitor to step up -- unlike redirectStartSessionRequired,
-// there is nothing to hide here (the caller IS authenticated, on the
-// settings page, and attempting a link they are entitled to attempt; the
-// only thing wrong is recency), so the actionable code travels with the
-// redirect exactly the way an ordinary /callback rejection's ?error=
-// already does.
-func (s *Service) redirectStartReauthRequired(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, s.publicOrigin+settingsSessionsPath+"?error="+url.QueryEscape(reauthRequiredCode), http.StatusFound)
-}
-
-// redirectStartCSRFRejected is DD-C16's own rejection (fix round 1, C1),
-// left AS 403 JSON by DD-C17 (fix round 2) rather than joining the two
-// redirects above: a same-site-initiated request always carries
-// Sec-Fetch-Site or a same-origin Referer (sameSiteInitiated's own
-// contract), so a real visitor -- one who reached /start by clicking
-// something on the settings page itself -- never reaches this branch at
-// all; the only thing that does is a cross-site request an attacker's own
-// page is driving. Redirecting THAT request would do two things this
-// ruling refuses to do: hand the attacker a same-origin navigation
-// primitive (a 302 with a Location this server controls, launched from a
-// page the attacker's script is still running on), and dress an attack up
-// as if it were an ordinary UX event worth a friendly page. A flat 403
-// JSON body -- no Location header, nothing for a script to act on beyond
-// the status code it already knows -- is the correct terminal response
-// for a request that was never a legitimate navigation to begin with.
-func (s *Service) redirectStartCSRFRejected(w http.ResponseWriter) {
-	rejectCSRF(w)
 }

@@ -156,6 +156,17 @@ func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (ses
 		return store.Session{}, "", ErrSessionInvalid
 	}
 
+	// P1.1 item 4: this is the first request ever made with a successor's
+	// token, so the one-and-only delivery of that token provably reached a
+	// client -- start its predecessor's real grace countdown. Runs BEFORE
+	// the rotation block below so a successor that is itself already past
+	// rotationAge on its first use still retires its OWN predecessor,
+	// rather than silently leaving that row parked at its
+	// absolute_expires_at forever.
+	if graceErr := m.startPredecessorGrace(ctx, &sess, now); graceErr != nil {
+		return store.Session{}, "", graceErr
+	}
+
 	if now.Sub(sess.CreatedAt) > rotationAge && sess.RotationGraceUntil == nil {
 		var successor store.Session
 		var raw string
@@ -211,9 +222,33 @@ func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (ses
 //     crashed process's memory and was never Set-Cookie'd anywhere. It is
 //     an orphan -- unreachable by any client -- until it dies on its own
 //     at its inherited absolute_expires_at (never later, since rotation
-//     never extends it).
+//     never extends it). P1.1 item 4 is what keeps that orphan from
+//     taking the whole session down with it: see graceUntil below.
+//
+// graceUntil (P1.1 item 4, docs/plans/phase-1-deferred.md): the
+// predecessor's rotation_grace_until is parked at its OWN
+// absolute_expires_at here, not at now+rotationGrace. The column still
+// goes non-NULL -- BeginSessionRotation's CAS above depends on that to
+// admit exactly one winner, and it is what stops this lineage from ever
+// minting a second successor (which sessions_rotated_from_key's partial
+// UNIQUE index independently forbids too) -- but the predecessor is no
+// longer scheduled to die 60 seconds from THIS instant. It dies 60
+// seconds from the successor's FIRST USE instead
+// (startPredecessorGrace).
+//
+// Why: the successor's raw token is delivered on exactly one response and
+// is never stored (only its sha256 is). Killing the predecessor on a
+// timer started by the rotation means a single lost response orphans the
+// whole session -- the predecessor dies while the client still holds it,
+// and the live successor is unreachable by anyone. Over ~90 rotations in
+// a 90-day lifetime, a 0.1% per-response loss rate strands ~9% of
+// sessions. Deferring costs nothing in the ordinary case (the successor's
+// first use is the very next request, so the observable window is the
+// same 60 seconds it always was) and costs, in the lost-response case, a
+// lineage that stays un-rotated until its natural absolute expiry --
+// availability preserved, one credential live, never two.
 func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Session, now time.Time) (successor store.Session, raw string, won bool, err error) {
-	graceUntil := now.Add(rotationGrace)
+	graceUntil := predecessor.AbsoluteExpiresAt
 	_, err = m.q.BeginSessionRotation(ctx, store.BeginSessionRotationParams{
 		ID:                 predecessor.ID,
 		RotationGraceUntil: &graceUntil,
@@ -257,6 +292,51 @@ func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Sessio
 		return store.Session{}, "", false, fmt.Errorf("auth: rotate session: create successor: %w", err)
 	}
 	return successor, raw, true, nil
+}
+
+// startPredecessorGrace converts a rotation predecessor's parked
+// rotation_grace_until (tryRotate sets it to the predecessor's own
+// absolute_expires_at) into a real, short deadline -- now + rotationGrace
+// -- the first time sess, the SUCCESSOR, is used (P1.1 item 4,
+// docs/plans/phase-1-deferred.md). A no-op for every other session.
+//
+// "First use" is read off the row itself, with no extra column and no
+// migration: a successor is a row with rotated_from set (only tryRotate's
+// insert sets it), and it has never served a request while its
+// last_seen_at is still exactly the created_at both were written with in
+// the same CreateSession call. touchLastSeenAt's ordinary 1-hour throttle
+// would leave those two equal for an hour, so this function forces the
+// write itself -- that is what flips the bit, and it is why the forced
+// write must not be folded into the throttled path.
+//
+// Both writes are deliberately safe to repeat. StartSessionRotationGrace
+// only ever moves a deadline INWARD (see its own doc comment,
+// sql/queries.sql), so a clock so coarse that now still equals created_at
+// -- a frozen test clock, never a real one -- re-enters this branch on
+// the next request and changes nothing. A failure of either write fails
+// the whole Authenticate: the same treatment touchLastSeenAt's own error
+// already gets, and the correct one here, since silently skipping the
+// grace start would leave a superseded credential alive with nothing to
+// retire it.
+func (m *SessionManager) startPredecessorGrace(ctx context.Context, sess *store.Session, now time.Time) error {
+	if sess.RotatedFrom == nil || !sess.LastSeenAt.Equal(sess.CreatedAt) {
+		return nil
+	}
+
+	if err := m.q.StartSessionRotationGrace(ctx, store.StartSessionRotationGraceParams{
+		ID:         *sess.RotatedFrom,
+		GraceUntil: now.Add(rotationGrace),
+	}); err != nil {
+		return fmt.Errorf("auth: authenticate: start predecessor rotation grace: %w", err)
+	}
+
+	if now.After(sess.LastSeenAt) {
+		if err := m.q.TouchLastSeenAt(ctx, store.TouchLastSeenAtParams{ID: sess.ID, LastSeenAt: now}); err != nil {
+			return fmt.Errorf("auth: authenticate: mark successor first use: %w", err)
+		}
+		sess.LastSeenAt = now
+	}
+	return nil
 }
 
 // touchLastSeenAt writes sess.LastSeenAt = now, throttled to at most once

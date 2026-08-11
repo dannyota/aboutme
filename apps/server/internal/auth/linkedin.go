@@ -15,6 +15,7 @@ import (
 	"net/http"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 
@@ -101,42 +102,28 @@ func (s *Service) linkedinRedirectURL() string {
 	return s.publicOrigin + LinkedInCallbackPath
 }
 
-// handleLinkedInStart begins a LinkedIn login transaction and redirects
-// the browser to LinkedIn's own authorize endpoint, with PKCE (S256) and
-// an OIDC nonce bound to the transaction -- see handleGoogleStart's
-// identical shape.
-func (s *Service) handleLinkedInStart(w http.ResponseWriter, r *http.Request) {
-	// withProviderHTTPClient (provider_http.go): bounds the OIDC discovery
-	// call below with a timeout, same as every other outbound provider
-	// call this package makes.
-	ctx := withProviderHTTPClient(r.Context())
-
-	purpose, linkingUserID, ok := s.startPurposeAndLinkingUser(w, r)
-	if !ok {
-		return
-	}
-
+// buildLinkedInAuthorizeURL is LinkedIn's authorizeURLBuilder
+// (start.go), structurally identical to buildGoogleAuthorizeURL
+// (handlers.go): discover, create the transaction row, and return the
+// __Host-oauth-tx handle plus the authorize URL with PKCE (S256) and an
+// OIDC nonce bound to that transaction.
+func (s *Service) buildLinkedInAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID) (handle, authURL, op string, err error) {
 	provider, err := s.linkedinProvider(ctx)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderLinkedIn, "linkedin_provider_discovery", err)
-		return
+		return "", "", "linkedin_provider_discovery", err
 	}
 
 	redirectURI := s.linkedinRedirectURL()
 	handle, tx, err := s.tx.Begin(ctx, ProviderLinkedIn, purpose, linkingUserID, redirectURI)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderLinkedIn, "begin_transaction", err)
-		return
+		return "", "", "begin_transaction", err
 	}
 
 	oauth2Cfg := s.linkedinOAuth2Config(provider.Endpoint(), redirectURI)
-	authURL := oauth2Cfg.AuthCodeURL(tx.State,
+	return handle, oauth2Cfg.AuthCodeURL(tx.State,
 		oauth2.S256ChallengeOption(tx.PKCEVerifier),
 		oidc.Nonce(tx.Nonce),
-	)
-
-	SetOAuthTxCookie(w, handle)
-	http.Redirect(w, r, authURL, http.StatusFound)
+	), "", nil
 }
 
 // handleLinkedInCallback completes a LinkedIn login: consumes the OAuth
@@ -157,14 +144,14 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, PurposeLogin, "missing or malformed __Host-oauth-tx cookie")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, PurposeLogin, reasonTxCookieMissing)
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderLinkedIn)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, ProviderLinkedIn, PurposeLogin, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
+			s.redirectAuthFailed(w, r, ProviderLinkedIn, PurposeLogin, reasonTxInvalid)
 			return
 		}
 		s.writeInternalError(w, r, ProviderLinkedIn, "consume_transaction", err)
@@ -175,20 +162,20 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	// 6749 §10.12).
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, "state parameter mismatch")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonStateMismatch)
 		return
 	}
 
 	// See handleGoogleCallback's identical ruling b2 ordering (checked
 	// only after state has already been validated above).
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, cancelledErrorCode, "user denied consent (access_denied)")
+		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, "callback missing code and no recognized error parameter")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonAuthorizationCodeMissing)
 		return
 	}
 
@@ -203,33 +190,33 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	oauth2Cfg := s.linkedinOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, "token exchange failed")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonTokenExchangeFailed)
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, "token response missing id_token")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonIDTokenMissing)
 		return
 	}
 
 	verifier := provider.Verifier(&oidc.Config{ClientID: s.linkedin.clientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, "id_token verification failed (issuer, audience, signature, or expiry)")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonIDTokenVerificationFailed)
 		return
 	}
 
 	// go-oidc does NOT check nonce automatically -- see
 	// handleGoogleCallback's identical comment.
 	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, "nonce mismatch")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonNonceMismatch)
 		return
 	}
 
 	var claims linkedinClaims
 	if claimsErr := idToken.Claims(&claims); claimsErr != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, "id_token claims decode failed")
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonIDTokenClaimsDecodeFailed)
 		return
 	}
 
@@ -273,7 +260,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		// Unknown identity: about to register. THE rule.
 		if claims.Email == "" || claims.EmailVerified == nil || !*claims.EmailVerified {
 			s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, emailNotVerifiedErrorCode,
-				"linkedin registration requires a verified email (unknown identity, not a link)")
+				reasonLinkedInRegistrationEmailUnverified)
 			return
 		}
 	}

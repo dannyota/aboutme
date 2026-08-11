@@ -2,11 +2,13 @@
 // coverage for link.go, added during Task 10 fix round 1 in direct
 // response to Opus review's findings on the original implementation:
 //
-//   - C1 (Critical, DD-C16): GET /auth/{provider}/start's same-site
-//     enforcement for purpose=link/reauth (sameSiteInitiated, csrf.go) --
-//     the control that closes the reauth-then-link cross-site chain the
-//     review traced. See link.go's own top-of-file comment for the full
-//     attack narrative this control closes.
+//   - C1 (Critical, DD-C16): the control that closes the reauth-then-link
+//     cross-site chain the review traced. DD-C16 answered it with a
+//     same-site check on GET /auth/{provider}/start; P1.1 item 2 replaced
+//     that with a CSRF-protected POST and an unconditional refusal of
+//     those purposes on the GET. The header table this file used to own
+//     now lives in start_test.go -- see this file's own superseded-test
+//     note below, and start.go's top-of-file comment for the reasoning.
 //   - I4: purpose=reauth against an UNCLAIMED identity must reject with
 //     no identity row created and no reauthenticated_at bump -- otherwise
 //     reauth becomes an un-gated link primitive.
@@ -16,9 +18,9 @@
 //     claim a wiring bug (the wrong Provider constant passed at a
 //     GitHub-specific call site) can silently defeat without a
 //     provider-specific proof.
-//   - I6: 401 session_required on ?purpose=link|reauth with no session at
-//     all -- the most basic rejection startPurposeAndLinkingUser produces
-//     had no dedicated test.
+//   - I6: 401 session_required on a link/reauth start with no session at
+//     all -- the most basic rejection a link/reauth start produces had no
+//     dedicated test.
 //
 // link_adversarial_test.go (independently authored, Step 2/3) already
 // covers the reauth-refresh happy path, the already-claimed-by-another-
@@ -44,14 +46,26 @@ import (
 )
 
 // ============================================================================
-// C1 / DD-C16: same-site enforcement on purpose=link/reauth starts
+// C1 / DD-C16, superseded by P1.1 item 2: link/reauth starts are POST-only
 // ============================================================================
+//
+// This file's original table (TestStart_SameSiteEnforcement_LinkAndReauth)
+// walked every Sec-Fetch-Site/Origin combination against
+// GET /start?purpose=link|reauth, pinning DD-C16's same-site gate: reject
+// cross-site, admit same-origin. P1.1 item 2
+// (docs/plans/phase-1-deferred.md) replaced that gate with a
+// CSRF-protected POST, so the property to pin changed shape -- the GET no
+// longer serves those purposes for ANY caller, which subsumes "rejects
+// them cross-site". The header table now lives in
+// TestStartGET_LinkAndReauthPurposesUnavailable (start_test.go), which
+// asserts the stronger claim against the same combinations, including the
+// same-origin request DD-C16 used to admit; the CSRF chain the POST rides
+// is covered by TestStartPOST_RejectsWithoutCSRFOrSession.
 
-// doGetWithHeaders is doGet's (handlers_test.go) sibling for this file's
-// own same-site tests, which need to set Sec-Fetch-Site/Origin directly --
-// a capability neither doGet nor doJSON (me_test.go) exposes (doJSON sets
-// Origin only, via its own dedicated parameter, but has no way to set
-// Sec-Fetch-Site at all).
+// doGetWithHeaders is doGet's (handlers_test.go) sibling for tests that
+// need to set Sec-Fetch-Site/Origin directly -- a capability neither doGet
+// nor doJSON (me_test.go) exposes (doJSON sets Origin only, via its own
+// dedicated parameter, and has no way to set Sec-Fetch-Site at all).
 func doGetWithHeaders(t *testing.T, handler http.Handler, path string, headers map[string]string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
@@ -71,90 +85,15 @@ func doGetWithHeaders(t *testing.T, handler http.Handler, path string, headers m
 	return resp
 }
 
-// TestStart_SameSiteEnforcement_LinkAndReauth is C1's own required table:
-// every combination of Sec-Fetch-Site/Origin the finding calls out,
-// exercised for BOTH purpose=link and purpose=reauth (DD-C16 gates both
-// identically -- see sameSiteInitiated's own doc comment, csrf.go, for
-// why reauth needs this every bit as much as link does). Every case uses
-// a session that is otherwise fully valid -- and, for purpose=link,
-// already within RequireRecentReauth's window -- so a rejection can only
-// be attributed to the same-site check itself, never a downstream gate
-// masquerading as it.
-func TestStart_SameSiteEnforcement_LinkAndReauth(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name         string
-		secFetchSite string // "" = header absent.
-		origin       string // "" = header absent.
-		wantRejected bool
-	}{
-		// Sec-Fetch-Site present: its value is authoritative, no fallback.
-		{"Sec-Fetch-Site: cross-site", "cross-site", "", true},
-		{"Sec-Fetch-Site: same-site (not same-origin)", "same-site", "", true},
-		{"Sec-Fetch-Site: none", "none", "", true},
-		{"Sec-Fetch-Site: same-origin", "same-origin", "", false},
-		// Sec-Fetch-Site absent: falls back to originAllowed (Origin/Referer).
-		{"missing Sec-Fetch-Site, foreign Origin", "", "https://evil.example", true},
-		{"missing Sec-Fetch-Site, matching Origin", "", testPublicOrigin, false},
-		{"missing both signals entirely (fail closed)", "", "", true},
-	}
-
-	for _, purpose := range []auth.Purpose{auth.PurposeLink, auth.PurposeReauth} {
-		for _, c := range cases {
-			t.Run(string(purpose)+"/"+c.name, func(t *testing.T) {
-				t.Parallel()
-
-				p := oidctest.NewProvider(t)
-				handler, q := newTestService(t, withGoogleIssuer(p.URL))
-				pool := newRowInspectorPool(t)
-
-				userID := createTestUser(t, q)
-				raw, _ := issueTestSession(t, q, userID) // fresh reauth (Issue sets it to now) -- satisfies purpose=link's own gate too.
-
-				headers := map[string]string{}
-				if c.secFetchSite != "" {
-					headers["Sec-Fetch-Site"] = c.secFetchSite
-				}
-				if c.origin != "" {
-					headers["Origin"] = c.origin
-				}
-
-				resp := doGetWithHeaders(t, handler, auth.GoogleStartPath+"?purpose="+string(purpose), headers, sessionRequestCookie(raw)) //nolint:bodyclose // doGetWithHeaders closes the body itself before returning.
-
-				if c.wantRejected {
-					if resp.StatusCode != http.StatusForbidden {
-						t.Fatalf("status = %d, want %d (DD-C16 same-site rejection)", resp.StatusCode, http.StatusForbidden)
-					}
-					if got := decodeErrorCode(t, resp); got != "csrf_rejected" {
-						t.Errorf("error.code = %q, want %q", got, "csrf_rejected")
-					}
-					if tx := extractCookie(resp, auth.OAuthTxCookieName); tx != nil && tx.MaxAge >= 0 {
-						t.Error("a LIVE __Host-oauth-tx cookie was set despite the same-site rejection, want none -- no transaction may be created before the same-site gate passes")
-					}
-					if got := oauthTransactionCountForLinkingUser(context.Background(), t, pool, userID); got != 0 {
-						t.Errorf("oauth_transactions row count for linking_user_id=%s = %d, want 0 (Begin must never run before the same-site gate passes)", userID, got)
-					}
-					return
-				}
-
-				if resp.StatusCode != http.StatusFound {
-					t.Fatalf("status = %d, want %d (a same-site-initiated, fully-authorized request must reach the provider redirect)", resp.StatusCode, http.StatusFound)
-				}
-				if txc := extractCookie(resp, auth.OAuthTxCookieName); txc == nil {
-					t.Error("a same-site request did not set __Host-oauth-tx, want a live transaction")
-				}
-			})
-		}
-	}
-}
-
-// TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement proves DD-C16's
-// scope is exactly purpose=link/reauth: an ordinary purpose=login start
-// (the default -- no ?purpose= at all) must succeed even when every
-// same-site signal says the request is cross-site, since a login start
-// must stay reachable from anywhere (a bookmarked or shared "sign in"
-// link, another site's "continue with aboutme" button).
+// TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement proves the
+// login start carries no same-site requirement of any kind: an ordinary
+// purpose=login start (the default -- no ?purpose= at all) must succeed
+// even when every same-site signal says the request is cross-site, since
+// a login start must stay reachable from anywhere (a bookmarked or shared
+// "sign in" link, another site's "continue with aboutme" button). This
+// was DD-C16's own carve-out and it survives P1.1 item 2 unchanged --
+// item 2 narrowed what the GET serves, and deliberately did not touch
+// what a login start requires.
 func TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement(t *testing.T) {
 	t.Parallel()
 
@@ -302,21 +241,27 @@ func TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser(t *te
 }
 
 // ============================================================================
-// I6: 401 session_required on ?purpose=link|reauth with no session at all
+// I6: no session at all on a link/reauth start
 // ============================================================================
 
-// TestStart_PurposeLinkOrReauth_NoSession_RedirectsToLoginNoErrorCode is
-// fix round 1's I6, reshaped by fix round 2's DD-C17: the most basic
-// rejection startPurposeAndLinkingUser produces -- no __Host-session
-// cookie at all -- had no dedicated test, and (before DD-C17) returned a
-// raw JSON 401 on what is a top-level browser navigation. DD-C17 requires
-// a 302 to PublicOrigin + "/login" instead, with NO ?error= query param at
-// all -- arriving at the login page IS the message; a distinct code would
-// announce that a link/reauth attempt was in flight. Every request here is
-// otherwise same-site (a matching Origin header), so a rejection can only
-// be attributed to the missing session, never DD-C16's same-site gate
-// running first and masking it.
-func TestStart_PurposeLinkOrReauth_NoSession_RedirectsToLoginNoErrorCode(t *testing.T) {
+// TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced is fix
+// round 1's I6, reshaped again by P1.1 item 2. The rejection it covers --
+// a link/reauth start carrying no __Host-session cookie at all -- is
+// unchanged; what changed is the shape it must take. DD-C17 required a
+// 302 to PublicOrigin + "/login" with NO ?error= code, because /start was
+// a top-level browser navigation and a raw JSON body would have rendered
+// as a document to a human, while a distinct code in the URL would have
+// announced (to a history entry, or a referrer on whatever loaded next)
+// that a link attempt for a specific provider was in flight.
+//
+// A POST is a fetch(), so the first half of that reasoning is gone: the
+// caller parses an envelope. The second half is honored more simply than
+// DD-C17 managed -- there is no redirect, so there is no URL for anything
+// to be announced in, and the response is RequireSession's ordinary
+// 401 session_required, identical to every other session-authenticated
+// endpoint's. Nothing about the attempted provider or purpose appears
+// anywhere in it.
+func TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced(t *testing.T) {
 	t.Parallel()
 
 	for _, purpose := range []auth.Purpose{auth.PurposeLink, auth.PurposeReauth} {
@@ -326,20 +271,21 @@ func TestStart_PurposeLinkOrReauth_NoSession_RedirectsToLoginNoErrorCode(t *test
 			p := oidctest.NewProvider(t)
 			handler, _ := newTestService(t, withGoogleIssuer(p.URL))
 
-			resp := doGetWithHeaders(t, handler, auth.GoogleStartPath+"?purpose="+string(purpose), map[string]string{ //nolint:bodyclose // doGetWithHeaders closes the body itself before returning.
-				"Origin": testPublicOrigin,
-			}) // deliberately no cookies at all.
+			resp := doJSON(t, handler, http.MethodPost, auth.GoogleStartPath+"?purpose="+string(purpose), //nolint:bodyclose // doJSON closes the body itself before returning.
+				testPublicOrigin, "any-token", "") // deliberately no cookies at all.
 
-			if resp.StatusCode != http.StatusFound {
-				t.Fatalf("status = %d, want %d (DD-C17: a redirect, not a raw JSON 401 -- /start is a top-level browser navigation)", resp.StatusCode, http.StatusFound)
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d (RequireSession's own rejection)", resp.StatusCode, http.StatusUnauthorized)
 			}
-			wantLocation := testPublicOrigin + "/login"
-			if got := resp.Header.Get("Location"); got != wantLocation {
-				t.Errorf("Location = %q, want %q (DD-C17: no ?error= code -- arriving at the login page IS the message)", got, wantLocation)
+			if got := resp.Header.Get("Location"); got != "" {
+				t.Errorf("Location = %q, want none -- a rejected start must not hand the caller a URL that announces the attempt", got)
 			}
-			if extractCookie(resp, auth.SessionCookieName) == nil {
-				t.Error("response did not clear the __Host-session cookie on a missing/invalid-session rejection, want it cleared (same hygiene as the JSON-API rejectSession)")
-			} else if sc := extractCookie(resp, auth.SessionCookieName); sc.MaxAge >= 0 || sc.Value != "" {
+			if got := decodeErrorCode(t, resp); got != "session_required" {
+				t.Errorf("error.code = %q, want %q", got, "session_required")
+			}
+			if sc := extractCookie(resp, auth.SessionCookieName); sc == nil {
+				t.Error("response did not clear the __Host-session cookie on a missing/invalid-session rejection, want it cleared (RequireSession's own hygiene)")
+			} else if sc.MaxAge >= 0 || sc.Value != "" {
 				t.Errorf("__Host-session cookie = %+v, want cleared (empty value, negative Max-Age)", sc)
 			}
 			if tx := extractCookie(resp, auth.OAuthTxCookieName); tx != nil && tx.MaxAge >= 0 {

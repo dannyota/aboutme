@@ -57,25 +57,32 @@ tags:
   - name: auth
     description: >-
       OAuth login (Google/GitHub/LinkedIn) and the session/
-      device-management surface (design spec §3, AC-AUTH-005). The
-      `/auth/{provider}/start` and `.../callback` routes are top-level
-      browser redirects, not JSON calls a client parses; every other
-      operation here requires a valid `sessionCookie`, and every mutation
-      additionally requires `csrfToken` (see `components.securitySchemes`).
-      `/start`/`.../callback` are unauthenticated for the default
-      `?purpose=login` — the only purpose this document's request/response
-      bodies illustrate — but accept a `purpose=link` or `purpose=reauth`
-      query parameter (Task 10, design decision 5) that DOES require a
-      valid `sessionCookie` on `/start` (see each `/start` operation's own
-      `purpose` parameter and `302`/`403` responses — DD-C17, fix round 2:
-      a missing/stale session redirects rather than returning a JSON
-      `401`/`403`, since `/start` is itself a top-level browser
-      navigation); `.../callback` itself is always reachable anonymously
-      (an OAuth provider redirect carries
-      no cookie-forwarding guarantee of its own), and instead re-derives
-      the caller's session from the request's own `__Host-session` cookie
-      only when the transaction it is completing was itself begun for
-      `purpose=link`/`reauth`. Session endpoints are deliberately exempt
+      device-management surface (design spec §3, AC-AUTH-005). Every
+      operation here other than the two below requires a valid
+      `sessionCookie`, and every mutation additionally requires
+      `csrfToken` (see `components.securitySchemes`).
+
+
+      `GET /auth/{provider}/start` and `GET .../callback` are top-level
+      browser redirects, not JSON calls a client parses, and both are
+      unauthenticated: the start is a plain sign-in link that must work
+      from anywhere, and the callback is an OAuth provider redirect that
+      carries no cookie-forwarding guarantee of its own. The callback
+      re-derives the caller's session from the request's own
+      `__Host-session` cookie only when the transaction it is completing
+      was itself begun for `purpose=link`/`reauth`.
+
+
+      `POST /auth/{provider}/start` is the exception on that path (P1.1
+      item 2, `docs/plans/phase-1-deferred.md`): the `link`/`reauth`
+      flows act on the caller's own account, so they are an ordinary
+      `sessionCookie` + `csrfToken` JSON operation returning the authorize
+      URL, and the `GET` refuses those two purposes with `405`. Earlier
+      revisions of this document described them as `GET` query parameters
+      gated by a same-site check (DD-C16) with redirect-shaped rejections
+      (DD-C17); both rulings are superseded for these flows, and the
+      operations below are authoritative. Session endpoints are
+      deliberately exempt
       from the `If-Match`/`Idempotency-Key` write-safety envelope described
       above — plan design decision 6 — since they carry no resume
       `revision`, and every mutation here is already safely retryable on
@@ -195,22 +202,25 @@ paths:
       responses: *readyzResponses
 
   # ---- OAuth login (Google/GitHub/LinkedIn) -------------------------------
-  # /start begins a transaction and redirects to the provider; /callback
-  # completes it. Both are top-level browser navigations -- see each
-  # operation's own description for the shared DD-C3/DD-C4/DD-C7 contract
-  # (closed ?error= vocabulary, always redirect, rejections go to
+  # GET /start begins a login transaction and redirects to the provider;
+  # GET /callback completes it. Both are top-level browser navigations --
+  # see each operation's own description for the shared DD-C3/DD-C4/DD-C7
+  # contract (closed ?error= vocabulary, always redirect, rejections go to
   # /login?error=<code>, success goes to /) and DD-C15 for how a
-  # purpose=link/reauth transaction (Task 10, the `purpose` query
-  # parameter on every /start below) redirects to
+  # purpose=link/reauth transaction redirects to
   # /app/settings/sessions?error=<code> instead, on success and rejection
-  # alike. DD-C17 (fix round 2) extends the same "redirect, not raw JSON"
-  # reasoning to /start's OWN rejections (stale reauth, missing session)
-  # with exactly one deliberate exception -- the DD-C16 same-site check
-  # stays a flat 403 JSON body, never a redirect, because redirecting a
-  # cross-site-forced request would hand an attacker's page a same-origin
-  # navigation primitive rather than protect against one. See each
-  # /start operation's own 302/403 responses and the `purpose` parameter's
-  # own description for the exact shapes.
+  # alike.
+  #
+  # POST /start (P1.1 item 2) begins those link/reauth transactions and is
+  # NOT a navigation: it is a session- and CSRF-authenticated JSON call
+  # returning the authorize URL, so its own rejections are ordinary JSON
+  # errors and DD-C17's "redirect, not raw JSON" ruling does not apply to
+  # it. GET refuses purpose=link/reauth with 405 (Allow: POST), which
+  # supersedes DD-C16's same-site check on those flows -- see the
+  # AuthPurpose parameter for why an unconditional refusal is the stronger
+  # control, not merely a different one. Every start route additionally
+  # carries the auth-route rate limit (P1.1 item 1) -- see the
+  # AuthStartRateLimited response.
   /auth/google/start:
     get:
       operationId: getAuthGoogleStart
@@ -245,68 +255,124 @@ paths:
         - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
-          description: >-
-            Always a redirect, but to one of three different targets
-            (DD-C17, fix round 2 — `/start` is a top-level browser
-            navigation, so its own rejections follow the same
-            "redirect, not raw JSON" reasoning as `/callback`, except
-            where a redirect itself would be unsafe — see the `403`
-            response below for that one exception):
-
-
-            - **Success**: to Google's own authorize endpoint.
-
-            - `purpose=link`/`reauth`, no valid `__Host-session` cookie:
-              to `PublicOrigin + "/login"` — no `?error=` code at all;
-              arriving at the login page IS the message (see the `purpose`
-              parameter's own description for why no code is attached
-              here).
-
-            - `purpose=link` only, the session's last full OAuth login is
-              more than 15 minutes old, checked BEFORE any transaction row
-              is created: to
-              `PublicOrigin + "/app/settings/sessions?error=reauth_required"`
-              — the settings page that initiated this flow already renders
-              this exact code and prompts for step-up.
+          description: Success — a redirect to Google's own authorize endpoint.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
-              examples:
-                provider_authorize:
-                  summary: Success
-                  value: https://accounts.google.com/o/oauth2/v2/auth?...
-                session_required:
-                  summary: "purpose=link/reauth, no valid session"
-                  value: https://aboutme.vn/login
-                reauth_required:
-                  summary: "purpose=link, stale reauth window"
-                  value: https://aboutme.vn/app/settings/sessions?error=reauth_required
-        "403":
-          description: "`purpose=link`/`reauth` only: the request was not
-            same-site initiated (DD-C16). Deliberately NOT a redirect
-            (DD-C17, fix round 2) — see the `purpose` parameter's own
-            description for the full reasoning: a legitimate same-origin
-            navigation always carries `Sec-Fetch-Site` or a same-origin
-            `Referer`, so no genuine visitor reaches this branch; only a
-            cross-site request an attacker's own page is driving does, and
-            redirecting it would hand that page a same-origin navigation
-            primitive."
+              example: https://accounts.google.com/o/oauth2/v2/auth?...
+        "405":
+          description: >-
+            Either a method this path does not serve at all (`HEAD`
+            included — DD-C8), or a `GET` carrying
+            `?purpose=link`/`reauth`, which are served only by the `POST`
+            below (P1.1 item 2). The second case carries `Allow: POST`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/AuthStartRateLimited"
+    post:
+      operationId: postAuthGoogleStart
+      tags: [auth]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Begin a Google link or reauthentication
+      description: >-
+        Begins an OAuth transaction for the CALLER's own already-
+        authenticated account — `purpose=link` (attach this provider
+        identity to that account) or `purpose=reauth` (refresh the
+        session's `reauthenticated_at` against an ALREADY-linked
+        identity) — and returns Google's authorize URL for the client to
+        navigate to. Sets the same `__Host-oauth-tx` cookie (opaque
+        transaction handle, 10-minute TTL) the matching `GET
+        /auth/google/callback` consumes.
+
+
+        The response deliberately does NOT redirect: a `302` answering a
+        `fetch()` would be followed by the fetch, and the provider's
+        consent screen has to be a real top-level navigation the client
+        performs itself with the returned URL.
+
+
+        Why a `POST` (P1.1 item 2, `docs/plans/phase-1-deferred.md`): a
+        link/reauth start is a privileged operation on the caller's own
+        account, so it belongs behind the same `csrfToken` + exact-`Origin`
+        chain as every other mutation. It previously ran on the `GET`
+        above, gated by a same-site-initiation check (DD-C16) — a second
+        authorization primitive parallel to the CSRF machinery that
+        depended on `Sec-Fetch-Site` or a same-origin `Referer` surviving
+        the edge, and would have broken silently under a global
+        `Referrer-Policy: no-referrer`. The `GET` now refuses those two
+        purposes outright, for every caller.
+      parameters:
+        - $ref: "#/components/parameters/AuthLinkPurpose"
+      responses:
+        "200":
+          description: The authorize URL to navigate the browser to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStartResponse"
+              example:
+                data:
+                  authorizeUrl: https://accounts.google.com/o/oauth2/v2/auth?...
+        "400":
+          description: >-
+            `purpose` was absent or was something other than `link` or
+            `reauth`. This route serves exactly those two — a login start
+            is the `GET`'s job — and never substitutes a default, which
+            would hand back an authorize URL for a flow the caller did not
+            ask for.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
               example:
                 error:
-                  code: csrf_rejected
-                  message: CSRF validation failed
-        "405":
-          description: Any method other than `GET` (including `HEAD` — DD-C8).
+                  code: bad_request
+                  message: purpose must be link or reauth
+        "401":
+          description: No valid `__Host-session` cookie. Clears the cookie.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: >-
+            Either the CSRF chain rejected the request (missing/mismatched
+            `Origin`, missing/wrong `csrfToken`) or — `purpose=link` only —
+            the session's last full OAuth login is more than 15 minutes
+            old. The reauth check runs BEFORE any transaction row is
+            created, so a stale caller never gets a live transaction
+            handle. `purpose=reauth` has no such gate: its whole point is
+            to establish recency.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                csrf_rejected:
+                  summary: Failed the CSRF chain
+                  value:
+                    error:
+                      code: csrf_rejected
+                      message: CSRF validation failed
+                reauth_required:
+                  summary: "purpose=link, stale reauth window"
+                  value:
+                    error:
+                      code: reauth_required
+                      message: recent reauthentication is required
+        "429":
+          $ref: "#/components/responses/AuthStartRateLimited"
   /auth/google/callback:
     get:
       operationId: getAuthGoogleCallback
@@ -413,54 +479,124 @@ paths:
         - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
-          description: >-
-            Always a redirect, but to one of three different targets —
-            see `GET /auth/google/start`'s own `302` response description
-            for the full DD-C17 reasoning shared by every provider's
-            `/start`.
-
-
-            - **Success**: to GitHub's own authorize endpoint.
-
-            - `purpose=link`/`reauth`, no valid `__Host-session` cookie:
-              to `PublicOrigin + "/login"`, no `?error=` code.
-
-            - `purpose=link` only, stale reauth window: to
-              `PublicOrigin + "/app/settings/sessions?error=reauth_required"`.
+          description: Success — a redirect to GitHub's own authorize endpoint.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
-              examples:
-                provider_authorize:
-                  summary: Success
-                  value: https://github.com/login/oauth/authorize?...
-                session_required:
-                  summary: "purpose=link/reauth, no valid session"
-                  value: https://aboutme.vn/login
-                reauth_required:
-                  summary: "purpose=link, stale reauth window"
-                  value: https://aboutme.vn/app/settings/sessions?error=reauth_required
-        "403":
-          description: "`purpose=link`/`reauth` only: the request was not
-            same-site initiated (DD-C16). Deliberately NOT a redirect
-            (DD-C17) — see `GET /auth/google/start`'s own `403` response
-            description for the full reasoning."
+              example: https://github.com/login/oauth/authorize?...
+        "405":
+          description: >-
+            Either a method this path does not serve at all (`HEAD`
+            included — DD-C8), or a `GET` carrying
+            `?purpose=link`/`reauth`, which are served only by the `POST`
+            below (P1.1 item 2). The second case carries `Allow: POST`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/AuthStartRateLimited"
+    post:
+      operationId: postAuthGitHubStart
+      tags: [auth]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Begin a GitHub link or reauthentication
+      description: >-
+        Begins an OAuth transaction for the CALLER's own already-
+        authenticated account — `purpose=link` (attach this provider
+        identity to that account) or `purpose=reauth` (refresh the
+        session's `reauthenticated_at` against an ALREADY-linked
+        identity) — and returns GitHub's authorize URL for the client to
+        navigate to. Sets the same `__Host-oauth-tx` cookie (opaque
+        transaction handle, 10-minute TTL) the matching `GET
+        /auth/github/callback` consumes.
+
+
+        The response deliberately does NOT redirect: a `302` answering a
+        `fetch()` would be followed by the fetch, and the provider's
+        consent screen has to be a real top-level navigation the client
+        performs itself with the returned URL.
+
+
+        Why a `POST` (P1.1 item 2, `docs/plans/phase-1-deferred.md`): a
+        link/reauth start is a privileged operation on the caller's own
+        account, so it belongs behind the same `csrfToken` + exact-`Origin`
+        chain as every other mutation. It previously ran on the `GET`
+        above, gated by a same-site-initiation check (DD-C16) — a second
+        authorization primitive parallel to the CSRF machinery that
+        depended on `Sec-Fetch-Site` or a same-origin `Referer` surviving
+        the edge, and would have broken silently under a global
+        `Referrer-Policy: no-referrer`. The `GET` now refuses those two
+        purposes outright, for every caller.
+      parameters:
+        - $ref: "#/components/parameters/AuthLinkPurpose"
+      responses:
+        "200":
+          description: The authorize URL to navigate the browser to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStartResponse"
+              example:
+                data:
+                  authorizeUrl: https://github.com/login/oauth/authorize?...
+        "400":
+          description: >-
+            `purpose` was absent or was something other than `link` or
+            `reauth`. This route serves exactly those two — a login start
+            is the `GET`'s job — and never substitutes a default, which
+            would hand back an authorize URL for a flow the caller did not
+            ask for.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
               example:
                 error:
-                  code: csrf_rejected
-                  message: CSRF validation failed
-        "405":
-          description: Any method other than `GET` (including `HEAD` — DD-C8).
+                  code: bad_request
+                  message: purpose must be link or reauth
+        "401":
+          description: No valid `__Host-session` cookie. Clears the cookie.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: >-
+            Either the CSRF chain rejected the request (missing/mismatched
+            `Origin`, missing/wrong `csrfToken`) or — `purpose=link` only —
+            the session's last full OAuth login is more than 15 minutes
+            old. The reauth check runs BEFORE any transaction row is
+            created, so a stale caller never gets a live transaction
+            handle. `purpose=reauth` has no such gate: its whole point is
+            to establish recency.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                csrf_rejected:
+                  summary: Failed the CSRF chain
+                  value:
+                    error:
+                      code: csrf_rejected
+                      message: CSRF validation failed
+                reauth_required:
+                  summary: "purpose=link, stale reauth window"
+                  value:
+                    error:
+                      code: reauth_required
+                      message: recent reauthentication is required
+        "429":
+          $ref: "#/components/responses/AuthStartRateLimited"
   /auth/github/callback:
     get:
       operationId: getAuthGitHubCallback
@@ -532,54 +668,124 @@ paths:
         - $ref: "#/components/parameters/AuthPurpose"
       responses:
         "302":
-          description: >-
-            Always a redirect, but to one of three different targets —
-            see `GET /auth/google/start`'s own `302` response description
-            for the full DD-C17 reasoning shared by every provider's
-            `/start`.
-
-
-            - **Success**: to LinkedIn's own authorize endpoint.
-
-            - `purpose=link`/`reauth`, no valid `__Host-session` cookie:
-              to `PublicOrigin + "/login"`, no `?error=` code.
-
-            - `purpose=link` only, stale reauth window: to
-              `PublicOrigin + "/app/settings/sessions?error=reauth_required"`.
+          description: Success — a redirect to LinkedIn's own authorize endpoint.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
-              examples:
-                provider_authorize:
-                  summary: Success
-                  value: https://www.linkedin.com/oauth/v2/authorization?...
-                session_required:
-                  summary: "purpose=link/reauth, no valid session"
-                  value: https://aboutme.vn/login
-                reauth_required:
-                  summary: "purpose=link, stale reauth window"
-                  value: https://aboutme.vn/app/settings/sessions?error=reauth_required
-        "403":
-          description: "`purpose=link`/`reauth` only: the request was not
-            same-site initiated (DD-C16). Deliberately NOT a redirect
-            (DD-C17) — see `GET /auth/google/start`'s own `403` response
-            description for the full reasoning."
+              example: https://www.linkedin.com/oauth/v2/authorization?...
+        "405":
+          description: >-
+            Either a method this path does not serve at all (`HEAD`
+            included — DD-C8), or a `GET` carrying
+            `?purpose=link`/`reauth`, which are served only by the `POST`
+            below (P1.1 item 2). The second case carries `Allow: POST`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/AuthStartRateLimited"
+    post:
+      operationId: postAuthLinkedInStart
+      tags: [auth]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Begin a LinkedIn link or reauthentication
+      description: >-
+        Begins an OAuth transaction for the CALLER's own already-
+        authenticated account — `purpose=link` (attach this provider
+        identity to that account) or `purpose=reauth` (refresh the
+        session's `reauthenticated_at` against an ALREADY-linked
+        identity) — and returns LinkedIn's authorize URL for the client to
+        navigate to. Sets the same `__Host-oauth-tx` cookie (opaque
+        transaction handle, 10-minute TTL) the matching `GET
+        /auth/linkedin/callback` consumes.
+
+
+        The response deliberately does NOT redirect: a `302` answering a
+        `fetch()` would be followed by the fetch, and the provider's
+        consent screen has to be a real top-level navigation the client
+        performs itself with the returned URL.
+
+
+        Why a `POST` (P1.1 item 2, `docs/plans/phase-1-deferred.md`): a
+        link/reauth start is a privileged operation on the caller's own
+        account, so it belongs behind the same `csrfToken` + exact-`Origin`
+        chain as every other mutation. It previously ran on the `GET`
+        above, gated by a same-site-initiation check (DD-C16) — a second
+        authorization primitive parallel to the CSRF machinery that
+        depended on `Sec-Fetch-Site` or a same-origin `Referer` surviving
+        the edge, and would have broken silently under a global
+        `Referrer-Policy: no-referrer`. The `GET` now refuses those two
+        purposes outright, for every caller.
+      parameters:
+        - $ref: "#/components/parameters/AuthLinkPurpose"
+      responses:
+        "200":
+          description: The authorize URL to navigate the browser to.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStartResponse"
+              example:
+                data:
+                  authorizeUrl: https://www.linkedin.com/oauth/v2/authorization?...
+        "400":
+          description: >-
+            `purpose` was absent or was something other than `link` or
+            `reauth`. This route serves exactly those two — a login start
+            is the `GET`'s job — and never substitutes a default, which
+            would hand back an authorize URL for a flow the caller did not
+            ask for.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
               example:
                 error:
-                  code: csrf_rejected
-                  message: CSRF validation failed
-        "405":
-          description: Any method other than `GET` (including `HEAD` — DD-C8).
+                  code: bad_request
+                  message: purpose must be link or reauth
+        "401":
+          description: No valid `__Host-session` cookie. Clears the cookie.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: >-
+            Either the CSRF chain rejected the request (missing/mismatched
+            `Origin`, missing/wrong `csrfToken`) or — `purpose=link` only —
+            the session's last full OAuth login is more than 15 minutes
+            old. The reauth check runs BEFORE any transaction row is
+            created, so a stale caller never gets a live transaction
+            handle. `purpose=reauth` has no such gate: its whole point is
+            to establish recency.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                csrf_rejected:
+                  summary: Failed the CSRF chain
+                  value:
+                    error:
+                      code: csrf_rejected
+                      message: CSRF validation failed
+                reauth_required:
+                  summary: "purpose=link, stale reauth window"
+                  value:
+                    error:
+                      code: reauth_required
+                      message: recent reauthentication is required
+        "429":
+          $ref: "#/components/responses/AuthStartRateLimited"
   /auth/linkedin/callback:
     get:
       operationId: getAuthLinkedInCallback
@@ -928,6 +1134,28 @@ paths:
                   code: not_found
                   message: no such session
 components:
+  responses:
+    AuthStartRateLimited:
+      description: >-
+        The start routes' own rate limit (P1.1 item 1, per
+        `(account, client IP)`) is exhausted — far tighter than the
+        whole-server default, because a start is unauthenticated on the
+        `GET` branch and writes a database row on every request that
+        reaches its handler. Carries `Retry-After` in whole seconds.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+          description: Whole seconds to wait before retrying.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: rate_limited
+              message: too many requests; retry later
   schemas:
     Envelope:
       type: object
@@ -938,6 +1166,28 @@ components:
         - data
       properties:
         data: {}
+    AuthStartResponse:
+      type: object
+      description: >-
+        `POST /auth/{provider}/start`'s success envelope: the provider
+        authorize URL the client navigates the browser to itself.
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - authorizeUrl
+          properties:
+            authorizeUrl:
+              type: string
+              format: uri
+              description: >-
+                The provider's own authorize endpoint, carrying this
+                transaction's `state` and PKCE challenge. Single use: it
+                is bound to the `__Host-oauth-tx` cookie set on the same
+                response, and both expire together after 10 minutes.
+              example: https://accounts.google.com/o/oauth2/v2/auth?...
     Error:
       type: object
       description: Failure response wrapper.
@@ -1141,82 +1391,70 @@ components:
       required: false
       description: >-
         Why this OAuth transaction is being started (Task 10, design
-        decision 5). `link`/`reauth` additionally require (1) a
-        SAME-SITE-INITIATED request (DD-C16, fix round 1) and (2) a valid
-        `sessionCookie` on `/start` — `/start`'s own default security
-        scheme (none) applies only to the default `login`. Any value other
-        than the two literal purposes below — including an absent
-        parameter — is treated as `login`: an unrecognized value is never a
-        distinct error, the same no-invented-oracle reasoning
-        `OAuthCallbackErrorCode` documents for `/callback`.
+        decision 5). On `GET` only `login` is served, and it is the
+        default: any value other than the two POST-only literals —
+        including an absent parameter — is treated as `login`, since an
+        unrecognized value is never a distinct error (the same
+        no-invented-oracle reasoning `OAuthCallbackErrorCode` documents
+        for `/callback`).
 
 
         - `login` (default): an ordinary, unauthenticated sign-in/
           registration attempt. Reachable from anywhere — a bookmarked or
           shared link, another site's "continue with aboutme" button —
-          with no same-site requirement at all.
+          with no session, CSRF, or same-site requirement at all.
 
-        - `link`: attach this provider identity to the CALLER's own
-          already-authenticated account. The request itself must be
-          same-site (see below); once that passes, a session whose last
-          full OAuth login (`reauthenticated_at`) is within the last 15
-          minutes is also required, checked BEFORE any transaction row is
-          created — a `302` redirect otherwise (DD-C17, see below), never
-          a raw JSON error.
+        - `link` / `reauth`: **not served by `GET`** (P1.1 item 2). Both
+          are `405` here, with `Allow: POST`, before any session read,
+          database access, or cookie is set — see the `POST` operation on
+          the same path, and `AuthLinkPurpose` below.
 
-        - `reauth`: refresh the CALLER's own session's
+
+        The refusal is deliberately unconditional rather than
+        cross-site-only. It replaces DD-C16's same-site-initiation check
+        (`Sec-Fetch-Site: same-origin`, else `Origin`/`Referer`), which
+        admitted same-origin `GET` link/reauth starts and rejected the
+        rest. Refusing every caller is strictly stronger: the chain DD-C16
+        existed to break — a cross-site page forcing a `reauth` start,
+        which silently refreshes the recent-reauth window, then forcing a
+        `link` start that now passes the gate the first step refreshed —
+        cannot be assembled out of `GET`s at all, and that holds without
+        depending on a header surviving the edge.
+      schema:
+        type: string
+        enum: [login]
+        default: login
+      example: login
+    AuthLinkPurpose:
+      name: purpose
+      in: query
+      required: true
+      description: >-
+        Which privileged flow `POST /auth/{provider}/start` is beginning
+        for the caller's own already-authenticated account. Required, with
+        no default: this route serves exactly these two, and substituting
+        one would return an authorize URL for a flow the caller did not
+        ask for.
+
+
+        - `link`: attach this provider identity to the caller's account.
+          Additionally requires a session whose last full OAuth login
+          (`reauthenticated_at`) is within the last 15 minutes, checked
+          BEFORE any transaction row is created — `403 reauth_required`
+          otherwise.
+
+        - `reauth`: refresh the caller's own session's
           `reauthenticated_at` via a fresh round trip against an
           ALREADY-linked provider (the compensating control the phase's
           long idle/absolute session timeouts require before a sensitive
-          operation). Unlike `link`, this does NOT itself require a recent
-          reauthentication first — that would be circular, since its whole
-          point is to establish one; same-site initiation (below) is what
-          makes that safe, closing the chain where a cross-site-forced
-          `reauth` round trip would otherwise silently refresh the window a
-          subsequent forced `link` request then relies on.
-
-
-        **Same-site initiation (DD-C16, `link`/`reauth` only):** the
-        browser's `Sec-Fetch-Site` header, when sent, must read exactly
-        `same-origin` (any other value — `cross-site`, `same-site`, `none`
-        — is rejected outright, no fallback); when that header is absent,
-        the request's `Origin` (or, failing that, `Referer`) must match
-        this API's own origin exactly, the identical fail-closed check
-        `csrfToken`-protected mutations already use. Neither signal present
-        fails closed.
-
-
-        **Rejection shapes (DD-C17, fix round 2 — `/start` is a top-level
-        browser navigation exactly like `/callback`, so its own rejections
-        follow the identical "redirect, not raw JSON" reasoning EXCEPT
-        where redirecting would itself be unsafe):**
-
-
-        - Stale reauth window (`link` only): `302` to
-          `PublicOrigin + "/app/settings/sessions?error=reauth_required"` —
-          the settings page already renders this code and prompts for
-          step-up.
-
-        - No valid session (`link`/`reauth`): `302` to
-          `PublicOrigin + "/login"`, with NO `?error=` code — arriving at
-          the login page IS the message; a distinct code would announce
-          that a link/reauth attempt was in flight.
-
-        - Not same-site initiated (`link`/`reauth`, DD-C16): stays a flat
-          `403 csrf_rejected` JSON body, deliberately NOT a redirect — a
-          legitimate same-origin navigation always carries `Sec-Fetch-Site`
-          or a same-origin `Referer` (see above), so no genuine visitor
-          ever reaches this branch; only a cross-site request an attacker's
-          own page is driving does. Redirecting it would hand that
-          attacker's page a same-origin navigation primitive and dress an
-          attack up as an ordinary UX event — the one rejection this
-          operation deliberately does NOT reshape into a friendlier page.
-
-        See the operation's own `302`/`403` responses for the exact shapes.
+          operation). Deliberately does NOT itself require a recent
+          reauthentication — that would be circular, since its whole point
+          is to establish one. What makes that safe is that this route is
+          `csrfToken`-protected, so a cross-site page cannot make the
+          request at all.
       schema:
         type: string
-        enum: [login, link, reauth]
-        default: login
+        enum: [link, reauth]
       example: link
     IfMatch:
       name: If-Match

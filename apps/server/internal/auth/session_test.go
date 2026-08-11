@@ -696,3 +696,153 @@ func TestAuthenticate_RotatesAfter24h_SequentialSingleRequest(t *testing.T) {
 		t.Errorf("Authenticate(new token) rotatedToken = %q, want empty (successor is brand new, far under rotationAge)", rotatedAgain)
 	}
 }
+
+// ---- rotation single-delivery (P1.1 item 4) ---------------------------------
+//
+// A successor's raw token is delivered on exactly ONE response and is
+// never stored (only its sha256 is), so a lost response used to orphan the
+// whole session: the predecessor died rotationGrace after the ROTATION,
+// and the live successor was unreachable by any client. The remedy
+// (docs/plans/phase-1-deferred.md P1.1 item 4) is to defer the
+// predecessor's death until the successor is FIRST USED -- the one signal
+// that proves the successor's token actually reached a client.
+
+// sessionRowRotationGraceUntil reads the rotation_grace_until column of
+// one sessions row, NULL included (nil out), so a test can assert on the
+// deferral marker itself rather than only on its observable effect.
+func sessionRowRotationGraceUntil(ctx context.Context, t *testing.T, db rowQuerier, id uuid.UUID) *time.Time {
+	t.Helper()
+	var ts *time.Time
+	if err := db.QueryRow(ctx, `SELECT rotation_grace_until FROM sessions WHERE id = $1`, id).Scan(&ts); err != nil {
+		t.Fatalf("sessionRowRotationGraceUntil query error: %v", err)
+	}
+	return ts
+}
+
+// TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace is
+// P1.1 item 4's core claim: when the response carrying the successor's raw
+// token never reaches the client, the client keeps presenting the
+// PREDECESSOR's token -- and that token must keep working past the point
+// where the old implementation killed it (rotation + rotationGrace),
+// because nothing has ever proven the successor is reachable.
+func TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace(t *testing.T) {
+	q := newTestQueries(t)
+	userID := createTestUser(t, q)
+	clk := testutil.NewClockAtEpoch()
+	sm := auth.NewSessionManagerForTest(q, clk.Now)
+	ctx := context.Background()
+
+	oldRaw, predecessor, err := sm.Issue(ctx, userID, "ua", "203.0.113.31")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	clk.Advance(rotationAge + time.Hour)
+
+	successor, newRaw, err := sm.Authenticate(ctx, oldRaw)
+	if err != nil {
+		t.Fatalf("Authenticate() at 25h error = %v", err)
+	}
+	if newRaw == "" {
+		t.Fatal("Authenticate() at 25h returned no rotatedToken, want rotation to have occurred")
+	}
+	// newRaw is deliberately never presented again: this test IS the lost
+	// response.
+
+	clk.Advance(rotationGrace + time.Second)
+
+	sess, rotatedAgain, err := sm.Authenticate(ctx, oldRaw)
+	if err != nil {
+		t.Fatalf("Authenticate(predecessor token) %v after rotation error = %v, want nil (the successor was never used, so the predecessor must not have died)", rotationGrace+time.Second, err)
+	}
+	if sess.ID != predecessor.ID {
+		t.Errorf("Authenticate(predecessor token) session ID = %v, want %v (the predecessor itself)", sess.ID, predecessor.ID)
+	}
+	if rotatedAgain != "" {
+		t.Errorf("Authenticate(predecessor token) rotatedToken = %q, want empty (already rotated once; a second successor would multiply live credentials from one lineage)", rotatedAgain)
+	}
+
+	// Still true much later: the deferral is not a longer fixed window, it
+	// is a window that has not started at all.
+	clk.Advance(30 * 24 * time.Hour / 2) // 15 days, far past any grace
+	setSessionRowLastSeenAt(ctx, t, newRowInspectorPool(t), predecessor.ID, clk.Now())
+	if _, _, err := sm.Authenticate(ctx, oldRaw); err != nil {
+		t.Errorf("Authenticate(predecessor token) 15 days after an undelivered rotation error = %v, want nil", err)
+	}
+
+	// The successor row itself is untouched and still live -- the fix must
+	// not "repair" the orphan by deleting or revoking it.
+	inspector := newRowInspectorPool(t)
+	if got := sessionRowRotationGraceUntil(ctx, t, inspector, successor.ID); got != nil {
+		t.Errorf("successor rotation_grace_until = %v, want NULL (the successor is not itself rotating)", got)
+	}
+}
+
+// TestAuthenticate_SuccessorFirstUse_StartsPredecessorGrace is the other
+// half of P1.1 item 4: the predecessor's grace window starts when the
+// successor is FIRST USED, and runs exactly rotationGrace from that
+// instant -- long enough for requests already in flight with the old
+// token, and no longer.
+func TestAuthenticate_SuccessorFirstUse_StartsPredecessorGrace(t *testing.T) {
+	q := newTestQueries(t)
+	userID := createTestUser(t, q)
+	clk := testutil.NewClockAtEpoch()
+	sm := auth.NewSessionManagerForTest(q, clk.Now)
+	ctx := context.Background()
+	inspector := newRowInspectorPool(t)
+
+	oldRaw, predecessor, err := sm.Issue(ctx, userID, "ua", "203.0.113.32")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	clk.Advance(rotationAge + time.Hour)
+
+	_, newRaw, err := sm.Authenticate(ctx, oldRaw)
+	if err != nil {
+		t.Fatalf("Authenticate() at 25h error = %v", err)
+	}
+
+	// A long gap between the rotation and the successor's first use (the
+	// browser was closed, the tab was backgrounded): the predecessor is
+	// still alive throughout, because its grace has not started.
+	clk.Advance(2 * time.Hour)
+	if _, _, err := sm.Authenticate(ctx, oldRaw); err != nil {
+		t.Fatalf("Authenticate(predecessor token) 2h after rotation, successor still unused, error = %v, want nil", err)
+	}
+
+	firstUse := clk.Now()
+	if _, _, err := sm.Authenticate(ctx, newRaw); err != nil {
+		t.Fatalf("Authenticate(successor token) first use error = %v", err)
+	}
+
+	graceUntil := sessionRowRotationGraceUntil(ctx, t, inspector, predecessor.ID)
+	if graceUntil == nil {
+		t.Fatal("predecessor rotation_grace_until is NULL after the successor's first use, want a real deadline")
+	}
+	if want := firstUse.Add(rotationGrace); !graceUntil.Equal(want) {
+		t.Errorf("predecessor rotation_grace_until = %v, want %v (first use + rotationGrace)", graceUntil, want)
+	}
+
+	// Inside the window the old token still works (requests already in
+	// flight when the successor's cookie landed).
+	clk.Advance(rotationGrace / 2)
+	if _, _, err := sm.Authenticate(ctx, oldRaw); err != nil {
+		t.Errorf("Authenticate(predecessor token) inside the started grace window error = %v, want nil", err)
+	}
+
+	// Past it, the predecessor is dead and only the successor survives.
+	clk.Advance(rotationGrace)
+	if _, _, err := sm.Authenticate(ctx, oldRaw); !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate(predecessor token) past the started grace window error = %v, want ErrSessionInvalid", err)
+	}
+	if _, _, err := sm.Authenticate(ctx, newRaw); err != nil {
+		t.Errorf("Authenticate(successor token) past the predecessor's grace error = %v, want nil (the successor is unaffected)", err)
+	}
+
+	// Repeated successor use must never push the predecessor's deadline
+	// back out: the window starts once, at first use, and only shrinks.
+	if got := sessionRowRotationGraceUntil(ctx, t, inspector, predecessor.ID); got == nil || !got.Equal(firstUse.Add(rotationGrace)) {
+		t.Errorf("predecessor rotation_grace_until after further successor use = %v, want it pinned at %v", got, firstUse.Add(rotationGrace))
+	}
+}

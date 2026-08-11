@@ -72,6 +72,27 @@ type Querier interface {
 	// before its mutation transaction, so expiry enforcement survives a rejected
 	// key reuse or mutation error instead of depending on a future global job.
 	DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (int64, error)
+	// P1.1 item 1 (docs/plans/phase-1-deferred.md): opportunistic
+	// request-path reaping, the same shape D11 already uses for
+	// idempotency_records. GET /auth/{provider}/start is unauthenticated and
+	// writes one row here per request; nothing reaps them, and the scheduled
+	// global sweep belongs to P8-priv, which does not exist yet. Every start
+	// therefore clears a bounded batch of already-expired rows before
+	// creating its own.
+	//
+	// Bounded by an explicit LIMIT rather than an unqualified DELETE: this
+	// runs on a request path, so its worst case must be a constant, not a
+	// function of however large the table grew during an outage of whatever
+	// eventually reaps it. The inner SELECT drives the index
+	// oauth_transactions_expires_at_idx directly, oldest first, so repeated
+	// calls make monotonic progress instead of rescanning the same rows.
+	//
+	// expires_at alone is the predicate: a consumed transaction still carries
+	// its original expires_at, so consumed and abandoned rows alike leave on
+	// the same schedule, and a row is never removed while it could still be
+	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
+	// expires_at > now).
+	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
 	DeleteIdempotencyRecordIfExpired(ctx context.Context, arg DeleteIdempotencyRecordIfExpiredParams) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
 	// Fix round 3, finding DD-C14c (owner ruling: schema change, replacing
@@ -96,6 +117,13 @@ type Querier interface {
 	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
 	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	// System-job read for the D12 CAS backfill (Task 8). BackfillOne is not
+	// user-scoped -- exactly like BackfillResumeDocumentCAS and
+	// ListResumeIDsBelowSchemaVersion, which pages its candidates -- so it
+	// cannot use the D17 ownership-scoped GetResumeForUser. Read-only: it adds
+	// no write path, so it needs no entry in the
+	// go-resume-write-outside-domain-store manifest.
+	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
 	// Fix round 2, finding DD-C14b: DELETE /sessions/{id}'s lineage sweep
 	// (sessions_handlers.go's revokeLineagePartners) needs the just-revoked
@@ -165,6 +193,25 @@ type Querier interface {
 	// confirms whether the id exists for someone else, is merely dead, or
 	// belongs to another user.
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
+	// P1.1 item 4 (docs/plans/phase-1-deferred.md): starts a rotation
+	// PREDECESSOR's grace countdown, called when its successor is first used
+	// (internal/auth.SessionManager.Authenticate). BeginSessionRotation above
+	// parks the predecessor's rotation_grace_until at its own
+	// absolute_expires_at -- non-NULL, so the rotation CAS still admits
+	// exactly one winner, but far enough out that a successor whose one and
+	// only raw-token delivery was lost never orphans the lineage. This is the
+	// statement that converts that parked value into a real, short deadline
+	// once the successor's token has provably reached a client.
+	//
+	// The `rotation_grace_until > grace_until` predicate makes it
+	// monotonically SHRINKING and idempotent: the first call moves the
+	// deadline in from absolute_expires_at to first-use + rotationGrace;
+	// every later call (the same successor's second, third, ... request, or a
+	// concurrent one racing it) proposes a LATER deadline and therefore
+	// matches no row. A predecessor's grace can never be pushed back out by
+	// continued use of the successor, which would otherwise keep a superseded
+	// credential alive indefinitely.
+	StartSessionRotationGrace(ctx context.Context, arg StartSessionRotationGraceParams) error
 	// Unconditional: callers throttle to at most once per lastSeenThrottle
 	// themselves (internal/auth.SessionManager.Authenticate) before issuing
 	// this write, so it is not itself CAS-guarded.
@@ -173,7 +220,15 @@ type Querier interface {
 	// (design decision 2) -- called only after a real reauth round trip
 	// (internal/auth.SessionManager.TouchReauthenticated), never by rotation.
 	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
+	// The returned revision is the NEW revision (revision + 1), never the
+	// caller's expected one. A stale or non-matching $3 updates zero rows and
+	// surfaces as pgx.ErrNoRows, which internal/resume turns into
+	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error)
+	// The returned revision is the NEW revision (revision + 1), never the
+	// caller's expected one. A stale or non-matching $3 updates zero rows and
+	// surfaces as pgx.ErrNoRows, which internal/resume turns into
+	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
 }
 

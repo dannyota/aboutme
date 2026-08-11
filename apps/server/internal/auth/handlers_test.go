@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -104,11 +105,13 @@ func (noopPinger) Ping(context.Context) error { return nil }
 // auth.NewServiceForTest (Google, GitHub, LinkedIn all three -- see that
 // function's own doc comment for its sentinel-defaulting guarantee).
 type testServiceConfig struct {
-	googleIssuer   string
-	githubEndpoint string
-	linkedinIssuer string
-	logger         *slog.Logger
-	sessionIssuer  sessionIssuerForTest
+	googleIssuer    string
+	githubEndpoint  string
+	linkedinIssuer  string
+	logger          *slog.Logger
+	sessionIssuer   sessionIssuerForTest
+	startRateLimit  int
+	startRateWindow time.Duration
 }
 
 // testServiceOption configures newTestService.
@@ -164,6 +167,16 @@ func withLinkedInIssuer(issuer string) testServiceOption {
 // guard below.
 func withLogger(logger *slog.Logger) testServiceOption {
 	return func(c *testServiceConfig) { c.logger = logger }
+}
+
+// withStartRateLimit shrinks the /start routes' own rate-limit budget
+// (P1.1 item 1) to requests per window for the returned Service, so a
+// test can exhaust it in a handful of requests instead of driving the
+// production default. Must be applied before RegisterRoutes, which is
+// where the limiter is actually built -- newTestService does both, in
+// that order.
+func withStartRateLimit(requests int, window time.Duration) testServiceOption {
+	return func(c *testServiceConfig) { c.startRateLimit, c.startRateWindow = requests, window }
 }
 
 // sessionIssuerForTest structurally mirrors handlers.go's unexported
@@ -260,6 +273,9 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	}
 	if sc.sessionIssuer != nil {
 		auth.SetSessionIssuerForTest(svc, sc.sessionIssuer)
+	}
+	if sc.startRateLimit > 0 {
+		auth.SetStartRateLimitForTest(svc, sc.startRateLimit, sc.startRateWindow)
 	}
 
 	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
@@ -600,7 +616,7 @@ func TestDefaultTestOverride_UsesExplicitOverrideWhenSupplied(t *testing.T) {
 // local-only assertion, never a real network dependency:
 // auth.UnroutableTestSentinel (127.0.0.1:1) is loopback with no listener,
 // so the discovery call fails immediately with connection-refused, which
-// handleLinkedInStart surfaces as the standard opaque 500 via
+// buildLinkedInAuthorizeURL surfaces as the standard opaque 500 via
 // writeInternalError -- this test is deliberately only ever run AFTER the
 // sentinel-default fix exists (see this dispatch's fix report for why it
 // was not exercised against the pre-fix code: doing so would have meant a
@@ -644,29 +660,42 @@ func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T
 	assertRedirectPath(t, cbResp.Header.Get("Location"), "/login") // DD-C7
 }
 
-// TestService_RegisterRoutes_WrongMethod_Returns405 covers POST (any
-// method net/http's own "GET /path" mux pattern would never let through
-// regardless) and, separately, HEAD -- DD-C8 (integration-owner ruling):
-// unlike internal/api's own route helper (and Go's stdlib ServeMux
-// pattern matching), which both let HEAD satisfy a registered GET route
-// per RFC 9110 §9.3.2, this package's own routes deliberately do NOT: see
-// TestService_HeadRequest_DoesNotBeginTransaction and
-// TestService_HeadRequest_DoesNotConsumeTransaction below for why (a HEAD
-// prefetcher must never create or burn a real OAuth transaction).
+// TestService_RegisterRoutes_WrongMethod_Returns405 covers DD-C8
+// (integration-owner ruling): unlike internal/api's own route helper (and
+// Go's stdlib ServeMux pattern matching), which both let HEAD satisfy a
+// registered GET route per RFC 9110 §9.3.2, this package's own routes
+// deliberately do NOT: see TestService_HeadRequest_DoesNotBeginTransaction
+// and TestService_HeadRequest_DoesNotConsumeTransaction below for why (a
+// HEAD prefetcher must never create or burn a real OAuth transaction).
+//
+// POST is no longer in this table for the /start paths (P1.1 item 2): a
+// start now answers POST with the link/reauth flow, behind
+// RequireSession + RequireCSRF. It stays in the table for /callback,
+// which is GET-only as before. TestStartPOST_* (start_test.go) covers
+// what a POST /start does instead, and PATCH stands in here for "any
+// method neither branch claims".
 func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
 	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL))
 
-	paths := []string{auth.GoogleStartPath, auth.GoogleCallbackPath, auth.LinkedInStartPath, auth.LinkedInCallbackPath}
-	for _, path := range paths {
-		for _, method := range []string{http.MethodPost, http.MethodHead} {
-			req := httptest.NewRequestWithContext(context.Background(), method, path, nil)
+	cases := []struct {
+		path    string
+		methods []string
+	}{
+		{auth.GoogleStartPath, []string{http.MethodHead, http.MethodPatch}},
+		{auth.LinkedInStartPath, []string{http.MethodHead, http.MethodPatch}},
+		{auth.GoogleCallbackPath, []string{http.MethodPost, http.MethodHead}},
+		{auth.LinkedInCallbackPath, []string{http.MethodPost, http.MethodHead}},
+	}
+	for _, c := range cases {
+		for _, method := range c.methods {
+			req := httptest.NewRequestWithContext(context.Background(), method, c.path, nil)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			if rec.Code != http.StatusMethodNotAllowed {
-				t.Errorf("%s %s status = %d, want %d", method, path, rec.Code, http.StatusMethodNotAllowed)
+				t.Errorf("%s %s status = %d, want %d", method, c.path, rec.Code, http.StatusMethodNotAllowed)
 			}
 		}
 	}
@@ -675,8 +704,8 @@ func TestService_RegisterRoutes_WrongMethod_Returns405(t *testing.T) {
 // TestService_HeadRequest_DoesNotBeginTransaction is DD-C8's first half:
 // a HEAD /start request -- the shape a link-preview/prefetch crawler
 // sends without ever intending to complete the flow -- must be rejected
-// by the method check BEFORE handleGoogleStart ever runs, so it never
-// performs handleGoogleStart's real side effect (a database INSERT via
+// by the method check BEFORE the start handler ever runs, so it never
+// performs that handler's real side effect (a database INSERT via
 // TransactionStore.Begin) or sets a real __Host-oauth-tx cookie. Proven
 // here by the absence of any Set-Cookie header for it at all -- a
 // well-formed GET always sets one (see beginGoogle).

@@ -12,8 +12,8 @@ package auth
 // plus TransactionStore.Consume's provider check (transaction.go) -- see
 // that function's own doc comment for the RFC 9700 §4.4 reasoning.
 //
-// handleGitHubStart/handleGitHubCallback otherwise follow the exact same
-// routing/funnel pattern handlers.go's Google handlers established:
+// buildGitHubAuthorizeURL/handleGitHubCallback otherwise follow the exact
+// same routing/funnel pattern handlers.go's Google handlers established:
 // Begin/Consume for the transaction, the shared __Host-oauth-tx cookie
 // helpers (cookie.go), and the shared redirectWithError/redirectAuthFailed/
 // writeInternalError funnel (handlers.go) for every rejection and
@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
@@ -194,30 +195,24 @@ func githubDisplayName(user githubUser) string {
 	return user.Login
 }
 
-// handleGitHubStart begins a GitHub login transaction and redirects the
-// browser to GitHub's own authorize endpoint, with PKCE (S256) bound to
-// the transaction -- no oidc.Nonce option (unlike handleGoogleStart):
-// GitHub issues no ID token to bind one to.
-func (s *Service) handleGitHubStart(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	purpose, linkingUserID, ok := s.startPurposeAndLinkingUser(w, r)
-	if !ok {
-		return
-	}
-
+// buildGitHubAuthorizeURL is GitHub's authorizeURLBuilder (start.go),
+// GitHub's counterpart to buildGoogleAuthorizeURL (handlers.go): it
+// creates the transaction row and returns the __Host-oauth-tx handle plus
+// the authorize URL, with PKCE (S256) bound to that transaction. There is
+// no discovery step -- GitHub is plain OAuth2 (AC-AUTH-003) with endpoints
+// this package knows statically.
+func (s *Service) buildGitHubAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID) (handle, authURL, op string, err error) {
 	redirectURI := s.githubRedirectURL()
 	handle, tx, err := s.tx.Begin(ctx, ProviderGitHub, purpose, linkingUserID, redirectURI)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderGitHub, "begin_transaction", err)
-		return
+		return "", "", "begin_transaction", err
 	}
 
 	oauth2Cfg := s.githubOAuth2Config(redirectURI)
-	authURL := oauth2Cfg.AuthCodeURL(tx.State, oauth2.S256ChallengeOption(tx.PKCEVerifier))
-
-	SetOAuthTxCookie(w, handle)
-	http.Redirect(w, r, authURL, http.StatusFound)
+	// No oidc.Nonce option, unlike Google/LinkedIn: GitHub issues no ID
+	// token to bind one to (transaction.go's Begin leaves Nonce empty for
+	// this provider).
+	return handle, oauth2Cfg.AuthCodeURL(tx.State, oauth2.S256ChallengeOption(tx.PKCEVerifier)), "", nil
 }
 
 // handleGitHubCallback completes a GitHub login: consumes the OAuth
@@ -254,14 +249,14 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, "missing or malformed __Host-oauth-tx cookie")
+		s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, reasonTxCookieMissing)
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderGitHub)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, "oauth transaction invalid (unknown, expired, replayed, or wrong provider)")
+			s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, reasonTxInvalid)
 			return
 		}
 		s.writeInternalError(w, r, ProviderGitHub, "consume_transaction", err)
@@ -272,7 +267,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// reasoning to handleGoogleCallback's own check.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "state parameter mismatch")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonStateMismatch)
 		return
 	}
 
@@ -280,13 +275,13 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// visitor declined consent, checked only after state has already
 	// been validated -- identical to handleGoogleCallback.
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, cancelledErrorCode, "user denied consent (access_denied)")
+		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "callback missing code and no recognized error parameter")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonAuthorizationCodeMissing)
 		return
 	}
 
@@ -300,7 +295,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	oauth2Cfg := s.githubOAuth2Config(tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "token exchange failed")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonTokenExchangeFailed)
 		return
 	}
 
@@ -308,11 +303,11 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	var user githubUser
 	if err = s.githubAPIGet(ctx, client, "/user", &user); err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "github /user api call failed (non-200 status, network error, or malformed response)")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonGitHubUserAPIFailed)
 		return
 	}
 	if user.ID == 0 {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "github /user response missing id")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonGitHubUserIDMissing)
 		return
 	}
 	providerUserID := strconv.FormatInt(user.ID, 10)
@@ -334,12 +329,12 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	var emails []githubEmail
 	if err = s.githubAPIGet(ctx, client, "/user/emails", &emails); err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, "github /user/emails api call failed (non-200 status, network error, or malformed response)")
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonGitHubUserEmailsAPIFailed)
 		return
 	}
 	email, ok := primaryVerifiedGitHubEmail(emails)
 	if !ok {
-		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, emailNotVerifiedErrorCode, "no verified primary email in /user/emails")
+		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, emailNotVerifiedErrorCode, reasonGitHubNoVerifiedPrimaryEmail)
 		return
 	}
 
