@@ -41,16 +41,24 @@ export function paginate(
 ```
 
 `PagedResume.vue` renders `paginate()` output as fixed-size page boxes
-(`pageMetrics.ts`: A4 794×1123 / Letter 816×1056, 48 px padding — D7), each page
-re-rendering its blocks' section/entry slices. It accepts an injectable
-`measure` function prop (defaulting to the DOM adapter) so SSR/tests supply the
-synthetic measurer.
+(`pageMetrics.ts`: A4 794×1123 / Letter 816×1056 CSS px at 96 dpi — D7), each
+page re-rendering its blocks' section/entry slices. **Page padding is not a
+constant.** It comes from `--page-margin-x` / `--page-margin-y`, which
+`useResumeStyles` derives from `spacing.pageMargin` and defaults to 15 mm per
+axis (`tokens.md` §6; `print.md` §2 fixes the same 15 mm in `@page`). The
+`pageContentHeightPx` fed to `paginate()` is therefore
+`pageHeightPx − 2 × --page-margin-y` converted at 96 dpi, computed per document
+— all 20 committed presets set `spacing.pageMargin`, so a hard-coded 48 px would
+mis-paginate every one of them. It accepts an injectable `measure` function prop
+(defaulting to the DOM adapter) so SSR/tests supply the synthetic measurer.
 
 - [ ] **Step 1: Failing engine tests.** Table-driven `paginate` cases: empty
       input → one empty page; blocks exactly filling a page → break after;
       heading-orphan pull; oversized block; two-column independent flow with
       unequal page counts; determinism (same input twice → deep-equal output).
-      Run → FAIL; implement; PASS.
+      Table-driven `pageMetrics` cases too: A4 and Letter × absent
+      `spacing.pageMargin` (15 mm) × an explicit margin × the `0` mm bound →
+      expected `pageContentHeightPx`. Run → FAIL; implement; PASS.
 - [ ] **Step 2: `PagedResume` with synthetic measurer.** Component test: render
       paged mode with the committed synthetic measurer
       (`test/renderer/synthetic-measure.ts`: height = fixed base per kind +

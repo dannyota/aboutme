@@ -9,11 +9,40 @@ Satisfies **AC-REN-001** and the golden half of AC-REN-002; the master plan's
 `fullName`, headline, every section type's text fields, dates, chips — also Task
 11's screenshot subject).
 
-**Matrix** (32 goldens — name = `<fixture>--<template>--<mode>.html`):
+**Matrix — 40 goldens** (name = `<preset>--<mode>.html`), per the owner's
+coverage ruling of 2026-08-11 recorded in `tokens.md` §4.2:
 
-| Fixtures                                                         | Templates | Modes                 |
-| ---------------------------------------------------------------- | --------- | --------------------- |
-| `minimal`, `full`, `vn-full`, `draft-cleared-name-empty-section` | all 4     | `continuous`, `paged` |
+| Fixture                    | Presets                                | Modes                 |
+| -------------------------- | -------------------------------------- | --------------------- |
+| `full` (fixture of record) | all 20 in `packages/schema/templates/` | `continuous`, `paged` |
+
+20 presets × 2 modes = 40. The ruling scopes the two artifacts differently
+because they cost differently: **string goldens cover every preset**, since they
+are cheap, deterministic, and byte-diffable; **pixel baselines cover a named
+six-preset subset only** (Task 11 Step 3). A preset outside that subset is still
+covered here; what it loses is pixel-level regression detection.
+
+Three consequences to implement literally:
+
+- The preset list is enumerated from the `templates/` directory listing, never
+  hand-written — the same anti-drift rule Task 8 applies to `TEMPLATES`. Adding
+  a 21st preset must add two goldens and fail until they exist.
+- `full.json` is the fixture of record because it is the richest document: all
+  eight section types, a hidden work entry, and both `main` and `sidebar`
+  populated, so one-column presets exercise main-then-sidebar and two-column
+  presets exercise both flows. Per-surface clamp resolution (`tokens.md` §4.2)
+  is pinned by the seven presets that tint — four `surfaceTarget: "header"`,
+  three `"sidebar"` — not by the fixture, because `applyTemplate` replaces
+  `customization` wholesale (ADR 0008), so the preset's tint is what renders.
+- The fixture axis is collapsed deliberately, and what it used to cover moves to
+  stronger and cheaper assertions: `minimal.json`'s absent-optional-token
+  behaviour is a table case in Task 6's `useResumeStyles` test (each of the
+  seven optional tokens absent → its fallback), the draft fixtures are Task 6
+  Step 3, and `vn-full` is Task 11's screenshot subject plus Task 5's cmap test.
+  Record this in the task report so the phase review reads it as a decision, not
+  an omission.
+
+## Steps
 
 - [ ] **Step 0: Fixture addition gate, serialized with P2A (B11).**
       `packages/schema/fixtures/vn-full.json` lands in the shared top-level

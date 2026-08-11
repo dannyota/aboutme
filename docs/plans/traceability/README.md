@@ -24,6 +24,6 @@ rows are never split by number range.
 | `AC-OPS`  | 20   | [ac-ops.md](./ac-ops.md)   |
 | `AC-INF`  | 8    | [ac-inf.md](./ac-inf.md)   |
 | `AC-API`  | 2    | [ac-api.md](./ac-api.md)   |
-| `AC-REN`  | 6    | [ac-ren.md](./ac-ren.md)   |
+| `AC-REN`  | 8    | [ac-ren.md](./ac-ren.md)   |
 
-Total: 70 rows across 12 prefixes.
+Total: 72 rows across 12 prefixes.

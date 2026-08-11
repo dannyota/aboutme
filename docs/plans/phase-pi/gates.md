@@ -32,9 +32,10 @@ owner decides.
 
 - [ ] Every module (incl. bootstrap) and both env roots: `terraform fmt -check`,
       `validate`, `terraform test` (mock providers with explicit `override_data`
-      where data sources feed wiring), tflint — green in CI on the PR gate with
-      **zero AWS credentials**; parity check (byte diff + tfvars key-set) proves
-      staging/production differ only by `backend.hcl` + variable values.
+      where data sources feed wiring), tflint — green under `make ci` locally
+      (ADR 0011 gate of record), and on the PR gate for fork PRs, with **zero
+      AWS credentials** either way; parity check (byte diff + tfvars key-set)
+      proves staging/production differ only by `backend.hcl` + variable values.
 - [ ] The **BLOCKING** boundary test (`prod_boundary_test.go`, all 20 rows — two
       viewers through one simulated edge; forged AND duplicated
       `X-Forwarded-For`/`X-Real-IP`/`Forwarded`/`X-Origin-Secret`; fail-closed
@@ -78,8 +79,11 @@ owner decides.
       master-plan corrections incl. Edit 3) are committed to `main` by the
       integration owner; PI's rows carry filled test references handed as a diff
       at Task 14.
-- [ ] Opus 5 has reviewed every task diff; blocking findings resolved. Task 7
-      (client-IP boundary) additionally gets independent adversarial tests
-      derived from the spec **before** the reviewer reads the implementation
-      diff (security-sensitive per the master-plan workflow table), and
+- [ ] Every task delivered per its ADR 0011 risk tier: high-risk tasks (4,
+      7, 12) get author TDD, then a fresh worker deriving tests from the spec
+      before reading the diff, then a fresh reviewer; normal-risk tasks get
+      author TDD plus `make ci`; blocking findings resolved. Task 7 (client-IP
+      boundary) additionally gets independent adversarial tests derived from the
+      spec **before** the reviewer reads the implementation diff
+      (security-sensitive per the master-plan workflow table), and
       `make semgrep` runs clean on the touched configuration.

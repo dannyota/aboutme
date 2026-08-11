@@ -1,18 +1,18 @@
 # Phase 9 — Local manual UAT (execution plan)
 
 > **Adopted Rev 1 (2026-08-04), owner decision.** UAT is performed by the
-> main-session UAT executor (GPT-5.6 Sol), not by the human owner. This plan is
-> prospective: its expected results are derived only from the design spec,
-> OpenAPI contract, accepted ADRs, and traceability acceptance IDs immediately
-> before the first run, then remain immutable for that run. The implementation
-> informs only the user actions and fixtures used to exercise those contracts.
+> main-session UAT executor, not by the human owner. This plan is prospective:
+> its expected results are derived only from the design spec, OpenAPI contract,
+> accepted ADRs, and traceability acceptance IDs immediately before the first
+> run, then remain immutable for that run. The implementation informs only the
+> user actions and fixtures used to exercise those contracts.
 
 ## Goal and role boundary
 
 Prove that a release candidate works as a user experiences it before any AWS
-resource is created. The main-session UAT executor (GPT-5.6 Sol) autonomously
-operates the complete local application on this laptop through the
-project-scoped Playwright MCP server. The human owner does not execute UAT.
+resource is created. The main-session UAT executor autonomously operates the
+complete local application on this laptop through the project-scoped Playwright
+MCP server. The human owner does not execute UAT.
 
 A fresh independent reviewer verifies the report and artifacts without editing
 product code, tests, snapshots, seeds, or UAT criteria. The integration owner
@@ -35,7 +35,8 @@ This plan distinguishes three gates:
       work; no working-tree product changes are present.
 - [ ] Every affected build, unit, integration, contract, migration, security,
       scripted Playwright E2E, accessibility, and automated phase-acceptance
-      gate is green at that commit.
+      gate is green at that commit — `make ci` green at the candidate commit
+      (ADR 0011 gate of record).
 - [ ] The local project MCP configuration is trusted and its Playwright server
       is available at the exact pinned version. Missing MCP tools make the run
       `BLOCKED`; the human owner is not asked to replace them by running UAT.
@@ -167,9 +168,14 @@ evidence. Criteria cannot change during a run.
    and recovery behavior defined by the product contract.
 3. Autosave and conflicts: coalescing, visible save state, offline queue and
    reconnect, two-tab conflict and `412` recovery, idempotent replay.
-4. Rendering and accessibility: every template and pagination mode, Vietnamese
-   fonts, responsive desktop/mobile layouts, keyboard-only editing/publishing,
-   focus behavior, landmarks, names, and contrast/axe checks.
+4. Rendering and accessibility: the six named template presets that phase 3 pins
+   for screenshot baselines (`classic-serif`, `engineer-compact`,
+   `modern-sidebar`, `executive-band`, `consulting-formal`, `academic-dense` —
+   `phase-3/task-11-playwright-harness.md` Step 3) and both pagination modes,
+   not all twenty presets; the other fourteen are covered by phase 3's string
+   goldens. Also Vietnamese fonts, responsive desktop/mobile layouts,
+   keyboard-only editing/publishing, focus behavior, landmarks, names, and
+   contrast/axe checks.
 5. Publishing and discovery: slug create/rename/tombstone, every disclosure and
    visibility toggle combination, public SSR, canonical/JSON-LD/robots/sitemap/
    `llms.txt`/Markdown behavior, cache invalidation, unpublish `404`.
@@ -226,7 +232,7 @@ committed or casually copied.
    integration owner does not guess at the cause.
 4. If product code is defective, a separate implementation worker writes the
    failing automated regression first, implements the smallest fix, and passes
-   independent defect review.
+   the review its risk tier requires (ADR 0011).
 5. The UAT executor rebuilds and resets the isolated deployment, then reruns
    every scenario whose product path or prerequisite changed. The previous
    failed run remains immutable.

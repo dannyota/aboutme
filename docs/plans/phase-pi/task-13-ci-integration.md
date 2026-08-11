@@ -6,7 +6,10 @@ execute the applied-workflow steps and must not claim them.
 
 **Files:** `.github/workflows/iac.yml` + additions to `ci.yml` authored as diffs
 for the integration owner; Makefile diff (`iac-fmt`, `iac-validate`, `iac-test`,
-`staging-plan`).
+`staging-plan`). Per ADR 0011, `iac-fmt`, `iac-validate`, and `iac-test` are
+fork-safe and credential-free, so `make ci` composes all three — they run at the
+gate of record, not only in CI. `staging-plan` is credentialed and stays out of
+`make ci`; it runs only via the manual `workflow_dispatch` path below.
 
 **Worker steps:**
 
