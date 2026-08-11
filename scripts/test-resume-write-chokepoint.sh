@@ -153,13 +153,16 @@ flagged_methods() {
   ' <<<"$SEMGREP_JSON" | sort -u
 }
 
-# Method names ANY rule flagged in a given file (used by the probe below,
-# whose config holds exactly one rule).
-any_flagged_methods() {
-  jq -r --arg path "$1" '
+# Like flagged_methods, but scoped to the visibility probe's own rule id rather
+# than to any result at that path: a result from some other rule carries no
+# $METHOD metavariable, and reading one would report a bare "null" instead of
+# naming the real problem.
+probe_flagged_methods() {
+  jq -r --arg rule "${RULE_ID}-probe" --arg path "$1" '
     .results[]
+    | select(.check_id | endswith($rule))
     | select(.path == $path)
-    | .extra.metavars["$METHOD"].abstract_content
+    | .extra.metavars["$METHOD"].abstract_content // empty
   ' <<<"$SEMGREP_JSON" | sort -u
 }
 
@@ -236,11 +239,28 @@ probe_json="$(semgrep --config "$probe_config" --json --quiet --metrics=off \
   --disable-version-check "$OUTSIDE_FIXTURE" "$INSIDE_FIXTURE" 2>/dev/null)" || probe_status=$?
 rm -f "$probe_config"
 [ "$probe_status" -eq 0 ] || fail "the fixture visibility probe failed (semgrep exited $probe_status)."
+[ -n "$probe_json" ] || fail "the fixture visibility probe produced no JSON output."
 SEMGREP_JSON="$probe_json"
+
+# A skipped or unparsable target is reported as an error, not as an absent
+# result, so read the error list before concluding anything from the results.
+# Without this the probe blames the rule for what is actually a parse or
+# target-selection failure.
+probe_errs="$(jq -r '[.errors[]? | "\(.type // "error"): \(.message // "?")"] | join("; ")' <<<"$probe_json")"
+[ -z "$probe_errs" ] ||
+  fail "the fixture visibility probe hit semgrep errors, so its verdict would be meaningless: $probe_errs"
+
+probe_scanned="$(jq -r '[.paths.scanned[]?] | length' <<<"$probe_json")"
+[ "$probe_scanned" = "2" ] ||
+  fail "the fixture visibility probe scanned $probe_scanned of 2 fixtures. Scanned: $(jq -rc '[.paths.scanned[]?]' <<<"$probe_json"); skipped: $(jq -rc '[.paths.skipped[]? | {path, reason}]' <<<"$probe_json")"
+
 for f in "$OUTSIDE_FIXTURE" "$INSIDE_FIXTURE"; do
-  probe_flagged="$(any_flagged_methods "$f")"
-  [ "$probe_flagged" = "$covered_sorted" ] ||
+  probe_flagged="$(probe_flagged_methods "$f")"
+  [ "$probe_flagged" = "$covered_sorted" ] || {
+    echo "  raw probe results for $f:" >&2
+    jq -rc --arg path "$f" '[.results[] | select(.path == $path) | {check_id, line: .start.line, metavars: (.extra.metavars | keys)}]' <<<"$probe_json" >&2
     fail "visibility probe: semgrep did not see all ${#METHODS[@]} covered calls in $f, so the checks below would be vacuous. Saw: $(echo "$probe_flagged" | tr '\n' ' ')"
+  }
 done
 echo "  visibility probe: both fixtures parsed, all ${#METHODS[@]} calls visible to semgrep"
 
