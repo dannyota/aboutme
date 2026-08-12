@@ -1,6 +1,6 @@
 # Phase 2A — Resume domain and store
 
-Status: **Corrective verification in progress** (2026-08-12).
+Status: **Complete** (2026-08-12).
 
 This phase owns the resume relational schema, validated aggregate store,
 revision compare-and-swap (CAS), transactional idempotency, immutable document
@@ -30,16 +30,16 @@ hand-written goose migrations as the only relational schema source.
 | 10   | Independent document-migration suite              | Landed                       |
 | 11   | Bounds matrix and completeness guard              | Landed                       |
 | 12   | Traceability, docs, and handoffs                  | Landed                       |
-| Gate | Phase defect review                               | Reopened                     |
-| Gate | Exact-candidate phase acceptance                  | Pending revision 5           |
+| Gate | Phase defect review                               | Passed                       |
+| Gate | Exact-candidate phase acceptance                  | Passed, revision 5           |
 
 Task 12's traceability, architecture documentation, and named downstream
-handoffs are landed. A post-closure review found that the cap trigger rejects a
-no-op owner assignment at the cap and that revision 2 acceptance lacks its
-required persisted per-row report. The pre-UAT migration correction is landed
-and re-reviewed. The current candidate still needs a fresh phase review, the
-owner gates, catalog revision 5 acceptance, and a documentation-only closure
-commit before P2A returns to complete.
+handoffs are landed. The pre-UAT migration correction is landed and
+independently re-reviewed. Candidate `2ce66d36b7aab2f9814c4e894b937c5e80bcb520`
+passed the fresh phase review, owner gates, and every catalog revision 5 row
+with zero retries. This later documentation-only closure commit persists the
+report and status changes; it does not claim that its own commit was
+product-gated.
 
 The production document registry currently contains only v1. P2A supplies pure
 projection, adjacent-converter machinery tested with synthetic later versions,
@@ -74,21 +74,23 @@ none of its otherwise-passing evidence closes the phase. The next run at
 `bf45983a4c120dfa40f46230d736a26686784ab4` also passed every product and
 security capture through 11, but its report table contained an unescaped pipe;
 the required Markdown lint stopped the process before the report hash and
-capture 12. That attempt is also final and failed. The next run uses a new
-candidate and a new empty evidence directory.
+capture 12. That attempt is also final and failed. The final run used a new
+candidate and a new empty evidence directory. Candidate
+`2ce66d36b7aab2f9814c4e894b937c5e80bcb520` passed all 13 rows with zero retries.
+Its persisted [revision 5 acceptance report](acceptance-report-r5.md) has
+SHA-256 `93e807071cd74edf734382f49ce8a34d9fbc95eb0af56113574a27aeba2e4ea8`.
 
 ## Corrective closure sequence
 
-1. Commit a clean candidate containing catalog revision 5 and the Suite A/B/C
-   provenance record. AC-DOC-001 remains `PENDING` until acceptance passes.
-2. Record a fresh exact-candidate phase-defect review. Run `make ci` and
-   connected `make scan` once at that unchanged candidate.
-3. A fresh read-only worker runs catalog revision 5 and returns its external
-   report. Any failed, blocked, missing, changed-candidate, or retry result
-   fails closure.
-4. If every row passes, persist the report and change traceability and active
-   status pages in a second documentation-only closure commit. That commit cites
-   the tested candidate and does not claim it was itself gated.
+1. The clean candidate contains catalog revision 5 and the Suite A/B/C
+   provenance record.
+2. The fresh exact-candidate phase-defect review, `make ci`, and connected
+   `make scan` passed once at the unchanged candidate.
+3. A fresh read-only worker ran catalog revision 5. Every row passed with zero
+   retries.
+4. This second documentation-only commit persists the report and closes the
+   traceability and active status pages. It cites the tested candidate and does
+   not claim it was itself gated.
 
 ## Authorities
 
