@@ -230,7 +230,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install semgrep==1.172.0
-      - run: semgrep ci --no-suppress-errors
+      - run: scripts/test/semgrep-sca-inputs-test.sh
+      - run: semgrep ci --code --supply-chain --secrets --no-suppress-errors
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 

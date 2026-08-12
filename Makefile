@@ -15,19 +15,22 @@ check: ## Fast gate — the same checks minus the web build and DB-backed suites
 	bash scripts/ci.sh --fast
 
 scan: ## Batched security scan for a phase gate: Semgrep (SAST + Supply Chain SCA + secrets) then gitleaks over full history
+	scripts/test/semgrep-sca-inputs-test.sh
 	bash scripts/scan.sh
 
 tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="ci", "scan", "dev", or tool names)
 	bash scripts/check-tool-versions.sh $(ARGS)
 
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
-	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
 	scripts/test/ci-failure-propagation-test.sh
 	scripts/test/ci-lifecycle-test.sh
 	scripts/test/ci-scan-adversarial-test.sh
+	scripts/test/live-db-transcript-secrecy-test.sh
 	scripts/test/makefile-safety-test.sh
 	scripts/test/migration-append-only-test.sh
 	scripts/test/scan-engine-error-test.sh
+	scripts/test/scan-products-contract-test.sh
 	scripts/test/toolchain-contract-test.sh
 	scripts/test/workflow-safety-test.sh
 
@@ -68,7 +71,8 @@ server-test: ## Test the Go API server
 	cd apps/server && go test ./...
 
 server-test-db: ## Run the auth/store/user/resume DB-backed test suite against a live Postgres (needs test-db-up or TEST_DATABASE_URL); REQUIRE_TEST_DB=1 turns a missing TEST_DATABASE_URL into a failure instead of a silent skip, so a gate run can never pass vacuously
-	cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
+	@printf '%s\n' 'server-test-db: go test live auth/store/user/resume packages'
+	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... -race -count=1 -v
 
 web-build: ## Build the Nuxt web app
@@ -145,7 +149,8 @@ test-db-down: ## Stop the aboutme Postgres container (check no worker is mid-sui
 	podman rm -f aboutme-test-db
 
 server-test-integration: ## Run server integration tests (needs test-db-up or TEST_DATABASE_URL)
-	cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
+	@printf '%s\n' 'server-test-integration: go test store integration package'
+	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./internal/store/... -run Integration -count=1 -v
 
 semgrep: ## Offline SAST scan with registry packs + project rules (no account needed; quick local check)
@@ -154,7 +159,7 @@ semgrep: ## Offline SAST scan with registry packs + project rules (no account ne
 	  --config .semgrep.yml --error .
 
 semgrep-ci: ## Connected Semgrep — Code (Pro rules) + Supply Chain (SCA) + Secrets; free for public repos. Needs SEMGREP_APP_TOKEN in the environment. This is what CI runs.
-	semgrep ci
+	semgrep ci --code --supply-chain --secrets --no-suppress-errors
 
 sqlc-gen: ## Regenerate the typed data layer (sqlc reads migrations/ for the schema and sql/queries.sql for the queries)
 	cd apps/server && sqlc generate
@@ -172,7 +177,8 @@ migrate-check: ## Report pending migrations without applying them
 	cd apps/server && go run ./cmd/migrate -check
 
 server-migration-test: ## Run the migration harness + migrate CLI (needs test-db-up or TEST_DATABASE_URL)
-	cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
+	@printf '%s\n' 'server-migration-test: go test migration harness and CLI packages'
+	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./migrations/... ./cmd/migrate/... -count=1 -v
 
 route-table-test: ## Run the Caddy route-table integration test (needs a caddy binary; set CADDY_BIN or have caddy on PATH)
