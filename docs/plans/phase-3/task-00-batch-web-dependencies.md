@@ -8,14 +8,14 @@ behavior.
 
 **Files:** modify `apps/web/package.json`, `apps/web/package-lock.json`.
 
-- [ ] **Step 1: Production dependencies.**
-      `(cd apps/web && npm install dompurify@latest lucide-vue-next@latest --save-exact)`
+- [x] **Step 1: Production dependencies.**
+      `(cd apps/web && npm install dompurify@latest @lucide/vue@latest --save-exact)`
       (consumed by Task 3 — D3 — and Task 6 — D13).
-- [ ] **Step 2: Dev dependencies.**
+- [x] **Step 2: Dev dependencies.**
       `(cd apps/web && npm install -D jsdom@latest fontkit@latest @playwright/test@latest pdfjs-dist@latest @napi-rs/canvas@latest tsx@latest --save-exact)`
       (consumed by Task 3's `jsdom` vitest environment — D3, test-only, never
       production — Task 5's `fontkit` cmap coverage — D8 — and Task 11's harness
       plus pinned PDF raster goldens — D16).
-- [ ] **Step 3: Verify.** Run `make web-lint web-typecheck web-test web-build`.
+- [x] **Step 3: Verify.** Run `make web-lint web-typecheck web-test web-build`.
       Report the exact installed versions and the two-file diff in the session
       ledger.

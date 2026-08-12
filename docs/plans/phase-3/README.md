@@ -41,7 +41,7 @@ files exist. Reverify both at the execution base.
 
 | Task | Deliverable                                                 | Tier   | State   |
 | ---- | ----------------------------------------------------------- | ------ | ------- |
-| 0    | Batch pinned web dependencies                               | Normal | Pending |
+| 0    | Batch pinned web dependencies                               | Normal | Landed  |
 | 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Pending |
 | 2    | Go sanitizer package                                        | High   | Pending |
 | 3    | Client DOMPurify wrapper and agreement tests                | High   | Pending |

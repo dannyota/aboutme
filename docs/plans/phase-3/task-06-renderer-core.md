@@ -15,7 +15,7 @@ those files, stop and correct the plan before implementation.
 `useResumeStyles.ts`, `clampContrast.ts`, `icons.ts`, `formatDate.ts`,
 `pageMetrics.ts`);
 `apps/web/test/renderer/{styles,clamp,chips,icons,photo,dates,sections}.test.ts`.
-`lucide-vue-next` is already installed by Task 0 (B8); this task does not touch
+`@lucide/vue` is already installed by Task 0 (B8); this task does not touch
 `package.json`.
 
 Task 4's `bounds.adversarial.test.ts` and `plain-fields.adversarial.test.ts`
