@@ -20,3 +20,8 @@ rules:
   # later phase adds paths to this file; it is never rewritten"). Error is
   # already referenced by GET /readyz's 503 response.
   no-unused-components: off
+  # Examples are contract, not decoration: a wrong example teaches a client
+  # the wrong shape. Both rules are errors so docs/api/test asserts the
+  # linter enforces them instead of a test re-implementing JSON Schema.
+  no-invalid-media-type-examples: error
+  no-invalid-schema-examples: error
