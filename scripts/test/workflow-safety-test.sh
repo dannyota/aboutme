@@ -42,4 +42,13 @@ grep -Fq 'semgrep ci --code --supply-chain --secrets --no-suppress-errors' "$WOR
 grep -Fq -- '- run: scripts/test/semgrep-sca-inputs-test.sh' "$WORKFLOW" ||
   fail "hosted Semgrep does not verify its dependency inputs"
 
+grep -Fq 'runs-on: ubuntu-24.04' "$WORKFLOW" ||
+  fail "hosted S3 conformance does not pin a runner with Podman"
+grep -Fq -- '- run: make test-s3-up' "$WORKFLOW" ||
+  fail "hosted S3 conformance does not start the pinned test service"
+grep -Fq -- '- run: make server-test-s3' "$WORKFLOW" ||
+  fail "hosted S3 conformance does not run the fail-closed suite"
+grep -Fq 'run: make test-s3-down' "$WORKFLOW" ||
+  fail "hosted S3 conformance does not tear down its disposable service"
+
 printf 'hosted workflow safety tests passed\n'

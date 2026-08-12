@@ -31,10 +31,19 @@ From the repository root:
 
 ```sh
 cp .env.example .env
-# Set POSTGRES_PASSWORD to a new value in .env.
+# Set POSTGRES_PASSWORD, MEDIA_ACCESS_KEY_ID, and MEDIA_SECRET_ACCESS_KEY.
 make test-db-down
 make dev
 ```
+
+Generate independent media credentials and copy them into `MEDIA_ACCESS_KEY_ID`
+and `MEDIA_SECRET_ACCESS_KEY` in `.env`. For example, use `openssl rand -hex 16`
+for the access key and `openssl rand -hex 32` for the secret key. Do not commit
+`.env`, paste its contents into commands, or put its values in logs.
+
+Compose uses the private `aboutme-media` bucket in `us-east-1` by default. Set
+`MEDIA_BUCKET` or `MEDIA_REGION` in `.env` only to change those values. Bucket
+creation is idempotent: a one-shot initializer creates it before Go starts.
 
 `make dev` fails its preflight while the shared `aboutme-test-db` container is
 running. Only the integration owner may wait for every live-database worker to
@@ -65,14 +74,45 @@ and only when later work needs it.
 
 ## Runtime boundaries
 
-Compose runs PostgreSQL, Go, Nuxt, and Caddy as long-lived services. A one-shot
-`migrate` service applies embedded goose migrations before Go starts. A failed
-migration prevents the server from starting.
+Compose runs PostgreSQL, MinIO, Go, Nuxt, and Caddy as long-lived services. Two
+one-shot services run first: `migrate` applies embedded goose migrations, and
+the media initializer creates the private bucket. A failed migration or bucket
+initialization prevents the server from starting.
 
-PostgreSQL is not published to the host. Only Caddy publishes a port. Separate
-`db`, `edge`, and `frontend` networks prevent Nuxt and PostgreSQL from becoming
+PostgreSQL and the MinIO API are not published to the host. Only Caddy publishes
+a port. MinIO, its initializer, and Go are the only members of the isolated
+`media` network. Caddy and Nuxt cannot reach object storage. Separate `db`,
+`edge`, and `frontend` networks prevent Nuxt and PostgreSQL from becoming
 trusted Go proxies. Caddy strips viewer-supplied forwarding headers and sends
 one canonical client address to Go.
+
+The bucket has no public route. Go remains the authorization boundary for all
+owner and public photo reads. A leaked object key does not bypass the current
+resume-reference and live-state checks. Replacement and deletion revoke the
+database reference and schedule exact-key cleanup; object storage is not a
+second source of ownership.
+
+## Media configuration
+
+The server validates media configuration at startup. It accepts these closed
+modes; values from another mode are errors rather than ignored settings.
+
+| Mode               | Required settings                                                                                                                     | Settings that must be absent                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Filesystem         | `MEDIA_BACKEND=fs`, `MEDIA_FS_DIR`                                                                                                    | All six S3-only settings                                                                                     |
+| Custom-endpoint S3 | `MEDIA_BACKEND=s3`, `MEDIA_BUCKET`, `MEDIA_REGION`, absolute `MEDIA_ENDPOINT`, both static credentials, `MEDIA_FORCE_PATH_STYLE=true` | `MEDIA_FS_DIR`                                                                                               |
+| AWS task-role S3   | `MEDIA_BACKEND=s3`, `MEDIA_BUCKET`, `MEDIA_REGION`                                                                                    | `MEDIA_FS_DIR`, `MEDIA_ENDPOINT`, `MEDIA_ACCESS_KEY_ID`, `MEDIA_SECRET_ACCESS_KEY`, `MEDIA_FORCE_PATH_STYLE` |
+
+The S3-only settings are `MEDIA_BUCKET`, `MEDIA_REGION`, `MEDIA_ENDPOINT`,
+`MEDIA_ACCESS_KEY_ID`, `MEDIA_SECRET_ACCESS_KEY`, and `MEDIA_FORCE_PATH_STYLE`.
+A custom endpoint must be an absolute HTTP or HTTPS origin with no credentials,
+path, query, or fragment. Static credentials must be supplied as a complete pair
+and are valid only with a custom endpoint. An empty endpoint selects AWS mode
+and the AWS SDK default credential chain.
+
+Compose selects custom-endpoint S3 with `http://media:9000`, path-style access,
+and credentials from `.env`. MinIO is development and self-hosting tooling;
+production uses private S3 without an endpoint or static credentials.
 
 The database password is supplied through `PGPASSWORD`, not inserted into the
 database URL. This preserves passwords containing URI delimiters.

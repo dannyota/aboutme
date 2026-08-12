@@ -1,0 +1,28 @@
+# Keep local credentials, agent state, and repository metadata out of the
+# repository-root build context used by both deployment images.
+.git
+.claude
+.codex
+.dev
+.mcp.json
+.superpowers
+.env
+.env.*
+!.env.example
+AGENTS.md
+CLAUDE.md
+PROGRESS.md
+
+# Dependency trees, caches, test artifacts, and local build outputs are not
+# Dockerfile inputs.
+**/node_modules
+**/.nuxt
+**/.output
+**/dist
+**/coverage
+**/.cache
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.log
+.playwright-mcp

@@ -15,12 +15,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3/lock"
 
-	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
@@ -141,12 +141,12 @@ func run(check bool, stdout io.Writer) error {
 		return fmt.Errorf("invalid deadline budgets: %w", err)
 	}
 
-	cfg, err := config.LoadEnv()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if databaseURL == "" {
+		return fmt.Errorf("load config: DATABASE_URL is required")
 	}
 
-	db, err := sql.Open("pgx", cfg.DatabaseURL)
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

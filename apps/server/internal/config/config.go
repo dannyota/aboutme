@@ -3,6 +3,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
 	"net/url"
@@ -81,6 +82,25 @@ type Config struct {
 	// LinkedInClientID. Same required-in-prod/staging, optional-in-dev
 	// semantics.
 	LinkedInClientSecret string
+	// MediaBackend selects the private object store: "fs" for native
+	// development or "s3" for Compose, UAT, staging, and production.
+	MediaBackend string
+	// MediaFSDir is the rooted filesystem store directory. It is required
+	// only when MediaBackend is "fs".
+	MediaFSDir string
+	// MediaBucket and MediaRegion are required when MediaBackend is "s3".
+	MediaBucket string
+	MediaRegion string
+	// MediaEndpoint selects custom-endpoint S3 mode. An empty endpoint uses
+	// AWS's default endpoint and task-role credential chain.
+	MediaEndpoint string
+	// MediaAccessKeyID and MediaSecretAccessKey are required only for a
+	// custom endpoint. Their values must never enter errors or logs.
+	MediaAccessKeyID     string
+	MediaSecretAccessKey string
+	// MediaForcePathStyle must be true with a custom endpoint and absent in
+	// AWS mode.
+	MediaForcePathStyle bool
 }
 
 const (
@@ -111,7 +131,7 @@ var validEnvs = map[string]bool{
 //
 // PORT defaults to 8080, LISTEN_HOST defaults to "127.0.0.1", and
 // LOG_LEVEL defaults to "info" when unset. DATABASE_URL, ENV, and
-// PUBLIC_ORIGIN have no safe default and are required.
+// PUBLIC_ORIGIN and MEDIA_BACKEND have no safe default and are required.
 // TRUSTED_PROXY_CIDRS is required when
 // ENV=prod or ENV=staging (see TrustedProxyCIDRs and
 // requiresProductionTrustBoundary) and optional in dev. Load fails fast
@@ -168,6 +188,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	mediaCfg, err := loadMediaConfig(getenv)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port:                 port,
 		ListenHost:           listenHost,
@@ -182,6 +207,14 @@ func Load(getenv func(string) string) (Config, error) {
 		GitHubClientSecret:   githubClientSecret,
 		LinkedInClientID:     linkedInClientID,
 		LinkedInClientSecret: linkedInClientSecret,
+		MediaBackend:         mediaCfg.backend,
+		MediaFSDir:           mediaCfg.fsDir,
+		MediaBucket:          mediaCfg.bucket,
+		MediaRegion:          mediaCfg.region,
+		MediaEndpoint:        mediaCfg.endpoint,
+		MediaAccessKeyID:     mediaCfg.accessKeyID,
+		MediaSecretAccessKey: mediaCfg.secretAccessKey,
+		MediaForcePathStyle:  mediaCfg.forcePathStyle,
 	}, nil
 }
 
@@ -485,4 +518,112 @@ func loadLinkedInCredentials(rawClientID, rawClientSecret, env string) (clientID
 		}
 	}
 	return clientID, clientSecret, nil
+}
+
+type mediaConfig struct {
+	backend         string
+	fsDir           string
+	bucket          string
+	region          string
+	endpoint        string
+	accessKeyID     string
+	secretAccessKey string
+	forcePathStyle  bool
+}
+
+// loadMediaConfig validates the selected backend as one closed mode. Values
+// for the other mode are rejected rather than ignored, so a stale credential
+// or path setting cannot silently take effect after a later backend switch.
+// Errors name variables only and never include credential or endpoint values.
+func loadMediaConfig(getenv func(string) string) (mediaConfig, error) {
+	cfg := mediaConfig{
+		backend:         strings.ToLower(strings.TrimSpace(getenv("MEDIA_BACKEND"))),
+		fsDir:           strings.TrimSpace(getenv("MEDIA_FS_DIR")),
+		bucket:          strings.TrimSpace(getenv("MEDIA_BUCKET")),
+		region:          strings.TrimSpace(getenv("MEDIA_REGION")),
+		endpoint:        strings.TrimSpace(getenv("MEDIA_ENDPOINT")),
+		accessKeyID:     strings.TrimSpace(getenv("MEDIA_ACCESS_KEY_ID")),
+		secretAccessKey: strings.TrimSpace(getenv("MEDIA_SECRET_ACCESS_KEY")),
+	}
+	forcePathStyleRaw := strings.TrimSpace(getenv("MEDIA_FORCE_PATH_STYLE"))
+	forcePathStyleSet := forcePathStyleRaw != ""
+	if forcePathStyleSet {
+		switch forcePathStyleRaw {
+		case "true":
+			cfg.forcePathStyle = true
+		case "false":
+			cfg.forcePathStyle = false
+		default:
+			return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE must be true or false")
+		}
+	}
+
+	switch cfg.backend {
+	case "":
+		return mediaConfig{}, errors.New("config: MEDIA_BACKEND is required: must be fs or s3")
+	case "fs":
+		if cfg.fsDir == "" {
+			return mediaConfig{}, errors.New("config: MEDIA_FS_DIR is required when MEDIA_BACKEND=fs")
+		}
+		for _, crossMode := range []struct {
+			name  string
+			value string
+		}{
+			{"MEDIA_BUCKET", cfg.bucket},
+			{"MEDIA_REGION", cfg.region},
+			{"MEDIA_ENDPOINT", cfg.endpoint},
+			{"MEDIA_ACCESS_KEY_ID", cfg.accessKeyID},
+			{"MEDIA_SECRET_ACCESS_KEY", cfg.secretAccessKey},
+		} {
+			if crossMode.value != "" {
+				return mediaConfig{}, fmt.Errorf("config: %s must be absent when MEDIA_BACKEND=fs", crossMode.name)
+			}
+		}
+		if forcePathStyleSet {
+			return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE must be absent when MEDIA_BACKEND=fs")
+		}
+		return cfg, nil
+	case "s3":
+		if cfg.fsDir != "" {
+			return mediaConfig{}, errors.New("config: MEDIA_FS_DIR must be absent when MEDIA_BACKEND=s3")
+		}
+		if cfg.bucket == "" {
+			return mediaConfig{}, errors.New("config: MEDIA_BUCKET is required when MEDIA_BACKEND=s3")
+		}
+		if cfg.region == "" {
+			return mediaConfig{}, errors.New("config: MEDIA_REGION is required when MEDIA_BACKEND=s3")
+		}
+	default:
+		return mediaConfig{}, errors.New("config: MEDIA_BACKEND must be fs or s3")
+	}
+
+	if cfg.endpoint == "" {
+		if cfg.accessKeyID != "" {
+			return mediaConfig{}, errors.New("config: MEDIA_ACCESS_KEY_ID must be absent in AWS S3 mode")
+		}
+		if cfg.secretAccessKey != "" {
+			return mediaConfig{}, errors.New("config: MEDIA_SECRET_ACCESS_KEY must be absent in AWS S3 mode")
+		}
+		if forcePathStyleSet {
+			return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE must be absent in AWS S3 mode")
+		}
+		return cfg, nil
+	}
+
+	u, err := url.Parse(cfg.endpoint)
+	if err != nil || !u.IsAbs() || u.Host == "" ||
+		(strings.ToLower(u.Scheme) != "http" && strings.ToLower(u.Scheme) != "https") ||
+		u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return mediaConfig{}, errors.New("config: MEDIA_ENDPOINT must be an absolute scheme://host[:port] HTTP(S) URL")
+	}
+	if !forcePathStyleSet || !cfg.forcePathStyle {
+		return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE=true is required with MEDIA_ENDPOINT")
+	}
+	if cfg.accessKeyID == "" {
+		return mediaConfig{}, errors.New("config: MEDIA_ACCESS_KEY_ID is required with MEDIA_ENDPOINT")
+	}
+	if cfg.secretAccessKey == "" {
+		return mediaConfig{}, errors.New("config: MEDIA_SECRET_ACCESS_KEY is required with MEDIA_ENDPOINT")
+	}
+	return cfg, nil
 }
