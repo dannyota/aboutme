@@ -23,12 +23,12 @@
 // (resume.DecodeParts) happens exactly once, at the boundary, in
 // resume.Store's projectRow, after Project has already lifted the parts.
 //
-// Deliberate asymmetry between the read path and the wire boundary: an
-// identity conversion (from == to) is a byte-for-byte passthrough that runs
-// no validator, so projecting a row already at the current version never
-// turns a read into a validation pass. internal/resume validates documents on
-// writes. AcceptWire and EmitWire validate unconditionally, including at the
-// current version, because there the bytes come from, or go to, a client.
+// Convert validates every source, including identity conversions. Project
+// owns the deliberate read-path exception: a row already at the current
+// version takes Project's byte-for-byte short circuit without a schema
+// validation pass. internal/resume validates documents on writes. AcceptWire
+// and EmitWire also validate unconditionally because there the bytes come
+// from, or go to, a client.
 //
 // Every write must persist the full document through internal/resume's codec.
 // A granular jsonb_set-style write could restore an old-shape part after a
@@ -40,6 +40,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"slices"
 	"strconv"
@@ -100,6 +101,12 @@ var (
 	// it claims to be -- as a conversion source, as a conversion output, or
 	// at the wire boundary.
 	ErrInvalidDocument = errors.New("docmigrate: document invalid for its schema version")
+
+	// ErrLossyConversion means wire emission produced a schema-valid older
+	// document that could not be converted back to the exact same current
+	// document. P2A has no declared intentional lossy defaults, so emission
+	// fails closed until a future version contract explicitly defines one.
+	ErrLossyConversion = errors.New("docmigrate: lossy wire conversion")
 )
 
 // ConvertFunc converts one FULL canonical document by exactly one version.
@@ -261,9 +268,9 @@ func (p *Projector) CurrentVersion() int32 { return p.current }
 // an unknown version, a missing direction, a converter error, output that is
 // not valid JSON, or output invalid for its target schema.
 //
-// from == to is the identity: the exact input bytes come back, with no
-// validator run. That keeps a projected read pure and cheap;
-// the wire boundary validates separately and unconditionally.
+// from == to validates the source and returns its exact bytes. Project keeps
+// current-version reads byte-stable through its own short circuit rather than
+// weakening this public conversion interface.
 //
 // Convert is NOT gated on the accepted/emitted declarations -- those gate
 // the wire boundary, not internal conversion.
@@ -281,13 +288,13 @@ func (p *Projector) convert(doc json.RawMessage, from, to int32, validateSource 
 	if _, err := p.validatorFor(to); err != nil {
 		return nil, err
 	}
-	if from == to {
-		return doc, nil
-	}
 	if validateSource {
 		if err := p.validate(from, doc); err != nil {
 			return nil, fmt.Errorf("docmigrate: source document at version %d: %w", from, err)
 		}
+	}
+	if from == to {
+		return doc, nil
 	}
 
 	step := int32(1)
@@ -378,9 +385,10 @@ func (p *Projector) AcceptWire(doc json.RawMessage, version int32) (json.RawMess
 
 // EmitWire converts a current-version document to a declared emitted
 // version, validating the source at CurrentVersion and the result against
-// the target version's immutable schema. A Down converter that drops data
-// the target version requires therefore surfaces as an error rather than as
-// a quietly truncated document handed to an old client.
+// the target version's immutable schema. It then converts that result back
+// to CurrentVersion and compares JSON values semantically. This catches a
+// schema-valid Down converter that drops optional data, without requiring
+// converters to preserve whitespace or object-key order.
 func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessage, error) {
 	if !slices.Contains(p.emitted, version) {
 		return nil, fmt.Errorf("%w: %d is not emitted (emitted: %v)", ErrUnsupportedVersion, version, p.emitted)
@@ -388,7 +396,104 @@ func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessag
 	if err := p.validate(p.current, doc); err != nil {
 		return nil, fmt.Errorf("docmigrate: emitting a version %d document: %w", version, err)
 	}
-	return p.convert(doc, p.current, version, false)
+	emitted, err := p.convert(doc, p.current, version, false)
+	if err != nil {
+		return nil, err
+	}
+	if version == p.current {
+		return emitted, nil
+	}
+	restored, err := p.convert(emitted, version, p.current, false)
+	if err != nil {
+		return nil, fmt.Errorf("%w: restoring emitted version %d: %w", ErrLossyConversion, version, err)
+	}
+	equal, err := jsonSemanticallyEqual(doc, restored)
+	if err != nil {
+		return nil, fmt.Errorf("%w: comparing restored version %d: %w", ErrLossyConversion, version, err)
+	}
+	if !equal {
+		return nil, fmt.Errorf("%w: current -> %d -> current changed the document", ErrLossyConversion, version)
+	}
+	return emitted, nil
+}
+
+// jsonSemanticallyEqual compares JSON values without treating whitespace,
+// object-key order, or string escaping as changes. Arrays remain ordered.
+// JSON numbers retain their exact token spelling through UseNumber; canonical
+// resume documents use one generated spelling for each numeric value.
+func jsonSemanticallyEqual(left, right json.RawMessage) (bool, error) {
+	decode := func(raw json.RawMessage) (any, error) {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		var value any
+		if err := dec.Decode(&value); err != nil {
+			return nil, err
+		}
+		var trailing any
+		if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+			if err == nil {
+				return nil, errors.New("multiple JSON values")
+			}
+			return nil, err
+		}
+		return value, nil
+	}
+
+	leftValue, err := decode(left)
+	if err != nil {
+		return false, fmt.Errorf("decoding current document: %w", err)
+	}
+	rightValue, err := decode(right)
+	if err != nil {
+		return false, fmt.Errorf("decoding restored document: %w", err)
+	}
+	return jsonValuesEqual(leftValue, rightValue)
+}
+
+func jsonValuesEqual(left, right any) (bool, error) {
+	switch left := left.(type) {
+	case nil:
+		return right == nil, nil
+	case bool:
+		right, ok := right.(bool)
+		return ok && left == right, nil
+	case string:
+		right, ok := right.(string)
+		return ok && left == right, nil
+	case json.Number:
+		right, ok := right.(json.Number)
+		return ok && left.String() == right.String(), nil
+	case []any:
+		right, ok := right.([]any)
+		if !ok || len(left) != len(right) {
+			return false, nil
+		}
+		for i := range left {
+			equal, err := jsonValuesEqual(left[i], right[i])
+			if err != nil || !equal {
+				return equal, err
+			}
+		}
+		return true, nil
+	case map[string]any:
+		right, ok := right.(map[string]any)
+		if !ok || len(left) != len(right) {
+			return false, nil
+		}
+		for key, leftValue := range left {
+			rightValue, ok := right[key]
+			if !ok {
+				return false, nil
+			}
+			equal, err := jsonValuesEqual(leftValue, rightValue)
+			if err != nil || !equal {
+				return equal, err
+			}
+		}
+		return true, nil
+	default:
+		return false, fmt.Errorf("unsupported decoded JSON value %T", left)
+	}
 }
 
 // Project lifts personalDetails/content/customization -- exactly the three

@@ -485,13 +485,11 @@ func TestConvert_MultiStepChain(t *testing.T) {
 	}
 }
 
-// TestConvert_IdentityDoesNotValidate pins the deliberate asymmetry between
-// the READ path and the WIRE boundary: an identity conversion is a pure
-// byte passthrough and runs no validator, so projecting a row that is
-// already current never turns a read into a validation pass. Reads stay pure
-// and cheap; writes own validation. The wire boundary (AcceptWire/EmitWire)
-// validates unconditionally -- see its own tests.
-func TestConvert_IdentityDoesNotValidate(t *testing.T) {
+// TestConvert_IdentityValidatesSourceAndPreservesBytes pins Convert's public
+// contract: even an identity conversion validates its source, while a valid
+// document still returns byte-for-byte unchanged. Project owns the separate
+// current-version read short circuit.
+func TestConvert_IdentityValidatesSourceAndPreservesBytes(t *testing.T) {
 	t.Parallel()
 
 	var n int
@@ -504,8 +502,44 @@ func TestConvert_IdentityDoesNotValidate(t *testing.T) {
 	if _, err := p.Convert(fullV1Doc(t), 1, 1); err != nil {
 		t.Fatalf("Convert(doc, 1, 1): %v", err)
 	}
+	if n != 1 {
+		t.Errorf("identity Convert ran the validator %d time(s), want 1", n)
+	}
+
+	invalid := json.RawMessage(`{"schemaVersion":1,"not":"a resume"}`)
+	if _, err := p.Convert(invalid, 1, 1); !errors.Is(err, docmigrate.ErrInvalidDocument) {
+		t.Errorf("identity Convert of invalid source returned %v, want ErrInvalidDocument", err)
+	}
+	if n != 2 {
+		t.Errorf("two identity Convert calls ran the validator %d time(s), want 2", n)
+	}
+}
+
+// TestProject_CurrentVersionBypassesValidation protects the read-path
+// behavior independently from Convert: an already-current row is returned
+// byte-for-byte and is not turned into a schema validation pass.
+func TestProject_CurrentVersionBypassesValidation(t *testing.T) {
+	t.Parallel()
+
+	var n int
+	p, err := docmigrate.NewProjector(nil,
+		map[int32]docmigrate.ValidateFunc{1: counted(compileValidator(t, v1RawSchema(t)), &n)},
+		[]int32{1}, []int32{1}, 1)
+	if err != nil {
+		t.Fatalf("NewProjector: %v", err)
+	}
+	pd := json.RawMessage(`{"not":"schema-valid personal details"}`)
+	content := json.RawMessage(`[]`)
+	customization := json.RawMessage(`null`)
+	gotPD, gotContent, gotCustomization, err := p.Project(pd, content, customization, 1)
+	if err != nil {
+		t.Fatalf("Project(current parts): %v", err)
+	}
+	if !bytes.Equal(gotPD, pd) || !bytes.Equal(gotContent, content) || !bytes.Equal(gotCustomization, customization) {
+		t.Errorf("Project current-version short circuit changed bytes: got %s / %s / %s", gotPD, gotContent, gotCustomization)
+	}
 	if n != 0 {
-		t.Errorf("identity Convert ran the validator %d time(s), want 0", n)
+		t.Errorf("Project current-version short circuit ran the validator %d time(s), want 0", n)
 	}
 }
 
@@ -1102,9 +1136,10 @@ func TestWire_InvalidInputFailsClosed(t *testing.T) {
 	}
 }
 
-// TestWire_LossyEmissionFailsClosed: a Down converter that drops data the
-// target version requires must surface as an error, never as a quietly
-// truncated document handed to an old client.
+// TestWire_LossyEmissionFailsClosed proves schema validity alone cannot hide
+// data loss: photo is optional in v1, so the emitted document remains valid
+// after a broken Down converter drops it. EmitWire must still reject the
+// non-preserving round trip.
 func TestWire_LossyEmissionFailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -1117,7 +1152,11 @@ func TestWire_LossyEmissionFailsClosed(t *testing.T) {
 					if err != nil {
 						return nil, err
 					}
-					delete(m, "content") // required by v1
+					pd, ok := m["personalDetails"].(map[string]any)
+					if !ok {
+						return nil, errors.New("personalDetails is not an object")
+					}
+					delete(pd, "photo") // optional in v1: output remains schema-valid
 					m["schemaVersion"] = json.Number("1")
 					return json.Marshal(m)
 				},
@@ -1134,7 +1173,7 @@ func TestWire_LossyEmissionFailsClosed(t *testing.T) {
 	}
 
 	current := mustConvert(t, p, fullV1Doc(t), 1, 2)
-	if _, err := p.EmitWire(current, 1); !errors.Is(err, docmigrate.ErrInvalidDocument) {
-		t.Errorf("EmitWire error = %v, want ErrInvalidDocument for a lossy Down converter", err)
+	if _, err := p.EmitWire(current, 1); !errors.Is(err, docmigrate.ErrLossyConversion) {
+		t.Errorf("EmitWire error = %v, want ErrLossyConversion for a schema-valid optional-photo loss", err)
 	}
 }

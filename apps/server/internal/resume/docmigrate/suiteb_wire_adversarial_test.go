@@ -55,8 +55,8 @@ func suiteBPersonalDetailsOf(m map[string]any) (map[string]any, error) {
 }
 
 // suiteBValidatorFor builds a ValidateFunc for one synthetic version. calls,
-// when non-nil, counts every invocation so a test can prove a validator was
-// not run for the identity passthrough.
+// when non-nil, counts every invocation so tests can prove which public
+// boundaries validate their inputs.
 func suiteBValidatorFor(version int32, calls *atomic.Int64) docmigrate.ValidateFunc {
 	return func(doc json.RawMessage) error {
 		if calls != nil {
@@ -429,27 +429,31 @@ func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Convert_IdentityIsBytewisePassthroughWithNoValidator pins the
-// documented asymmetry: from == to returns the exact input bytes and runs NO
-// validator, which keeps a projected read pure and cheap.
-func TestSuiteB_Convert_IdentityIsBytewisePassthroughWithNoValidator(t *testing.T) {
+// TestSuiteB_Convert_IdentityValidatesAndPreservesBytes pins the public
+// Convert contract independently from Project's current-version read short
+// circuit.
+func TestSuiteB_Convert_IdentityValidatesAndPreservesBytes(t *testing.T) {
 	var calls atomic.Int64
 	p := suiteBNewProjector(t,
 		map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
 		suiteBValidators(2, &calls),
 		[]int32{1, 2}, []int32{1, 2}, 2)
 
-	// Deliberately invalid at v2: if the identity path validated, this fails.
-	junk := json.RawMessage(`{"schemaVersion":2,"not":"a document"}`)
-	got, err := p.Convert(junk, 2, 2)
+	valid := suiteBDocAt(t, 2)
+	got, err := p.Convert(valid, 2, 2)
 	if err != nil {
 		t.Fatalf("Convert identity returned an error: %v", err)
 	}
-	if !bytes.Equal(got, junk) {
-		t.Errorf("Convert identity returned %s, want the exact input bytes %s", got, junk)
+	if !bytes.Equal(got, valid) {
+		t.Errorf("Convert identity returned %s, want the exact input bytes %s", got, valid)
 	}
-	if calls.Load() != 0 {
-		t.Errorf("Convert identity ran %d validations, want 0", calls.Load())
+	if calls.Load() != 1 {
+		t.Errorf("Convert identity ran %d validations, want 1", calls.Load())
+	}
+
+	junk := json.RawMessage(`{"schemaVersion":2,"not":"a document"}`)
+	if _, err := p.Convert(junk, 2, 2); !errors.Is(err, docmigrate.ErrInvalidDocument) {
+		t.Errorf("Convert identity of invalid source returned %v, want ErrInvalidDocument", err)
 	}
 }
 
@@ -613,8 +617,8 @@ func TestSuiteB_AcceptWire_And_EmitWire_FailClosed(t *testing.T) {
 	})
 
 	t.Run("validates unconditionally at the current version", func(t *testing.T) {
-		// Unlike Convert's identity passthrough, the wire boundary validates
-		// even when no conversion is needed: those bytes came from a client.
+		// The wire boundary validates even when no conversion is needed because
+		// those bytes came from, or will go to, a client.
 		var calls atomic.Int64
 		p := newProjector(t, &calls)
 		junk := json.RawMessage(`{"schemaVersion":2,"not":"a document"}`)
@@ -659,31 +663,67 @@ func TestSuiteB_AcceptWire_And_EmitWire_FailClosed(t *testing.T) {
 	})
 }
 
-// TestSuiteB_EmitWire_LossyDownConversionFailsClosed pins the contract's own
-// example: a Down converter that drops data the target version requires
-// surfaces as an error rather than as a quietly truncated document handed to
-// an old client.
-func TestSuiteB_EmitWire_LossyDownConversionFailsClosed(t *testing.T) {
-	requireFullName := func(version int32) docmigrate.ValidateFunc {
-		base := suiteBValidatorFor(version, nil)
-		return func(doc json.RawMessage) error {
-			if err := base(doc); err != nil {
-				return err
-			}
-			m, err := suiteBDecodeDoc(doc)
-			if err != nil {
-				return err
-			}
-			pd, err := suiteBPersonalDetailsOf(m)
-			if err != nil {
-				return err
-			}
-			if _, ok := pd["fullName"]; !ok {
-				return fmt.Errorf("synthetic v%d: personalDetails.fullName is required", version)
-			}
-			return nil
-		}
+// TestSuiteB_WireDeclarationsAreIndependent uses different accepted and
+// emitted sets. It proves each boundary consults its own declaration rather
+// than a shared union or the converter capability.
+func TestSuiteB_WireDeclarationsAreIndependent(t *testing.T) {
+	p := suiteBNewProjector(t,
+		map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
+		suiteBValidators(2, nil),
+		[]int32{1, 2}, []int32{2}, 2)
+
+	v1 := suiteBDocAt(t, 1)
+	current, version, err := p.AcceptWire(v1, 1)
+	if err != nil {
+		t.Fatalf("AcceptWire rejected v1 from the accepted-only set: %v", err)
 	}
+	if version != 2 {
+		t.Fatalf("AcceptWire returned version %d, want 2", version)
+	}
+	if _, err := p.EmitWire(current, 1); !errors.Is(err, docmigrate.ErrUnsupportedVersion) {
+		t.Errorf("EmitWire accepted v1 outside the emitted set: got %v, want ErrUnsupportedVersion", err)
+	}
+	if _, err := p.EmitWire(current, 2); err != nil {
+		t.Errorf("EmitWire rejected current v2 from the emitted set: %v", err)
+	}
+}
+
+// TestSuiteB_EmitWire_LossyDownConversionFailsClosed proves target-schema
+// validation cannot hide loss of an optional old-version field. The sentinel
+// is valid but not required at both versions, so only a semantic round trip
+// detects a Down converter that drops it.
+func TestSuiteB_EmitWire_LossyDownConversionFailsClosed(t *testing.T) {
+	const sentinelKey = "legacyOptionalSentinel"
+	old := suiteBDocAt(t, 1)
+	oldMap, err := suiteBDecodeDoc(old)
+	if err != nil {
+		t.Fatalf("decode old-version fixture: %v", err)
+	}
+	oldPD, err := suiteBPersonalDetailsOf(oldMap)
+	if err != nil {
+		t.Fatalf("old-version personalDetails: %v", err)
+	}
+	oldPD[sentinelKey] = "must survive"
+	old, err = json.Marshal(oldMap)
+	if err != nil {
+		t.Fatalf("marshal old-version fixture with sentinel: %v", err)
+	}
+	preparing := suiteBNewProjector(t,
+		map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
+		suiteBValidators(2, nil), []int32{1, 2}, []int32{1, 2}, 2)
+	current, version, err := preparing.AcceptWire(old, 1)
+	if err != nil {
+		t.Fatalf("AcceptWire(old v1 with sentinel): %v", err)
+	}
+	if version != 2 {
+		t.Fatalf("AcceptWire returned version %d, want 2", version)
+	}
+	var formatted bytes.Buffer
+	if err := json.Indent(&formatted, current, "", "  "); err != nil {
+		t.Fatalf("format current fixture: %v", err)
+	}
+	current = formatted.Bytes()
+
 	lossyDown := func(doc json.RawMessage) (json.RawMessage, error) {
 		lifted, err := suiteBDownTo(1)(doc)
 		if err != nil {
@@ -697,18 +737,53 @@ func TestSuiteB_EmitWire_LossyDownConversionFailsClosed(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		delete(pd, "fullName")
+		delete(pd, sentinelKey)
 		return json.Marshal(m)
 	}
 
-	p := suiteBNewProjector(t,
-		map[int32]docmigrate.AdjacentConverters{1: {Up: suiteBUpTo(2), Down: lossyDown}},
-		map[int32]docmigrate.ValidateFunc{1: requireFullName(1), 2: suiteBValidatorFor(2, nil)},
-		[]int32{1, 2}, []int32{1, 2}, 2)
+	t.Run("preserving converter keeps every old-version field", func(t *testing.T) {
+		p := suiteBNewProjector(t,
+			map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)},
+			suiteBValidators(2, nil), []int32{1, 2}, []int32{1, 2}, 2)
+		emitted, err := p.EmitWire(current, 1)
+		if err != nil {
+			t.Fatalf("EmitWire with preserving Down converter: %v", err)
+		}
+		emittedMap, err := suiteBDecodeDoc(emitted)
+		if err != nil {
+			t.Fatalf("decode emitted v1: %v", err)
+		}
+		emittedPD, err := suiteBPersonalDetailsOf(emittedMap)
+		if err != nil {
+			t.Fatalf("emitted personalDetails: %v", err)
+		}
+		if got := emittedPD[sentinelKey]; got != "must survive" {
+			t.Errorf("emitted optional sentinel = %v, want %q", got, "must survive")
+		}
+		if suiteBNormalize(t, emitted) != suiteBNormalize(t, old) {
+			t.Errorf("preserving emission changed the old-version document:\n got %s\nwant %s",
+				suiteBNormalize(t, emitted), suiteBNormalize(t, old))
+		}
+		restored, _, err := p.AcceptWire(emitted, 1)
+		if err != nil {
+			t.Fatalf("AcceptWire of preserving emission: %v", err)
+		}
+		if suiteBNormalize(t, restored) != suiteBNormalize(t, current) {
+			t.Errorf("preserving wire round trip changed the current document:\n got %s\nwant %s",
+				suiteBNormalize(t, restored), suiteBNormalize(t, current))
+		}
+	})
 
-	if _, err := p.EmitWire(suiteBDocAt(t, 2), 1); !errors.Is(err, docmigrate.ErrInvalidDocument) {
-		t.Errorf("EmitWire with a lossy Down converter: got %v, want ErrInvalidDocument", err)
-	}
+	t.Run("schema-valid sentinel loss fails closed", func(t *testing.T) {
+		p := suiteBNewProjector(t,
+			map[int32]docmigrate.AdjacentConverters{1: {Up: suiteBUpTo(2), Down: lossyDown}},
+			suiteBValidators(2, nil), []int32{1, 2}, []int32{1, 2}, 2)
+
+		emitted, err := p.EmitWire(current, 1)
+		if !errors.Is(err, docmigrate.ErrLossyConversion) {
+			t.Fatalf("EmitWire error = %v, want ErrLossyConversion; emitted %s", err, emitted)
+		}
+	})
 }
 
 // TestSuiteB_WireRoundTripPreservesV1Fields proves round-trip preservation of
