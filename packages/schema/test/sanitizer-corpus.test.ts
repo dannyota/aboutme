@@ -1,62 +1,107 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// This package owns the shared sanitizer allowlist and hostile corpus. These
-// tests keep their versions and coverage aligned for the Go and browser
-// consumers. See docs/design/security.md#untrusted-document-content.
-const root = new URL("..", import.meta.url).pathname;
-const allowlist = JSON.parse(
-  readFileSync(join(root, "validation", "sanitizer-allowlist.v1.json"), "utf8"),
-);
-const corpus = JSON.parse(
-  readFileSync(join(root, "validation", "hostile-corpus.json"), "utf8"),
-);
-const schema = JSON.parse(
-  readFileSync(join(root, "resume.schema.json"), "utf8"),
-);
+import {
+  ALLOWED_ATTRIBUTES,
+  ALLOWED_TAGS,
+  ALLOWED_URL_SCHEMES,
+  EXTERNAL_REL,
+  FORBIDDEN_ATTRIBUTE_PREFIXES,
+  FORBIDDEN_TAGS,
+  FORBIDDEN_URL_SCHEMES,
+  HOSTILE_CORPUS,
+  SANITIZER_ALLOWLIST_VERSION,
+} from "../gen/ts/sanitizer";
 
-describe("sanitizer-allowlist.v1.json", () => {
-  it("version matches resume.schema.json's sanitizerAllowlistVersion", () => {
-    expect(allowlist.version).toBe(
-      schema.$defs.sanitizerAllowlistVersion.const,
+interface AllowlistSource {
+  version: number;
+  tags: string[];
+  attributes: Record<string, string[]>;
+  globalAttributes: string[];
+  urlSchemes: string[];
+  forbidden: {
+    tags: string[];
+    attributePrefixes: string[];
+    urlSchemes: string[];
+  };
+  linkHardening: { externalRel: string };
+}
+
+interface CorpusSource {
+  version: number;
+  payloads: Array<{ id: string; category: string; payload: string }>;
+}
+
+interface SchemaSource {
+  $defs: { sanitizerAllowlistVersion: { const: number } };
+}
+
+const readJSON = <T>(path: string): T =>
+  JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8")) as T;
+
+const sourceAllowlist = readJSON<AllowlistSource>(
+  "../validation/sanitizer-allowlist.v1.json",
+);
+const sourceCorpus = readJSON<CorpusSource>(
+  "../validation/hostile-corpus.json",
+);
+const sourceSchema = readJSON<SchemaSource>("../resume.schema.json");
+
+describe("generated sanitizer data", () => {
+  it("matches both validation sources and the schema version", () => {
+    expect(SANITIZER_ALLOWLIST_VERSION).toBe(sourceAllowlist.version);
+    expect(SANITIZER_ALLOWLIST_VERSION).toBe(sourceCorpus.version);
+    expect(SANITIZER_ALLOWLIST_VERSION).toBe(
+      sourceSchema.$defs.sanitizerAllowlistVersion.const,
     );
-  });
-
-  it("permits exactly https, mailto, tel and nothing else", () => {
-    expect(allowlist.urlSchemes.sort()).toEqual(["https", "mailto", "tel"]);
-  });
-
-  it("forbids javascript:/data: explicitly, and they don't overlap the permitted list", () => {
-    expect(allowlist.forbidden.urlSchemes).toEqual(
-      expect.arrayContaining(["javascript", "data"]),
+    expect(sourceAllowlist.globalAttributes).toEqual([]);
+    expect(ALLOWED_TAGS).toEqual(sourceAllowlist.tags);
+    expect(ALLOWED_ATTRIBUTES).toEqual(sourceAllowlist.attributes);
+    expect(ALLOWED_URL_SCHEMES).toEqual(sourceAllowlist.urlSchemes);
+    expect(FORBIDDEN_TAGS).toEqual(sourceAllowlist.forbidden.tags);
+    expect(FORBIDDEN_ATTRIBUTE_PREFIXES).toEqual(
+      sourceAllowlist.forbidden.attributePrefixes,
     );
-    for (const scheme of allowlist.forbidden.urlSchemes) {
-      expect(allowlist.urlSchemes).not.toContain(scheme);
-    }
-  });
-
-  it("declares at least one allowed tag and no forbidden tag is also allowed", () => {
-    expect(allowlist.tags.length).toBeGreaterThan(0);
-    for (const tag of allowlist.forbidden.tags) {
-      expect(allowlist.tags).not.toContain(tag);
-    }
+    expect(FORBIDDEN_URL_SCHEMES).toEqual(sourceAllowlist.forbidden.urlSchemes);
+    expect(EXTERNAL_REL).toBe(sourceAllowlist.linkHardening.externalRel);
+    expect(HOSTILE_CORPUS).toEqual(
+      sourceCorpus.payloads.map(({ id, category, payload }) => ({
+        id,
+        category,
+        payload,
+      })),
+    );
   });
 });
 
-describe("hostile-corpus.json", () => {
-  it("has at least one payload", () => {
-    expect(corpus.payloads.length).toBeGreaterThan(0);
+describe("sanitizer source coverage", () => {
+  it("keeps allowed and forbidden URL schemes disjoint", () => {
+    expect([...sourceAllowlist.urlSchemes].sort()).toEqual([
+      "https",
+      "mailto",
+      "tel",
+    ]);
+    for (const scheme of sourceAllowlist.forbidden.urlSchemes) {
+      expect(sourceAllowlist.urlSchemes).not.toContain(scheme);
+    }
   });
 
-  it("every payload has a unique id", () => {
-    const ids = corpus.payloads.map((p: { id: string }) => p.id);
+  it("keeps allowed and forbidden tags disjoint", () => {
+    expect(sourceAllowlist.tags.length).toBeGreaterThan(0);
+    for (const tag of sourceAllowlist.forbidden.tags) {
+      expect(sourceAllowlist.tags).not.toContain(tag);
+    }
+  });
+
+  it("has unique, non-empty payloads for every required attack class", () => {
+    const ids = sourceCorpus.payloads.map(({ id }) => id);
     expect(new Set(ids).size).toBe(ids.length);
-  });
+    for (const { payload } of sourceCorpus.payloads) {
+      expect(payload.length).toBeGreaterThan(0);
+    }
 
-  it("covers every category the phase-gate review required: javascript:, data:, protocol-relative, mixed-case/whitespace-obfuscated schemes, and event-handler attributes", () => {
     const categories = new Set(
-      corpus.payloads.map((p: { category: string }) => p.category),
+      sourceCorpus.payloads.map(({ category }) => category),
     );
     for (const required of [
       "javascript-scheme",
@@ -65,86 +110,43 @@ describe("hostile-corpus.json", () => {
       "obfuscated-scheme",
       "event-handler-attribute",
     ]) {
+      expect(categories).toContain(required);
+    }
+  });
+
+  it("covers every explicitly forbidden scheme and tag", () => {
+    for (const scheme of sourceAllowlist.forbidden.urlSchemes) {
       expect(
-        categories,
-        `missing hostile-corpus category "${required}"`,
-      ).toContain(required);
+        sourceCorpus.payloads.some(({ payload }) =>
+          payload.toLowerCase().includes(`${scheme}:`),
+        ),
+        `missing hostile payload for ${scheme}:`,
+      ).toBe(true);
     }
-  });
-
-  it("every payload is a non-empty string", () => {
-    for (const p of corpus.payloads) {
-      expect(typeof p.payload).toBe("string");
-      expect(p.payload.length).toBeGreaterThan(0);
-    }
-  });
-
-  // Derive coverage from the allowlist so a newly forbidden scheme cannot land
-  // without a payload.
-  it("every forbidden.urlSchemes scheme in the allowlist has at least one corpus payload exercising it", () => {
-    for (const scheme of allowlist.forbidden.urlSchemes) {
-      const covering = corpus.payloads.filter((p: { payload: string }) =>
-        p.payload.toLowerCase().includes(`${scheme}:`),
-      );
+    for (const tag of sourceAllowlist.forbidden.tags) {
       expect(
-        covering.length,
-        `no hostile-corpus payload contains "${scheme}:" (sanitizer-allowlist.v1.json forbids this scheme)`,
-      ).toBeGreaterThan(0);
+        sourceCorpus.payloads.some(({ payload }) =>
+          payload.toLowerCase().includes(`<${tag}`),
+        ),
+        `missing hostile payload for <${tag}>`,
+      ).toBe(true);
     }
   });
 
-  // Link hardening needs a target=_blank payload or sanitizer conformance
-  // cannot detect its removal.
-  it('covers the mandated rel="noopener noreferrer" hardening on target="_blank" anchors', () => {
-    const relHardeningPayloads = corpus.payloads.filter(
-      (p: { payload: string }) => p.payload.includes('target="_blank"'),
-    );
+  it("covers link hardening, entity encoding, and nested normalization", () => {
     expect(
-      relHardeningPayloads.length,
-      'no hostile-corpus payload exercises target="_blank" (sanitizer-allowlist.v1.json linkHardening)',
-    ).toBeGreaterThan(0);
-    // At least one of those payloads must supply NO rel at all (proving the
-    // sanitizer must ADD it, not just correct a wrong one) — this is what
-    // "rel-hardening-target-blank-missing-rel" exists for.
-    expect(
-      relHardeningPayloads.some(
-        (p: { payload: string }) => !p.payload.includes("rel="),
+      sourceCorpus.payloads.some(
+        ({ payload }) =>
+          payload.includes('target="_blank"') && !payload.includes("rel="),
       ),
-      'expected at least one target="_blank" payload with no rel attribute at all',
     ).toBe(true);
-  });
-
-  // Derive tag coverage from the allowlist for the same reason as schemes.
-  it("every forbidden.tags entry in the allowlist has at least one corpus payload exercising it", () => {
-    for (const tag of allowlist.forbidden.tags) {
-      const covering = corpus.payloads.filter((p: { payload: string }) =>
-        p.payload.toLowerCase().includes(`<${tag}`),
-      );
-      expect(
-        covering.length,
-        `no hostile-corpus payload contains "<${tag}" (sanitizer-allowlist.v1.json forbids this tag)`,
-      ).toBeGreaterThan(0);
-    }
-  });
-
-  // Literal checks miss entity-encoded schemes and nested-tag normalization.
-  it("covers an HTML-entity-encoded scheme (bypasses a literal-string scheme check)", () => {
-    const covering = corpus.payloads.filter((p: { payload: string }) =>
-      p.payload.includes("&#"),
-    );
     expect(
-      covering.length,
-      "expected at least one payload with an HTML numeric character reference (&#...;) encoding a scheme",
-    ).toBeGreaterThan(0);
-  });
-
-  it("covers a nested/normalization tag-stripping bypass", () => {
-    const covering = corpus.payloads.filter(
-      (p: { category: string }) => p.category === "nested-tag-normalization",
-    );
+      sourceCorpus.payloads.some(({ payload }) => payload.includes("&#")),
+    ).toBe(true);
     expect(
-      covering.length,
-      "expected at least one payload demonstrating a single-pass tag-stripping bypass",
-    ).toBeGreaterThan(0);
+      sourceCorpus.payloads.some(
+        ({ category }) => category === "nested-tag-normalization",
+      ),
+    ).toBe(true);
   });
 });

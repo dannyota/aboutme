@@ -23,6 +23,8 @@ const files = [
   "gen/go/rawschema.go",
   "gen/go/released.go",
   "gen/ts/released.ts",
+  "gen/go/sanitizer.go",
+  "gen/ts/sanitizer.ts",
   ...released.flatMap((entry) => [
     `${entry.goPackage}/resume.go`,
     `${entry.goPackage}/rawschema.go`,

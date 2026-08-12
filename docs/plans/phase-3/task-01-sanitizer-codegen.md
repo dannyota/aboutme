@@ -40,7 +40,7 @@ export const HOSTILE_CORPUS: readonly HostilePayload[];
 // ExternalRel, HostilePayload struct, HostileCorpus slice.
 ```
 
-- [ ] **Step 1: Failing faithfulness test.** In `test/gen.test.ts` (or a new
+- [x] **Step 1: Failing faithfulness test.** In `test/gen.test.ts` (or a new
       `sanitizer-gen.test.ts`): import `gen/ts/sanitizer.ts`, parse the two
       validation JSONs independently, assert deep equality (tags, attributes,
       schemes, forbidden sets, rel value, every corpus payload by id) and
@@ -48,17 +48,17 @@ export const HOSTILE_CORPUS: readonly HostilePayload[];
       Run
       `(cd packages/schema && npx vitest run test/gen.test.ts test/sanitizer-corpus.test.ts)`
       → **FAIL** (module absent).
-- [ ] **Step 2: Extend `generate.mjs`.** Emit both artifacts from the JSON
+- [x] **Step 2: Extend `generate.mjs`.** Emit both artifacts from the JSON
       sources (sorted keys, stable ordering — same determinism bar as the
       existing outputs). Wire the Go emission into the same run so
       `(cd packages/schema && npm run generate)` produces everything.
       Regenerate; Step 1 passes.
-- [ ] **Step 3: Drift + Go compile.** Extend the byte-compare drift test to the
+- [x] **Step 3: Drift + Go compile.** Extend the byte-compare drift test to the
       two new outputs. Run
       `(cd packages/schema/gen/go && go test ./... -count=1)` and
       `(cd apps/server && go build ./... && go test ./...)`. A Go-side test in
       `gen/go` (`sanitizer_test.go`, hand-written like `section.go`'s tests)
       re-parses the JSON with `encoding/json` and asserts equality with the
       generated constants — the same faithfulness check in the second language.
-- [ ] **Step 4: Gate.** Run `make schema-check`. Report the generated paths and
+- [x] **Step 4: Gate.** Run `make schema-check`. Report the generated paths and
       exact check output to the integration owner.
