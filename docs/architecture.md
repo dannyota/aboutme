@@ -1,6 +1,6 @@
 # Current-state architecture
 
-This document describes the repository at `main` commit `c67e47d`, verified on
+This document describes the repository at `main` commit `8ccf0d2`, verified on
 2026-08-12. The [design](design/README.md) owns intended behavior. The
 [roadmap](plans/implementation-plan.md) owns delivery state and gates.
 
@@ -53,8 +53,8 @@ Resume HTTP routes are not implemented.
 
 ## Implemented resume data layer
 
-Phase 2A Tasks 1–11 are present, but Task 12 and both phase gates remain. The
-landed slice provides:
+Phase 2A Tasks 1–12 are present, but both phase gates remain. The landed slice
+provides:
 
 - immutable resume schema v1, retained v1 Go and TypeScript types, and released,
   accepted, and emitted version registries that currently contain only version
@@ -69,8 +69,8 @@ landed slice provides:
   UUID key, and caller-supplied body hash; it stores a JSON status/body result
   and reaps the active user's expired records on their next execution;
 - pure document projection, explicit adjacent-converter machinery, a one-row CAS
-  backfill primitive, independent write and migration suites, and a bounds
-  completeness guard.
+  backfill primitive, independent write, migration, and bounds suites, and a
+  bounds completeness guard.
 
 These are data-layer primitives, not resume HTTP behavior. Production has no
 adjacent version pair while v1 is the only released version. No process invokes
@@ -83,15 +83,13 @@ global expiry sweep.
 Twenty template preset JSON files are committed. Their design contract remains
 draft, and the renderer, sanitizer, and licensed font assets have not landed.
 
-## Known contract defects
+## Known delivery gaps
 
-- The settings page starts provider linking and reauthentication with GET links.
-  The server and OpenAPI require authenticated CSRF-protected POST, then
-  navigation to the returned authorization URL. P1.1 remains open.
-- `GET /me` currently inherits identity order from SQL ordered only by
-  `created_at`. The settings page uses the first identity as its default
-  reauthentication provider, so P1.1 must add the `id` tiebreaker required by
-  the design.
+- P1.1's settings-page POST flow, provider-bound navigation, CSRF retry, and
+  deterministic identity order are implemented. The bounded browser proof and
+  both phase gates remain before P1.1 closes.
+- P2A Task 12 traceability and downstream handoffs are landed. Its phase defect
+  review and exact-candidate acceptance remain before P2A closes.
 - The current Compose route serves HTTP. P9 requires the complete image-based
   deployment at an HTTPS origin on port 443. The UAT harness must close this gap
   before acceptance can run.
