@@ -21,8 +21,8 @@ SELECT * FROM identities WHERE provider = $1 AND provider_user_id = $2;
 INSERT INTO identities (user_id, provider, provider_user_id) VALUES ($1, $2, $3) RETURNING *;
 
 -- name: ListIdentitiesByUserID :many
--- Ordered by creation time, oldest first.
-SELECT * FROM identities WHERE user_id = $1 ORDER BY created_at;
+-- Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
+SELECT * FROM identities WHERE user_id = $1 ORDER BY created_at ASC, id ASC;
 
 -- name: CreateSession :one
 -- Always inserts a brand-new row -- used both by Issue (fixation defense: a

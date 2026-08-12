@@ -711,10 +711,10 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 }
 
 const listIdentitiesByUserID = `-- name: ListIdentitiesByUserID :many
-SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE user_id = $1 ORDER BY created_at
+SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE user_id = $1 ORDER BY created_at ASC, id ASC
 `
 
-// Ordered by creation time, oldest first.
+// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error) {
 	rows, err := q.db.Query(ctx, listIdentitiesByUserID, userID)
 	if err != nil {
