@@ -412,6 +412,21 @@ func TestSlugTombstones_ConstraintBoundaries(t *testing.T) {
 			slug:           "-lead",
 			wantConstraint: "slug_tombstones_slug_format_check",
 		},
+		{
+			name:           "slug trailing hyphen rejected",
+			slug:           "trail-",
+			wantConstraint: "slug_tombstones_slug_format_check",
+		},
+		{
+			name:           "slug double hyphen rejected",
+			slug:           "dou--ble",
+			wantConstraint: "slug_tombstones_slug_format_check",
+		},
+		{
+			name:           "slug uppercase rejected",
+			slug:           "UPPERCASE",
+			wantConstraint: "slug_tombstones_slug_format_check",
+		},
 	}
 
 	for _, tt := range tests {
