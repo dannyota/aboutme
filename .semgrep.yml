@@ -28,9 +28,9 @@
 # key leak detection; p/dockerfile + p/docker-compose = deploy/*.Dockerfile
 # and deploy/compose.yml.
 #
-# Generated/vendored paths (packages/schema/gen/**, node_modules, .nuxt,
-# .output, lockfiles) are excluded via .semgrepignore, so they apply to
-# both the packs above and the rules below.
+# Generated/vendored code (except tracked dependency manifests), node_modules,
+# .nuxt, and .output are excluded via .semgrepignore. Tracked manifests and
+# lockfiles remain visible to connected Supply Chain analysis.
 #
 # Each custom rule below enforces a project invariant rather than a generic bad
 # pattern already covered by the packs above. Its metadata cites the exact
