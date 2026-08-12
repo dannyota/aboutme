@@ -1,3 +1,5 @@
+// Package sanitizetest provides independent structural checks for sanitized
+// rich-text fragments.
 package sanitizetest
 
 import (
