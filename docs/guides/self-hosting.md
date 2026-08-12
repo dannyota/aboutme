@@ -1,8 +1,8 @@
 # Self-hosting
 
 The repository currently ships a Podman Compose deployment for local evaluation.
-It runs PostgreSQL, the Go API, Nuxt, Caddy, and a one-shot goose migration
-service.
+It runs PostgreSQL, private MinIO object storage, the Go API, Nuxt, Caddy, a
+one-shot goose migration service, and a one-shot private-bucket initializer.
 
 This artifact is not ready for direct Internet exposure. Its Caddy listener is
 HTTP-only and its client-IP rule assumes the viewer connects directly to Caddy.
@@ -11,7 +11,7 @@ Authentication UAT and public service require the planned HTTPS/443 edge path.
 ## Prerequisites
 
 - Podman with `podman compose` support.
-- Enough memory to build the Go and Nuxt images and run four long-lived
+- Enough memory to build the Go and Nuxt images and run five long-lived
   containers.
 - A repository checkout and a private `.env` file.
 
@@ -28,9 +28,11 @@ From the repository root:
 cp .env.example .env
 ```
 
-Set `POSTGRES_PASSWORD` to a new value. Do not commit `.env`. Other variables
-have development defaults; [`.env.example`](../../.env.example) documents each
-name.
+Set `POSTGRES_PASSWORD`, `MEDIA_ACCESS_KEY_ID`, and `MEDIA_SECRET_ACCESS_KEY` to
+independent new values. Do not commit `.env`. Generate the media values with
+`openssl rand -hex 16` and `openssl rand -hex 32`, respectively. Other Compose
+variables have development defaults; [`.env.example`](../../.env.example)
+documents each name.
 
 The current listener defaults to HTTP port 80. On a rootless Podman host that
 cannot bind privileged ports, set this for local evaluation:
@@ -66,12 +68,14 @@ curl --fail http://localhost:8080/readyz
 ```
 
 Use `http://localhost` when `CADDY_HTTP_PORT` is unset. The one-shot migration
-service must exit successfully before the server starts. A migration failure
-keeps the application down.
+and private-bucket initialization services must exit successfully before the
+server starts. Either failure keeps the application down.
 
-Only Caddy publishes a host port. PostgreSQL stays inside the Compose networks.
-The server and migration process receive the database password through
-`PGPASSWORD`; it is not inserted into a URI.
+Only Caddy publishes a host port. PostgreSQL and MinIO stay inside separate
+Compose networks. Only MinIO, its initializer, and Go join the `media` network;
+Caddy and Nuxt cannot reach object storage. The server and migration process
+receive the database password through `PGPASSWORD`; it is not inserted into a
+URI.
 
 Inspect logs without printing `.env`:
 

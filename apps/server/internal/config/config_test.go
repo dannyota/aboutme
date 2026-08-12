@@ -15,7 +15,28 @@ import (
 // touch real process environment variables.
 func env(vars map[string]string) func(string) string {
 	return func(key string) string {
+		if value, ok := vars[key]; ok {
+			return value
+		}
+		// Media is required startup configuration. Existing tests exercise
+		// unrelated fields, so give them one explicit valid filesystem mode;
+		// media-specific tests override these keys, including with an empty
+		// value when they need to prove a missing-variable failure.
+		switch key {
+		case "MEDIA_BACKEND":
+			return "fs"
+		case "MEDIA_FS_DIR":
+			return "/tmp/aboutme-config-test-media"
+		}
 		return vars[key]
+	}
+}
+
+func validBaseVars() map[string]string {
+	return map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://aboutme.vn",
+		"ENV":           "dev",
 	}
 }
 
@@ -1151,5 +1172,153 @@ func TestLoad_TrustedProxyCIDRs_InvalidCIDR(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "TRUSTED_PROXY_CIDRS") {
 		t.Errorf("Load() error = %q, want it to contain %q", err.Error(), "TRUSTED_PROXY_CIDRS")
+	}
+}
+
+func TestLoad_MediaFilesystemMode(t *testing.T) {
+	t.Parallel()
+	vars := validBaseVars()
+	vars["MEDIA_BACKEND"] = "fs"
+	vars["MEDIA_FS_DIR"] = " /var/lib/aboutme/media "
+
+	got, err := config.Load(env(vars))
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+	if got.MediaBackend != "fs" || got.MediaFSDir != "/var/lib/aboutme/media" {
+		t.Errorf("media filesystem config = %q, %q; want fs, /var/lib/aboutme/media", got.MediaBackend, got.MediaFSDir)
+	}
+	if got.MediaBucket != "" || got.MediaRegion != "" || got.MediaEndpoint != "" ||
+		got.MediaAccessKeyID != "" || got.MediaSecretAccessKey != "" || got.MediaForcePathStyle {
+		t.Errorf("filesystem mode retained S3-only values: %+v", got)
+	}
+}
+
+func TestLoad_MediaS3Modes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		vars      map[string]string
+		endpoint  string
+		accessID  string
+		secret    string
+		pathStyle bool
+	}{
+		{
+			name: "custom endpoint",
+			vars: map[string]string{
+				"MEDIA_BACKEND":           "s3",
+				"MEDIA_BUCKET":            "private-media",
+				"MEDIA_REGION":            "us-east-1",
+				"MEDIA_ENDPOINT":          "http://127.0.0.1:20091",
+				"MEDIA_ACCESS_KEY_ID":     "local-access",
+				"MEDIA_SECRET_ACCESS_KEY": "local-secret",
+				"MEDIA_FORCE_PATH_STYLE":  "true",
+			},
+			endpoint:  "http://127.0.0.1:20091",
+			accessID:  "local-access",
+			secret:    "local-secret",
+			pathStyle: true,
+		},
+		{
+			name: "AWS task role",
+			vars: map[string]string{
+				"MEDIA_BACKEND": "s3",
+				"MEDIA_BUCKET":  "private-media",
+				"MEDIA_REGION":  "ap-southeast-1",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			vars := validBaseVars()
+			for key, value := range tt.vars {
+				vars[key] = value
+			}
+			// Suppress the test helper's filesystem default in S3 mode.
+			vars["MEDIA_FS_DIR"] = ""
+
+			got, err := config.Load(env(vars))
+			if err != nil {
+				t.Fatalf("Load() unexpected error: %v", err)
+			}
+			if got.MediaBackend != "s3" || got.MediaFSDir != "" || got.MediaBucket != "private-media" ||
+				got.MediaRegion != tt.vars["MEDIA_REGION"] || got.MediaEndpoint != tt.endpoint ||
+				got.MediaAccessKeyID != tt.accessID || got.MediaSecretAccessKey != tt.secret ||
+				got.MediaForcePathStyle != tt.pathStyle {
+				t.Errorf("media S3 config = %+v; fields do not match selected mode", got)
+			}
+		})
+	}
+}
+
+func TestLoad_MediaRejectsMissingAndCrossModeValues(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		values  map[string]string
+		wantVar string
+	}{
+		{"missing backend", map[string]string{"MEDIA_BACKEND": ""}, "MEDIA_BACKEND"},
+		{"unknown backend", map[string]string{"MEDIA_BACKEND": "disk"}, "MEDIA_BACKEND"},
+		{"filesystem missing directory", map[string]string{"MEDIA_BACKEND": "fs", "MEDIA_FS_DIR": ""}, "MEDIA_FS_DIR"},
+		{"filesystem with bucket", map[string]string{"MEDIA_BACKEND": "fs", "MEDIA_BUCKET": "bucket"}, "MEDIA_BUCKET"},
+		{"filesystem with region", map[string]string{"MEDIA_BACKEND": "fs", "MEDIA_REGION": "region"}, "MEDIA_REGION"},
+		{"filesystem with endpoint", map[string]string{"MEDIA_BACKEND": "fs", "MEDIA_ENDPOINT": "http://127.0.0.1:20091"}, "MEDIA_ENDPOINT"},
+		{"filesystem with access key", map[string]string{"MEDIA_BACKEND": "fs", "MEDIA_ACCESS_KEY_ID": "access"}, "MEDIA_ACCESS_KEY_ID"},
+		{"filesystem with secret key", map[string]string{"MEDIA_BACKEND": "fs", "MEDIA_SECRET_ACCESS_KEY": "secret"}, "MEDIA_SECRET_ACCESS_KEY"},
+		{"filesystem with path style", map[string]string{"MEDIA_BACKEND": "fs", "MEDIA_FORCE_PATH_STYLE": "true"}, "MEDIA_FORCE_PATH_STYLE"},
+		{"S3 with filesystem directory", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "/tmp/media", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region"}, "MEDIA_FS_DIR"},
+		{"S3 missing bucket", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_REGION": "region"}, "MEDIA_BUCKET"},
+		{"S3 missing region", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket"}, "MEDIA_REGION"},
+		{"AWS mode with access key", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_ACCESS_KEY_ID": "access"}, "MEDIA_ACCESS_KEY_ID"},
+		{"AWS mode with secret key", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_SECRET_ACCESS_KEY": "secret"}, "MEDIA_SECRET_ACCESS_KEY"},
+		{"AWS mode with explicit path style", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_FORCE_PATH_STYLE": "false"}, "MEDIA_FORCE_PATH_STYLE"},
+		{"custom endpoint without path style", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_ENDPOINT": "http://127.0.0.1:20091", "MEDIA_ACCESS_KEY_ID": "access", "MEDIA_SECRET_ACCESS_KEY": "secret"}, "MEDIA_FORCE_PATH_STYLE"},
+		{"custom endpoint missing access key", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_ENDPOINT": "http://127.0.0.1:20091", "MEDIA_SECRET_ACCESS_KEY": "secret", "MEDIA_FORCE_PATH_STYLE": "true"}, "MEDIA_ACCESS_KEY_ID"},
+		{"custom endpoint missing secret key", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_ENDPOINT": "http://127.0.0.1:20091", "MEDIA_ACCESS_KEY_ID": "access", "MEDIA_FORCE_PATH_STYLE": "true"}, "MEDIA_SECRET_ACCESS_KEY"},
+		{"relative custom endpoint", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_ENDPOINT": "127.0.0.1:20091", "MEDIA_ACCESS_KEY_ID": "access", "MEDIA_SECRET_ACCESS_KEY": "secret", "MEDIA_FORCE_PATH_STYLE": "true"}, "MEDIA_ENDPOINT"},
+		{"custom endpoint with path", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_ENDPOINT": "http://127.0.0.1:20091/path", "MEDIA_ACCESS_KEY_ID": "access", "MEDIA_SECRET_ACCESS_KEY": "secret", "MEDIA_FORCE_PATH_STYLE": "true"}, "MEDIA_ENDPOINT"},
+		{"malformed path-style value", map[string]string{"MEDIA_BACKEND": "s3", "MEDIA_FS_DIR": "", "MEDIA_BUCKET": "bucket", "MEDIA_REGION": "region", "MEDIA_ENDPOINT": "http://127.0.0.1:20091", "MEDIA_ACCESS_KEY_ID": "access", "MEDIA_SECRET_ACCESS_KEY": "secret", "MEDIA_FORCE_PATH_STYLE": "yes"}, "MEDIA_FORCE_PATH_STYLE"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			vars := validBaseVars()
+			for key, value := range tt.values {
+				vars[key] = value
+			}
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatalf("Load() error = nil, want rejection naming %s", tt.wantVar)
+			}
+			if !strings.Contains(err.Error(), tt.wantVar) {
+				t.Errorf("Load() error = %q, want it to name %s", err, tt.wantVar)
+			}
+		})
+	}
+}
+
+func TestLoad_MediaErrorsDoNotExposeCredentials(t *testing.T) {
+	t.Parallel()
+	const accessSentinel = "CONFIG-AKID-SENTINEL-8c31"
+	const secretSentinel = "CONFIG-SECRET-SENTINEL-a721"
+	vars := validBaseVars()
+	vars["MEDIA_BACKEND"] = "s3"
+	vars["MEDIA_FS_DIR"] = ""
+	vars["MEDIA_BUCKET"] = "bucket"
+	vars["MEDIA_REGION"] = "region"
+	vars["MEDIA_ENDPOINT"] = "http://user:" + secretSentinel + "@127.0.0.1:20091"
+	vars["MEDIA_ACCESS_KEY_ID"] = accessSentinel
+	vars["MEDIA_SECRET_ACCESS_KEY"] = secretSentinel
+	vars["MEDIA_FORCE_PATH_STYLE"] = "true"
+
+	_, err := config.Load(env(vars))
+	if err == nil {
+		t.Fatal("Load() error = nil, want malformed endpoint rejection")
+	}
+	if strings.Contains(err.Error(), accessSentinel) || strings.Contains(err.Error(), secretSentinel) {
+		t.Errorf("Load() error leaks a credential sentinel: %v", err)
 	}
 }

@@ -28,6 +28,7 @@ DEV_LOG_LEVEL=${ABOUTME_DEV_LOG_LEVEL:-info}
 
 readonly DEV_DIR=$ROOT/.dev
 readonly BIN_DIR=$DEV_DIR/bin
+readonly MEDIA_DIR=$DEV_DIR/media
 readonly CADDYFILE_SRC=$ROOT/deploy/caddy/Caddyfile
 readonly CADDYFILE_GEN=$DEV_DIR/Caddyfile
 readonly SERVICES=(server web caddy)
@@ -258,12 +259,9 @@ run_migrations() {
     cd "$ROOT/apps/server"
     go build -o "$BIN_DIR/migrate" ./cmd/migrate
   )
-  # cmd/migrate loads the same internal/config.Config as the server, so ENV
-  # and PUBLIC_ORIGIN are required even though it only uses DATABASE_URL.
   (
     cd "$ROOT/apps/server"
-    env DATABASE_URL="$DEV_DATABASE_URL" ENV=dev PUBLIC_ORIGIN="$PUBLIC_ORIGIN" \
-      "$BIN_DIR/migrate"
+    env DATABASE_URL="$DEV_DATABASE_URL" "$BIN_DIR/migrate"
   )
 }
 
@@ -295,6 +293,8 @@ start_server() {
     PUBLIC_ORIGIN="$PUBLIC_ORIGIN" \
     TRUSTED_PROXY_CIDRS=127.0.0.1/32 \
     LOG_LEVEL="$DEV_LOG_LEVEL" \
+    MEDIA_BACKEND=fs \
+    MEDIA_FS_DIR="$MEDIA_DIR" \
     "$BIN_DIR/server"
   wait_http server "http://127.0.0.1:$SERVER_PORT/healthz" 30
   info "server ready on http://127.0.0.1:$SERVER_PORT"
@@ -344,7 +344,7 @@ start_caddy() {
 
 cmd_up() {
   require_tools
-  mkdir -p "$DEV_DIR" "$BIN_DIR"
+  mkdir -p "$DEV_DIR" "$BIN_DIR" "$MEDIA_DIR"
   ensure_database
   run_migrations
   start_server
