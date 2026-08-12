@@ -66,6 +66,13 @@ P8 privacy work.
    preserve the correction history. Revision 5 is active because it fixes R4's
    shell-specific capture-variable defect without changing any criterion.
 
+The revision 5 run at `262a5b3668abab5951efd8de674ff54cb9f6c096` passed the
+fresh defect review, `make ci`, connected `make scan`, and acceptance captures
+03–11. Its worker process exited while assembling the report, before the report
+and capture 12 existed. The zero-retry rule makes that attempt final and failed;
+none of its otherwise-passing evidence closes the phase. The next run uses a new
+candidate and a new empty evidence directory.
+
 ## Corrective closure sequence
 
 1. Commit a clean candidate containing catalog revision 5 and the Suite A/B/C
