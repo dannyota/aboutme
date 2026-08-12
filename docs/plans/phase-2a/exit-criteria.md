@@ -3,14 +3,16 @@
 The phase closes only when the candidate commit satisfies every item. A later
 product-code change invalidates evidence for each affected path.
 
-Task 12 documentation and handoffs are landed. The candidate commands and both
-independent gates passed on the unchanged phase candidate.
+Task 12 documentation and handoffs are landed. A later pre-UAT cap-trigger
+correction invalidated the migration-path evidence, so revision 3 acceptance is
+pending at a new exact candidate.
 
 ## Product and contract
 
-- [x] Goose migrations `00004` and `00005` remain append-only. Empty-to-head,
+- [ ] Corrected pre-UAT migration `00005` permits a no-op owner assignment at
+      the cap while inserts and real owner moves remain capped. Empty-to-head,
       previous-to-head, concurrent-lock, and partial-failure migration tests
-      pass.
+      pass. The first UAT baseline will freeze the migration history.
 - [x] Direct SQL and store tests prove the three-resume cap, ownership
       indistinguishability, title bounds, and every relational constraint.
 - [x] Every document bound has passing limit and failing limit+1 coverage. The
@@ -34,13 +36,13 @@ independent gates passed on the unchanged phase candidate.
 
 ## Evidence and checks
 
-- [x] `make ci` passes once, without concurrent heavy workers, at the candidate
+- [ ] `make ci` passes once, without concurrent heavy workers, at the candidate
       commit.
-- [x] `make schema-check`, `make sqlc-check`, `make server-migration-test`, and
+- [ ] `make schema-check`, `make sqlc-check`, `make server-migration-test`, and
       `make server-test-db` pass with live suites required and `-count=1`.
-- [x] `make scan` passes. If the connected scan cannot run, the phase is
+- [ ] `make scan` passes. If the connected scan cannot run, the phase is
       blocked; offline Semgrep alone is not phase-exit evidence.
-- [x] P2A-owned traceability rows have explicit `PROVEN` state and exact test or
+- [ ] P2A-owned traceability rows have explicit `PROVEN` state and exact test or
       command evidence. Handoffs have a named owner and downstream gate.
 - [x] The owner verifies that `server-test-db` still includes the resume live-DB
       suite and that local and hosted CI retain the released-schema guard plus
@@ -53,10 +55,10 @@ independent gates passed on the unchanged phase candidate.
 
 ## Independent gates
 
-- [x] A fresh phase reviewer that authored none of the phase reports no blocking
+- [ ] A fresh phase reviewer that authored none of the phase reports no blocking
       defect in behavior, design fit, interface stability, assumptions, or
       traceability. Fixes receive independent re-review.
-- [x] A fresh acceptance worker runs
-      [catalog revision 2](acceptance-catalog-r2.md) at the exact commit without
-      editing product code, tests, fixtures, or criteria. Every row is `PASS`.
-      `FAIL`, `BLOCKED`, missing evidence, or an undisclosed retry fails.
+- [ ] A fresh acceptance worker runs catalog revision 3 at the exact commit
+      without editing product code, tests, fixtures, or criteria. Every row is
+      `PASS`. `FAIL`, `BLOCKED`, missing evidence, or an undisclosed retry
+      fails.

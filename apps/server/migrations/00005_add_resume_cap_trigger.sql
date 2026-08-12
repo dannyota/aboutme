@@ -1,23 +1,17 @@
 -- +goose Up
--- enforce_resume_cap and resumes_enforce_cap are hand-written here, not
--- Atlas-generated: Atlas's Postgres schema differ silently drops
--- functions, triggers, procedures, views, sequences, rules, and policies
--- from a generated migration -- verified empirically against the pinned
--- Atlas community v1.2.0 (see cmd/migrate/gen/main.go's package doc
--- comment and checkUndiffableObjects). `make migrate-gen`/`make
--- data-drift` cross-check this file's statements against sql/schema.sql's
--- own CREATE FUNCTION/CREATE TRIGGER declarations byte-for-byte (after
--- comment/whitespace normalization) instead of a blanket reject, so the
--- two can never silently drift apart the way an un-cross-checked
--- hand-written migration could. Everything Atlas CAN diff
--- (tables/columns/indexes/constraints, including 00004's resumes,
--- slug_tombstones, and idempotency_records tables this trigger attaches
--- to) is generated from sql/schema.sql by `make migrate-gen` as usual.
---
+-- The cap trigger is explicit because migrations are the sole relational
+-- schema source. Its lock and count order implements Phase 2A decision D7.
 -- +goose StatementBegin
 CREATE FUNCTION enforce_resume_cap() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+    -- A no-op assignment does not increase either owner's count. Returning
+    -- before the lock also avoids serializing an update that cannot affect the
+    -- cap.
+    IF TG_OP = 'UPDATE' AND NEW.user_id IS NOT DISTINCT FROM OLD.user_id THEN
+        RETURN NEW;
+    END IF;
+
     -- Serialize per-owner (D7). The lock blocks a competing writer; the
     -- count that follows then takes a FRESH snapshot and sees the row
     -- that writer committed. This holds even for writers that bypass the

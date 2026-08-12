@@ -96,36 +96,7 @@ sqlc_drift() { make sqlc-check; }
 web() { make web-lint web-typecheck web-test web-build; }
 
 migrations_append_only() {
-  # CI compares against the PR base; locally the useful comparison is the
-  # upstream branch. Skip cleanly when there is no upstream to compare to.
-  local base status
-  if base=$(git rev-parse --verify --quiet origin/main); then
-    :
-  else
-    status=$?
-    if [ "$status" -ne 1 ]; then
-      echo "could not resolve origin/main" >&2
-      return 1
-    fi
-    echo "no origin/main to compare against; skipped"
-    return 0
-  fi
-  local index_diff worktree_diff changed
-  if ! index_diff=$(git diff --cached --name-status "$base" -- apps/server/migrations); then
-    echo "could not compare the migration index with origin/main" >&2
-    return 1
-  fi
-  if ! worktree_diff=$(git diff --name-status "$base" -- apps/server/migrations); then
-    echo "could not compare the migration worktree with origin/main" >&2
-    return 1
-  fi
-  changed=$(printf '%s\n%s\n' "$index_diff" "$worktree_diff" |
-    awk -F '\t' '$1 ~ /^(M|D|R|T)/ && $0 ~ /\.sql$/ { print }')
-  if [ -n "$changed" ]; then
-    echo "Applied migrations are immutable; only new files may be added:" >&2
-    echo "$changed" >&2
-    return 1
-  fi
+  bash "$ROOT/scripts/check-migrations-append-only.sh" --local origin/main
 }
 
 released_schema_append_only() {

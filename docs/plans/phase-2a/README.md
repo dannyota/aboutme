@@ -1,6 +1,6 @@
 # Phase 2A — Resume domain and store
 
-Status: **Complete** (phase gates verified 2026-08-12).
+Status: **Corrective verification in progress** (2026-08-12).
 
 This phase owns the resume relational schema, validated aggregate store,
 revision compare-and-swap (CAS), transactional idempotency, immutable document
@@ -18,7 +18,7 @@ hand-written goose migrations as the only relational schema source.
 | 1    | Historical Atlas drift-gate extension             | Superseded by ADR 0010       |
 | 2    | Shared validation and embedded current schema     | Landed                       |
 | 2b   | Immutable v1 schema and released-version registry | Landed                       |
-| 3    | Resume tables, constraints, and cap trigger       | Landed                       |
+| 3    | Resume tables, constraints, and cap trigger       | Correction re-reviewed       |
 | 4    | sqlc queries and generated store                  | Landed                       |
 | 5    | Codec, validation, and bounds                     | Landed                       |
 | 6    | Owner-scoped store and revision CAS               | Landed                       |
@@ -30,12 +30,15 @@ hand-written goose migrations as the only relational schema source.
 | 10   | Independent document-migration suite              | Landed                       |
 | 11   | Bounds matrix and completeness guard              | Landed                       |
 | 12   | Traceability, docs, and handoffs                  | Landed                       |
-| Gate | Phase defect review                               | Passed                       |
-| Gate | Exact-candidate phase acceptance                  | Passed                       |
+| Gate | Phase defect review                               | Reopened                     |
+| Gate | Exact-candidate phase acceptance                  | Pending revision 3           |
 
 Task 12's traceability, architecture documentation, and named downstream
-handoffs are landed. Both phase gates passed at the unchanged phase candidate.
-P2B and P3 no longer wait on P2A, though their other prerequisites still apply.
+handoffs are landed. A post-closure review found that the cap trigger rejects a
+no-op owner assignment at the cap and that revision 2 acceptance lacks its
+required persisted per-row report. The pre-UAT migration correction, independent
+review, catalog revision 3, and a recorded exact-candidate run must close before
+P2A returns to complete.
 
 The production document registry currently contains only v1. P2A supplies pure
 projection, adjacent-converter machinery tested with synthetic later versions,
@@ -50,7 +53,7 @@ headers, bounded request-path cleanup and capacity accounting, and HTTP replay
 contract remain P2B work. The authoritative hourly global expiry sweep remains
 P8 privacy work.
 
-## Completed gate sequence
+## Prior candidate gate sequence
 
 1. A fresh reviewer inspected the complete phase for defects, design fit,
    interface stability, assumptions, and traceability.
@@ -58,8 +61,8 @@ P8 privacy work.
 3. The integration owner pinned one unchanged candidate and froze
    [acceptance catalog revision 2](acceptance-catalog-r2.md).
 4. `make ci` and connected `make scan` passed without concurrent heavy workers.
-5. A fresh acceptance worker ran the frozen catalog without editing code, tests,
-   fixtures, or criteria.
+5. The required per-row acceptance report was not persisted. The corrective
+   candidate therefore uses catalog revision 3 and records the full result.
 
 ## Authorities
 

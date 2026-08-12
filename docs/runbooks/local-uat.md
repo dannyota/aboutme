@@ -49,6 +49,8 @@ P9 can start only when all of these are true:
 - rootless Podman can bind 443, and the isolated browser profile trusts the
   recorded UAT Caddy root without certificate-error bypass flags;
 - the complete product slice and frozen P9 scenarios are present;
+- the exact candidate contains `apps/server/migrations/.uat-baseline`, which
+  freezes every existing migration after that candidate lands;
 - `make ci` passes at the exact candidate commit;
 - the integration owner has every live-database worker's idle acknowledgment,
   has stopped the native stack and `aboutme-test-db`, and has verified that no

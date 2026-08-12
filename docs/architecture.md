@@ -53,13 +53,17 @@ Resume HTTP routes are not implemented.
 
 ## Implemented resume data layer
 
-Phase 2A Tasks 1–12 and both phase gates are complete. The phase provides:
+Phase 2A Tasks 1–12 are landed. A pre-UAT cap-trigger correction is under
+verification, so its phase review and exact-candidate acceptance are reopened.
+The phase provides:
 
 - immutable resume schema v1, retained v1 Go and TypeScript types, and released,
   accepted, and emitted version registries that currently contain only version
   1;
-- hand-written, append-only goose migrations as the sole relational schema
-  source;
+- hand-written goose migrations as the sole relational schema source; their
+  pre-UAT history remains correctable until the first candidate adds the
+  immutable baseline marker required by
+  [ADR 0020](adr/0020-uat-migration-baseline.md);
 - sqlc-generated data access from those migrations and `sql/queries.sql`;
 - schema-derived bounds, aggregate validation, and a bounded codec;
 - owner-scoped CRUD primitives, a three-resume cap, and revision

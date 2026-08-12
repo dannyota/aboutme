@@ -10,7 +10,7 @@ describes what is implemented now.
 | `apps/web/`                   | Nuxt SSR, authenticated UI, editor, and the shared Vue renderer                  |
 | `apps/mobile/`                | Deferred Flutter client                                                          |
 | `packages/schema/`            | Resume JSON Schema, immutable releases, generators, fixtures, and preset JSON    |
-| `apps/server/migrations/`     | Sole relational schema source; append-only goose SQL                             |
+| `apps/server/migrations/`     | Sole relational schema source; goose SQL frozen by the first UAT baseline        |
 | `apps/server/sql/queries.sql` | sqlc query source                                                                |
 | `docs/api/openapi.yaml`       | Implemented HTTP contract                                                        |
 | `docs/design/`                | Intended product and architecture                                                |

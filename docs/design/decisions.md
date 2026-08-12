@@ -25,6 +25,7 @@ proposed with Draft v4 and require the same explicit approval.
 | [0017](../adr/0017-resume-document-versioning.md)   | Proposed | Pure read projection, CAS persistence, explicit converters     |
 | [0018](../adr/0018-bounded-rate-limiter.md)         | Proposed | No active-bucket eviction under key churn                      |
 | [0019](../adr/0019-private-media-delivery.md)       | Proposed | Private object storage behind live-gated Go reads              |
+| [0020](../adr/0020-uat-migration-baseline.md)       | Accepted | First UAT freezes development migration history                |
 
 ## Open approval gates
 

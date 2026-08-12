@@ -102,6 +102,8 @@ S3-compatible service for the whole machine.
 - The candidate is one clean exact commit containing completed P0–P8 web v1 and
   PI code-only/local-IaC work. Every affected phase gate and `make ci` passed at
   that commit.
+- The candidate contains `apps/server/migrations/.uat-baseline`; the UAT run
+  proves the migration history that becomes immutable when this commit lands.
 - U9 and U10 passed at the same commit. The host and shared-resource gate above
   is complete.
 - Catalog r1 maps every applicable acceptance row, is frozen, and has recorded
