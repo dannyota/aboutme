@@ -1,6 +1,6 @@
 # Phase 2A — Resume domain and store
 
-Status: **Task 12 and phase gates remain** (verified at `9edca31`, 2026-08-12).
+Status: **Task 12 and phase gates remain** (verified at `c67e47d`, 2026-08-12).
 
 This phase owns the resume relational schema, validated aggregate store,
 revision compare-and-swap (CAS), transactional idempotency, immutable document
@@ -35,10 +35,24 @@ hand-written goose migrations as the only relational schema source.
 `Landed` does not claim that the phase gates passed. P2B and P3 remain blocked
 on this phase until Task 12 and both gates close at the exact candidate commit.
 
+The production document registry currently contains only v1. P2A supplies pure
+projection, adjacent-converter machinery tested with synthetic later versions,
+and the transport-independent `AcceptWire`/`EmitWire` boundary. Its production
+v1 test composes that boundary with complete-document store persistence. P2B
+must consume it through the real old-version HTTP/OpenAPI contract after P3
+releases v2; P2A does not simulate that missing HTTP path.
+
+P2A's landed idempotency API is the transaction primitive that AC-SAVE-003 owns.
+The Draft v4 operation tuple and semantic fingerprint, deterministic response
+headers, bounded request-path cleanup and capacity accounting, and HTTP replay
+contract remain P2B work. The authoritative hourly global expiry sweep remains
+P8 privacy work.
+
 ## Remaining order
 
 1. Update every P2A-owned traceability row with an explicit state and concrete
-   test evidence. Apply or assign every integration handoff.
+   test evidence. Verify every owner-only shared-file need and assign every
+   forward handoff to a named owner and downstream gate.
 2. Run the affected local checks and `make ci` once at the candidate commit.
 3. Have a fresh reviewer inspect the complete phase diff for defects, design
    fit, interface stability, assumptions, and traceability.
@@ -79,6 +93,9 @@ written even where a later ADR superseded their workflow.
 
 ## Acceptance ownership
 
-P2A owns AC-DOC-001/002/003/004/007/008/009/010/011/012 and AC-SAVE-003. P2B
-adds HTTP evidence for revision mismatch and wire-version persistence. The
-customization-delta allowlist is P2B's AC-SAVE-005.
+P2A owns AC-DOC-001/002/003/004/007/008/009/010/011/012 and AC-SAVE-003. Its
+store CAS tests are prerequisite evidence for P2B-owned AC-SAVE-001. P2B owns
+the HTTP retry contract in AC-SAVE-002, real HTTP/OpenAPI old-version
+persist/emission proof in AC-SAVE-004, and customization-delta allowlist in
+AC-SAVE-005. P8 privacy owns the authoritative global idempotency-retention
+sweep; P2A's active-user reap is only opportunistic.

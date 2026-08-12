@@ -1,6 +1,6 @@
 # Current-state architecture
 
-This document describes the repository at `main` commit `9edca31`, verified on
+This document describes the repository at `main` commit `c67e47d`, verified on
 2026-08-12. The [design](design/README.md) owns intended behavior. The
 [roadmap](plans/implementation-plan.md) owns delivery state and gates.
 
@@ -56,15 +56,29 @@ Resume HTTP routes are not implemented.
 Phase 2A Tasks 1–11 are present, but Task 12 and both phase gates remain. The
 landed slice provides:
 
-- immutable resume schema v1 and released-version registries;
+- immutable resume schema v1, retained v1 Go and TypeScript types, and released,
+  accepted, and emitted version registries that currently contain only version
+  1;
 - hand-written, append-only goose migrations as the sole relational schema
   source;
 - sqlc-generated data access from those migrations and `sql/queries.sql`;
 - schema-derived bounds, aggregate validation, and a bounded codec;
-- owner-scoped CRUD primitives, a three-resume cap, revision compare-and-swap,
-  and transactional idempotency;
-- pure document projection, compare-and-swap backfill, independent write and
-  migration suites, and a bounds completeness guard.
+- owner-scoped CRUD primitives, a three-resume cap, and revision
+  compare-and-swap (CAS) that persists the complete document aggregate;
+- a transactional idempotency primitive keyed by user, caller-supplied route,
+  UUID key, and caller-supplied body hash; it stores a JSON status/body result
+  and reaps the active user's expired records on their next execution;
+- pure document projection, explicit adjacent-converter machinery, a one-row CAS
+  backfill primitive, independent write and migration suites, and a bounds
+  completeness guard.
+
+These are data-layer primitives, not resume HTTP behavior. Production has no
+adjacent version pair while v1 is the only released version. No process invokes
+the backfill candidate query, and no scheduled idempotency-expiry sweep exists.
+The Draft v4 operation tuple and request fingerprint, stored response headers,
+bounded cleanup and capacity accounting, HTTP retry behavior, and fixed
+customization-delta allowlist remain P2B work. P8 owns the authoritative hourly
+global expiry sweep.
 
 Twenty template preset JSON files are committed. Their design contract remains
 draft, and the renderer, sanitizer, and licensed font assets have not landed.
