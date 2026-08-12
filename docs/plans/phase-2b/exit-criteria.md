@@ -51,19 +51,25 @@ Every item must pass at one unchanged candidate commit.
       and performs no object I/O. Photo replacement clears the old crop because
       the normalized pixels and key changed.
 - [ ] A committed idempotent replay avoids a new object write. Concurrent
-      candidates retain only the database winner after compensation.
-- [ ] Replace and delete change the database reference before deleting old
-      bytes. Photo delete and whole-resume delete share exact-key validation,
-      cleanup-result handling, and replay behavior. A current document never
-      points at an object deleted by cleanup.
-- [ ] Failure injection covers candidate write, definite transaction failure,
-      ambiguous commit, response loss, and old-object deletion failure.
+      proved-created candidates leave only the database winner after successful
+      compensation. Failed compensation stays private for reconciliation. An
+      unknown remote `Put` stops before database mutation and remains private
+      for reconciliation without unsafe deletion.
+- [ ] Replace and delete validate the exact old key, then change the database
+      reference and enqueue cleanup in one transaction. Photo delete and
+      whole-resume delete share enqueue, replay, and rollback behavior. A
+      current document never points at an object selected by cleanup.
+- [ ] Failure injection covers proved-created, proved-not-created, and unknown
+      object writes; definite and ambiguous database commits; lost create and
+      collision responses; deletion-job insert failure; and worker deletion
+      failure.
 - [ ] The frozen normalization benchmark passes provisionally on its pinned
       local controlled-cgroup profile. Five seconds is measured; request-time
       decoding is synchronous and no work remains after return. P9A owns the
       launch-gate rerun on the selected production ARM64 Graviton task.
 - [ ] The media backend exposes stable bounded pages and update time for
-      AC-MEDIA-007. The P8-priv job implements and verifies the adopted 48-hour,
+      AC-MEDIA-007. P2B supplies the durable exact-key queue. P8-priv implements
+      its 24-hour deletion target plus the adopted 48-hour orphan-reconciliation
       page, run, retry, concurrency, cursor, metric, and dry-run rules before
       launch.
 
@@ -72,17 +78,19 @@ Every item must pass at one unchanged candidate commit.
 - [ ] `make ci`, `make api-check`, `make sqlc-check`, and the live database and
       fail-closed `make server-test-s3`, `make server-test-p2b`, and
       `make server-test-p2b-s3` suites pass at the candidate commit. Migration
-      00006 applies from the prior head and released migrations remain
-      byte-identical.
+      00006 applies from the prior head with idempotency bounds and the media
+      cleanup ledger; released migrations remain byte-identical.
 - [ ] `make scan` passes; offline-only scanning does not close the phase gate.
 - [ ] Independent suites D, E, and F were derived before their authors read the
       implementation diff and pass unchanged.
 - [ ] Every high-risk task has an independent defect review. Blocking fixes
       receive independent re-review.
 - [ ] AC-SAVE-001/002/004/005, the P2B half of AC-SEC-003, and
-      AC-MEDIA-001…006/008/009 are `PROVEN` with exact evidence. AC-MEDIA-007
-      remains `PLANNED` with P8-priv ownership. Borrowed rows retain their
-      original owner.
+      AC-MEDIA-001/002/004/005/008/009 are `PROVEN` with exact evidence. The P2B
+      slices of AC-MEDIA-003/006 are evidenced, but those cross-phase rows
+      remain `PLANNED` until P8-priv proves account deletion and worker
+      behavior. AC-MEDIA-007 remains `PLANNED` with P8-priv ownership. Borrowed
+      rows retain their original owner.
 - [ ] Every integration handoff is applied or has a named owner and downstream
       gate.
 

@@ -6,10 +6,14 @@ Every item passes at one unchanged candidate commit.
 
 - [ ] Resume schema v1 and retained output are byte-unchanged. V2 is released
       through the manifest, generated types, adjacent converters, and current
-      registry. Catalog IDs, schema enum, and preset IDs agree exactly.
+      registry. The manifest explicitly declares current 2, accepted `[1, 2]`,
+      and emitted `[1, 2]`; generated Go/TypeScript declarations and the
+      `@aboutme/schema/released` export agree. Catalog IDs, schema enum, and
+      preset IDs agree exactly.
 - [ ] Every font asset passes AC-FONT-001 against its exact official source,
       license, Reserved Font Names, final hashes, internal names, and declared
-      asset policy. Required notices ship.
+      asset policy. Every exact license and the generated notice index ship in
+      the built runtime artifact.
 - [ ] Coverage labels match the final bytes. Selected faces and fallbacks load
       locally with no third-party request. The declared English, Vietnamese, and
       renderer punctuation fixtures use only bundled fonts.
@@ -40,16 +44,28 @@ Every item passes at one unchanged candidate commit.
       tracked and untracked secret-like negative controls pass, the explicit
       manifest and archive hashes are recorded, and the fresh boundary reviewer
       reports no blocking finding.
-- [ ] Independent sanitizer and render-bound suites were derived before their
-      authors read the implementation diff and remain unweakened. One frozen
-      test-only diff contains only the plain-field and bounds suites and
-      predates Task 6. A second pagination-only test diff, written by a
-      different fresh author after the Task 6 renderer gate, predates Task 7.
-      Evidence records both diffs separately.
-- [ ] AC-SEC-001, the P3 half of AC-SEC-003, AC-REN-001…009, and AC-FONT-001 are
-      `PROVEN` with exact evidence. P2B write, P5A public-read, and P7A
-      internal-print-read sanitizer handoffs remain assigned to their owning
-      gates.
+- [ ] Independent sanitizer and render-bound authors did not read the
+      implementation diff or author helpers before freezing their suites, and
+      the suites remain unweakened. Evidence discloses the sanitizer chronology
+      exception, the counterfactual failure at `897d69c`, and the independent
+      finding fixed before integration. One frozen test-only diff contains only
+      the plain-field and bounds suites and predates Task 6. A second
+      pagination-only test diff, written by a different fresh author after the
+      Task 6 renderer gate, predates Task 7. Evidence records both diffs
+      separately. A third test-only diff contains only the blind template-apply
+      suite and predates Task 8.
+- [ ] Task 5B evidence records the P2A closure and approved-design base, Task 5
+      catalog review, and its two independent test files frozen before any Task
+      5B implementation diff. The integration owner did not edit those files.
+- [ ] P3's evidence slices are recorded on AC-SEC-001 and AC-SEC-003 without
+      marking the cross-phase rows complete. AC-SEC-004 records the renderer URL
+      recheck, AC-DOC-012 records the v2 release extension, and AC-REN-001…009
+      plus AC-FONT-001 are `PROVEN` with exact evidence. P2B write, P5A
+      public-read, and P7A internal-print-read sanitizer handoffs remain
+      assigned to their owning gates.
+- [ ] `docs/architecture.md` describes the implemented v2 registry, sanitizer,
+      font, renderer, pagination, preset, golden, and browser boundaries. It
+      distinguishes shipped behavior from later P2B/P5A/P7A integration work.
 
 ## Phase gates
 

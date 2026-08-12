@@ -18,9 +18,26 @@ intended model, not replacement DDL.
 | `resumes`             | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts   |
 | `slug_tombstones`     | Released slug and release time; the former owner becomes nullable on account deletion                  |
 | `idempotency_records` | User, concrete operation identity, mutation key, semantic request fingerprint, stored response, expiry |
+| `idempotency_usage`   | One per-user retained-record and stored-response-byte counter maintained transactionally               |
+| `media_deletion_jobs` | Exact immutable object key, due time, bounded retry state, terminal outcome, audit timestamps          |
+| `public_state`        | Singleton durable discovery generation advanced with public-membership mutations                       |
 
 Server-owned relational rows use PostgreSQL UUIDv7 defaults. Client-generated
 UUIDs occur only inside resume documents as entry identifiers.
+
+`media_deletion_jobs` is cleanup state, not media ownership. A transaction that
+removes a photo reference enqueues its validated exact key in the same commit.
+The document reference remains the sole ownership authority; the ledger only
+drives bounded physical deletion and records its outcome.
+
+`public_state` has one checked singleton row and a positive monotonic
+`discovery_generation`. A transaction that changes a resume slug, live state,
+discovery eligibility, or deletes a public resume increments it with the same
+commit. P5A owns its forward migration and every public-state caller. Go loads
+the committed generation before readiness and uses it for aggregate discovery
+cache keys, entity tags, and the in-process response fence. Aggregate discovery
+contains only a fixed heading and the slug-ordered eligible public URLs; it has
+no other mutable resume field, so other document edits cannot change its bytes.
 
 Database constraints enforce global slug uniqueness and format, valid publish
 flag combinations, and the three-resume cap. Resume creation also locks the
@@ -63,11 +80,11 @@ one section.
 | `work`        | `jobTitle`, `employer`, `employerLink`, `city`, `country`, `dates`, `description` |
 | `education`   | `degree`, `school`, `schoolLink`, `city`, `country`, `dates`, `description`       |
 | `skill`       | `name`, optional `level` from 0–5, `infoHtml`                                     |
-| `language`    | `name`, `level`                                                                   |
+| `language`    | `name`, optional `level` from 0–5                                                 |
 | `certificate` | `title`, `titleLink`, `issuer`, `date`, `description`                             |
 | `project`     | `title`, `link`, `dates`, `description`                                           |
 | `custom`      | `title`, `titleLink`, `subtitle`, `city`, `dates`, `description`                  |
-| Every entry   | Client-generated UUID `id` and `isHidden`                                         |
+| Every entry   | Client-generated UUID `id` and optional `isHidden`                                |
 
 A date range is `{start:{y,m?}, end:{y,m?}|null, present:boolean}`. Start may
 not follow end. `present=true` requires a null end; `present=false` requires an
@@ -117,10 +134,14 @@ persists the projected current shape with revision compare-and-swap (CAS).
 Background backfill compares the observed schema version and revision. It does
 not bump the revision, and it loses cleanly to any concurrent resume write.
 Adjacent up and down converters are explicit, validated at every step, and
-tested in both directions. Retained types support compatibility testing; HTTP
-delta application may remain generic so handlers do not need one compiled code
-path per old version. [ADR 0017](../adr/0017-resume-document-versioning.md)
-records this boundary.
+tested in both directions. The v2 compatibility release accepts and emits both
+v1 and v2. Its only declared lossy emission is a v2 font ID that v1 cannot
+represent: emission uses the catalog entry's explicit v1 fallback, and every
+non-font value must remain equal. Old-client mutations preserve the stored v2
+font unless the operation explicitly targets that field. Retained types support
+compatibility testing; HTTP delta application may remain generic so handlers do
+not need one compiled code path per old version.
+[ADR 0017](../adr/0017-resume-document-versioning.md) records this boundary.
 
 ## Schema and migrations
 

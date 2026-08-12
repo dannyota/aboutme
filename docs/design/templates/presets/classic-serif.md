@@ -15,7 +15,8 @@ noticed — no fill, no tint, no band, no proficiency widget.
 1. **One column, `placement: "keep"`.** Sections span the full text width and
    applying the preset moves none of them; a document that already uses a
    sidebar keeps its arrangement, rendered below `main` (`contract.md` §7).
-   `sidebarSectionTypes` is `[]`, inert under `keep` and stated as a choice.
+   `sidebarSectionTypes` is absent, as `keep` requires; the omission is
+   deliberate.
 2. **Centred letterhead.** `header.align: "center"` with
    `detailsLayout: "inline"` and `iconStyle: "none"` gives name, headline, then
    one centred line of contact values. This triple is the preset's signature.

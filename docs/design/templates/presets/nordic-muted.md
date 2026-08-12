@@ -69,7 +69,8 @@ panel itself (1.11:1 on the page); no information depends on seeing either.
   rule; this reaches calm by placing — two columns, a panel, a hairline, dots.
 - **high-contrast**: opposite in chroma, not in ratio. Its separation is maximal
   and neutral; here it is nearly as high, but every ink is hued.
-- **modern-sidebar**: same skeleton; tinted, text-only skills, low-chroma inks.
+- **modern-sidebar**: same skeleton; tinted, bar-rendered skills, low-chroma
+  inks.
 
 ## Unexpressible intent
 

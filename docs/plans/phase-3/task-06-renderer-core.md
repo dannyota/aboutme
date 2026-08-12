@@ -2,7 +2,7 @@
 
 Satisfies **AC-REN-006** (purity), **AC-REN-007** (accessibility floor),
 **AC-REN-008** (the 2026-08-11 tokens), and the NEW-M7 re-check inside
-**AC-SEC-001**; structural prerequisite for AC-REN-001/002.
+**AC-SEC-004**; structural prerequisite for AC-REN-001/002.
 
 **Authority for everything below:** `docs/design/web.md` and
 `docs/design/templates/`: `contract.md` §§5–7, `tokens.md` §3, `colors.md`
@@ -12,8 +12,8 @@ those files, stop and correct the plan before implementation.
 **Files:** create the renderer tree per the file-structure table
 (`ResumeDocument.vue`, `ResumeHeader.vue`, `LayoutColumns.vue`,
 `SectionRenderer.vue`, `sections/*.vue` ×8, `primitives/*` ×7,
-`useResumeStyles.ts`, `clampContrast.ts`, `icons.ts`, `formatDate.ts`,
-`pageMetrics.ts`);
+`resolveRenderModel.ts`, `useResumeStyles.ts`, `clampContrast.ts`, `icons.ts`,
+`formatDate.ts`, `pageMetrics.ts`);
 `apps/web/test/renderer/{styles,clamp,chips,icons,photo,dates,sections}.test.ts`.
 `@lucide/vue` is already installed by Task 0 (B8); this task does not touch
 `package.json`.
@@ -27,9 +27,11 @@ exist until this task passes its gate.
 **Interfaces (produced):**
 
 ```ts
+import { CURRENT_VERSION } from "@aboutme/schema/released";
+
 // ResumeDocument.vue props — the renderer contract. Resume and the current
-// version constant come from @aboutme/schema; the renderer never redefines or
-// migrates the document shape.
+// version constant come from generated schema exports; the renderer never
+// redefines or migrates the document shape.
 interface RenderContext {
   lng: string; // resumes.lng — emitted as lang= on the resume root
   mode: "continuous" | "paged"; // Task 6 implements continuous; Task 7 paged
@@ -42,9 +44,30 @@ interface Props {
   context: RenderContext;
 }
 
-// ResumeDocument compares document.schemaVersion with
-// CURRENT_SCHEMA_VERSION before rendering. A mismatch, or a mismatch between
-// photo metadata and context.photoUrl presence, returns a typed render error.
+export type ResumeRenderErrorCode =
+  | "unsupported_schema_version"
+  | "photo_url_required"
+  | "unexpected_photo_url"
+  | "render_mode_unavailable";
+export class ResumeRenderError extends Error {
+  readonly code: ResumeRenderErrorCode;
+  constructor(code: ResumeRenderErrorCode, message: string);
+}
+
+// ResumeDocument compares document.schemaVersion with CURRENT_VERSION before
+// rendering. A version or photo/context mismatch throws ResumeRenderError with
+// the exact code above. Task 6 throws render_mode_unavailable for `paged`;
+// Task 7 replaces that branch with PagedResume.
+
+// resolveRenderModel.ts — the single pure boundary from raw document and
+// render context to renderer input. Ordered sections, columns, header behavior,
+// sectionDisplay, dateFormat, pageFormat, language, mode, and authorized photo
+// state remain typed structural fields. Child components receive only their
+// model slice and never read raw Customization.
+export function resolveRenderModel(
+  document: Resume,
+  context: RenderContext,
+): ResolvedRenderModel;
 
 // clampContrast.ts — pure, its own tested module (colors.md §5). It scores
 // black and white by their minimum contrast over every required surface,
@@ -65,8 +88,9 @@ export function deriveLevelColors(
   surface: string,
 ): { solid: string; track: string };
 
-// useResumeStyles.ts — pure: Customization → the CSS custom properties of
-// tokens.md §§3–6, in that document's UNPREFIXED vocabulary (--color-*,
+// useResumeStyles.ts — pure: the resolved model's CSS-valued token projection
+// → the CSS custom properties of tokens.md §§3–6, in that document's
+// UNPREFIXED vocabulary (--color-*,
 // --fs-*, --lh-*, --header-align, --gap-*, --page-margin-*, --rule-*,
 // --sidebar-ratio, --column-gutter, --photo-size, --bar-height, --dot-size,
 // --tag-padding, --icon-size). There is no --r-* prefix: print.md's break
@@ -77,14 +101,27 @@ export function deriveLevelColors(
 // (colors.md §4.2) — code must not hoist a clamped role to the document
 // root. `header` and `sidebar` are emitted only when
 // effectiveSurfaceTarget() selects that region.
+export type ResolvedPageGeometry = {
+  marginXmm: number;
+  marginYmm: number;
+} & (
+  | { format: "a4"; widthPx: 794; heightPx: 1123 }
+  | { format: "letter"; widthPx: 816; heightPx: 1056 }
+);
 export interface ResumeStyles {
   root: Record<string, string>; // page surface: --color-surface
   header?: Record<string, string>; // header-band scope, when tinted
   sidebar?: Record<string, string>; // sidebar-column scope, when tinted
-  pageMargin: { x: string; y: string }; // feeds the @page rule below
+  page: ResolvedPageGeometry;
 }
-export function useResumeStyles(c: Customization): ResumeStyles;
+export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles;
+export function renderPageRule(page: ResumeStyles["page"]): string;
 ```
+
+`renderPageRule` emits the complete print-only rule from `print.md` §2: A4 uses
+`size: 210mm 297mm`, Letter uses `size: 8.5in 11in`, and margin order is `y x`.
+It never inserts the rule itself. P7 inserts it only on the print route; public
+continuous HTML and editor paged mode do not carry `@page`.
 
 The resume root sets `font-synthesis: none`. A browser-facing style test checks
 the computed root value so a missing weight or style cannot be synthesized.
@@ -129,7 +166,9 @@ every template, unsettable by any preset (`geometry.md` §6; `limitations.md`
 
 **Rich text.** `RichText` emits one `.rich-text` container and calls
 `sanitizeRichText` (Task 3) on every client render. On SSR the string passes
-through, because Go is the sole SSR sanitization authority (ADR 0012).
+through, because Go is the sole SSR sanitization authority (ADR 0012). An SSR
+test uses only the committed Go-sanitized artifact. Raw hostile corpus bytes are
+never passed to the SSR component as a shortcut for a client-sanitizer test.
 
 **Headings.** `heading.style` drives `text-transform` through a CSS var **and**
 `letter-spacing`: `0.06em` for `uppercase`, `0` for `titlecase` and `normal`
@@ -139,7 +178,7 @@ the print container's locale can change casing and break snapshot determinism
 (`print.md` §7). `showRule` is a bottom border whose `--rule-gap` disappears
 with it.
 
-**The eight optional tokens** (`tokens.md` §2 — all 20 committed presets set
+**The eight optional leaves** (`tokens.md` §2 — all 20 committed presets set
 `header` and `spacing.pageMargin`, four set `surfaceTarget: "header"`, three set
 `"sidebar"`). Each fallback is applied at the point of use and never written
 back into the document:
@@ -165,8 +204,11 @@ accent), so a level widget must remain correct when the track is invisible
 **Level widgets.** `skill`/`language` `sectionDisplay.style` variants
 `text`/`tag`/`bar`/`dots` are each a distinct DOM shape. Level **absent** → name
 only, never a zero-width bar; level **`0`** → an explicit value rendering zero
-of five filled; `0` and absent must render differently (contract §5.6). The
-`text` style renders **no widget at all**.
+of five filled; `0` and absent must render differently (contract §5.6). Every
+present non-text widget has `role="img"` and exact accessible name
+`<entry name>: <n> of 5`; absent emits neither widget nor accessible name. This
+remains deterministic when the track falls back to the surface. The `text` style
+renders **no widget at all**.
 
 **DOM class contract (P7A depends on it).** The renderer emits exactly
 `.resume-header`, `.resume-section`, `.section-heading`, `.entry`,
@@ -178,14 +220,19 @@ without an overlapping wrapper.
 **Print-fidelity properties the renderer owns.** `print-color-adjust: exact`
 (with the `-webkit-` prefix) goes on the resume root — without it level bars,
 tag chips, and every surface tint vanish from the PDF while remaining in preview
-(`print.md` §6). `useResumeStyles` also emits
-`margin: var(--page-margin-y) var(--page-margin-x)` into the `@page` rule
-(`geometry.md` §6); P7A consumes it and does not recompute it.
+(`print.md` §6). `useResumeStyles` resolves format-derived page dimensions and
+validated point-of-use margins. `renderPageRule` emits their exact dynamic
+`@page` rule; P7A consumes it and does not recompute it.
 
 Photo per D14; icons per D13.
 
 ## Steps
 
+- [ ] **Step 0: approval and registry gate.** Record the dated Draft v4 and
+      template-contract owner approval. Verify Task 5B's generated
+      `@aboutme/schema/released` export resolves `CURRENT_VERSION` and that the
+      two Task 4 renderer files predate this implementation diff. Stop on any
+      mismatch.
 - [ ] **Step 1: Failing purity + smoke test.** `sections.test.ts` opens with a
       file-level `// @vitest-environment node` pragma (B7 — the global
       `environment: 'nuxt'` happy-dom would otherwise let a stray `document.*`
@@ -200,24 +247,28 @@ Photo per D14; icons per D13.
       passes remains unchanged; black and white are scored by their actual
       minimum contrast; the first hue-preserving passing step wins; no passing
       endpoint returns `null`; returned endpoints themselves pass),
-      `useResumeStyles` (table: customization → expected root map, plus the
-      per-surface maps for a `header`-tinted and a `sidebar`-tinted preset, plus
-      each of the eight optional tokens absent → its fallback value, plus both
-      `effectiveSurfaceTarget` degradations), `formatDate` (all three formats ×
-      y-only/y+m × present/closed ranges), `icons` (known key → component,
-      unknown → null), `ContactChip` (D12/ADR 0013 matrix: four URL types
-      linkify **only** with `https://`-prefixed values — a
+      `resolveRenderModel` (raw document/context → ordered structural model and
+      CSS token projection, input immutability, and no raw customization
+      retained; every exact `ResumeRenderError` code), `useResumeStyles`
+      (resolved projection → expected root map and format-derived page value,
+      plus the per-surface maps for a `header`-tinted and a `sidebar`-tinted
+      preset, plus each of the eight optional tokens absent → its fallback
+      value, plus both `effectiveSurfaceTarget` degradations), `formatDate` (all
+      three formats × y-only/y+m × present/closed ranges), `icons` (known key →
+      component, unknown → null), `ContactChip` (D12/ADR 0013 matrix: four URL
+      types linkify **only** with `https://`-prefixed values — a
       `javascript:`/`//`/`mailto:` value in a URL-typed chip renders as text,
       direct NEW-M7 evidence; email/phone/location/custom always text; `label`
       present and non-empty replaces the default label; every anchor is
       underlined), `Photo` (crop math from a fixed rect → expected style
       bindings; explicit `context.photoUrl` use and metadata/context mismatch),
       `DateRange`, `EntryHeader`, `SectionHeading`, then the eight sections
-      (contract §5.2's mapping and §5.6's absent-versus-`0` widget cases), then
-      `LayoutColumns` (2-col placement; 1-col main-then-sidebar order; sidebar
-      tint degrading to `none` at `columns: 1`), then `ResumeHeader`, then
-      `ResumeDocument` (continuous mode only; `paged` throws `not implemented`
-      until Task 7).
+      (contract §5.2's mapping and §5.6's absent-versus-`0` DOM and accessible-
+      name widget cases), then `LayoutColumns` (2-col placement; 1-col
+      main-then-sidebar order; sidebar tint degrading to `none` at
+      `columns: 1`), then `ResumeHeader`, then `ResumeDocument` (continuous mode
+      only; `paged` throws
+      `new ResumeRenderError("render_mode_unavailable", ...)` until Task 7).
 - [ ] **Step 2a: Contrast regressions.** Include the old direction heuristic's
       `clampAgainst("#b7b7b7", ["#b7b7b7"], 4.5)` mid-surface counterexample:
       the algorithm must select the actually passing black direction, not a
@@ -239,12 +290,22 @@ Photo per D14; icons per D13.
       rendered HTML carries the six `print.md` §3 class names, that heading and
       first entry are non-overlapping siblings with both avoid rules, that the
       resume root carries `lang` from `context.lng` and
-      `print-color-adjust: exact`, and that the emitted `@page` margin resolves
-      from `--page-margin-x/y`. These are P7A's inputs; a rename here is a
-      silent P7A regression.
+      `print-color-adjust: exact`. Assert exact A4 and Letter `renderPageRule`
+      output, including explicit and default margins, and prove continuous HTML
+      does not insert it. Task 7 repeats the absence check for editor-paged
+      HTML. These are P7A's inputs; a rename here is a silent P7A regression.
 - [ ] **Step 5: Renderer-only gate.** Before the pagination adversarial file
       exists, run
       `(cd apps/web && npx vitest run test/renderer/bounds.adversarial.test.ts test/renderer/plain-fields.adversarial.test.ts)`,
       then `make web-lint web-typecheck web-test web-build`. Record the
       unchanged two-file test diff and this task's separate implementation diff.
-      The integration owner runs `make ci` before integrating the phase.
+      The integration owner runs `make ci` once at the final unchanged phase
+      candidate, not after this task.
+
+## Acceptance mapping
+
+- AC-SEC-004: the renderer rechecks URL-contact `https://` values and never
+  linkifies an unknown or non-URL contact type.
+- AC-REN-006/007/008: the generated current-version guard, pure resolved model,
+  typed failures, dynamic page geometry, and token/accessibility rules pass in
+  the DOM-free renderer suite.

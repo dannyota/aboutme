@@ -63,14 +63,16 @@ widgets draw no chip. Nothing clamps, so the goldens pin the authored hexes.
 
 ## Nearest siblings
 
-- **academic-dense** — same metrics, opposite purpose: tight over many pages
-  versus tight to reach exactly one. Page two is free there, so it need not
-  sidebar sections or drop widgets; here those are the two largest levers.
+- **academic-dense** — the same 13 px base and dense intent, but a different
+  grid and opposite purpose: tight over many pages versus tight to reach exactly
+  one. Page two is free there, so it need not re-home sections. Both presets set
+  skills and languages to `text` and render no level widgets; here, sidebar
+  placement is the largest extra lever.
 - **editorial-wide** — the polar opposite: it spends the page on air, this
   spends 186 of 210 mm on ink.
 - **modern-sidebar** — same mechanism, other motive: it tints the sidebar as a
   signature; this leaves it untinted and admits three section types.
-- **engineer-compact** — also dense, but keeps 15 mm margins and level widgets.
+- **engineer-compact** — also dense, with 11 × 12 mm margins and level widgets.
 
 ## Unexpressible intent
 

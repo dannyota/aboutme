@@ -30,12 +30,17 @@ for every concrete template design.
 ```mermaid
 flowchart LR
   P[preset JSON] --> A[applyTemplate]
-  K[content section keys] --> A
+  K[content section map] --> A
   L[current layout.sections] --> A
   A --> C[complete customization]
-  D[personalDetails plus content] --> R[ResumeDocument]
-  C --> S[useResumeStyles: CSS custom properties]
-  S --> R
+  C --> D[document with customization]
+  D --> M[resolveRenderModel]
+  X[render context] --> M
+  M --> T[CSS-valued token projection]
+  T --> S[useResumeStyles]
+  M --> V[structural component props]
+  S --> R[ResumeDocument]
+  V --> R
   R --> E[editor preview]
   R --> W[public SSR page]
   R --> F[Chromium print, PDF]
@@ -66,12 +71,12 @@ The boundary in one line each:
   endpoint that may rewrite it (ADR 0009).
 
 Because the user's customization _is_ the template, applying a template replaces
-it. That is not data loss through carelessness; it is the definition. What
-survives an apply is the document itself and the placement of its sections (§3).
-The editor is responsible for making the replacement visible and undoable; the
+it. That is not data loss through carelessness; it is the definition. The
+document content survives; section placement follows the preset's rule (§3). The
+editor is responsible for making the replacement visible and undoable; the
 renderer and the preset schema are not.
 
-## 3. Apply semantics — ADR 0008 is binding
+## 3. Apply semantics — ADR 0008 and placement order
 
 ADR 0008 imposes:
 
@@ -89,17 +94,24 @@ Consequences a template design must respect:
 - A preset declares `layout.placement` as either `"keep"` (preserve the
   document's current `main`/`sidebar` arrays) or `"byType"` with an ordered
   `sidebarSectionTypes` list. One-column presets use `"keep"`.
-- Under `"byType"`, every content key whose section's `sectionType` appears in
-  the list goes to `sidebar` in list order; every other key goes to `main`
-  preserving its current relative order. Each key lands in exactly one array, so
-  §3's exactly-once aggregate invariant holds by construction, not by
-  validation.
+- Proposed [ADR 0021](../../adr/0021-template-placement-order.md) fixes ADR
+  0008's missing tie-breaks. Current visual order is `main` followed by
+  `sidebar`. A `byType` apply visits the unique `sidebarSectionTypes` in list
+  order and places matching keys in their current visual order. Unselected keys
+  and all custom sections remain in `main`, in current visual order.
+- Before either rule runs, the current arrays must contain every content key
+  exactly once and no unknown key. Invalid placement, duplicate selectors, or a
+  `custom` selector fails with a typed error. `keep` returns the validated
+  arrays byte-for-byte.
+- Each valid output key lands in exactly one array, so §3's exactly-once
+  aggregate invariant holds by construction rather than through a repair pass.
 - A preset must therefore be renderable against a document it has never seen,
   including one whose only sections are custom sections with UUID keys.
 - The preset shape is **not** the document's `customization` shape: it adds
   `layout.placement`/`sidebarSectionTypes` and omits `layout.sections`.
-  `applyTemplate(preset, contentKeys, currentSections)` is a pure function
-  returning a complete, schema-valid `customization`.
+  `applyTemplate(currentCustomization, preset, content)` is a pure function
+  returning either a complete, schema-valid `customization` or a typed
+  validation error.
 - A preset must supply every one of the eight required `customization` keys,
   including `pageFormat` and `dateFormat`, because the replace is wholesale.
   Applying a template therefore resets page size and date format. See
@@ -123,6 +135,32 @@ rule.
 
 A key present in `layout.sections` but absent from `content` renders nothing —
 the store rejects that state on write, and the renderer must not crash on it.
+
+Template application is stricter than rendering stale input. It validates both
+arrays before apply and never derives an order by iterating `content`. Proposed
+[ADR 0021](../../adr/0021-template-placement-order.md) defines the exact apply
+order and fail-closed cases.
+
+### 4.1 Resolved render model
+
+`ResumeDocument` calls one pure
+`resolveRenderModel(currentDocument, renderContext)` boundary before it emits
+HTML. The returned model contains:
+
+- ordered `main` and `sidebar` section models plus `layout.columns`;
+- resolved header behavior, including optional-field fallbacks;
+- `sectionDisplay`, `dateFormat`, `pageFormat`, language, pagination mode, and
+  authorized photo state; and
+- scoped CSS properties produced from a CSS-valued token projection by
+  `useResumeStyles`.
+
+Structural customization drives model fields and component props. In particular,
+layout arrays and column count choose section order and layout; header settings
+choose header DOM behavior; `sectionDisplay` chooses widget DOM shape; and
+`dateFormat` chooses date output. `useResumeStyles` handles only CSS-valued
+leaves such as font, colors, spacing, heading treatment, page geometry, and
+surface treatment. After resolution, no component reads raw `customization`;
+child components receive only the model slice they render.
 
 ## 5. Rendering the document contract
 
@@ -219,8 +257,13 @@ or reflows the markup. Anchors inside rich text get `rel="noopener noreferrer"`.
 
 - Level **absent** → render the name only, in every style. No zero bar, no empty
   dots row, no "N/A".
-- Level **`0`** → an explicit value; render zero of five filled. `0` and absent
-  are different and must render differently.
+- Level **`0`** → an explicit value; render the non-text widget container with
+  zero of five filled. `0` and absent remain different even when the visual
+  track equals the surface: every `tag`, `bar`, and `dots` widget with a present
+  level has `role="img"` and the exact accessible name `<entry name>: <n> of 5`;
+  absent level emits neither the widget nor that accessible name.
+- Levels **`1`–`5`** use the same widget role and accessible-name rule. The
+  visible fill also carries their visual meaning.
 - `text` style renders no widget at all; the level is not spelled out, because
   the schema defines no label vocabulary for 0–5.
 
@@ -256,8 +299,8 @@ Rules the above encodes:
   a trailing comma and space. This is where the sentinel bug reappears as a
   punctuation bug.
 - Colors and levels have no cleared form: `hexColor` cannot be `""` and `level`
-  cannot be `""`. For those, absence is the only unset state, and
-  `colors.accent` is the only optional color ([Color roles](colors.md)).
+  cannot be `""`. For those, absence is the only unset state. `colors.accent`
+  and `colors.surface` are the two optional colors ([Color roles](colors.md)).
 - Entry `id` is never rendered and never emitted as an HTML attribute.
 
 ## 7. Columns

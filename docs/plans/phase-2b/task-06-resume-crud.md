@@ -16,17 +16,14 @@ CRUD with the three-resume cap on create.
 | `POST /resumes`        | Creates from an optional seed document; any seed `personalDetails.photo` is `422 document_invalid` because only the server may create photo metadata. A 4th is `409 resume_cap_exceeded`. `Idempotency-Key` required, `If-Match` rejected (D6). `201` with `Location` and the full resume |
 | `GET /resumes/{id}`    | The resume with its document, projected to current and emitted at the caller's declared version; `ETag: "r<revision>"`                                                                                                                                                                    |
 | `PATCH /resumes/{id}`  | `{title?, lng?}`; absent key means "unchanged", `""` means "cleared" under the [resume aggregate](../../design/data.md#resume-aggregate). Projects, sanitizes, and validates the complete current aggregate, then uses `SaveMetadataAndDocumentTx`                                        |
-| `DELETE /resumes/{id}` | `204`, no body. After row commit, deletes only the transaction-returned photo key that passes D11's expected-resume validator                                                                                                                                                             |
+| `DELETE /resumes/{id}` | `204`, no body. The transaction validates its returned photo key and enqueues exact-key cleanup while deleting the row                                                                                                                                                                    |
 
 **Delete handles media without unbounded work.** Inside the idempotent database
-transaction, the handler reads the current photo key and deletes the resume.
-After a definite commit it validates that transaction-returned key against D11's
-exact grammar and expected resume ID, then deletes that exact key. An invalid or
-cross-resume key makes no backend call; cleanup records a safe metric and leaves
-the bytes for the reference-aware sweep. A missing object is success; another
-backend error is logged and measured. Neither cleanup failure changes the stored
-`204`. An ambiguous commit does not delete bytes because the row may still
-reference them. A replay performs no cleanup.
+transaction, the handler reads and validates the current photo key, deletes the
+resume, and enqueues that exact key. An invalid or cross-resume key rolls back
+both changes and makes no backend call. A queue write failure also rolls back.
+After commit the old object is inaccessible because every read is
+reference-gated. A replay performs no callback and creates no duplicate job.
 
 ## Steps
 
@@ -72,14 +69,13 @@ reference them. A replay performs no cleanup.
       `internal/api/health_contract_test.go` establishes. A contract/handler
       disagreement stops this task and goes to the owner as an amendment (D1).
 - [ ] **Step 6: failing media cleanup test.** Delete a resume with a current
-      photo and assert that exact object is removed after commit. An unrelated
-      candidate under the same prefix and a neighbour resume's object remain for
-      bounded orphan cleanup. Backend failure does not turn a committed delete
-      into `500`; it emits the required failure metric. A malformed or cross-
-      resume transaction-returned key also leaves the committed `204` unchanged,
-      emits no key value, and causes zero backend calls. Race a prior read
-      against a transaction-time photo-key change and prove the cleanup intent
-      uses only the key returned by `DeleteTx`; a replay executes no cleanup.
+      photo and assert the row deletion and one exact-key job commit together.
+      The object remains private until the worker runs. An unrelated candidate
+      under the same prefix and a neighbour resume's object get no job. Queue
+      failure, malformed key, or cross-resume key rolls back the delete, emits
+      no key value, and causes zero backend calls. Race a prior read against a
+      transaction-time photo-key change and prove only the key returned by
+      `DeleteTx` is enqueued; a replay creates no duplicate job.
 - [ ] **Step 7: implement; green.**
 - [ ] **Step 8: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
@@ -98,5 +94,5 @@ reference them. A replay performs no cleanup.
 | AC-DOC-001   | HTTP evidence that the 4th resume is rejected, including under races     |
 | AC-SAVE-001  | `412` on a stale rename                                                  |
 | AC-SAVE-002  | Replay and reuse over create, rename, and delete                         |
-| AC-MEDIA-003 | Resume delete removes the resume's stored objects                        |
-| AC-MEDIA-006 | Ambiguous commits and failed cleanup never delete a possibly live object |
+| AC-MEDIA-003 | Resume delete commits reference revocation with one exact-key job        |
+| AC-MEDIA-006 | Ambiguous commits and queue failures never target a possibly live object |

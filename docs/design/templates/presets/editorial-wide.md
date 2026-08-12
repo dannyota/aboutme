@@ -64,8 +64,8 @@ and `--color-track` is unused because both level styles are `text`.
   at 15:1. A sparse page reads fast; this one is built to be read slowly.
 - **elegant-serif-two** shares the serif and probably the warm palette, but two
   columns halve the measure and make the page a layout.
-- **classic-serif** is the conventional serif resume: default margins, tighter
-  leading, rules under headings. The distance is geometric.
+- **classic-serif** is the conventional serif resume: 25 × 20 mm margins,
+  tighter leading, rules under headings. The distance is geometric.
 
 ## Unexpressible intent
 

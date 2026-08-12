@@ -34,9 +34,43 @@ editing.
 ## Public namespace
 
 A resume slug is globally unique, 4–30 characters, and matches
-`^[a-z0-9]+(-[a-z0-9]+)*$`. Reserved root segments cannot be claimed. A resume
-keeps its slug when unpublished. Rename or deletion releases the old slug into a
-180-day tombstone so another account cannot immediately take over an old link.
+`^[a-z0-9]+(-[a-z0-9]+)*$`. One versioned public-root registry is the exhaustive
+authority for literal first path segments declared by product and infrastructure
+route sources and for their dispatch class. It generates the Caddy fixed-root
+matcher, the Go slug-claim set, and route-parity fixtures; those consumers have
+no separate handwritten exceptions. A fixed root is added to the registry before
+any route may claim it, and drift between the registry, OpenAPI root paths, the
+Nuxt page manifest, or generated dispatch fails the build.
+
+Draft v4 starts with this exact registry:
+
+| Root              | Source and dispatch                                                              |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `admin`           | Protected future namespace from ADR 0004; reserved-only, with no current handler |
+| `api`             | OpenAPI server root and Caddy `/api/v1/*`; Go                                    |
+| `app`             | Current Nuxt `/app/settings/sessions` page tree; Nuxt                            |
+| `healthz`         | OpenAPI and Caddy `/healthz`; Go                                                 |
+| `_nuxt`           | Nuxt build-asset namespace; Nuxt                                                 |
+| `internal-render` | Direct Go-to-Nuxt renderer; Caddy denies every viewer request                    |
+| `llms.txt`        | Caddy `/llms.txt`; Go                                                            |
+| `login`           | Current Nuxt `/login` page; Nuxt                                                 |
+| `people`          | Protected future namespace from ADR 0004; reserved-only, with no current handler |
+| `print`           | Caddy `/print` and `/print/*`; denied externally and capability-gated internally |
+| `readyz`          | OpenAPI and Caddy `/readyz`; Go                                                  |
+| `robots.txt`      | Caddy `/robots.txt`; Go                                                          |
+| `sitemap.xml`     | Caddy `/sitemap.xml`; Go                                                         |
+| `u`               | Protected future namespace from ADR 0004; reserved-only, with no current handler |
+
+The root `/` has no first segment. Dynamic `/{slug}` and `/{slug}.md` routes do
+not add literal entries. The dotted and underscore-prefixed roots cannot pass
+the slug grammar, but stay in the registry so route dispatch and reservation
+parity remain exhaustive. Framework-generated paths that are not fixed product
+or infrastructure routes remain outside this registry and fall through to Nuxt.
+
+A slug claim validates both the grammar and exact registry membership. Reserved
+root segments cannot be claimed. A resume keeps its slug when unpublished.
+Rename or deletion releases the old slug into a 180-day tombstone so another
+account cannot immediately take over an old link.
 [ADR 0004](../adr/0004-resume-slug-only-urls.md) records the rationale.
 
 ## Publish controls
@@ -56,6 +90,12 @@ The publish dialog exposes three independent choices:
 
 Deleted, renamed, tombstoned, and never-published slugs all return the same
 public `404`. The service does not expose which internal state caused absence.
+Every public representation revalidates the current publish state before a
+stored response is reused. Unpublish, delete, and rename do not return success
+until the old public generation can no longer be admitted. A service-controlled
+cache never extends access beyond that success boundary.
+[ADR 0022](../adr/0022-public-artifact-revocation.md) defines the revocation
+fence and its 60-second cache trade-off.
 
 ## Product boundaries
 
@@ -65,6 +105,9 @@ public `404`. The service does not expose which internal state caused absence.
 - Publishing explains that public content can be delivered through a global
   content-delivery network. The discovery option separately explains crawler and
   AI-engine access.
+- Deletion copy distinguishes immediate access revocation, private-media removal
+  targeted within 24 hours, and expiry from the 30-day backup schedule. An
+  overdue physical delete is audited and retried; it does not restore access.
 - The v1 application interface is English. Vietnamese resume content is a
   first-class fixture and fallback target because the initial community is
   Vietnamese. Other scripts remain valid content; font choices state measured

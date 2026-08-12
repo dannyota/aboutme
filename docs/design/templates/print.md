@@ -8,11 +8,11 @@ renderer-owned (`tokens.md` §1).
 
 ## 1. Three targets, one renderer
 
-| Target           | Route         | Pagination model                                                                         | Authority            |
-| ---------------- | ------------- | ---------------------------------------------------------------------------------------- | -------------------- |
-| Editor preview   | `/app/**`     | JS measure-and-break at entry boundaries, fixed 794 px page, `transform: scale()` to fit | approximate          |
-| Public SSR page  | `/[slug]`     | continuous flow, no pagination                                                           | not paginated at all |
-| PDF and og-image | `/print/[id]` | CSS `@page` plus fragmentation properties                                                | **authoritative**    |
+| Target           | Route         | Pagination model                                                                               | Authority            |
+| ---------------- | ------------- | ---------------------------------------------------------------------------------------------- | -------------------- |
+| Editor preview   | `/app/**`     | JS measure-and-break at entry boundaries, selected A4/Letter page, `transform: scale()` to fit | approximate          |
+| Public SSR page  | `/[slug]`     | continuous flow, no pagination                                                                 | not paginated at all |
+| PDF and og-image | `/print/[id]` | CSS `@page` plus fragmentation properties                                                      | **authoritative**    |
 
 The [renderer boundary](../system.md#renderer-boundary) makes editor pagination
 an approximation and Chromium print pagination authoritative. JavaScript
@@ -40,16 +40,25 @@ boundary linked above.
 
 ## 2. Page geometry
 
+The renderer resolves one typed page-geometry value from `pageFormat` and
+`spacing.pageMargin`. Its pure `renderPageRule` function emits one of these
+exact print-only shapes, substituting the validated `y` and `x` margins:
+
 ```css
 @page {
-  size: A4; /* or Letter, from customization.pageFormat */
-  margin: 15mm;
+  size: 210mm 297mm;
+  margin: <y>mm <x>mm;
+}
+@page {
+  size: 8.5in 11in;
+  margin: <y>mm <x>mm;
 }
 ```
 
-- `pageFormat: "a4"` → `210mm × 297mm`; `pageFormat: "letter"` → `8.5in × 11in`.
-  The value is emitted into the `@page` rule by `useResumeStyles`; it is the one
-  token that changes sheet size.
+- `pageFormat: "a4"` selects `210mm × 297mm` and the 794 × 1123 px editor box.
+  `pageFormat: "letter"` selects `8.5in × 11in` and the 816 × 1056 px editor
+  box. The editor paginator and print rule consume the same resolved value;
+  neither defaults every document to A4.
 - Margins default to **15 mm on all four sides for both formats**.
   `spacing.pageMargin` (`{x, y}` in mm, 0–40 per axis) overrides them; when
   absent, `useResumeStyles` applies the 15 mm fallback at the point of use and
@@ -61,8 +70,9 @@ boundary linked above.
   (`displayHeaderFooter: false`), and `preferCSSPageSize: true` makes the CSS
   rule win over the print job's defaults.
 - Orientation is always portrait. There is no landscape token.
-- The public SSR page and the editor preview do not apply `@page`; it exists
-  only in the print path.
+- `renderPageRule` returns the complete rule rather than a CSS variable used
+  inside `@page`. The print path inserts that output. The public SSR page and
+  editor preview do not insert it.
 
 ## 3. Break rules
 

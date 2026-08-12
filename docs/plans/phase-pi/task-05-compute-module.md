@@ -21,17 +21,19 @@
       or equal — never a looser task bound); caddy + server containers set
       `ulimits nofile 65536/65536`; web container env has `HOST=0.0.0.0`
       (bridge-internal), `PORT=3000`, `NUXT_PUBLIC_API_BASE=/api/v1`,
-      `NUXT_INTERNAL_API_BASE=http://${var.bridge_gateway_ip}:8081` (D24); caddy
-      task env includes `GO_UPSTREAM=127.0.0.1:8080`,
-      `WEB_UPSTREAM=127.0.0.1:3000`, `INTERNAL_API_LISTEN` derived from
-      `var.bridge_gateway_ip` (D7/D24); the server task definition contains the
-      non-essential `migrate` container with `dependsOn SUCCESS` from the server
-      container (D16). Only `migrate` receives `DB_MIGRATOR_PASSWORD`; Go
-      receives only `PGPASSWORD`. The module also creates a non-service,
-      one-shot DB-bootstrap task definition whose container receives master,
-      app, migrator, and restore secrets through Task 4's dedicated execution
-      role and runs Task 8's exact bootstrap script. Every container's image
-      input is a **digest** reference (`@sha256:`) — the test rejects a tag.
+      `NUXT_INTERNAL_API_BASE=http://${var.bridge_gateway_ip}:8081` (D24);
+      server env also has `NUXT_RENDER_ORIGIN=http://127.0.0.1:3000`, the direct
+      origin used only for bounded `POST /internal-render/public`; caddy task
+      env includes `GO_UPSTREAM=127.0.0.1:8080`, `WEB_UPSTREAM=127.0.0.1:3000`,
+      `INTERNAL_API_LISTEN` derived from `var.bridge_gateway_ip` (D7/D24); the
+      server task definition contains the non-essential `migrate` container with
+      `dependsOn SUCCESS` from the server container (D16). Only `migrate`
+      receives `DB_MIGRATOR_PASSWORD`; Go receives only `PGPASSWORD`. The module
+      also creates a non-service, one-shot DB-bootstrap task definition whose
+      container receives master, app, migrator, and restore secrets through Task
+      4's dedicated execution role and runs Task 8's exact bootstrap script.
+      Every container's image input is a **digest** reference (`@sha256:`) — the
+      test rejects a tag.
 - [ ] Implement: cluster, capacity provider on Task 2's ASG, three services
       (caddy, server, web) with deployment `minimum_healthy_percent = 0`,
       `maximum_percent = 100` (fixed host ports forbid overlap — this _is_ the

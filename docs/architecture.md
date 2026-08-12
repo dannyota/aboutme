@@ -83,8 +83,16 @@ bounded cleanup and capacity accounting, HTTP retry behavior, and fixed
 customization-delta allowlist remain P2B work. P8 owns the authoritative hourly
 global expiry sweep.
 
+The versioned sanitizer allowlist and hostile corpus generate Go and TypeScript
+artifacts. `internal/sanitize.RichText` builds its Go policy from that artifact;
+the client wrapper builds DOMPurify policy from the same data and is a byte-
+preserving passthrough on server-side rendering. Author and independent suites
+cover the corpus, parser boundaries, exact anchor hardening, idempotence, and
+deterministic arbitrary input. Resume HTTP, public-read, and internal-print
+wiring remain owned by P2B, P5A, and P7A.
+
 Twenty template preset JSON files are committed. Their design contract remains
-draft, and the renderer, sanitizer, and licensed font assets have not landed.
+draft, and the renderer and licensed font assets have not landed.
 
 ## Known delivery gaps
 
@@ -94,6 +102,7 @@ draft, and the renderer, sanitizer, and licensed font assets have not landed.
 
 ## Not implemented
 
-Resume HTTP and media, sanitizing and rendering, the editor, public publishing,
-Server-Sent Events, PDF and image rendering, privacy jobs, production
-infrastructure, staging, production deployment, and Flutter remain planned.
+Resume HTTP and media, sanitizer boundary wiring, rendering, the editor, public
+publishing, Server-Sent Events, PDF and image rendering, privacy jobs,
+production infrastructure, staging, production deployment, and Flutter remain
+planned.

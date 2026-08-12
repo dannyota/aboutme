@@ -44,7 +44,13 @@ architecture authority.
    `document.fonts.ready`.
 5. **D10 — Template apply.** A preset stores a placement rule. `applyTemplate`
    computes section keys against the current document and replaces the rest of
-   customization without touching content. ADR 0008 controls.
+   customization without touching content. Current visual order is `main`
+   followed by `sidebar`. `keep` preserves both arrays after exact-once
+   validation. `byType` orders selected keys by selector rank and then current
+   visual order; unselected and custom keys are placed in `main` in current
+   order. Invalid placement, duplicate selectors, and a `custom` selector fail
+   with a typed error. ADR 0008 controls the base rule; proposed ADR 0021 fixes
+   these candidate tie-breaks and validation rules.
 6. **D11 — Dates.** `Mon YYYY` uses a fixed English abbreviation table.
    Locale-aware month names remain a later explicit i18n contract.
 7. **D12 — Contacts.** Details render in array order. Only validated website,

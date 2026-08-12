@@ -2,10 +2,10 @@
 
 Status: **Draft v1** (2026-08-12). Not approved.
 
-One column, black on white, no icons, no level widgets. For an applicant whose
-resume is ingested by an applicant tracking system before a person sees it.
-Every value serves one property: the characters a machine extracts from the PDF
-are the characters the document stores, in the order it stores them.
+One column, black on white, no contact icons, no level widgets. For an applicant
+whose resume is ingested by an applicant tracking system before a person sees
+it. Every value serves one property: the characters a machine extracts from the
+PDF are the characters the document stores, in the order it stores them.
 
 Restraint for a human removes marks that compete for attention; restraint for a
 machine removes marks that change the character stream or its order. So this
@@ -56,8 +56,8 @@ WCAG 2.1 luminance, sRGB. Nothing needs clamping, so these render as specified.
 
 `--color-track` (`#cccccc`, 1.61:1) is never painted: with `text` widgets and no
 fills, this preset renders no meaningful non-text element, so the 3:1 floor has
-nothing to apply to. An all-black palette costs link affordance — the anchor and
-its PDF annotation survive, and a user wanting blue sets `colors.accent`.
+nothing to apply to. The renderer-fixed underline preserves link affordance in
+the all-black palette; the anchor and its PDF annotation also survive.
 
 ## Limits, and intent the token space could not carry
 

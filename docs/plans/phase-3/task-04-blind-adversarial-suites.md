@@ -20,14 +20,25 @@ imports either path.
 - `apps/web/test/renderer/bounds.adversarial.test.ts`
 - `apps/web/test/renderer/plain-fields.adversarial.test.ts`
 - `apps/web/test/renderer/paginate.adversarial.test.ts`
+- `apps/web/test/renderer/apply-template.adversarial.test.ts`
 
-The task has four freeze points. Freeze the two codegen-faithfulness tests
+The task has five freeze points. Freeze the two codegen-faithfulness tests
 before Task 1. Freeze the runtime sanitizer files after Task 1 and before Task 2
 or 3. Freeze bounds and plain-fields in one test-only diff after Task 5B and
 before Task 6. After Task 6 passes the renderer-only gate below, a different
 fresh author freezes pagination in a second, pagination-only diff before Task 7.
-A missing implementation may make the focused test fail to compile; record that
-expected failure and the applicable test-only diff.
+After Task 5B, another fresh author freezes the `applyTemplate` suite in its own
+test-only diff before Task 8. A missing implementation may make a focused test
+fail to compile; record that expected failure and the applicable test-only diff.
+
+The runtime sanitizer workers were unavailable before Tasks 2 and 3, so those
+two implementations landed first. The recovered authors later derived their
+suites without reading the implementation, author tests, helpers, or diffs. The
+exact frozen files fail at codegen-only commit `897d69c` because the public
+implementations are absent, and pass at their integration commit. This preserves
+independent derivation but does not claim the originally planned chronology. The
+Phase 3 defect review must assess this disclosed exception. Renderer and
+pagination suites still follow their original pre-implementation freeze order.
 
 - [x] **Step 0a (blind): freeze codegen faithfulness before Task 1.** From only
       the validation JSON, schema version constant, and generated-interface
@@ -38,7 +49,7 @@ expected failure and the applicable test-only diff.
       frozen and may never edit them. Run
       `(cd packages/schema && npx vitest run test/sanitizer-codegen.adversarial.test.ts)`
       and `(cd packages/schema/gen/go && go test ./... -count=1)`.
-- [ ] **Step 0b (blind): author an independent neutralization predicate** on
+- [x] **Step 0b (blind): author an independent neutralization predicate** on
       each side, derived **only** from the
       [rich-text contract](../../design/security.md#untrusted-document-content)
       and the allowlist JSON — never by importing or transcribing Task 2/3's
@@ -50,7 +61,7 @@ expected failure and the applicable test-only diff.
       always returns true must fail the suite (B4: this is the difference
       between proving neutralization and proving nothing). Assert separately
       that dangerous-looking bare text remains a safe text node.
-- [ ] **Step 1 (blind): derive payloads beyond the corpus** from the spec's
+- [x] **Step 1 (blind): derive payloads beyond the corpus** from the spec's
       forbidden list — at minimum: nested/mutation cases (mXSS-style
       `<noscript>`/`<template>`/foreign-content pivots), scheme obfuscation not
       in the corpus (URL-encoded colon, mixed entity+case), attribute smuggling
@@ -60,13 +71,14 @@ expected failure and the applicable test-only diff.
       parser boundary removed by D3 (no jsdom in the SSR path), the remaining
       cross-parser seam is x/net/html → Blink — the mutation payloads target it
       directly.
-- [ ] **Step 2 (blind): property tests.** Both sides: for arbitrary strings
+- [x] **Step 2 (blind): property tests.** Both sides: for arbitrary strings
       (seeded PRNG, fixed seed — deterministic), output always satisfies the
       blind predicate; idempotence; output of one side fed to the other never
       reintroduces a violation.
-- [ ] **Step 3: freeze the sanitizer suite.** Record the test-only diff and
-      expected focused-test failure before the Task 2 or 3 author may inspect or
-      change implementation code. Run
+- [x] **Step 3: freeze the sanitizer suite.** The recovered suites are commit
+      `30291d4`; Go uses seed `0x5033474f5a17` for 2,048 cases and web uses seed
+      `0x51a17e3d` for 512 cases. Both fail for the missing public interface at
+      codegen-only commit `897d69c`. Run
       `(cd apps/server && go test ./internal/sanitize)` and
       `(cd apps/web && npx vitest run test/sanitizer/adversarial.test.ts)`.
 - [ ] **Step 4 (blind): plain fields stay text.** Put markup-looking strings,
@@ -99,6 +111,17 @@ expected failure and the applicable test-only diff.
       async `PaginationMeasureKey`, proves no element/global DOM read, and gets
       complete paged output; missing SSR provider fails closed. Derive these
       tests before reading the Task 7 diff.
+- [ ] **Step 6a (blind): template-apply properties.** From accepted ADRs 0008
+      and 0021, the template contract, current schema, and Task 8's public
+      signature, derive cases without reading a Task 8 implementation diff.
+      Prove `keep` preserves valid arrays byte-for-byte; `byType` ranks selected
+      keys by selector order and then current visual order; unselected and
+      custom keys stay in `main` in current visual order; and object insertion
+      order never changes either result. Missing, duplicate, and unknown current
+      placement keys, duplicate selectors, `custom`, and selectors on `keep`
+      fail with the exact typed code. Property cases prove exactly-once output,
+      wholesale replacement outside `layout.sections`, content preservation, and
+      input immutability.
 - [ ] **Step 7: freeze renderer suites before Task 6.** Record the test-only
       diff containing only `bounds.adversarial.test.ts` and
       `plain-fields.adversarial.test.ts`, plus the expected focused-test
@@ -111,6 +134,11 @@ expected failure and the applicable test-only diff.
       must have passed before this file exists, so its absent T7 imports cannot
       break Task 6. Run
       `(cd apps/web && npx vitest run test/renderer/paginate.adversarial.test.ts)`.
+- [ ] **Step 7b: freeze template apply after Task 5B and before Task 8.** A
+      fresh author adds only `apply-template.adversarial.test.ts`, records its
+      expected compile or contract failure, and freezes it before the Task 8
+      author reads the file. Run
+      `(cd apps/web && npx vitest run test/renderer/apply-template.adversarial.test.ts)`.
 - [ ] **Step 8: hand findings to the implementers** without fixing them in the
       independent suites; the phase reviewer adjudicates disputes.
 - [ ] **Step 9: final gate.** Run the focused Go sanitizer tests and
@@ -126,3 +154,5 @@ expected failure and the applicable test-only diff.
 - AC-REN-002: pagination preserves every block exactly once and in order.
 - AC-REN-006: the pure renderer handles valid boundary documents without a DOM
   or network dependency; plain fields remain escaped text nodes.
+- AC-REN-004: preset application is a pure total function for valid documents
+  and fails closed with the exact typed error for invalid placement inputs.

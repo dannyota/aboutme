@@ -29,10 +29,20 @@ shape for input and output while storage remains current. Creating a new schema
 version updates the manifest, schemas, converters, generated types, tests,
 OpenAPI examples, and consumers in one reviewed contract change.
 
+The first compatibility release makes v2 current and declares both v1 and v2
+accepted and emitted. Emitting a v2 document at v1 normally remains lossless.
+The only declared exception is `customization.font.family`: a v2 catalog ID that
+v1 cannot represent emits the catalog entry's explicit v1 fallback. The emission
+policy rejects any other changed value. A v1 mutation that does not target the
+font preserves the stored v2 font; it does not persist the fallback that was
+present only in the down-emitted working document. A v1 mutation that does
+target the font maps that chosen v1 family back to its v2 ID.
+
 ## Consequences
 
 - Released schema files and versioned generated outputs never change.
 - Adding font choices or fields to the v1 document requires v2; widening the v1
   enum is not allowed.
-- Converter tests must prove round trips where lossless and document every
-  intentional lossy default.
+- Converter tests must prove exact round trips where lossless. The v2-to-v1 font
+  exception proves the declared fallback and byte-for-value preservation of
+  every non-font field. Any other loss fails closed.

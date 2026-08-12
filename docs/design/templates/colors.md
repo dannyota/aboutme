@@ -41,9 +41,10 @@ Notes:
   surface and the fill uses the ordinary single-surface clamp. This fallback may
   make the track invisible, which is valid because it carries no meaning.
   Renderer consequence: a level widget must remain correct when the track is
-  invisible, which is why an absent `level` renders no widget at all rather than
-  an empty track (contract §5.6) — an empty track that might not be visible
-  cannot be the difference between "rated 0" and "unrated".
+  invisible. An absent `level` renders no widget. A present level, including
+  zero, emits the exact accessible widget name from contract §5.6; levels 1–5
+  additionally use the visible fill. An empty track is never the sole difference
+  between "rated 0" and "unrated".
 - `--color-link` is the link's **color** role only. Its underline is
   renderer-fixed ([Geometry](geometry.md)) and no preset can remove it, so a
   link is separable from body text even where the two colors are close.

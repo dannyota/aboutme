@@ -11,10 +11,10 @@ HTTP surface or image normalizer** — Task 11 owns both.
 **Files:** create
 `apps/server/internal/media/{media.go,fs.go,s3.go,conformance_test.go,fs_test.go,s3_test.go}`;
 modify `apps/server/internal/config/config.go` + `config_test.go`,
-`deploy/compose.yml`, `deploy/README.md`, `.env.example`, and
-`apps/server/go.mod` (**exclusive dependency-source window**). The integration
-owner applies the reserved `apps/server/go.sum` result. Reports the `Makefile`
-and CI changes to the integration owner — does not apply them.
+`deploy/README.md`, and `.env.example`. The worker reports exact
+`deploy/compose.yml`, `apps/server/go.mod`, `apps/server/go.sum`, `Makefile`,
+and CI diffs to the integration owner, who owns and applies those shared
+manifest, lockfile, and workflow paths in one exclusive window.
 
 ## Interfaces
 
@@ -26,14 +26,28 @@ package media
 var ErrNotFound = errors.New("media: object not found")
 var ErrAlreadyExists = errors.New("media: object already exists")
 
+type PutOutcome uint8
+
+const (
+    // PutNotCreated means the backend knows this call created no object.
+    PutNotCreated PutOutcome = iota
+    // PutCreated means this call created the complete object.
+    PutCreated
+    // PutUnknown means the remote result is ambiguous. The named key may or
+    // may not exist and must not be deleted by the request path.
+    PutUnknown
+)
+
 // Backend is the whole storage contract. Object keys are canonical,
 // forward-slash-separated nonempty segments produced only by this package's
 // callers (D11); no implementation may interpret a key as a filesystem path
 // before validating every segment.
 type Backend interface {
-    // Put is create-only. It returns ErrAlreadyExists without changing bytes
-    // when key already exists.
-    Put(ctx context.Context, key, contentType string, body io.Reader, size int64) error
+    // Put is create-only. Nil error requires PutCreated. ErrAlreadyExists
+    // requires PutNotCreated and leaves existing bytes unchanged. A remote
+    // request whose commit cannot be proved returns PutUnknown with an error.
+    Put(ctx context.Context, key, contentType string, body io.Reader, size int64) (
+        PutOutcome, error)
     Get(ctx context.Context, key string) (io.ReadCloser, string, error) // body, contentType
     Delete(ctx context.Context, key string) error
     ListPage(ctx context.Context, prefix, cursor string, limit int) (
@@ -53,6 +67,13 @@ func NewFS(dir string) (Backend, error)
 // and set for the local service; PathStyle is required for the latter.
 func NewS3(ctx context.Context, cfg S3Config) (Backend, error)
 ```
+
+The only valid `Put` result pairs are `PutCreated, nil`,
+`PutNotCreated, non-nil`, and `PutUnknown, non-nil`. `ErrAlreadyExists` is a
+`PutNotCreated` error. Any other pair is an internal contract violation and
+fails closed. A received S3 rejection that proves the conditional create did not
+occur is `PutNotCreated`; a dispatched request without a conclusive service
+result is `PutUnknown`.
 
 Configuration (`internal/config`, validated at startup, fail-closed):
 `MEDIA_BACKEND` (`fs` | `s3`), `MEDIA_FS_DIR`, `MEDIA_BUCKET`, `MEDIA_REGION`,
@@ -94,17 +115,24 @@ defines the target and port contract.
       `..` segment, repeated `/`, a leading or trailing `/`, a backslash, or a
       NUL are rejected by both backends **before** any I/O. Prefix tests cover
       the one allowed trailing delimiter and the same alias cases. `Put` accepts
-      only a body whose EOF is exactly at `size` and leaves no partial object
-      when the body is shorter or longer; a cancelled context aborts without
-      writing. Inject unique sentinel access-key and secret values into
-      configuration, backend errors, and a failing SDK response. Assert neither
-      sentinel appears in returned errors or captured logs. Startup errors may
-      name a missing variable but never its value.
+      only a body whose EOF is exactly at `size` and never exposes a partial
+      object when the body is shorter or longer. Cancellation before remote
+      dispatch is `PutNotCreated`; cancellation or transport loss after S3 may
+      have accepted the conditional write is `PutUnknown`. Inject unique
+      sentinel access-key and secret values into configuration, backend errors,
+      and a failing SDK response. Assert neither sentinel appears in returned
+      errors or captured logs. Startup errors may name a missing variable but
+      never its value.
 - [ ] Both implementations enforce create-only atomically: filesystem uses
       exclusive create in the target directory followed by safe cleanup of only
       its own partial file; S3 uses conditional `If-None-Match: *` and maps only
-      the documented collision response to `ErrAlreadyExists`. A concurrent
-      same-key test proves a loser cannot overwrite or delete the winner.
+      a proved collision response to `PutNotCreated, ErrAlreadyExists`. A
+      concurrent same-key test proves a loser cannot overwrite or delete the
+      winner. Fault injection covers cancellation before dispatch, a response
+      lost after the service accepted the write, a response lost after a
+      collision, and a definite service rejection. Unknown outcomes never
+      trigger request-path deletion because the key could belong to a collision
+      winner. The conformance suite rejects every invalid outcome/error pair.
 - [ ] **Step 2: skip-or-fail-closed harness.** Add `RequireTestS3(t)` in the
       same shape as `testutil.RequireMigratedTestDatabaseURL`: skip when
       `TEST_S3_ENDPOINT` is unset, **fail** when `REQUIRE_TEST_S3=1` is set and
@@ -114,30 +142,36 @@ defines the target and port contract.
       key and refuses escapes; `s3` uses AWS SDK for Go v2 pinned at latest
       stable, with a custom endpoint resolver and path-style addressing when
       `MEDIA_ENDPOINT` is set, and maps `NoSuchKey`/404 to `ErrNotFound`. Record
-      the transitive dependency delta from `go mod graph` in the task report, as
-      P2A's D1 requires for a new module. In the same exclusive dependency
-      window, pin the latest stable `golang.org/x/image` for Task 11's WebP
-      decoder and Catmull–Rom scaler. It must not be older than `v0.43.0`, which
-      fixes [GO-2026-5061](https://pkg.go.dev/vuln/GO-2026-5061). At this plan's
+      S3 returns `PutUnknown` for every non-collision result after dispatch
+      whose object-creation outcome is not proved. Filesystem outcomes are
+      always `PutCreated` or `PutNotCreated`. Record the transitive dependency
+      delta from `go mod graph` in the task report, as P2A's D1 requires for a
+      new module. Report the exact `go mod edit`/`go get` commands and resulting
+      `go.mod`/`go.sum` diff; the integration owner runs and applies them in the
+      exclusive dependency window. Pin the latest stable `golang.org/x/image`
+      for Task 11's WebP decoder and Catmull–Rom scaler. It must not be older
+      than `v0.43.0`, which fixes
+      [GO-2026-5061](https://pkg.go.dev/vuln/GO-2026-5061). At this plan's
       2026-08-12 review, the latest stable release is `v0.45.0`; recheck at
       scaffold time under the repository's dependency rule. Recheck and promote
       the already-transitive `golang.org/x/text/language` dependency to a direct
       exact pin for Task 6's BCP 47 parse/canonicalize path.
-- [ ] **Step 4: the local service.** Add a pinned, fully qualified
-      `docker.io/minio/minio:<exact tag>` service to `deploy/compose.yml` on a
-      **new `media` network shared only with `server`** — never `edge`, never
-      `frontend`, so a compromise of Caddy or Nuxt cannot reach it — plus a
-      one-shot `docker.io/minio/mc:<exact tag>` container that creates the
-      bucket and exits (the `migrate` service is the established one-shot
-      precedent, including `healthcheck: disable: true`). Credentials come from
-      `.env` with **no baked-in default**, exactly as `POSTGRES_PASSWORD` does,
-      because `compose.yml` is also the self-hosting artifact. Document both in
-      `deploy/README.md` and `.env.example`.
-- [ ] **Step 5: report the owner changes.** Supply exact Makefile recipes for
-      `test-s3-up`, `test-s3-down`, `server-test-s3`, and `server-test-p2b-s3`
-      that implement D10's container, credential-file, environment, fail-closed,
-      and package-command contract. The integration owner applies and verifies
-      those shared targets before this task's gate.
+- [ ] **Step 4: the local service.** Prepare the exact integration-owner diff
+      adding a pinned, fully qualified `docker.io/minio/minio:<exact tag>`
+      service to `deploy/compose.yml` on a **new `media` network shared only
+      with `server`** — never `edge`, never `frontend`, so a compromise of Caddy
+      or Nuxt cannot reach it — plus a one-shot `docker.io/minio/mc:<exact tag>`
+      container that creates the bucket and exits (the `migrate` service is the
+      established one-shot precedent, including `healthcheck: disable: true`).
+      Credentials come from `.env` with **no baked-in default**, exactly as
+      `POSTGRES_PASSWORD` does, because `compose.yml` is also the self-hosting
+      artifact. Document both in `deploy/README.md` and `.env.example`.
+- [ ] **Step 5: report the owner changes.** Supply exact compose/module/lockfile
+      diffs and Makefile recipes for `test-s3-up`, `test-s3-down`,
+      `server-test-s3`, and `server-test-p2b-s3` that implement D10's container,
+      credential-file, environment, fail-closed, and package-command contract.
+      The integration owner applies and verifies those shared targets before
+      this task's gate.
 - [ ] **Step 6: gate.** Run `make server-build server-vet server-test`,
       `make test-s3-up`, `make server-test-s3`, and
       `gitleaks dir --no-banner --redact .`. Record the test tally. A missing
@@ -152,10 +186,11 @@ defines the target and port contract.
 
 ## Acceptance mapping
 
-| Row          | What this task contributes                                                  |
-| ------------ | --------------------------------------------------------------------------- |
-| AC-MEDIA-004 | The one contract, both backends, and the fail-closed S3 run — the whole row |
-| AC-MEDIA-002 | The key-escape and traversal rejection both backends enforce                |
-| AC-MEDIA-003 | Exact-key deletion and bounded listing support safe lifecycle cleanup       |
-| AC-MEDIA-007 | Stable pages and object age make the orphan sweep bounded and race-safe     |
-| AC-MEDIA-009 | Context cancellation and exact-size writes support bounded intake           |
+| Row          | What this task contributes                                                 |
+| ------------ | -------------------------------------------------------------------------- |
+| AC-MEDIA-004 | The backend-contract and fail-closed S3 slice; T11/T12 close the row       |
+| AC-MEDIA-002 | The key-escape and traversal rejection both backends enforce               |
+| AC-MEDIA-003 | Exact-key deletion and bounded listing support safe lifecycle cleanup      |
+| AC-MEDIA-006 | Explicit `PutUnknown` prevents unsafe cleanup after a lost remote response |
+| AC-MEDIA-007 | Stable pages and object age make the orphan sweep bounded and race-safe    |
+| AC-MEDIA-009 | Context cancellation and exact-size writes support bounded intake          |

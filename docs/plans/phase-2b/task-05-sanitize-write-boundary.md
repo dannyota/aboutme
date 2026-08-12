@@ -70,7 +70,8 @@ func sanitizeDocument(doc schema.Resume) schema.Resume
 - [ ] **Step 6: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1)`,
-      and `make semgrep`.
+      and the focused sanitizer package tests. Connected `make scan` runs once
+      at the unchanged phase candidate.
 - [ ] **Step 7: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and rich-text completeness set to the integration owner. Do not
       stage or commit.

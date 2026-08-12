@@ -34,6 +34,9 @@ The server sends a heartbeat every 25 seconds. It caps connections per IP and
 account, budgets file descriptors, and evicts slow clients. An unpublish closes
 the public stream and makes the following refetch return `404`.
 
-SSE does not make edge cache invalidation synchronous. An open JavaScript client
-converges through its uncached refetch; a crawler or no-JavaScript visitor may
-observe the bounded public cache lifetime.
+SSE is not the public revocation authority. Every shared-cache reuse revalidates
+through the live-state gate, and the state mutation waits on the revocation
+fence before returning success. An open JavaScript client still converges
+through its uncached refetch; a crawler or no-JavaScript visitor gets the same
+immediate live-state decision without SSE.
+[ADR 0022](../adr/0022-public-artifact-revocation.md) owns that boundary.

@@ -20,7 +20,8 @@ photocopy, and completeness beats compression.
    is the register, and no pictogram stands in for a label a photocopy can lose.
 2. **One column, `placement: "keep"`.** Announcements prescribe the order in
    which qualifications are addressed, so a `byType` rule would re-home sections
-   on apply and break that silently. `sidebarSectionTypes` is `[]`, inert here.
+   on apply and break that silently. `sidebarSectionTypes` is absent, as `keep`
+   requires.
 3. **Letter, 25 mm margins, MM/YYYY.** 25 mm is one inch to the nearest
    millimetre, the standard instruction. Numeric dates need no month table and
    make a gap readable to the month without fabricating precision: a `{y}` with
@@ -38,11 +39,12 @@ photocopy, and completeness beats compression.
 
 ## The omitted accent, and the numbers
 
-`colors.accent` is the only optional colour: `$defs.customization.colors`
-requires `primary`, `text` and `background` only. Omitting it is valid, and
-`useResumeStyles` falls back to `colors.primary`, never a brand colour
-(`colors.md` §4), so links and `--color-accent-solid` are `#000000`,
-`--color-rule` is the 60 % mix `#999999`, and `--color-track` the 80 % mix.
+`colors.accent` and `colors.surface` are the optional colours:
+`$defs.customization.colors` requires `primary`, `text` and `background` only.
+Omitting both is valid, and `useResumeStyles` falls back to `colors.primary`,
+never a brand colour (`colors.md` §4), so links and `--color-accent-solid` are
+`#000000`, `--color-rule` is the 60 % mix `#999999`, and `--color-track` the 80
+% mix.
 
 Computed WCAG 2.x ratios, before clamping; each clears its floor.
 
@@ -63,9 +65,10 @@ nothing. No colour carries information, so WCAG 1.4.1 holds by construction.
 - **`mono-print`** — if it is monochrome we share the palette outright, and a
   black-and-white page is not distinctness on its own. What separates them is
   Letter at 25 mm, the stacked contact block, and 24/14 gaps that spend space.
-- **`ats-plain`** — identical on every axis a parser sees (one column, one ink,
-  `text` widgets, a common sans), opposite on every axis a human sees: ATS work
-  compresses for keyword density per page, this takes inch margins and base 14.
+- **`ats-plain`** — shares several parser-friendly axes (one column, one ink,
+  `text` widgets, a common sans), but differs in heading case and date format.
+  ATS work compresses for keyword density per page; this takes inch margins and
+  base 14.
 - **`classic-serif`** runs the same ruled-uppercase skeleton in serif, on A4 and
   centred; **`consulting-formal`** keeps an accent and a tighter grid.
 

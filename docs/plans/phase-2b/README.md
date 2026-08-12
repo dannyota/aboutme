@@ -60,9 +60,13 @@ stores v2 as current. P2B does not duplicate or defer the sanitizer.
   route-rate, header, and permit checks precede one bounded streaming read.
 - Filesystem and S3 backends implement one contract. A pinned local
   S3-compatible service proves the production protocol without AWS.
-- Object upload precedes the database update. Failure compensates by deleting
-  the new object. A crash orphan remains unreachable and is removed by the
-  bounded scheduled sweep in AC-MEDIA-007.
+- Object upload precedes the database update. A proved-created candidate is
+  compensated after a definite database failure. A remote `Put` with an unknown
+  outcome is never deleted by the request and never enters a database mutation;
+  a crash or unknown orphan stays private until the bounded scheduled sweep in
+  AC-MEDIA-007 proves it unreferenced.
+- Photo replacement and deletion commit reference revocation with one exact-key
+  deletion job. The job is cleanup state, not a second media ownership model.
 
 [Decisions](decisions.md) records the mechanism and rejected alternatives.
 [ADR 0019](../../adr/0019-private-media-delivery.md) owns the media trust and
@@ -70,15 +74,16 @@ failure boundary.
 
 ## Migration and shared-file rules
 
-P2B adds only migration 00006 for bounded idempotency retention. Photo keys
-already live in the document. Any other schema change stops for a new serialized
-design and migration review.
+P2B adds only migration 00006 for bounded idempotency retention and the durable
+media deletion-job ledger. Photo ownership stays in the document. Any other
+schema change stops for a new serialized design and migration review.
 
 The integration owner authors Task 2's exclusive migration,
 `apps/server/sql/queries.sql`, and regenerated `internal/store/**` window. Task
 1 alone owns OpenAPI; the integration owner regenerates the web client. Task 3
-authors dependency-source changes; the integration owner owns lockfile writes.
-The integration owner owns the root Makefile, workflows, and shared scripts.
+reports exact dependency changes; the integration owner applies `go.mod` and
+`go.sum` together in the exclusive dependency window. The integration owner owns
+the root Makefile, workflows, manifests, and shared scripts.
 
 ## Task index
 
@@ -154,11 +159,12 @@ integration owner lands a dedicated reviewed contract correction.
 
 ## Acceptance ownership
 
-P2B owns AC-SAVE-001/002/004/005, the P2B half of AC-SEC-003, and
-AC-MEDIA-001…006/008/009. AC-MEDIA-007 belongs to P8-priv; P2B supplies its
-paginated backend seam. P2B adds HTTP evidence without re-owning P2A document
-rows. These rows exist before dispatch; Task 15 fills evidence and state rather
-than creating criteria after the implementation.
+P2B owns AC-SAVE-001/002/004/005, the P2B half of AC-SEC-003,
+AC-MEDIA-001/002/004/005/008/009, and the P2B slices of the cross-phase
+AC-MEDIA-003/006 rows. P8-priv closes AC-MEDIA-003/006/007; P2B supplies their
+transactional queue and paginated backend seams. P2B adds HTTP evidence without
+re-owning P2A document rows. These rows exist before dispatch; Task 15 fills
+evidence and state rather than creating criteria after the implementation.
 
 The phase exit is defined in [exit criteria](exit-criteria.md). A fresh catalog
 author owns `acceptance-catalog-r1.md`, derives it from the approved design,
