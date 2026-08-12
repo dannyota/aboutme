@@ -54,7 +54,7 @@ used by the internal print job, and asserts that every rich-text field equals
 stored bytes and the user-visible revision unchanged. A direct sanitized test
 fixture or a renderer-only test does not close this handoff.
 
-- [ ] **Step 1: Failing conformance test.** `conformance_test.go` iterates
+- [x] **Step 1: Failing conformance test.** `conformance_test.go` iterates
       `schemagen.HostileCorpus`, runs `RichText`, parses output with
       `x/net/html`, and asserts the **neutralization predicate** (D2 a): no node
       whose tag ∉ AllowedTags; no attribute outside the per-tag allowlist; no
@@ -74,20 +74,20 @@ fixture or a renderer-only test does not close this handoff.
       node or attribute remains safe text. A predicate that vacuously accepts
       must fail the suite, never silently bless the sanitizer. Run → **FAIL**
       (package absent).
-- [ ] **Step 2: Implement.** Build the bluemonday policy **from the generated
+- [x] **Step 2: Implement.** Build the bluemonday policy **from the generated
       constants** in a package-level constructor — iterating
       `AllowedTags`/`AllowedAttributes`/`AllowedURLSchemes`, never a literal
       list. Add `RequireParseableURLs(true)`, reject relative URLs, and a
       post-pass that normalizes `rel`/`target` per D4 (bluemonday's built-ins
       append rel tokens in their own order; normalize to the exact D4 string so
       the DOMPurify fixed point in Task 3 can hold). Run → **PASS**.
-- [ ] **Step 3: Preservation + idempotence.** Table-driven positive tests:
+- [x] **Step 3: Preservation + idempotence.** Table-driven positive tests:
       benign input using every allowed tag survives with text content intact;
       `sanitize(sanitize(x)) == sanitize(x)` across the corpus and the benign
       table; malformed/truncated HTML never panics (add `FuzzRichText` seed
       corpus from the hostile payloads — go fuzz seeds only, deterministic in
       CI).
-- [ ] **Step 4: Freeze the corpus-output artifact.** A test regenerates
+- [x] **Step 4: Freeze the corpus-output artifact.** A test regenerates
       `testdata/corpus-output.golden.json` (payload id → `RichText(payload)`)
       when `UPDATE_GOLDEN=1`, otherwise asserts byte-equality with the committed
       file. This artifact is Task 3's cross-check input.
