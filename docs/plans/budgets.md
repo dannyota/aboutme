@@ -4,48 +4,54 @@ Each owning phase enforces its rows. P9A repeats production-shaped latency and
 resource measurements. A hard-budget breach fails the gate; changing a number
 requires a reviewed change with evidence.
 
-| Budget                                    | Target                               | Where enforced                            |
-| ----------------------------------------- | ------------------------------------ | ----------------------------------------- |
-| API p95 latency (read, warm)              | ≤ 150 ms                             | P9A synthetic                             |
-| API p95 latency (granular PATCH)          | ≤ 250 ms                             | P9A synthetic                             |
-| Public SSR page p95 (origin, uncached)    | ≤ 400 ms                             | P9A synthetic                             |
-| PDF render wall time                      | ≤ 20 s hard timeout, p95 ≤ 8 s       | P7A                                       |
-| Concurrent renders                        | 1 (v1)                               | P7A                                       |
-| Render queue depth                        | ≤ 8, then 503 + readiness unhealthy  | P7A                                       |
-| Whole server task memory (Go + Chromium)  | ≤ 512 MiB cgroup                     | P7A, P9A                                  |
-| pgx pool size                             | ≤ 20, below Postgres max_connections | P0B config                                |
-| SSE concurrent connections per task       | ≤ 2000                               | P6A stress                                |
-| SSE file descriptors headroom             | ≥ 25% below ulimit                   | P6A stress                                |
-| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)     | P6A, P9A                                  |
-| Request body                              | ≤ 256 KB                             | P0B middleware                            |
-| Global API requests per client IP         | ≤ 300/min                            | P0B middleware                            |
-| In-memory rate-limiter keys               | ≤ 10,000                             | P0B middleware                            |
-| OAuth starts per account and client IP    | ≤ 30/min                             | P1 auth                                   |
-| OAuth cleanup batch                       | ≤ 200 rows/start                     | P1 auth                                   |
-| Resume photo multipart body               | ≤ 2,162,688 bytes                    | P2B route                                 |
-| Resume photo file / normalized object     | ≤ 2,097,152 bytes                    | P2B media                                 |
-| Resume photo source edge / pixels         | ≤ 8,192 px / 16,777,216 pixels       | P2B media                                 |
-| Resume photo normalized edge              | ≤ 2,048 px opaque / 1,024 px alpha   | P2B media                                 |
-| Concurrent photo intake                   | 1 per server task; wait ≤ 1 s        | P2B media                                 |
-| Photo body read / object write            | ≤ 60 s / 5 s hard deadline           | P2B media                                 |
-| Photo normalization                       | ≤ 5 s; synchronous                   | P2B controlled-host gate; P9A launch gate |
-| Photo normalization peak RSS delta        | ≤ 192 MiB                            | P2B controlled-host gate; P9A launch gate |
-| Resume document total                     | ≤ 512 KB                             | P2A store                                 |
-| Resume title length                       | ≤ 160 characters                     | P2A DB + store                            |
-| `lng` tag length                          | ≤ 35 characters                      | P2A DB                                    |
-| Idempotency record TTL                    | 24 h                                 | P2A store                                 |
-| Idempotency cleanup batch                 | ≤ 200 rows/mutation                  | P2B store                                 |
-| Retained idempotency records/account      | ≤ 50,000 after new-key insert        | P2B store                                 |
-| Retained idempotency stored bytes/account | ≤ 1 GiB after new-key insert         | P2B store                                 |
-| Global idempotency expiry sweep           | hourly; 1,000/page; 10,000/run       | P8 privacy                                |
-| Resume reads per account and IP           | ≤ 600/min                            | P2B middleware                            |
-| Resume writes per account and IP          | ≤ 240/min                            | P2B middleware                            |
-| Photo uploads per account and IP          | ≤ 20/h                               | P2B middleware                            |
-| Structure commands per request            | ≤ 100                                | P2B handler                               |
-| Customization deltas per request          | ≤ 100                                | P2B handler                               |
-| Media orphan minimum age                  | ≥ 48 h                               | P8-priv job                               |
-| Media orphan sweep page / run             | 1,000 / 10,000 objects               | P8-priv job                               |
-| Media orphan delete concurrency           | ≤ 4                                  | P8-priv job                               |
+| Budget                                    | Target                                | Where enforced                            |
+| ----------------------------------------- | ------------------------------------- | ----------------------------------------- |
+| API p95 latency (read, warm)              | ≤ 150 ms                              | P9A synthetic                             |
+| API p95 latency (granular PATCH)          | ≤ 250 ms                              | P9A synthetic                             |
+| Public SSR page p95 (origin, uncached)    | ≤ 400 ms                              | P9A synthetic                             |
+| PDF render wall time                      | ≤ 20 s hard timeout, p95 ≤ 8 s        | P7A                                       |
+| Concurrent renders                        | 1 (v1)                                | P7A                                       |
+| Render queue depth                        | ≤ 8, then 503 + readiness unhealthy   | P7A                                       |
+| Whole server task memory (Go + Chromium)  | ≤ 512 MiB cgroup                      | P7A, P9A                                  |
+| pgx pool size                             | ≤ 20, below Postgres max_connections  | P0B config                                |
+| SSE concurrent connections per task       | ≤ 2000                                | P6A stress                                |
+| SSE file descriptors headroom             | ≥ 25% below ulimit                    | P6A stress                                |
+| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)      | P6A, P9A                                  |
+| Request body                              | ≤ 256 KB                              | P0B middleware                            |
+| Global API requests per client IP         | ≤ 300/min                             | P0B middleware                            |
+| In-memory rate-limiter keys per instance  | ≤ 10,000                              | P0B/P1/P2B middleware                     |
+| Anonymous login starts per client IP      | ≤ 30/min                              | P1 auth                                   |
+| Privileged OAuth starts/account and IP    | ≤ 30/min                              | P1 auth                                   |
+| Public revocation drain                   | ≤ 5 s hard, then fail before mutation | P5A                                       |
+| OAuth cleanup batch                       | ≤ 200 rows/start                      | P1 auth                                   |
+| Resume photo multipart body               | ≤ 2,162,688 bytes                     | P2B route                                 |
+| Resume photo file / normalized object     | ≤ 2,097,152 bytes                     | P2B media                                 |
+| Resume photo source edge / pixels         | ≤ 8,192 px / 16,777,216 pixels        | P2B media                                 |
+| Resume photo normalized edge              | ≤ 2,048 px opaque / 1,024 px alpha    | P2B media                                 |
+| Concurrent photo intake                   | 1 per server task; wait ≤ 1 s         | P2B media                                 |
+| Photo body read / object write            | ≤ 60 s / 5 s hard deadline            | P2B media                                 |
+| Photo candidate create-to-commit lifetime | ≤ 5 min hard deadline                 | P2B media                                 |
+| Photo normalization                       | ≤ 5 s; synchronous                    | P2B controlled-host gate; P9A launch gate |
+| Photo normalization peak RSS delta        | ≤ 192 MiB                             | P2B controlled-host gate; P9A launch gate |
+| Resume document total                     | ≤ 512 KB                              | P2A store                                 |
+| Resume title length                       | ≤ 160 characters                      | P2A DB + store                            |
+| `lng` tag length                          | ≤ 35 characters                       | P2A DB                                    |
+| Idempotency record TTL                    | 24 h                                  | P2A store                                 |
+| Idempotency cleanup batch                 | ≤ 200 rows/mutation                   | P2B store                                 |
+| Retained idempotency records/account      | ≤ 50,000 after new-key insert         | P2B store                                 |
+| Retained idempotency stored bytes/account | ≤ 1 GiB after new-key insert          | P2B store                                 |
+| Global idempotency expiry sweep           | hourly; 1,000/page; 10,000/run        | P8 privacy                                |
+| Resume reads per account and IP           | ≤ 600/min                             | P2B middleware                            |
+| Resume writes per account and IP          | ≤ 240/min                             | P2B middleware                            |
+| Photo uploads per account and IP          | ≤ 20/h                                | P2B middleware                            |
+| Structure commands per request            | ≤ 100                                 | P2B handler                               |
+| Customization deltas per request          | ≤ 100                                 | P2B handler                               |
+| Media orphan minimum age                  | ≥ 48 h                                | P8-priv job                               |
+| Media orphan sweep page / run             | 1,000 / 10,000 objects                | P8-priv job                               |
+| Media orphan delete concurrency           | ≤ 4                                   | P8-priv job                               |
+| Media deletion physical-removal target    | ≤ 24 h from reference revocation      | P8-priv job                               |
+| Media deletion queue page / run           | 200 / 2,000 jobs                      | P8-priv job                               |
+| Media deletion retry / concurrency        | 1/run, ≤ 6 h backoff / ≤ 4            | P8-priv job                               |
 
 **P2A rationale.** The [data design](../design/data.md#bounds-and-invariants)
 owns the 512 KiB document limit. Title length is enforced in both PostgreSQL and
@@ -90,11 +96,15 @@ uploads at 20/h contain binary abuse without blocking normal crop and
 replacement work. All three route policies use the account-and-client-IP
 composite key.
 
-The global API limiter permits 300 requests per client IP each minute and keeps
-at most 10,000 keys. OAuth start adds a 30-per-minute account-and-client-IP
-policy and reaps at most 200 expired transactions per start. Structure and
-customization requests accept at most 100 ordered operations each; the 256 KiB
-transport ceiling remains a separate byte bound.
+The global API limiter permits 300 requests per client IP each minute. Each
+independent limiter instance keeps at most 10,000 ordinary keys and applies the
+shared overflow behavior from ADR 0018. Anonymous login starts add a
+30-per-minute client-IP policy. Authenticated provider-link and reauthentication
+starts use a separate 30-per-minute `(account, client IP)` policy. P2B read,
+write, and upload policies are also separate instances. Each start reaps at most
+200 expired transactions. Structure and customization requests accept at most
+100 ordered operations each; the 256 KiB transport ceiling remains a separate
+byte bound.
 
 An orphan object is never public, but retained bytes still need a bound. The
 weekly sweep ignores objects younger than 48 hours, reads at most 1,000 keys per
@@ -102,6 +112,13 @@ page and 10,000 per run, and deletes with concurrency four. It retries each
 object up to three times with capped exponential backoff, exposes backlog and
 failure metrics, and supports dry-run mode. A backlog at the run ceiling alerts
 and continues from a stored cursor on the next run.
+
+Reference-removal transactions enqueue exact-key deletion jobs. The hourly
+worker reads at most 200 jobs per page and 2,000 per run with concurrency four.
+It makes one delete attempt per due job per run and doubles retry delay up to
+six hours. Already-absent objects complete successfully. Jobs older than 24
+hours alert and remain queued. The weekly sweep reconciles objects against both
+live references and outstanding jobs; it is not the normal deletion path.
 
 ## Benchmark protocol
 

@@ -19,9 +19,11 @@ rotation does not extend any of them.
 
 The winner initially parks the predecessor's deadline at
 `min(now + 24 hours, absolute expiry)`. The successor's first authenticated use
-proves that its cookie reached a client and moves that deadline inward to
-`now + 60 seconds`. Concurrent losers continue with the predecessor while it is
-live and never mint another successor.
+proves that its cookie reached a client and changes the predecessor deadline to
+`min(existing predecessor deadline, now + 60 seconds)`. This transition can only
+shorten the deadline; first use never revives or extends a predecessor whose
+parked or absolute deadline is earlier. Concurrent losers continue with the
+predecessor while it is live and never mint another successor.
 
 The admission update and successor insert are separate statements. If the insert
 fails, the predecessor remains usable only to its parked deadline. If the
@@ -39,4 +41,7 @@ so a device action cannot leave the paired credential active.
 - Rotation convergence depends on first use, not on assuming that `Set-Cookie`
   was delivered.
 - Tests must cover concurrent winners, lost insert, lost response, first-use
-  grace, absolute expiry, and lineage revocation.
+  grace, absolute expiry, and lineage revocation. First-use boundary cases pin
+  an existing predecessor deadline before, exactly at, and after
+  `now + 60 seconds`; concurrent successor uses must never move any of those
+  deadlines outward.

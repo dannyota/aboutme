@@ -10,17 +10,17 @@ order, task state, and gates. A plan cannot redefine the design.
 
 The status below is verified against the phase-closure candidate on `main`.
 
-| Slice                         | Repository state            | Work still required before closure                                      |
-| ----------------------------- | --------------------------- | ----------------------------------------------------------------------- |
-| P0 foundations                | Complete                    | None; historical gates remain unchanged                                 |
-| P0F TypeScript API client     | Complete                    | None                                                                    |
-| P1 authentication             | Complete                    | None; historical gates remain unchanged                                 |
-| P1.1 authentication hardening | Complete                    | None                                                                    |
-| P2A resume domain and store   | Corrective verification     | Re-run review and recorded acceptance after the cap-trigger correction  |
-| P3 design and preset data     | Draft design and 20 presets | Approve contract; add licensed font catalog through schema v2           |
-| P2B resume HTTP and media     | Draft plan only             | Close the dispatch blockers listed below                                |
-| PI infrastructure             | Adopted plan, not executed  | Refresh after runtime phases; no cloud mutation before P9 authorization |
-| P9 HTTPS UAT harness          | Exact task lane drafted     | Approve and execute U1–U10 before any local UAT run                     |
+| Slice                         | Repository state                             | Work still required before closure                                      |
+| ----------------------------- | -------------------------------------------- | ----------------------------------------------------------------------- |
+| P0 foundations                | Complete                                     | None; historical gates remain unchanged                                 |
+| P0F TypeScript API client     | Complete                                     | None                                                                    |
+| P1 authentication             | Complete                                     | None; historical gates remain unchanged                                 |
+| P1.1 authentication hardening | Complete                                     | None                                                                    |
+| P2A resume domain and store   | Corrective verification                      | Re-run review and recorded acceptance after the cap-trigger correction  |
+| P3 sanitizer and preset data  | Sanitizer core, draft design, and 20 presets | Approve contract; add fonts, schema v2, renderer, and pagination        |
+| P2B resume HTTP and media     | Draft plan only                              | Close the dispatch blockers listed below                                |
+| PI infrastructure             | Adopted plan, not executed                   | Refresh after runtime phases; no cloud mutation before P9 authorization |
+| P9 HTTPS UAT harness          | Exact task lane drafted                      | Approve and execute U1–U10 before any local UAT run                     |
 
 The settings page uses authenticated CSRF-protected POST for provider linking
 and reauthentication. The identity query uses `(created_at, id)` order. P1.1's
@@ -30,10 +30,10 @@ contract, tests, browser proof, and independent gates agree.
 
 1. Approve Draft v4 design and the template contract after independent design
    and plan reviews close every blocking finding.
-2. Close P2A corrective verification, then refresh P3 against the approved
-   design and follow its dependency graph. Run the sanitizer and font-license
-   lanes in parallel; vendor the final font catalog before releasing document v2
-   from its stable IDs, then run the renderer and template consumers.
+2. Close P2A corrective verification, then continue P3 against the approved
+   design and follow its dependency graph. The sanitizer lane is landed. Vendor
+   the final font catalog before releasing document v2 from its stable IDs, then
+   run the renderer and template consumers.
 3. Adopt and execute P2B only after all P3 tasks and both P3 phase gates are
    closed.
 4. Implement and review the isolated HTTPS UAT Compose overlay before P9. This
@@ -46,7 +46,6 @@ contract, tests, browser proof, and independent gates agree.
 | Design approval state   | Draft v4 needs explicit dated owner approval after independent reviews                          |
 | Template approval state | `docs/design/templates/` remains draft until its contract review passes                         |
 | Font expansion          | Fee-free license verification, local assets, choice metadata, manifest, and immutable schema v2 |
-| P2B sanitizer edge      | P3 Task 2 must land before P2B Task 5                                                           |
 | P2B plan adoption       | Design-owner approval must adopt the independently reviewed plan and its fixed resource budgets |
 | P9 HTTPS harness        | Execute the reviewed U1–U10 isolated HTTPS UAT Compose-overlay lane                             |
 
@@ -112,23 +111,23 @@ read that feeds internal print SSR.
 
 ## Delivery index
 
-| Step | Phase or wave                | State                        | Exit                                               |
-| ---- | ---------------------------- | ---------------------------- | -------------------------------------------------- |
-| 01   | P0 + P1                      | Complete                     | Historical phase evidence remains pinned           |
-| 02   | P2A                          | Corrective verification      | Updated phase review and acceptance pass           |
-| 03   | P0F + P1.1 corrections       | Complete                     | Contract, UI, review, and acceptance agree         |
-| 04   | P3                           | Waiting on design            | Renderer, sanitizer, fonts, and preset gates pass  |
-| 05   | P2B                          | Blocked from dispatch        | HTTP and media phase gates pass                    |
-| 06   | P4 + P5A + P6A + P7A         | Future parallel wave         | Each phase passes its own gates                    |
-| 07   | P5B + P6B + P7B + P8 privacy | Future parallel closure wave | Product surface and lifecycle close                |
-| 08   | PI local infrastructure      | Deferred                     | IaC validates locally; no external mutation        |
-| 09   | P9 HTTPS UAT harness         | Draft, not executed          | U1–U10 implementation, review, and local gate pass |
-| 10   | P9 local UAT                 | Waiting                      | HTTPS UAT and evidence review pass                 |
-| 11   | Human cloud authorization    | Waiting                      | Exact resource scope and spend approved            |
-| 12   | PI activation + P9A          | Waiting                      | Staging and real operations drills pass            |
-| 13   | Human production approval    | Waiting                      | Separate public-launch approval                    |
-| 14   | P10 production               | Waiting                      | Proven artifacts promoted and smoke tests pass     |
-| 15   | P11 Flutter                  | Post-launch                  | Mobile contract and release gates pass             |
+| Step | Phase or wave                | State                                    | Exit                                               |
+| ---- | ---------------------------- | ---------------------------------------- | -------------------------------------------------- |
+| 01   | P0 + P1                      | Complete                                 | Historical phase evidence remains pinned           |
+| 02   | P2A                          | Corrective verification                  | Updated phase review and acceptance pass           |
+| 03   | P0F + P1.1 corrections       | Complete                                 | Contract, UI, review, and acceptance agree         |
+| 04   | P3                           | Sanitizer core landed; waiting on design | Renderer, sanitizer, fonts, and preset gates pass  |
+| 05   | P2B                          | Blocked from dispatch                    | HTTP and media phase gates pass                    |
+| 06   | P4 + P5A + P6A + P7A         | Future parallel wave                     | Each phase passes its own gates                    |
+| 07   | P5B + P6B + P7B + P8 privacy | Future parallel closure wave             | Product surface and lifecycle close                |
+| 08   | PI local infrastructure      | Deferred                                 | IaC validates locally; no external mutation        |
+| 09   | P9 HTTPS UAT harness         | Draft, not executed                      | U1–U10 implementation, review, and local gate pass |
+| 10   | P9 local UAT                 | Waiting                                  | HTTPS UAT and evidence review pass                 |
+| 11   | Human cloud authorization    | Waiting                                  | Exact resource scope and spend approved            |
+| 12   | PI activation + P9A          | Waiting                                  | Staging and real operations drills pass            |
+| 13   | Human production approval    | Waiting                                  | Separate public-launch approval                    |
+| 14   | P10 production               | Waiting                                  | Proven artifacts promoted and smoke tests pass     |
+| 15   | P11 Flutter                  | Post-launch                              | Mobile contract and release gates pass             |
 
 ## Task and phase gates
 

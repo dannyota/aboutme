@@ -68,7 +68,7 @@ attribute.
 | Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                          |
 | Absolute expiry   | 90 days                                                                                                        |
 | Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                  |
-| Rotation delivery | The predecessor remains usable only for a bounded interval and until successor use proves delivery             |
+| Rotation delivery | Successor use sets the predecessor deadline to `min(existing deadline, now + 60 seconds)`; it never extends it |
 | Recent reauth     | 15 minutes                                                                                                     |
 | Sensitive actions | Provider link, account deletion, slug release, per-session revoke, and logout-everywhere require recent reauth |
 | Visibility        | Account settings list sessions and permit per-session revoke                                                   |
@@ -113,15 +113,47 @@ production origin path, discards viewer-supplied forwarding headers, derives one
 canonical address, and sends it to Go. Go accepts that value only from
 configured trusted-proxy CIDRs and never parses `X-Forwarded-For`.
 
-Rate-limit storage is bounded. Expired entries may be evicted; active entries
-are not evicted to give an attacker a fresh bucket. When the map is full, a
-global overflow limiter or admission refusal contains key churn. Policies can
-key by IP, account, or account-and-IP.
-[ADR 0018](../adr/0018-bounded-rate-limiter.md) records the failure model.
+Each limiter stores at most 10,000 per-key buckets. A fully refilled bucket
+expires because it is equivalent to a new bucket; 24 hours without any request
+is the hard idle expiry. Active entries are never evicted to give an attacker a
+fresh bucket. When the map is full, every untracked key shares one bounded
+global overflow bucket with the same budget as one ordinary key. Admission
+refusal is not an alternative. Policies can key by IP, account, or
+account-and-IP. [ADR 0018](../adr/0018-bounded-rate-limiter.md) records the
+failure model.
 
-Public auth starts have their own IP limit. Each start deletes only a bounded
-batch of expired OAuth transactions before inserting one row, so unauthenticated
+Anonymous login starts are limited to 30 per minute per client IP. Authenticated
+provider-link and reauthentication starts are separately limited to 30 per
+minute per `(account, client IP)` pair. Each start deletes only a bounded batch
+of expired OAuth transactions before inserting one row, so unauthenticated
 traffic cannot turn cleanup into unbounded request work.
+
+## Public artifact revocation
+
+Every public response revalidates current slug, live state, route flags, and
+public generation at the origin before a shared cache can reuse bytes. The
+revocation fence drains old-generation origin responses before unpublish,
+delete, or rename returns success. A cache hit, an object key, and an SSE event
+are never authorization. [ADR 0022](../adr/0022-public-artifact-revocation.md)
+owns this boundary.
+
+## Internal print authority
+
+Go authorizes and freezes one render snapshot, then grants Nuxt a random 256-bit
+one-use capability bound to resume, snapshot version and digest, caller,
+`nuxt-print` audience, and a maximum 60-second lifetime. Redemption is atomic
+over a loopback or deployment-private internal interface. Chromium carries no
+account cookie, and an ID-only request never renders. Tokens are absent from
+URLs and logs. Caddy's external `/print/**` denial remains defense in depth. Go
+retains capability and consumed-job state only inside a reserved slot in the
+bounded render queue. At most one unused capability exists per active job. An
+unused record is removed at its 60-second expiry; consumed state and controller
+authority are removed on acceptance, discard, render timeout, or process loss.
+Only the controlling render job may submit completed bytes for a terminal
+generation and digest check. Completion has one atomic winner; later attempts
+receive a generic not-active result without a terminal tombstone. Nuxt and
+Chromium never publish artifacts.
+[ADR 0023](../adr/0023-private-print-capability.md) defines the protocol.
 
 ## Untrusted document content
 
@@ -148,10 +180,20 @@ Only decoded pixels cross the storage boundary. The normalizer applies one valid
 Exif orientation and re-encodes a static JPEG or PNG. It drops Exif and GPS
 data, XMP, IPTC, comments, thumbnails, ICC profiles, unknown optional chunks,
 and trailing bytes. Decoder details, filenames, and metadata never enter
-responses or logs. Every rejection leaves both PostgreSQL and object storage
-unchanged. [ADR 0019](../adr/0019-private-media-delivery.md) owns the storage
-and failure boundary; [the API design](api.md#photo-intake) owns the
-normalization contract.
+responses or logs. Every rejection before object-write dispatch leaves both
+PostgreSQL and object storage unchanged. A remote create with an unknown outcome
+leaves PostgreSQL unchanged and may leave one unreachable private object; the
+request never deletes its uncertain key, and bounded reconciliation later proves
+whether it is unreferenced. [ADR 0019](../adr/0019-private-media-delivery.md)
+owns the storage and failure boundary; [the API design](api.md#photo-intake)
+owns the normalization contract.
+
+Removing a media reference and enqueuing its exact-key deletion job are one
+transaction. Private storage plus reference-gated reads revoke access at commit;
+physical deletion may follow asynchronously and targets completion within 24
+hours. Overdue deletion is audited, alerted, and retried. Weekly orphan
+reconciliation covers crash candidates and queue/accounting gaps without making
+object existence an authority.
 
 Secrets never enter source, Terraform state where avoidable, URLs, or logs.
 Production fails closed when trusted proxies, provider credentials, origin

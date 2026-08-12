@@ -15,6 +15,7 @@ or wire-version handling — and no route can forget one. Implements
 and the seven stub handler files
 `{resumes.go,entries.go,sections.go,structure.go,personal_details.go,customization.go,photo.go}`;
 modify `apps/server/internal/api/router.go` + `router_test.go` and
+`apps/server/internal/api/ratelimit.go` + `ratelimit_test.go`,
 `apps/server/internal/auth/csrf.go` + `csrf_test.go`, and
 `apps/server/cmd/server/main.go`. `middleware.go` remains unchanged: the photo
 route bypasses its buffering `BodyLimit` and applies `MaxBytesReader` in Task 11
@@ -56,13 +57,12 @@ type mutationSpec struct {
     Prepare             func(context.Context, boundedInput,
         idempotencyInspection) (preparedInput, error)
     Run                 mutationOperation
-    Finalize            func(context.Context, preparedInput, cleanupIntent,
+    Finalize            func(context.Context, preparedInput,
         resume.ExecuteResult, error)
 }
 
 type mutationRunResult struct {
     Response resume.StoredResponse
-    Cleanup  cleanupIntent
 }
 
 type mutationOperation interface {
@@ -92,47 +92,52 @@ The explicit operations have these contracts:
   then calls `SaveMetadataAndDocumentTx` so title, language, current document,
   schema version, and revision commit together.
 - **Delete:** calls revision-aware `DeleteTx`; a miss returns the scoped winner
-  for `412`, while missing/wrong owner stays `404`. Post-commit media cleanup
-  uses only a non-persisted `cleanupIntent` built from the deleted row returned
-  by that transaction.
+  for `412`, while missing/wrong owner stays `404`. Its transaction validates
+  the deleted row's photo key and enqueues exact-key cleanup before commit.
 - **Photo upload/replace:** owns candidate preparation and compensation, but
-  commits the document through the aggregate operation. A not-attempted or
-  definitely rolled-back commit removes its candidate; an ambiguous commit
-  leaves it for the bounded sweep.
+  commits the document through the aggregate operation only after storage
+  reports `PutCreated`. A not-attempted or definitely rolled-back database
+  commit removes that proved-created candidate; an ambiguous database commit
+  leaves it for the bounded sweep. `PutUnknown` stops before `Execute` and is
+  never request-deleted because the key may belong to a collision winner.
 - **Photo crop:** uses the ordinary JSON aggregate operation. It preserves the
   key read in that transaction and has no external preparation, cleanup, or
   object I/O.
 - **Photo delete:** clears the reference through the aggregate operation and
-  returns the transaction-read old key as its cleanup intent.
+  enqueues the validated transaction-read old key before commit.
 
-For operations with no external preparation or cleanup, `Prepare` and `Finalize`
-are no-ops. Resume delete and photo replace/delete use the cleanup intent even
-though resume delete has no external `Prepare`. `Finalize` is a
-telemetry-and-compensation hook: it never returns an error and cannot replace a
-stored HTTP result. Cleanup failure is logged and measured while first response
-and replay keep the same stored success. The upload path uses the same envelope
-in this fixed order: bounded raw read → extract all canonical targets (including
+This task also closes ADR 0018's current-code gap before adding route-specific
+limiters. Each stored limiter entry records the injected-clock time of its
+latest request, including a rejection. The bounded sweep removes an entry when
+it is fully refilled or has been idle for at least 24 hours. Clock rollback is
+clamped before both checks. The existing 10,000-entry bound, one shared overflow
+bucket, and no-active-eviction rule remain unchanged.
+
+For operations with no external candidate, `Prepare` and `Finalize` are no-ops.
+Resume delete and photo replace/delete enqueue cleanup inside `Execute`; queue
+failure rolls back the mutation. `Finalize` handles only external candidate
+compensation. It never returns an error and cannot replace a stored HTTP result.
+Candidate cleanup failure is logged and measured while first response and replay
+keep the same stored success. The upload path uses the same envelope in this
+fixed order: bounded raw read → extract all canonical targets (including
 body-owned `entry.id` where applicable) → build fingerprint → `Inspect` → on a
 fresh key normalize and `Put` a candidate outside PostgreSQL → transactional
 `Execute`/CAS → `Finalize` → stored-response writer. A preflight replay never
 prepares a candidate. A concurrent replay after preparation deletes only that
-request's unreferenced candidate. `CommitNotAttempted` and
-`CommitDefinitelyRolledBack` delete it; an unknown commit outcome retains it. No
-external I/O occurs inside `Run`. Once `Prepare` succeeds, `Finalize` runs for
-every `Execute` result or error.
+request's unreferenced candidate. `Replayed=true`, `CommitNotAttempted`, and
+`CommitDefinitelyRolledBack` delete it. A non-replayed `CommitCommitted` result
+is the winner; every `CommitUnknown` is retained. No external I/O occurs inside
+`Run`. Once `Prepare` succeeds, `Finalize` runs for every `Execute` result or
+error.
 
-The envelope captures `mutationRunResult.Cleanup` inside the transaction
-callback but stores only `Response` in the idempotency record. It executes that
-intent only for a fresh `CommitCommitted` result. A replay never repeats old-
-object cleanup. A rollback or unknown outcome never executes the intent because
-the database may still reference its key. Candidate compensation is separate: it
-deletes this request's new candidate on a replay, key conflict,
-`CommitNotAttempted`, or `CommitDefinitelyRolledBack`, and retains it on
-`CommitUnknown`. Tests change the photo key between preflight and the
-transaction and prove cleanup uses only the transaction-returned key. Before an
-intent reaches `media.Backend.Delete`, it must pass D11's exact parser for the
-expected resume ID. An invalid or cross-resume cleanup key is a measured
-telemetry-only failure and never becomes backend I/O.
+The transaction callback stores only `Response` in the idempotency record. Old-
+object cleanup is durable database work inside that callback, so replay never
+duplicates it and rollback or an unknown commit outcome never triggers direct
+object I/O. Candidate compensation is separate: it deletes this request's new
+candidate on a replay, key conflict, `CommitNotAttempted`, or
+`CommitDefinitelyRolledBack`, and retains it on `CommitUnknown`. Tests change
+the photo key between preflight and the transaction and prove only the
+transaction-read validated key can be enqueued.
 
 An idempotency retained-capacity rejection maps to the existing
 `429 rate_limited` response. `Retry-After` is one second while expired backlog
@@ -256,14 +261,22 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       persists document bytes reaches the one project/sanitize/validate helper
       before a store call. The order test uses spies for body reads, inspection,
       normalization, object I/O, transaction, commit classification, and
-      cleanup; no transposition may pass. A cleanup failure after a fresh
-      commit, or candidate-compensation failure after a concurrent replay, is
-      logged and measured but cannot change the stored success status, headers,
-      or body. Race tests prove a stale preflight key is never put into a
-      cleanup intent, replay never repeats a committed intent, and only a fresh
-      committed result executes the intent returned by its own transaction.
-      `Cache-Control: no-store` stays on every response (the outer chain already
-      guarantees it; assert it rather than re-add it).
+      cleanup; no transposition may pass. A deletion-job failure rolls back the
+      database mutation. Candidate-compensation failure after a concurrent
+      replay is logged and measured but cannot change the stored success status,
+      headers, or body. Race tests prove a stale preflight key is never
+      enqueued, replay never runs the callback, and only the key read by the
+      winning transaction enters the queue. `Cache-Control: no-store` stays on
+      every response (the outer chain already guarantees it; assert it rather
+      than re-add it).
+- [ ] **Step 7a: close the limiter expiry contract.** Add fake-clock tests that
+      reclaim a fully refilled entry, keep an unrefilled entry from idle expiry
+      with periodic allowed and rejected requests, expire an unrefilled entry
+      only after 24 hours with no request, prove a rejection resets the idle
+      clock, clamp a backward clock step, and reclaim capacity without evicting
+      another active entry. Update `internal/api/ratelimit.go` with the smallest
+      state needed; retain the overflow and concurrent-admission tests
+      unchanged.
 - [ ] **Step 8: the shared test harness.** `testutil_test.go` builds an
       `httptest` server over the real router with a live database and the
       filesystem media backend, plus helpers to create a user, a session cookie,

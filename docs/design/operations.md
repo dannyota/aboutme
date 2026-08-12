@@ -6,15 +6,23 @@ exercised at the environment that owns the risk.
 
 ## Privacy lifecycle
 
-| Concern          | Intended behavior                                                                                                                   |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Account deletion | Recent reauthentication; revoke sessions; delete identities, resumes, and media; retain slug tombstones; invalidate public surfaces |
-| Export           | A JSON bundle of the account's resume documents and related portable data                                                           |
-| Session metadata | IP and user-agent data redacted after 90 days                                                                                       |
-| Audit records    | Security and lifecycle audit records retained for 180 days                                                                          |
-| Orphan media     | Weekly idempotent sweep, including objects left by a crash between object and database operations                                   |
-| Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                   |
-| Backups          | Copies expire on the 30-day backup-retention schedule and this delay is disclosed to users                                          |
+| Concern          | Intended behavior                                                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account deletion | Recent reauthentication; transactionally revoke sessions, identities, resumes, public generations, and media references; retain slug tombstones      |
+| Media deletion   | Enqueue exact keys with reference revocation; deny access immediately; target physical removal within 24 hours; audit, alert, and retry overdue work |
+| Export           | A JSON bundle of the account's resume documents and related portable data                                                                            |
+| Session metadata | IP and user-agent data redacted after 90 days                                                                                                        |
+| Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                        |
+| Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                  |
+| Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                                    |
+| Backups          | Copies expire on the 30-day backup-retention schedule; disclosures distinguish this delay from live access and private-object deletion               |
+
+Account and resume delete APIs may succeed once reference revocation and every
+applicable deletion job commit together. Object-storage latency does not extend
+the API transaction and cannot restore access. The 24-hour physical-removal
+target is measured from reference revocation. A breach creates a lifecycle audit
+event and alert and remains queued until a terminal outcome is recorded.
+[ADR 0019](../adr/0019-private-media-delivery.md) owns this boundary.
 
 Public delivery and discovery disclosures are product requirements. The final
 legal wording and any jurisdiction-specific data-residency obligations require
@@ -43,6 +51,8 @@ Production alerts cover:
 - SSE connection and file-descriptor headroom.
 - TLS expiry and origin-path failures.
 - Scheduled retention, orphan cleanup, and audit jobs.
+- Media deletion queue age, retry exhaustion, 24-hour target breaches, and
+  weekly reconciliation drift.
 
 Every critical alert has a documented trigger and its delivery is proven in
 staging. Dashboards without a tested notification path do not satisfy the gate.

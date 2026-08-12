@@ -92,7 +92,10 @@ Granular endpoints read the complete aggregate, apply the change, sanitize rich
 text, validate the current document, and persist the complete aggregate with
 revision CAS. A request declared at an older supported version is down-emitted,
 changed at that version, converted back to current, validated, and stored at
-current. The response is emitted at the declared version. No endpoint performs
+current. Values that exist only in the current version are preserved from the
+stored aggregate unless the operation explicitly targets their field. This is
+required for v1 mutations against a v2 document whose font emits through a v1
+fallback. The response is emitted at the declared version. No endpoint performs
 an unchecked `jsonb_set` write.
 
 ### Structure command ordering
@@ -114,6 +117,11 @@ no intermediate content, layout, or revision change is persisted.
 All public routes return the same `404` for a missing, private, deleted,
 renamed, tombstoned, or unauthorized resume. Public responses never reveal
 account identity. Unpublish, delete, rename, and material publish-state changes
-invalidate every affected HTML, markdown, image, PDF, sitemap, and `llms.txt`
-surface. Invalidation is asynchronous; clients use ETags and SSE refetch to
-converge.
+advance the public generation and drain old-generation origin leases before
+success. Every affected HTML, markdown, image, PDF, sitemap, and `llms.txt`
+reuse then passes the origin live-state gate; retained old bytes cannot be
+served. Edge invalidation releases those bytes as defense in depth. ETags and
+SSE refetch improve client freshness but are not the revocation authority. Go
+holds a per-resume lease through each public response, including a Nuxt SSR
+response proxied through Go. Sitemap and `llms.txt` use a separate aggregate
+discovery generation; membership-changing mutations drain its old leases too.

@@ -91,7 +91,8 @@ is classified.
 - [ ] **Step 8: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
-      `make api-check`, and `make semgrep`.
+      `make api-check`. Connected `make scan` runs once at the unchanged phase
+      candidate.
 - [ ] **Step 9: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and allowed/denied parity sets to the integration owner. Do not
       stage or commit.

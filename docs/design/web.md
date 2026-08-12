@@ -11,7 +11,7 @@ produces the same document everywhere.
 | Landing and login  | `/`, `/login` | Nuxt SSR                                                     |
 | Account and editor | `/app/**`     | Client application; authenticated requests never run in SSR  |
 | Public resume      | `/{slug}`     | Nuxt SSR followed by client hydration and live refetch       |
-| Print              | `/print/**`   | Internal Nuxt route called only by the bounded Go render job |
+| Print              | `/print/**`   | Internal Nuxt route gated by one Go-issued render capability |
 
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.
@@ -30,6 +30,19 @@ their own token values.
 The print browser has no general outbound network access. Fonts and renderer
 assets are local. Its controller supplies an authorized photo as same-origin or
 inline data and waits for every requested font and image to finish loading.
+
+Go freezes the authorized render snapshot and issues a cryptographically random
+one-use capability bound to that resume, snapshot, caller, and the `nuxt-print`
+audience. It expires within 60 seconds and is consumed atomically over a
+loopback or deployment-private internal interface. Chromium sends it in a
+redacted authorization header, never a URL or cookie. A resume ID or direct Nuxt
+access grants no print authority. After redemption, Go retains the consumed job
+binding and a separate controller-handle hash. The controller handle never
+leaves the Go render queue; knowing the job ID is insufficient. The controlling
+Go render job receives the browser output and performs the in-process terminal
+snapshot, digest, and public-generation check. Nuxt and Chromium cannot publish
+the result. [ADR 0023](../adr/0023-private-print-capability.md) defines this
+boundary.
 
 The server supplies `renderContext.lng` from the total language projection in
 [the data design](data.md#relational-model). Null, empty, and invalid legacy
@@ -144,8 +157,30 @@ screenshot subset cover visual output, including Vietnamese text.
 
 ## Freshness
 
-Normal public HTML may remain at the edge for up to 60 seconds. Unpublish,
-delete, rename, and publish-state changes request invalidation for every
-affected representation. An open page also listens for SSE invalidations,
-refetches uncached public JSON, and renders in place. Clients never treat an SSE
-event as document data.
+Normal published HTML uses `Cache-Control: no-cache, must-revalidate` and a
+strong entity tag. Shared caches may retain it for up to 60 seconds, but every
+reuse revalidates through the origin live-state gate. Private render caches key
+artifacts by public generation and use the same maximum lifetime. A cache hit is
+never authorization.
+
+Unpublish, delete, and rename advance the public generation under the revocation
+fence and wait for old-generation origin responses before returning success.
+Edge invalidation releases retained bytes but is defense in depth. An open page
+also listens for SSE invalidations, refetches uncached public JSON, and renders
+in place. Clients never treat an SSE event as document data.
+[ADR 0022](../adr/0022-public-artifact-revocation.md) owns the immediate
+revocation rule.
+
+Caddy routes public resume HTML through Go. Go holds the per-resume generation
+lease and origin response, passes a frozen snapshot to Nuxt over the private
+render interface, and releases the lease only after the response finishes or
+aborts. Nuxt remains the sole HTML renderer but never owns the public origin
+response authority. A CloudFront viewer request already validated before a
+revocation may finish; every request admitted or revalidated afterward sees the
+new state. Go's sitemap and `llms.txt` handlers hold the separate discovery
+generation lease through their aggregate origin responses.
+
+The private public-render interface is exactly Nuxt
+`POST /internal-render/public` on the direct origin listener. It accepts the
+bounded frozen snapshot and performs no ID lookup or ambient fetch. Public Caddy
+denies the root before its default Nuxt handler.

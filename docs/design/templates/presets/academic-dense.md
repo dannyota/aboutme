@@ -23,13 +23,14 @@ but ≈ 99 characters per line against ≈ 105: 3.6% less capacity. Size and lea
 repay it at 18% more lines than 14 px/1.4. 99 exceeds the 45–75 ideal, tolerable
 since entries run one to three lines; 20 mm left is staple clearance.
 
-**One ink, no widgets, years only.** `colors.accent` is omitted, so
-`--color-accent` falls back to `colors.primary`: two inks, with hierarchy on
-size, weight, uppercase, and rule — all surviving the mono laser printer a CV is
-printed on. `surfaceTarget` is `"none"`: a tint is ink with no information.
-`sectionDisplay` is `text`, rendering no widget (`contract.md` §5.6);
-`dateFormat` is `YYYY`, month precision being noise on a hundred meta lines; and
-the header is left, `inline`, `iconStyle: "none"`, saving four lines.
+**Two inks, no widgets, years only.** `colors.accent` is omitted, so
+`--color-accent` falls back to `colors.primary`; `colors.text` and
+`colors.primary` remain distinct. Hierarchy also uses size, weight, uppercase,
+and rules, all surviving the mono laser printer a CV is printed on.
+`surfaceTarget` is `"none"`: a tint is ink with no information. `sectionDisplay`
+is `text`, rendering no widget (`contract.md` §5.6); `dateFormat` is `YYYY`,
+month precision being noise on a hundred meta lines; and the header is left,
+`inline`, `iconStyle: "none"`, saving four lines.
 
 ## Multi-page breaks
 
@@ -74,9 +75,9 @@ Inter.
 1. **Page numbers and per-section breaks** — `print.md` §2 keeps `@page` margin
    boxes empty, so six pages carry no "Name — 3 of 7" and nothing can start
    Publications on a fresh sheet.
-2. **Sub-headings, numbered or hanging-indent entries, underlined links** — all
-   renderer-owned, and a link is only `--color-link`, so it vanishes on a mono
-   print.
+2. **Sub-headings and numbered or hanging-indent entries** — all are
+   renderer-owned. Links remain visible on a mono print because the renderer
+   underlines every inline link, independent of `--color-link`.
 3. **Meta size and measure** — `--fs-meta` is pinned at 0.9 × base though the
    year is this CV's scanning key, and `pageMargin` sets margins, not line
    length, so Letter widens the measure to ≈ 103 characters.

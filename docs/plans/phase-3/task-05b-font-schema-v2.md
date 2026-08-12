@@ -15,7 +15,7 @@ and `apps/server/internal/resume/docmigrate/v1_v2_adversarial_test.go`.
 **Implementation files:** `packages/schema/resume.schema.json`, new
 `packages/schema/resume.v2.schema.json`,
 `packages/schema/released-versions.json`,
-`packages/schema/scripts/generate.mjs`,
+`packages/schema/scripts/generate.mjs`, `packages/schema/package.json`,
 `packages/schema/test/{gen,schema,released-versions,released-append-only,type-fidelity}.test.ts`,
 `packages/schema/fixtures/**`, `packages/schema/templates/*.json`, generated
 `packages/schema/gen/go/{resume.go,rawschema.go,released.go,v2/resume.go,v2/rawschema.go}`,
@@ -41,11 +41,33 @@ generated client as a separate integration-owner contract change.
   visual result may change for a family unavailable in v1.
 - Converters preserve every non-font field byte-for-byte at the JSON-value level
   and validate source and target.
+- `released-versions.json` remains the reviewed source for three independent
+  declarations: `currentVersion: 2`, `acceptedVersions: [1, 2]`, and
+  `emittedVersions: [1, 2]`. None is inferred from the released `versions`
+  array. The generator validates every declared version is released and emits
+  `CURRENT_VERSION`, `ACCEPTED_VERSIONS`, and `EMITTED_VERSIONS` in
+  `gen/ts/released.ts`. It emits `CurrentVersion`, `AcceptedVersions()`, and
+  `EmittedVersions()` in `gen/go/released.go`; both functions return copies.
+- `packages/schema/package.json` exposes that generated TypeScript registry at
+  the exact `@aboutme/schema/released` subpath. Renderer code imports
+  `CURRENT_VERSION` from that subpath. The Go production projector consumes the
+  generated current, accepted, and emitted declarations instead of maintaining a
+  second hand-written list.
+- Generic `EmitWire` remains lossless by default. Add an immutable production
+  emission-loss policy whose input is the current, emitted, and restored full
+  document plus the target version. It permits only the declared v2→v1 font
+  fallback and rejects any other changed JSON value as `ErrLossyConversion`.
+  Synthetic projectors without that policy retain exact round-trip behavior.
 - Current storage advances to v2 only through normal writes or CAS backfill.
   Reads remain pure.
 
 ## Steps
 
+- [ ] **Chronology gate.** Confirm corrected P2A acceptance is closed, Task 5's
+      final catalog and assets are committed and independently reviewed, and
+      Draft v4 has dated owner approval. Record the exact base commit. Do not
+      open the Task 5B implementation diff before the independent files below
+      are frozen.
 - [ ] **Freeze independent tests first.** A fresh author writes only
       `font-v2-adversarial.test.ts` and `v1_v2_adversarial_test.go` from the
       catalog, design, and interface above, runs their focused commands, and
@@ -54,16 +76,23 @@ generated client as a separate integration-owner contract change.
 - [ ] Write separate failing author tests for ordered catalog/schema array
       equality, immutable-v1, converter matrix, generated drift, and preset
       validation.
-- [ ] Add `resume.v2.schema.json`, update the release manifest to current v2,
-      and regenerate current plus retained v2 types. Verify v1 bytes and types
-      are unchanged.
+- [ ] Add `resume.v2.schema.json`; update the release manifest to current v2,
+      accepted `[1, 2]`, and emitted `[1, 2]`; then regenerate current plus
+      retained v2 types and all three registry declarations. Add the
+      `./released` package export. Verify v1 bytes and types are unchanged.
 - [ ] Write concise v2 schema descriptions that state current constraints and
       point to `docs/design/` for rationale. Do not copy v1's task, review, or
       retired-file history into the new release; keep the immutable v1 bytes
       unchanged.
 - [ ] Implement adjacent v1↔v2 converters and every catalog fallback. Test all
-      families, unknown IDs, missing mappings, and round trips for the original
-      five.
+      families, unknown IDs, missing mappings, exact round trips for the
+      original five, the declared font-only loss for every new family, and
+      rejection when any non-font value changes.
+- [ ] Wire the production projector to the generated current, accepted, and
+      emitted declarations. Prove accepted/emitted arrays stay independently
+      authored, every member is released, the package export resolves
+      `CURRENT_VERSION === 2`, and the production loss policy is present only
+      for v2→v1 font fallback.
 - [ ] Update the 20 presets to stable catalog IDs. Template behavior and every
       non-font token remain unchanged.
 - [ ] Verify the OpenAPI source still has no resume-document example or compiled
@@ -75,12 +104,12 @@ generated client as a separate integration-owner contract change.
       the integration owner-provided shared test database, run
       `make server-test-db server-test-integration server-migration-test`. The
       schema append-only test compares the new release with the phase base.
-- [ ] Obtain an independent defect review and re-review of fixes. Record all
-      owned diffs and exact output; do not stage or commit before phase
-      integration.
+- [ ] Record all owned diffs and exact output. The fresh integrated phase review
+      inspects this high-risk change before the phase gates and push.
 
 ## Acceptance mapping
 
-- AC-DOC-012: immutable release, adjacent conversion, and fail-closed version
-  registry.
+- AC-DOC-012: add the v2 immutable release, adjacent conversion, and fail-closed
+  generated registry as a P3 extension to the row's retained P2A proof. Do not
+  replace or erase the P2A evidence.
 - AC-REN-009: schema, catalog, presets, types, and v1 fallbacks agree.

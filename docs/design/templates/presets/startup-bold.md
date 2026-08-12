@@ -2,9 +2,9 @@
 
 Status: **Draft v1** (2026-08-12). Not approved.
 
-One column, no rules, no fills, no accent hue. Emphasis comes from where the two
-available weights are spent and from a spacing ladder with hard steps. Preset:
-`packages/schema/templates/startup-bold.json`.
+One column, no rules, no surface or chip fills, no accent hue. Emphasis comes
+from where the two available weights are spent and from a spacing ladder with
+hard steps. Preset: `packages/schema/templates/startup-bold.json`.
 
 ## Who it is for
 

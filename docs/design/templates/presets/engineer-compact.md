@@ -66,8 +66,9 @@ there is no text-on-surface pair, and `--color-on-accent` is never exercised.
 **modern-sidebar** is also two columns with a sidebar; the visible differences
 are no tint behind it, base 13 px against a conventional 14–15, bars over a
 track for skills with dots for languages, and 11 mm margins — enough to change
-the page count. **ats-plain** shares the white ground and numeric dates but is
-one column with no widgets; this one pays its density in bars no ATS can parse.
+the page count. **ats-plain** shares the white ground but uses `Mon YYYY`, not
+this preset's numeric dates; it is one column with no widgets, while this one
+pays its density in bars no ATS can parse.
 
 ## What the token space could not express
 

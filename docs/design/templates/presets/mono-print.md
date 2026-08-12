@@ -18,11 +18,13 @@ set as body text. Black `text` is chosen for the grey it derives, not its own
 21:1 — `--color-meta` is `colors.text` mixed 25 % toward the surface and is not
 settable, so black is the only input that puts dates and places at `#404040`.
 
-**Nothing is drawn.** No rule, no tint, one column. `--color-rule` is fixed at
-accent mixed 60 % toward the surface, here `#999999`: a 1 px 40 % grey hairline
-prints as a halftone screen 0.26 mm tall, the scale where copier screening is
-least predictable — gone on one machine, heavier on the next. A tint is bimodal
-under auto-exposure, and a two-column gutter is 8 mm of white that skew shears.
+**No preset-controlled geometry is drawn.** No rule, tint, or level widget; one
+column. Document-supplied heading icons and a present photo still render because
+this preset cannot suppress them. `--color-rule` is fixed at accent mixed 60 %
+toward the surface, here `#999999`: a 1 px 40 % grey hairline prints as a
+halftone screen 0.26 mm tall, the scale where copier screening is least
+predictable — gone on one machine, heavier on the next. A tint is bimodal under
+auto-exposure, and a two-column gutter is 8 mm of white that skew shears.
 
 **Space carries what the rule would have.** `sectionGap: 26`, `entryGap: 12`,
 derived `--gap-heading` = 10.4 px: a heading binds to its first entry more

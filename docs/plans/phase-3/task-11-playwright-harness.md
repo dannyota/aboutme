@@ -26,19 +26,23 @@ blind test author owns only `scripts/web-e2e-source.test.sh`.
 <!-- markdownlint-disable MD010 -->
 
 ```make
-WEB_E2E_COMMIT := $(shell git rev-parse --verify HEAD)
+WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_RESULT_ROOT := .dev/web-e2e-results/$(WEB_E2E_COMMIT)/$(WEB_E2E_RUN_ID)
 WEB_E2E_SOURCE_TAR := .dev/web-e2e-source/$(WEB_E2E_COMMIT)/$(WEB_E2E_RUN_ID).tar
 
 web-e2e: ## Renderer visual regression + browser corpus (pinned container, AMD64 baseline)
 		test -z "$${UPDATE_GOLDEN+x}" && test -z "$${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
+		test -z "$$(git status --porcelain=v1 --untracked-files=all)"
+		test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$(WEB_E2E_COMMIT)"
 		case "$(WEB_E2E_RUN_ID)" in ''|.|..|*[!A-Za-z0-9_-]*) exit 64;; esac
 		test ! -e $(WEB_E2E_RESULT_ROOT)/compare && test ! -e $(WEB_E2E_SOURCE_TAR)
 		install -d -m 0700 $(WEB_E2E_RESULT_ROOT)/compare $(dir $(WEB_E2E_SOURCE_TAR))
-		scripts/web-e2e-source.sh scripts/web-e2e-source.manifest $(WEB_E2E_SOURCE_TAR)
+		scripts/web-e2e-source.sh $(WEB_E2E_COMMIT) scripts/web-e2e-source.manifest $(WEB_E2E_SOURCE_TAR)
+		test -z "$$(git status --porcelain=v1 --untracked-files=all)"
 		podman run --rm --platform linux/amd64 --network=host \
 	   --security-opt label=disable -v $(PWD)/$(WEB_E2E_SOURCE_TAR):/candidate.tar:ro \
 	   -v $(PWD)/$(WEB_E2E_RESULT_ROOT)/compare:/results:rw \
+	   -e TZ=UTC -e LANG=en_US.UTF-8 -e LC_ALL=en_US.UTF-8 \
 	   -e PLAYWRIGHT_RESULTS_DIR=/results \
    -w /tmp/aboutme/apps/web \
    mcr.microsoft.com/playwright:<pinned-version>@sha256:<digest> \
@@ -72,7 +76,10 @@ production ARM64 image as a separate launch gate.
       version, resolve and verify its AMD64 image digest and Chrome executable,
       then replace every placeholder above. Record `uname -m` on the host and
       inside the container and require `x86_64` in both; a platform flag without
-      a native architecture is a failure. Expand `web-e2e-update` into a
+      a native architecture is a failure. Inside the image, require
+      `en_US.UTF-8` in `locale -a` and prove `TZ`, `LANG`, and `LC_ALL` have the
+      exact values passed by the recipe; an unavailable locale is a blocking
+      image finding, not permission to fall back. Expand `web-e2e-update` into a
       complete recipe identical to `web-e2e` except for the explicit
       `--update-snapshots` flag and its distinct `<commit>/<run-id>/update`
       mount. Hand the integration owner both complete recipes; no placeholder or
@@ -110,10 +117,14 @@ missing or extra file. No candidate may remain only under `/tmp/aboutme`.
 one canonical repo-relative regular-file path per line, sorted bytewise, with no
 blank, duplicate, directory, or glob entry. Entries are limited to the root
 `package.json` and `package-lock.json`, `apps/web/**`, and `packages/schema/**`.
-The source script accepts that manifest and one new output path below `.dev/`;
-it reads no unlisted file. It rejects absolute paths, `..`, ignored files,
-symlinks, special files, and closed secret-like names even when Git tracks them.
-The case-insensitive denylist covers any `.env` variant; `.git`, `.dev`,
+The source script accepts an exact commit, that manifest, and one new output
+path below `.dev/`. It verifies the commit exists, equals `HEAD`, and that the
+worktree and index are clean before and after archive creation. Every entry must
+be a regular blob in that commit. Archive bytes come from those commit blobs,
+never from the index, worktree, an ignored file, or an untracked file. It reads
+no unlisted repository path. It rejects absolute paths, `..`, symlinks, special
+files, and closed secret-like names even when Git tracks them. The
+case-insensitive denylist covers any `.env` variant; `.git`, `.dev`,
 `.superpowers`, `node_modules`, `.nuxt`, `.output`, `dist`, `coverage`,
 `test-results`, or `playwright-report` components; `credentials*` or `secrets*`
 basenames; `id_rsa*` or `id_ed25519*`; and `.key` or `.pem` suffixes. The script
@@ -124,12 +135,15 @@ The security gate has three separate roles:
 
 1. A fresh blind author reads this contract, not `web-e2e-source.sh`, and owns
    only `web-e2e-source.test.sh`. In isolated temporary Git repositories, the
-   test proves listed valid tracked and untracked files enter the tar. Separate
-   listed tracked and untracked controls exercise every secret-like class and
-   must make the script fail without leaving an archive. Ignored paths,
-   traversal, duplicates, symlinks, and special files are also negative
-   controls. The author freezes the test and records the expected failure from
-   `bash scripts/web-e2e-source.test.sh` before implementation.
+   test proves listed valid tracked files enter the tar with bytes from the
+   requested commit. A listed ordinary untracked path must fail, not enter the
+   archive. Separate tracked and untracked controls exercise every secret-like
+   class and must make the script fail without leaving an archive. A dirty
+   tracked file, dirty index, ignored path, traversal, duplicate, symlink,
+   special file, invalid commit, non-HEAD commit, or commit that changes during
+   the run is also a negative control. The author freezes the test and records
+   the expected failure from `bash scripts/web-e2e-source.test.sh` before
+   implementation.
 2. The integration-owner implementer writes only the explicit manifest and
    source script, cannot weaken the frozen test, and runs
    `bash scripts/web-e2e-source.test.sh` to pass.
@@ -150,12 +164,14 @@ its own output directory and serves on `127.0.0.1:20090`. The normal invocation
 builds with the flag absent into a different output directory and serves on
 `127.0.0.1:20092`; port 20091 is reserved by P2B's retained test-S3 service.
 `nuxt.config.ts` owns the exact distinct build and Nitro output paths. Neither
-server may reuse another build's output. The config fixes `retries: 0`,
-`workers: 1`, `fullyParallel: false`, and
+server may reuse another build's output. The container environment fixes
+`TZ=UTC`, `LANG=en_US.UTF-8`, and `LC_ALL=en_US.UTF-8` for installation, build,
+both servers, Playwright, PDF generation, and rasterization. The config fixes
+`retries: 0`, `workers: 1`, `fullyParallel: false`, and
 `webServer.reuseExistingServer: false`. It also defines a fixed `use:` context
 (`timezoneId: 'UTC'` — the same value `print.md` §7 pins as `TZ=UTC` for the
 print container, so the two rendering paths cannot disagree about which is
-authoritative (D16); `locale: 'en-US'`, `viewport` per D7 page geometry,
+authoritative (D16); `locale: 'en-US'`, A4 viewport 794 × 1123 by default,
 `deviceScaleFactor: 1`, `colorScheme: 'light'`, `reducedMotion: 'reduce'`); and
 Chromium launch args `--force-color-profile=srgb`, `--font-render-hinting=none`,
 `--disable-lcd-text`, `--disable-gpu`, and `--hide-scrollbars`. A global setup
@@ -210,12 +226,13 @@ still owns the production `/print` route and worker.
 The PDF call is fixed to `preferCSSPageSize: true`, `printBackground: true`,
 `displayHeaderFooter: false`, `scale: 1`, and zero top/right/bottom/left job
 margins so CSS `@page` wins. Each case runs alone with a 20-second hard timeout,
-`TZ=UTC`, `LANG=en_US.UTF-8`, device scale 1, reduced motion, and the full print
-launch-argument set. Before printing, it awaits the selected face, fallback,
-`document.fonts.ready`, and successful decode of every image. Timeout kills the
-browser process group and fails without writing a baseline. Raster generation is
-deterministic and remains inside the disposable container; only the update
-target's ignored output mount can receive candidate pages.
+`TZ=UTC`, `LANG=en_US.UTF-8`, `LC_ALL=en_US.UTF-8`, device scale 1, reduced
+motion, and the full print launch-argument set. Before printing, it awaits the
+selected face, fallback, `document.fonts.ready`, and successful decode of every
+image. Timeout kills the browser process group and fails without writing a
+baseline. Raster generation is deterministic and remains inside the disposable
+container; only the update target's ignored output mount can receive candidate
+pages.
 
 Harness page contract:
 `/_harness/render?fixture=<id>&template=<id>&mode=<m>&font=<catalog-id>` renders
@@ -227,12 +244,21 @@ The harness root emits the exact validated mode as `data-render-mode`; it never
 infers that marker from rendered children. When the fixture has photo metadata,
 the page sets `context.photoUrl` to Task 9's inline PNG only after verifying its
 recorded SHA-256. It maps `full` to `context.lng: "en"` and `vn-full` to
-`context.lng: "vi"`; `mode` comes from the validated query. The page also has a
-`?payload=<corpus-id>` mode rendering one `RichText`, and `?raw=1` renders that
-payload **unsanitized** (CSP-backstop probe only — the page carries a visible
-warning comment and exists only under the build flag). All `_harness` responses
-carry `HTML_CSP` via route rules. `HTML_CSP` is byte-for-byte D5's fixed
-directive string; tests do not reconstruct or reorder it.
+`context.lng: "vi"`; `mode` comes from the validated query. Screenshot tests set
+the viewport before the first navigation from the document's closed page-format
+map: A4 is 794 × 1123 and Letter is 816 × 1056.
+
+The page also has a client-only `?payload=<corpus-id>` mode. Its SSR response
+contains only an inert mount point and no corpus payload or raw-markup
+assignment. After mount, it resolves the closed corpus ID, calls
+`sanitizeRichText`, assigns that result, and sets
+`data-corpus-ready="sanitized"`. `?raw=1` uses a separate harness-only client
+branch to assign the same payload without sanitizing and sets
+`data-corpus-ready="raw"` for the CSP-backstop probe. It carries a visible
+warning, but never serializes raw corpus markup into SSR. Both branches exist
+only under the build flag. All `_harness` responses carry `HTML_CSP` via route
+rules. `HTML_CSP` is byte-for-byte D5's fixed directive string; tests do not
+reconstruct or reorder it.
 
 - [ ] **Step 1: Failing gating test.** `harness-absent.test.ts`: a normal
       `nuxt build` output contains no `_harness` route; a `NUXT_HARNESS=1` build
@@ -240,39 +266,44 @@ directive string; tests do not reconstruct or reorder it.
 - [ ] **Step 2: Offline fonts.** `fonts-offline.spec.ts`: route-block every
       non-`localhost` request and **fail the test if any is attempted**; load
       the full Vietnamese harness page once per catalog family; await
-      `fontsReady()` for the selected face and fallback; assert the manifest's
-      declared loaded faces are ready and zero external requests were attempted
-      — the self-hosted/offline proof (AC-REN-003).
+      `fontsReady(catalogId)` for the selected face and fallback; assert the
+      manifest's declared loaded faces are ready and zero external requests were
+      attempted — the self-hosted/offline proof (AC-REN-003).
 - [ ] **Step 3: Screenshot baselines.** `screenshot.spec.ts` renders the seven
-      cells of the named subset above. Before capture it waits for
-      `fontsReady()`, `data-pagination-settled="true"` in paged mode, and every
-      requested image to complete and decode with `naturalWidth > 0`; any image
-      error fails the cell. It then captures the full page and compares with
-      **zero** tolerance against committed baselines. First run generates via
-      the update target; committed; CI compares. Vietnamese diacritic fidelity
-      is judged in baseline review (tofu/misplaced marks in a baseline = task
-      failure, not a later discovery).
+      cells of the named subset above. Before navigation it sets the exact A4 or
+      Letter viewport derived from the fixture's `pageFormat`, asserts the
+      rendered paper box uses the same dimensions, then waits for
+      `fontsReady(catalogId)`, `data-pagination-settled="true"` in paged mode,
+      and every requested image to complete and decode with `naturalWidth > 0`;
+      any image error fails the cell. It then captures the full page and
+      compares with **zero** tolerance against committed baselines. First run
+      generates via the update target; committed; CI compares. Vietnamese
+      diacritic fidelity is judged in baseline review (tofu/misplaced marks in a
+      baseline = task failure, not a later discovery).
 - [ ] **Step 3a: Print fragmentation goldens.** Run both cases above through
       actual `page.pdf()`, raster every page, and compare at zero tolerance.
       Prove sidebar-only and main-only overflow independently, repeated tint,
       correct page order, and no clipped or missing entry. Generate only through
       the owner update target and preserve any divergent output as evidence.
 - [ ] **Step 4: Browser corpus + CSP conformance.** `corpus.spec.ts`, per corpus
-      payload: (a) sanitized page (`?payload=`) — collect `page.on('dialog')`,
-      `pageerror`, console errors, and `securitypolicyviolation` events; assert
-      **zero** of each; assert the author-side rules from
-      `apps/web/test/sanitizer/neutralization.ts` via `page.evaluate` over the
-      live DOM (the real-browser leg of AC-SEC-001); (b) raw backstop (`?raw=1`)
-      — the CSP alone must still prevent script execution: zero
-      dialogs/pageerrors even though markup is unsanitized (violation events are
+      payload: first fetch the SSR response and prove it contains neither the
+      payload bytes nor an active corpus node. Then: (a) sanitized page
+      (`?payload=`) — wait for `data-corpus-ready="sanitized"`; collect
+      `page.on('dialog')`, `pageerror`, console errors, and
+      `securitypolicyviolation` events; assert **zero** of each; assert the
+      author-side rules from `apps/web/test/sanitizer/neutralization.ts` via
+      `page.evaluate` over the live DOM (the real-browser leg of AC-SEC-001);
+      (b) raw backstop (`?raw=1`) — wait for `data-corpus-ready="raw"`; the CSP
+      alone must still prevent script execution: zero dialogs/pageerrors even
+      though client-assigned markup is unsanitized (violation events are
       _expected_ here and recorded, not asserted zero). Assert the response
       actually carried `HTML_CSP` byte-exact (a silently missing header must
       fail, not vacuously pass). (c) **CSP baseline compatibility on a normal
       build (B9).** In the later sequential `PLAYWRIGHT_SURFACE=normal`
       invocation, `normal-csp.spec.ts` navigates to the existing `/login` page
-      and inject the `HTML_CSP` header via `page.route()` response fulfillment —
-      real route-rule wiring for production pages is P5A/P8-sec's job (D5), this
-      step only proves the exported **value** is compatible with genuinely
+      and injects the `HTML_CSP` header via `page.route()` response fulfillment
+      — real route-rule wiring for production pages is P5A/P8-sec's job (D5),
+      this step only proves the exported **value** is compatible with genuinely
       Nuxt-emitted output on the separate port 20092, not just the harness's
       purpose-built markup. Collect `securitypolicyviolation` events across the
       page's full load and hydration and assert **zero** — the regression this

@@ -9,7 +9,9 @@ boundary between what the template decides, what the user decides, and what the
 document carries, precisely enough that two designers working from it
 independently produce compatible templates. Bound by
 [ADR 0008](../../adr/0008-template-apply-semantics.md) and
-[ADR 0009](../../adr/0009-section-order-authority.md).
+[ADR 0009](../../adr/0009-section-order-authority.md). Proposed
+[ADR 0021](../../adr/0021-template-placement-order.md) defines the candidate
+total order and fail-closed validation for template placement.
 
 - [`contract.md`](contract.md) — template identity, apply and ordering
   semantics, rendering, absence, hiding, columns, and conformance.

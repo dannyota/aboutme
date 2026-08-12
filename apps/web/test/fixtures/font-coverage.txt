@@ -1,0 +1,13 @@
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+abcdefghijklmnopqrstuvwxyz
+0123456789
+AĂÂBCDĐEÊGHIKLMNOÔƠPQRSTUƯVXY
+aăâbcdđeêghiklmnoôơpqrstuưvxy
+ÀÁẢÃẠ ẰẮẲẴẶ ẦẤẨẪẬ ÈÉẺẼẸ ỀẾỂỄỆ ÌÍỈĨỊ
+ÒÓỎÕỌ ỒỐỔỖỘ ỜỚỞỠỢ ÙÚỦŨỤ ỪỨỬỮỰ ỲÝỶỸỴ
+àáảãạ ằắẳẵặ ầấẩẫậ èéẻẽẹ ềếểễệ ìíỉĩị
+òóỏõọ ồốổỗộ ờớởỡợ ùúủũụ ừứửữự ỳýỷỹỵ
+à á ả ã ạ ă â ơ ư
+Present Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec
+.,:;!?'"“”‘’()[]{}<>/@#%&*+-=_
+… – — • · | \

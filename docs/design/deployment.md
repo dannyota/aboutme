@@ -33,6 +33,7 @@ graph LR
     CA --> NX[Nuxt task]
     GO --> PG[(RDS PostgreSQL)]
     GO --> S3[(Private S3)]
+    GO -->|leased public render and one-use print snapshot| NX
 ```
 
 V1 is an honest single-node application tier: one EC2 Graviton host runs Caddy,
@@ -65,15 +66,60 @@ empty. Go never parses `X-Forwarded-For` itself.
 
 ## CloudFront behavior
 
-| Surface                                      | Cookies               | Cache policy                                                 |
-| -------------------------------------------- | --------------------- | ------------------------------------------------------------ |
-| Authenticated API and `/api/v1/events` SSE   | Forwarded as required | Disabled; origin sends `no-store`                            |
-| Public JSON, photo, and `/api/v1/live/*` SSE | Never forwarded       | JSON/photo revalidate with ETag; SSE is never cached         |
-| Public HTML and discovery                    | Never forwarded       | Up to 60 seconds, with explicit invalidation on state change |
-| Public PDF and generated images              | Never forwarded       | Up to 60 seconds, with publish-state invalidation            |
+| Surface                                    | Cookies               | Cache policy                                                     |
+| ------------------------------------------ | --------------------- | ---------------------------------------------------------------- |
+| Authenticated API and `/api/v1/events` SSE | Forwarded as required | Disabled; origin sends `no-store`                                |
+| Public JSON and photo                      | Never forwarded       | Stored up to 60 seconds; revalidated through the live-state gate |
+| `/api/v1/live/*` SSE                       | Never forwarded       | Never cached                                                     |
+| Public HTML and discovery                  | Never forwarded       | Stored up to 60 seconds; revalidated through the live-state gate |
+| Public PDF and generated images            | Never forwarded       | Stored up to 60 seconds; revalidated through the live-state gate |
 
 Viewer responses never cache `Set-Cookie`. Apex is the sole application origin;
 `www` redirects before any authentication route.
+
+CloudFront storage is not publication authority. A public reuse reaches the
+origin, where the current slug, state, route flag, and public generation are
+checked before a strong ETag can validate retained bytes. Cacheable public
+responses use `Cache-Control: no-cache, must-revalidate`. Their CloudFront
+behaviors set minimum and default TTL to zero and maximum TTL to 60 seconds, so
+retained bytes always revalidate and are never served under positive freshness.
+Origin render caches are private and generation-keyed. The state mutation waits
+for old-generation origin leases to drain before success; edge invalidation
+remains cleanup and defense in depth.
+[ADR 0022](../adr/0022-public-artifact-revocation.md) owns the trade-off.
+
+Public resume HTML reaches Go first. Go holds the origin connection and
+per-resume generation lease while Nuxt renders a private frozen snapshot, then
+returns the completed or streaming body to Caddy or CloudFront. Nuxt does not
+receive the public origin socket. An edge viewer request already admitted under
+the old state may finish after revocation; later admission or revalidation must
+see the new state. Sitemap and `llms.txt` responses use a global discovery
+generation lease; any mutation that changes their membership advances and drains
+that generation before success.
+
+Go reaches public SSR at the direct Nuxt origin URL
+`http://127.0.0.1:3000/internal-render/public` in production and the equivalent
+direct native Nuxt address in development. Caddy denies `/internal-render` and
+`/internal-render/*` before its default web proxy. The Nuxt route is POST-only,
+accepts only the bounded frozen snapshot, and has no ambient session, ID lookup,
+API fetch, or database path. Route-parity tests pin the Caddy denial and direct-
+origin caller so topology drift cannot expose it.
+
+## Internal print
+
+The render browser reaches Nuxt only on the internal application network. Go
+authorizes and freezes the render snapshot, then issues a 256-bit one-use
+capability with a maximum 60-second lifetime. Nuxt redeems it through a loopback
+or deployment-private Go interface and receives the document and inline photo
+context. The browser has no account cookie or general outbound network access.
+Caddy's external `/print/**` denial and network placement are defense in depth;
+Nuxt still rejects a missing, expired, mismatched, or consumed capability. Go
+retains the consumed job binding and is the only component that can accept
+completed bytes after the terminal digest and public-generation check. Nuxt and
+Chromium have no artifact-publish credential. Completion is an in-process Go
+operation requiring a separate controller handle that never leaves the render
+queue; the job ID alone grants no completion authority.
+[ADR 0023](../adr/0023-private-print-capability.md) owns the protocol.
 
 ## Media
 
@@ -90,12 +136,23 @@ sweep's reach. Object writes are create-only and fail on collision; a loser
 never overwrites or deletes bytes already referenced by a winner.
 
 Uploads first write a new immutable candidate, then update the resume in a
-transactional database operation. Every fresh candidate not named by the
-committed result is best-effort deleted, including an idempotency replay or
-loser, conflict, stale precondition, or definite rollback. An ambiguous commit,
-crash, or failed compensation can still leave an unreachable object; the weekly
-orphan sweep owns that residual. Replace and delete never remove the old object
-before the document no longer references it.
+transactional database operation. Only an object write with a proved-created
+outcome may reach that mutation. Every such candidate not named by a definite
+database result is best-effort deleted, including an idempotency replay or
+loser, conflict, stale precondition, or definite rollback. An ambiguous database
+commit retains the possibly live candidate. A remote object write with an
+unknown outcome stops before database mutation and is not deleted because the
+key may name a collision winner. Crashes, unknown outcomes, and failed
+compensation can leave an unreachable private object; weekly orphan
+reconciliation owns that residual.
+
+Replacement, photo deletion, resume deletion, and account deletion revoke the
+reference and enqueue an exact-key deletion job in one PostgreSQL transaction.
+The API may succeed after that commit because every read is reference-gated and
+the bucket is private. A worker retries idempotent object deletion toward a
+24-hour physical-removal target. Overdue work is audited and alerted until it
+finishes. The weekly orphan job reconciles storage, live references, and the
+durable queue; it is not the ordinary deletion path.
 
 Only normalized JPEG or PNG bytes enter object storage. Photo normalization and
 Chromium rendering share one task-wide heavy-work permit before P7 combines

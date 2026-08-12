@@ -7,12 +7,19 @@ accessibility floor every template satisfies regardless of what the user picks.
 
 ## 1. How a token reaches the page
 
-`useResumeStyles(customization)` is the single function that turns the
-document's `customization` object into CSS custom properties on the resume root
-element, as required by the [pure renderer](../web.md#pure-renderer). Editor
-preview, server-rendered public pages, and Chromium print call the same function
-with the same input and get byte-identical properties. No component reads
-`customization` directly, and no component computes a color or size of its own.
+`resolveRenderModel(currentDocument, renderContext)` is the renderer's single
+pure input boundary, as required by the
+[pure renderer](../web.md#pure-renderer). It resolves structural customization
+into component props and passes a CSS-valued token projection to
+`useResumeStyles`. The latter returns the scoped CSS custom properties used by
+editor preview, server-rendered public pages, and Chromium print.
+
+Layout arrays and columns, header behavior, `sectionDisplay`, `dateFormat`, and
+`pageFormat` remain typed fields in the resolved model; they are not encoded as
+CSS to hide structural decisions. Font, colors, spacing, heading treatment, page
+geometry, and surface treatment form the CSS-valued projection. After
+resolution, no component reads raw `customization`, and no component invents a
+color, size, order, or fallback of its own.
 
 Ownership has exactly three values in the tables below.
 
@@ -26,10 +33,11 @@ There is no fourth column for "the template fixes it". Because the document
 stores no template identity (`contract.md` §1), any value not in `customization`
 is the same in every template by construction.
 
-## 2. Author-controlled tokens (the whole of `customization`)
+## 2. Customization leaves
 
-Twenty-five leaves, eight of them optional. Ranges and enums are the schema's,
-not this document's.
+The complete document `customization` has 25 leaves: 23 author-controlled and 2
+derived placement arrays. Eight leaves are optional. Ranges and enums are the
+schema's, not this document's.
 
 | Token                           | Type                                            | Baseline (`fixtures/minimal.json`) | Owner        |
 | ------------------------------- | ----------------------------------------------- | ---------------------------------- | ------------ |
@@ -59,8 +67,11 @@ not this document's.
 | `dateFormat`                    | enum: `MM/YYYY`, `Mon YYYY`, `YYYY`             | `MM/YYYY`                          | user, preset |
 
 `minimal.json` is the repository's baseline document, not a declared default; no
-canonical default customization exists in code yet, so a preset must state all
-seventeen **required** values explicitly rather than relying on omission.
+canonical default customization exists in code yet. A preset therefore states
+the 15 required author-controlled leaves explicitly, adds its required
+`layout.placement` rule, and never contains the 2 derived `layout.sections`
+arrays. `applyTemplate` computes those arrays. This accounts for all 17 required
+document leaves without inventing preset-owned placement arrays.
 
 The eight optional leaves work differently. The
 [document-version rule](../data.md#document-versions) requires new fields to
@@ -142,14 +153,14 @@ snapshot determinism (`print.md` §7).
 It is presentation, never content — no value here adds, removes, reorders, or
 reveals a detail, and `isHidden` still wins in every combination.
 
-| Token                  | Value     | Effect                                                                           |
-| ---------------------- | --------- | -------------------------------------------------------------------------------- |
-| `header.align`         | `left`    | `--header-align: left`; the block sits on the content measure's left edge        |
-|                        | `center`  | `--header-align: center`; photo, name, headline, and details all centre together |
-| `header.detailsLayout` | `inline`  | details flow on one wrapping line, separated by `--gap-inline`                   |
-|                        | `stacked` | each detail takes its own line, separated by `--gap-block`                       |
-| `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone                 |
-|                        | `outline` | the stroked lucide glyph at `--icon-size`                                        |
+| Token                  | Value     | Effect                                                            |
+| ---------------------- | --------- | ----------------------------------------------------------------- |
+| `header.align`         | `left`    | the resolved header block sits on the content measure's left edge |
+|                        | `center`  | photo, name, headline, and details all centre together            |
+| `header.detailsLayout` | `inline`  | details flow on one wrapping line, separated by `--gap-inline`    |
+|                        | `stacked` | each detail takes its own line, separated by `--gap-block`        |
+| `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone  |
+|                        | `outline` | the stroked lucide glyph at `--icon-size`                         |
 
 Absent `header` renders `left` / `inline` / `outline`, which is what every
 document rendered before the token existed.

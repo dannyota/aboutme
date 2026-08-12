@@ -93,5 +93,6 @@ fixture or a renderer-only test does not close this handoff.
       file. This artifact is Task 3's cross-check input.
 - [ ] **Step 5: Gate.** Run the focused sanitizer tests and hand off. The
       integration owner runs the post-task module command above, then runs
-      `make server-build server-vet server-test` and `make semgrep` against the
-      final module graph. Report both owned-path diffs and every exact command.
+      `make server-build server-vet server-test` against the final module graph.
+      Report both owned-path diffs and every exact command. Connected Semgrep
+      runs once through `make scan` at the unchanged phase candidate.

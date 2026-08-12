@@ -98,12 +98,14 @@ handler then streams one request through `http.MaxBytesReader` and the 60-second
 read boundary, extracts one bounded raw part, hashes D18's complete identity,
 and checks for a committed replay or reuse. A fresh request fully decodes and
 normalizes the image synchronously before writing a private candidate. Five
-seconds is a measured release gate, not a decoder-cancellation timer. The
-request then calls the same transactional idempotency and CAS kernel. Only a
-database winner may remain referenced. Replay, reuse, or a definite failure
-best-effort deletes an unreferenced candidate. An ambiguous commit leaves it
-private because the database may reference it. The scheduled orphan sweep
-deletes only old objects with no database reference.
+seconds is a measured release gate, not a decoder-cancellation timer. Only a
+proved-created object may proceed to the transactional idempotency and CAS
+kernel. Replay, reuse, or a definite database failure best-effort deletes that
+unreferenced candidate. An ambiguous database commit leaves it private because
+the database may reference it. An unknown remote object-write outcome stops
+before database mutation and is not deleted because the key may name a collision
+winner. The scheduled orphan sweep deletes only old objects with no database
+reference or pending deletion job.
 
 No source container crosses the object-storage boundary. The stored object is a
 bounded canonical JPEG or PNG with orientation applied and source metadata
@@ -115,7 +117,8 @@ Photo crop is not part of the upload variant. It follows the ordinary bounded
 JSON path and hashes exact `{crop: PhotoCrop|null}` bytes. Inside the
 transaction it reads the current `PhotoRef`, changes or removes only `crop`,
 preserves the key, and performs no object I/O. Photo delete and whole-resume
-delete return the old key from their transaction. Post-commit cleanup validates
-the exact key grammar and expected resume ID before one exact delete; invalid or
-cross-resume keys never reach a backend, and cleanup failure cannot replace
-stored success.
+delete validate the old key and enqueue its exact `(resume_id, object_key)`
+deletion job in the same transaction that removes the reference. Invalid or
+cross-resume keys fail before either write. The P8-priv worker performs one
+exact delete from the durable job; cleanup failure cannot replace stored success
+or restore access.

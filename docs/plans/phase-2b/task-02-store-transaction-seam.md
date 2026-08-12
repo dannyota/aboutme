@@ -15,8 +15,8 @@ ships no HTTP code.
 modify `apps/server/internal/resume/store.go`, `idempotency.go`,
 `idempotency_test.go`, `apps/server/internal/resume/export_test.go`,
 `apps/server/sql/queries.sql`, new migration
-`apps/server/migrations/00006_bound_idempotency_retention.sql`, focused
-`apps/server/cmd/migrate/idempotency_retention_test.go`, and the regenerated
+`apps/server/migrations/00006_bound_retention_and_media_cleanup.sql`, focused
+`apps/server/cmd/migrate/retention_media_cleanup_test.go`, and the regenerated
 `apps/server/internal/store/**`. **This task holds the exclusive migration +
 queries.sql + `internal/store` window for the whole phase. Because migrations
 and generated files are integration-owner paths, the integration owner is the
@@ -47,6 +47,12 @@ func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Querie
     expectedRevision int64) (int64, error)
 func (s *Store) DeleteTx(ctx context.Context, qtx *store.Queries,
     userID, id uuid.UUID, expectedRevision int64) (Resume, error)
+
+// EnqueueMediaDeletionTx records cleanup work in the caller's transaction.
+// The caller validates key against resumeID before this call. The document,
+// not this job, remains the media ownership authority.
+func (s *Store) EnqueueMediaDeletionTx(ctx context.Context,
+    qtx *store.Queries, resumeID uuid.UUID, key string) error
 
 // InspectIdempotency returns an already committed replay or key-reuse error
 // without running a mutation. operation is D18's method + registered operation
@@ -81,8 +87,12 @@ before a transaction begins is `CommitNotAttempted`; callback failure or a
 confirmed rollback is `CommitDefinitelyRolledBack`; a successful commit or
 replay is `CommitCommitted`; connection loss or another indeterminate commit
 result is `CommitUnknown`. Media compensation may delete a candidate after the
-first two outcomes, but never after `CommitUnknown`. Injected
-disconnect-at-commit tests prove every classification.
+first two outcomes. It may also delete this request's candidate when
+`Replayed=true`, including the `Replayed=true, CommitCommitted` result: the
+stored response proves another execution already owns the referenced object. A
+non-replayed `CommitCommitted` result is the winner and every `CommitUnknown`
+result is retained. Injected disconnect-at-commit tests prove every
+classification and the valid `Replayed`/outcome pairs.
 
 `StoredResponse` contains status, body, and only these deterministic response
 headers: `Location`, `ETag`, and `X-Resume-Schema-Version`. Migration 00006 adds
@@ -180,6 +190,16 @@ expired retained row remains, otherwise the rounded-up interval to the earliest
 expiry. An existing unexpired key still replays. It is a new append-only
 migration; released migrations remain byte-identical.
 
+The same migration adds `media_deletion_jobs` as a work ledger, not an ownership
+table. Each outstanding row contains a UUID job ID, the resume ID, one unique
+canonical object key, `enqueued_at`, `next_attempt_at`, and a non-negative
+attempt count. Database checks require the key's embedded canonical resume ID to
+equal `resume_id`. An index on `(next_attempt_at, id)` supports bounded
+oldest-due claims. Jobs have no foreign key to `resumes`, because resume and
+account deletion must not cascade away pending physical deletion. P8-priv owns
+claim leases, retry state, terminal audit records, and removal of completed
+jobs.
+
 `Execute` keeps P2A's cleanup-on-error property with two explicit transactions.
 First it begins a cleanup transaction, locks the user, deletes at most 200
 expired rows, releases their exact retained counters, and commits. Failure stops
@@ -213,11 +233,11 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       already-projected, sanitized, validated current-version aggregate under
       one revision CAS; the store persists that document unchanged and does not
       add a second sanitizer. A stale revision changes nothing. `DeleteTx` takes
-      the expected revision, returns the deleted row for post-commit media
-      cleanup, and on a CAS miss re-reads the scoped winner so the HTTP layer
-      can produce `412`; wrong owner and missing remain indistinguishable. Cover
-      `lng` clearing, canonical length, and title 160/161 before any statement
-      runs.
+      the expected revision and returns the deleted row so its caller can
+      validate and enqueue media cleanup in the same transaction. On a CAS miss
+      it re-reads the scoped winner so the HTTP layer can produce `412`; wrong
+      owner and missing remain indistinguishable. Cover `lng` clearing,
+      canonical length, and title 160/161 before any statement runs.
 - [ ] **Step 3: failing composition test.** Two `IdempotencyStore.Execute` calls
       with different keys, whose callbacks use `CreateTx` and `SaveDocumentTx`,
       both commit; a callback that returns an error after calling
@@ -233,9 +253,12 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       at commit, connection loss during commit, success, and replay. Assert the
       exact
       `Execute(ctx, userID, operation, key, requestHash, mutate)     (ExecuteResult, error)`
-      result on every path. Only `CommitNotAttempted` and
-      `CommitDefinitelyRolledBack` errors are safe for candidate deletion; an
-      unknown outcome is never classified as safe.
+      result on every path. Candidate deletion is safe exactly when
+      `Replayed=true`, `Outcome=CommitNotAttempted`, or
+      `Outcome=CommitDefinitelyRolledBack`. It is unsafe for a non-replayed
+      `CommitCommitted` winner and every `CommitUnknown`. The matrix includes
+      concurrent replay as `Replayed=true, CommitCommitted`, plus invalid
+      `Replayed`/outcome pairs that fail closed.
 - [ ] **Step 3b: failing bounded-cleanup tests.** Seed 201 expired rows for one
       user plus live and neighbour-user rows. One mutation removes exactly the
       oldest 200 in `(expires_at,id)` order; a later mutation removes the
@@ -255,13 +278,20 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       approved headers, and body are byte-identical even when input object keys
       were not in PostgreSQL's canonical order. Assert `Date` and `X-Request-ID`
       are valid, fresh, and distinct.
+- [ ] **Step 3e: failing media-deletion enqueue tests.** In one transaction,
+      remove a photo reference or whole resume and enqueue its exact validated
+      key. Commit persists both changes; rollback persists neither. Duplicate
+      enqueue of the immutable key is idempotent. A malformed key, a key for a
+      different resume, a missing owner, or a stale revision changes neither the
+      aggregate nor the queue. Resume/account deletion does not cascade the
+      pending job. The due-order index supports the P8-priv bounded claim.
 - [ ] **Step 4: add migration and queries; regenerate.** Add the composite
       cleanup index, usage table/backfill, the two CAS queries, bounded per-user
       and global cleanup, the approved-header column, response
       normalization/insert-returning, conditional usage reservation/decrement,
-      and capacity-retry queries. The integration owner authors the focused
-      prior-head proof at
-      `apps/server/cmd/migrate/idempotency_retention_test.go`; no route or
+      capacity-retry queries, and the deletion-job table/enqueue operation. The
+      integration owner authors the focused prior-head proof at
+      `apps/server/cmd/migrate/retention_media_cleanup_test.go`; no route or
       blind- suite task may edit that migration test. Run `make sqlc-gen`,
       include generated files, and prove released migrations are unchanged and
       the new migration applies from the prior head.
@@ -287,4 +317,5 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
 | AC-SAVE-001  | The CAS path that produces `*RevisionMismatchError` with the winning document     |
 | AC-SAVE-002  | The transaction seam that lets a mutation and its idempotency record share a tx   |
 | AC-DOC-001   | HTTP-level evidence path for the cap: `CreateTx` keeps the store lock and trigger |
-| AC-MEDIA-006 | The safe preflight used before an external candidate object is written            |
+| AC-MEDIA-003 | Reference revocation and exact-key cleanup work commit together                   |
+| AC-MEDIA-006 | The safe preflight and durable cleanup seam around external object writes         |

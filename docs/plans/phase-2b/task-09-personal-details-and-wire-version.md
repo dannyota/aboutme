@@ -54,8 +54,10 @@ or contact edit from clearing the reference and leaking an orphan.
       write-at-v1/read-at-v1 byte comparison; 4. an undeclared version fails
       closed with `400 unsupported_schema_version` and writes nothing; 5. a
       `GET` declaring v1 emits v1 while storage stays byte-identical v2, with
-      unchanged `revision` and `updated_at`. Synthetic projectors are forbidden
-      for these released-version proofs.
+      unchanged `revision` and `updated_at`; 6. seed a v2-only font, make the v1
+      personal-details write, and prove the stored v2 font remains unchanged
+      while the v1 response carries only its declared fallback. Synthetic
+      projectors are forbidden for these released-version proofs.
 - [ ] **Step 3: failing current-version identity test.** With current v2,
       absence of the header and explicit `X-Resume-Schema-Version: 2` produce
       byte-identical stored documents and responses. The explicit v1 case must

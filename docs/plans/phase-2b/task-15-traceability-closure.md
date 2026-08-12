@@ -14,9 +14,12 @@ other status, handoff, or shared integration file is in scope.
 ## Steps
 
 - [ ] Add a `State` value and exact file plus test name for
-      AC-MEDIA-001…006/008/009, AC-SAVE-001/002/004/005, and the P2B half of
-      AC-SEC-003. Keep AC-MEDIA-007 `PLANNED` under P8-priv. No row becomes
-      `PROVEN` from a report alone.
+      AC-MEDIA-001/002/004/005/008/009, AC-SAVE-001/002/004/005, and the P2B
+      half of AC-SEC-003. Record the P2B evidence slices for AC-MEDIA-003/006
+      but keep those cross-phase rows `PLANNED` until P8-priv proves account
+      deletion and worker behavior. Keep AC-MEDIA-007 `PLANNED` under P8-priv
+      while citing P2B's queue and paginated-backend handoff evidence. No row
+      becomes `PROVEN` from a report alone.
 - [ ] Add P2B HTTP evidence to borrowed AC-DOC rows without changing their
       owning phase.
 - [ ] Verify the traceability prefix and row totals mechanically. Correct the
