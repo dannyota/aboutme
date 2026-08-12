@@ -1,0 +1,5 @@
+# Pinned generation environment for generate.py (Task 5).
+# Regeneration must use exactly these versions so the final WOFF2 bytes
+# and their recorded SHA-256 hashes stay reproducible.
+fonttools==4.63.0
+brotli==1.2.0

@@ -28,6 +28,7 @@ COPY packages/schema/gen/ts/ ./packages/schema/gen/ts/
 RUN npm --prefix apps/web ci
 
 COPY apps/web/app/ ./apps/web/app/
+COPY apps/web/public/ ./apps/web/public/
 
 RUN npm --prefix apps/web run build
 

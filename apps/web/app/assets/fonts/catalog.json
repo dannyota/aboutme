@@ -1,0 +1,2250 @@
+{
+  "catalogVersion": 2,
+  "design": {
+    "document": "docs/design/fonts.md",
+    "revision": "2366632f0a55c2a7ab3b63c0bf23fe8994ceb4fe",
+    "sha256": "3fb0a77bbab22de3fb7928a8612625aed4f16b3bf22f12a08f11144199577624"
+  },
+  "generator": {
+    "tool": "apps/web/app/assets/fonts/tools/generate.py",
+    "python": "3.14.7",
+    "fonttools": "4.63.0",
+    "brotli": "1.2.0",
+    "subsetUnicodes": "0020-007E,00A0-017F,01A0-01B0,02C6-02DD,0300-036F,1E00-1EFF,2000-206F,20AB-20AC,2122,2212"
+  },
+  "fixture": {
+    "path": "apps/web/test/fixtures/font-coverage.txt",
+    "sha256": "4bdc09434b4f98d65bbf55f746a35a98e52ffecba9c519dbdf57ac11a70eb605"
+  },
+  "excluded": [],
+  "entries": [
+    {
+      "id": "be-vietnam-pro",
+      "displayName": "Be Vietnam Pro",
+      "category": "sans",
+      "cssFamily": "Be Vietnam Pro",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2021 The Be Vietnam Pro Project Authors (https://github.com/bettergui/BeVietnamPro),",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/bettergui/BeVietnamPro",
+        "commit": "804e62d81abbbcdcce5686069c69b41b8c245192",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/BeVietnamPro[wght].ttf",
+            "sha256": "2e7f074803b2252224a55ebc3112d19e2e844b5edee4dcf1e91e254f78e69f4c"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "6b7f8f73609a25ea78c891e34cf37b06f8a676b7ea986e941e43b009110f2a85"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/be-vietnam-pro/OFL.txt",
+        "sha256": "6b7f8f73609a25ea78c891e34cf37b06f8a676b7ea986e941e43b009110f2a85"
+      },
+      "assets": [
+        {
+          "path": "be-vietnam-pro-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/BeVietnamPro[wght].ttf",
+          "sha256": "b1f2560f628637cc3297d6db51c5eadb34244348dece4477950baa90ab59df56",
+          "bytes": 56300,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "Be Vietnam Pro",
+            "subfamily": "Regular",
+            "fullName": "Be Vietnam Pro Regular",
+            "postScriptName": "BeVietnamPro-Regular"
+          },
+          "coverage": {
+            "codepoints": 430,
+            "ranges": "20-7E,A0-107,10A-113,116-11B,11E-121,126-12B,12E-131,139-13A,13D-13E,141-144,147-148,14C-14D,150-155,158-15B,15E-16B,16E-17E,1A0-1A1,1AF-1B0,2C6-2C7,2D8-2DC,300-304,306-30C,312,31B,323,326-328,1E20-1E21,1E80-1E85,1E9E,1EA0-1EF9,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2039-203A,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Be Vietnam Pro"
+    },
+    {
+      "id": "inter",
+      "displayName": "Inter",
+      "category": "sans",
+      "cssFamily": "Inter",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/rsms/inter",
+        "commit": "66647c0bbbe41a850d79d9c76fb13add3378940f",
+        "binaryCommit": null,
+        "archive": {
+          "ref": "A1",
+          "url": "https://github.com/rsms/inter/files/15438431/Inter-4.1-GoogleFonts.zip",
+          "sha256": "925d1022e7dad4eae6dc3fe92aaad9f8750db2786f2012e2a3f2a533de0ef4e1"
+        },
+        "inputs": [
+          {
+            "path": "Inter[opsz,wght].ttf",
+            "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031"
+          }
+        ],
+        "license": {
+          "path": "LICENSE.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/inter/LICENSE.txt",
+        "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a"
+      },
+      "assets": [
+        {
+          "path": "inter-var.woff2",
+          "role": "variable",
+          "input": "Inter[opsz,wght].ttf",
+          "sha256": "aaf0943716d446ca6311ccec5b3cf41f2b4cee50b0ef8845618504c5576486ca",
+          "bytes": 158184,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "opsz",
+              "min": 14,
+              "default": 14,
+              "max": 32
+            },
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "Inter",
+            "subfamily": "Regular",
+            "fullName": "Inter Regular",
+            "postScriptName": "Inter-Regular"
+          },
+          "coverage": {
+            "codepoints": 760,
+            "ranges": "20-7E,A0-AC,AE-148,14A-17F,1A0-1B0,2C6-2DD,300-304,306-30A,30C,30F,313,315,31B,323,326-328,32C,337-338,342-343,346-36F,1E00-1E9B,1E9D-1EFF,2000-200B,2010-2027,202F-2055,2057,205F,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "noto-sans",
+      "displayName": "Noto Sans",
+      "category": "sans",
+      "cssFamily": "Noto Sans",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/notofonts/latin-greek-cyrillic",
+        "commit": "c4a321e123e4d4ff315f57f4e0adf294fe3a95be",
+        "binaryCommit": null,
+        "archive": {
+          "ref": "A2",
+          "url": "https://github.com/notofonts/latin-greek-cyrillic/releases/download/NotoSans-v2.015/NotoSans-v2.015.zip",
+          "sha256": "0c34df072a3fa7efbb7cbf34950e1f971a4447cffe365d3a359e2d4089b958f5"
+        },
+        "inputs": [
+          {
+            "path": "NotoSans/googlefonts/variable-ttf/NotoSans[wdth,wght].ttf",
+            "sha256": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/noto-sans/OFL.txt",
+        "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+      },
+      "assets": [
+        {
+          "path": "noto-sans-var.woff2",
+          "role": "variable",
+          "input": "NotoSans/googlefonts/variable-ttf/NotoSans[wdth,wght].ttf",
+          "sha256": "b72e2a3ba836be9f84ec33339aaa3807fa39af6817b06f4f57e81e7eb07f5638",
+          "bytes": 170424,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "wdth",
+              "min": 62.5,
+              "default": 100,
+              "max": 100
+            }
+          ],
+          "internalNames": {
+            "family": "Noto Sans",
+            "subfamily": "Regular",
+            "fullName": "Noto Sans Regular",
+            "postScriptName": "NotoSans-Regular"
+          },
+          "coverage": {
+            "codepoints": 843,
+            "ranges": "20-7E,A0-17F,1A0-1B0,2C6-2DD,300-36F,1E00-1EFF,2000-2064,2066-206F,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "noto-serif",
+      "displayName": "Noto Serif",
+      "category": "serif",
+      "cssFamily": "Noto Serif",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/notofonts/latin-greek-cyrillic",
+        "commit": "c4a321e123e4d4ff315f57f4e0adf294fe3a95be",
+        "binaryCommit": null,
+        "archive": {
+          "ref": "A3",
+          "url": "https://github.com/notofonts/latin-greek-cyrillic/releases/download/NotoSerif-v2.015/NotoSerif-v2.015.zip",
+          "sha256": "0e9a43c8a4b94ac76f55069ed1d7385bbcaf6b99527a94deb5619e032b7e76c1"
+        },
+        "inputs": [
+          {
+            "path": "NotoSerif/googlefonts/variable-ttf/NotoSerif[wdth,wght].ttf",
+            "sha256": "4d8e6761424656867019081a1a01336f3cb086982682698714054fc33f782713"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/noto-serif/OFL.txt",
+        "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a"
+      },
+      "assets": [
+        {
+          "path": "noto-serif-var.woff2",
+          "role": "variable",
+          "input": "NotoSerif/googlefonts/variable-ttf/NotoSerif[wdth,wght].ttf",
+          "sha256": "0df4288a972cf3b325bba1da2596dbabb3dd16fb051c78a014ed0b3d095af697",
+          "bytes": 172008,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "wdth",
+              "min": 62.5,
+              "default": 100,
+              "max": 100
+            }
+          ],
+          "internalNames": {
+            "family": "Noto Serif",
+            "subfamily": "Regular",
+            "fullName": "Noto Serif Regular",
+            "postScriptName": "NotoSerif-Regular"
+          },
+          "coverage": {
+            "codepoints": 843,
+            "ranges": "20-7E,A0-17F,1A0-1B0,2C6-2DD,300-36F,1E00-1EFF,2000-2064,2066-206F,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "roboto",
+      "displayName": "Roboto",
+      "category": "sans",
+      "cssFamily": "Roboto",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2011 The Roboto Project Authors (https://github.com/googlefonts/roboto-classic)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/roboto-classic",
+        "commit": "91d5d3e5b81efa04a77925cc609fdcdd7ee663d1",
+        "binaryCommit": null,
+        "archive": {
+          "ref": "A4",
+          "url": "https://github.com/googlefonts/roboto-3-classic/releases/download/v3.015/Roboto_v3.015.zip",
+          "sha256": "bee3e9334ea86dd63e184598f31fb16750881c2da1a6f097a66e0f66a95b3d54"
+        },
+        "inputs": [
+          {
+            "path": "web/split/Roboto[wdth,wght].ttf",
+            "sha256": "d7598e12c5dbef095ff8272cfc55da0250bd07fbdecbac8a530b9b277872a134"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "061402327a96aadb0bfb694a960ed289ecd38d383e396243831ab81feb109c41"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/roboto/OFL.txt",
+        "sha256": "061402327a96aadb0bfb694a960ed289ecd38d383e396243831ab81feb109c41"
+      },
+      "assets": [
+        {
+          "path": "roboto-var.woff2",
+          "role": "variable",
+          "input": "web/split/Roboto[wdth,wght].ttf",
+          "sha256": "fd79ff9f09590d44fb96d7373f53a53e8a6a83ed08bffd70baa18ac540c10890",
+          "bytes": 117380,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "wdth",
+              "min": 75,
+              "default": 100,
+              "max": 100
+            }
+          ],
+          "internalNames": {
+            "family": "Roboto",
+            "subfamily": "Regular",
+            "fullName": "Roboto Regular",
+            "postScriptName": "Roboto-Regular"
+          },
+          "coverage": {
+            "codepoints": 481,
+            "ranges": "20-7E,A0-17F,1A0-1A1,1AF-1B0,2C6-2C7,2C9,2D8-2DD,300-301,303,309,30F,323,1E00-1E01,1E3E-1E3F,1E80-1E85,1E9E,1EA0-1EF9,2000-200B,2010-2011,2013-2015,2017-201E,2020-2022,2025-2027,2030,2032-2033,2039-203A,203C,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": false,
+        "missing": [
+          "U+0302",
+          "U+0306",
+          "U+031B"
+        ]
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "open-sans",
+      "displayName": "Open Sans",
+      "category": "sans",
+      "cssFamily": "Open Sans",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/opensans",
+        "commit": "bd7e37632246368c60fdcbd374dbf9bad11969b6",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/OpenSans[wdth,wght].ttf",
+            "sha256": "36643644f318a812aab2d2ed3bb98f8cf0872527f835fe9398d95fe6b9adb878"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "01cd5ffb3a528c219a86e49a814c6c53bd8a69b9a3c305dd237074ba1c811af7"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/open-sans/OFL.txt",
+        "sha256": "01cd5ffb3a528c219a86e49a814c6c53bd8a69b9a3c305dd237074ba1c811af7"
+      },
+      "assets": [
+        {
+          "path": "open-sans-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/OpenSans[wdth,wght].ttf",
+          "sha256": "1d51bc8b757b1074c05512acdb0fdd6e9c80a6596045638c3f000c142c38b74f",
+          "bytes": 123888,
+          "weight": [
+            300,
+            800
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 300,
+              "default": 400,
+              "max": 800
+            },
+            {
+              "tag": "wdth",
+              "min": 75,
+              "default": 100,
+              "max": 100
+            }
+          ],
+          "internalNames": {
+            "family": "Open Sans",
+            "subfamily": "Regular",
+            "fullName": "Open Sans Regular",
+            "postScriptName": "OpenSans-Regular"
+          },
+          "coverage": {
+            "codepoints": 489,
+            "ranges": "20-7E,A0-17F,1A0-1A1,1AF-1B0,2C6-2C7,2C9,2D8-2DD,300-304,306-30C,30F,312,323,326-328,1E00-1E01,1E3E-1E3F,1E80-1E85,1E9E,1EA0-1EF9,2000-200B,2013-2015,2017-201E,2020-2022,2026,2030,2032-2033,2039-203A,203C,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": false,
+        "missing": [
+          "U+031B"
+        ]
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "plus-jakarta-sans",
+      "displayName": "Plus Jakarta Sans",
+      "category": "sans",
+      "cssFamily": "Plus Jakarta Sans",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2020 The Plus Jakarta Sans Project Authors (https://github.com/tokotype/PlusJakartaSans)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/tokotype/PlusJakartaSans",
+        "commit": "18d1cd2f7ea10481919d2f05c1f7064b7307fc26",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/PlusJakartaSans[wght].ttf",
+            "sha256": "89b3fb38aa0d275d7a731d0d817a4f1622b316b4d7fbdedcf02ee9099ff68bc8"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/plus-jakarta-sans/OFL.txt",
+        "sha256": "995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99"
+      },
+      "assets": [
+        {
+          "path": "plus-jakarta-sans-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/PlusJakartaSans[wght].ttf",
+          "sha256": "32da3b8ffbc1b125eda14b9c03858e81a8145312890b4d2698ef22e58177d37f",
+          "bytes": 46336,
+          "weight": [
+            200,
+            800
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 200,
+              "default": 400,
+              "max": 800
+            }
+          ],
+          "internalNames": {
+            "family": "Plus Jakarta Sans",
+            "subfamily": "Regular",
+            "fullName": "Plus Jakarta Sans Regular",
+            "postScriptName": "PlusJakartaSans-Regular"
+          },
+          "coverage": {
+            "codepoints": 547,
+            "ranges": "20-7E,A0-AC,AE-148,14A-17E,1A0-1A1,1AF-1B0,2C6-2C7,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2002-2003,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "work-sans",
+      "displayName": "Work Sans",
+      "category": "sans",
+      "cssFamily": "Work Sans",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2019 The Work Sans Project Authors (https://github.com/weiweihuanghuang/Work-Sans)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/weiweihuanghuang/Work-Sans",
+        "commit": "b35c81086186162164947bd39574683073d9b268",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/WorkSans[wght].ttf",
+            "sha256": "f50f61f2ba738e239442d40bf1069adb195c224b6a5a73a581fc2f3ed62a9f63"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "749aca05078664ce682dce1b1b10096ac397cb088c1a6df4e1bb56f0092a9272"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/work-sans/OFL.txt",
+        "sha256": "749aca05078664ce682dce1b1b10096ac397cb088c1a6df4e1bb56f0092a9272"
+      },
+      "assets": [
+        {
+          "path": "work-sans-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/WorkSans[wght].ttf",
+          "sha256": "659458ce191786b461bbd7f9e1c0bdb7eccb5781eba40f776634bae588d464b6",
+          "bytes": 110212,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "Work Sans",
+            "subfamily": "Regular",
+            "fullName": "Work Sans Regular",
+            "postScriptName": "WorkSans-Regular"
+          },
+          "coverage": {
+            "codepoints": 556,
+            "ranges": "20-7E,A0-148,14A-17F,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,335,338,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,2052,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "nunito-sans",
+      "displayName": "Nunito Sans",
+      "category": "sans",
+      "cssFamily": "Nunito Sans",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2016 The Nunito Sans Project Authors (https://github.com/Fonthausen/NunitoSans)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/NunitoSans",
+        "commit": "058bd7a2f33d6ad5ef1df985b3db403622016a8c",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/NunitoSans[YTLC,opsz,wdth,wght].ttf",
+            "sha256": "f934d7142fb4784bf828da485b7dcbd90c0c80d514e9d49a5da0ed3a1ae2491d"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "efbb0c9e864cef973982d9a17567e6be5c3d1759695574586f3f18c7ecca064b"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/nunito-sans/OFL.txt",
+        "sha256": "efbb0c9e864cef973982d9a17567e6be5c3d1759695574586f3f18c7ecca064b"
+      },
+      "assets": [
+        {
+          "path": "nunito-sans-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/NunitoSans[YTLC,opsz,wdth,wght].ttf",
+          "sha256": "f60f5554635e3b2d45f8c93bb435a3d8f61c1c766bead7d38d5365be986ead9c",
+          "bytes": 114236,
+          "weight": [
+            200,
+            1000
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 200,
+              "default": 200,
+              "max": 1000
+            },
+            {
+              "tag": "wdth",
+              "min": 75,
+              "default": 100,
+              "max": 125
+            },
+            {
+              "tag": "opsz",
+              "min": 6,
+              "default": 12,
+              "max": 12
+            },
+            {
+              "tag": "YTLC",
+              "min": 440,
+              "default": 500,
+              "max": 540
+            }
+          ],
+          "internalNames": {
+            "family": "Nunito Sans 12pt ExtraLight",
+            "subfamily": "Regular",
+            "fullName": "Nunito Sans 12pt ExtraLight",
+            "postScriptName": "NunitoSans-12ptExtraLight"
+          },
+          "coverage": {
+            "codepoints": 556,
+            "ranges": "20-7E,A0-17E,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,335,337-338,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,2052,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "montserrat",
+      "displayName": "Montserrat",
+      "category": "sans",
+      "cssFamily": "Montserrat",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2024 The Montserrat.Git Project Authors (https://github.com/JulietaUla/Montserrat.git)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/JulietaUla/Montserrat",
+        "commit": "cc8daf2e7085006b9c112542fc82b58afc13521d",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/Montserrat[wght].ttf",
+            "sha256": "1e2c44ef8c956ed66998649d8c832d221e22c04eaab63c044f18eb05d1c63b7c"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "8b7141c03fa4f8d44e6345d5d4931709290f0f67875e452e95ac1fd3a027802e"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/montserrat/OFL.txt",
+        "sha256": "8b7141c03fa4f8d44e6345d5d4931709290f0f67875e452e95ac1fd3a027802e"
+      },
+      "assets": [
+        {
+          "path": "montserrat-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/Montserrat[wght].ttf",
+          "sha256": "bc152528bc070f1461b522844f2384caa1f734a281a0555aa3f7c8e6384a8388",
+          "bytes": 93736,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 100,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "Montserrat Thin",
+            "subfamily": "Regular",
+            "fullName": "Montserrat Thin",
+            "postScriptName": "Montserrat-Thin"
+          },
+          "coverage": {
+            "codepoints": 667,
+            "ranges": "20-7E,A0-AC,AE-17F,1A0-1A1,1A4-1A6,1A9,1AC-1B0,2C6-2CC,2D7-2DD,300-304,306-30D,30F-313,315,31B,320,323-329,32D-332,334-338,34F,358,35C-35D,35F,361-362,1E00-1E9B,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,2052,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "fira-sans",
+      "displayName": "Fira Sans",
+      "category": "sans",
+      "cssFamily": "Fira Sans",
+      "policy": "unmodified-upstream",
+      "spdx": "OFL-1.1",
+      "copyright": "Digitized data copyright 2012-2018: The Mozilla Foundation, Telefonica S.A., Carrois Corporate GbR and bBox Type GmbH.",
+      "reservedFontNames": [
+        "Fira"
+      ],
+      "source": {
+        "repository": "https://github.com/bBoxType/FiraSans",
+        "commit": "f54eeb3124c63fe9b5bcd36d09d1cd46788cd15e",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "Fira_Sans_4_3/Fonts/Fira_Sans_WEB_4301/Normal/Roman/FiraSans-Regular.woff2",
+            "sha256": "51000d3cc8a601427bdb88625275e0eefc00570f4f2ab7a926fa336abee7098f"
+          },
+          {
+            "path": "Fira_Sans_4_3/Fonts/Fira_Sans_WEB_4301/Normal/Roman/FiraSans-Bold.woff2",
+            "sha256": "7dff4e2351ca54fae96180e79ab1d1fdeb74ebb6e6cba53a7d9d7b4941600ada"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "5c29650250730778eccb5475b112d32a8e0c9dd1860d9509693329652bf8e9eb"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/fira-sans/OFL.txt",
+        "sha256": "5c29650250730778eccb5475b112d32a8e0c9dd1860d9509693329652bf8e9eb"
+      },
+      "assets": [
+        {
+          "path": "fira-sans-400.woff2",
+          "role": "upright-400",
+          "input": "Fira_Sans_4_3/Fonts/Fira_Sans_WEB_4301/Normal/Roman/FiraSans-Regular.woff2",
+          "sha256": "51000d3cc8a601427bdb88625275e0eefc00570f4f2ab7a926fa336abee7098f",
+          "bytes": 155928,
+          "weight": [
+            400,
+            400
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Fira Sans",
+            "subfamily": "Regular",
+            "fullName": "Fira Sans Regular",
+            "postScriptName": "FiraSans-Regular"
+          },
+          "coverage": {
+            "codepoints": 1718,
+            "ranges": "D,20-7E,A0-2B2,2B4,2B7-2BC,2BF-2C0,2C6-2C8,2CA-2CC,2CE-2D1,2D4,2D6-2DE,2E0-2E9,2EE,300-30D,30F,311-313,316-321,323-32D,32F-332,334-336,339-33D,342,345,35C,361,370-377,37A-37F,384-38A,38C,38E-3A1,3A3-3E1,3F0-479,48A-52F,E3F,1D4A,1D6C-1D76,1D7B,1D91,1DBF,1DC4-1DC9,1E02-1E05,1E0A-1E0F,1E12-1E13,1E1E-1E1F,1E24-1E25,1E2E-1E2F,1E36-1E37,1E3C-1E41,1E44-1E47,1E4A-1E4D,1E50-1E57,1E5A-1E5B,1E60-1E63,1E6A-1E71,1E78-1E79,1E80-1E85,1E92-1E93,1E9E,1EA0-1EF9,1F00-1F15,1F18-1F1D,1F20-1F45,1F48-1F4D,1F50-1F57,1F59,1F5B,1F5D,1F5F-1F7D,1F80-1FB4,1FB6-1FC4,1FC6-1FD3,1FD6-1FDB,1FDD-1FEF,1FF2-1FF4,1FF6-1FFE,2007-2008,200B-2016,2018-201A,201C-201E,2020-2022,2026,2030,2039-203A,203F,2044,204A,2070,2074-208E,20A1,20A6,20A9-20AC,20AF,20B4,20B9-20BA,20BD,210A,2113,2116,2122,2126,212E,2153-215F,2190-2199,21E6-21EA,2202,2205-2206,220F,2211-2212,2215,2219-221A,221E,222B,2248,2260,2264-2265,22C5,2326-2328,232B,23CE,23FB-23FE,25AF,25B2,25B4,25B6,25B8,25BA,25BC,25BE,25C0,25C2,25C4,25CA,25CF,27A1,2981,2B05-2B07,2B58,2C64-2C66,2C6D,2C71-2C73,A789-A78D,A7AA,A7AD-A7AE,A7B2-A7B7,AB53,FB01-FB02,FEFF,1F310"
+          }
+        },
+        {
+          "path": "fira-sans-700.woff2",
+          "role": "upright-700",
+          "input": "Fira_Sans_4_3/Fonts/Fira_Sans_WEB_4301/Normal/Roman/FiraSans-Bold.woff2",
+          "sha256": "7dff4e2351ca54fae96180e79ab1d1fdeb74ebb6e6cba53a7d9d7b4941600ada",
+          "bytes": 167008,
+          "weight": [
+            700,
+            700
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Fira Sans",
+            "subfamily": "Bold",
+            "fullName": "Fira Sans Bold",
+            "postScriptName": "FiraSans-Bold"
+          },
+          "coverage": {
+            "codepoints": 1718,
+            "ranges": "D,20-7E,A0-2B2,2B4,2B7-2BC,2BF-2C0,2C6-2C8,2CA-2CC,2CE-2D1,2D4,2D6-2DE,2E0-2E9,2EE,300-30D,30F,311-313,316-321,323-32D,32F-332,334-336,339-33D,342,345,35C,361,370-377,37A-37F,384-38A,38C,38E-3A1,3A3-3E1,3F0-479,48A-52F,E3F,1D4A,1D6C-1D76,1D7B,1D91,1DBF,1DC4-1DC9,1E02-1E05,1E0A-1E0F,1E12-1E13,1E1E-1E1F,1E24-1E25,1E2E-1E2F,1E36-1E37,1E3C-1E41,1E44-1E47,1E4A-1E4D,1E50-1E57,1E5A-1E5B,1E60-1E63,1E6A-1E71,1E78-1E79,1E80-1E85,1E92-1E93,1E9E,1EA0-1EF9,1F00-1F15,1F18-1F1D,1F20-1F45,1F48-1F4D,1F50-1F57,1F59,1F5B,1F5D,1F5F-1F7D,1F80-1FB4,1FB6-1FC4,1FC6-1FD3,1FD6-1FDB,1FDD-1FEF,1FF2-1FF4,1FF6-1FFE,2007-2008,200B-2016,2018-201A,201C-201E,2020-2022,2026,2030,2039-203A,203F,2044,204A,2070,2074-208E,20A1,20A6,20A9-20AC,20AF,20B4,20B9-20BA,20BD,210A,2113,2116,2122,2126,212E,2153-215F,2190-2199,21E6-21EA,2202,2205-2206,220F,2211-2212,2215,2219-221A,221E,222B,2248,2260,2264-2265,22C5,2326-2328,232B,23CE,23FB-23FE,25AF,25B2,25B4,25B6,25B8,25BA,25BC,25BE,25C0,25C2,25C4,25CA,25CF,27A1,2981,2B05-2B07,2B58,2C64-2C66,2C6D,2C71-2C73,A789-A78D,A7AA,A7AD-A7AE,A7B2-A7B7,AB53,FB01-FB02,FEFF,1F310"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "barlow",
+      "displayName": "Barlow",
+      "category": "sans",
+      "cssFamily": "Barlow",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/jpt/barlow",
+        "commit": "b4726ddf91525818e85e5fce111c285b9273d764",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/ttf/Barlow-Regular.ttf",
+            "sha256": "95aa02c7c43096e0dd44d787ba6216864a67157e402adab59b35572e0c1577ea"
+          },
+          {
+            "path": "fonts/ttf/Barlow-Bold.ttf",
+            "sha256": "84e6a4d61e7c3e21f3c50ea6a4f7e5303a3467864c038be6ea3759bab8d547f9"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/barlow/OFL.txt",
+        "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f"
+      },
+      "assets": [
+        {
+          "path": "barlow-400.woff2",
+          "role": "upright-400",
+          "input": "fonts/ttf/Barlow-Regular.ttf",
+          "sha256": "0fcd5483513d6271a0ee23ad7735cb998934d1a56a5de8b264e49e200cef9d6d",
+          "bytes": 31948,
+          "weight": [
+            400,
+            400
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Barlow",
+            "subfamily": "Regular",
+            "fullName": "Barlow Regular",
+            "postScriptName": "Barlow-Regular"
+          },
+          "coverage": {
+            "codepoints": 464,
+            "ranges": "20-7E,A0-113,116-12B,12D-131,133-137,139-13E,140-148,14A-14D,14F-17E,1A0-1A1,1AF-1B0,2C6-2C7,2C9,2D8-2DD,300-304,306-30C,312-313,31B,323,326-328,335-338,1E80-1E85,1EA0-1EF9,2010,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AC,2122,2212"
+          }
+        },
+        {
+          "path": "barlow-700.woff2",
+          "role": "upright-700",
+          "input": "fonts/ttf/Barlow-Bold.ttf",
+          "sha256": "27fddba4d1c0b1236cbccb53af63131f7bfbd5ce84c9bbb40834da9db7469590",
+          "bytes": 32820,
+          "weight": [
+            700,
+            700
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Barlow",
+            "subfamily": "Bold",
+            "fullName": "Barlow Bold",
+            "postScriptName": "Barlow-Bold"
+          },
+          "coverage": {
+            "codepoints": 464,
+            "ranges": "20-7E,A0-113,116-12B,12D-131,133-137,139-13E,140-148,14A-14D,14F-17E,1A0-1A1,1AF-1B0,2C6-2C7,2C9,2D8-2DD,300-304,306-30C,312-313,31B,323,326-328,335-338,1E80-1E85,1EA0-1EF9,2010,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "alegreya",
+      "displayName": "Alegreya",
+      "category": "serif",
+      "cssFamily": "Alegreya",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2011 The Alegreya Project Authors (https://github.com/huertatipografica/Alegreya)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/huertatipografica/Alegreya",
+        "commit": "254c16b651af6926154b9af159c7af8eb908a6ea",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/webfonts/Alegreya-Regular.woff2",
+            "sha256": "df48af9e17d325cbdbe0340e9e7ce3eaf6e70d31749323b7e79f71cc4237de21"
+          },
+          {
+            "path": "fonts/webfonts/Alegreya-Bold.woff2",
+            "sha256": "5043b0e4261f2947c3a86cd5239cbb6996c28fdc2042dca396eabe18f8a6ba3a"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "f6f60d5d4cf4f4b1fc4e41353c897a2f5a16e6396c0cd8fa8bdfd2f4586a9a68"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/alegreya/OFL.txt",
+        "sha256": "f6f60d5d4cf4f4b1fc4e41353c897a2f5a16e6396c0cd8fa8bdfd2f4586a9a68"
+      },
+      "assets": [
+        {
+          "path": "alegreya-400.woff2",
+          "role": "upright-400",
+          "input": "fonts/webfonts/Alegreya-Regular.woff2",
+          "sha256": "54b43735eceafb0c274f31a4d799d1c85af035f7415dd706733ab4b8ce45df0b",
+          "bytes": 52648,
+          "weight": [
+            400,
+            400
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Alegreya",
+            "subfamily": "Regular",
+            "fullName": "Alegreya Regular",
+            "postScriptName": "Alegreya-Regular"
+          },
+          "coverage": {
+            "codepoints": 560,
+            "ranges": "20-7E,A0-148,14A-17F,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,335,342-345,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2024-2026,2030,2032-2033,2039-203A,2044,2052,20AB-20AC,2122,2212"
+          }
+        },
+        {
+          "path": "alegreya-700.woff2",
+          "role": "upright-700",
+          "input": "fonts/webfonts/Alegreya-Bold.woff2",
+          "sha256": "cdf90be921d65e94fa96eefecdbab6af32ca0cb8ed9591b534d97fe361d7a18f",
+          "bytes": 56172,
+          "weight": [
+            700,
+            700
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Alegreya",
+            "subfamily": "Bold",
+            "fullName": "Alegreya Bold",
+            "postScriptName": "Alegreya-Bold"
+          },
+          "coverage": {
+            "codepoints": 560,
+            "ranges": "20-7E,A0-148,14A-17F,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,335,342-345,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2024-2026,2030,2032-2033,2039-203A,2044,2052,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "spectral",
+      "displayName": "Spectral",
+      "category": "serif",
+      "cssFamily": "Spectral",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2017 The Spectral Project Authors (https://github.com/productiontype/spectral)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/productiontype/Spectral",
+        "commit": "dbc06862d7030eedb1b01b60cdad8f6102f4ddfa",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/ttf/Spectral-Regular.ttf",
+            "sha256": "c89021dc20720c8d0dcf40b0b2f6e00c13665fa8041717f581396f51b8c78f5d"
+          },
+          {
+            "path": "fonts/ttf/Spectral-Bold.ttf",
+            "sha256": "70ddb1ec6ae3b0b8d0c79231f670de786978f19baeba2130757526e407aebf9b"
+          }
+        ],
+        "license": {
+          "path": "ofl.txt",
+          "sha256": "6df9374cc60c5b64f15280ff4cc43596f0dbcafb46d3bbfd48385f5f78da60f2"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/spectral/ofl.txt",
+        "sha256": "6df9374cc60c5b64f15280ff4cc43596f0dbcafb46d3bbfd48385f5f78da60f2"
+      },
+      "assets": [
+        {
+          "path": "spectral-400.woff2",
+          "role": "upright-400",
+          "input": "fonts/ttf/Spectral-Regular.ttf",
+          "sha256": "0f4dd94146511ccb202d89d18bf010045db9aa4a02cfdc637c0cf7ce37dbe2f6",
+          "bytes": 44776,
+          "weight": [
+            400,
+            400
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Spectral",
+            "subfamily": "Regular",
+            "fullName": "Spectral Regular",
+            "postScriptName": "Spectral-Regular"
+          },
+          "coverage": {
+            "codepoints": 551,
+            "ranges": "20-7E,A0-AC,AE-148,14A-17F,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AB-20AC,2122,2212"
+          }
+        },
+        {
+          "path": "spectral-700.woff2",
+          "role": "upright-700",
+          "input": "fonts/ttf/Spectral-Bold.ttf",
+          "sha256": "afaaed8a9a2a125de888db04cc9de25e296430ad4ff2dc370dede0edb69db76c",
+          "bytes": 47568,
+          "weight": [
+            700,
+            700
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Spectral",
+            "subfamily": "Bold",
+            "fullName": "Spectral Bold",
+            "postScriptName": "Spectral-Bold"
+          },
+          "coverage": {
+            "codepoints": 551,
+            "ranges": "20-7E,A0-AC,AE-148,14A-17F,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "literata",
+      "displayName": "Literata",
+      "category": "serif",
+      "cssFamily": "Literata",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/literata",
+        "commit": "0c2761b727a1b3a7cffd313c37f0f5163dfc7a63",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/Literata[opsz,wght].ttf",
+            "sha256": "b41138c9373112f32abb589cc22e8674b06ed4048b0c513be922bdd26f274440"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "8742963604cd89dc81437811a850018fc03b2bfad686d7422c8235967c87614e"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/literata/OFL.txt",
+        "sha256": "8742963604cd89dc81437811a850018fc03b2bfad686d7422c8235967c87614e"
+      },
+      "assets": [
+        {
+          "path": "literata-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/Literata[opsz,wght].ttf",
+          "sha256": "b952a68ebac3dd2c761b95260b6c7500289fa2ab0ea47ee133c1fe041eb1f931",
+          "bytes": 209000,
+          "weight": [
+            200,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "opsz",
+              "min": 7,
+              "default": 12,
+              "max": 72
+            },
+            {
+              "tag": "wght",
+              "min": 200,
+              "default": 400,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "Literata",
+            "subfamily": "Regular",
+            "fullName": "Literata Regular",
+            "postScriptName": "Literata-Regular"
+          },
+          "coverage": {
+            "codepoints": 557,
+            "ranges": "20-7E,A0-17E,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2042,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "newsreader",
+      "displayName": "Newsreader",
+      "category": "serif",
+      "cssFamily": "Newsreader",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2020 The Newsreader Project Authors (http://github.com/productiontype/Newsreader)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/productiontype/NewsReader",
+        "commit": "1ece6a8bfe5db1a2b90c76cc1fe5d3b2eed5dcf3",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/ttf/Newsreader[opsz,wght].ttf",
+            "sha256": "8a08d13f8a6c0d51be379a60af84f945f65369a67e509ee3c3bdcc421254d7c1"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "fdfad38143ec470553cae82a1e45320bdd1b9ec70415d37bd0171051d8a4ded8"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/newsreader/OFL.txt",
+        "sha256": "fdfad38143ec470553cae82a1e45320bdd1b9ec70415d37bd0171051d8a4ded8"
+      },
+      "assets": [
+        {
+          "path": "newsreader-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/ttf/Newsreader[opsz,wght].ttf",
+          "sha256": "cb0e3e1fa0b2d51f2c3db92faca9ca5233a5cd820e352319fec6f5148c9efff9",
+          "bytes": 185568,
+          "weight": [
+            200,
+            800
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 200,
+              "default": 400,
+              "max": 800
+            },
+            {
+              "tag": "opsz",
+              "min": 6,
+              "default": 18,
+              "max": 72
+            }
+          ],
+          "internalNames": {
+            "family": "Newsreader 16pt",
+            "subfamily": "Regular",
+            "fullName": "Newsreader 16pt Regular",
+            "postScriptName": "Newsreader16pt-Regular"
+          },
+          "coverage": {
+            "codepoints": 472,
+            "ranges": "20-7E,A0-131,134-148,14A-17E,1A0-1A1,1AF-1B0,2C6-2C7,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,335,1E80-1E85,1E9E,1EA0-1EF9,2010,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,2052,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "space-mono",
+      "displayName": "Space Mono",
+      "category": "monospace",
+      "cssFamily": "Space Mono",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2016 The Space Mono Project Authors (https://github.com/googlefonts/spacemono)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/spacemono",
+        "commit": "329858c2c4dbd3476f972a4ae00624b018cf4b81",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/ttf/SpaceMono-Regular.ttf",
+            "sha256": "95837e182baeeada83368f7748db28357f0a1b75c6b84ff7065b5edf933c8e18"
+          },
+          {
+            "path": "fonts/ttf/SpaceMono-Bold.ttf",
+            "sha256": "405e73d41afb7e5906efce206a326af5c956f38e255f35421c260e861e599c59"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "8e4ee42b2553e1e01504e61cb0d46d148cd8c9e5eacaa3622a7df2d4f2955b9f"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/space-mono/OFL.txt",
+        "sha256": "8e4ee42b2553e1e01504e61cb0d46d148cd8c9e5eacaa3622a7df2d4f2955b9f"
+      },
+      "assets": [
+        {
+          "path": "space-mono-400.woff2",
+          "role": "upright-400",
+          "input": "fonts/ttf/SpaceMono-Regular.ttf",
+          "sha256": "c302c77bfd49ec32f87a0dfd8c6589bce81afe38512bb147af297f16ac83d6c4",
+          "bytes": 27372,
+          "weight": [
+            400,
+            400
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Space Mono",
+            "subfamily": "Regular",
+            "fullName": "Space Mono Regular",
+            "postScriptName": "SpaceMono-Regular"
+          },
+          "coverage": {
+            "codepoints": 511,
+            "ranges": "20-7E,A0-AC,AE-13E,141-17F,1A0-1A1,1AF-1B0,2C6-2C7,2C9,2D8-2DD,300-304,306-30C,312,31B,323,326-328,32E,331,1E0C-1E0F,1E20-1E21,1E24-1E25,1E2A-1E2B,1E36-1E3B,1E42-1E49,1E5A-1E63,1E6C-1E6F,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AB-20AC,2122,2212"
+          }
+        },
+        {
+          "path": "space-mono-700.woff2",
+          "role": "upright-700",
+          "input": "fonts/ttf/SpaceMono-Bold.ttf",
+          "sha256": "0c5cd7dadf2f3bc79acfb085a0ad48cead89641f9a33de9c2af4bb568f7d6c29",
+          "bytes": 27744,
+          "weight": [
+            700,
+            700
+          ],
+          "axes": [],
+          "internalNames": {
+            "family": "Space Mono",
+            "subfamily": "Bold",
+            "fullName": "Space Mono Bold",
+            "postScriptName": "SpaceMono-Bold"
+          },
+          "coverage": {
+            "codepoints": 511,
+            "ranges": "20-7E,A0-AC,AE-13E,141-17F,1A0-1A1,1AF-1B0,2C6-2C7,2C9,2D8-2DD,300-304,306-30C,312,31B,323,326-328,32E,331,1E0C-1E0F,1E20-1E21,1E24-1E25,1E2A-1E2B,1E36-1E3B,1E42-1E49,1E5A-1E63,1E6C-1E6F,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "space-mono",
+        "cssFamily": "Space Mono"
+      },
+      "v1Family": "Source Sans 3"
+    },
+    {
+      "id": "crimson-pro",
+      "displayName": "Crimson Pro",
+      "category": "serif",
+      "cssFamily": "Crimson Pro",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2018 The Crimson Pro Project Authors (https://github.com/Fonthausen/CrimsonPro)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/Fonthausen/CrimsonPro",
+        "commit": "24e8f7bf59ec45d77c67879ad80d97e5f94c787b",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/CrimsonPro[wght].ttf",
+            "sha256": "16aa9fb7300a93637da51fac03a071b2ff08b6bbf65f99c794c25f040b58af6a"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "1820869bd5baa1c2d88fa87c89eea532cf9442d841008acab720654b7f82823d"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/crimson-pro/OFL.txt",
+        "sha256": "1820869bd5baa1c2d88fa87c89eea532cf9442d841008acab720654b7f82823d"
+      },
+      "assets": [
+        {
+          "path": "crimson-pro-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/CrimsonPro[wght].ttf",
+          "sha256": "00e487aa273617dbd949e6eb6c91273817cfd1ba0fbb3e81aa024e764a6b222f",
+          "bytes": 69552,
+          "weight": [
+            200,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 200,
+              "default": 400,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "Crimson Pro",
+            "subfamily": "Regular",
+            "fullName": "Crimson Pro Regular",
+            "postScriptName": "CrimsonPro-Regular"
+          },
+          "coverage": {
+            "codepoints": 557,
+            "ranges": "20-7E,A0-17E,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,335-338,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2007-200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,2052,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "eb-garamond",
+      "displayName": "EB Garamond",
+      "category": "serif",
+      "cssFamily": "EB Garamond",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12) Copyright 2025 Deborah Khodanovich (RCS citation glyphs)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/octaviopardo/EBGaramond12",
+        "commit": "106a4a6d377987459ae5e68673a4570f13b957fb",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/EBGaramond[wght].ttf",
+            "sha256": "684fcc0db2239b43497341d596d68422ea60ef7522cf2e857071ad84e4ade2a4"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "058611bd968817d532cedeab6acaa055e882d365a88523df00e7917ad7a0f704"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/eb-garamond/OFL.txt",
+        "sha256": "058611bd968817d532cedeab6acaa055e882d365a88523df00e7917ad7a0f704"
+      },
+      "assets": [
+        {
+          "path": "eb-garamond-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/EBGaramond[wght].ttf",
+          "sha256": "dc3bc9d3a8f8e361979fe44db534efbc6216504b1b0de193893e0be8677876b5",
+          "bytes": 140140,
+          "weight": [
+            400,
+            800
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 400,
+              "default": 400,
+              "max": 800
+            }
+          ],
+          "internalNames": {
+            "family": "EB Garamond",
+            "subfamily": "Regular",
+            "fullName": "EB Garamond Regular",
+            "postScriptName": "EBGaramond-Regular"
+          },
+          "coverage": {
+            "codepoints": 746,
+            "ranges": "20-7E,A0-17F,1A0-1B0,2C6-2D1,2D8-2DD,300-33E,340-345,351,353,357,35D,361,364,1E00-1EFF,2000-2016,2018-201A,201C-201E,2020-2022,2024-2027,202A,2030,2032-2037,2039-203A,203C-203E,2044,2047-2049,204B,204E,2057,2060,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "aleo",
+      "displayName": "Aleo",
+      "category": "slab serif",
+      "cssFamily": "Aleo",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2018 The Aleo Project Authors (https://github.com/AlessioLaiso/aleo)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/AlessioLaiso/aleo",
+        "commit": "ce875e48d9983031648e87f38b7a269f4fbf5eb5",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/Aleo[wght].ttf",
+            "sha256": "62b6cb49b7b087b341f0307ea3bc871a9690d8947691206ab025d149b8f6ed6f"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "f13013bb1f4887b67240ec2ec5754ef968a3753ada1e538b598eae375cf74273"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/aleo/OFL.txt",
+        "sha256": "f13013bb1f4887b67240ec2ec5754ef968a3753ada1e538b598eae375cf74273"
+      },
+      "assets": [
+        {
+          "path": "aleo-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/Aleo[wght].ttf",
+          "sha256": "86069f38e7d019fc8f376f42ba0953ec7d2821640b83cec9b0474c803cbf7055",
+          "bytes": 47040,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "Aleo",
+            "subfamily": "Regular",
+            "fullName": "Aleo Regular",
+            "postScriptName": "Aleo-Regular"
+          },
+          "coverage": {
+            "codepoints": 514,
+            "ranges": "20-7E,A0-AC,AE-17E,1A0-1A1,1A4-1A5,1A9,1AC-1B0,2C6-2C7,2C9,2D8-2DD,300-304,306-30C,312,31B,323,326-328,32D,331,335,338,1E04-1E05,1E0C-1E0F,1E12-1E13,1E24-1E25,1E2E-1E2F,1E36-1E37,1E3C-1E3F,1E44-1E47,1E4A-1E4D,1E50-1E53,1E62-1E63,1E6C-1E71,1E80-1E85,1E92-1E93,1E9E,1EA0-1EF9,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2039-203A,2044,20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "cormorant-garamond",
+      "displayName": "Cormorant Garamond",
+      "category": "display serif",
+      "cssFamily": "Cormorant Garamond",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2015 the Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/CatharsisFonts/Cormorant",
+        "commit": "6d210fd3550b7358ca62d6ba3e354ec1ec940813",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/CormorantGaramond[wght].ttf",
+            "sha256": "9737ba131f55e218632dd517f60e86d63d69c7c7ac31e8c182896d310c165d80"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "60700d351cac4650c51f3f9db318d2a420f8b45052dba2715eb5fec41f0f6956"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/cormorant-garamond/OFL.txt",
+        "sha256": "60700d351cac4650c51f3f9db318d2a420f8b45052dba2715eb5fec41f0f6956"
+      },
+      "assets": [
+        {
+          "path": "cormorant-garamond-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/CormorantGaramond[wght].ttf",
+          "sha256": "9bcad0cbcab0b9c7ad69d7f5d7c24bf9cf609b611254c59df36395b6b04cfca9",
+          "bytes": 111476,
+          "weight": [
+            300,
+            700
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 300,
+              "default": 300,
+              "max": 700
+            }
+          ],
+          "internalNames": {
+            "family": "Cormorant Garamond Light",
+            "subfamily": "Regular",
+            "fullName": "Cormorant Garamond Light",
+            "postScriptName": "CormorantGaramond-Light"
+          },
+          "coverage": {
+            "codepoints": 557,
+            "ranges": "20-7E,A0-B4,B6-17F,1A0-1A1,1AF-1B0,2C6-2C8,2CA-2CC,2D8-2DD,300-304,306-30D,30F,311,31B,323-324,326-328,32D-32E,331,34F,358,1E0C-1E0F,1E20-1E21,1E24-1E25,1E2A-1E2B,1E30-1E31,1E36-1E3B,1E3E-1E4B,1E5A-1E63,1E6C-1E6F,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EF9,2000-200D,2010-2015,2018-201A,201C-201E,2020-2022,2026-2029,202F-2030,2032-2033,2039-203A,2042-2044,205F-2060,2063,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Alegreya"
+    },
+    {
+      "id": "roboto-serif",
+      "displayName": "Roboto Serif",
+      "category": "serif",
+      "cssFamily": "Roboto Serif",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2013 The Roboto Serif Project Authors (https://github.com/googlefonts/roboto-serif)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/roboto-serif",
+        "commit": "1ecc2513e8215b569246a5802f18aa4b0e1d67a5",
+        "binaryCommit": "21f165c815d0f5668369d637cb9564a0545c9613",
+        "archive": {
+          "ref": "A5",
+          "url": "https://github.com/googlefonts/roboto-serif/releases/download/v1.008/RobotoSerifFonts-v1.008.zip",
+          "sha256": "366f437312f40a0039d6719e6493d64828a982ac2734f9618f4c07c8684b6984"
+        },
+        "inputs": [
+          {
+            "path": "variable/RobotoSerif[GRAD,opsz,wdth,wght].ttf",
+            "sha256": "351ced75f3851806aa6d846b669361521eb1925cfc530396df9c1a1b77061ddb"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "f141687500701deabdcff54626718144af27a853a66b6ba13239dbff156d1f06"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/roboto-serif/OFL.txt",
+        "sha256": "f141687500701deabdcff54626718144af27a853a66b6ba13239dbff156d1f06"
+      },
+      "assets": [
+        {
+          "path": "roboto-serif-var.woff2",
+          "role": "variable",
+          "input": "variable/RobotoSerif[GRAD,opsz,wdth,wght].ttf",
+          "sha256": "b2acefacadb03d05a0f7aadc072b9f527e45da03c60a449f2421b76436a2bc00",
+          "bytes": 904132,
+          "weight": [
+            100,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wdth",
+              "min": 50,
+              "default": 100,
+              "max": 150
+            },
+            {
+              "tag": "opsz",
+              "min": 8,
+              "default": 20,
+              "max": 144
+            },
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "GRAD",
+              "min": -50,
+              "default": 0,
+              "max": 100
+            }
+          ],
+          "internalNames": {
+            "family": "Roboto Serif 20pt",
+            "subfamily": "Regular",
+            "fullName": "Roboto Serif 20pt Regular",
+            "postScriptName": "RobotoSerif-20ptRegular"
+          },
+          "coverage": {
+            "codepoints": 547,
+            "ranges": "20-7E,A0-17E,1A0-1A1,1AF-1B0,2C6-2CC,2D8-2DD,300-304,306-30C,30F,311-312,31B,323-324,326-328,32E,331,1E08-1E09,1E0C-1E0F,1E14-1E17,1E1C-1E1D,1E20-1E21,1E24-1E25,1E2A-1E2B,1E2E-1E2F,1E36-1E37,1E3A-1E3B,1E42-1E49,1E4C-1E53,1E5A-1E5B,1E5E-1E69,1E6C-1E6F,1E78-1E7B,1E80-1E85,1E8E-1E8F,1E92-1E93,1E97,1E9E,1EA0-1EC7,1ECA-1EF9,2009,200B,2010,2012-2015,2018-201A,201C-201E,2020-2022,2026,2030,2032-2033,2039-203A,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": false,
+        "missing": [
+          "U+1EC8",
+          "U+1EC9"
+        ]
+      },
+      "fallback": {
+        "id": "noto-serif",
+        "cssFamily": "Noto Serif"
+      },
+      "v1Family": "Roboto Serif"
+    },
+    {
+      "id": "roboto-mono",
+      "displayName": "Roboto Mono",
+      "category": "monospace",
+      "cssFamily": "Roboto Mono",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2015 The Roboto Mono Project Authors (https://github.com/googlefonts/robotomono)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/RobotoMono",
+        "commit": "111eb14e367888c9374da4da0b018e72cf8ac46d",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/RobotoMono[wght].ttf",
+            "sha256": "66a80e79d17e4c7cabd162e2916578a4cc08fd19eef6e2a643305eae9c567b2b"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "50ab8dd54680d3473f649c9db86fece88434d097c7834475c1c72d2f8c429215"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/roboto-mono/OFL.txt",
+        "sha256": "50ab8dd54680d3473f649c9db86fece88434d097c7834475c1c72d2f8c429215"
+      },
+      "assets": [
+        {
+          "path": "roboto-mono-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/RobotoMono[wght].ttf",
+          "sha256": "09aa8d2a39801d6e7152f44a157b2436c76f32049b878708fdda3265d81e1185",
+          "bytes": 50156,
+          "weight": [
+            100,
+            700
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 700
+            }
+          ],
+          "internalNames": {
+            "family": "Roboto Mono",
+            "subfamily": "Regular",
+            "fullName": "Roboto Mono Regular",
+            "postScriptName": "RobotoMono-Regular"
+          },
+          "coverage": {
+            "codepoints": 477,
+            "ranges": "20-7E,A0-17F,1A0-1A1,1AF-1B0,2C6-2C7,2C9,2D8-2DD,300-301,303,309,30F,323,1E00-1E01,1E3E-1E3F,1E80-1E85,1EA0-1EF9,2000-200B,2013-2015,2017-201E,2020-2022,2025-2026,2030,2032-2033,2039-203A,203C,2044,20AB-20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": false,
+        "missing": [
+          "U+0302",
+          "U+0306",
+          "U+031B"
+        ]
+      },
+      "fallback": {
+        "id": "space-mono",
+        "cssFamily": "Space Mono"
+      },
+      "v1Family": "Source Sans 3"
+    },
+    {
+      "id": "dm-sans",
+      "displayName": "DM Sans",
+      "category": "sans",
+      "cssFamily": "DM Sans",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2014 The DM Sans Project Authors (https://github.com/googlefonts/dm-fonts)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/dm-fonts",
+        "commit": "d0520ba03bd780f5dccb3024854463d44f699b78",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "Sans/fonts/variable/DMSans[opsz,wght].ttf",
+            "sha256": "8cd08d97e89c24d0aa92edd2f0f4c8ee6195eee9b7c9f154865a58b02f0c1c0d"
+          }
+        ],
+        "license": {
+          "path": "Sans/OFL.txt",
+          "sha256": "9af36190332437f5ecd09974de43c1f7c77a310a996cdd8ceb25628b458840e1"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/dm-sans/OFL.txt",
+        "sha256": "9af36190332437f5ecd09974de43c1f7c77a310a996cdd8ceb25628b458840e1"
+      },
+      "assets": [
+        {
+          "path": "dm-sans-var.woff2",
+          "role": "variable",
+          "input": "Sans/fonts/variable/DMSans[opsz,wght].ttf",
+          "sha256": "d26520871e70d611854fcd6ee04e87d82e3e43972c60d9ed3884229540523941",
+          "bytes": 81084,
+          "weight": [
+            100,
+            1000
+          ],
+          "axes": [
+            {
+              "tag": "opsz",
+              "min": 9,
+              "default": 9,
+              "max": 40
+            },
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 1000
+            }
+          ],
+          "internalNames": {
+            "family": "DM Sans 9pt",
+            "subfamily": "Regular",
+            "fullName": "DM Sans 9pt Regular",
+            "postScriptName": "DMSans-9ptRegular"
+          },
+          "coverage": {
+            "codepoints": 358,
+            "ranges": "20-7E,A0-AC,AE-107,10A-11B,11E-123,126-133,136-137,139-148,14A-15B,15E-165,168-17E,2C6-2C7,2D8-2DD,300-304,306-308,30A-30C,312,326-328,1E80-1E85,1E9E,1EBC-1EBD,1EF2-1EF3,1EF8-1EF9,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2039-203A,2044,20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": false,
+        "missing": [
+          "U+01A0",
+          "U+01A1",
+          "U+01AF",
+          "U+01B0",
+          "U+0309",
+          "U+031B",
+          "U+0323",
+          "U+1EA0",
+          "U+1EA1",
+          "U+1EA2",
+          "U+1EA3",
+          "U+1EA4",
+          "U+1EA5",
+          "U+1EA6",
+          "U+1EA7",
+          "U+1EA8",
+          "U+1EA9",
+          "U+1EAA",
+          "U+1EAB",
+          "U+1EAC",
+          "U+1EAD",
+          "U+1EAE",
+          "U+1EAF",
+          "U+1EB0",
+          "U+1EB1",
+          "U+1EB2",
+          "U+1EB3",
+          "U+1EB4",
+          "U+1EB5",
+          "U+1EB6",
+          "U+1EB7",
+          "U+1EB8",
+          "U+1EB9",
+          "U+1EBA",
+          "U+1EBB",
+          "U+1EBE",
+          "U+1EBF",
+          "U+1EC0",
+          "U+1EC1",
+          "U+1EC2",
+          "U+1EC3",
+          "U+1EC4",
+          "U+1EC5",
+          "U+1EC6",
+          "U+1EC7",
+          "U+1EC8",
+          "U+1EC9",
+          "U+1ECA",
+          "U+1ECB",
+          "U+1ECC",
+          "U+1ECD",
+          "U+1ECE",
+          "U+1ECF",
+          "U+1ED0",
+          "U+1ED1",
+          "U+1ED2",
+          "U+1ED3",
+          "U+1ED4",
+          "U+1ED5",
+          "U+1ED6",
+          "U+1ED7",
+          "U+1ED8",
+          "U+1ED9",
+          "U+1EDA",
+          "U+1EDB",
+          "U+1EDC",
+          "U+1EDD",
+          "U+1EDE",
+          "U+1EDF",
+          "U+1EE0",
+          "U+1EE1",
+          "U+1EE2",
+          "U+1EE3",
+          "U+1EE4",
+          "U+1EE5",
+          "U+1EE6",
+          "U+1EE7",
+          "U+1EE8",
+          "U+1EE9",
+          "U+1EEA",
+          "U+1EEB",
+          "U+1EEC",
+          "U+1EED",
+          "U+1EEE",
+          "U+1EEF",
+          "U+1EF0",
+          "U+1EF1",
+          "U+1EF4",
+          "U+1EF5",
+          "U+1EF6",
+          "U+1EF7"
+        ]
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "atkinson-hyperlegible-next",
+      "displayName": "Atkinson Hyperlegible Next",
+      "category": "sans",
+      "cssFamily": "Atkinson Hyperlegible Next",
+      "policy": "subset-original-name",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)",
+      "reservedFontNames": [],
+      "source": {
+        "repository": "https://github.com/googlefonts/atkinson-hyperlegible-next",
+        "commit": "7925f50f649b3813257faf2f4c0b381011f434f1",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "fonts/variable/AtkinsonHyperlegibleNext[wght].ttf",
+            "sha256": "5a455d1cfa099b601ab70751bb9673e8fe1854dc4500c80e1a220d0d75e31745"
+          }
+        ],
+        "license": {
+          "path": "OFL.txt",
+          "sha256": "aca6a428580965d2297d1b718042dd427c2a9443ece3b0d02d758e161e0c4030"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/atkinson-hyperlegible-next/OFL.txt",
+        "sha256": "aca6a428580965d2297d1b718042dd427c2a9443ece3b0d02d758e161e0c4030"
+      },
+      "assets": [
+        {
+          "path": "atkinson-hyperlegible-next-var.woff2",
+          "role": "variable",
+          "input": "fonts/variable/AtkinsonHyperlegibleNext[wght].ttf",
+          "sha256": "bae37f871583cac66a273743f1abab6d915114630aadcd9ca4d2d70d435f30bb",
+          "bytes": 42772,
+          "weight": [
+            200,
+            800
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 200,
+              "default": 400,
+              "max": 800
+            }
+          ],
+          "internalNames": {
+            "family": "Atkinson Hyperlegible Next",
+            "subfamily": "Regular",
+            "fullName": "Atkinson Hyperlegible Next Regular",
+            "postScriptName": "AtkinsonHyperlegibleNext-Regular"
+          },
+          "coverage": {
+            "codepoints": 335,
+            "ranges": "20-7E,A0-AC,AE-B4,B6-107,10A-113,116-11B,11E-123,126-127,12A-12B,12E-133,136-137,139-13E,141-148,150-155,158-15B,15E-165,16A-16B,16E-17E,2C6-2C7,2C9,2D8-2DD,300-304,306-308,30A-30C,312,326-328,1E80-1E85,1E9E,1EF2-1EF3,2009,2013-2014,2018-201A,201C-201E,2020-2022,2026,2030,2039-203A,2044,20AC,2122,2212"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": false,
+        "missing": [
+          "U+0128",
+          "U+0129",
+          "U+0168",
+          "U+0169",
+          "U+01A0",
+          "U+01A1",
+          "U+01AF",
+          "U+01B0",
+          "U+0309",
+          "U+031B",
+          "U+0323",
+          "U+1EA0",
+          "U+1EA1",
+          "U+1EA2",
+          "U+1EA3",
+          "U+1EA4",
+          "U+1EA5",
+          "U+1EA6",
+          "U+1EA7",
+          "U+1EA8",
+          "U+1EA9",
+          "U+1EAA",
+          "U+1EAB",
+          "U+1EAC",
+          "U+1EAD",
+          "U+1EAE",
+          "U+1EAF",
+          "U+1EB0",
+          "U+1EB1",
+          "U+1EB2",
+          "U+1EB3",
+          "U+1EB4",
+          "U+1EB5",
+          "U+1EB6",
+          "U+1EB7",
+          "U+1EB8",
+          "U+1EB9",
+          "U+1EBA",
+          "U+1EBB",
+          "U+1EBC",
+          "U+1EBD",
+          "U+1EBE",
+          "U+1EBF",
+          "U+1EC0",
+          "U+1EC1",
+          "U+1EC2",
+          "U+1EC3",
+          "U+1EC4",
+          "U+1EC5",
+          "U+1EC6",
+          "U+1EC7",
+          "U+1EC8",
+          "U+1EC9",
+          "U+1ECA",
+          "U+1ECB",
+          "U+1ECC",
+          "U+1ECD",
+          "U+1ECE",
+          "U+1ECF",
+          "U+1ED0",
+          "U+1ED1",
+          "U+1ED2",
+          "U+1ED3",
+          "U+1ED4",
+          "U+1ED5",
+          "U+1ED6",
+          "U+1ED7",
+          "U+1ED8",
+          "U+1ED9",
+          "U+1EDA",
+          "U+1EDB",
+          "U+1EDC",
+          "U+1EDD",
+          "U+1EDE",
+          "U+1EDF",
+          "U+1EE0",
+          "U+1EE1",
+          "U+1EE2",
+          "U+1EE3",
+          "U+1EE4",
+          "U+1EE5",
+          "U+1EE6",
+          "U+1EE7",
+          "U+1EE8",
+          "U+1EE9",
+          "U+1EEA",
+          "U+1EEB",
+          "U+1EEC",
+          "U+1EED",
+          "U+1EEE",
+          "U+1EEF",
+          "U+1EF0",
+          "U+1EF1",
+          "U+1EF4",
+          "U+1EF5",
+          "U+1EF6",
+          "U+1EF7",
+          "U+1EF8",
+          "U+1EF9"
+        ]
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Inter"
+    },
+    {
+      "id": "source-sans-3",
+      "displayName": "Source Sans 3",
+      "category": "sans",
+      "cssFamily": "Source Sans 3",
+      "policy": "unmodified-upstream",
+      "spdx": "OFL-1.1",
+      "copyright": "Copyright 2010-2022 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.",
+      "reservedFontNames": [
+        "Source"
+      ],
+      "source": {
+        "repository": "https://github.com/adobe-fonts/source-sans",
+        "commit": "ed1808970eb3c7301c9a523bee26473ba0bb62fa",
+        "binaryCommit": null,
+        "archive": null,
+        "inputs": [
+          {
+            "path": "WOFF2/VF/SourceSans3VF-Upright.ttf.woff2",
+            "sha256": "5f16566f7a40d39b339ad26be151fa5a1ab1f0c2574c7a2e619765584a1acbd8"
+          }
+        ],
+        "license": {
+          "path": "LICENSE.md",
+          "sha256": "89ad2c4f66dd29127527493e729c31e731f111cf10faf5774c3db9275ed0c22c"
+        }
+      },
+      "licenseFile": {
+        "runtimePath": "font-licenses/source-sans-3/LICENSE.md",
+        "sha256": "89ad2c4f66dd29127527493e729c31e731f111cf10faf5774c3db9275ed0c22c"
+      },
+      "assets": [
+        {
+          "path": "source-sans-3-var.woff2",
+          "role": "variable",
+          "input": "WOFF2/VF/SourceSans3VF-Upright.ttf.woff2",
+          "sha256": "5f16566f7a40d39b339ad26be151fa5a1ab1f0c2574c7a2e619765584a1acbd8",
+          "bytes": 170188,
+          "weight": [
+            200,
+            900
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 200,
+              "default": 200,
+              "max": 900
+            }
+          ],
+          "internalNames": {
+            "family": "SourceSans3VF",
+            "subfamily": "Regular",
+            "fullName": "SourceSans3VF",
+            "postScriptName": "SourceSans3VF-ExtraLight"
+          },
+          "coverage": {
+            "codepoints": 1615,
+            "ranges": "20-7E,A0-181,186,18A,18D-190,192-194,196-197,19A-19B,19E,1A0-1A1,1AF-1B1,1B7,1BF-1C3,1CD-1DD,1E2-1E7,1EA-1EB,1EE-1F0,1F4-1F5,1F7-201,204-205,208-209,20C-20D,218-220,222-223,226-227,237,23A-23E,241-245,248-249,250-27B,27D-285,287-292,294-295,298-299,29B-29F,2A1-2A8,2B0-2B4,2B7-2B9,2BB-2C1,2C6-2CC,2D0-2DE,2E0-2E4,2ED,300-30D,30F-313,315,318-320,323-32A,32C,32E-332,334,337-33D,340,342-345,34F,357-358,35C,35E-35F,361,374-375,37A,37E,384-38A,38C,38E-3A1,3A3-3D1,3D5,3D7,3D9,3DB,3DD,3E1,3F4,3F7-3F8,400-45F,462-463,472-475,490-493,496-49B,4A0-4A3,4AA-4AB,4AE-4B3,4B6-4B7,4BA-4BB,4C0-4C4,4C7-4C8,4CF-4D1,4D4-4D9,4E2-4E3,4E6-4E9,4EE-4EF,4F2-4F3,4F6-4F7,1D25,1D2C,1D2E,1D30-1D31,1D33-1D3A,1D3C,1D3E-1D43,1D47-1D4B,1D4D,1D4F-1D52,1D56-1D58,1D5B,1D6F-1D70,1D79,1D7B,1D7F,1D9C,1DA0,1DAC,1DAE,1DB0,1DBB,1DBF,1DCD,1E02-1E03,1E06-1E07,1E0A-1E11,1E16-1E17,1E1E-1E2B,1E32-1E3B,1E3E-1E49,1E52-1E53,1E56-1E63,1E66-1E67,1E6A-1E6F,1E72-1E73,1E7E-1E85,1E8E-1E97,1E9E-1EF9,1F00-1F15,1F18-1F1D,1F20-1F45,1F48-1F4D,1F50-1F57,1F59,1F5B,1F5D,1F5F-1F7D,1F80-1FB4,1FB6-1FC4,1FC6-1FD3,1FD6-1FDB,1FDD-1FEF,1FF2-1FF4,1FF6-1FFE,2007,2009-200B,2010-201E,2020-2023,2026,202F-2033,2035,2039-203A,203C-203F,2044,2047-204A,2070-2071,2074-208E,20A1,20A3-20A4,20A6-20A7,20A9,20AB-20AC,20AE,20B1-20B2,20B4-20B5,20B8-20BA,20BD,2105,2113,2116-2117,211E,2120,2122,2126,212E,2150-215E,2189,2190-2199,21A8,21D0-21D3,21E7,2200,2202-2203,2206,220F,2211-2212,2215,2219-221A,221E-221F,2229,222B,2236-2237,2248,2260-2261,2264-2265,2302-2303,2310,2318,231C-2321,2325-2326,232B,25A0-25A1,25AA-25AC,25B2-25BA,25BC-25C4,25C6,25C9-25CC,25CF,25D8-25D9,25E6,2610-2611,2615,263A-263C,263F-2642,2660,2663,2665-2666,266A-266B,2713-2714,2717-2718,2752,275B-2760,2764,27E6-27E9,2C60-2C62,2C65-2C66,2C71,2C7D,2E18,2E22-2E25,2E3A-2E3B,2E52,A71C,A722-A725,A74E-A74F,A75A-A75B,A764-A765,A779-A787,A789,A7AD-A7AE,A7B3,A7B5,A7F2-A7F4,AB53,AB66-AB67,FB00-FB04,FEFF,1F10D-1F10F,1F12F,1F16A-1F16F,1F4A9,1F512,1F748,1F916"
+          }
+        }
+      ],
+      "fixtureCoverage": {
+        "complete": true,
+        "missing": []
+      },
+      "fallback": {
+        "id": "noto-sans",
+        "cssFamily": "Noto Sans"
+      },
+      "v1Family": "Source Sans 3"
+    }
+  ]
+}
