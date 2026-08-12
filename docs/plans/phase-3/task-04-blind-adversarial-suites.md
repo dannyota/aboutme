@@ -29,7 +29,7 @@ fresh author freezes pagination in a second, pagination-only diff before Task 7.
 A missing implementation may make the focused test fail to compile; record that
 expected failure and the applicable test-only diff.
 
-- [ ] **Step 0a (blind): freeze codegen faithfulness before Task 1.** From only
+- [x] **Step 0a (blind): freeze codegen faithfulness before Task 1.** From only
       the validation JSON, schema version constant, and generated-interface
       contract, author independent TS and Go tests for exact tags, attributes,
       schemes, forbidden sets, rel value, corpus IDs/payloads, and version.

@@ -10,6 +10,10 @@
     ".": {
       "types": "./gen/ts/resume.ts",
       "default": "./gen/ts/resume.ts"
+    },
+    "./sanitizer": {
+      "types": "./gen/ts/sanitizer.ts",
+      "default": "./gen/ts/sanitizer.ts"
     }
   },
   "scripts": {
