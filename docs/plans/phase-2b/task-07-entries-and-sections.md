@@ -77,7 +77,10 @@ re-implemented here.
 - [ ] **Step 8: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and concurrency results to the integration owner. Do not stage or
       commit.
-- [ ] **Step 9: independent defect review.**
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks whole-resume
+entry identity, section-placement isolation, CAS, and autosave concurrency for
+this route group. The same reviewer confirms fixes.
 
 ## Acceptance mapping
 

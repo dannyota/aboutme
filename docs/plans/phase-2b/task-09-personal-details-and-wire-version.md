@@ -62,17 +62,17 @@ or contact edit from clearing the reference and leaking an orphan.
       absence of the header and explicit `X-Resume-Schema-Version: 2` produce
       byte-identical stored documents and responses. The explicit v1 case must
       traverse the real converters and is covered in Step 2.
-- [ ] **Step 4: hand off the granular old-client proof.** Suite E is frozen in
-      WF before implementation. After all W3 route files land, the W4
-      integration run executes
-      `writesafety_adversarial_test.go::TestWireVersion_AcceptProjectPersistEmit`
-      sends a v1 entry delta through the real entry route, proves down-emit →
-      fragment apply → up-accept, and asserts the complete stored row is current
-      v2. Run
+- [ ] **Step 4: own the granular old-client proof.** This case is specified in
+      [adversarial coverage](adversarial-coverage.md) before implementation and
+      is authored in this task's `wireversion_e2e_test.go`. After all W3 route
+      files land, the W4 integration run executes
+      `TestWireVersion_AcceptProjectPersistEmit`, which sends a v1 entry delta
+      through the real entry route, proves down-emit → fragment apply →
+      up-accept, and asserts the complete stored row is current v2. Run
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi -run '^TestWireVersion_AcceptProjectPersistEmit$' -race -count=1 -v)`.
       This task reports its fixture and projector setup for that later run; its
       own gate does not depend on a sibling route. It never weakens the shared
-      adversarial file or Task 7's route/tests.
+      coverage checklist or edits Task 7's route/tests.
 - [ ] **Step 5: failing contract test.** Handler statuses, codes, and the
       request/response shapes agree with `docs/api/openapi.yaml`, including the
       `X-Resume-Schema-Version` header on both sides. Validate a request
@@ -86,9 +86,11 @@ or contact edit from clearing the reference and leaking an orphan.
 - [ ] **Step 8: handoff.** Report the owned paths, failing-test evidence, exact
       checks, released-version fixtures, and stored-row assertions to the
       integration owner. Do not stage or commit.
-- [ ] **Step 9: independent defect review**, asked specifically whether any
-      accepted-version path can persist a non-current document, and whether an
-      emitted version can leak a field the target schema does not declare.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
+accepted-version path can persist a non-current document and whether an emitted
+version can leak a field the target schema does not declare. The same reviewer
+confirms fixes.
 
 ## Acceptance mapping
 

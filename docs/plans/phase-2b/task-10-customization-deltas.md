@@ -96,8 +96,10 @@ is classified.
 - [ ] **Step 9: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and allowed/denied parity sets to the integration owner. Do not
       stage or commit.
-- [ ] **Step 10: independent defect review**, asked specifically whether any
-      accepted path can reach a document location outside `customization`.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
+accepted path can reach a document location outside `customization`. The same
+reviewer confirms fixes.
 
 ## Acceptance mapping
 

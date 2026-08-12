@@ -20,8 +20,9 @@ modify `apps/server/internal/resume/store.go`, `idempotency.go`,
 `apps/server/internal/store/**`. **This task holds the exclusive migration +
 queries.sql + `internal/store` window for the whole phase. Because migrations
 and generated files are integration-owner paths, the integration owner is the
-implementation author for this task; independent test and review roles stay
-separate.**
+implementation author for this task, writes its failing tests, and runs its
+narrow gate. The fresh W4 reviewer performs the phase's only fresh defect
+review.**
 
 ## Interfaces
 
@@ -99,11 +100,13 @@ headers: `Location`, `ETag`, and `X-Resume-Schema-Version`. Migration 00006 adds
 `response_headers jsonb NOT NULL DEFAULT '{}'::jsonb`; existing records get the
 empty object. The HTTP writer derives JSON `Content-Type` from a non-204 body
 and the outer middleware supplies `Cache-Control: no-store`. `Date` and
-`X-Request-ID` are fresh for every request and are never persisted. Tests assert
-the exact header set per operation: create has `Location`; every success that
-returns a revision has `ETag`; JSON resume responses and bodyless child deletes
-have `X-Resume-Schema-Version`; resume delete has neither header; and every
-bodyless delete response has no `Content-Type`.
+`X-Request-ID` are fresh for every request and are never persisted. Task 2 tests
+assert the exact persisted header set per operation fixture: create has
+`Location`; every success that returns a revision has `ETag`; JSON resume
+responses and bodyless child deletes have `X-Resume-Schema-Version`; resume
+delete has neither header. Task 4 owns the HTTP proof that every bodyless delete
+has no `Content-Type` and that `Date` and `X-Request-ID` are fresh on first and
+replayed requests.
 
 `StoredResponse` uses one internal sentinel for bodyless success: status 204 is
 stored with `response_body = 'null'::jsonb`. Both the first response and every
@@ -253,12 +256,15 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       at commit, connection loss during commit, success, and replay. Assert the
       exact
       `Execute(ctx, userID, operation, key, requestHash, mutate)     (ExecuteResult, error)`
-      result on every path. Candidate deletion is safe exactly when
-      `Replayed=true`, `Outcome=CommitNotAttempted`, or
-      `Outcome=CommitDefinitelyRolledBack`. It is unsafe for a non-replayed
-      `CommitCommitted` winner and every `CommitUnknown`. The matrix includes
-      concurrent replay as `Replayed=true, CommitCommitted`, plus invalid
-      `Replayed`/outcome pairs that fail closed.
+      result on every path. Among the valid pairs `Execute` emits, candidate
+      deletion is safe exactly when `Replayed=true`,
+      `Outcome=CommitNotAttempted`, or `Outcome=CommitDefinitelyRolledBack`. It
+      is unsafe for a non-replayed `CommitCommitted` winner and every
+      `CommitUnknown`. The matrix includes concurrent replay as
+      `Replayed=true, CommitCommitted`, and proves `Execute` emits no invalid
+      `Replayed`/outcome pair. Task 4 owns fail-closed handling of injected
+      invalid pairs because its `Finalize` consumer makes the candidate-cleanup
+      decision.
 - [ ] **Step 3b: failing bounded-cleanup tests.** Seed 201 expired rows for one
       user plus live and neighbour-user rows. One mutation removes exactly the
       oldest 200 in `(expires_at,id)` order; a later mutation removes the
@@ -276,8 +282,8 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       PostgreSQL's stored body and approved-header `jsonb` values and use those
       normalized bytes for the first response. Assert first and replay status,
       approved headers, and body are byte-identical even when input object keys
-      were not in PostgreSQL's canonical order. Assert `Date` and `X-Request-ID`
-      are valid, fresh, and distinct.
+      were not in PostgreSQL's canonical order. Task 4 proves fresh `Date` and
+      `X-Request-ID` values through the HTTP writer; Task 2 ships no HTTP.
 - [ ] **Step 3e: failing media-deletion enqueue tests.** In one transaction,
       remove a photo reference or whole resume and enqueue its exact validated
       key. Commit persists both changes; rollback persists neither. Duplicate
@@ -297,18 +303,21 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       the new migration applies from the prior head.
 - [ ] **Step 5: implement; green.** The pool-backed methods become thin wrappers
       that open a transaction and delegate, so there is exactly one
-      implementation of each behavior and P2A's existing tests still pass
-      unchanged — run them.
+      implementation of each behavior. Run P2A's existing behavior tests with
+      only the required adapter edits for the new `Execute` signature; do not
+      weaken or remove their assertions.
 - [ ] **Step 6: gate.** Run `make test-db-up`, `make server-build server-vet`,
       and
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resume/... -race -count=1)`.
       Repeat the same package command with `-race -count=20`, then run
       `make sqlc-check server-migration-test`.
 - [ ] **Step 7: handoff.** Record the exact owned diff, failing-test evidence,
-      checks, generated-file list, and migration/query delta. Do not stage or
-      commit until the independent review and phase integration decision.
-- [ ] **Step 8: independent defect review** by a worker that did not author the
-      change; blocking findings fixed by a different worker and re-reviewed.
+      checks, generated-file list, and migration/query delta. Inspect and stage
+      it through the integration owner's normal phase integration flow.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks transaction
+boundaries, ownership scoping, CAS, idempotency capacity and cleanup, commit
+classification, and media-deletion enqueue. The same reviewer confirms fixes.
 
 ## Acceptance mapping
 

@@ -283,9 +283,11 @@ internal invariant failure, not a client-writable key path.
 - [ ] **Step 11: handoff.** Report the owned paths, failing-test evidence, exact
       checks, frozen benchmark manifest, raw resource evidence, and lifecycle
       fault matrix to the integration owner. Do not stage or commit.
-- [ ] **Step 12: independent defect review.** Review resource exhaustion, parser
-      differentials, metadata removal, key influence, timeout cleanup,
-      authorization, and ambiguous-commit handling.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks resource
+exhaustion, parser differentials, metadata removal, key influence, timeout
+cleanup, authorization, and ambiguous-commit handling. The same reviewer
+confirms fixes.
 
 ## Acceptance mapping
 

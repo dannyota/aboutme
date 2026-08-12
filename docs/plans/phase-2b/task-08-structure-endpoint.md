@@ -97,8 +97,10 @@ is the exact failure the spec's single-endpoint rule exists to prevent.
 - [ ] **Step 10: handoff.** Report the owned paths, failing-test evidence, exact
       checks, property-test seed policy, and concurrency results to the
       integration owner. Do not stage or commit.
-- [ ] **Step 11: independent defect review**, asked specifically whether any
-      command sequence can commit a document violating exactly-once placement.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
+command sequence can commit a document that violates exactly-once placement. The
+same reviewer confirms fixes.
 
 ## Acceptance mapping
 

@@ -11,10 +11,11 @@ exact requested change and stop at that boundary.
 - The design chooses private live-gated media and no direct `/assets` route.
 - `Error.details`, the local S3-compatible service, and mutable resume `lng`
   metadata are adopted plan inputs.
-- P3 passed both gates with v2 current, real v1↔v2 converters, and the Go
-  rich-text sanitizer. P3 renderer tests own context-safe escaping of plain-text
-  fields; P2B preserves those fields as text and sanitizes only schema-declared
-  rich text.
+- P3 Task 2's Go rich-text sanitizer is landed, so P2B work that depends only on
+  it may proceed in parallel with the rest of P3. P3 Task 5B releases v2 and the
+  real v1↔v2 converters before P2B Task 9 and Task 1's remaining version cases
+  close. P3 renderer tests own context-safe escaping of plain-text fields; P2B
+  preserves those fields as text and sanitizes only schema-declared rich text.
 
 ## Shared changes during execution
 
@@ -26,7 +27,7 @@ exact requested change and stop at that boundary.
 | `docs/api/openapi.yaml`                    | Dedicated correction if a route finds T1's contract wrong                                                                                                | Integration owner on demand               |
 | `apps/web/app/api/generated/openapi.ts`    | Regenerate from T1's accepted OpenAPI source                                                                                                             | Integration owner after T1                |
 | `apps/server/go.mod`, `apps/server/go.sum` | Apply T3's exact AWS SDK and image/text dependency report together                                                                                       | Integration owner exclusive window        |
-| `../implementation-plan.md`                | Record phase state only after both gates                                                                                                                 | Integration owner at gate                 |
+| `../implementation-plan.md`                | Record P2B state after its phase review and exit gate                                                                                                    | Integration owner at gate                 |
 
 `server-test-p2b` runs, from `apps/server`,
 `REQUIRE_TEST_DB=1 TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} TEST_MEDIA_BACKEND=fs go test ./internal/resumeapi/... -race -count=1 -v`.

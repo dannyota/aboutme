@@ -29,11 +29,12 @@ the same path.
 | `apps/server/internal/resumeapi/{personal_details.go,personal_details_test.go,personal_details_contract_test.go,wireversion_e2e_test.go}`               | Personal details + the AC-SAVE-004 end-to-end proof (T9)                                                                           |
 | `apps/server/internal/resumeapi/{customization.go,customization_allowlist.go,customization_test.go,customization_contract_test.go}`                     | Delta application + fixed path allowlist + schema-walk parity test (T10)                                                           |
 | `apps/server/internal/resumeapi/{photo.go,photo_test.go,photo_contract_test.go}`                                                                        | Upload, read, crop, replace, delete, compensation, and key derivation (T11)                                                        |
-| `apps/server/internal/resumeapi/authz_adversarial_test.go`                                                                                              | Blind suite D (T12)                                                                                                                |
-| `apps/server/internal/resumeapi/writesafety_adversarial_test.go`                                                                                        | Blind suite E (T13)                                                                                                                |
-| `apps/server/internal/resumeapi/bounds_adversarial_test.go`                                                                                             | Blind suite F (T14)                                                                                                                |
-| `docs/plans/traceability/{ac-media,ac-save,ac-sec,ac-doc}.md`, `docs/architecture.md`, `README.md`, `exit-criteria.md`, `integration-handoffs.md`       | Exact T15 documentation ownership                                                                                                  |
+| `docs/plans/traceability/{ac-media,ac-save,ac-sec,ac-doc}.md`, `docs/architecture.md`, `README.md`, `exit-criteria.md`, `integration-handoffs.md`       | Integration-owner evidence and handoff updates at W4; no separate documentation task                                               |
 | `apps/server/go.mod`, `apps/server/go.sum`                                                                                                              | Integration owner applies T3's AWS SDK, `x/image`, and direct `x/text` exact dependency report in one serialized window            |
+
+Adversarial coverage D–F lives in the owning task test files above. Tasks 4–11
+write the cases for their behavior, and the W4 reviewer confirms the integrated
+matrix. There are no separate suite or documentation tasks.
 
 **Not touched by this phase:** released migrations 00001–00005,
 `packages/schema/**`, `deploy/caddy/Caddyfile` (`/api/v1/*` already covers every

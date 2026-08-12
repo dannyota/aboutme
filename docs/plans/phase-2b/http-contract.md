@@ -40,8 +40,9 @@ Three properties this diagram is drawn to make checkable:
 
 - **Nothing is written before every bound is checked.** Validation, sanitization
   and the size bounds all run inside the transaction and before the CAS
-  statement, so a rejected request leaves the row byte-identical. The blind
-  bounds suite asserts exactly that (row equality before and after).
+  statement, so a rejected request leaves the row byte-identical. The
+  author-owned bounds coverage asserts exactly that (row equality before and
+  after).
 - **The idempotency record and the mutation share one transaction.** A replay
   returns the stored response without re-running the mutation; a rolled-back
   mutation leaves no record to replay. This is P2A's primitive, unchanged — P2B
