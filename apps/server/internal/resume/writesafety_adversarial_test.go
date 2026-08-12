@@ -12,9 +12,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -645,18 +645,7 @@ func TestSaveDocument_ConcurrentSameRevision_OneWinner(t *testing.T) {
 			t.Errorf("writer %d: mismatch.CurrentRevision = %d, want the winning %d",
 				i, mismatch.CurrentRevision, final.Revision)
 		}
-		if mismatch.Current.Revision != final.Revision {
-			t.Errorf("writer %d: mismatch.Current.Revision = %d, want %d",
-				i, mismatch.Current.Revision, final.Revision)
-		}
-		if mismatch.Current.ID != created.ID || mismatch.Current.UserID != userID {
-			t.Errorf("writer %d: mismatch carries id %s/user %s, want %s/%s",
-				i, mismatch.Current.ID, mismatch.Current.UserID, created.ID, userID)
-		}
-		if got := wsaFullName(t, mismatch.Current.Doc); got != names[winner] {
-			t.Errorf("writer %d: mismatch carries fullName %q, want the winner's %q",
-				i, got, names[winner])
-		}
+		wsaRequireResumeEqual(t, fmt.Sprintf("writer %d mismatch Current", i), mismatch.Current, final)
 	}
 }
 
@@ -680,19 +669,18 @@ func TestSaveDocument_MismatchCarriesWinningDoc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
+	winningSlug := "wsa-" + strings.ReplaceAll(created.ID.String(), "-", "")[:24]
+	const winningLng = "en-US"
+	if _, updateErr := h.pool.Exec(h.ctx, `UPDATE resumes
+		SET slug = $1, live = true, download_enabled = false,
+			seo_geo_enabled = true, lng = $2
+		WHERE id = $3 AND user_id = $4`, winningSlug, winningLng, created.ID, userID); updateErr != nil {
+		t.Fatalf("seed non-default resume fields: %v", updateErr)
+	}
 
 	newRevision, err := h.st.SaveDocument(h.ctx, userID, created.ID, wsaDoc(t, "winner"), created.Revision)
 	if err != nil {
 		t.Fatalf("winning save: %v", err)
-	}
-
-	fresh, err := h.st.Get(h.ctx, userID, created.ID)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	freshCanonical, err := resume.AssembleCanonical(fresh.Doc)
-	if err != nil {
-		t.Fatalf("assemble fresh doc: %v", err)
 	}
 
 	cases := []struct {
@@ -710,6 +698,7 @@ func TestSaveDocument_MismatchCarriesWinningDoc(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			before := h.wsaSnapshot(t, "resumes", userID)
 			err := tc.call()
 			var mismatch *resume.RevisionMismatchError
 			if !errors.As(err, &mismatch) {
@@ -718,48 +707,43 @@ func TestSaveDocument_MismatchCarriesWinningDoc(t *testing.T) {
 			if mismatch.CurrentRevision != newRevision {
 				t.Errorf("CurrentRevision = %d, want %d", mismatch.CurrentRevision, newRevision)
 			}
-			carried, err := resume.AssembleCanonical(mismatch.Current.Doc)
+			fresh, err := h.st.Get(h.ctx, userID, created.ID)
 			if err != nil {
-				t.Fatalf("assemble carried doc: %v", err)
+				t.Fatalf("fresh Get after stale %s: %v", tc.name, err)
 			}
-			if string(carried) != string(freshCanonical) {
-				t.Errorf("carried document bytes differ from a fresh Get\n carried: %s\n   fresh: %s",
-					carried, freshCanonical)
+			if fresh.Slug == nil || *fresh.Slug != winningSlug {
+				t.Fatalf("fresh Slug = %v, want %q", fresh.Slug, winningSlug)
 			}
-			wsaCompareResumeMeta(t, mismatch.Current, fresh)
+			if fresh.Lng == nil || *fresh.Lng != winningLng {
+				t.Fatalf("fresh Lng = %v, want %q", fresh.Lng, winningLng)
+			}
+			wsaRequireResumeEqual(t, "mismatch Current", mismatch.Current, fresh)
+			if after := h.wsaSnapshot(t, "resumes", userID); after != before {
+				t.Errorf("stale %s changed the winning row\n before: %s\n  after: %s", tc.name, before, after)
+			}
 		})
 	}
 }
 
-// wsaCompareResumeMeta asserts every scalar of two Resume values matches, so a
-// 412 body cannot silently differ from a fresh read in a non-document field.
-func wsaCompareResumeMeta(t *testing.T, got, want resume.Resume) {
+// wsaRequireResumeEqual compares the complete domain value and separately
+// byte-compares its canonical document. The whole-value comparison is
+// intentionally reflection-based so adding a Resume field cannot silently
+// weaken this acceptance assertion.
+func wsaRequireResumeEqual(t *testing.T, label string, got, want resume.Resume) {
 	t.Helper()
-	if got.ID != want.ID {
-		t.Errorf("ID = %s, want %s", got.ID, want.ID)
+	gotCanonical, err := resume.AssembleCanonical(got.Doc)
+	if err != nil {
+		t.Fatalf("%s: assemble got document: %v", label, err)
 	}
-	if got.UserID != want.UserID {
-		t.Errorf("UserID = %s, want %s", got.UserID, want.UserID)
+	wantCanonical, err := resume.AssembleCanonical(want.Doc)
+	if err != nil {
+		t.Fatalf("%s: assemble wanted document: %v", label, err)
 	}
-	if got.Title != want.Title {
-		t.Errorf("Title = %q, want %q", got.Title, want.Title)
+	if string(gotCanonical) != string(wantCanonical) {
+		t.Errorf("%s: document bytes differ\n    got: %s\n   want: %s", label, gotCanonical, wantCanonical)
 	}
-	if got.Revision != want.Revision {
-		t.Errorf("Revision = %d, want %d", got.Revision, want.Revision)
-	}
-	if got.StoredSchemaVersion != want.StoredSchemaVersion {
-		t.Errorf("StoredSchemaVersion = %d, want %d", got.StoredSchemaVersion, want.StoredSchemaVersion)
-	}
-	if got.Live != want.Live || got.DownloadEnabled != want.DownloadEnabled || got.SEOGeoEnabled != want.SEOGeoEnabled {
-		t.Errorf("publish flags = %v/%v/%v, want %v/%v/%v",
-			got.Live, got.DownloadEnabled, got.SEOGeoEnabled,
-			want.Live, want.DownloadEnabled, want.SEOGeoEnabled)
-	}
-	if !got.CreatedAt.Equal(want.CreatedAt) {
-		t.Errorf("CreatedAt = %s, want %s", got.CreatedAt, want.CreatedAt)
-	}
-	if !got.UpdatedAt.Equal(want.UpdatedAt) {
-		t.Errorf("UpdatedAt = %s, want %s", got.UpdatedAt, want.UpdatedAt)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("%s: complete Resume differs\n    got: %#v\n   want: %#v", label, got, want)
 	}
 }
 
@@ -776,13 +760,11 @@ func TestIdempotency_ConcurrentSameKey_OneMutationCommits(t *testing.T) {
 	hash := wsaHash("body-A")
 	responseBody := json.RawMessage(`{"created":true,"n":1}`)
 
-	// Built on the test goroutine: this callback runs on 20 OTHER goroutines
-	// below, and wsaCreateParams/wsaDoc take *testing.T and can call t.Fatalf,
-	// which is only legal from the goroutine running the test.
+	// Built on the test goroutine: Execute may invoke this callback on one of
+	// the worker goroutines below, while wsaCreateParams/wsaDoc take *testing.T
+	// and can call t.Fatalf only from the test goroutine.
 	createParams := wsaCreateParams(t, userID, "idem-created", wsaDoc(t, "Ada"))
-	var calls atomic.Int64
 	mutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
-		calls.Add(1)
 		if _, err := qtx.CreateResume(h.ctx, createParams); err != nil {
 			return resume.StoredResponse{}, err
 		}
@@ -826,11 +808,8 @@ func TestIdempotency_ConcurrentSameKey_OneMutationCommits(t *testing.T) {
 	if leaders != 1 {
 		t.Errorf("callers reporting a fresh execution = %d, want exactly 1", leaders)
 	}
-	if n := calls.Load(); n != 1 {
-		t.Errorf("callback invocations = %d, want exactly 1", n)
-	}
 	if n := h.wsaCount(t, "resumes", userID); n != 1 {
-		t.Errorf("resumes rows = %d, want exactly 1 observable mutation", n)
+		t.Errorf("committed resume mutations = %d, want exactly 1", n)
 	}
 	if n := h.wsaCount(t, "idempotency_records", userID); n != 1 {
 		t.Errorf("idempotency_records rows = %d, want exactly 1", n)
@@ -912,18 +891,23 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 		userID := h.wsaNewUser(t)
 		key := wsaUUID(9101)
 		hash := wsaHash("body-A")
+		failedParams := wsaCreateParams(t, userID, "rolled-back", wsaDoc(t, "Ada"))
+		retryParams := wsaCreateParams(t, userID, "retry-committed", wsaDoc(t, "Grace"))
 
 		before := h.wsaSnapshot(t, "resumes", userID)
-		_, _, err := h.idem.Execute(h.ctx, userID, route, key, hash,
+		failedResp, failedReplayed, err := h.idem.Execute(h.ctx, userID, route, key, hash,
 			func(qtx *store.Queries) (resume.StoredResponse, error) {
-				if _, createErr := qtx.CreateResume(h.ctx,
-					wsaCreateParams(t, userID, "rolled-back", wsaDoc(t, "Ada"))); createErr != nil {
+				if _, createErr := qtx.CreateResume(h.ctx, failedParams); createErr != nil {
 					return resume.StoredResponse{}, createErr
 				}
 				return resume.StoredResponse{Status: 201, Body: json.RawMessage(`{"ok":true}`)}, errWsaCallbackFailed
 			})
 		if !errors.Is(err, errWsaCallbackFailed) {
 			t.Fatalf("Execute error = %#v (%v), want the callback's own error", err, err)
+		}
+		if failedReplayed || failedResp.Status != 0 || failedResp.Body != nil {
+			t.Errorf("failed Execute returned response=%#v replayed=%t, want zero response and false",
+				failedResp, failedReplayed)
 		}
 		if after := h.wsaSnapshot(t, "resumes", userID); after != before {
 			t.Errorf("the failed callback's resume insert survived\n before: %s\n  after: %s", before, after)
@@ -935,12 +919,14 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 			t.Errorf("idempotency_records rows = %d, want 0", n)
 		}
 
-		// Nothing was recorded, so the same key+hash must be treated as fresh.
-		var calls atomic.Int64
-		_, replayed, retryErr := h.idem.Execute(h.ctx, userID, route, key, hash,
-			func(_ *store.Queries) (resume.StoredResponse, error) {
-				calls.Add(1)
-				return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"ok":true}`)}, nil
+		// Nothing was recorded, so the same key+hash must run a fresh,
+		// transaction-scoped mutation and commit its response with it.
+		retryResp, replayed, retryErr := h.idem.Execute(h.ctx, userID, route, key, hash,
+			func(qtx *store.Queries) (resume.StoredResponse, error) {
+				if _, createErr := qtx.CreateResume(h.ctx, retryParams); createErr != nil {
+					return resume.StoredResponse{}, createErr
+				}
+				return resume.StoredResponse{Status: 201, Body: json.RawMessage(`{"ok":true}`)}, nil
 			})
 		if retryErr != nil {
 			t.Fatalf("retry after rollback: %v", retryErr)
@@ -948,8 +934,18 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 		if replayed {
 			t.Errorf("retry replayed a response, but the failed attempt must have left no record")
 		}
-		if n := calls.Load(); n != 1 {
-			t.Errorf("retry callback invocations = %d, want 1", n)
+		if retryResp.Status != 201 {
+			t.Errorf("retry status = %d, want 201", retryResp.Status)
+		}
+		listed, listErr := h.st.List(h.ctx, userID)
+		if listErr != nil {
+			t.Fatalf("list committed retry mutation: %v", listErr)
+		}
+		if len(listed) != 1 || listed[0].Title != retryParams.Title {
+			t.Errorf("committed retry resumes = %#v, want one titled %q", listed, retryParams.Title)
+		}
+		if n := h.wsaCount(t, "idempotency_records", userID); n != 1 {
+			t.Errorf("idempotency_records after retry = %d, want 1", n)
 		}
 	})
 
@@ -963,7 +959,7 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 		before := h.wsaSnapshot(t, "resumes", userID)
 
 		key := wsaUUID(9102)
-		_, _, err = h.idem.Execute(h.ctx, userID, route, key, wsaHash("body-A"),
+		failedResp, failedReplayed, err := h.idem.Execute(h.ctx, userID, route, key, wsaHash("body-A"),
 			func(qtx *store.Queries) (resume.StoredResponse, error) {
 				if _, casErr := qtx.UpdateResumeTitleCAS(h.ctx, store.UpdateResumeTitleCASParams{
 					ID: created.ID, UserID: userID, Revision: created.Revision, Title: "clobbered",
@@ -988,6 +984,10 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 		if !errors.Is(err, errWsaCallbackFailed) {
 			t.Fatalf("Execute error = %#v (%v), want the callback's own error", err, err)
 		}
+		if failedReplayed || failedResp.Status != 0 || failedResp.Body != nil {
+			t.Errorf("failed Execute returned response=%#v replayed=%t, want zero response and false",
+				failedResp, failedReplayed)
+		}
 		if after := h.wsaSnapshot(t, "resumes", userID); after != before {
 			t.Errorf("the failed callback's title CAS survived\n before: %s\n  after: %s", before, after)
 		}
@@ -1011,16 +1011,13 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 	hashB := wsaHash("body-B")
 	responseBody := json.RawMessage(`{"created":true}`)
 
-	// Both callbacks' parameters are built on the test goroutine: they run on
-	// 20 OTHER goroutines below, and wsaCreateParams/wsaDoc take *testing.T
-	// and can call t.Fatalf, which is only legal from the goroutine running
-	// the test.
+	// Both callbacks' parameters are built on the test goroutine: Execute may
+	// invoke one on a worker goroutine below, while wsaCreateParams/wsaDoc take
+	// *testing.T and can call t.Fatalf only from the test goroutine.
 	leaderParams := wsaCreateParams(t, userID, "idem-leader", wsaDoc(t, "Ada"))
 	rejectParams := wsaCreateParams(t, userID, "must-not-exist", wsaDoc(t, "Eve"))
 
-	var leaderCalls atomic.Int64
 	leaderMutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
-		leaderCalls.Add(1)
 		if _, err := qtx.CreateResume(h.ctx, leaderParams); err != nil {
 			return resume.StoredResponse{}, err
 		}
@@ -1038,19 +1035,19 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 
 	// Sequential rejection first: the plain contract, with no concurrency to
 	// hide behind.
-	var rejectedCalls atomic.Int64
 	rejectMutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
-		rejectedCalls.Add(1)
 		if _, err := qtx.CreateResume(h.ctx, rejectParams); err != nil {
 			return resume.StoredResponse{}, err
 		}
 		return resume.StoredResponse{Status: 201, Body: json.RawMessage(`{"created":"eve"}`)}, nil
 	}
-	if _, _, err := h.idem.Execute(h.ctx, userID, route, key, hashB, rejectMutate); !errors.Is(err, resume.ErrIdempotencyKeyReuse) {
+	rejectedResp, rejectedReplay, err := h.idem.Execute(h.ctx, userID, route, key, hashB, rejectMutate)
+	if !errors.Is(err, resume.ErrIdempotencyKeyReuse) {
 		t.Fatalf("different-hash reuse returned %#v (%v), want ErrIdempotencyKeyReuse", err, err)
 	}
-	if n := rejectedCalls.Load(); n != 0 {
-		t.Errorf("rejected callback ran %d times, want 0", n)
+	if rejectedReplay || rejectedResp.Status != 0 || rejectedResp.Body != nil {
+		t.Errorf("different-hash reuse returned response=%#v replayed=%t, want zero response and false",
+			rejectedResp, rejectedReplay)
 	}
 
 	// Now interleave 10 valid replays with 10 different-body reuses.
@@ -1102,12 +1099,10 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 		if !errors.Is(r.err, resume.ErrIdempotencyKeyReuse) {
 			t.Errorf("reuse %d: error = %#v (%v), want ErrIdempotencyKeyReuse", i, r.err, r.err)
 		}
-	}
-	if n := leaderCalls.Load(); n != 1 {
-		t.Errorf("leader callback invocations = %d, want exactly 1", n)
-	}
-	if n := rejectedCalls.Load(); n != 0 {
-		t.Errorf("rejected callback invocations = %d, want 0", n)
+		if r.replayed || r.resp.Status != 0 || r.resp.Body != nil {
+			t.Errorf("reuse %d: response=%#v replayed=%t, want zero response and false",
+				i, r.resp, r.replayed)
+		}
 	}
 	if after := h.wsaSnapshot(t, "resumes", userID); after != resumesBefore {
 		t.Errorf("resumes changed across replay/reuse traffic\n before: %s\n  after: %s", resumesBefore, after)
@@ -1244,47 +1239,55 @@ func TestNoExistenceOracle_WrongUserSameAsNotFound(t *testing.T) {
 	ghostID := wsaUUID(9301)
 	before := h.wsaSnapshot(t, "resumes", ownerID)
 
+	type probeResult struct {
+		value any
+		err   error
+	}
 	probes := []struct {
 		name string
-		call func(id uuid.UUID) error
+		call func(id uuid.UUID) probeResult
 	}{
-		{"Get", func(id uuid.UUID) error {
-			_, err := h.st.Get(h.ctx, attackerID, id)
-			return err
+		{"Get", func(id uuid.UUID) probeResult {
+			got, err := h.st.Get(h.ctx, attackerID, id)
+			return probeResult{value: got, err: err}
 		}},
-		{"SaveDocument/correct revision", func(id uuid.UUID) error {
-			_, err := h.st.SaveDocument(h.ctx, attackerID, id, wsaDoc(t, "Mallory"), victim.Revision)
-			return err
+		{"SaveDocument/correct revision", func(id uuid.UUID) probeResult {
+			revision, err := h.st.SaveDocument(h.ctx, attackerID, id, wsaDoc(t, "Mallory"), victim.Revision)
+			return probeResult{value: revision, err: err}
 		}},
-		{"SaveDocument/stale revision", func(id uuid.UUID) error {
-			_, err := h.st.SaveDocument(h.ctx, attackerID, id, wsaDoc(t, "Mallory"), victim.Revision+41)
-			return err
+		{"SaveDocument/stale revision", func(id uuid.UUID) probeResult {
+			revision, err := h.st.SaveDocument(h.ctx, attackerID, id, wsaDoc(t, "Mallory"), victim.Revision+41)
+			return probeResult{value: revision, err: err}
 		}},
-		{"SaveTitle/correct revision", func(id uuid.UUID) error {
-			_, err := h.st.SaveTitle(h.ctx, attackerID, id, "mallory", victim.Revision)
-			return err
+		{"SaveTitle/correct revision", func(id uuid.UUID) probeResult {
+			revision, err := h.st.SaveTitle(h.ctx, attackerID, id, "mallory", victim.Revision)
+			return probeResult{value: revision, err: err}
 		}},
-		{"SaveTitle/stale revision", func(id uuid.UUID) error {
-			_, err := h.st.SaveTitle(h.ctx, attackerID, id, "mallory", victim.Revision+41)
-			return err
+		{"SaveTitle/stale revision", func(id uuid.UUID) probeResult {
+			revision, err := h.st.SaveTitle(h.ctx, attackerID, id, "mallory", victim.Revision+41)
+			return probeResult{value: revision, err: err}
 		}},
-		{"Delete", func(id uuid.UUID) error {
-			return h.st.Delete(h.ctx, attackerID, id)
+		{"Delete", func(id uuid.UUID) probeResult {
+			return probeResult{err: h.st.Delete(h.ctx, attackerID, id)}
 		}},
 	}
 	for _, probe := range probes {
 		t.Run(probe.name, func(t *testing.T) {
-			realErr := probe.call(victim.ID)
-			ghostErr := probe.call(ghostID)
-			wsaRequireNotFound(t, probe.name+" (real id, wrong owner)", realErr)
-			wsaRequireNotFound(t, probe.name+" (nonexistent id)", ghostErr)
-			if realErr.Error() != ghostErr.Error() {
-				t.Errorf("%s: wrong-owner error %q differs from nonexistent-id error %q",
-					probe.name, realErr.Error(), ghostErr.Error())
+			real := probe.call(victim.ID)
+			ghost := probe.call(ghostID)
+			wsaRequireNotFound(t, probe.name+" (real id, wrong owner)", real.err)
+			wsaRequireNotFound(t, probe.name+" (nonexistent id)", ghost.err)
+			if !reflect.DeepEqual(real.value, ghost.value) {
+				t.Errorf("%s: wrong-owner return value %#v differs from nonexistent-id return value %#v",
+					probe.name, real.value, ghost.value)
 			}
-			if fmt.Sprintf("%T", realErr) != fmt.Sprintf("%T", ghostErr) {
+			if real.err.Error() != ghost.err.Error() {
+				t.Errorf("%s: wrong-owner error %q differs from nonexistent-id error %q",
+					probe.name, real.err.Error(), ghost.err.Error())
+			}
+			if reflect.TypeOf(real.err) != reflect.TypeOf(ghost.err) {
 				t.Errorf("%s: wrong-owner error type %T differs from nonexistent-id type %T",
-					probe.name, realErr, ghostErr)
+					probe.name, real.err, ghost.err)
 			}
 		})
 	}
