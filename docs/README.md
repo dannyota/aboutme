@@ -18,9 +18,10 @@ link to that source instead of copying the contract.
 | How does a contributor or operator get started?   | [`guides/`](guides/README.md)                                            |
 | How should documentation and comments be written? | [`standards/`](standards/README.md)                                      |
 
-The design wins over a plan. Code, deployment configuration, and OpenAPI must
-agree about implemented behavior. A disagreement between those artifacts is a
-defect, not permission to choose one silently.
+The design wins over a plan. An accepted ADR controls its decision when it
+conflicts with the draft design; a proposed ADR does not. Code, deployment
+configuration, and OpenAPI must agree about implemented behavior. A disagreement
+between those artifacts is a defect, not permission to choose one silently.
 
 ## Directory map
 

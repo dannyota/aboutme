@@ -22,6 +22,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: make docs-lint
+      - run: make operational-test
 
   schema:
     runs-on: ubuntu-latest
@@ -71,6 +72,7 @@ jobs:
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           working-directory: apps/server
+          version: v2.12.2
       - name: go mod tidy is a no-op
         run: |
           cd apps/server
@@ -80,7 +82,7 @@ jobs:
             || { echo "go.mod/go.sum are not tidy — run 'go mod tidy' in apps/server and commit"; exit 1; }
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
           cd apps/server && govulncheck ./...
 
   web:
@@ -148,8 +150,11 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           base="$BASE_SHA"
-          changed=$(git diff --name-status "$base"...HEAD -- apps/server/migrations \
-            | grep -E '^(M|D|R)' | grep -E '\.sql$' || true)
+          if ! diff=$(git diff --name-status "$base"...HEAD -- apps/server/migrations); then
+            echo "could not compare migrations with the base commit" >&2
+            exit 1
+          fi
+          changed=$(printf '%s\n' "$diff" | grep -E '^(M|D|R|T)' | grep -E '\.sql$' || true)
           if [ -n "$changed" ]; then
             echo "Applied migrations are immutable; only new files may be added:"
             echo "$changed"
@@ -200,6 +205,24 @@ jobs:
             exit 1
           fi
 
+  # Token-free secret scanning runs for every push and pull request, including
+  # forks where GitHub correctly withholds the connected Semgrep token.
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+      - name: Install the pinned gitleaks (8.30.1)
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: bash scripts/check-tool-versions.sh gitleaks
+      - run: gitleaks detect --redact --no-banner
+
   # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
   # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
   # It replaces the separate osv-scanner job: Supply Chain covers dependency
@@ -217,7 +240,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install semgrep==1.172.0
-      - run: semgrep ci
+      - run: semgrep ci --no-suppress-errors
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 

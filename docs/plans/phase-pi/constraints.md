@@ -38,11 +38,11 @@
   one task per service and no application load balancer; PI adds no service
   discovery.
 - CI jobs at base:
-  `docs, schema, api, server, web, server-integration, migrations-append-only, semgrep, route-table, sqlc-drift`
+  `docs, schema, api, server, web, server-integration, migrations-append-only, released-schema-append-only, gitleaks, semgrep, route-table, sqlc-drift`
   (`.github/workflows/ci.yml`). Makefile targets relevant here: `docs-fmt`,
   `docs-lint`, `route-table-test`, `dev`, `test-db-up/down`,
   `server-migration-test`, plus `ci`, `check`, `scan` (`make ci` is the ADR 0011
-  gate of record, run locally before any handoff).
+  gate of record, run locally by the integration owner before integration).
 - Two-runner migration safety is already implemented and tested (AC-OPS-001):
   goose Provider with Postgres session advisory lock,
   `apps/server/migrations/harness_test.go::TestHarness_ConcurrentRunners_ExactlyOneApplies`.

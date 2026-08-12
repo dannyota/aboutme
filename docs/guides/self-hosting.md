@@ -17,7 +17,8 @@ Authentication UAT and public service require the planned HTTPS/443 edge path.
 
 Daily source development should use the lighter
 [native stack](../runbooks/native-development.md). Use Compose when the image
-and network boundaries are what you need to inspect.
+and network boundaries are what you need to inspect. The Compose stack cannot
+run beside the shared `aboutme-test-db` container.
 
 ## Configure
 
@@ -50,7 +51,14 @@ weaken Secure cookie settings to make it one.
 
 ## Start and verify
 
+Within a shared development session, only the integration owner may schedule
+Compose. The owner waits until every live-database worker is idle, stops the
+shared database, runs the smoke stack, tears it down, then restores the shared
+database if later work needs it. `make dev` fails its preflight while
+`aboutme-test-db` is running. Workers never stop the shared database.
+
 ```sh
+make test-db-down
 make dev
 podman compose --env-file .env -f deploy/compose.yml ps
 curl --fail http://localhost:8080/healthz
@@ -77,7 +85,11 @@ Stop containers while retaining the PostgreSQL volume:
 
 ```sh
 make dev-down
+make test-db-up
 ```
+
+Restore the shared database only after `make dev-down`, and only when later work
+needs it.
 
 An updated checkout rebuilds images and applies pending embedded goose
 migrations on the next `make dev`. Released migrations are append-only. Back up

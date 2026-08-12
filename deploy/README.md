@@ -20,10 +20,10 @@ Go, Nuxt, and Caddy processes against the one shared PostgreSQL container. See
 the [native development runbook](../docs/runbooks/native-development.md).
 
 `make dev` builds and starts the Compose deployment. Reserve it for local
-deployment smoke checks and UAT sessions because it is heavier. The current
-Caddyfile is HTTP-only. It does not yet meet the P9 requirement for HTTPS on
-port 443, so it cannot produce valid authentication UAT evidence. See the
-[local UAT runbook](../docs/runbooks/local-uat.md).
+deployment smoke checks and self-hosting evaluation because it is heavier. The
+current Caddyfile is HTTP-only. It cannot produce authentication or P9 UAT
+evidence. The isolated HTTPS harness and its `uat-*` targets are planned but do
+not exist. See the [local UAT runbook](../docs/runbooks/local-uat.md).
 
 ## Start the Compose deployment
 
@@ -32,8 +32,13 @@ From the repository root:
 ```sh
 cp .env.example .env
 # Set POSTGRES_PASSWORD to a new value in .env.
+make test-db-down
 make dev
 ```
+
+`make dev` fails its preflight while the shared `aboutme-test-db` container is
+running. Only the integration owner may wait for every live-database worker to
+be idle and run `make test-db-down`. Workers never stop the shared database.
 
 The default published origin is `http://localhost` on port 80. Rootless Podman
 often cannot bind that port. Set `CADDY_HTTP_PORT=8080` in `.env` for a local
@@ -52,7 +57,11 @@ without deleting its PostgreSQL volume:
 
 ```sh
 make dev-down
+make test-db-up
 ```
+
+The integration owner restores the shared database only after Compose teardown,
+and only when later work needs it.
 
 ## Runtime boundaries
 

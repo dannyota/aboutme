@@ -32,16 +32,21 @@ Documentation rules and lifecycle terms are in
 
 ## Checks
 
-Run the narrowest check while developing, then the full local gate before
-handoff:
+Independent contributors run the narrowest check while developing, then the full
+local gate before opening a pull request:
 
 ```sh
 make check
 make ci
 ```
 
-For documentation changes, run `make docs-fmt` and `make docs-lint`. The
-[root Makefile](Makefile) lists component checks and generation drift gates.
+In a coordinated worker session, workers run only their affected checks. The
+integration owner alone runs `make ci` before integrating the shared tree.
+
+For documentation changes, run `make docs-fmt`; it formats and re-lints the
+documentation tree. [`.tool-versions`](.tool-versions) pins local and hosted CI
+tools. Run `make tools-check` to verify them. The [root Makefile](Makefile)
+lists component checks and generation drift gates.
 
 ## Pull requests
 

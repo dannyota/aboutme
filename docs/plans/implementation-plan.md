@@ -8,7 +8,7 @@ order, task state, and gates. A plan cannot redefine the design.
 
 ## Current baseline
 
-The status below is verified against `main` at `9edca31`.
+The status below is verified against `main` at `b230e96`.
 
 | Slice                         | Repository state            | Work still required before closure                                      |
 | ----------------------------- | --------------------------- | ----------------------------------------------------------------------- |
@@ -58,10 +58,11 @@ query, contract prose, tests, and independent review agree.
 | P2B plan adoption          | Design-owner approval must adopt the independently reviewed plan and its fixed resource budgets |
 | P9 HTTPS harness           | Execute the reviewed U1–U10 isolated HTTPS UAT Compose-overlay lane                             |
 
-Draft v4 resolves the old `/assets` question with private live-gated media. The
-proposed P2B contract also fixes `Error.details`, exact photo intake and
-normalization bounds, and a local S3-compatible test service. Dispatch still
-requires owner approval after independent review.
+Draft v4 proposes private live-gated media for the old `/assets` question. The
+proposed P2B contract also defines `Error.details`, exact photo intake and
+normalization bounds, and a local S3-compatible test service. Neither is an
+approved contract; dispatch still requires owner approval after independent
+review.
 
 ## Dependency graph
 
@@ -152,8 +153,8 @@ For a high-risk task:
 3. A different fresh reviewer inspects the diff. The author fixes blocking
    findings; an independent reviewer rechecks them.
 
-Normal tasks use author TDD and the affected checks. The integration owner runs
-`make ci` before handoff.
+Normal tasks use author TDD and the affected checks. The integration owner alone
+runs `make ci` before integration.
 
 Every phase has two gates:
 
@@ -171,9 +172,11 @@ invalidates evidence for every changed path.
 
 Daily work uses the native stack at `http://localhost:20080` and the one shared
 PostgreSQL container. The current `make dev` Compose stack stays HTTP-only and
-is reserved for image/network smoke checks and self-hosting evaluation. P9 uses
-the isolated HTTPS UAT Compose overlay through `make uat-up` on port 443 and the
-project Playwright server because authentication uses Secure `__Host-` cookies.
+is reserved for image/network smoke checks and self-hosting evaluation. P9 will
+use the planned isolated HTTPS UAT Compose overlay through the future
+`make uat-up` target on port 443 and the project Playwright server because
+authentication uses Secure `__Host-` cookies. The `uat-*` targets do not exist
+yet.
 
 P9 validates complete user workflows and records browser, network, console,
 server, and database evidence. A fresh reviewer verifies it. Only then may the

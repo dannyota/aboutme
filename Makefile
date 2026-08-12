@@ -3,12 +3,12 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-16s %s\n", $$1, $$2}'
 
-ci: ## Full local gate — every check GitHub CI runs, including DB-backed suites. Run before any handoff instead of waiting on Actions
+ci: ## Full local non-security gate, including DB-backed suites; integration owner runs it before integration
 	bash scripts/ci.sh
 
 check: ## Fast gate — the same checks minus the web build and DB-backed suites; for the inner development loop
@@ -16,6 +16,20 @@ check: ## Fast gate — the same checks minus the web build and DB-backed suites
 
 scan: ## Batched security scan for a phase gate: Semgrep (SAST + Supply Chain SCA + secrets) then gitleaks over full history
 	bash scripts/scan.sh
+
+tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="ci", "scan", "dev", or tool names)
+	bash scripts/check-tool-versions.sh $(ARGS)
+
+operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
+	bash -n scripts/check-tool-versions.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	scripts/test/ci-failure-propagation-test.sh
+	scripts/test/ci-lifecycle-test.sh
+	scripts/test/ci-scan-adversarial-test.sh
+	scripts/test/makefile-safety-test.sh
+	scripts/test/migration-append-only-test.sh
+	scripts/test/scan-engine-error-test.sh
+	scripts/test/toolchain-contract-test.sh
+	scripts/test/workflow-safety-test.sh
 
 hooks-install: ## Point git at .githooks so pre-commit runs gitleaks on staged content
 	git config core.hooksPath .githooks
@@ -69,13 +83,21 @@ web-typecheck: ## Typecheck the Nuxt web app
 web-test: ## Test the Nuxt web app
 	cd apps/web && npm run test
 
-dev: ## UAT ONLY — full compose stack (4 containers + image builds; heavy). Daily dev uses the native stack against the single test-db container. Tear down with dev-down when the UAT session ends
+dev: ## HTTP image/network smoke and self-hosting stack; not for daily development
+	@if ! running_containers="$$(podman ps --format '{{.Names}}')"; then \
+	  echo "make dev: cannot inspect running containers; refusing to start Compose." >&2; \
+	  exit 1; \
+	fi; \
+	if grep -qx aboutme-test-db <<<"$$running_containers"; then \
+	  echo "make dev: aboutme-test-db is running; only the integration owner may stop it after every live-DB worker is idle." >&2; \
+	  exit 1; \
+	fi; \
 	podman compose --env-file .env -f deploy/compose.yml up -d --build
 
 dev-down: ## Stop the compose stack and remove containers (keeps the postgres volume)
 	podman compose --env-file .env -f deploy/compose.yml down
 
-dev-native: ## Daily development — server, web, and Caddy as native processes on http://localhost:20080 against the one Postgres container's aboutme_dev DB (idempotent). The compose stack is UAT-only
+dev-native: ## Daily development — native server, web, and Caddy on http://localhost:20080 against the shared database
 	bash scripts/dev-native.sh up
 
 dev-native-down: ## Stop the native dev stack (leaves the shared aboutme-test-db container running)
@@ -88,7 +110,15 @@ dev-native-logs: ## Tail native dev stack logs (make dev-native-logs ARGS="-f we
 	bash scripts/dev-native.sh logs $(ARGS)
 
 test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the `aboutme` test DB and the `aboutme_dev` native-dev DB; 512 MB cap). One DB container total is the rule — never start a second
-	@if podman ps --format '{{.Names}}' | grep -qx aboutme-test-db; then \
+	@if ! running_containers="$$(podman ps --format '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}')"; then \
+	  echo "test-db-up: cannot inspect running containers; refusing to start Postgres." >&2; \
+	  exit 1; \
+	fi; \
+	if awk -F '|' '$$1 != "aboutme-test-db" && $$2 == "aboutme" && $$3 == "postgres" { found=1 } END { exit !found }' <<<"$$running_containers"; then \
+	  echo "test-db-up: the Compose Postgres service is running; stop it before starting the shared database." >&2; \
+	  exit 1; \
+	fi; \
+	if awk -F '|' '$$1 == "aboutme-test-db" { found=1 } END { exit !found }' <<<"$$running_containers"; then \
 	  echo "aboutme-test-db already running; reusing it."; \
 	else \
 	  podman run -d --rm --name aboutme-test-db --memory 512m -p 127.0.0.1:20432:5432 \
