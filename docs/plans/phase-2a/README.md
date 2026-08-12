@@ -1,7 +1,6 @@
 # Phase 2A — Resume domain and store
 
-Status: **Task 12 landed; phase gates remain** (Task 12 landed at `6925548`,
-2026-08-12).
+Status: **Complete** (phase gates verified 2026-08-12).
 
 This phase owns the resume relational schema, validated aggregate store,
 revision compare-and-swap (CAS), transactional idempotency, immutable document
@@ -31,13 +30,12 @@ hand-written goose migrations as the only relational schema source.
 | 10   | Independent document-migration suite              | Landed                       |
 | 11   | Bounds matrix and completeness guard              | Landed                       |
 | 12   | Traceability, docs, and handoffs                  | Landed                       |
-| Gate | Phase defect review                               | Pending                      |
-| Gate | Exact-candidate phase acceptance                  | Pending                      |
+| Gate | Phase defect review                               | Passed                       |
+| Gate | Exact-candidate phase acceptance                  | Passed                       |
 
 Task 12's traceability, architecture documentation, and named downstream
-handoffs are landed. `Landed` does not claim that either phase gate passed. P2B
-and P3 remain blocked on this phase until both gates close at the exact
-candidate commit.
+handoffs are landed. Both phase gates passed at the unchanged phase candidate.
+P2B and P3 no longer wait on P2A, though their other prerequisites still apply.
 
 The production document registry currently contains only v1. P2A supplies pure
 projection, adjacent-converter machinery tested with synthetic later versions,
@@ -52,17 +50,16 @@ headers, bounded request-path cleanup and capacity accounting, and HTTP replay
 contract remain P2B work. The authoritative hourly global expiry sweep remains
 P8 privacy work.
 
-## Remaining order
+## Completed gate sequence
 
-1. Have a fresh reviewer inspect the complete phase diff for defects, design
-   fit, interface stability, assumptions, and traceability.
-2. Fix blocking findings and obtain independent re-review.
-3. Pin the unchanged candidate and freeze
+1. A fresh reviewer inspected the complete phase for defects, design fit,
+   interface stability, assumptions, and traceability.
+2. Blocking findings were fixed and independently re-reviewed.
+3. The integration owner pinned one unchanged candidate and froze
    [acceptance catalog revision 2](acceptance-catalog-r2.md).
-4. Run `make ci` and connected `make scan` once at that candidate, without
-   concurrent heavy workers.
-5. Have a fresh acceptance worker run the frozen catalog without editing code,
-   tests, fixtures, or criteria.
+4. `make ci` and connected `make scan` passed without concurrent heavy workers.
+5. A fresh acceptance worker ran the frozen catalog without editing code, tests,
+   fixtures, or criteria.
 
 ## Authorities
 

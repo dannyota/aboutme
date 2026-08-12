@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 9, active** (2026-08-12).
+Status: **Revision 10, active** (2026-08-12).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior. This plan owns delivery
@@ -8,55 +8,47 @@ order, task state, and gates. A plan cannot redefine the design.
 
 ## Current baseline
 
-The status below is verified against `main` at `b230e96`.
+The status below is verified against the phase-closure candidate on `main`.
 
 | Slice                         | Repository state            | Work still required before closure                                      |
 | ----------------------------- | --------------------------- | ----------------------------------------------------------------------- |
 | P0 foundations                | Complete                    | None; historical gates remain unchanged                                 |
-| P0F TypeScript API client     | Landed at `38ecfd5`         | Record correction review and acceptance evidence                        |
+| P0F TypeScript API client     | Complete                    | None                                                                    |
 | P1 authentication             | Complete                    | None; historical gates remain unchanged                                 |
-| P1.1 authentication hardening | Server changes landed       | Close AC-AUTH-006/007, review, and run the gate                         |
-| P2A resume domain and store   | Tasks 1–11 landed           | Task 12 traceability closure, defect review, and phase acceptance       |
+| P1.1 authentication hardening | Complete                    | None                                                                    |
+| P2A resume domain and store   | Complete                    | None                                                                    |
 | P3 design and preset data     | Draft design and 20 presets | Approve contract; add licensed font catalog through schema v2           |
 | P2B resume HTTP and media     | Draft plan only             | Close the dispatch blockers listed below                                |
 | PI infrastructure             | Adopted plan, not executed  | Refresh after runtime phases; no cloud mutation before P9 authorization |
 | P9 HTTPS UAT harness          | Exact task lane drafted     | Approve and execute U1–U10 before any local UAT run                     |
 
-The settings page currently starts provider linking and reauthentication with
-GET links. The server and OpenAPI require authenticated CSRF-protected POST. Its
-default reauthentication provider also depends on an identity query whose
-creation-time order lacks an `id` tiebreaker. P1.1 remains open until the UI,
-query, contract prose, tests, and independent review agree.
+The settings page uses authenticated CSRF-protected POST for provider linking
+and reauthentication. The identity query uses `(created_at, id)` order. P1.1's
+contract, tests, browser proof, and independent gates agree.
 
 ## Immediate delivery order
 
 1. Approve Draft v4 design and the template contract after independent design
    and plan reviews close every blocking finding.
-2. Close P2A Task 12, run the phase defect review, then run immutable automated
-   phase acceptance at the shipping commit.
-3. Close P1.1 and P0F correction evidence. P1.1 includes the settings UI POST
-   flow and its browser check.
-4. Refresh P3 against the approved design and follow its dependency graph. Run
+2. Refresh P3 against the approved design and follow its dependency graph. Run
    the sanitizer and font-license lanes in parallel; vendor the final font
    catalog before releasing document v2 from its stable IDs, then run the
    renderer and template consumers.
-5. Adopt and execute P2B only after P2A, P0F, P1.1, all P3 tasks, and both P3
-   phase gates are closed.
-6. Implement and review the isolated HTTPS UAT Compose overlay before P9. This
+3. Adopt and execute P2B only after all P3 tasks and both P3 phase gates are
+   closed.
+4. Implement and review the isolated HTTPS UAT Compose overlay before P9. This
    harness work does not authorize a UAT verdict or any cloud mutation.
 
 ## Current blockers
 
-| Blocker                    | Required resolution                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------------------- |
-| Design approval state      | Draft v4 needs explicit dated owner approval after independent reviews                          |
-| Template approval state    | `docs/design/templates/` remains draft until its contract review passes                         |
-| P2A evidence               | Task 12 and both phase gates remain                                                             |
-| P1.1 auth/browser mismatch | Use POST for privileged starts and make identity order `(created_at, id)`                       |
-| Font expansion             | Fee-free license verification, local assets, choice metadata, manifest, and immutable schema v2 |
-| P2B sanitizer edge         | P3 Task 2 must land before P2B Task 5                                                           |
-| P2B plan adoption          | Design-owner approval must adopt the independently reviewed plan and its fixed resource budgets |
-| P9 HTTPS harness           | Execute the reviewed U1–U10 isolated HTTPS UAT Compose-overlay lane                             |
+| Blocker                 | Required resolution                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------- |
+| Design approval state   | Draft v4 needs explicit dated owner approval after independent reviews                          |
+| Template approval state | `docs/design/templates/` remains draft until its contract review passes                         |
+| Font expansion          | Fee-free license verification, local assets, choice metadata, manifest, and immutable schema v2 |
+| P2B sanitizer edge      | P3 Task 2 must land before P2B Task 5                                                           |
+| P2B plan adoption       | Design-owner approval must adopt the independently reviewed plan and its fixed resource budgets |
+| P9 HTTPS harness        | Execute the reviewed U1–U10 isolated HTTPS UAT Compose-overlay lane                             |
 
 Draft v4 proposes private live-gated media for the old `/assets` question. The
 proposed P2B contract also defines `Error.details`, exact photo intake and
@@ -123,9 +115,9 @@ read that feeds internal print SSR.
 | Step | Phase or wave                | State                        | Exit                                               |
 | ---- | ---------------------------- | ---------------------------- | -------------------------------------------------- |
 | 01   | P0 + P1                      | Complete                     | Historical phase evidence remains pinned           |
-| 02   | P2A                          | Active                       | Task 12 and both phase gates pass                  |
-| 03   | P0F + P1.1 corrections       | Landed, not closed           | Contract, UI, review, and acceptance agree         |
-| 04   | P3                           | Waiting on 02 and design     | Renderer, sanitizer, fonts, and preset gates pass  |
+| 02   | P2A                          | Complete                     | Task 12 and both phase gates passed                |
+| 03   | P0F + P1.1 corrections       | Complete                     | Contract, UI, review, and acceptance agree         |
+| 04   | P3                           | Waiting on design            | Renderer, sanitizer, fonts, and preset gates pass  |
 | 05   | P2B                          | Blocked from dispatch        | HTTP and media phase gates pass                    |
 | 06   | P4 + P5A + P6A + P7A         | Future parallel wave         | Each phase passes its own gates                    |
 | 07   | P5B + P6B + P7B + P8 privacy | Future parallel closure wave | Product surface and lifecycle close                |

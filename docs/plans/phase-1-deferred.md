@@ -1,7 +1,6 @@
 # P1.1 — Authentication contract closure
 
-Status: **Tasks 0–3 landed; browser and phase gates remain** (verified at
-`fa53fd2`, 2026-08-12).
+Status: **Complete** (phase gates verified 2026-08-12).
 
 P1.1 closes the remaining differences among the authentication server, settings
 UI, OpenAPI, and acceptance evidence. It is a hard predecessor of P2B and adds
@@ -35,8 +34,7 @@ no migration.
 | 3    | LANDED | OpenAPI contract assertions and the package-wide GitHub no-OIDC callback-path guard                                        |
 
 The bounded Playwright proof, integrated phase defect review, full checks,
-connected scan, and frozen acceptance run remain open. These gates must pass at
-one unchanged candidate before P1.1 closes.
+connected scan, and frozen acceptance catalog pass at the phase candidate.
 
 ## Task 0 — Freeze independent adversarial tests
 
