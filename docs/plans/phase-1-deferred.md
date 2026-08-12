@@ -1,7 +1,7 @@
 # P1.1 — Authentication contract closure
 
-Status: **Active; server work landed, browser and ordering corrections open**
-(2026-08-12).
+Status: **Tasks 0–3 landed; browser and phase gates remain** (verified at
+`fa53fd2`, 2026-08-12).
 
 P1.1 closes the remaining differences among the authentication server, settings
 UI, OpenAPI, and acceptance evidence. It is a hard predecessor of P2B and adds
@@ -17,13 +17,26 @@ no migration.
 
 ## Current baseline
 
-| Concern                                                    | Current state                                                 | Required closure                                           |
-| ---------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
-| Auth route limits, transaction reaping, and rejection logs | Implemented and tested                                        | Reverify in the final auth gate                            |
-| Privileged OAuth start                                     | Server and OpenAPI require authenticated, CSRF-protected POST | Replace settings-page GET anchors and add browser coverage |
-| Session rotation delivery                                  | Successor-first-use grace is implemented and tested           | Reverify lineage and lost-delivery cases                   |
-| Identity order                                             | SQL orders only by `created_at`                               | Add `id` as the deterministic tiebreaker                   |
-| Contract evidence                                          | OpenAPI prose is corrected                                    | Regenerate, run conformance, and close P1.1 evidence       |
+| Concern                                                    | Current state                                                                  | Required closure                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| Auth route limits, transaction reaping, and rejection logs | Implemented and tested                                                         | Reverify in the final auth gate                       |
+| Privileged OAuth start                                     | Settings uses bodiless CSRF POST and validates the returned provider URL       | Run the bounded browser proof and final phase gates   |
+| Session rotation delivery                                  | Successor-first-use grace and the one-retry CSRF flow are implemented          | Reverify lineage and lost-delivery cases              |
+| Identity order                                             | SQL, `/me`, and settings use deterministic `(created_at, id)` order            | Reverify the live-database and settings cases         |
+| Contract evidence                                          | OpenAPI, generated client, server, UI, and static guards agree at the baseline | Run contract drift checks and frozen phase acceptance |
+
+## Task state
+
+| Task | State  | Landed evidence                                                                                                            |
+| ---- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| 0    | LANDED | Frozen web privileged-start matrix and live-database equal-time `/me` ordering test                                        |
+| 1    | LANDED | Settings privileged-start POST flow, provider-bound URL checks, CSRF retry coverage, and author component/composable tests |
+| 2    | LANDED | `(created_at, id)` sqlc query, generated output, author `/me` test, and frozen live-database test                          |
+| 3    | LANDED | OpenAPI contract assertions and the package-wide GitHub no-OIDC callback-path guard                                        |
+
+The bounded Playwright proof, integrated phase defect review, full checks,
+connected scan, and frozen acceptance run remain open. These gates must pass at
+one unchanged candidate before P1.1 closes.
 
 ## Task 0 — Freeze independent adversarial tests
 
