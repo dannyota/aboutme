@@ -65,9 +65,18 @@ const wsaUngrantedLocksSQL = `SELECT coalesce(string_agg(
 	format('%s on %s', locktype, coalesce(relation::regclass::text, '-')), ', '), '')
 	FROM pg_locks WHERE pid = $1::int AND NOT granted`
 
-// errWsaCallbackFailed is the sentinel a deliberately failing idempotency
-// callback returns, so the rollback assertions match on identity.
-var errWsaCallbackFailed = errors.New("wsa: callback failed after mutating")
+var (
+	// errWsaCallbackFailed is the sentinel a deliberately failing
+	// idempotency callback returns, so the rollback assertions match on
+	// identity.
+	errWsaCallbackFailed = errors.New("wsa: callback failed after mutating")
+
+	// errWsaRejectedCallbackRan makes any invocation on a different-hash
+	// reuse observable through Execute's result without an external side
+	// effect. The contracted path returns ErrIdempotencyKeyReuse before this
+	// callback.
+	errWsaRejectedCallbackRan = errors.New("wsa: rejected idempotency callback ran")
+)
 
 // wsaCustomizationJSON is packages/schema/fixtures/minimal.json's
 // customization block, with the layout.sections.main array left as a format
@@ -1011,11 +1020,10 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 	hashB := wsaHash("body-B")
 	responseBody := json.RawMessage(`{"created":true}`)
 
-	// Both callbacks' parameters are built on the test goroutine: Execute may
-	// invoke one on a worker goroutine below, while wsaCreateParams/wsaDoc take
-	// *testing.T and can call t.Fatalf only from the test goroutine.
+	// The leader callback's parameters are built on the test goroutine: Execute
+	// may invoke it on a worker goroutine below, while wsaCreateParams/wsaDoc
+	// take *testing.T and can call t.Fatalf only from the test goroutine.
 	leaderParams := wsaCreateParams(t, userID, "idem-leader", wsaDoc(t, "Ada"))
-	rejectParams := wsaCreateParams(t, userID, "must-not-exist", wsaDoc(t, "Eve"))
 
 	leaderMutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
 		if _, err := qtx.CreateResume(h.ctx, leaderParams); err != nil {
@@ -1035,11 +1043,8 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 
 	// Sequential rejection first: the plain contract, with no concurrency to
 	// hide behind.
-	rejectMutate := func(qtx *store.Queries) (resume.StoredResponse, error) {
-		if _, err := qtx.CreateResume(h.ctx, rejectParams); err != nil {
-			return resume.StoredResponse{}, err
-		}
-		return resume.StoredResponse{Status: 201, Body: json.RawMessage(`{"created":"eve"}`)}, nil
+	rejectMutate := func(_ *store.Queries) (resume.StoredResponse, error) {
+		return resume.StoredResponse{}, errWsaRejectedCallbackRan
 	}
 	rejectedResp, rejectedReplay, err := h.idem.Execute(h.ctx, userID, route, key, hashB, rejectMutate)
 	if !errors.Is(err, resume.ErrIdempotencyKeyReuse) {
