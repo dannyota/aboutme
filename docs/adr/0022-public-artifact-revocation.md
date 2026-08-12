@@ -1,6 +1,6 @@
 # 0022 — Public artifacts pass a live-state gate before reuse
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

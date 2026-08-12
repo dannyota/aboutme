@@ -1,6 +1,6 @@
 # 0018 — Rate-limit state uses bounded overflow and expiry
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

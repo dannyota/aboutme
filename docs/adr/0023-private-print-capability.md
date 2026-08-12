@@ -1,6 +1,6 @@
 # 0023 — Internal print uses a one-use render capability
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

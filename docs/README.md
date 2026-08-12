@@ -18,17 +18,17 @@ link to that source instead of copying the contract.
 | How does a contributor or operator get started?   | [`guides/`](guides/README.md)                                            |
 | How should documentation and comments be written? | [`standards/`](standards/README.md)                                      |
 
-The design wins over a plan. An accepted ADR controls its decision when it
-conflicts with the draft design; a proposed ADR does not. Code, deployment
-configuration, and OpenAPI must agree about implemented behavior. A disagreement
-between those artifacts is a defect, not permission to choose one silently.
+The design wins over a plan. An accepted ADR controls its decision when the
+design text conflicts with it. Code, deployment configuration, and OpenAPI must
+agree about implemented behavior. A disagreement between those artifacts is a
+defect, not permission to choose one silently.
 
 ## Directory map
 
 | Path                                     | Contents                                                    | Lifecycle                                                |
 | ---------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
-| [`design/`](design/README.md)            | Intended product, architecture, and template contract       | Draft until approved; frozen by revision after approval  |
-| [`adr/`](adr/README.md)                  | One proposed or accepted decision per record                | Draft until accepted; accepted records are append-only   |
+| [`design/`](design/README.md)            | Intended product, architecture, and template contract       | Approved at v4; changes need an ADR or a new revision    |
+| [`adr/`](adr/README.md)                  | One decision per record                                     | Accepted records are append-only; supersede, never edit  |
 | [`api/`](api/README.md)                  | OpenAPI source, contract tests, and client-generation notes | Living with implemented HTTP behavior                    |
 | [`plans/`](plans/README.md)              | Roadmap, active phase plans, budgets, gates, and evidence   | Active plans are living; completed records are immutable |
 | [`research/`](research/flowcv/README.md) | External observations used as evidence                      | Not project authority                                    |
@@ -42,7 +42,7 @@ entry points and project policy.
 
 ## Current entry points
 
-- [Draft v4 design](design/README.md)
+- [Approved v4 design](design/README.md)
 - [Current-state architecture](architecture.md)
 - [Implementation roadmap](plans/implementation-plan.md)
 - [Template system](design/templates/README.md)
@@ -51,7 +51,7 @@ entry points and project policy.
 - [Native development runbook](runbooks/native-development.md)
 - [Local UAT runbook](runbooks/local-uat.md)
 
-Draft v4 is not approved or frozen. Approval rules live in the
+Design v4 is approved. Changing a decision needs a new ADR; see the
 [design index](design/README.md#approval-rule).
 
 ## Writing and checks
@@ -60,7 +60,7 @@ Draft v4 is not approved or frozen. Approval rules live in the
 - Use Mermaid for Markdown diagrams.
 - Keep living Markdown files near 300 lines. Split larger subjects into a
   directory with a `README.md` index and focused pages.
-- Do not rewrite completed phase records or acceptance catalogs.
+- Do not rewrite completed phase records.
 - Move long-lived design reasoning out of code comments and into the owning
   design page or ADR.
 - Run `make docs-fmt` and `make docs-lint` after Markdown or YAML changes.

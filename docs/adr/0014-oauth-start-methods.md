@@ -1,6 +1,6 @@
 # 0014 — Privileged OAuth starts use authenticated POST
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

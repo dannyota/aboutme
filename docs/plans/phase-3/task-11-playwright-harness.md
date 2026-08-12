@@ -20,8 +20,7 @@ is already installed by Task 0 (B8); this task does not touch `package.json`.
 
 **Requested from the integration owner (Makefile + CI are owner-owned; recipe
 template to resolve before handover):** `scripts/web-e2e-source.manifest` and
-`scripts/web-e2e-source.sh` are integration-owner-only shared files. A fresh
-blind test author owns only `scripts/web-e2e-source.test.sh`.
+`scripts/web-e2e-source.sh` are integration-owner-only shared files.
 
 <!-- markdownlint-disable MD010 -->
 
@@ -133,19 +132,18 @@ group zero.
 
 The security gate has three separate roles:
 
-1. A fresh blind author reads this contract, not `web-e2e-source.sh`, and owns
-   only `web-e2e-source.test.sh`. In isolated temporary Git repositories, the
-   test proves listed valid tracked files enter the tar with bytes from the
-   requested commit. A listed ordinary untracked path must fail, not enter the
-   archive. Separate tracked and untracked controls exercise every secret-like
-   class and must make the script fail without leaving an archive. A dirty
-   tracked file, dirty index, ignored path, traversal, duplicate, symlink,
-   special file, invalid commit, non-HEAD commit, or commit that changes during
-   the run is also a negative control. The author freezes the test and records
-   the expected failure from `bash scripts/web-e2e-source.test.sh` before
-   implementation.
+1. `web-e2e-source.test.sh` is written from this contract, before the source
+   script exists. In isolated temporary Git repositories, the test proves listed
+   valid tracked files enter the tar with bytes from the requested commit. A
+   listed ordinary untracked path must fail, not enter the archive. Separate
+   tracked and untracked controls exercise every secret-like class and must make
+   the script fail without leaving an archive. A dirty tracked file, dirty
+   index, ignored path, traversal, duplicate, symlink, special file, invalid
+   commit, non-HEAD commit, or commit that changes during the run is also a
+   negative control. Record the expected failure from
+   `bash scripts/web-e2e-source.test.sh` before implementation.
 2. The integration-owner implementer writes only the explicit manifest and
-   source script, cannot weaken the frozen test, and runs
+   source script, cannot weaken the test, and runs
    `bash scripts/web-e2e-source.test.sh` to pass.
 3. A fresh reviewer that authored neither side reviews the manifest path by path
    and the complete boundary diff, then independently reruns

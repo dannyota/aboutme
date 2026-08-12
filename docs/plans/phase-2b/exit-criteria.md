@@ -81,10 +81,15 @@ Every item must pass at one unchanged candidate commit.
       00006 applies from the prior head with idempotency bounds and the media
       cleanup ledger; released migrations remain byte-identical.
 - [ ] `make scan` passes; offline-only scanning does not close the phase gate.
-- [ ] Independent suites D, E, and F were derived before their authors read the
-      implementation diff and pass unchanged.
-- [ ] Every high-risk task has an independent defect review. Blocking fixes
-      receive independent re-review.
+- [ ] Every case in [adversarial coverage](adversarial-coverage.md) is present
+      and passing, with its bound set derived from `budgets.md` and the schema
+      rather than from implementation constants.
+- [ ] Construction stubs are gone:
+      `! rg -n --glob '*.go' --glob '!**/*_test.go' 'not_implemented|StatusNotImplemented' apps/server/internal/resumeapi`,
+      the route-table equality test, and `TestNoRouteAnswers501` all pass, and
+      OpenAPI contains no `501` response.
+- [ ] `docs/architecture.md` describes the actual resume routes, media backends,
+      failure boundary, and remaining gaps.
 - [ ] AC-SAVE-001/002/004/005, the P2B half of AC-SEC-003, and
       AC-MEDIA-001/002/004/005/008/009 are `PROVEN` with exact evidence. The P2B
       slices of AC-MEDIA-003/006 are evidenced, but those cross-phase rows
@@ -94,12 +99,10 @@ Every item must pass at one unchanged candidate commit.
 - [ ] Every integration handoff is applied or has a named owner and downstream
       gate.
 
-## Phase gates
+## Phase review
 
 - [ ] A fresh reviewer that authored none of the phase finds no blocking defect
       in behavior, design fit, interface stability, assumptions, or
-      traceability.
-- [ ] A fresh acceptance worker runs the frozen catalog at the exact commit and
-      edits no code, tests, fixtures, snapshots, seeds, or criteria. Every row
-      is `PASS`; `FAIL`, `BLOCKED`, missing evidence, or an undisclosed retry
-      fails the gate.
+      traceability, and confirms by name the authorization, CSRF, CAS,
+      idempotency, sanitizing, and media-privacy invariants. Fixes are confirmed
+      by the same reviewer.

@@ -1,11 +1,15 @@
 # P9 evidence and review
 
+> Detailed reference. Where this page describes frozen catalogs, blind authors,
+> sealed image identities, or the U10 export tool, ADR 0024 and the
+> [phase README](README.md) apply instead.
+
 Only redacted, allowlisted evidence persists. Raw browser and network output
 stays in volatile storage and is destroyed after safe export and review.
 
-The verified [U10 tool](evidence-tooling.md) is the only evidence export path.
-The executor and reviewer cannot replace it with manual filtering, a new script,
-or an unpinned OCR command during a run.
+Evidence stays on this machine under an ignored path and is never committed; see
+the [phase README](README.md). The executor and reviewer cannot replace it with
+manual filtering, a new script, or an unpinned OCR command during a run.
 
 ## Paths and identity
 

@@ -1,5 +1,9 @@
 # P9 execution
 
+> Detailed reference. Where this page describes frozen catalogs, blind authors,
+> sealed image identities, or the U10 export tool, ADR 0024 and the
+> [phase README](README.md) apply instead.
+
 The executor runs one frozen catalog against one unchanged candidate commit.
 This run does not authorize external infrastructure.
 

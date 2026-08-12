@@ -1,6 +1,6 @@
 # 0019 — Resume media stays private behind live-gated reads
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

@@ -62,8 +62,8 @@ or contact edit from clearing the reference and leaking an orphan.
       absence of the header and explicit `X-Resume-Schema-Version: 2` produce
       byte-identical stored documents and responses. The explicit v1 case must
       traverse the real converters and is covered in Step 2.
-- [ ] **Step 4: hand off the granular old-client proof.** Task 13's suite is
-      frozen in WF before implementation. After all W3 route files land, the W4
+- [ ] **Step 4: hand off the granular old-client proof.** Suite E is frozen in
+      WF before implementation. After all W3 route files land, the W4
       integration run executes
       `writesafety_adversarial_test.go::TestWireVersion_AcceptProjectPersistEmit`
       sends a v1 entry delta through the real entry route, proves down-emit →
@@ -71,8 +71,8 @@ or contact edit from clearing the reference and leaking an orphan.
       v2. Run
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi -run '^TestWireVersion_AcceptProjectPersistEmit$' -race -count=1 -v)`.
       This task reports its fixture and projector setup for that later run; its
-      own gate does not depend on a sibling route. It never edits the blind file
-      or Task 7's route/tests.
+      own gate does not depend on a sibling route. It never weakens the shared
+      adversarial file or Task 7's route/tests.
 - [ ] **Step 5: failing contract test.** Handler statuses, codes, and the
       request/response shapes agree with `docs/api/openapi.yaml`, including the
       `X-Resume-Schema-Version` header on both sides. Validate a request
