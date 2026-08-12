@@ -13,15 +13,22 @@ import (
 )
 
 type IdempotencyRecord struct {
-	ID             uuid.UUID
-	UserID         uuid.UUID
-	Route          string
-	IdempotencyKey uuid.UUID
-	RequestHash    []byte
-	ResponseStatus int32
-	ResponseBody   json.RawMessage
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Route           string
+	IdempotencyKey  uuid.UUID
+	RequestHash     []byte
+	ResponseStatus  int32
+	ResponseBody    json.RawMessage
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	ResponseHeaders json.RawMessage
+}
+
+type IdempotencyUsage struct {
+	UserID          uuid.UUID
+	RetainedRecords int64
+	StoredBytes     int64
 }
 
 type Identity struct {
@@ -30,6 +37,15 @@ type Identity struct {
 	Provider       string
 	ProviderUserID string
 	CreatedAt      time.Time
+}
+
+type MediaDeletionJob struct {
+	ID            uuid.UUID
+	ResumeID      uuid.UUID
+	ObjectKey     string
+	EnqueuedAt    time.Time
+	NextAttemptAt time.Time
+	AttemptCount  int32
 }
 
 type OAuthTransaction struct {

@@ -272,24 +272,181 @@ SELECT id FROM resumes WHERE schema_version < $1 ORDER BY id LIMIT $2;
 -- not user-scoped, unlike product reads. It adds no write path.
 SELECT * FROM resumes WHERE id = $1;
 
--- name: CreateIdempotencyRecord :exec
+-- name: UpdateResumeMetadataAndDocumentCAS :one
+-- The P2B full-aggregate metadata write (D15/D17): title, lng, and the
+-- caller's complete already-projected document under ONE revision CAS. The
+-- returned revision is the NEW revision. A stale or non-matching $3
+-- updates zero rows and surfaces as pgx.ErrNoRows, which internal/resume
+-- turns into *RevisionMismatchError or ErrNotFound. user_id never appears
+-- in a SET clause (the cap trigger fires on UPDATE OF user_id).
+UPDATE resumes
+SET title = sqlc.arg(title), lng = sqlc.narg(lng),
+    personal_details = sqlc.arg(personal_details),
+    content = sqlc.arg(content), customization = sqlc.arg(customization),
+    schema_version = sqlc.arg(schema_version),
+    revision = revision + 1, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING revision;
+
+-- name: DeleteResumeForUserCAS :one
+-- Revision-CAS delete returning the deleted row, so the caller can
+-- validate the stored photo key and enqueue media cleanup in the same
+-- transaction. Zero rows (stale revision, wrong owner, or missing id)
+-- surfaces as pgx.ErrNoRows; the caller re-reads to distinguish staleness
+-- from absence without creating an existence oracle.
+DELETE FROM resumes
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING *;
+
+-- name: CreateIdempotencyRecord :one
+-- Returns PostgreSQL's normalized jsonb representation of the stored body
+-- and approved headers plus the exact stored byte count, so the first
+-- response and every replay use identical bytes and no caller recomputes
+-- capacity accounting in Go.
 INSERT INTO idempotency_records
     (user_id, route, idempotency_key, request_hash,
-     response_status, response_body, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+     response_status, response_body, response_headers, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING response_body, response_headers,
+          octet_length(response_body::text) +
+          octet_length(response_headers::text) AS stored_bytes;
 
 -- name: GetIdempotencyRecord :one
 SELECT * FROM idempotency_records
 WHERE user_id = $1 AND route = $2 AND idempotency_key = $3;
 
--- name: DeleteIdempotencyRecordIfExpired :execrows
-DELETE FROM idempotency_records
-WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
-    AND expires_at <= $4;
+-- name: NormalizeIdempotencyResponse :one
+-- Normalizes a candidate response through the same jsonb representation an
+-- insert would store and reports the exact byte count the usage
+-- reservation must account for — the one canonical byte expression shared
+-- with backfill, insert, and cleanup.
+SELECT sqlc.arg(response_body)::jsonb AS response_body,
+       sqlc.arg(response_headers)::jsonb AS response_headers,
+       octet_length(sqlc.arg(response_body)::jsonb::text) +
+       octet_length(sqlc.arg(response_headers)::jsonb::text) AS stored_bytes;
 
--- name: DeleteExpiredIdempotencyRecordsForUser :execrows
--- Every Execute commits this per-user cleanup before its mutation transaction,
--- so expiry enforcement survives a rejected key reuse or mutation error
--- instead of depending on a future global job.
-DELETE FROM idempotency_records
-WHERE user_id = $1 AND expires_at <= $2;
+-- name: DeleteExpiredIdempotencyRecordForKey :one
+-- Deletes exactly this key's record if (and only if) it has expired, and
+-- reports the counters to release — zero rows deleted still returns one
+-- aggregate row of zeros.
+WITH deleted AS (
+  DELETE FROM idempotency_records
+  WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
+      AND expires_at <= $4
+  RETURNING response_body, response_headers
+)
+SELECT count(*)::bigint AS deleted_records,
+       COALESCE(sum(octet_length(response_body::text) +
+                    octet_length(response_headers::text)), 0)::bigint
+         AS deleted_bytes
+FROM deleted;
+
+-- name: DeleteExpiredIdempotencyRecordsForUser :one
+-- The bounded request-path cleanup: at most limit_rows of the calling
+-- user's expired records, deterministically oldest first by
+-- (expires_at, id) on the composite index. FOR UPDATE SKIP LOCKED keeps
+-- concurrent cleanup bounded and deadlock-free. Always returns one
+-- aggregate row, even when nothing was deleted.
+WITH doomed AS (
+  SELECT idempotency_records.id FROM idempotency_records
+  WHERE idempotency_records.user_id = $1
+      AND idempotency_records.expires_at <= $2
+  ORDER BY idempotency_records.expires_at, idempotency_records.id
+  LIMIT $3
+  FOR UPDATE SKIP LOCKED
+), deleted AS (
+  DELETE FROM idempotency_records AS records
+  USING doomed WHERE records.id = doomed.id
+  RETURNING records.response_body, records.response_headers
+)
+SELECT count(*)::bigint AS deleted_records,
+       COALESCE(sum(octet_length(response_body::text) +
+                    octet_length(response_headers::text)), 0)::bigint
+         AS deleted_bytes
+FROM deleted;
+
+-- name: DeleteExpiredIdempotencyRecordsGlobal :many
+-- The P8-priv scheduled sweep's bounded page: oldest expired rows across
+-- all users, grouped per user so the sweep can release each user's exact
+-- counters (once per returned user) before committing that cleanup
+-- transaction.
+WITH doomed AS (
+  SELECT id FROM idempotency_records
+  WHERE expires_at <= sqlc.arg(now)::timestamptz
+  ORDER BY expires_at, id
+  LIMIT sqlc.arg(limit_rows)
+  FOR UPDATE SKIP LOCKED
+), deleted AS (
+  DELETE FROM idempotency_records AS records
+  USING doomed WHERE records.id = doomed.id
+  RETURNING records.user_id, records.response_body, records.response_headers
+)
+SELECT user_id,
+       count(*)::bigint AS deleted_records,
+       COALESCE(sum(octet_length(response_body::text) +
+                    octet_length(response_headers::text)), 0)::bigint
+         AS deleted_bytes
+FROM deleted
+GROUP BY user_id;
+
+-- name: GetOrCreateIdempotencyUsageForUpdate :one
+-- Locks (creating if absent) the caller's usage row inside the current
+-- transaction. The no-op DO UPDATE assignment is what makes the conflict
+-- arm take the row lock and return the existing row; user_id itself never
+-- appears in a SET clause.
+INSERT INTO idempotency_usage (user_id, retained_records, stored_bytes)
+VALUES ($1, 0, 0)
+ON CONFLICT (user_id) DO UPDATE
+SET retained_records = idempotency_usage.retained_records
+RETURNING *;
+
+-- name: TryReserveIdempotencyUsage :one
+-- Conditionally admits one new retained record of record_bytes stored
+-- bytes within the caps. Zero rows (pgx.ErrNoRows) means the insert would
+-- exceed a cap and the caller must reject with the typed capacity error
+-- without committing the mutation.
+UPDATE idempotency_usage
+SET retained_records = retained_records + 1,
+    stored_bytes = stored_bytes + sqlc.arg(record_bytes)::bigint
+WHERE user_id = $1
+  AND retained_records + 1 <= sqlc.arg(max_records)::bigint
+  AND stored_bytes + sqlc.arg(record_bytes)::bigint <= sqlc.arg(max_bytes)::bigint
+RETURNING retained_records, stored_bytes;
+
+-- name: ReleaseIdempotencyUsage :execrows
+-- Releases exactly the counters of physically deleted records, in the same
+-- transaction as their deletion. The migration's purge-then-backfill order
+-- plus transactional maintenance guarantee this can never underflow the
+-- non-negative checks.
+UPDATE idempotency_usage
+SET retained_records = retained_records - sqlc.arg(records)::bigint,
+    stored_bytes = stored_bytes - sqlc.arg(released_bytes)::bigint
+WHERE user_id = $1;
+
+-- name: GetIdempotencyCapacityRetryAfter :one
+-- Inputs for the capacity Retry-After decision: while an expired retained
+-- row remains the caller retries in one second (the next mutation's
+-- bounded cleanup frees space); otherwise the earliest retained expiry
+-- says when space can next appear.
+-- earliest_expiry falls back to the caller's own now when the user retains
+-- no records at all (capacity rejection with zero retained records cannot
+-- normally happen); the caller maps any earliest_expiry <= now to the
+-- one-second branch.
+SELECT EXISTS (
+         SELECT 1 FROM idempotency_records
+         WHERE idempotency_records.user_id = $1
+             AND idempotency_records.expires_at <= sqlc.arg(now)::timestamptz
+       ) AS expired_backlog,
+       COALESCE((SELECT min(idempotency_records.expires_at)
+                 FROM idempotency_records
+                 WHERE idempotency_records.user_id = $1),
+                sqlc.arg(now)::timestamptz)::timestamptz
+         AS earliest_expiry;
+
+-- name: EnqueueMediaDeletionJob :execrows
+-- Records exact-key cleanup work in the caller's transaction (ADR 0019).
+-- Duplicate enqueue of the immutable key is idempotent (zero rows); the
+-- table's own check constraint rejects a malformed or cross-resume key.
+INSERT INTO media_deletion_jobs (resume_id, object_key)
+VALUES ($1, $2)
+ON CONFLICT (object_key) DO NOTHING;

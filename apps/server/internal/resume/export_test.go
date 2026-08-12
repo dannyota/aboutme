@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
@@ -59,18 +60,19 @@ func EncodePartsForTest(doc schema.Resume) (personalDetails, content, customizat
 	return encodeParts(doc)
 }
 
-// CreateTxForTest exposes (*Store).createTx so idempotency tests can compose
+// CreateTxForTest adapts the exported transaction seam for older focused
+// tests whose create path leaves lng unset.
 // Execute with the real cap-checked create logic instead of an INSERT stand-in.
 func (s *Store) CreateTxForTest(ctx context.Context, qtx *store.Queries, userID uuid.UUID, title string, doc schema.Resume) (Resume, error) {
-	return s.createTx(ctx, qtx, userID, title, doc)
+	return s.CreateTx(ctx, qtx, userID, title, nil, doc)
 }
 
-// SaveDocumentTxForTest exposes (*Store).saveDocumentTx so
+// SaveDocumentTxForTest adapts the exported transaction seam so
 // idempotency contention tests can compose Execute with the real revision-CAS
 // write inside Execute's supplied transaction. Production callers use
 // SaveDocument; this test-only seam does not widen the shipped API.
 func (s *Store) SaveDocumentTxForTest(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (int64, error) {
-	return s.saveDocumentTx(ctx, qtx, userID, id, doc, expectedRevision)
+	return s.SaveDocumentTx(ctx, qtx, userID, id, doc, expectedRevision)
 }
 
 // NewIdempotencyStoreForTest builds an IdempotencyStore backed by pool that
@@ -81,6 +83,30 @@ func (s *Store) SaveDocumentTxForTest(ctx context.Context, qtx *store.Queries, u
 // sleep. Every non-test caller uses NewIdempotencyStore.
 func NewIdempotencyStoreForTest(pool *store.Pool, now func() time.Time) *IdempotencyStore {
 	return &IdempotencyStore{pool: pool, q: store.New(pool), now: now}
+}
+
+// NewIdempotencyStoreWithHooksForTest exposes only the transaction lifecycle
+// seams needed to prove Execute's commit-outcome classification. A nil hook
+// uses the production path.
+func NewIdempotencyStoreWithHooksForTest(pool *store.Pool, now func() time.Time,
+	beginTx func(context.Context) (pgx.Tx, error),
+	commitTx func(context.Context, pgx.Tx) error,
+) *IdempotencyStore {
+	return &IdempotencyStore{
+		pool: pool, q: store.New(pool), now: now,
+		beginTx: beginTx, commitTx: commitTx,
+	}
+}
+
+// ExecuteForTest preserves the response/replayed/error view used by the
+// Phase 2A suites while production callers consume ExecuteResult's commit
+// classification. The underlying execution path is exactly Execute.
+func (s *IdempotencyStore) ExecuteForTest(ctx context.Context, userID uuid.UUID,
+	operation string, key uuid.UUID, requestHash [32]byte,
+	mutate func(*store.Queries) (StoredResponse, error),
+) (StoredResponse, bool, error) {
+	result, err := s.Execute(ctx, userID, operation, key, requestHash, mutate)
+	return result.Response, result.Replayed, err
 }
 
 // BackfillOneForTest exposes (*Store).backfillOne's pause seam so

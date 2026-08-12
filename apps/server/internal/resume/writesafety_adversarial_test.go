@@ -794,7 +794,7 @@ func TestIdempotency_ConcurrentSameKey_OneMutationCommits(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			resp, replayed, err := h.idem.Execute(h.ctx, userID, route, key, hash, mutate)
+			resp, replayed, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, hash, mutate)
 			results[i] = outcome{resp: resp, replayed: replayed, err: err}
 		}()
 	}
@@ -904,7 +904,7 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 		retryParams := wsaCreateParams(t, userID, "retry-committed", wsaDoc(t, "Grace"))
 
 		before := h.wsaSnapshot(t, "resumes", userID)
-		failedResp, failedReplayed, err := h.idem.Execute(h.ctx, userID, route, key, hash,
+		failedResp, failedReplayed, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, hash,
 			func(qtx *store.Queries) (resume.StoredResponse, error) {
 				if _, createErr := qtx.CreateResume(h.ctx, failedParams); createErr != nil {
 					return resume.StoredResponse{}, createErr
@@ -930,7 +930,7 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 
 		// Nothing was recorded, so the same key+hash must run a fresh,
 		// transaction-scoped mutation and commit its response with it.
-		retryResp, replayed, retryErr := h.idem.Execute(h.ctx, userID, route, key, hash,
+		retryResp, replayed, retryErr := h.idem.ExecuteForTest(h.ctx, userID, route, key, hash,
 			func(qtx *store.Queries) (resume.StoredResponse, error) {
 				if _, createErr := qtx.CreateResume(h.ctx, retryParams); createErr != nil {
 					return resume.StoredResponse{}, createErr
@@ -968,7 +968,7 @@ func TestIdempotency_MutationErrorRollsBack(t *testing.T) {
 		before := h.wsaSnapshot(t, "resumes", userID)
 
 		key := wsaUUID(9102)
-		failedResp, failedReplayed, err := h.idem.Execute(h.ctx, userID, route, key, wsaHash("body-A"),
+		failedResp, failedReplayed, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, wsaHash("body-A"),
 			func(qtx *store.Queries) (resume.StoredResponse, error) {
 				if _, casErr := qtx.UpdateResumeTitleCAS(h.ctx, store.UpdateResumeTitleCASParams{
 					ID: created.ID, UserID: userID, Revision: created.Revision, Title: "clobbered",
@@ -1032,7 +1032,7 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 		return resume.StoredResponse{Status: 201, Body: responseBody}, nil
 	}
 
-	if _, replayed, err := h.idem.Execute(h.ctx, userID, route, key, hashA, leaderMutate); err != nil {
+	if _, replayed, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, hashA, leaderMutate); err != nil {
 		t.Fatalf("leader Execute: %v", err)
 	} else if replayed {
 		t.Fatalf("leader reported a replay on a fresh key")
@@ -1046,7 +1046,7 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 	rejectMutate := func(_ *store.Queries) (resume.StoredResponse, error) {
 		return resume.StoredResponse{}, errWsaRejectedCallbackRan
 	}
-	rejectedResp, rejectedReplay, err := h.idem.Execute(h.ctx, userID, route, key, hashB, rejectMutate)
+	rejectedResp, rejectedReplay, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, hashB, rejectMutate)
 	if !errors.Is(err, resume.ErrIdempotencyKeyReuse) {
 		t.Fatalf("different-hash reuse returned %#v (%v), want ErrIdempotencyKeyReuse", err, err)
 	}
@@ -1071,14 +1071,14 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			resp, replayed, err := h.idem.Execute(h.ctx, userID, route, key, hashA, leaderMutate)
+			resp, replayed, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, hashA, leaderMutate)
 			replayResults[i] = outcome{resp: resp, replayed: replayed, err: err}
 		}()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			<-start
-			resp, replayed, err := h.idem.Execute(h.ctx, userID, route, key, hashB, rejectMutate)
+			resp, replayed, err := h.idem.ExecuteForTest(h.ctx, userID, route, key, hashB, rejectMutate)
 			rejectResults[i] = outcome{resp: resp, replayed: replayed, err: err}
 		}()
 	}

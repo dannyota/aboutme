@@ -137,34 +137,51 @@ func (q *Queries) CountResumesForUser(ctx context.Context, userID uuid.UUID) (in
 	return count, err
 }
 
-const createIdempotencyRecord = `-- name: CreateIdempotencyRecord :exec
+const createIdempotencyRecord = `-- name: CreateIdempotencyRecord :one
 INSERT INTO idempotency_records
     (user_id, route, idempotency_key, request_hash,
-     response_status, response_body, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+     response_status, response_body, response_headers, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING response_body, response_headers,
+          octet_length(response_body::text) +
+          octet_length(response_headers::text) AS stored_bytes
 `
 
 type CreateIdempotencyRecordParams struct {
-	UserID         uuid.UUID
-	Route          string
-	IdempotencyKey uuid.UUID
-	RequestHash    []byte
-	ResponseStatus int32
-	ResponseBody   json.RawMessage
-	ExpiresAt      time.Time
+	UserID          uuid.UUID
+	Route           string
+	IdempotencyKey  uuid.UUID
+	RequestHash     []byte
+	ResponseStatus  int32
+	ResponseBody    json.RawMessage
+	ResponseHeaders json.RawMessage
+	ExpiresAt       time.Time
 }
 
-func (q *Queries) CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) error {
-	_, err := q.db.Exec(ctx, createIdempotencyRecord,
+type CreateIdempotencyRecordRow struct {
+	ResponseBody    json.RawMessage
+	ResponseHeaders json.RawMessage
+	StoredBytes     int32
+}
+
+// Returns PostgreSQL's normalized jsonb representation of the stored body
+// and approved headers plus the exact stored byte count, so the first
+// response and every replay use identical bytes and no caller recomputes
+// capacity accounting in Go.
+func (q *Queries) CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) (CreateIdempotencyRecordRow, error) {
+	row := q.db.QueryRow(ctx, createIdempotencyRecord,
 		arg.UserID,
 		arg.Route,
 		arg.IdempotencyKey,
 		arg.RequestHash,
 		arg.ResponseStatus,
 		arg.ResponseBody,
+		arg.ResponseHeaders,
 		arg.ExpiresAt,
 	)
-	return err
+	var i CreateIdempotencyRecordRow
+	err := row.Scan(&i.ResponseBody, &i.ResponseHeaders, &i.StoredBytes)
+	return i, err
 }
 
 const createIdentity = `-- name: CreateIdentity :one
@@ -380,25 +397,144 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
-const deleteExpiredIdempotencyRecordsForUser = `-- name: DeleteExpiredIdempotencyRecordsForUser :execrows
-DELETE FROM idempotency_records
-WHERE user_id = $1 AND expires_at <= $2
+const deleteExpiredIdempotencyRecordForKey = `-- name: DeleteExpiredIdempotencyRecordForKey :one
+WITH deleted AS (
+  DELETE FROM idempotency_records
+  WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
+      AND expires_at <= $4
+  RETURNING response_body, response_headers
+)
+SELECT count(*)::bigint AS deleted_records,
+       COALESCE(sum(octet_length(response_body::text) +
+                    octet_length(response_headers::text)), 0)::bigint
+         AS deleted_bytes
+FROM deleted
+`
+
+type DeleteExpiredIdempotencyRecordForKeyParams struct {
+	UserID         uuid.UUID
+	Route          string
+	IdempotencyKey uuid.UUID
+	ExpiresAt      time.Time
+}
+
+type DeleteExpiredIdempotencyRecordForKeyRow struct {
+	DeletedRecords int64
+	DeletedBytes   int64
+}
+
+// Deletes exactly this key's record if (and only if) it has expired, and
+// reports the counters to release — zero rows deleted still returns one
+// aggregate row of zeros.
+func (q *Queries) DeleteExpiredIdempotencyRecordForKey(ctx context.Context, arg DeleteExpiredIdempotencyRecordForKeyParams) (DeleteExpiredIdempotencyRecordForKeyRow, error) {
+	row := q.db.QueryRow(ctx, deleteExpiredIdempotencyRecordForKey,
+		arg.UserID,
+		arg.Route,
+		arg.IdempotencyKey,
+		arg.ExpiresAt,
+	)
+	var i DeleteExpiredIdempotencyRecordForKeyRow
+	err := row.Scan(&i.DeletedRecords, &i.DeletedBytes)
+	return i, err
+}
+
+const deleteExpiredIdempotencyRecordsForUser = `-- name: DeleteExpiredIdempotencyRecordsForUser :one
+WITH doomed AS (
+  SELECT idempotency_records.id FROM idempotency_records
+  WHERE idempotency_records.user_id = $1
+      AND idempotency_records.expires_at <= $2
+  ORDER BY idempotency_records.expires_at, idempotency_records.id
+  LIMIT $3
+  FOR UPDATE SKIP LOCKED
+), deleted AS (
+  DELETE FROM idempotency_records AS records
+  USING doomed WHERE records.id = doomed.id
+  RETURNING records.response_body, records.response_headers
+)
+SELECT count(*)::bigint AS deleted_records,
+       COALESCE(sum(octet_length(response_body::text) +
+                    octet_length(response_headers::text)), 0)::bigint
+         AS deleted_bytes
+FROM deleted
 `
 
 type DeleteExpiredIdempotencyRecordsForUserParams struct {
 	UserID    uuid.UUID
 	ExpiresAt time.Time
+	Limit     int32
 }
 
-// Every Execute commits this per-user cleanup before its mutation transaction,
-// so expiry enforcement survives a rejected key reuse or mutation error
-// instead of depending on a future global job.
-func (q *Queries) DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredIdempotencyRecordsForUser, arg.UserID, arg.ExpiresAt)
+type DeleteExpiredIdempotencyRecordsForUserRow struct {
+	DeletedRecords int64
+	DeletedBytes   int64
+}
+
+// The bounded request-path cleanup: at most limit_rows of the calling
+// user's expired records, deterministically oldest first by
+// (expires_at, id) on the composite index. FOR UPDATE SKIP LOCKED keeps
+// concurrent cleanup bounded and deadlock-free. Always returns one
+// aggregate row, even when nothing was deleted.
+func (q *Queries) DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (DeleteExpiredIdempotencyRecordsForUserRow, error) {
+	row := q.db.QueryRow(ctx, deleteExpiredIdempotencyRecordsForUser, arg.UserID, arg.ExpiresAt, arg.Limit)
+	var i DeleteExpiredIdempotencyRecordsForUserRow
+	err := row.Scan(&i.DeletedRecords, &i.DeletedBytes)
+	return i, err
+}
+
+const deleteExpiredIdempotencyRecordsGlobal = `-- name: DeleteExpiredIdempotencyRecordsGlobal :many
+WITH doomed AS (
+  SELECT id FROM idempotency_records
+  WHERE expires_at <= $1::timestamptz
+  ORDER BY expires_at, id
+  LIMIT $2
+  FOR UPDATE SKIP LOCKED
+), deleted AS (
+  DELETE FROM idempotency_records AS records
+  USING doomed WHERE records.id = doomed.id
+  RETURNING records.user_id, records.response_body, records.response_headers
+)
+SELECT user_id,
+       count(*)::bigint AS deleted_records,
+       COALESCE(sum(octet_length(response_body::text) +
+                    octet_length(response_headers::text)), 0)::bigint
+         AS deleted_bytes
+FROM deleted
+GROUP BY user_id
+`
+
+type DeleteExpiredIdempotencyRecordsGlobalParams struct {
+	Now       time.Time
+	LimitRows int32
+}
+
+type DeleteExpiredIdempotencyRecordsGlobalRow struct {
+	UserID         uuid.UUID
+	DeletedRecords int64
+	DeletedBytes   int64
+}
+
+// The P8-priv scheduled sweep's bounded page: oldest expired rows across
+// all users, grouped per user so the sweep can release each user's exact
+// counters (once per returned user) before committing that cleanup
+// transaction.
+func (q *Queries) DeleteExpiredIdempotencyRecordsGlobal(ctx context.Context, arg DeleteExpiredIdempotencyRecordsGlobalParams) ([]DeleteExpiredIdempotencyRecordsGlobalRow, error) {
+	rows, err := q.db.Query(ctx, deleteExpiredIdempotencyRecordsGlobal, arg.Now, arg.LimitRows)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []DeleteExpiredIdempotencyRecordsGlobalRow
+	for rows.Next() {
+		var i DeleteExpiredIdempotencyRecordsGlobalRow
+		if err := rows.Scan(&i.UserID, &i.DeletedRecords, &i.DeletedBytes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const deleteExpiredOAuthTransactions = `-- name: DeleteExpiredOAuthTransactions :execrows
@@ -438,32 +574,6 @@ func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, arg Delete
 	return result.RowsAffected(), nil
 }
 
-const deleteIdempotencyRecordIfExpired = `-- name: DeleteIdempotencyRecordIfExpired :execrows
-DELETE FROM idempotency_records
-WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
-    AND expires_at <= $4
-`
-
-type DeleteIdempotencyRecordIfExpiredParams struct {
-	UserID         uuid.UUID
-	Route          string
-	IdempotencyKey uuid.UUID
-	ExpiresAt      time.Time
-}
-
-func (q *Queries) DeleteIdempotencyRecordIfExpired(ctx context.Context, arg DeleteIdempotencyRecordIfExpiredParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteIdempotencyRecordIfExpired,
-		arg.UserID,
-		arg.Route,
-		arg.IdempotencyKey,
-		arg.ExpiresAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteResumeForUser = `-- name: DeleteResumeForUser :execrows
 DELETE FROM resumes WHERE id = $1 AND user_id = $2
 `
@@ -475,6 +585,68 @@ type DeleteResumeForUserParams struct {
 
 func (q *Queries) DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteResumeForUser, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteResumeForUserCAS = `-- name: DeleteResumeForUserCAS :one
+DELETE FROM resumes
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at
+`
+
+type DeleteResumeForUserCASParams struct {
+	ID       uuid.UUID
+	UserID   uuid.UUID
+	Revision int64
+}
+
+// Revision-CAS delete returning the deleted row, so the caller can
+// validate the stored photo key and enqueue media cleanup in the same
+// transaction. Zero rows (stale revision, wrong owner, or missing id)
+// surfaces as pgx.ErrNoRows; the caller re-reads to distinguish staleness
+// from absence without creating an existence oracle.
+func (q *Queries) DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error) {
+	row := q.db.QueryRow(ctx, deleteResumeForUserCAS, arg.ID, arg.UserID, arg.Revision)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const enqueueMediaDeletionJob = `-- name: EnqueueMediaDeletionJob :execrows
+INSERT INTO media_deletion_jobs (resume_id, object_key)
+VALUES ($1, $2)
+ON CONFLICT (object_key) DO NOTHING
+`
+
+type EnqueueMediaDeletionJobParams struct {
+	ResumeID  uuid.UUID
+	ObjectKey string
+}
+
+// Records exact-key cleanup work in the caller's transaction (ADR 0019).
+// Duplicate enqueue of the immutable key is idempotent (zero rows); the
+// table's own check constraint rejects a malformed or cross-resume key.
+func (q *Queries) EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, enqueueMediaDeletionJob, arg.ResumeID, arg.ObjectKey)
 	if err != nil {
 		return 0, err
 	}
@@ -510,8 +682,46 @@ func (q *Queries) FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uui
 	return i, err
 }
 
+const getIdempotencyCapacityRetryAfter = `-- name: GetIdempotencyCapacityRetryAfter :one
+SELECT EXISTS (
+         SELECT 1 FROM idempotency_records
+         WHERE idempotency_records.user_id = $1
+             AND idempotency_records.expires_at <= $2::timestamptz
+       ) AS expired_backlog,
+       COALESCE((SELECT min(idempotency_records.expires_at)
+                 FROM idempotency_records
+                 WHERE idempotency_records.user_id = $1),
+                $2::timestamptz)::timestamptz
+         AS earliest_expiry
+`
+
+type GetIdempotencyCapacityRetryAfterParams struct {
+	UserID uuid.UUID
+	Now    time.Time
+}
+
+type GetIdempotencyCapacityRetryAfterRow struct {
+	ExpiredBacklog bool
+	EarliestExpiry time.Time
+}
+
+// Inputs for the capacity Retry-After decision: while an expired retained
+// row remains the caller retries in one second (the next mutation's
+// bounded cleanup frees space); otherwise the earliest retained expiry
+// says when space can next appear.
+// earliest_expiry falls back to the caller's own now when the user retains
+// no records at all (capacity rejection with zero retained records cannot
+// normally happen); the caller maps any earliest_expiry <= now to the
+// one-second branch.
+func (q *Queries) GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error) {
+	row := q.db.QueryRow(ctx, getIdempotencyCapacityRetryAfter, arg.UserID, arg.Now)
+	var i GetIdempotencyCapacityRetryAfterRow
+	err := row.Scan(&i.ExpiredBacklog, &i.EarliestExpiry)
+	return i, err
+}
+
 const getIdempotencyRecord = `-- name: GetIdempotencyRecord :one
-SELECT id, user_id, route, idempotency_key, request_hash, response_status, response_body, created_at, expires_at FROM idempotency_records
+SELECT id, user_id, route, idempotency_key, request_hash, response_status, response_body, created_at, expires_at, response_headers FROM idempotency_records
 WHERE user_id = $1 AND route = $2 AND idempotency_key = $3
 `
 
@@ -534,6 +744,7 @@ func (q *Queries) GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRe
 		&i.ResponseBody,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.ResponseHeaders,
 	)
 	return i, err
 }
@@ -557,6 +768,25 @@ func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdent
 		&i.ProviderUserID,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getOrCreateIdempotencyUsageForUpdate = `-- name: GetOrCreateIdempotencyUsageForUpdate :one
+INSERT INTO idempotency_usage (user_id, retained_records, stored_bytes)
+VALUES ($1, 0, 0)
+ON CONFLICT (user_id) DO UPDATE
+SET retained_records = idempotency_usage.retained_records
+RETURNING user_id, retained_records, stored_bytes
+`
+
+// Locks (creating if absent) the caller's usage row inside the current
+// transaction. The no-op DO UPDATE assignment is what makes the conflict
+// arm take the row lock and return the existing row; user_id itself never
+// appears in a SET clause.
+func (q *Queries) GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, userID uuid.UUID) (IdempotencyUsage, error) {
+	row := q.db.QueryRow(ctx, getOrCreateIdempotencyUsageForUpdate, userID)
+	var i IdempotencyUsage
+	err := row.Scan(&i.UserID, &i.RetainedRecords, &i.StoredBytes)
 	return i, err
 }
 
@@ -889,6 +1119,60 @@ func (q *Queries) LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uui
 	return id_2, err
 }
 
+const normalizeIdempotencyResponse = `-- name: NormalizeIdempotencyResponse :one
+SELECT $1::jsonb AS response_body,
+       $2::jsonb AS response_headers,
+       octet_length($1::jsonb::text) +
+       octet_length($2::jsonb::text) AS stored_bytes
+`
+
+type NormalizeIdempotencyResponseParams struct {
+	ResponseBody    json.RawMessage
+	ResponseHeaders json.RawMessage
+}
+
+type NormalizeIdempotencyResponseRow struct {
+	ResponseBody    json.RawMessage
+	ResponseHeaders json.RawMessage
+	StoredBytes     int32
+}
+
+// Normalizes a candidate response through the same jsonb representation an
+// insert would store and reports the exact byte count the usage
+// reservation must account for — the one canonical byte expression shared
+// with backfill, insert, and cleanup.
+func (q *Queries) NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error) {
+	row := q.db.QueryRow(ctx, normalizeIdempotencyResponse, arg.ResponseBody, arg.ResponseHeaders)
+	var i NormalizeIdempotencyResponseRow
+	err := row.Scan(&i.ResponseBody, &i.ResponseHeaders, &i.StoredBytes)
+	return i, err
+}
+
+const releaseIdempotencyUsage = `-- name: ReleaseIdempotencyUsage :execrows
+UPDATE idempotency_usage
+SET retained_records = retained_records - $2::bigint,
+    stored_bytes = stored_bytes - $3::bigint
+WHERE user_id = $1
+`
+
+type ReleaseIdempotencyUsageParams struct {
+	UserID        uuid.UUID
+	Records       int64
+	ReleasedBytes int64
+}
+
+// Releases exactly the counters of physically deleted records, in the same
+// transaction as their deletion. The migration's purge-then-backfill order
+// plus transactional maintenance guarantee this can never underflow the
+// non-negative checks.
+func (q *Queries) ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseIdempotencyUsage, arg.UserID, arg.Records, arg.ReleasedBytes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeAllSessions = `-- name: RevokeAllSessions :execrows
 UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL
 `
@@ -1034,6 +1318,44 @@ func (q *Queries) TouchReauthenticatedAt(ctx context.Context, arg TouchReauthent
 	return err
 }
 
+const tryReserveIdempotencyUsage = `-- name: TryReserveIdempotencyUsage :one
+UPDATE idempotency_usage
+SET retained_records = retained_records + 1,
+    stored_bytes = stored_bytes + $2::bigint
+WHERE user_id = $1
+  AND retained_records + 1 <= $3::bigint
+  AND stored_bytes + $2::bigint <= $4::bigint
+RETURNING retained_records, stored_bytes
+`
+
+type TryReserveIdempotencyUsageParams struct {
+	UserID      uuid.UUID
+	RecordBytes int64
+	MaxRecords  int64
+	MaxBytes    int64
+}
+
+type TryReserveIdempotencyUsageRow struct {
+	RetainedRecords int64
+	StoredBytes     int64
+}
+
+// Conditionally admits one new retained record of record_bytes stored
+// bytes within the caps. Zero rows (pgx.ErrNoRows) means the insert would
+// exceed a cap and the caller must reject with the typed capacity error
+// without committing the mutation.
+func (q *Queries) TryReserveIdempotencyUsage(ctx context.Context, arg TryReserveIdempotencyUsageParams) (TryReserveIdempotencyUsageRow, error) {
+	row := q.db.QueryRow(ctx, tryReserveIdempotencyUsage,
+		arg.UserID,
+		arg.RecordBytes,
+		arg.MaxRecords,
+		arg.MaxBytes,
+	)
+	var i TryReserveIdempotencyUsageRow
+	err := row.Scan(&i.RetainedRecords, &i.StoredBytes)
+	return i, err
+}
+
 const updateResumeDocumentCAS = `-- name: UpdateResumeDocumentCAS :one
 UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
@@ -1061,6 +1383,52 @@ func (q *Queries) UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeD
 		arg.ID,
 		arg.UserID,
 		arg.Revision,
+		arg.PersonalDetails,
+		arg.Content,
+		arg.Customization,
+		arg.SchemaVersion,
+	)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
+const updateResumeMetadataAndDocumentCAS = `-- name: UpdateResumeMetadataAndDocumentCAS :one
+UPDATE resumes
+SET title = $4, lng = $5,
+    personal_details = $6,
+    content = $7, customization = $8,
+    schema_version = $9,
+    revision = revision + 1, updated_at = now()
+WHERE id = $1 AND user_id = $2 AND revision = $3
+RETURNING revision
+`
+
+type UpdateResumeMetadataAndDocumentCASParams struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Revision        int64
+	Title           string
+	Lng             *string
+	PersonalDetails json.RawMessage
+	Content         json.RawMessage
+	Customization   json.RawMessage
+	SchemaVersion   int32
+}
+
+// The P2B full-aggregate metadata write (D15/D17): title, lng, and the
+// caller's complete already-projected document under ONE revision CAS. The
+// returned revision is the NEW revision. A stale or non-matching $3
+// updates zero rows and surfaces as pgx.ErrNoRows, which internal/resume
+// turns into *RevisionMismatchError or ErrNotFound. user_id never appears
+// in a SET clause (the cap trigger fires on UPDATE OF user_id).
+func (q *Queries) UpdateResumeMetadataAndDocumentCAS(ctx context.Context, arg UpdateResumeMetadataAndDocumentCASParams) (int64, error) {
+	row := q.db.QueryRow(ctx, updateResumeMetadataAndDocumentCAS,
+		arg.ID,
+		arg.UserID,
+		arg.Revision,
+		arg.Title,
+		arg.Lng,
 		arg.PersonalDetails,
 		arg.Content,
 		arg.Customization,
