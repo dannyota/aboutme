@@ -1,6 +1,6 @@
 # 0017 — Resume document versions use explicit adjacent converters
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

@@ -20,16 +20,15 @@ placement rule, fonts — generation **fails** on an invalid preset — and emit
 `apps/web/test/renderer/apply-template.test.ts`.
 
 This is the final exclusive generator window. Task 1 and Task 5B must already be
-verified. Task 4's `apply-template.adversarial.test.ts` must be frozen in its
-own test-only diff before this author reads it. The author records the expected
-failure and never edits that file. Concurrent edits to any generator or preset
-path are forbidden.
+verified. This author writes `apply-template.adversarial.test.ts` from the Task
+8 section of [adversarial coverage](adversarial-coverage.md), test-first, before
+the implementation. Concurrent edits to any generator or preset path are
+forbidden.
 
 Preset shape (D10 / ADR 0008): a preset carries a placement **rule**, never a
 key list. See `docs/design/templates/presets/` for the rationale behind each
-preset. Phase 3 cannot start until `docs/design/templates/README.md` records
-owner approval. This task validates, generates types for, and wires up the
-existing 20; it does not choose them.
+preset. This task validates, generates types for, and wires up the existing 20;
+it does not choose them.
 
 ```ts
 // gen/ts/templates.ts (generated) — shape matches the 20 committed preset
@@ -81,9 +80,8 @@ export function applyTemplate(
 
 - [ ] **Step 0: ADR gate.** Confirm ADRs 0008 and 0021 both exist on the base
       commit, are accepted, and match the semantics above; record both status
-      lines plus the dated template-contract owner approval in the task report.
-      Confirm the blind apply suite predates the implementation diff. Divergence
-      → stop, report to the integration owner.
+      lines in the task report. Divergence → stop, report to the integration
+      owner.
 - [ ] **Step 1: Failing registry test** (`templates.test.ts`): `TEMPLATES`'s id
       set equals the `packages/schema/templates/` directory listing (so the test
       cannot drift from the data again — do not hard-code the id count or list);

@@ -1,7 +1,8 @@
 # Phase 2A automated acceptance report — revision 5
 
-Verdict: **PASS**. All 13 frozen rows passed at candidate `2ce66d36b7aab2f9814c4e894b937c5e80bcb520`
-with zero retries, zero manual data mutations, and no repository change.
+Verdict: **PASS**. All 13 frozen rows passed at candidate
+`2ce66d36b7aab2f9814c4e894b937c5e80bcb520` with zero retries, zero manual data
+mutations, and no repository change.
 
 ## Run identity
 
@@ -24,8 +25,8 @@ with zero retries, zero manual data mutations, and no repository change.
 ## Tool and database identity
 
 The pinned checks recorded Node.js 24.19.0, Go 1.26.5, sqlc 1.31.1,
-golangci-lint 2.12.2, govulncheck 1.6.0, Caddy 2.11.4, Semgrep 1.172.0,
-and gitleaks 8.30.1.
+golangci-lint 2.12.2, govulncheck 1.6.0, Caddy 2.11.4, Semgrep 1.172.0, and
+gitleaks 8.30.1.
 
 Capture 04 recorded the running `aboutme-test-db` image ID and digest, its
 536870912-byte memory limit, host port 20432, readiness, and migration head

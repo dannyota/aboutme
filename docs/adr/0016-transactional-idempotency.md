@@ -1,6 +1,6 @@
 # 0016 — Resume mutations store idempotency results transactionally
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

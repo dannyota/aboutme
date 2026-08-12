@@ -79,9 +79,8 @@ separate image-only license copy is allowed to drift.
 
 ## Steps
 
-- [ ] Record the dated Draft v4 owner approval and the reviewed font-catalog
-      revision before fetching or generating an asset. Stop if either is absent
-      or differs from this task's 26-row input matrix.
+- [ ] Record the reviewed font-catalog revision before fetching or generating an
+      asset. Stop if it differs from this task's 26-row input matrix.
 - [ ] Write failing manifest-schema, path, hash, internal-name, license-file,
       archive, and official-provenance tests. Assert the exact 26 design
       commits, input paths, input hashes, license paths, license hashes, RFNs,

@@ -1,5 +1,9 @@
 # P9 HTTPS harness
 
+> Detailed reference. Where this page describes frozen catalogs, blind authors,
+> sealed image identities, or the U10 export tool, ADR 0024 and the
+> [phase README](README.md) apply instead.
+
 ## Deployment contract
 
 `make uat-up`, `make uat-reset`, and `make uat-down` target only Compose project

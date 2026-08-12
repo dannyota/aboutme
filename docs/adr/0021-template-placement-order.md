@@ -1,6 +1,6 @@
 # 0021 — Template placement has one deterministic total order
 
-Status: Proposed (2026-08-12)
+Status: Accepted (2026-08-12)
 
 ## Context
 

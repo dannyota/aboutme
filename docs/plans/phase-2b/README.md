@@ -1,35 +1,31 @@
 # Phase 2B — Resume HTTP API and media
 
-Status: **Draft revision 2; not dispatchable** (2026-08-12).
+Status: **Revision 3, adopted and dispatchable** (2026-08-12).
 
 This phase adds the authenticated resume HTTP surface, granular autosave
 commands, full write-safety enforcement, document-version negotiation, and
 private resume photos. It does not add publishing, public resume reads, SSE, the
 editor, PDF generation, or cloud resources.
 
-Draft revision 2 integrates [Draft v4 design](../../design/README.md), proposed
-ADRs 0014–0019, the two-gate delivery model, and the media acceptance rows and
-budgets that were missing from revision 1. A fresh plan review must close all
-blocking findings before adoption.
+Revision 3 integrates the approved [v4 design](../../design/README.md), ADRs
+0014–0019 and 0024, and the media acceptance rows and budgets.
 
-## Hard preconditions
+## Preconditions
 
-| Input                         | Required state                                                                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| P2A                           | Task 12, phase defect review, and phase acceptance passed                                                   |
-| P0F                           | Generated TypeScript client correction reviewed and accepted                                                |
-| P1.1                          | Server, settings UI, OpenAPI prose, tests, and phase evidence closed                                        |
-| P3                            | All tasks and both phase gates passed; current document version is v2                                       |
-| Design decisions              | Draft v4 and proposed ADRs 0014–0019 approved                                                               |
-| P2B plan                      | Independent review green; this page marked adopted                                                          |
-| Numeric and acceptance inputs | `budgets.md`, AC-MEDIA-001…009, and AC-SAVE-005 frozen                                                      |
-| Media benchmark manifest      | Task 11 Step 7 path, fixture hashes, local profile, production Graviton target, command, and samples frozen |
+P0F, P1.1, and P2A are complete, so this phase runs as the server lane beside
+P3's renderer lane. The two lanes own disjoint paths: P2B owns `apps/server/**`
+and `docs/api/openapi.yaml` and never edits `packages/schema/**`.
 
-P3 Task 2 is the direct code dependency on P2B Task 5: its reviewed Go
-`sanitize.RichText` implementation and generated allowlist must exist before
-Task 5 starts. The whole P3 phase is still a dispatch precondition. P2B starts
-only after the production projector accepts v1 and v2, emits both versions, and
-stores v2 as current. P2B does not duplicate or defer the sanitizer.
+| Input                    | Required state                                                               |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| Go sanitizer package     | Landed in P3 Task 2; Task 5 wires it at the write boundary                   |
+| Document schema v2       | Released by P3 Task 5B — the only cross-lane sync point, needed by Task 9    |
+| Numeric inputs           | `budgets.md`, AC-MEDIA-001…009, and AC-SAVE-005                              |
+| Media benchmark manifest | Task 11 fixture hashes, local profile, Graviton target, command, and samples |
+
+Tasks 1–8 and 10–11 depend only on the landed sanitizer. Task 9 and the
+version-negotiation cases in Task 1 wait for schema v2. P2B does not duplicate
+or defer the sanitizer.
 
 ## Fixed scope decisions
 
@@ -100,11 +96,10 @@ the root Makefile, workflows, manifests, and shared scripts.
 | 9    | Personal details and wire-version proof            | High   | Pending |
 | 10   | Fixed-allowlist customization deltas               | High   | Pending |
 | 11   | Photo upload, read, crop, replace, and delete      | High   | Pending |
-| 12   | Independent auth, CSRF, and authorization suite    | High   | Pending |
-| 13   | Independent write-safety and wire-version suite    | High   | Pending |
-| 14   | Independent bounds, hostile-input, and media suite | High   | Pending |
-| 15   | Traceability evidence, docs, and handoffs          | Normal | Pending |
-| Gate | Phase defect review and phase acceptance           | —      | Pending |
+| Gate | Phase review and exit checklist                    | —      | Pending |
+
+The adversarial suites are folded into the tasks that own the behavior; their
+cases live in [adversarial coverage](adversarial-coverage.md).
 
 Task details:
 
@@ -117,41 +112,28 @@ Task details:
   [7](task-07-entries-and-sections.md), [8](task-08-structure-endpoint.md),
   [9](task-09-personal-details-and-wire-version.md),
   [10](task-10-customization-deltas.md), [11](task-11-photo-endpoints.md)
-- [Independent suites 12–14](task-12-blind-suite-authz-csrf.md),
-  [13](task-13-blind-suite-write-safety.md),
-  [14](task-14-blind-suite-bounds-media.md), and
-  [closure task 15](task-15-traceability-closure.md)
 
 ## Execution waves
 
-| Wave | Parallel work                                      | Gate before next wave                                 |
-| ---- | -------------------------------------------------- | ----------------------------------------------------- |
-| W0   | T1 contract                                        | Contract review and API drift gate                    |
-| WF   | T12–T14 independent authors freeze test-only diffs | Focused expected failures recorded; files frozen      |
-| W1   | T2 store seam and T3 media                         | Affected checks and high-risk review pass             |
-| W2   | T4 kernel and T5 sanitizer wiring                  | Integrate together; choke-point tests and review pass |
-| W3   | T6–T11 disjoint route files                        | Route tests pass; every construction-only 501 is gone |
-| W4   | Run frozen T12–T14 suites; authors fix findings    | Full suites pass; fixes receive independent re-review |
-| W5   | T15 traceability and handoffs                      | Every owned row has state and exact evidence          |
-| W6   | Two phase gates                                    | Candidate is unchanged and every criterion passes     |
+| Wave | Parallel work                     | Gate before next wave                                 |
+| ---- | --------------------------------- | ----------------------------------------------------- |
+| W0   | T1 contract                       | Contract review and API drift gate                    |
+| W1   | T2 store seam and T3 media        | Affected checks pass                                  |
+| W2   | T4 kernel and T5 sanitizer wiring | Integrate together; choke-point tests pass            |
+| W3   | T6–T11 disjoint route files       | Route tests pass; every construction-only 501 is gone |
+| W4   | Phase review and exit checklist   | Candidate is unchanged and every criterion passes     |
 
-W3 file authoring may run in parallel, but its build, race, database, and S3
+W3 file authoring runs in parallel, but its build, race, database, and S3
 verification commands queue in at most two batches of three workers. The
-integration owner's full `make ci` runs alone.
+integration owner's full `make ci` runs alone. Individual W3 task gates do not
+depend on a sibling task that may still be in progress.
 
-After all six W3 files land, W4 begins when the integration owner runs Task 13's
-frozen `writesafety_adversarial_test.go` with its exact focused live-database
-command from Task 9. Its named wire-version case proves a v1 entry upsert
-down-emits, applies, up-accepts, and persists current v2. The frozen media cases
-prove crop preserves its transaction-read key without object I/O and whole-
-resume delete removes only its canonical transaction-returned photo after
-commit; an invalid or cross-resume key makes no backend call. Individual W3 task
-gates do not depend on a sibling task that may still be in progress.
-
-WF occurs before any T2–T11 implementation author reads an implementation diff.
-The blind authors receive only approved authorities and plan interfaces. Their
-files remain frozen through W4; findings return to the implementation authors,
-and fresh reviewers re-review fixes.
+Each task carries its slice of [adversarial coverage](adversarial-coverage.md).
+The wire-version case proves a v1 entry upsert down-emits, applies, up-accepts,
+and persists current v2. The media cases prove crop preserves its
+transaction-read key without object I/O, and whole-resume delete removes only
+its canonical transaction-returned photo after commit while an invalid or
+cross-resume key makes no backend call.
 
 OpenAPI lands contract-first in T1. Later handlers add conformance tests but do
 not edit the contract. If implementation proves it wrong, the task stops and the
@@ -163,14 +145,11 @@ P2B owns AC-SAVE-001/002/004/005, the P2B half of AC-SEC-003,
 AC-MEDIA-001/002/004/005/008/009, and the P2B slices of the cross-phase
 AC-MEDIA-003/006 rows. P8-priv closes AC-MEDIA-003/006/007; P2B supplies their
 transactional queue and paginated backend seams. P2B adds HTTP evidence without
-re-owning P2A document rows. These rows exist before dispatch; Task 15 fills
-evidence and state rather than creating criteria after the implementation.
+re-owning P2A document rows. These rows exist before dispatch; W4 fills evidence
+and state rather than creating criteria after the implementation.
 
-The phase exit is defined in [exit criteria](exit-criteria.md). A fresh catalog
-author owns `acceptance-catalog-r1.md`, derives it from the approved design,
-ADRs, budgets, and traceability rows, and freezes it before W6. The acceptance
-worker never edits it. A future correction uses the next revision; it never
-rewrites a completed catalog.
+The phase exit is [exit criteria](exit-criteria.md), run with `make ci` and
+connected `make scan` at one unchanged candidate commit.
 
 ## Reference documents
 

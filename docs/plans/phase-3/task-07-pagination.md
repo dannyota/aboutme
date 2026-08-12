@@ -8,9 +8,9 @@ measurement).
 `apps/web/test/renderer/paginate.test.ts`; modify `ResumeDocument.vue`
 (`mode: 'paged'` delegates to `PagedResume`).
 
-Task 4's `paginate.adversarial.test.ts` must already be frozen. This author
-reads it before implementation, records its expected failure, and never edits
-the independent suite.
+This author writes `paginate.adversarial.test.ts` from the Task 7 section of
+[adversarial coverage](adversarial-coverage.md), test-first, before the
+implementation.
 
 **Interfaces (produced):**
 

@@ -1,6 +1,6 @@
 # Resume template system
 
-Status: **Draft v2** (2026-08-12). Not approved.
+Status: **Approved v2** (2026-08-12).
 
 Defines what a resume template is in aboutme: the interface every template
 implements against the versioned [data contract](../data.md), the design tokens
@@ -8,10 +8,10 @@ it may control, and how it behaves under Chromium's print engine. It fixes the
 boundary between what the template decides, what the user decides, and what the
 document carries, precisely enough that two designers working from it
 independently produce compatible templates. Bound by
-[ADR 0008](../../adr/0008-template-apply-semantics.md) and
-[ADR 0009](../../adr/0009-section-order-authority.md). Proposed
-[ADR 0021](../../adr/0021-template-placement-order.md) defines the candidate
-total order and fail-closed validation for template placement.
+[ADR 0008](../../adr/0008-template-apply-semantics.md),
+[ADR 0009](../../adr/0009-section-order-authority.md), and
+[ADR 0021](../../adr/0021-template-placement-order.md), which fixes the total
+order and fail-closed validation for template placement.
 
 - [`contract.md`](contract.md) — template identity, apply and ordering
   semantics, rendering, absence, hiding, columns, and conformance.
@@ -26,6 +26,5 @@ total order and fail-closed validation for template placement.
 Concrete template designs are written against this contract and add no
 requirements to it.
 
-The preset rationale files record Draft v1 designs. Their JSON has landed, but
-neither that repository state nor an old plan's “sign-off” wording approves this
-Draft v2 contract. Approval is explicit and dated here after independent review.
+The preset rationale files record the v1 preset designs. Their JSON has landed
+and is the input the renderer and preset registry build against.

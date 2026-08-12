@@ -5,10 +5,9 @@
 owner, state, and evidence before independent approval. Acceptance IDs are
 stable and referenced by phase acceptance and UAT reports.
 
-States are `PLANNED`, `LANDED`, `PROVEN`, or `BLOCKED`. Older rows without an
-explicit state are not closed: a concrete test reference is evidence, not a
-substitute for adjudicating the row. Active phases add the state column when
-they next close their rows; P2A Task 12 owns the first cleanup.
+States are `PLANNED`, `LANDED`, `PROVEN`, or `BLOCKED`. A concrete test
+reference is evidence, not a substitute for adjudicating the row. Each phase
+closes its owned rows before its exit checklist.
 
 ## Matrix index
 

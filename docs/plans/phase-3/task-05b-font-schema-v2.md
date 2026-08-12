@@ -24,11 +24,11 @@ and `apps/server/internal/resume/docmigrate/v1_v2_adversarial_test.go`.
 Never edit `packages/schema/resume.v1.schema.json` or retained v1 output.
 
 This is the middle exclusive generator window: Task 1 must be verified first,
-and Task 8 cannot start until this task is verified. The independent test author
-owns only the two adversarial files and freezes them before the implementation
-author reads them. OpenAPI has no resume-document examples at the current base;
-if that fact changes before dispatch, stop and assign the OpenAPI source and
-generated client as a separate integration-owner contract change.
+and Task 8 cannot start until this task is verified. This author writes the two
+adversarial files test-first, before the implementation. OpenAPI has no
+resume-document examples at the current base; if that fact changes before
+dispatch, stop and assign the OpenAPI source and generated client as a separate
+integration-owner contract change.
 
 ## Conversion contract
 
@@ -63,12 +63,9 @@ generated client as a separate integration-owner contract change.
 
 ## Steps
 
-- [ ] **Chronology gate.** Confirm corrected P2A acceptance is closed, Task 5's
-      final catalog and assets are committed and independently reviewed, and
-      Draft v4 has dated owner approval. Record the exact base commit. Do not
-      open the Task 5B implementation diff before the independent files below
-      are frozen.
-- [ ] **Freeze independent tests first.** A fresh author writes only
+- [ ] **Base gate.** Confirm Task 5's final catalog and assets are committed and
+      reviewed. Record the exact base commit.
+- [ ] **Write the adversarial tests first.** This author writes only
       `font-v2-adversarial.test.ts` and `v1_v2_adversarial_test.go` from the
       catalog, design, and interface above, runs their focused commands, and
       records the expected failure before the integration owner reads or writes

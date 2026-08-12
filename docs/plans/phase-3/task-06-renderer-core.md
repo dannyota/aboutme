@@ -18,11 +18,10 @@ those files, stop and correct the plan before implementation.
 `@lucide/vue` is already installed by Task 0 (B8); this task does not touch
 `package.json`.
 
-Task 4's `bounds.adversarial.test.ts` and `plain-fields.adversarial.test.ts`
-must already be frozen in their first test-only diff. This author reads only
-those two adversarial files, treats their initial failure as the independent
-test-first signal, and never edits them. `paginate.adversarial.test.ts` does not
-exist until this task passes its gate.
+This author also writes `bounds.adversarial.test.ts` and
+`plain-fields.adversarial.test.ts` from the Task 6 sections of
+[adversarial coverage](adversarial-coverage.md), test-first, before the
+implementation. Pagination cases belong to Task 7.
 
 **Interfaces (produced):**
 

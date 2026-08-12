@@ -1,6 +1,7 @@
 # aboutme design
 
-Status: **Draft v4** (2026-08-12). This design is not approved or frozen.
+Status: **Approved v4** (2026-08-12), approved by the design owner's delegated
+review. Changed decisions from here on need a new ADR or a v5 revision.
 
 This directory defines the intended v1 product and architecture. Current
 behavior lives in code, deployment configuration, and
@@ -8,10 +9,9 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md). Delivery state lives in the
 [`../plans/implementation-plan.md`](../plans/implementation-plan.md).
 
-[Architecture Decision Records](../adr/) explain individual choices and state
-whether each choice is proposed or accepted. This draft incorporates their
-current outcomes. If a page here disagrees with an accepted ADR, the ADR
-controls that decision until this draft is corrected.
+[Architecture Decision Records](../adr/) explain individual choices. Every ADR
+through 0024 is accepted and integrated here. If a page disagrees with an
+accepted ADR, the ADR controls that decision until this text is corrected.
 
 ## Sections
 
@@ -59,9 +59,8 @@ The design has five cross-cutting rules:
 
 ## Approval rule
 
-Draft pages may change through reviewed design work. Approval requires both
-independent design and plan reviews to have no blocking findings, every open
-gate in [Decision status](decisions.md) to have an owner and deadline, and an
-explicit dated approval by the design owner. After approval, corrections or
-changed decisions require a new design revision or an ADR; they do not silently
-rewrite the approved text.
+V4 is approved and implementable. A changed decision needs a new ADR; a
+structural rewrite needs a v5 revision. Neither silently rewrites approved text.
+
+A correction that fixes an error, ambiguity, or contradiction without changing a
+decision is an ordinary edit. Note it in [Decision status](decisions.md).

@@ -292,7 +292,7 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       capacity-retry queries, and the deletion-job table/enqueue operation. The
       integration owner authors the focused prior-head proof at
       `apps/server/cmd/migrate/retention_media_cleanup_test.go`; no route or
-      blind- suite task may edit that migration test. Run `make sqlc-gen`,
+      adversarial-suite work may edit that migration test. Run `make sqlc-gen`,
       include generated files, and prove released migrations are unchanged and
       the new migration applies from the prior head.
 - [ ] **Step 5: implement; green.** The pool-backed methods become thin wrappers
