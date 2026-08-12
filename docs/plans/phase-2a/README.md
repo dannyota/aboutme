@@ -70,7 +70,11 @@ The revision 5 run at `262a5b3668abab5951efd8de674ff54cb9f6c096` passed the
 fresh defect review, `make ci`, connected `make scan`, and acceptance captures
 03–11. Its worker process exited while assembling the report, before the report
 and capture 12 existed. The zero-retry rule makes that attempt final and failed;
-none of its otherwise-passing evidence closes the phase. The next run uses a new
+none of its otherwise-passing evidence closes the phase. The next run at
+`bf45983a4c120dfa40f46230d736a26686784ab4` also passed every product and
+security capture through 11, but its report table contained an unescaped pipe;
+the required Markdown lint stopped the process before the report hash and
+capture 12. That attempt is also final and failed. The next run uses a new
 candidate and a new empty evidence directory.
 
 ## Corrective closure sequence
