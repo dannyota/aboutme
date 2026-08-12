@@ -30,7 +30,7 @@ its expected failure before implementation and never edits that file.
 export function sanitizeRichText(html: string): string;
 ```
 
-- [ ] **Step 1: Failing corpus test (client leg).** `sanitize.test.ts` (run
+- [x] **Step 1: Failing corpus test (client leg).** `sanitize.test.ts` (run
       under the `jsdom` vitest environment via a file-level
       `// @vitest-environment jsdom` pragma — DOMPurify's supported test DOM;
       happy-dom stays the default elsewhere): iterate `HOSTILE_CORPUS`, assert
@@ -43,11 +43,11 @@ export function sanitizeRichText(html: string): string;
       violations. Dangerous-looking bare text such as `javascript:alert(1)`
       remains safe text and must pass the structural predicate. A vacuous
       predicate fails the suite (B4).
-- [ ] **Step 2: Implement** with generated constants + hooks; make Step 1 pass.
+- [x] **Step 2: Implement** with generated constants + hooks; make Step 1 pass.
       Also assert idempotence across the corpus. The real-browser (non-jsdom)
       execution of this exact code path is proven in Task 11 Step 4 — the test
       env here is a development proxy, not the AC-SEC-001 browser evidence.
-- [ ] **Step 3: Cross-implementation agreement.** `cross-agreement.test.ts`
+- [x] **Step 3: Cross-implementation agreement.** `cross-agreement.test.ts`
       reads `apps/server/internal/sanitize/testdata/corpus-output.golden.json`
       (repo-relative path, read-only — the same cross-package pattern
       `schema-contract.test.ts` already uses) and asserts, per payload:
@@ -58,7 +58,7 @@ export function sanitizeRichText(html: string): string;
       never visibly alter Go-sanitized content when P6B refetches or P4 previews
       it. A mismatch here is a **blocking cross-side defect**, resolved by
       changing one side's normalization, never by loosening the test.
-- [ ] **Step 4: SSR passthrough contract.** `ssr-passthrough.test.ts` opens with
+- [x] **Step 4: SSR passthrough contract.** `ssr-passthrough.test.ts` opens with
       a file-level `// @vitest-environment node` pragma (B7 — plain Node env, no
       DOM, proving nothing here depends on a browser shim): with the server
       branch active, `sanitizeRichText` returns its input **byte-identical**,
@@ -69,7 +69,7 @@ export function sanitizeRichText(html: string): string;
       the only place DOMPurify lands: `nuxt build` output's server bundle
       contains no `dompurify`/`jsdom` module (string scan of `.output/server` —
       cheap and direct evidence for D3's "not in the SSR path" claim).
-- [ ] **Step 5: Gate.** Run `make web-lint web-typecheck web-test web-build`
+- [x] **Step 5: Gate.** Run `make web-lint web-typecheck web-test web-build`
       first, then run the focused bundle-scan test against the just-built
       `.output/server`. A missing or older output is a test failure. Report the
       owned-path diff and exact output to the integration owner.

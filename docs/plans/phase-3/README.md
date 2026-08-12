@@ -39,22 +39,22 @@ files exist. Reverify both at the execution base.
 
 ## Task index
 
-| Task | Deliverable                                                 | Tier   | State   |
-| ---- | ----------------------------------------------------------- | ------ | ------- |
-| 0    | Batch pinned web dependencies                               | Normal | Landed  |
-| 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Pending |
-| 2    | Go sanitizer package                                        | High   | Pending |
-| 3    | Client DOMPurify wrapper and agreement tests                | High   | Pending |
-| 4    | Independent sanitizer, renderer, and pagination suites      | High   | Pending |
-| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Pending |
-| 5B   | Immutable document v2 font catalog and converters           | High   | Pending |
-| 6    | Pure renderer in continuous mode                            | High   | Pending |
-| 7    | Pure pagination engine and editor paged wrapper             | High   | Pending |
-| 8    | Preset registry, validation, and apply semantics            | Normal | Pending |
-| 9    | Deterministic HTML golden harness                           | Normal | Pending |
-| 10   | Renderer import and nondeterminism lint rules               | Normal | Pending |
-| 11   | Pinned-browser screenshot, offline-font, sanitizer, CSP run | High   | Pending |
-| Gate | Phase defect review and phase acceptance                    | —      | Pending |
+| Task | Deliverable                                                 | Tier   | State       |
+| ---- | ----------------------------------------------------------- | ------ | ----------- |
+| 0    | Batch pinned web dependencies                               | Normal | Landed      |
+| 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Implemented |
+| 2    | Go sanitizer package                                        | High   | Implemented |
+| 3    | Client DOMPurify wrapper and agreement tests                | High   | Implemented |
+| 4    | Independent sanitizer, renderer, and pagination suites      | High   | Pending     |
+| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Pending     |
+| 5B   | Immutable document v2 font catalog and converters           | High   | Pending     |
+| 6    | Pure renderer in continuous mode                            | High   | Pending     |
+| 7    | Pure pagination engine and editor paged wrapper             | High   | Pending     |
+| 8    | Preset registry, validation, and apply semantics            | Normal | Pending     |
+| 9    | Deterministic HTML golden harness                           | Normal | Pending     |
+| 10   | Renderer import and nondeterminism lint rules               | Normal | Pending     |
+| 11   | Pinned-browser screenshot, offline-font, sanitizer, CSP run | High   | Pending     |
+| Gate | Phase defect review and phase acceptance                    | —      | Pending     |
 
 Task files:
 
