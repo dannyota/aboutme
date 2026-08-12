@@ -85,7 +85,7 @@ the root Makefile, workflows, manifests, and shared scripts.
 
 | Task | Deliverable                                        | Tier   | State   |
 | ---- | -------------------------------------------------- | ------ | ------- |
-| 1    | Complete OpenAPI contract and client regeneration  | Normal | Pending |
+| 1    | Complete OpenAPI contract and client regeneration  | Normal | Landed  |
 | 2    | Transaction seam and metadata CAS query            | High   | Pending |
 | 3    | Media backends and local S3-compatible service     | High   | Pending |
 | 4    | Write-safety kernel, routes, and policies          | High   | Pending |
