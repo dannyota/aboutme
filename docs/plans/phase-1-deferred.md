@@ -87,15 +87,17 @@ actions. They assert a bodiless start has no `Content-Type`, while JSON
 mutations still use `application/json`.
 
 The browser check uses the project Playwright MCP server pinned in `.mcp.json`.
-Start `make dev-native`, then use `browser_run_code` in a fresh isolated context
-to register `page.route` handlers for `/api/v1/me`, `/api/v1/sessions`, and
-`/api/v1/auth/*/start` before opening
+Start `make dev-native`, then use the pinned server's `browser_run_code_unsafe`
+tool in a fresh isolated context to register `page.route` handlers for
+`/api/v1/me`, `/api/v1/sessions`, and `/api/v1/auth/*/start` before opening
 `http://localhost:20080/app/settings/sessions`. Exercise one link control and
 one reauthentication prompt. For each start request, record the method, complete
 URL, headers, and body; fulfill
 `{"data":{"authorizeUrl":"http://localhost:20080/__uat/oauth/p1-authorized"}}`;
-and assert the page performs that top-level navigation. The request must be
-POST, carry the query purpose and CSRF header, have no body, and omit
+and assert the page performs that top-level navigation. The `unsafe` suffix is
+the exact tool name exposed by the repository-pinned `@playwright/mcp@0.0.78`;
+it does not authorize code outside this bounded browser procedure. The request
+must be POST, carry the query purpose and CSRF header, have no body, and omit
 `Content-Type`. Save the MCP accessibility snapshot and network evidence under
 `.superpowers/acceptance/p1.1/<commit>/<run-id>/`. Full provider round trips
 remain part of P9 HTTPS UAT.
