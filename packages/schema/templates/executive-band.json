@@ -4,7 +4,7 @@
   "description": "A filled navy masthead plate across the top of page one carries a large name and title; the pages below stay plain, uppercase-led, and ruleless.",
   "customization": {
     "font": {
-      "family": "Be Vietnam Pro",
+      "family": "be-vietnam-pro",
       "baseSizePx": 15
     },
     "colors": {

@@ -11,10 +11,9 @@
 // Every identifier here is prefixed `bf` so this file never collides with the
 // sibling suites that share package resume_test. It reuses projection_test.go's
 // `pj` helpers for the synthetic two-version projector and the row snapshots:
-// a row the store itself wrote is at docmigrate.CurrentVersion (1), so the only
-// way to obtain a row BELOW the projector's current version -- while exactly
-// one version is released -- is to point the store at a projector whose current
-// is 2.
+// a row the store itself wrote with this suite's fixture is at v2. Pointing the
+// store at the suite's synthetic current-v3 projector makes that row eligible
+// for backfill without coupling these tests to the production font converter.
 package resume_test
 
 import (
@@ -31,9 +30,9 @@ import (
 )
 
 // bfSeedOldVersionRow creates a resume through s (whose projector's current
-// version is 2) and returns it. The row lands at schema_version 1 because the
-// WRITE path persists at the docmigrate.CurrentVersion constant, so it is
-// exactly the "stored below current" shape the backfill exists for.
+// version is 3) and returns it. The row lands at production schema_version 2,
+// so it is exactly the "stored
+// below current" shape the backfill exists for.
 func bfSeedOldVersionRow(ctx context.Context, t *testing.T, s *resume.Store, userID uuid.UUID, title string) resume.Resume {
 	t.Helper()
 	created, err := s.Create(ctx, userID, title, validDocForTest(t))
@@ -81,8 +80,8 @@ func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 	created := bfSeedOldVersionRow(ctx, t, s, userID, "backfill-applied")
 
 	before := pjSnapshot(ctx, t, pool, created.ID)
-	if before.SchemaVersion != 1 {
-		t.Fatalf("seeded schema_version = %d, want 1 (the row must start BELOW the projector's current)", before.SchemaVersion)
+	if before.SchemaVersion != 2 {
+		t.Fatalf("seeded schema_version = %d, want 2 (the row must start BELOW the projector's current)", before.SchemaVersion)
 	}
 	docBefore := bfProjectedDoc(ctx, t, s, userID, created.ID)
 
@@ -95,8 +94,8 @@ func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 	}
 
 	after := pjSnapshot(ctx, t, pool, created.ID)
-	if after.SchemaVersion != 2 {
-		t.Errorf("schema_version after backfill = %d, want 2", after.SchemaVersion)
+	if after.SchemaVersion != 3 {
+		t.Errorf("schema_version after backfill = %d, want 3", after.SchemaVersion)
 	}
 	if after.Revision != before.Revision {
 		t.Errorf("revision moved %d -> %d; a backfill must not bump it (D12)", before.Revision, after.Revision)
@@ -186,8 +185,8 @@ func TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace(t *testi
 	// The lost race is NOT "already done": the row is still at the old
 	// version, so a job that treated BackfillLostRace as terminal would
 	// abandon a row that still needs migrating.
-	if after.SchemaVersion != 1 {
-		t.Errorf("schema_version = %d, want 1 (the backfill must have written nothing)", after.SchemaVersion)
+	if after.SchemaVersion != 2 {
+		t.Errorf("schema_version = %d, want 2 (the backfill must have written nothing)", after.SchemaVersion)
 	}
 
 	// Retryable: a fresh observation succeeds.
@@ -198,8 +197,8 @@ func TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace(t *testi
 	if retry != resume.BackfillApplied {
 		t.Fatalf("retry BackfillOne() = %v, want %v", retry, resume.BackfillApplied)
 	}
-	if v := bfSchemaVersion(ctx, t, pool, created.ID); v != 2 {
-		t.Errorf("schema_version after the retry = %d, want 2", v)
+	if v := bfSchemaVersion(ctx, t, pool, created.ID); v != 3 {
+		t.Errorf("schema_version after the retry = %d, want 3", v)
 	}
 	if final := pjSnapshot(ctx, t, pool, created.ID); final.Revision != after.Revision {
 		t.Errorf("the retry bumped revision %d -> %d; a backfill must not (D12)", after.Revision, final.Revision)
@@ -241,8 +240,8 @@ func TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace(t *testing.T
 	if after.Revision != created.Revision+1 {
 		t.Errorf("revision = %d, want %d (only SaveTitle wrote)", after.Revision, created.Revision+1)
 	}
-	if after.SchemaVersion != 1 {
-		t.Errorf("schema_version = %d, want 1: a title write never migrates a document, so this lost race is a retry signal, not completion", after.SchemaVersion)
+	if after.SchemaVersion != 2 {
+		t.Errorf("schema_version = %d, want 2: a title write never migrates a document, so this lost race is a retry signal, not completion", after.SchemaVersion)
 	}
 	if after.PersonalDetails != before.PersonalDetails || after.Content != before.Content || after.Customization != before.Customization {
 		t.Error("the losing backfill rewrote a jsonb part; a lost CAS must write nothing")
@@ -255,8 +254,8 @@ func TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace(t *testing.T
 	if retry != resume.BackfillApplied {
 		t.Fatalf("retry BackfillOne() = %v, want %v", retry, resume.BackfillApplied)
 	}
-	if v := bfSchemaVersion(ctx, t, pool, created.ID); v != 2 {
-		t.Errorf("schema_version after the retry = %d, want 2", v)
+	if v := bfSchemaVersion(ctx, t, pool, created.ID); v != 3 {
+		t.Errorf("schema_version after the retry = %d, want 3", v)
 	}
 }
 

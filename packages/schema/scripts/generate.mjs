@@ -484,6 +484,40 @@ function readReleasedManifest() {
     );
   }
 
+  const releasedVersions = new Set(versions.map((entry) => entry.version));
+  for (const field of ["acceptedVersions", "emittedVersions"]) {
+    const declared = manifest[field];
+    if (!Array.isArray(declared) || declared.length === 0) {
+      throw new Error(
+        `generate.mjs: released-versions.json's ${field} must be a non-empty array.`,
+      );
+    }
+    let previousDeclared = 0;
+    for (const version of declared) {
+      if (!Number.isInteger(version) || version < 1) {
+        throw new Error(
+          `generate.mjs: released-versions.json's ${field} contains invalid version ${JSON.stringify(version)}.`,
+        );
+      }
+      if (version <= previousDeclared) {
+        throw new Error(
+          `generate.mjs: released-versions.json's ${field} must ascend without duplicates; ${version} follows ${previousDeclared}.`,
+        );
+      }
+      if (!releasedVersions.has(version)) {
+        throw new Error(
+          `generate.mjs: released-versions.json's ${field} declares unreleased version ${version}.`,
+        );
+      }
+      previousDeclared = version;
+    }
+    if (!declared.includes(manifest.currentVersion)) {
+      throw new Error(
+        `generate.mjs: released-versions.json's currentVersion ${manifest.currentVersion} is absent from ${field}.`,
+      );
+    }
+  }
+
   return manifest;
 }
 
@@ -531,8 +565,19 @@ ${imports}
 // CurrentVersion is the document-shape version resume.schema.json currently
 // describes, and the version every stored resume is projected to on read and
 // persisted at on write. It matches apps/server's docmigrate.CurrentVersion
-// by construction: both move only when a new version is released here.
+// because the production projector consumes this generated declaration.
 const CurrentVersion = ${manifest.currentVersion}
+
+var acceptedVersions = []int{${manifest.acceptedVersions.join(", ")}}
+var emittedVersions = []int{${manifest.emittedVersions.join(", ")}}
+
+// AcceptedVersions returns the independently declared wire versions accepted
+// by production. The returned slice is a copy.
+func AcceptedVersions() []int { return append([]int(nil), acceptedVersions...) }
+
+// EmittedVersions returns the independently declared wire versions emitted by
+// production. The returned slice is a copy.
+func EmittedVersions() []int { return append([]int(nil), emittedVersions...) }
 
 // ReleasedSchema is one released document-shape version: its immutable schema
 // file and the retained generated types derived from that file. Released
@@ -634,6 +679,12 @@ export interface ReleasedSchema {
  * The document-shape version resume.schema.json currently describes.
  */
 export const CURRENT_VERSION = ${manifest.currentVersion};
+
+/** Wire versions accepted by production, authored independently of releases. */
+export const ACCEPTED_VERSIONS: readonly number[] = Object.freeze([${manifest.acceptedVersions.join(", ")}]);
+
+/** Wire versions emitted by production, authored independently of releases. */
+export const EMITTED_VERSIONS: readonly number[] = Object.freeze([${manifest.emittedVersions.join(", ")}]);
 
 /**
  * Every released version, ascending. Frozen: the registry is a contract, not

@@ -4,7 +4,7 @@
   "description": "One column, no rules and no fills: wide margins and one spacing ladder carry the hierarchy.",
   "customization": {
     "font": {
-      "family": "Inter",
+      "family": "inter",
       "baseSizePx": 15
     },
     "colors": {

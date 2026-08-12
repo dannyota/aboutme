@@ -4,7 +4,7 @@
   "description": "Long-form academic CV: one column, 9.75 pt body, year-only dates, and ruled section landmarks that stay findable across many pages.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 13
     },
     "colors": {

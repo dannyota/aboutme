@@ -4,7 +4,7 @@
   "description": "Cool blue-grey ink on white with a faint tinted sidebar panel, uppercase labels, and hairline rules.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 13
     },
     "colors": {

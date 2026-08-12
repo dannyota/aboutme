@@ -8,15 +8,11 @@
 // declared production versions. The pure converter matrix lives in
 // docmigrate/suiteb_wire_adversarial_test.go.
 //
-// SYNTHETIC OLD VERSION. `resumes_schema_version_check` is `schema_version >= 1`
-// and production's CurrentVersion is 1, so there is no room below the current
-// version for a synthetic "old" row. Synthetic old versions therefore sit ABOVE
-// the current one: the projector's current stays at docmigrate.CurrentVersion
-// (so SaveDocument, ValidateForStore and the backfill target all agree on the
-// same version), and a row seeded at schema_version = 2 is the stale one, walked
-// DOWN to the current version by the pair's Down converter. Synthetic v2 is v1
-// plus a required personalDetails.headline marker, so a projection that did not
-// actually run is visible as a leftover marker rather than as a relabelling.
+// SYNTHETIC FUTURE VERSION. This suite puts stale rows one version above the
+// production current version. That isolates the concurrency tests from
+// production converters: the stale row is walked DOWN by the suite's converter,
+// and a required personalDetails.headline marker makes a skipped projection
+// visible rather than merely relabeling the version.
 package resume_test
 
 import (
@@ -42,19 +38,19 @@ import (
 
 // suiteBOldVersion is the synthetic stale schema_version stored rows carry.
 // It sits above CurrentVersion because the CHECK constraint forbids 0.
-const suiteBOldVersion int32 = 2
+const suiteBOldVersion int32 = docmigrate.CurrentVersion + 1
 
-// suiteBHeadlineMarker is what synthetic v2 requires and v1 forbids.
-const suiteBHeadlineMarker = "synthetic-v2-headline"
+// suiteBHeadlineMarker is what the synthetic future version requires.
+const suiteBHeadlineMarker = "synthetic-future-headline"
 
 // suiteBMinimalDoc is the shape of packages/schema/fixtures/minimal.json: the
 // smallest document the store's own validation pipeline accepts.
 const suiteBMinimalDoc = `{
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "personalDetails": { "fullName": "PLACEHOLDER", "details": [] },
   "content": {},
   "customization": {
-    "font": { "family": "Inter", "baseSizePx": 14 },
+    "font": { "family": "inter", "baseSizePx": 14 },
     "colors": { "primary": "#1a1a1a", "text": "#1a1a1a", "background": "#ffffff" },
     "spacing": { "sectionGap": 16, "entryGap": 8, "lineHeight": 1.4 },
     "heading": { "style": "normal", "showRule": false },
@@ -148,7 +144,7 @@ func suiteBParts(t *testing.T, doc schema.Resume) (pd, c, cu string) {
 	return string(m["personalDetails"]), string(m["content"]), string(m["customization"])
 }
 
-// suiteBAddHeadline stamps the synthetic v2 marker onto a personalDetails part.
+// suiteBAddHeadline stamps the synthetic marker onto a personalDetails part.
 func suiteBAddHeadline(t *testing.T, personalDetails string) string {
 	t.Helper()
 	var m map[string]json.RawMessage
@@ -184,7 +180,7 @@ func (e *suiteBEnv) suiteBInsertRow(t *testing.T, title string, version int32, p
 }
 
 // suiteBSeedStaleRow plants a row at the synthetic old version carrying doc's
-// content plus the v2 headline marker.
+// content plus the synthetic headline marker.
 func (e *suiteBEnv) suiteBSeedStaleRow(t *testing.T, title string, doc schema.Resume) uuid.UUID {
 	t.Helper()
 	pd, c, cu := suiteBParts(t, doc)
@@ -238,7 +234,7 @@ func suiteBRequireUntouched(t *testing.T, what string, before, after suiteBRow) 
 }
 
 // suiteBHasHeadline reports whether the stored personalDetails still carries
-// the synthetic v2 marker key.
+// the synthetic future-version marker key.
 func (e *suiteBEnv) suiteBHasHeadline(t *testing.T, id uuid.UUID) bool {
 	t.Helper()
 	var present bool
@@ -251,8 +247,8 @@ func (e *suiteBEnv) suiteBHasHeadline(t *testing.T, id uuid.UUID) bool {
 }
 
 // suiteBSyntheticProjector is the projector the live cases run against:
-// current stays at docmigrate.CurrentVersion, and synthetic v2 rows walk down
-// to it. down, when non-nil, replaces the well-behaved Down converter.
+// current stays at docmigrate.CurrentVersion, and synthetic future-version rows
+// walk down to it. down, when non-nil, replaces the well-behaved Down converter.
 func suiteBSyntheticProjector(t *testing.T, down docmigrate.ConvertFunc) *docmigrate.Projector {
 	t.Helper()
 	current := docmigrate.CurrentVersion
@@ -465,7 +461,7 @@ func TestSuiteB_Get_NeverWrites(t *testing.T) {
 		t.Errorf("Doc.SchemaVersion = %d, want %d (always projected to current, D18)", got.Doc.SchemaVersion, docmigrate.CurrentVersion)
 	}
 	if got.Doc.PersonalDetails.Headline != nil {
-		t.Errorf("Doc still carries the synthetic v2 headline %q: the read was not projected", *got.Doc.PersonalDetails.Headline)
+		t.Errorf("Doc still carries the synthetic headline %q: the read was not projected", *got.Doc.PersonalDetails.Headline)
 	}
 	if !env.suiteBHasHeadline(t, id) {
 		t.Error("the stored row lost its v2 headline: Get rewrote storage")
@@ -574,7 +570,7 @@ func TestSuiteB_Backfill_LosesToConcurrentAutosave(t *testing.T) {
 			after.SchemaVersion, docmigrate.CurrentVersion)
 	}
 	if env.suiteBHasHeadline(t, id) {
-		t.Error("the stored document still carries the synthetic v2 headline: the autosave's document was not persisted intact")
+		t.Error("the stored document still carries the synthetic headline: the autosave's document was not persisted intact")
 	}
 	got, err := st.Get(t.Context(), env.userID, id)
 	if err != nil {
@@ -628,7 +624,7 @@ func TestSuiteB_Autosave_AfterBackfill_NoSpurious412(t *testing.T) {
 		t.Error("backfill left personal_details byte-identical: the stored parts were not rewritten")
 	}
 	if env.suiteBHasHeadline(t, id) {
-		t.Error("backfill did not rewrite the stored parts: the synthetic v2 headline survived")
+		t.Error("backfill did not rewrite the stored parts: the synthetic headline survived")
 	}
 
 	getAfter, err := st.Get(t.Context(), env.userID, id)

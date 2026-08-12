@@ -4,7 +4,7 @@
   "description": "Maximum legibility: near-black on white at 13.5 pt, one AAA-contrast blue accent, one column.",
   "customization": {
     "font": {
-      "family": "Inter",
+      "family": "inter",
       "baseSizePx": 18
     },
     "colors": {

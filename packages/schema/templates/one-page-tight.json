@@ -4,7 +4,7 @@
   "description": "A4 two-column tuned to land a full senior career on a single sheet: cut margins, disciplined leading, no level widgets.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 13
     },
     "colors": {

@@ -9,7 +9,7 @@ current document storage). It runs after P2A closes and before renderer work.
 Because schema heads, release manifests, and generated outputs are reserved
 shared paths, the integration owner is this task's implementation author.
 
-**Independent-test files:** `packages/schema/test/font-v2-adversarial.test.ts`
+**Adversarial-test files:** `packages/schema/test/font-v2-adversarial.test.ts`
 and `apps/server/internal/resume/docmigrate/v1_v2_adversarial_test.go`.
 
 **Implementation files:** `packages/schema/resume.schema.json`, new
@@ -24,11 +24,13 @@ and `apps/server/internal/resume/docmigrate/v1_v2_adversarial_test.go`.
 Never edit `packages/schema/resume.v1.schema.json` or retained v1 output.
 
 This is the middle exclusive generator window: Task 1 must be verified first,
-and Task 8 cannot start until this task is verified. This author writes the two
-adversarial files test-first, before the implementation. OpenAPI has no
-resume-document examples at the current base; if that fact changes before
-dispatch, stop and assign the OpenAPI source and generated client as a separate
-integration-owner contract change.
+and Task 8 cannot start until this task is verified. The integration owner
+writes the two adversarial files test-first, before the implementation, under
+ADR 0024's one-author task gate. OpenAPI treats the resume document as opaque at
+the current base: its only `ResumeDocument` example is the version-only
+`{schemaVersion: 2}` placeholder. If it gains a full document or compiled schema
+before dispatch, stop and assign the OpenAPI source and generated client as a
+separate integration-owner contract change.
 
 ## Conversion contract
 
@@ -63,46 +65,70 @@ integration-owner contract change.
 
 ## Steps
 
-- [ ] **Base gate.** Confirm Task 5's final catalog and assets are committed and
-      reviewed. Record the exact base commit.
-- [ ] **Write the adversarial tests first.** This author writes only
+- [x] **Base gate.** Confirm Task 5's final catalog and assets are committed and
+      reviewed. Base commit: `acd29b6f3c881fa4796f21658ddaf5c732505aff`.
+- [x] **Write the adversarial tests first.** The integration owner writes
       `font-v2-adversarial.test.ts` and `v1_v2_adversarial_test.go` from the
       catalog, design, and interface above, runs their focused commands, and
-      records the expected failure before the integration owner reads or writes
-      any implementation diff. The integration owner never edits these files.
-- [ ] Write separate failing author tests for ordered catalog/schema array
+      records the expected failure before writing the implementation.
+- [x] Write separate failing author tests for ordered catalog/schema array
       equality, immutable-v1, converter matrix, generated drift, and preset
       validation.
-- [ ] Add `resume.v2.schema.json`; update the release manifest to current v2,
+- [x] Add `resume.v2.schema.json`; update the release manifest to current v2,
       accepted `[1, 2]`, and emitted `[1, 2]`; then regenerate current plus
       retained v2 types and all three registry declarations. Add the
       `./released` package export. Verify v1 bytes and types are unchanged.
-- [ ] Write concise v2 schema descriptions that state current constraints and
+- [x] Write concise v2 schema descriptions that state current constraints and
       point to `docs/design/` for rationale. Do not copy v1's task, review, or
       retired-file history into the new release; keep the immutable v1 bytes
       unchanged.
-- [ ] Implement adjacent v1↔v2 converters and every catalog fallback. Test all
+- [x] Implement adjacent v1↔v2 converters and every catalog fallback. Test all
       families, unknown IDs, missing mappings, exact round trips for the
       original five, the declared font-only loss for every new family, and
       rejection when any non-font value changes.
-- [ ] Wire the production projector to the generated current, accepted, and
+- [x] Wire the production projector to the generated current, accepted, and
       emitted declarations. Prove accepted/emitted arrays stay independently
       authored, every member is released, the package export resolves
       `CURRENT_VERSION === 2`, and the production loss policy is present only
       for v2→v1 font fallback.
-- [ ] Update the 20 presets to stable catalog IDs. Template behavior and every
+- [x] Update the 20 presets to stable catalog IDs. Template behavior and every
       non-font token remain unchanged.
-- [ ] Verify the OpenAPI source still has no resume-document example or compiled
-      schema reference. If it gained one, stop and assign the OpenAPI source,
+- [x] Verify the OpenAPI source still keeps the document opaque: it has only the
+      version-only `ResumeDocument` placeholder and no compiled schema or font
+      example. If it gains a full document example, assign the OpenAPI source,
       tests, and generated client as a separate integration-owner contract
       change.
-- [ ] Run `(cd packages/schema/gen/go && go test ./... -count=1)` and
+- [x] Run `(cd packages/schema/gen/go && go test ./... -count=1)` and
       `make schema-check api-check server-build server-vet server-test`. With
       the integration owner-provided shared test database, run
       `make server-test-db server-test-integration server-migration-test`. The
       schema append-only test compares the new release with the phase base.
-- [ ] Record all owned diffs and exact output. The fresh integrated phase review
+- [x] Record all owned diffs and exact output. The fresh integrated phase review
       inspects this high-risk change before the phase gates and push.
+
+## Implementation record
+
+Implemented from base `acd29b6f3c881fa4796f21658ddaf5c732505aff`. The first
+focused runs failed because the current TypeScript schema still declared v1, the
+stable font IDs were absent, and the Go v1↔v2 converter and production loss
+policy did not exist. The later live database gate exposed two synthetic
+projection tests that had reused version 2 as a future version; they now use a
+synthetic version after the production current version.
+
+The retained v1 schema and generated types stayed byte-identical. The current
+schema, all 20 presets, the generated Go and TypeScript declarations, the
+explicit adjacent converters, and the production projector now use v2. The
+OpenAPI source remains opaque with only its version-only placeholder.
+
+Green commands:
+
+- `(cd packages/schema/gen/go && go test ./... -count=1)`
+- `make schema-check api-check server-build server-vet server-test`
+- `make server-test-db server-test-integration server-migration-test`
+- `(cd apps/server && GOGC=50 golangci-lint run ./internal/resume/docmigrate/... ./internal/resumeapi/... ./internal/api/... ./internal/auth/... ./cmd/server/...)`
+
+The connected phase scan and fresh integrated phase review remain at the phase
+gate.
 
 ## Acceptance mapping
 

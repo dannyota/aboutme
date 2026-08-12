@@ -51,24 +51,26 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
-// CurrentVersion is the schema version every stored resume is projected to
-// on read and used for writes. It moves only when another document version
-// is released in packages/schema. Releases are append-only and require an
-// adjacent Up/Down pair plus a deliberate change to the declared sets below.
-const CurrentVersion int32 = 1
+// CurrentVersion is generated from the reviewed schema release manifest.
+const CurrentVersion int32 = int32(schema.CurrentVersion)
 
-// acceptedVersions and emittedVersions are the production declaration: the
-// document versions this server accepts from clients, and the versions it
-// will emit back. They are distinct sets on purpose -- a release can start
-// accepting a new version before it emits it, or keep accepting an old one
-// after it stops emitting it -- and they are written out explicitly rather
-// than derived from the released registry, because "released" is a fact
-// about packages/schema and "accepted"/"emitted" are decisions about this
-// server. With one released version both are {1}.
+// acceptedVersions and emittedVersions consume the independently authored
+// declarations generated from released-versions.json.
 var (
-	acceptedVersions = []int32{CurrentVersion}
-	emittedVersions  = []int32{CurrentVersion}
+	acceptedVersions = int32Versions(schema.AcceptedVersions())
+	emittedVersions  = int32Versions(schema.EmittedVersions())
 )
+
+func int32Versions(versions []int) []int32 {
+	out := make([]int32, len(versions))
+	for i, version := range versions {
+		if version < 1 || version > math.MaxInt32 {
+			panic(fmt.Sprintf("docmigrate: generated schema version %d is out of int32 range", version))
+		}
+		out[i] = int32(version)
+	}
+	return out
+}
 
 // AcceptedVersions returns the document versions this server accepts from
 // clients, ascending. The returned slice is a copy, so a caller cannot
@@ -105,8 +107,8 @@ var (
 
 	// ErrLossyConversion means wire emission produced a schema-valid older
 	// document that could not be converted back to the exact same current
-	// document. P2A has no declared intentional lossy defaults, so emission
-	// fails closed until a future version contract explicitly defines one.
+	// document. Emission fails unless the production projector's immutable
+	// policy permits that exact declared loss.
 	ErrLossyConversion = errors.New("docmigrate: lossy wire conversion")
 )
 
@@ -141,7 +143,12 @@ type Projector struct {
 	accepted   []int32
 	emitted    []int32
 	current    int32
+	lossPolicy EmissionLossPolicy
 }
+
+// EmissionLossPolicy validates one declared lossy wire emission. Generic
+// projectors have no policy and therefore require exact round trips.
+type EmissionLossPolicy func(current, emitted, restored json.RawMessage, target int32) error
 
 // NewProjector builds a Projector and fails closed on any incoherent
 // configuration: a pair missing Up or Down, a pair or declared version with
@@ -149,6 +156,12 @@ type Projector struct {
 // current version that is not itself both accepted and emitted.
 func NewProjector(pairs map[int32]AdjacentConverters, validators map[int32]ValidateFunc,
 	accepted, emitted []int32, current int32,
+) (*Projector, error) {
+	return newProjector(pairs, validators, accepted, emitted, current, nil)
+}
+
+func newProjector(pairs map[int32]AdjacentConverters, validators map[int32]ValidateFunc,
+	accepted, emitted []int32, current int32, lossPolicy EmissionLossPolicy,
 ) (*Projector, error) {
 	if len(validators) == 0 {
 		return nil, errors.New("docmigrate: no schema validator registered")
@@ -205,6 +218,7 @@ func NewProjector(pairs map[int32]AdjacentConverters, validators map[int32]Valid
 		accepted:   acceptedCopy,
 		emitted:    emittedCopy,
 		current:    current,
+		lossPolicy: lossPolicy,
 	}, nil
 }
 
@@ -239,17 +253,23 @@ func cloneMap[V any](m map[int32]V) map[int32]V {
 	return out
 }
 
-// NewIdentityProjector returns the production projector: the released
-// validators, the accepted/emitted declaration, and no
-// adjacent pairs, because exactly one version is released. Every
-// stored row is already at CurrentVersion, so Project is a pure passthrough.
+// NewIdentityProjector returns the immutable production projector. The name is
+// retained for API compatibility; released adjacent converters now lift v1 to
+// current v2 and emit v2 through the declared v1 font fallback policy.
 // The returned projector is immutable and shared.
 func NewIdentityProjector() *Projector { return identityProjector }
 
 var identityProjector = mustIdentityProjector()
 
 func mustIdentityProjector() *Projector {
-	p, err := NewProjector(nil, releasedValidators, acceptedVersions, emittedVersions, CurrentVersion)
+	p, err := newProjector(
+		map[int32]AdjacentConverters{1: {Up: convertV1ToV2, Down: convertV2ToV1}},
+		releasedValidators,
+		acceptedVersions,
+		emittedVersions,
+		CurrentVersion,
+		productionEmissionLossPolicy,
+	)
 	if err != nil {
 		panic("docmigrate: building the production projector: " + err.Error())
 	}
@@ -413,7 +433,12 @@ func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessag
 		return nil, fmt.Errorf("%w: comparing restored version %d: %w", ErrLossyConversion, version, err)
 	}
 	if !equal {
-		return nil, fmt.Errorf("%w: current -> %d -> current changed the document", ErrLossyConversion, version)
+		if p.lossPolicy == nil {
+			return nil, fmt.Errorf("%w: current -> %d -> current changed the document", ErrLossyConversion, version)
+		}
+		if err := p.lossPolicy(doc, emitted, restored, version); err != nil {
+			return nil, fmt.Errorf("%w: current -> %d -> current: %w", ErrLossyConversion, version, err)
+		}
 	}
 	return emitted, nil
 }

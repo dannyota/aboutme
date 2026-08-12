@@ -243,7 +243,7 @@ describe("resume schema", () => {
     it('accepts a cleared fullName ("") and an absent details array', () => {
       expect(
         validate({
-          schemaVersion: 1,
+          schemaVersion: 2,
           personalDetails: { fullName: "" },
           content: {},
           customization: fixture("minimal.json").customization,
@@ -254,7 +254,7 @@ describe("resume schema", () => {
     it("accepts a freshly created section with no displayName/iconKey and no entries", () => {
       expect(
         validate({
-          schemaVersion: 1,
+          schemaVersion: 2,
           personalDetails: { fullName: "Ada Lovelace", details: [] },
           content: { work: { sectionType: "work", entries: [] } },
           customization: {
@@ -268,7 +268,7 @@ describe("resume schema", () => {
     it("still rejects a section entirely missing its sectionType discriminator", () => {
       expect(
         validate({
-          schemaVersion: 1,
+          schemaVersion: 2,
           personalDetails: { fullName: "Ada Lovelace", details: [] },
           content: { work: { entries: [] } },
           customization: fixture("minimal.json").customization,

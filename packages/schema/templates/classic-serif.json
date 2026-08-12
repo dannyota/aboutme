@@ -4,7 +4,7 @@
   "description": "Traditional one-column serif document: centred letterhead, ruled uppercase section headings, no fills or tints.",
   "customization": {
     "font": {
-      "family": "Roboto Serif",
+      "family": "roboto-serif",
       "baseSizePx": 13
     },
     "colors": {

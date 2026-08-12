@@ -4,7 +4,7 @@
   "description": "Dense two-column engineering CV: skill bars in an untinted sidebar, petrol accents on white, numeric dates.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 13
     },
     "colors": {

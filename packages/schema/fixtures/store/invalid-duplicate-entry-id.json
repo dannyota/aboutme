@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "personalDetails": {
     "fullName": "Ada Lovelace",
     "details": []
@@ -39,7 +39,7 @@
   },
   "customization": {
     "font": {
-      "family": "Inter",
+      "family": "inter",
       "baseSizePx": 14
     },
     "colors": {

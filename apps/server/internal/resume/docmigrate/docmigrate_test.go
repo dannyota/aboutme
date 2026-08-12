@@ -1,10 +1,11 @@
 // docmigrate_test.go covers adjacent conversion, projection, synthetic
 // old-client preparation, and supported-version emission.
 //
-// Everything here runs against SYNTHETIC released versions, because
-// production has exactly one. The synthetic v2/v3 schemas are derived from
-// the real immutable resume.v1.schema.json -- only `$id` and `$defs/schemaVersion/
-// const` change -- so:
+// Most tests here use SYNTHETIC released versions to exercise arbitrary
+// adjacent paths without coupling them to the production font conversion. The
+// synthetic v2/v3 schemas are derived from the real immutable
+// resume.v1.schema.json -- only `$id` and `$defs/schemaVersion/const` change --
+// so:
 //
 //   - version 1 always validates against the REAL immutable contract, which
 //     is what "EmitWire ... validates immutable v1" has to mean to be worth
@@ -26,6 +27,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -238,6 +240,11 @@ func syntheticV2(t *testing.T) *docmigrate.Projector {
 // document throughout.
 func fullV1Doc(t *testing.T) json.RawMessage {
 	t.Helper()
+	return json.RawMessage(readFixture(t, filepath.Join("v1", "full.json")))
+}
+
+func fullCurrentDoc(t *testing.T) json.RawMessage {
+	t.Helper()
 	return json.RawMessage(readFixture(t, "full.json"))
 }
 
@@ -282,11 +289,11 @@ func splitDoc(t *testing.T, doc json.RawMessage) (pd, content, customization jso
 
 // --- Production declarations ---
 
-func TestDeclarations_ProductionSetsAreV1Only(t *testing.T) {
+func TestDeclarations_ProductionSetsAreV1AndV2(t *testing.T) {
 	t.Parallel()
 
-	if docmigrate.CurrentVersion != 1 {
-		t.Fatalf("CurrentVersion = %d, want 1", docmigrate.CurrentVersion)
+	if docmigrate.CurrentVersion != 2 {
+		t.Fatalf("CurrentVersion = %d, want 2", docmigrate.CurrentVersion)
 	}
 	for _, tc := range []struct {
 		name string
@@ -295,8 +302,8 @@ func TestDeclarations_ProductionSetsAreV1Only(t *testing.T) {
 		{"accepted", docmigrate.AcceptedVersions()},
 		{"emitted", docmigrate.EmittedVersions()},
 	} {
-		if len(tc.got) != 1 || tc.got[0] != docmigrate.CurrentVersion {
-			t.Errorf("%sVersions() = %v, want [%d]", tc.name, tc.got, docmigrate.CurrentVersion)
+		if !slices.Equal(tc.got, []int32{1, 2}) {
+			t.Errorf("%sVersions() = %v, want [1 2]", tc.name, tc.got)
 		}
 	}
 }
@@ -332,11 +339,11 @@ func TestDeclarations_ReturnedSlicesCannotMutateInternalState(t *testing.T) {
 	accepted[0] = 99
 	emitted[0] = 99
 
-	if got := docmigrate.AcceptedVersions(); got[0] != docmigrate.CurrentVersion {
-		t.Errorf("AcceptedVersions() = %v after mutating a returned copy, want [%d]", got, docmigrate.CurrentVersion)
+	if got := docmigrate.AcceptedVersions(); !slices.Equal(got, []int32{1, 2}) {
+		t.Errorf("AcceptedVersions() = %v after mutating a returned copy, want [1 2]", got)
 	}
-	if got := docmigrate.EmittedVersions(); got[0] != docmigrate.CurrentVersion {
-		t.Errorf("EmittedVersions() = %v after mutating a returned copy, want [%d]", got, docmigrate.CurrentVersion)
+	if got := docmigrate.EmittedVersions(); !slices.Equal(got, []int32{1, 2}) {
+		t.Errorf("EmittedVersions() = %v after mutating a returned copy, want [1 2]", got)
 	}
 }
 
@@ -356,7 +363,7 @@ func TestIdentityProjector_ConvertIsByteStable(t *testing.T) {
 	}
 }
 
-func TestIdentityProjector_ProjectIsByteStable(t *testing.T) {
+func TestIdentityProjector_ProjectConvertsV1ToCurrent(t *testing.T) {
 	t.Parallel()
 	p := docmigrate.NewIdentityProjector()
 	pd, content, customization := splitDoc(t, fullV1Doc(t))
@@ -365,18 +372,33 @@ func TestIdentityProjector_ProjectIsByteStable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Project(parts, 1): %v", err)
 	}
-	for _, tc := range []struct {
-		name      string
-		got, want json.RawMessage
-	}{
-		{"personalDetails", gotPD, pd},
-		{"content", gotContent, content},
-		{"customization", gotCustomization, customization},
-	} {
-		if !bytes.Equal(tc.got, tc.want) {
-			t.Errorf("identity Project changed %s:\n got %s\nwant %s", tc.name, tc.got, tc.want)
-		}
+	assembled, err := json.Marshal(map[string]json.RawMessage{
+		"schemaVersion":   json.RawMessage("2"),
+		"personalDetails": gotPD,
+		"content":         gotContent,
+		"customization":   gotCustomization,
+	})
+	if err != nil {
+		t.Fatalf("assemble projected document: %v", err)
 	}
+	if got := fontFamilyOfTest(t, assembled); got != "be-vietnam-pro" {
+		t.Errorf("projected font family = %q, want be-vietnam-pro", got)
+	}
+}
+
+func fontFamilyOfTest(t *testing.T, doc json.RawMessage) string {
+	t.Helper()
+	var value struct {
+		Customization struct {
+			Font struct {
+				Family string `json:"family"`
+			} `json:"font"`
+		} `json:"customization"`
+	}
+	if err := json.Unmarshal(doc, &value); err != nil {
+		t.Fatalf("decode font family: %v", err)
+	}
+	return value.Customization.Font.Family
 }
 
 func TestIdentityProjector_CurrentVersion(t *testing.T) {
@@ -394,7 +416,7 @@ func TestIdentityProjector_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	p := docmigrate.NewIdentityProjector()
 	pd, content, customization := splitDoc(t, fullV1Doc(t))
 
-	for _, stored := range []int32{0, 2, 7} {
+	for _, stored := range []int32{0, 3, 7} {
 		if _, _, _, err := p.Project(pd, content, customization, stored); !errors.Is(err, docmigrate.ErrUnknownVersion) {
 			t.Errorf("Project(parts, %d) error = %v, want ErrUnknownVersion", stored, err)
 		}
@@ -1046,31 +1068,31 @@ func TestWire_OldClientDocumentAcceptedThenEmitted(t *testing.T) {
 func TestWire_EmitCurrentVersionIsByteStable(t *testing.T) {
 	t.Parallel()
 	p := docmigrate.NewIdentityProjector()
-	v1 := fullV1Doc(t)
+	current := fullCurrentDoc(t)
 
-	got, err := p.EmitWire(v1, docmigrate.CurrentVersion)
+	got, err := p.EmitWire(current, docmigrate.CurrentVersion)
 	if err != nil {
 		t.Fatalf("EmitWire(doc, current): %v", err)
 	}
-	if !bytes.Equal(got, v1) {
-		t.Errorf("EmitWire at the current version changed the bytes:\n got %s\nwant %s", got, v1)
+	if !bytes.Equal(got, current) {
+		t.Errorf("EmitWire at the current version changed the bytes:\n got %s\nwant %s", got, current)
 	}
 }
 
 func TestWire_AcceptCurrentVersionReturnsCurrent(t *testing.T) {
 	t.Parallel()
 	p := docmigrate.NewIdentityProjector()
-	v1 := fullV1Doc(t)
+	current := fullCurrentDoc(t)
 
-	got, version, err := p.AcceptWire(v1, docmigrate.CurrentVersion)
+	got, version, err := p.AcceptWire(current, docmigrate.CurrentVersion)
 	if err != nil {
 		t.Fatalf("AcceptWire(doc, current): %v", err)
 	}
 	if version != docmigrate.CurrentVersion {
 		t.Errorf("AcceptWire returned version %d, want %d", version, docmigrate.CurrentVersion)
 	}
-	if !bytes.Equal(got, v1) {
-		t.Errorf("AcceptWire at the current version changed the bytes:\n got %s\nwant %s", got, v1)
+	if !bytes.Equal(got, current) {
+		t.Errorf("AcceptWire at the current version changed the bytes:\n got %s\nwant %s", got, current)
 	}
 }
 

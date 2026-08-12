@@ -4,7 +4,7 @@
   "description": "Type-led one column for product, growth, and founding-team roles: the largest base in the set, uppercase black labels instead of rules, a 1:2.5:7.5 spacing ladder, and monochrome dot proficiency.",
   "customization": {
     "font": {
-      "family": "Inter",
+      "family": "inter",
       "baseSizePx": 16
     },
     "colors": {

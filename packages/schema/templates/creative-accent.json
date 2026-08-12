@@ -4,7 +4,7 @@
   "description": "One column under a tinted header block, with a single deep vermilion carrying the name, section headings, rules, links, and skill tags.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 15
     },
     "colors": {
