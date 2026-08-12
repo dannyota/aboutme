@@ -1,11 +1,5 @@
-// Package auth_test exercises TransactionStore against a live Postgres
-// database (spec §9): creating a transaction (Begin) and atomically
-// claiming it exactly once (Consume). Every test here is skipped, not
-// failed, when TEST_DATABASE_URL is unset, so `go test ./...` stays fully
-// hermetic by default. Test setup goes through internal/testutil's shared
-// RequireMigratedTestDatabaseURL, the same helper internal/user and
-// internal/store use, so this package's tests never depend on another
-// package's test binary having already applied migrations first.
+// Package auth_test exercises single-use TransactionStore behavior against a
+// migrated live database. Tests skip when TEST_DATABASE_URL is unset.
 package auth_test
 
 import (
@@ -21,11 +15,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-// newTestQueries returns a *store.Queries backed by a fresh pgx connection
-// pool against TEST_DATABASE_URL, with the database's schema brought to
-// head first (see internal/testutil.MigrateTestDatabase -- idempotent,
-// since another package's test may already have migrated this same
-// database).
+// newTestQueries opens a fresh pool after idempotently applying migrations.
 func newTestQueries(t *testing.T) *store.Queries {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
@@ -42,11 +32,7 @@ func newTestQueries(t *testing.T) *store.Queries {
 	return store.New(pool)
 }
 
-// createTestUser inserts a minimal users row and returns its ID, so tests
-// that need a real linking_user_id (a foreign key into users) have one to
-// point at -- oauth_transactions.linking_user_id REFERENCES users(id), so
-// an arbitrary, never-inserted UUID would fail with a foreign-key
-// violation instead of exercising Begin/Consume's own logic.
+// createTestUser returns a valid foreign-key target for linking transactions.
 func createTestUser(t *testing.T, q *store.Queries) uuid.UUID {
 	t.Helper()
 

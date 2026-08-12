@@ -1,8 +1,4 @@
-// Package auth_test exercises SessionManager against a live Postgres
-// database (spec §9), reusing this package's existing live-DB harness
-// (newTestQueries/createTestUser, both defined in transaction_test.go)
-// instead of duplicating it -- the same convention
-// transaction_adversarial_test.go already follows for TransactionStore.
+// Package auth_test exercises SessionManager against live Postgres.
 package auth_test
 
 import (
@@ -22,11 +18,9 @@ import (
 )
 
 // TestSessionCookieName_MatchesHostPrefixContract pins the literal value
-// task-7-brief.md's "Produces" section specifies. As with cookie.go's
-// OAuthTxCookieName (see transaction_adversarial_test.go), this matters
+// required by the session cookie contract. This matters
 // beyond naming taste: a browser only honors a __Host- prefixed cookie
-// when it is Secure, Path=/, and carries no Domain attribute -- Task 9's
-// cookie helpers depend on getting this exact string right.
+// when it is Secure, Path=/, and carries no Domain attribute.
 func TestSessionCookieName_MatchesHostPrefixContract(t *testing.T) {
 	const want = "__Host-session"
 	if auth.SessionCookieName != want {
@@ -34,8 +28,8 @@ func TestSessionCookieName_MatchesHostPrefixContract(t *testing.T) {
 	}
 }
 
-// TestIssueThenAuthenticate_ReturnsSameSession_NoRotation is task-7-brief.md
-// Step 1's happy path: Issue a session, Authenticate with the raw token it
+// TestIssueThenAuthenticate_ReturnsSameSession_NoRotation issues a session,
+// authenticates with the raw token it
 // returns, and confirm the round trip returns the same session with no
 // rotation triggered (the session is brand new -- age 0, far under
 // rotationAge).
@@ -70,10 +64,8 @@ func TestIssueThenAuthenticate_ReturnsSameSession_NoRotation(t *testing.T) {
 
 // ---- issuance ------------------------------------------------------------
 
-// TestIssue_CreatesNewRowEachTime is Issue's own doc comment's fixation
-// defense, exercised directly: two Issue calls for the same user must
-// produce two distinct raw tokens and two distinct session rows, not the
-// same row reused or updated.
+// TestIssue_CreatesNewRowEachTime proves repeated issuance resists fixation by
+// creating distinct tokens and rows.
 func TestIssue_CreatesNewRowEachTime(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -118,8 +110,7 @@ func TestIssue_CreatesNewRowEachTime(t *testing.T) {
 }
 
 // TestIssue_StoresUAAndIP guards that Issue round-trips the caller-supplied
-// user agent and IP onto the stored row -- the device-list feature (Task
-// 9) reads these back verbatim.
+// user agent and IP onto the stored row for the device list.
 func TestIssue_StoresUAAndIP(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -183,19 +174,15 @@ func TestIssue_AbsoluteExpiresAtAnchoredToIssueTime(t *testing.T) {
 
 // ---- hashing --------------------------------------------------------------
 
-// sessionTokenHash reproduces sessions.token_hash from a raw token,
-// independently of session.go's own unexported hashSessionToken -- the
-// same cross-check transaction_adversarial_test.go's handleHash performs
-// for oauth_transactions.handle_hash.
+// sessionTokenHash computes the expected stored value independently of the
+// production helper.
 func sessionTokenHash(raw string) []byte {
 	sum := sha256.Sum256([]byte(raw))
 	return sum[:]
 }
 
-// TestIssue_TokenHashedAtRest proves Issue's doc comment claim directly:
-// looking a session up by the independently-computed SHA-256 of the raw
-// token it returned finds that exact row, so token_hash is genuinely
-// sha256(raw) -- not the raw token itself, not some other encoding.
+// TestIssue_TokenHashedAtRest proves the raw token resolves through its
+// independently computed SHA-256 hash.
 func TestIssue_TokenHashedAtRest(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -237,10 +224,8 @@ func TestAuthenticate_UnknownToken_ReturnsSessionInvalid(t *testing.T) {
 }
 
 // TestAuthenticate_RevokedSession_ReturnsSessionInvalid covers
-// Authenticate's revoked branch directly (a basic, single-request version
-// of the grace-independence property; the adversarial
-// revoke-immediacy/no-grace-window edge case is Step 3's, authored
-// independently).
+// Authenticate's revoked branch directly. Revocation is independent of any
+// rotation grace window.
 func TestAuthenticate_RevokedSession_ReturnsSessionInvalid(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -283,22 +268,9 @@ func TestAuthenticate_IdleExpiredSession_ReturnsSessionInvalid(t *testing.T) {
 	}
 }
 
-// TestAuthenticate_AbsoluteExpiredSession_ReturnsSessionInvalid covers
-// Authenticate's absolute-expiry branch specifically -- as a hard ceiling
-// independent of activity, not merely as a corollary of idle expiry (which
-// would also fire if last_seen_at were simply left stale for 90+ days, and
-// would mask a broken/missing absolute check the same way a first version
-// of this test did: see this test's own mutation-testing note below). It
-// forces last_seen_at fresh via a direct SQL write -- bypassing
-// SessionManager, so this isn't just "Authenticate happened to touch it"
-// -- immediately before asserting, so idle expiry cannot be the reason
-// Authenticate rejects the session.
-//
-// (Author's note: an earlier version of this test advanced the clock past
-// absoluteTimeout without ever refreshing last_seen_at, so idle expiry
-// -- also past its own, shorter threshold by then -- fired instead and
-// masked a deliberately-broken absolute-expiry guard in a mutation check.
-// This version was rewritten specifically to close that gap.)
+// TestAuthenticate_AbsoluteExpiredSession_ReturnsSessionInvalid writes a fresh
+// last_seen_at before authentication, isolating the absolute-expiry ceiling
+// from idle expiry.
 func TestAuthenticate_AbsoluteExpiredSession_ReturnsSessionInvalid(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -429,8 +401,8 @@ func TestRevoke_UnknownSessionID_IsNotAnError(t *testing.T) {
 // is the ownership check RevokeForUser adds over Revoke: a caller naming a
 // session id that belongs to a different user must affect zero rows and
 // must not revoke it -- the id still authenticates afterward. This is what
-// lets Task 9's DELETE /sessions/{id} turn 0 into a 404 (never a 403)
-// without ever actually touching another user's session.
+// lets DELETE /sessions/{id} turn 0 into a 404 without distinguishing
+// another user's session from an unknown id, while leaving it untouched.
 func TestRevokeForUser_AnotherUsersSessionID_AffectsZeroRowsAndStaysAuthenticating(t *testing.T) {
 	q := newTestQueries(t)
 	userA := createTestUser(t, q)
@@ -456,10 +428,8 @@ func TestRevokeForUser_AnotherUsersSessionID_AffectsZeroRowsAndStaysAuthenticati
 	}
 }
 
-// TestRevokeForUser_OwnSessionID_RevokesIt is RevokeForUser's positive
-// case, exercised directly rather than only inferred from the negative
-// one above: the caller's own session id, under the caller's own user id,
-// is revoked (1 row affected) and stops authenticating.
+// TestRevokeForUser_OwnSessionID_RevokesIt proves an owned live session is
+// revoked and stops authenticating.
 func TestRevokeForUser_OwnSessionID_RevokesIt(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -539,9 +509,8 @@ func TestRevokeAll_RevokesOnlyThatUsersSessions(t *testing.T) {
 	}
 }
 
-// TestTouchReauthenticated_UpdatesReauthenticatedAt guards
-// TouchReauthenticated's own write, independently of any caller (Task 10's
-// purpose=reauth flow calls it after a real OAuth round trip).
+// TestTouchReauthenticated_UpdatesReauthenticatedAt guards the write used
+// after a successful reauthentication round trip.
 func TestTouchReauthenticated_UpdatesReauthenticatedAt(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -602,11 +571,7 @@ func TestRequireRecentReauth(t *testing.T) {
 	}
 }
 
-// ---- rotation (smoke coverage only -- the exactly-one-successor-under-
-// concurrency, grace-window-edge, and absolute-expiry-anchoring properties
-// are the independently authored adversarial suite's job, not this file's;
-// this is just enough to prove the algorithm isn't obviously broken before
-// that suite runs against it) ------------------------------------------------
+// ---- rotation smoke coverage -----------------------------------------------
 
 // TestAuthenticate_RotatesAfter24h_SequentialSingleRequest is a minimal,
 // single-goroutine sanity check of the rotation algorithm's winning path:
@@ -648,12 +613,7 @@ func TestAuthenticate_RotatesAfter24h_SequentialSingleRequest(t *testing.T) {
 	if !successor.ReauthenticatedAt.Equal(predecessor.ReauthenticatedAt) {
 		t.Errorf("successor.ReauthenticatedAt = %v, want %v (rotation is not itself a fresh OAuth login -- must not reset the recent-reauth gate)", successor.ReauthenticatedAt, predecessor.ReauthenticatedAt)
 	}
-	// Unlike user_id/absolute_expires_at/reauthenticated_at, csrf_secret
-	// must NOT be copied forward: rotation is exactly when a session's
-	// CSRF credential should refresh. A one-line refactor that copied
-	// predecessor.CSRFSecret into the successor (right next to the
-	// deliberate copies above) would defeat that silently -- nothing else
-	// in this test file would catch it.
+	// Rotation must mint a new CSRF secret while preserving session lineage.
 	if len(successor.CSRFSecret) != 32 {
 		t.Errorf("successor.CSRFSecret length = %d, want 32 (256-bit CSPRNG)", len(successor.CSRFSecret))
 	}
@@ -697,15 +657,12 @@ func TestAuthenticate_RotatesAfter24h_SequentialSingleRequest(t *testing.T) {
 	}
 }
 
-// ---- rotation single-delivery (P1.1 item 4) ---------------------------------
+// ---- rotation delivery ------------------------------------------------------
 //
 // A successor's raw token is delivered on exactly ONE response and is
-// never stored (only its sha256 is), so a lost response used to orphan the
-// whole session: the predecessor died rotationGrace after the ROTATION,
-// and the live successor was unreachable by any client. The remedy
-// (docs/plans/phase-1-deferred.md P1.1 item 4) is to defer the
-// predecessor's death until the successor is FIRST USED -- the one signal
-// that proves the successor's token actually reached a client.
+// never stored, so a lost response would make the successor unreachable.
+// The predecessor remains usable until the successor is first used, which
+// proves delivery. See docs/adr/0015-session-rotation-delivery.md.
 
 // sessionRowRotationGraceUntil reads the rotation_grace_until column of
 // one sessions row, NULL included (nil out), so a test can assert on the
@@ -720,11 +677,9 @@ func sessionRowRotationGraceUntil(ctx context.Context, t *testing.T, db rowQueri
 }
 
 // TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace is
-// P1.1 item 4's core claim: when the response carrying the successor's raw
-// token never reaches the client, the client keeps presenting the
-// PREDECESSOR's token -- and that token must keep working past the point
-// where the old implementation killed it (rotation + rotationGrace),
-// because nothing has ever proven the successor is reachable.
+// the lost-response case: when the successor token never reaches the
+// client, the predecessor token must keep working past rotationGrace
+// because nothing has proven the successor is reachable.
 func TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -746,8 +701,7 @@ func TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace(t *testi
 	if newRaw == "" {
 		t.Fatal("Authenticate() at 25h returned no rotatedToken, want rotation to have occurred")
 	}
-	// newRaw is deliberately never presented again: this test IS the lost
-	// response.
+	// Never present newRaw; this models a lost response.
 
 	clk.Advance(rotationGrace + time.Second)
 
@@ -764,19 +718,16 @@ func TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace(t *testi
 
 	// Still true many hours later, anywhere inside the deferral window:
 	// the 60-second countdown has not started at all, because nothing has
-	// proven the successor reachable. The window is bounded (phase gate
-	// finding B4 -- see
+	// proven the successor reachable. The window is bounded; see
 	// TestAuthenticate_UndeliveredSuccessor_PredecessorDiesAtBoundedWindow
-	// for the far side of it), so this walks to just inside the bound
-	// rather than to the absolute expiry the original P1.1 fix allowed.
+	// for the far side of it. This walks to just inside that bound.
 	clk.Advance(rotationAge - 2*rotationGrace)
 	setSessionRowLastSeenAt(ctx, t, newRowInspectorPool(t), predecessor.ID, clk.Now())
 	if _, _, err := sm.Authenticate(ctx, oldRaw); err != nil {
 		t.Errorf("Authenticate(predecessor token) just inside the deferral bound after an undelivered rotation error = %v, want nil", err)
 	}
 
-	// The successor row itself is untouched and still live -- the fix must
-	// not "repair" the orphan by deleting or revoking it.
+	// The successor row itself remains live.
 	inspector := newRowInspectorPool(t)
 	if got := sessionRowRotationGraceUntil(ctx, t, inspector, successor.ID); got != nil {
 		t.Errorf("successor rotation_grace_until = %v, want NULL (the successor is not itself rotating)", got)
@@ -784,7 +735,7 @@ func TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace(t *testi
 }
 
 // TestAuthenticate_SuccessorFirstUse_StartsPredecessorGrace is the other
-// half of P1.1 item 4: the predecessor's grace window starts when the
+// delivery case: the predecessor's grace window starts when the
 // successor is FIRST USED, and runs exactly rotationGrace from that
 // instant -- long enough for requests already in flight with the old
 // token, and no longer.
@@ -852,15 +803,12 @@ func TestAuthenticate_SuccessorFirstUse_StartsPredecessorGrace(t *testing.T) {
 	}
 }
 
-// ---- the deferral's upper bound (phase gate finding B4) --------------------
+// ---- the deferral's upper bound ---------------------------------------------
 //
-// P1.1 item 4's deferral is an availability fix, and an unbounded one is a
-// security defect: RFC 9700 (OAuth 2.0 Security BCP) and OWASP's session
-// guidance both rest rotation's value on the superseded credential
-// ceasing to work PROMPTLY. Parking the predecessor at its own
-// absolute_expires_at gave a stolen predecessor token up to 90 days of
-// life. The bound is one rotation interval: a client that has not used
-// its successor within rotationAge is not mid-request, it is gone, so
+// An unbounded delivery deferral is a security defect. RFC 9700 and OWASP's
+// session guidance both rest rotation's value on the superseded credential
+// ceasing to work promptly. The bound is one rotation interval. A client
+// that has not used its successor within rotationAge is gone, so
 // nothing past that buys availability -- it only buys an attacker time.
 
 // TestAuthenticate_UndeliveredSuccessor_PredecessorDiesAtBoundedWindow is
@@ -890,8 +838,7 @@ func TestAuthenticate_UndeliveredSuccessor_PredecessorDiesAtBoundedWindow(t *tes
 	if newRaw == "" {
 		t.Fatal("Authenticate() at 25h returned no rotatedToken, want rotation to have occurred")
 	}
-	// newRaw is deliberately never presented: this test IS the lost
-	// response, exactly like the survival test above.
+	// Never present newRaw; this models a lost response.
 
 	parked := sessionRowRotationGraceUntil(ctx, t, inspector, predecessor.ID)
 	if parked == nil {
@@ -906,14 +853,13 @@ func TestAuthenticate_UndeliveredSuccessor_PredecessorDiesAtBoundedWindow(t *tes
 
 	// The whole point of the deferral still holds inside the bound: a
 	// client whose successor cookie was lost keeps working, far past the
-	// 60 seconds the pre-P1.1 implementation allowed it.
+	// ordinary rotation grace interval.
 	clk.Advance(rotationAge - time.Second)
 	if _, _, err := sm.Authenticate(ctx, oldRaw); err != nil {
 		t.Errorf("Authenticate(predecessor token) one second before the bound error = %v, want nil (the deferral must still cover a lost response)", err)
 	}
 
-	// Past the bound it is dead -- this is the assertion the gate finding
-	// says nothing covered: before the bound existed, this call succeeded.
+	// Past the bound the predecessor is dead.
 	clk.Advance(2 * time.Second)
 	if _, _, err := sm.Authenticate(ctx, oldRaw); !errors.Is(err, auth.ErrSessionInvalid) {
 		t.Errorf("Authenticate(predecessor token) past the bounded deferral window error = %v, want ErrSessionInvalid (a superseded credential must stop working promptly)", err)
@@ -951,7 +897,7 @@ func successorOf(ctx context.Context, t *testing.T, q *store.Queries, predecesso
 // bare rotationAge offset. A session with less than one rotation interval
 // of life left must park at its own ceiling -- rotation is not allowed to
 // hand a superseded credential even one second past the absolute expiry
-// the original login fixed.
+// fixed at login.
 func TestAuthenticate_RotationGracePark_CappedAtAbsoluteExpiry(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)
@@ -1007,7 +953,7 @@ func TestAuthenticate_RotationGracePark_CappedAtAbsoluteExpiry(t *testing.T) {
 // liveSessionIDsForUser returns the ids GET /api/v1/sessions would list
 // for userID at now. It calls ListLiveSessionsForUser with exactly the
 // arguments handleSessionsList builds (sessions_handlers.go: UserID,
-// IdleCutoff = now - idleTimeout, Now = now), so what it reports is the
+// IdleCutoff = now - idleTimeout, Now = now), so its result is the
 // device list itself, not an approximation of it.
 func liveSessionIDsForUser(ctx context.Context, t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) map[uuid.UUID]bool {
 	t.Helper()
@@ -1026,20 +972,9 @@ func liveSessionIDsForUser(ctx context.Context, t *testing.T, q *store.Queries, 
 	return ids
 }
 
-// TestSessionsDeviceList_AcrossRotation pins what the user's own device
-// list shows at every point in a rotation's life -- the gap the phase gate
-// named. The listing rule itself (ListLiveSessionsForUser, sql/queries.sql)
-// is unchanged and not under test here; what is under test is how long the
-// deferral keeps a predecessor inside it.
-//
-// A predecessor still inside its grace window IS live and IS listed, by
-// design (design decision 1: rotation_grace_until being non-NULL is not a
-// death sentence -- sessions_adversarial_test.go's
-// TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace
-// pins that directly). So one physical device does show two entries for
-// the length of that window. That is correct but must be SHORT: before
-// the bound, an undelivered successor left the duplicate standing for up
-// to 90 days.
+// TestSessionsDeviceList_AcrossRotation proves the predecessor remains listed
+// while its grace interval is open, then disappears. One device can therefore
+// produce two entries during the bounded overlap.
 func TestSessionsDeviceList_AcrossRotation(t *testing.T) {
 	t.Run("successor first used", func(t *testing.T) {
 		q := newTestQueries(t)
@@ -1129,8 +1064,7 @@ func TestSessionsDeviceList_AcrossRotation(t *testing.T) {
 			t.Errorf("device list one second before the bound = %v, want both rows", listed)
 		}
 
-		// Past the bound the duplicate self-heals with no request from
-		// anyone. Before the bound existed it stood for up to 90 days.
+		// Past the bound the duplicate disappears without another request.
 		clk.Advance(2 * time.Second)
 		listed = liveSessionIDsForUser(ctx, t, q, userID, clk.Now())
 		if listed[predecessor.ID] {

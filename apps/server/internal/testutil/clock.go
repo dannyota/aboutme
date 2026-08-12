@@ -1,11 +1,4 @@
-// Package testutil provides deterministic test fixtures shared across
-// apps/server's test suites: a fake clock and seeded ID generation now,
-// with domain-specific factories (users, resumes, sessions, ...) added
-// here as later phases introduce those packages. Every helper in this
-// package is deterministic on purpose — no time.Now(), no unseeded rand,
-// no uuid.New() — so the same test produces the same values on every run,
-// on every machine, and in the UAT agent's environment too (design spec §0
-// "Determinism (mandatory for agent-run tests)").
+// Package testutil provides deterministic fixtures shared by server tests.
 package testutil
 
 import (
@@ -13,17 +6,10 @@ import (
 	"time"
 )
 
-// Epoch is the fixed instant fixtures anchor to when a test needs "a
-// timestamp" but not any particular one. Using one shared constant, rather
-// than each test picking its own time.Date literal, makes fixture
-// timestamps easy to recognize in test failures and diffs.
+// Epoch is the shared timestamp for fixtures that need no specific instant.
 var Epoch = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// Clock is a settable, injectable clock for tests: it stands in for
-// time.Now so time-dependent code (e.g. api.RateLimit's token-bucket
-// refill) can be driven forward deterministically with Advance, instead of
-// the test sleeping and hoping the scheduler cooperates. It is safe for
-// concurrent use.
+// Clock is a concurrency-safe clock that tests can advance without sleeping.
 type Clock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -34,8 +20,7 @@ func NewClock(start time.Time) *Clock {
 	return &Clock{now: start}
 }
 
-// NewClockAtEpoch returns a Clock starting at Epoch, for tests that need a
-// deterministic starting instant but don't care which one.
+// NewClockAtEpoch returns a Clock starting at Epoch.
 func NewClockAtEpoch() *Clock {
 	return NewClock(Epoch)
 }

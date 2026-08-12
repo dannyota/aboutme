@@ -1,0 +1,158 @@
+# Authentication and security
+
+Authentication uses external providers, opaque server-side sessions, one exact
+web origin, and a fail-closed request boundary. The service stores no passwords
+or provider refresh tokens.
+
+## Provider identity
+
+| Provider | Protocol              | Identity and registration email rule                                       |
+| -------- | --------------------- | -------------------------------------------------------------------------- |
+| Google   | OpenID Connect (OIDC) | `sub`; registration requires `email_verified=true`                         |
+| LinkedIn | OIDC                  | `sub`; registration requires an explicitly verified email                  |
+| GitHub   | OAuth 2.0             | Numeric user ID; registration uses the verified primary email from its API |
+
+Provider subject, not email, is identity. A verified email already owned by a
+different provider causes a generic `email_already_registered` result and no
+database write. The response never names the existing provider. Linking a second
+provider starts only from an authenticated account. V1 has no provider unlink or
+account-email-change endpoint.
+
+`GET /me` orders linked identities by `(created_at, id)`, oldest first. The
+settings UI uses that stable first identity as its default reauthentication
+provider. Equal timestamps must not make that choice depend on a PostgreSQL scan
+plan.
+
+## OAuth transaction
+
+All providers use authorization code with PKCE S256. OIDC providers also use a
+nonce and validate signature, issuer, audience, expiry, and nonce. GitHub has a
+distinct callback and no invented OIDC checks.
+
+The server stores transaction state, purpose, the opaque-handle hash, PKCE
+verifier, exact redirect URI, expiry, and OIDC nonce. The browser holds only the
+256-bit opaque `__Host-oauth-tx` handle. The database stores its SHA-256 hash. A
+transaction is consumed atomically once and expires after ten minutes.
+
+A privileged transaction binds the user who started it, not one concrete session
+ID. Its callback must authenticate a live session for that same user; a session
+for another user fails through the no-oracle path. Reauthentication updates only
+the concrete session that completes the callback.
+
+The transaction cookie is `Secure; HttpOnly; SameSite=Lax; Path=/` with no
+`Domain`. Every callback clears it on success or failure. Provider access and ID
+tokens exist only for the code exchange and profile fetch, then are discarded;
+no provider refresh token is stored.
+
+OAuth start methods are purpose-specific:
+
+- `GET /api/v1/auth/{provider}/start` starts an unauthenticated login only.
+- Authenticated link and reauthentication starts use a CSRF-protected `POST`.
+  The response contains an authorize URL that the browser opens as a top-level
+  navigation.
+- A `GET` carrying `purpose=link` or `purpose=reauth` returns `405` and creates
+  no transaction.
+
+[ADR 0014](../adr/0014-oauth-start-methods.md) records why privileged starts do
+not use links or redirects.
+
+## Sessions
+
+The browser cookie contains a 256-bit opaque token. PostgreSQL stores only its
+SHA-256 hash. The cookie is
+`__Host-session; Secure; HttpOnly; SameSite=Lax; Path=/` with no `Domain`
+attribute.
+
+| Control           | Rule                                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                          |
+| Absolute expiry   | 90 days                                                                                                        |
+| Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                  |
+| Rotation delivery | The predecessor remains usable only for a bounded interval and until successor use proves delivery             |
+| Recent reauth     | 15 minutes                                                                                                     |
+| Sensitive actions | Provider link, account deletion, slug release, per-session revoke, and logout-everywhere require recent reauth |
+| Visibility        | Account settings list sessions and permit per-session revoke                                                   |
+
+Logout revokes the session, expires the cookie, and sends `Clear-Site-Data`.
+Logout-everywhere revokes all sessions.
+[ADR 0015](../adr/0015-session-rotation-delivery.md) defines rotation
+convergence and the lost-response case.
+
+## CSRF and canonical origin
+
+Cookie-authenticated mutations require all of:
+
+- The synchronizer token returned in the authenticated `/me` response body.
+- `Content-Type: application/json` for JSON bodies. Bodiless mutations omit it,
+  and the photo upload route uses its specified media type.
+- An exact `Origin` match, with exact `Referer` fallback only when needed.
+- A valid session.
+
+CSRF-token comparison is constant-time. Web v1 exposes no credentialed
+cross-origin resource sharing (CORS) surface.
+
+The application has one configured public origin. Apex and `www` cannot both
+serve the authenticated application; one redirects before auth routes. Provider
+callbacks use that exact origin. Production and user acceptance testing use
+HTTPS because `__Host-` cookies are always `Secure`. Plain HTTP native
+development is suitable for non-authenticated work only.
+
+Startup lowercases the scheme and host and removes a default port. It does not
+canonicalize internationalized domain names or equivalent IPv6 spellings.
+Operators must configure the exact browser-serialized origin; an equivalent-
+looking but differently serialized host fails the exact CSRF comparison.
+
+Bearer authentication for the deferred mobile client chooses auth mode once.
+CSRF is required when that mode is cookie; the presence of an arbitrary
+`Authorization` header never bypasses CSRF.
+
+## Client address and rate limits
+
+Caddy is the only component that interprets forwarding headers. It validates the
+production origin path, discards viewer-supplied forwarding headers, derives one
+canonical address, and sends it to Go. Go accepts that value only from
+configured trusted-proxy CIDRs and never parses `X-Forwarded-For`.
+
+Rate-limit storage is bounded. Expired entries may be evicted; active entries
+are not evicted to give an attacker a fresh bucket. When the map is full, a
+global overflow limiter or admission refusal contains key churn. Policies can
+key by IP, account, or account-and-IP.
+[ADR 0018](../adr/0018-bounded-rate-limiter.md) records the failure model.
+
+Public auth starts have their own IP limit. Each start deletes only a bounded
+batch of expired OAuth transactions before inserting one row, so unauthenticated
+traffic cannot turn cleanup into unbounded request work.
+
+## Untrusted document content
+
+Rich text uses one versioned allowlist and shared hostile corpus. Go sanitizes
+every write and re-sanitizes every document before it crosses into a server-side
+rendering (SSR) surface, including public HTML and the internal print route.
+DOMPurify runs before client-side `innerHTML` assignments only; it does not ship
+in the server-rendered bundle. SSR proves neutralization of the Go-sanitized
+input rather than running a Node DOM sanitizer. A strict content security policy
+remains a backstop. [ADR 0012](../adr/0012-ssr-sanitizer-authority.md) owns this
+split.
+
+## Untrusted media
+
+A compressed-byte limit does not bound decoded image memory. Photo intake checks
+dimensions and pixel count before full decode, confirms the decoded bounds,
+rejects animation and malformed containers, and runs under one task-wide permit.
+Body read and object write have cancellable deadlines. Normalization is
+synchronous: its five-second ceiling is a measured release gate, and a request
+never returns while decoder work remains. A busy task rejects before reading the
+body.
+
+Only decoded pixels cross the storage boundary. The normalizer applies one valid
+Exif orientation and re-encodes a static JPEG or PNG. It drops Exif and GPS
+data, XMP, IPTC, comments, thumbnails, ICC profiles, unknown optional chunks,
+and trailing bytes. Decoder details, filenames, and metadata never enter
+responses or logs. Every rejection leaves both PostgreSQL and object storage
+unchanged. [ADR 0019](../adr/0019-private-media-delivery.md) owns the storage
+and failure boundary; [the API design](api.md#photo-intake) owns the
+normalization contract.
+
+Secrets never enter source, Terraform state where avoidable, URLs, or logs.
+Production fails closed when trusted proxies, provider credentials, origin
+settings, or origin-secret configuration is incomplete.

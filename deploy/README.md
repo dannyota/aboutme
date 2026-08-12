@@ -1,51 +1,77 @@
-# deploy
+# Deployment artifacts
 
-- `compose.yml` — podman compose for dev and self-hosting (postgres, a one-shot
-  `migrate` service, server, web, caddy).
-- `server.Dockerfile`, `web.Dockerfile` — multi-stage builds for the two apps.
-  The server image also carries the `migrate` binary the `migrate` service runs.
-- `caddy/` — Caddyfile implementing the full spec §2 route table.
-- `aws/` — **planned, not present yet**. The deferred PI phase will add
-  Terraform for ap-southeast-1 (ECS on Graviton, RDS, and CloudFront).
+`deploy/` contains the current image-based local deployment. The intended
+environment and trust boundaries live in the
+[deployment design](../docs/design/deployment.md).
 
-See spec §6.
+| Path                | Purpose                                               |
+| ------------------- | ----------------------------------------------------- |
+| `compose.yml`       | Podman Compose services and isolated networks         |
+| `server.Dockerfile` | Go server and embedded goose migration binaries       |
+| `web.Dockerfile`    | Nuxt production image                                 |
+| `caddy/Caddyfile`   | Current one-origin route table and client-IP boundary |
 
-## Running the stack
+AWS infrastructure has not landed.
 
-`compose.yml` doubles as the self-hosting artifact, so it ships **no** default
-database credential. Before the first run:
+## Which stack to use
+
+Daily work uses `make dev-native` at `http://localhost:20080`. It starts native
+Go, Nuxt, and Caddy processes against the one shared PostgreSQL container. See
+the [native development runbook](../docs/runbooks/native-development.md).
+
+`make dev` builds and starts the Compose deployment. Reserve it for local
+deployment smoke checks and UAT sessions because it is heavier. The current
+Caddyfile is HTTP-only. It does not yet meet the P9 requirement for HTTPS on
+port 443, so it cannot produce valid authentication UAT evidence. See the
+[local UAT runbook](../docs/runbooks/local-uat.md).
+
+## Start the Compose deployment
+
+From the repository root:
 
 ```sh
-cp .env.example .env   # repo root, if you haven't already
-# edit .env and set POSTGRES_PASSWORD, e.g.:
-#   POSTGRES_PASSWORD=$(openssl rand -base64 24)
+cp .env.example .env
+# Set POSTGRES_PASSWORD to a new value in .env.
+make dev
 ```
 
-Then, from the repo root (so the root `.env` is picked up):
+The default published origin is `http://localhost` on port 80. Rootless Podman
+often cannot bind that port. Set `CADDY_HTTP_PORT=8080` in `.env` for a local
+smoke check, then use `http://localhost:8080`.
+
+Verify the running services:
 
 ```sh
-podman compose --env-file .env -f deploy/compose.yml up -d --build
-podman compose --env-file .env -f deploy/compose.yml down
+podman compose --env-file .env -f deploy/compose.yml ps
+curl --fail http://localhost:8080/healthz
+curl --fail http://localhost:8080/readyz
 ```
 
-`make dev` / `make dev-down` wrap the same commands from the root Makefile.
+Use port 80 in the URLs when `CADDY_HTTP_PORT` is unset. Stop the deployment
+without deleting its PostgreSQL volume:
 
-On `up`, the one-shot `migrate` service runs first: it applies the embedded
-goose migrations against PostgreSQL and exits 0. The `server` only starts once
-it has, via compose's `depends_on: condition: service_completed_successfully`.
-If a migration fails, the `migrate` service exits non-zero and the server never
-starts. A bad migration therefore fails the whole stack closed, rather than
-booting a server against an unmigrated database. The service has no healthcheck:
-a run-to-completion container has no steady state to probe. It reuses the server
-image with the `migrate` entrypoint.
+```sh
+make dev-down
+```
 
-The database password is supplied to both `migrate` and `server` as
-`PGPASSWORD`, never spliced into `DATABASE_URL` — a `/`, `@`, `:` or `=` in a
-generated password would otherwise corrupt the connection URI. The three compose
-networks are isolated: only Caddy shares the `edge` network with the server. As
-a result, the SSR web container cannot reach the Go server directly, and only
-Caddy's address is a trusted proxy.
+## Runtime boundaries
 
-Serves on `http://localhost` (port 80). Rootless podman without a
-`sysctl net.ipv4.ip_unprivileged_port_start` adjustment can't bind port 80; set
-`CADDY_HTTP_PORT` (e.g. `8080`) in `.env` in that case.
+Compose runs PostgreSQL, Go, Nuxt, and Caddy as long-lived services. A one-shot
+`migrate` service applies embedded goose migrations before Go starts. A failed
+migration prevents the server from starting.
+
+PostgreSQL is not published to the host. Only Caddy publishes a port. Separate
+`db`, `edge`, and `frontend` networks prevent Nuxt and PostgreSQL from becoming
+trusted Go proxies. Caddy strips viewer-supplied forwarding headers and sends
+one canonical client address to Go.
+
+The database password is supplied through `PGPASSWORD`, not inserted into the
+database URL. This preserves passwords containing URI delimiters.
+
+The current Caddyfile is a development trust boundary. Do not expose it to the
+Internet or place it unchanged behind another proxy. Production must validate
+the edge path and derive the viewer address as specified by the deployment
+design.
+
+The [self-hosting guide](../docs/guides/self-hosting.md) states the current
+operator scope and TLS limits.

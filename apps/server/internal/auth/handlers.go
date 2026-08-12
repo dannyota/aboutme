@@ -1,11 +1,7 @@
 package auth
 
-// handlers.go implements the OAuth login HTTP surface (design spec §3):
-// route registration, the shared /callback funnel, and the
-// login-resolution algorithm every provider's callback runs. The /start
-// half of that surface lives in start.go, which owns both of its methods
-// and their shared route policy. See transaction.go for this package's
-// own doc comment.
+// OAuth callbacks share the no-oracle and identity rules in
+// docs/design/security.md.
 
 import (
 	"context"
@@ -28,183 +24,77 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// GoogleStartPath and GoogleCallbackPath are the literal routes Service
-// registers for "Sign in with Google" (design spec §3's OAuth table).
-// Exported so callers (tests, and later phases wiring the same paths into
-// docs/api/openapi.yaml) never need to hand-copy the literal strings.
+// GoogleStartPath and GoogleCallbackPath are the registered Google routes.
 const (
 	GoogleStartPath    = "/api/v1/auth/google/start"
 	GoogleCallbackPath = "/api/v1/auth/google/callback"
 )
 
-// LinkedInStartPath and LinkedInCallbackPath are the literal routes
-// Service registers for "Sign in with LinkedIn" (design spec §3's OAuth
-// table), mirroring GoogleStartPath/GoogleCallbackPath's naming.
+// LinkedInStartPath and LinkedInCallbackPath are the registered LinkedIn routes.
 const (
 	LinkedInStartPath    = "/api/v1/auth/linkedin/start"
 	LinkedInCallbackPath = "/api/v1/auth/linkedin/callback"
 )
 
-// MePath, LogoutPath, and SessionsPath are the literal routes Service
-// registers for Task 9's session-authenticated JSON API (design spec §3,
-// AC-AUTH-005): GET /me, POST /auth/logout, and GET+DELETE /sessions.
-// DELETE /sessions/{id} (per-session revoke) has no exported constant of
-// its own -- it is SessionsPath with a "/{id}" wildcard segment appended
-// where it is registered (RegisterRoutes) -- callers that need the literal
-// URL for a specific session build it themselves (SessionsPath + "/" +
-// id.String()).
+// MePath, LogoutPath, and SessionsPath are the session API routes.
 const (
 	MePath       = "/api/v1/me"
 	LogoutPath   = "/api/v1/auth/logout"
 	SessionsPath = "/api/v1/sessions"
 )
 
-// The full, closed vocabulary of ?error= codes a provider callback can
-// ever redirect the browser with (fix-round ruling b2). A new distinct
-// code is a deliberate, reviewed decision -- never something to add ad
-// hoc at a new call site -- because DD-C3's whole point is that a caller
-// gets no finer-grained oracle than this list:
-//
-//   - auth_failed:              DD-C3's generic code for every rejection
-//     not explicitly listed below (authFailedErrorCode).
-//   - email_not_verified:       design spec §3's Google/LinkedIn rule
-//     (emailNotVerifiedErrorCode).
-//   - the visitor declined consent at the provider --
-//     ?error=access_denied echoed back on the callback, RFC 6749
-//     §4.1.2.1 -- gets its own distinct code too: see cancelledErrorCode
-//     for the exact (ruling-specified, double-L) wire value.
-//   - email_already_registered: Task 10's cross-provider email-collision
-//     rejection (resolveLoginIdentity's EmailCollision result,
-//     emailAlreadyRegisteredErrorCode below): a verified email presented
-//     by an unauthenticated login attempt already belongs to a DIFFERENT
-//     account. Carries a &provider=<p> query param naming ONLY the
-//     provider THIS callback is for (already public -- it's the URL
-//     path) -- never the existing account's provider, which design spec
-//     §3's email-collision contract forbids naming (a targeted-phishing
-//     hint).
-//   - identity_already_linked:  Task 10's link-algorithm rejection
-//     (identityAlreadyLinkedErrorCode below, link.go): a purpose=link or
-//     purpose=reauth transaction's provider identity is already claimed
-//     by a DIFFERENT user than the one who started the flow (DD-C15).
-//     Kept distinct from auth_failed, unlike most rejections, because the
-//     actor here IS authenticated and the condition is one they can act
-//     on (unlink it from the other account, or use a different provider
-//     identity) -- not a security-sensitive class DD-C3's no-oracle
-//     reasoning needs to hide.
-//
-// Link/reauth-purpose callback outcomes (success AND error alike) redirect
-// to PublicOrigin+"/app/settings/sessions" instead of "/login"/"/"
-// (DD-C15, settingsSessionsPath below) -- see callbackSuccessRedirect and
-// redirectWithError's purpose parameter.
+// Callback error codes are closed. Security-sensitive failures collapse to
+// auth_failed; user-actionable outcomes remain distinct. See
+// docs/design/security.md.
 
-// authFailedErrorCode is the generic ?error= value every /callback
-// rejection not explicitly pinned a distinct code by the plan redirects
-// with (DD-C3, integration-owner ruling 2026-08-02): every OIDC
-// verification failure, every ErrTransactionInvalid outcome (unknown/
-// expired/replayed/wrong-provider transaction handle), a missing
-// __Host-oauth-tx cookie, and an OAuth `state` mismatch all collapse into
-// this one code, so a caller -- and, in turn, an attacker probing the
-// callback -- gets no oracle distinguishing which of them actually
-// happened. email_not_verified (and, from Task 10,
-// email_already_registered) stay distinct: they are plan-pinned,
-// user-actionable outcomes, not security-sensitive failure classes.
+// authFailedErrorCode collapses security-sensitive callback failures.
 const authFailedErrorCode = "auth_failed"
 
-// emailNotVerifiedErrorCode is the plan-pinned ?error= value for a
-// callback whose verified-email requirement failed (design spec §3's
-// Google row: "require email_verified == true").
+// emailNotVerifiedErrorCode identifies a failed registration email check.
 const emailNotVerifiedErrorCode = "email_not_verified"
 
-// cancelledErrorCode is the ?error= value for a callback where the
-// provider itself reports the visitor declined consent
-// (?error=access_denied on the callback query string, RFC 6749
-// §4.1.2.1) -- fix-round ruling b2: this reflects the provider's own
-// signal rather than an internal classification, leaks nothing about our
-// own defenses, and lets the frontend show "you canceled" instead of a
-// generic failure message.
-const cancelledErrorCode = "cancelled" //nolint:misspell // exact, ruling-specified wire value (double-L "cancelled"), not a typo for "canceled"
+// cancelledErrorCode identifies provider-reported consent denial.
+const cancelledErrorCode = "cancelled" //nolint:misspell // Exact wire value uses double-L "cancelled".
 
-// emailAlreadyRegisteredErrorCode is Task 10's ?error= value for
-// resolveLoginIdentity's EmailCollision result (design decision 5,
-// AC-AUTH-001): an unauthenticated login attempt's verified email already
-// belongs to a DIFFERENT account, reached via a different provider (or,
-// same-provider with a different provider_user_id). See
-// redirectEmailAlreadyRegistered for the &provider=<p> query param this
-// carries in addition to ?error=.
+// emailAlreadyRegisteredErrorCode identifies a verified-email collision.
 const emailAlreadyRegisteredErrorCode = "email_already_registered"
 
-// identityAlreadyLinkedErrorCode is Task 10's ?error= value for the link
-// algorithm's (link.go) rejection when a purpose=link or purpose=reauth
-// transaction's provider identity is already claimed by a user other than
-// the one who started the flow (DD-C15) -- see errIdentityAlreadyLinked's
-// own doc comment (link.go).
+// identityAlreadyLinkedErrorCode identifies an identity owned by another user.
 const identityAlreadyLinkedErrorCode = "identity_already_linked"
 
-// pgUniqueViolationCode is Postgres's SQLSTATE class code for a unique-
-// constraint violation (23505) -- checked by isUniqueViolation below, the
-// fix round 1 (I2/I3) race-recovery seam resolveLoginIdentity's CreateUser
-// call and resolveLinkOrReauth's CreateIdentity call (link.go) both use to
-// tell an ordinary, already-handled outcome racing in under them apart
-// from a genuine database defect.
+// pgUniqueViolationCode is PostgreSQL's unique-violation SQLSTATE.
 const pgUniqueViolationCode = "23505"
 
-// isUniqueViolation reports whether err is (or wraps) a *pgconn.PgError
-// whose Code is pgUniqueViolationCode -- the exact, narrow signal
-// resolveLoginIdentity/resolveLinkOrReauth's race-recovery branches key
-// off, never a broader "was this any kind of database error" check.
+// isUniqueViolation matches only PostgreSQL unique violations.
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode
 }
 
-// settingsSessionsPath is DD-C15's redirect target for every link/reauth-
-// purpose /callback outcome, success and rejection alike: the settings
-// page that initiates a link/reauth flow (Task 11's job to build), so the
-// visitor lands back where they started rather than the app's ordinary
-// post-login page ("/") or the anonymous login screen ("/login") -- both
-// of which would be actively wrong for a caller who was already
-// authenticated when they began this flow.
+// settingsSessionsPath is the success and error target for privileged callbacks.
 const settingsSessionsPath = "/app/settings/sessions"
 
-// sessionIssuer is the subset of *SessionManager handleGoogleCallback
-// needs to issue a session. Extracted as a seam (fix-round Important 1)
-// so a test can inject a deterministic failure at this exact point --
-// there is no realistic way to force a *SessionManager.Issue failure
-// through the real database mid-request -- and prove writeInternalError's
-// obligations end to end: __Host-oauth-tx cleared, a generic body with no
-// wrapped-error text, and no session cookie set.
+// sessionIssuer is the callback's injectable session-issuance seam.
 type sessionIssuer interface {
 	Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error)
 }
 
-// Service implements the OAuth login HTTP surface for every provider
-// (Google and LinkedIn are wired as of this phase task; GitHub follows
-// the same pattern in a later task). It holds the shared OAuth
-// transaction and session machinery plus each provider's own client
-// credentials.
+// Service implements the OAuth login HTTP surface for Google, GitHub, and
+// LinkedIn. It holds shared transaction and session machinery plus each
+// provider's credentials.
 type Service struct {
 	tx       *TransactionStore
 	q        *store.Queries
 	sessions sessionIssuer
-	// sessionMgr is the same *SessionManager instance as sessions, kept as
-	// its own concrete-typed field (rather than widening the sessions
-	// interface itself) because Task 9's RequireSession middleware and
-	// session-management handlers (me.go, sessions_handlers.go) need the
-	// SessionManager's full surface -- Authenticate, Revoke, RevokeForUser,
-	// RevokeAll -- not just sessionIssuer's single Issue method that
-	// SetSessionIssuerForTest is deliberately scoped to fault-inject.
+	// sessionMgr supplies the full session surface; sessions narrows issuance
+	// so tests can inject failures without replacing authentication.
 	sessionMgr *SessionManager
 	logger     *slog.Logger
 
 	publicOrigin   string
 	trustedProxies api.TrustedProxies
 
-	// startRateLimitRequests/startRateLimitWindow are the /start routes'
-	// own rate-limit budget (P1.1 item 1, start.go's startRateLimit).
-	// Fields rather than the package constants read directly so a test can
-	// shrink the budget to a handful of requests
-	// (SetStartRateLimitForTest) instead of driving 30 real starts through
-	// a live database.
+	// These fields let tests reduce the shared start-route budget.
 	startRateLimitRequests int
 	startRateLimitWindow   time.Duration
 
@@ -212,53 +102,18 @@ type Service struct {
 	github   githubProviderConfig
 	linkedin linkedinProviderConfig
 
-	// googleIssuerOverride replaces the real googleIssuer
-	// ("https://accounts.google.com") used for discovery. Empty in
-	// production; set only by tests -- see NewServiceForTest -- so the
-	// callback exercises exactly the same discovery/verify code path
-	// against an in-process oidctest.Provider instead of the real Google
-	// endpoint.
+	// Provider overrides are empty in production and route test traffic to
+	// in-process providers through the production verification paths.
 	googleIssuerOverride string
 
-	// githubEndpointOverride replaces GitHub's real OAuth2 endpoints
-	// (https://github.com/login/oauth/...) and REST API base
-	// (https://api.github.com) alike. Empty in production; set only by
-	// tests -- see NewServiceForTest (export_test.go), which also
-	// defaults this to an unroutable sentinel when the caller passes an
-	// empty string -- so a bare *Service can never be pointed at
-	// anything but the real network for GitHub, mirroring
-	// googleIssuerOverride's own guard.
+	// GitHub uses one override for both OAuth and API endpoints.
 	githubEndpointOverride string
 
-	// linkedinIssuerOverride is googleIssuerOverride's LinkedIn
-	// counterpart, replacing the real linkedinIssuer
-	// ("https://www.linkedin.com/oauth").
 	linkedinIssuerOverride string
 }
 
-// NewService builds a Service backed by q, wiring per-provider OAuth2
-// configuration from cfg. logger receives this Service's own operational
-// logging (fix-round Important 2) -- error class and request id on every
-// rejected or failed callback, matching internal/api's own
-// constructor-injected logger style (see api.New); a nil logger is valid
-// and simply disables logging (tests that don't care pass one that
-// discards output, but nil is accepted too so a caller never needs a
-// throwaway).
-//
-// NewService performs no network I/O of its own (e.g. no OIDC discovery):
-// each provider's discovery document is fetched lazily, and cached, the
-// first time a request actually needs it (see (*Service).googleProvider)
-// -- a server with no login traffic yet, or a dev environment with empty
-// GOOGLE_CLIENT_ID, never blocks startup on it.
-//
-// NewService does not hold an internal/user.Store: that package's own
-// constructor (user.New) takes a store.DBTX (pool/connection) and builds
-// its own internal *store.Queries, which cannot be recovered from the
-// *store.Queries this constructor is pinned to receive. Service instead
-// calls q's CreateUser/GetUserByEmail/GetIdentityByProviderSubject/
-// CreateIdentity methods directly -- the same store.Queries surface
-// user.Store itself wraps, with equivalent pgx.ErrNoRows handling done
-// inline (see resolveLoginIdentity).
+// NewService builds a Service without network I/O. Provider discovery is lazy
+// and cached. A nil logger disables auth logging.
 func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Service, error) {
 	if cfg.PublicOrigin == "" {
 		return nil, fmt.Errorf("auth: NewService: config.PublicOrigin is required")
@@ -290,15 +145,9 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 	}, nil
 }
 
-// RegisterRoutes matches api.New's register signature (design decision
-// 7): it attaches this Service's routes to mux, so cmd/server/main.go can
-// wire it in without internal/api importing internal/auth (which imports
-// internal/api itself -- the reverse import would cycle).
+// RegisterRoutes attaches the authentication and session routes to mux.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
-	// Every provider's /start shares ONE rate limiter instance (P1.1 item
-	// 1): a single bounded key store for the whole auth-start surface,
-	// rather than three that each get their own MaxKeys allowance. See
-	// start.go's startRoute for the per-method chain each one wraps.
+	// All providers share one bounded start-route limiter.
 	startLimit := s.startRateLimit()
 	mux.Handle(GoogleStartPath, s.startRoute(ProviderGoogle, s.buildGoogleAuthorizeURL, startLimit))
 	mux.Handle(GoogleCallbackPath, route(http.MethodGet, s.handleGoogleCallback))
@@ -307,112 +156,24 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(LinkedInStartPath, s.startRoute(ProviderLinkedIn, s.buildLinkedInAuthorizeURL, startLimit))
 	mux.Handle(LinkedInCallbackPath, route(http.MethodGet, s.handleLinkedInCallback))
 
-	// Session-authenticated JSON API (Task 9, AC-AUTH-005). Every route
-	// below is wired through sessionChain, so it always runs the same two
-	// layers, in order, before the handler: RequireSession, then
-	// RequireCSRF. Combined with api.New's own outer chain (applied
-	// identically to every route RegisterRoutes adds -- see router.go's
-	// New), the FULL order every request here passes through is (fix
-	// round 1, M1: the previous version of this comment omitted
-	// SecurityHeaders, NoStoreCache, and RateLimit):
-	//
-	//	RequestID -> SecurityHeaders -> Logging -> NoStoreCache ->
-	//	RateLimit -> BodyLimit -> RequireSession -> RequireCSRF -> handler
-	//
-	// RequireCSRF only enforces on mutating methods (GET/HEAD/OPTIONS pass
-	// through untouched -- csrf.go's isMutatingMethod), so applying it
-	// unconditionally via sessionChain, even to GET /me and GET /sessions,
-	// costs nothing on those routes and keeps every protected route behind
-	// the identical two-layer stack rather than hand-picking per route.
+	// Session routes authenticate before CSRF enforcement.
 	mux.Handle(MePath, route(http.MethodGet, s.sessionChain(s.handleMe)))
 	mux.Handle(LogoutPath, route(http.MethodPost, s.sessionChain(s.handleLogout)))
-	// GET (device list) and DELETE (logout-everywhere) share one path, so
-	// they can't both go through route()'s single-method wrapper the way
-	// every other route here does; handleSessionsCollection does its own
-	// method dispatch, checking the method BEFORE either branch's
-	// sessionChain runs -- an unsupported method never reaches
-	// RequireSession, so it always cleanly 405s regardless of the caller's
-	// auth state, matching route()'s own method-before-side-effect
-	// ordering.
+	// Collection method dispatch runs before authentication, matching route.
 	mux.Handle(SessionsPath, http.HandlerFunc(s.handleSessionsCollection))
 	mux.Handle(SessionsPath+"/{id}", route(http.MethodDelete, s.sessionChain(s.handleRevokeSession)))
 }
 
-// The closed vocabulary of JSON API error codes this package ITSELF
-// introduces for its session-authenticated surface (distinct from the
-// OAuth callback's own ?error= redirect vocabulary above, which is a
-// different mechanism entirely -- a query parameter on a 302, never a
-// JSON body). Deliberately scoped to codes this package defines, not an
-// exhaustive list of every code a response from this surface can ever
-// carry: internal_error, method_not_allowed, body_too_large, and other
-// generic infrastructure codes are internal/api's own (api.WriteError
-// call sites in this package reuse them verbatim, e.g.
-// writeSessionAPIInternalError/handleSessionsCollection's 405) and are
-// documented at their own definition, not repeated here. A new distinct
-// code IN THIS LIST is a deliberate, reviewed decision, not something to
-// invent ad hoc at a new call site:
-//
-//   - session_required: RequireSession's own single rejection code (401)
-//     -- adjudicated 2026-08-02 (fix round 1) as THE canonical code for
-//     "no valid session," to be reused verbatim by every later
-//     session-authenticated endpoint this package or Task 10 adds
-//     (provider link/unlink, account deletion, email change, slug
-//     release, ...), never reinvented under a different literal.
-//   - csrf_rejected: RequireCSRF's own single rejection code (403,
-//     csrf.go's csrfRejectedCode) -- established at Task 8.
-//   - reauth_required: RequireRecentReauth's own rejection code (403,
-//     reauthRequiredCode below) -- shared with the phase's other
-//     sensitive-operation flows (provider link/reauth).
-//   - not_found: DELETE /sessions/{id}'s uniform, no-oracle 404
-//     (sessions_handlers.go's notFoundCode).
-
-// sessionRequiredCode is the single error code every RequireSession
-// rejection returns: no __Host-session cookie at all, and a cookie that
-// fails to authenticate (unknown, revoked, idle/absolute-expired, or an
-// old token past its rotation grace window) are indistinguishable from the
-// response alone -- the same no-oracle reasoning ErrSessionInvalid itself
-// already collapses those five cases behind.
+// sessionRequiredCode collapses every invalid-session cause.
 const sessionRequiredCode = "session_required"
 
-// reauthRequiredCode is the error code Task 9's two recent-reauth-gated
-// endpoints (DELETE /sessions/{id}, DELETE /sessions) return when
-// RequireRecentReauth rejects the caller's session -- the same wire value
-// the phase's other sensitive-operation flows (provider link/reauth) use,
-// so a shared frontend prompt can key off one literal regardless of which
-// endpoint produced it.
+// reauthRequiredCode is shared by all recent-reauth gates.
 const reauthRequiredCode = "reauth_required"
 
-// RequireSession wraps a handler that requires an authenticated session
-// (Task 9; the counterpart to Task 8's RequireCSRF, which documents this
-// exact ordering requirement): it reads the __Host-session cookie,
-// authenticates it via m, and -- on success -- stores the governing
-// session in the request context (ContextWithSession) before calling
-// next, so next (and, per the documented chain, RequireCSRF running
-// between this and next) can read it back via SessionFromContext.
-//
-// If Authenticate rotated the session (task-7-brief.md's >24h rotation:
-// rotatedToken is non-empty), the new session cookie is set on the
-// response before next runs, so this request's own response already
-// carries the caller's next credential -- no extra round trip.
-//
-// On ErrSessionInvalid -- no cookie, or one that fails to authenticate for
-// any reason -- responds 401 with sessionRequiredCode and clears the
-// __Host-session cookie (ClearSessionCookie), so a browser holding a
-// dead/invalid token doesn't keep resending it forever. Any OTHER error
-// (e.g. the database itself is unreachable) is a genuine internal failure,
-// not a verdict on the credential's own validity, and gets the standard
-// opaque 500 instead -- it must never be conflated with "session invalid"
-// or clear a cookie that might still be perfectly good once the outage
-// clears.
-//
-// Ordering (RegisterRoutes' sessionChain, matching csrf.go's own
-// documented chain): RequestID -> SecurityHeaders -> Logging ->
-// NoStoreCache -> RateLimit -> BodyLimit -> RequireSession -> RequireCSRF
-// -> handler (fix round 1, M1: the previous version of this comment
-// omitted SecurityHeaders, NoStoreCache, and RateLimit -- see router.go's
-// New for the authoritative composition this mirrors). RequireCSRF
-// depends on RequireSession having already populated the session in
-// context.
+// RequireSession authenticates the session, delivers any rotated cookie, and
+// stores the session and account ID in context. Invalid credentials return the
+// same 401 and clear the cookie; internal failures return an opaque 500 without
+// clearing it. RequireCSRF must run after this middleware.
 func RequireSession(m *SessionManager) api.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -430,11 +191,7 @@ func RequireSession(m *SessionManager) api.Middleware {
 				SetSessionCookie(w, rotated)
 			}
 
-			// The authenticated account is published for api.AccountKeyFunc
-			// (P1.1 item 1) as well as stored for this package's own
-			// SessionFromContext readers: a rate limiter wrapped INSIDE this
-			// middleware -- start.go's POST link/reauth chain is the first --
-			// can then key per (account, IP) instead of per address alone.
+			// Account context lets inner limiters key by account and IP.
 			ctx := ContextWithSession(r.Context(), sess)
 			ctx = api.WithAccountID(ctx, sess.UserID.String())
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -442,27 +199,9 @@ func RequireSession(m *SessionManager) api.Middleware {
 	}
 }
 
-// readAndAuthenticateSession reads the __Host-session cookie from r and
-// authenticates it via m -- RequireSession's own logic (task-9-brief.md),
-// factored out so a caller that cannot use RequireSession as a route-level
-// http.Handler middleware can still reuse the identical read+authenticate
-// behavior. One caller remains, and it cannot know up front whether a
-// session is even required: resolveLinkOrReauth (link.go). /callback is a
-// public route reachable by an anonymous purpose=login visitor, so it
-// cannot be wrapped in RequireSession; only once a transaction's own
-// Purpose is known (after Consume) does it become clear that a session
-// must be re-authenticated for THIS specific request.
-//
-// The second caller this comment used to name, /start's own
-// purpose-dependent session handling, is gone: P1.1 item 2 split the two
-// starts by METHOD instead of by query parameter, so the link/reauth
-// start is an ordinary RequireSession-wrapped route (start.go) and the
-// login start needs no session at all.
-//
-// Returns ErrSessionInvalid verbatim (never written to w) for no cookie or
-// one that fails to authenticate for any reason -- callers decide how to
-// respond (RequireSession's own 401 JSON body, or a caller-appropriate
-// redirect).
+// readAndAuthenticateSession lets public callbacks reuse session
+// authentication after learning the transaction purpose. It returns
+// ErrSessionInvalid unchanged so callers choose JSON or redirect handling.
 func readAndAuthenticateSession(r *http.Request, m *SessionManager) (sess store.Session, rotated string, err error) {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
@@ -471,37 +210,20 @@ func readAndAuthenticateSession(r *http.Request, m *SessionManager) (sess store.
 	return m.Authenticate(r.Context(), cookie.Value)
 }
 
-// rejectSession writes RequireSession's single 401 rejection response and
-// clears the __Host-session cookie -- factored out so both of
-// RequireSession's own call sites and every Task 9 handler's
-// defense-in-depth "session missing from context" branch (which should
-// never be reachable in production wiring, but must still fail closed
-// rather than panic if it ever were) produce the exact same response.
+// rejectSession writes the uniform 401 response and clears the session cookie.
 func rejectSession(w http.ResponseWriter) {
 	ClearSessionCookie(w)
 	api.WriteError(w, http.StatusUnauthorized, sessionRequiredCode, "a valid session is required")
 }
 
-// sessionChain wraps handler with the two layers every one of Task 9's
-// session-authenticated routes needs, in the documented order:
-// RequireSession, then RequireCSRF. See RegisterRoutes' own comment for
-// why applying RequireCSRF unconditionally (even to a read-only route) is
-// safe and deliberate.
+// sessionChain authenticates before CSRF enforcement.
 func (s *Service) sessionChain(handler http.HandlerFunc) http.HandlerFunc {
 	wrapped := RequireSession(s.sessionMgr)(RequireCSRF(s.publicOrigin)(handler))
 	return wrapped.ServeHTTP
 }
 
-// writeSessionAPIInternalError writes the standard opaque 500 for one of
-// Task 9's session-authenticated JSON endpoints and logs the failing
-// operation server-side -- me.go/sessions_handlers.go's counterpart to
-// this file's own writeInternalError, minus that funnel's OAuth-specific
-// concerns (no provider to log, no __Host-oauth-tx cookie to clear: these
-// routes never set one). Like logInternalError below, this logs err's
-// SQLSTATE class code when it is a *pgconn.PgError, and ONLY that --
-// deliberately never err's own message/detail text, which for a real
-// database error can embed a bound parameter value (e.g. an email
-// address).
+// writeSessionAPIInternalError logs only fixed fields and an optional SQLSTATE,
+// never database error text, then writes an opaque 500.
 func (s *Service) writeSessionAPIInternalError(w http.ResponseWriter, r *http.Request, op string, err error) {
 	if s.logger != nil {
 		attrs := []any{
@@ -517,14 +239,8 @@ func (s *Service) writeSessionAPIInternalError(w http.ResponseWriter, r *http.Re
 	api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 }
 
-// buildGoogleAuthorizeURL is Google's authorizeURLBuilder (start.go): it
-// discovers Google's endpoints, creates the transaction row, and returns
-// the __Host-oauth-tx handle plus the authorize URL, with PKCE (S256) and
-// an OIDC nonce bound to that transaction. Whether the caller is
-// redirected there (GET, a login start) or handed the URL to navigate to
-// itself (POST, a link/reauth start) is start.go's decision, not this
-// function's -- everything provider-specific is here and everything
-// route-policy is there.
+// buildGoogleAuthorizeURL binds PKCE S256 and an OIDC nonce to the stored
+// transaction. start.go owns the GET-versus-POST response policy.
 func (s *Service) buildGoogleAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID) (handle, authURL, op string, err error) {
 	provider, err := s.googleProvider(ctx)
 	if err != nil {
@@ -544,27 +260,11 @@ func (s *Service) buildGoogleAuthorizeURL(ctx context.Context, purpose Purpose, 
 	), "", nil
 }
 
-// handleGoogleCallback completes a Google login: consumes the OAuth
-// transaction, exchanges the authorization code (with PKCE), verifies the
-// ID token (signature/issuer/audience/expiry via go-oidc, plus the
-// nonce check go-oidc does NOT perform itself), resolves or creates the
-// local user, and issues a session.
-//
-// ClearOAuthTxCookie is called on every exit path (ruling 1): every
-// rejection funnels through redirectWithError/redirectAuthFailed and
-// every internal failure funnels through writeInternalError, both of
-// which call it before writing their response, and the success path
-// calls it explicitly in the same place. It is deliberately NOT a
-// deferred call at the top of this function: a deferred ClearOAuthTxCookie
-// would run after the response's WriteHeader has already been called on
-// every exit path, and a Set-Cookie header added after WriteHeader has
-// been called never reaches a real client (net/http headers must be set
-// before the first WriteHeader/Write) -- only ResponseRecorder-based
-// tests that read .Header() instead of .Result() would fail to notice.
+// handleGoogleCallback consumes the transaction, verifies PKCE and OIDC, then
+// resolves the provider identity. Every exit clears the transaction cookie
+// before writing the response; deferring the clear would miss real clients.
 func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
-	// withProviderHTTPClient (provider_http.go): every outbound call below
-	// (OIDC discovery, token exchange, ID token verification's JWKS fetch)
-	// shares one bounded client.
+	// Discovery, token exchange, and JWKS fetch share one bounded client.
 	ctx := withProviderHTTPClient(r.Context())
 
 	handle, err := ReadOAuthTxCookie(r)
@@ -583,24 +283,15 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The OAuth `state` parameter (RFC 6749 §10.12): compared against
-	// what Begin generated for this exact transaction, independent of
-	// (and in addition to) the __Host-oauth-tx cookie and PKCE. Without
-	// this check, an attacker who gets a victim's browser to visit
-	// .../callback?code=<attacker's code>&state=<anything> while the
-	// victim holds a legitimate pending transaction cookie could splice
-	// their own authorization code into the victim's transaction.
+	// State prevents an attacker from splicing their authorization code into
+	// a victim's pending transaction; the cookie and PKCE do not replace it.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
 		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonStateMismatch)
 		return
 	}
 
-	// Ruling b2: the provider's own signal that the visitor declined
-	// consent (RFC 6749 §4.1.2.1's error=access_denied) is checked only
-	// after state has already been validated above, so a forged
-	// access_denied carrying the wrong state still gets the generic
-	// rejection, never this friendlier one.
+	// Validate state before exposing the friendlier consent-denied result.
 	if r.URL.Query().Get("error") == "access_denied" {
 		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
 		return
@@ -618,16 +309,9 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// tx.RedirectURI (not s.googleRedirectURL()): the exact redirect_uri
-	// Begin stored for THIS transaction, not one rebuilt from this
-	// Service's current PublicOrigin config -- see provider_cache.go's
-	// sibling hardening note and TestGoogleCallback_UsesStoredRedirectURI_
-	// NotCurrentPublicOrigin (google_test.go). A real provider enforces
-	// redirect_uri as an exact match against what it issued the
-	// authorization code for; rebuilding it from current config would
-	// desync the two if PUBLIC_ORIGIN changes between /start and
-	// /callback (the oauth_transactions.redirect_uri column would
-	// otherwise be a vestigial, never-read field).
+	// Use the redirect URI stored for this transaction. The provider requires
+	// it to match the authorization request exactly, even if configuration
+	// changed before the callback.
 	oauth2Cfg := s.googleOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
@@ -648,9 +332,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// go-oidc does NOT check nonce automatically (see its own docs on
-	// IDToken.Nonce) -- this is an application-level check and an easy
-	// one to accidentally skip.
+	// go-oidc exposes the nonce but does not validate it.
 	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
 		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonNonceMismatch)
 		return
@@ -662,10 +344,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// purpose=link/reauth: resolved entirely by link.go's shared
-	// algorithm, off tx.LinkingUserID -- no email check at all (Task 10's
-	// link algorithm; see resolveLinkOrReauth's own doc comment), so the
-	// claims.EmailVerified check below never runs for this branch.
+	// Link and reauth use provider identity without an email check.
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
 		if linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGoogle, idToken.Subject); linkErr != nil {
 			s.redirectLinkOrReauthError(w, r, ProviderGoogle, tx.Purpose, linkErr)
@@ -703,61 +382,26 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
 }
 
-// loginResultKind is resolveLoginIdentity's own three-way outcome
-// (design decision 5, AC-AUTH-001).
+// loginResultKind is resolveLoginIdentity's three-way outcome.
 type loginResultKind int
 
-// The three outcomes resolveLoginIdentity can produce -- see its own doc
-// comment for the algorithm that decides between them.
+// resolveLoginIdentity has three closed outcomes.
 const (
 	loginResultNewUser loginResultKind = iota
 	loginResultExistingIdentity
 	loginResultEmailCollision
 )
 
-// loginResult is resolveLoginIdentity's return value: Kind identifies
-// which of the three outcomes occurred; User is set for
-// loginResultNewUser and loginResultExistingIdentity only (the zero
-// store.User for loginResultEmailCollision, which creates nothing and
-// must never be used to issue a session).
+// loginResult carries a user only for new-user and existing-identity outcomes.
 type loginResult struct {
 	Kind loginResultKind
 	User store.User
 }
 
-// resolveLoginIdentity implements design decision 5 and AC-AUTH-001. It
-// never merges by email. Given a verified (provider, providerUserID,
-// email) from a successful token exchange -- and name, this
-// implementation's own necessary addition beyond the brief's illustrative
-// signature: users.name is NOT NULL, and every provider's own caller
-// already computes a non-empty display name (or "" to mean "no claim
-// carried one," triggering this function's own emailLocalPart fallback,
-// exactly like resolveGoogleUser's pre-Task-10 stub did) -- this is the
-// ONE shared function every provider's /callback calls for a
-// PurposeLogin transaction (never for PurposeLink/PurposeReauth, which
-// resolveLinkOrReauth in link.go handles instead, and never touches this
-// function at all):
-//
-//  1. GetIdentityByProviderSubject(provider, providerUserID) -- found ->
-//     ExistingIdentity, done. NO email comparison at all: identities are
-//     keyed by provider+sub alone and are never touched again by email,
-//     so a returning visitor's login never re-derives, re-checks, or
-//     re-compares anything about their email.
-//  2. Not found -> GetUserByEmail(email) -- found (a DIFFERENT account
-//     already owns this verified email, reached via a different
-//     provider, or the same provider under a different sub) ->
-//     EmailCollision. Creates NOTHING -- no users row, no identities
-//     row -- and the pre-existing account's own row is never read for
-//     write, only looked up by unique index; its own columns (including
-//     updated_at) are provably untouched by this call.
-//  3. Not found either -> create a new users row + a new identities row,
-//     NewUser.
-//
-// The HTTP layer maps EmailCollision to
-// redirectEmailAlreadyRegistered's 302 ?error=email_already_registered
-// &provider=<p> -- a redirect, never a raw JSON 409, because /callback is
-// a top-level browser navigation (same reasoning as Task 4/5/6's
-// email_not_verified redirects).
+// resolveLoginIdentity never merges by email. Provider identity wins for a
+// returning login. A verified email owned without that identity yields a
+// collision and no write. Otherwise it creates the user and identity. An empty
+// name falls back to the email local part. See docs/design/security.md.
 func (s *Service) resolveLoginIdentity(ctx context.Context, provider Provider, providerUserID, email, name string) (loginResult, error) {
 	identity, err := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
 		Provider:       string(provider),
@@ -775,45 +419,28 @@ func (s *Service) resolveLoginIdentity(ctx context.Context, provider Provider, p
 	}
 
 	if _, getErr := s.q.GetUserByEmail(ctx, email); getErr == nil {
-		// A different account (there is no identity for provider+sub yet,
-		// so this can never be the SAME account looking itself up) already
-		// owns this verified email. Create nothing -- AC-AUTH-001's whole
-		// point.
+		// No provider identity exists, so this email belongs to another account.
 		return loginResult{Kind: loginResultEmailCollision}, nil
 	} else if !errors.Is(getErr, pgx.ErrNoRows) {
 		return loginResult{}, fmt.Errorf("auth: resolve login identity: get user by email: %w", getErr)
 	}
 
 	if name == "" {
-		// See resolveGoogleUser's identical pre-Task-10 fallback and its
-		// reasoning (fix-round ruling b1): the LOCAL PART of the email,
-		// never the full address -- a later phase renders this value as a
-		// display name, and the full email would leak the visitor's
-		// address to anyone who can see it.
+		// Never expose the full email as the display name.
 		name = emailLocalPart(email)
 	}
 
 	usr, err := s.q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: name})
 	if err != nil {
 		if isUniqueViolation(err) {
-			// Lost a race against a concurrent registration for this exact
-			// email between the GetUserByEmail check above and this INSERT
-			// (fix round 1, I2): from this caller's perspective that is an
-			// entirely ORDINARY email collision, not a server defect -- DD-C4
-			// requires /callback to redirect, never 500, on a top-level
-			// browser navigation. Re-run the same read the happy path above
-			// already does and return its result exactly as if the check had
-			// seen the row the first time.
+			// A concurrent registration may win after the lookup. Re-read to
+			// classify the same email collision.
 			if _, getErr := s.q.GetUserByEmail(ctx, email); getErr == nil {
 				return loginResult{Kind: loginResultEmailCollision}, nil
 			} else if !errors.Is(getErr, pgx.ErrNoRows) {
 				return loginResult{}, fmt.Errorf("auth: resolve login identity: get user by email after race: %w", getErr)
 			}
-			// The unique index fired but a same-transaction re-read now sees
-			// no row at all (e.g. the concurrent winner's row was itself
-			// deleted in between) -- no longer an ordinary collision; fall
-			// through to the generic wrapped-error path below rather than
-			// silently treating this genuine anomaly as success.
+			// A missing row after the constraint error is an internal anomaly.
 		}
 		return loginResult{}, fmt.Errorf("auth: resolve login identity: create user: %w", err)
 	}
@@ -827,10 +454,7 @@ func (s *Service) resolveLoginIdentity(ctx context.Context, provider Provider, p
 	return loginResult{Kind: loginResultNewUser, User: usr}, nil
 }
 
-// emailLocalPart returns the portion of email before "@", or email
-// unchanged if it contains no "@" at all (defensive; email is already
-// validated non-empty by every caller). See resolveGoogleUser's
-// display-name fallback.
+// emailLocalPart returns the text before "@", or the input when absent.
 func emailLocalPart(email string) string {
 	if i := strings.IndexByte(email, '@'); i > 0 {
 		return email[:i]
@@ -838,57 +462,23 @@ func emailLocalPart(email string) string {
 	return email
 }
 
-// redirectWithError clears the __Host-oauth-tx cookie (ruling 1), logs
-// the rejection server-side (fix-round Important 2), and redirects the
-// browser to this rejection's error-display page with ?error=code (DD-C7,
-// integration-owner ruling: distinct from a SUCCESSFUL callback's own
-// target below -- a rejection's ?error= code is meant to render on an
-// error-display screen, never the app's post-login/post-link landing
-// page) -- /callback is a top-level browser navigation, so every
-// rejection is a redirect the user actually sees, never a raw JSON error
-// body. provider identifies which provider's callback this is (see
-// logRejection) -- it is never echoed to the client, only logged.
-//
-// purpose picks WHICH error-display page (DD-C15, corrected 2026-08-02):
-// PurposeLogin (also used for every rejection discovered before a
-// transaction has been consumed at all, so its real Purpose is still
-// unknown -- e.g. a missing/malformed __Host-oauth-tx cookie, or
-// ErrTransactionInvalid -- login is the safe default for an unrecoverable
-// unknown) redirects to PublicOrigin+"/login"; PurposeLink/PurposeReauth
-// redirect to PublicOrigin+settingsSessionsPath, the settings page that
-// initiated them, since that caller was already authenticated and never
-// belongs on the anonymous login screen.
+// redirectWithError clears the transaction cookie, logs the rejection, and
+// redirects to the purpose-specific error page. Unknown-purpose failures use
+// the login page.
 func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, provider Provider, purpose Purpose, code string, reason rejectReason) {
 	ClearOAuthTxCookie(w)
 	s.logRejection(r, provider, code, reason)
 	http.Redirect(w, r, s.callbackErrorRedirectBase(purpose)+"?error="+url.QueryEscape(code), http.StatusFound)
 }
 
-// redirectAuthFailed is redirectWithError's shorthand for the generic,
-// no-oracle authFailedErrorCode (DD-C3/DD-C4). reason is an operator-
-// facing detail logged server-side only (see logRejection) -- it never
-// reaches the client, which always sees the same generic
-// authFailedErrorCode regardless of reason's value. That asymmetry is
-// exactly why reason is a typed rejectReason (reason.go) rather than a
-// string: this is the ONLY place the collapsed failure classes stay
-// distinguishable, so the distinction has to survive as something a log
-// pipeline can group by.
+// redirectAuthFailed exposes one code while retaining a typed, server-only
+// reason for operators.
 func (s *Service) redirectAuthFailed(w http.ResponseWriter, r *http.Request, provider Provider, purpose Purpose, reason rejectReason) {
 	s.redirectWithError(w, r, provider, purpose, authFailedErrorCode, reason)
 }
 
-// redirectEmailAlreadyRegistered is resolveLoginIdentity's EmailCollision
-// outcome's own dedicated redirect (Task 10, design decision 5): unlike
-// every other rejection this package produces, it carries a SECOND query
-// param, &provider=<p> -- naming the provider THIS callback is for (never
-// the DIFFERENT provider the existing account was reached through, which
-// design spec §3's email-collision contract explicitly forbids naming, a
-// targeted-phishing hint). This leaks nothing new: the attempted provider
-// is already public from the URL path itself
-// (/api/v1/auth/<p>/callback). EmailCollision is reachable only from
-// PurposeLogin (resolveLoginIdentity is never called for a link/reauth
-// transaction), so this always targets "/login", never
-// settingsSessionsPath.
+// redirectEmailAlreadyRegistered names only the attempted provider, never the
+// provider already attached to the account. See docs/design/security.md.
 func (s *Service) redirectEmailAlreadyRegistered(w http.ResponseWriter, r *http.Request, provider Provider) {
 	ClearOAuthTxCookie(w)
 	s.logRejection(r, provider, emailAlreadyRegisteredErrorCode, reasonEmailAlreadyRegistered)
@@ -898,9 +488,7 @@ func (s *Service) redirectEmailAlreadyRegistered(w http.ResponseWriter, r *http.
 }
 
 // callbackErrorRedirectBase returns the PublicOrigin-prefixed page a
-// /callback rejection redirects to, before its own ?error=code is
-// appended -- see redirectWithError's own doc comment for the DD-C15
-// purpose-based choice.
+// callback rejection redirects to before ?error=code is appended.
 func (s *Service) callbackErrorRedirectBase(purpose Purpose) string {
 	if purpose == PurposeLink || purpose == PurposeReauth {
 		return s.publicOrigin + settingsSessionsPath
@@ -908,14 +496,7 @@ func (s *Service) callbackErrorRedirectBase(purpose Purpose) string {
 	return s.publicOrigin + "/login"
 }
 
-// callbackSuccessRedirect returns the PublicOrigin-prefixed page a
-// SUCCESSFUL /callback redirects to (DD-C15): PurposeLogin lands on the
-// app's own post-login landing page ("/", DD-C7's bare-origin pin,
-// unchanged from before Task 10); PurposeLink/PurposeReauth land back on
-// settingsSessionsPath, the settings page that initiated them, carrying
-// no query string either way -- a successful outcome has no ?error= to
-// report and Task 10's link algorithm never issues a new session a
-// query string would need to announce.
+// callbackSuccessRedirect selects the purpose-specific success page.
 func (s *Service) callbackSuccessRedirect(purpose Purpose) string {
 	if purpose == PurposeLink || purpose == PurposeReauth {
 		return s.publicOrigin + settingsSessionsPath
@@ -923,40 +504,16 @@ func (s *Service) callbackSuccessRedirect(purpose Purpose) string {
 	return s.publicOrigin + "/"
 }
 
-// writeInternalError clears the __Host-oauth-tx cookie (ruling 1: applies
-// to every exit path, including this server's own internal failures, not
-// only a rejected callback), logs the failing operation server-side
-// (fix-round Important 2) -- including err's SQLSTATE class code when it
-// is a *pgconn.PgError (see logInternalError) -- and writes an opaque 500
-// via the standard api error envelope -- integration-owner ruling 2:
-// never leak a wrapped error's text to the client. Clearing the cookie
-// here is a safe no-op when a /start internal-error path calls it (see
-// start.go's handleLoginStart/handleLinkStart) before any tx cookie for
-// the current attempt has been set at all; it still tidies up a stale
-// cookie left over from an earlier, abandoned attempt.
+// writeInternalError clears any transaction cookie, logs fixed failure data,
+// and writes an opaque 500.
 func (s *Service) writeInternalError(w http.ResponseWriter, r *http.Request, provider Provider, op string, err error) {
 	ClearOAuthTxCookie(w)
 	s.logInternalError(r, provider, op, err)
 	api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 }
 
-// logRejection logs a rejected /callback attempt at Warn level: which
-// provider it was for (this funnel is shared by every provider Service
-// registers, not just Google -- a provider-neutral message plus this
-// attribute is what still lets an operator filter or correlate by
-// provider in a shared log stream), the outward error code (never more
-// specific than what the browser itself already sees -- DD-C3 already
-// permits the client to know this much), the typed reason (reason.go's
-// closed vocabulary -- by construction never user- or provider-supplied
-// data: no OAuth authorization code, no token, no email, no raw
-// state/nonce value can be passed here at all), and the request id, so an
-// operator can correlate a specific rejected request in the access log
-// with why it was rejected. A nil logger (see NewService) is a silent
-// no-op.
-//
-// reason.String() rather than reason itself: slog's JSON handler marshals
-// an unrecognized value with encoding/json, which would render this
-// integer-backed type as a bare number and lose the token entirely.
+// logRejection logs only fixed vocabulary and request metadata, never OAuth or
+// identity values. String converts the integer-backed reason to its stable token.
 func (s *Service) logRejection(r *http.Request, provider Provider, code string, reason rejectReason) {
 	if s.logger == nil {
 		return
@@ -969,19 +526,8 @@ func (s *Service) logRejection(r *http.Request, provider Provider, code string, 
 	)
 }
 
-// logInternalError logs this server's own failure (never the browser's
-// fault) at Error level: which provider it was for (see logRejection's
-// same reasoning), which operation failed (op, a short fixed string),
-// the request id, and -- when err is a *pgconn.PgError -- its SQLSTATE
-// class code (pgconn.PgError.Code, e.g. "23505" for unique_violation)
-// ONLY. Deliberately NOT err's own message/detail text (unlike a plain
-// %w wrap, a database constraint-violation message can itself embed a
-// bound parameter value, e.g. Postgres's own "Key (email)=(...) already
-// exists" detail on users_email_key; logging that verbatim would leak an
-// email address into the server log, which fix-round Important 2
-// explicitly forbids) -- the SQLSTATE class code alone is enough for an
-// operator to distinguish, say, a constraint violation from a connection
-// failure, without risking that leak. A nil logger is a silent no-op.
+// logInternalError records fixed metadata and an optional SQLSTATE. Database
+// error text may contain bound values and must never be logged.
 func (s *Service) logInternalError(r *http.Request, provider Provider, op string, err error) {
 	if s.logger == nil {
 		return
@@ -998,20 +544,8 @@ func (s *Service) logInternalError(r *http.Request, provider Provider, op string
 	s.logger.ErrorContext(r.Context(), "auth: callback internal error", attrs...)
 }
 
-// route restricts handler to the given HTTP method, responding 405 Method
-// Not Allowed with the standard error envelope (and an Allow header) for
-// any other method on the same registered path. Deliberately NOT
-// internal/api's own route helper (which this package cannot reach --
-// api.route is unexported -- and would not want here regardless, see
-// methodMatches below): every route wrapped in this has a real
-// server-side side effect on every request that reaches its handler
-// (Consume's atomic single-use claim on /callback, or a session
-// mutation), so this is deliberately stricter than
-// internal/api/router.go's route, not merely a copy of it.
-//
-// The /start routes do not use this helper: they serve two methods, and
-// start.go's own dispatcher applies the identical exact-match rule (see
-// methodMatches) plus the rate limit and rejection log those routes need.
+// route rejects every method except the exact configured method before the
+// side-effecting handler runs.
 func route(method string, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !methodMatches(method, r.Method) {
@@ -1024,23 +558,9 @@ func route(method string, handler http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// methodMatches reports whether requestMethod satisfies a route
-// registered for routeMethod: exact match only (DD-C8, integration-owner
-// ruling). This is a deliberate divergence from internal/api's own
-// route/methodMatches (and from Go's stdlib ServeMux "GET /pattern"
-// registration syntax), both of which let HEAD satisfy a registered GET
-// route per RFC 9110 §9.3.2 ("HEAD is identical to GET but without a
-// body") -- the right default for an idempotent, side-effect-free GET,
-// but wrong here: a start's GET has a real side effect
-// (TransactionStore.Begin's database INSERT and a real __Host-oauth-tx
-// Set-Cookie) on every request that reaches it, and
-// handleGoogleCallback/handleLinkedInCallback's GET atomically consumes a
-// single-use transaction. start.go's own dispatcher applies this same
-// exact-match rule for the same reason. A HEAD request is exactly the shape a
-// link-preview/prefetch crawler sends without ever intending to complete
-// the flow -- letting it fall through to either handler would mean a
-// prefetcher hitting every link on a page burns a real transaction (and
-// sets a real cookie) for a request the visitor never made.
+// methodMatches is stricter than ServeMux's GET matching: HEAD must not start
+// or consume an OAuth transaction. This prevents preview and prefetch requests
+// from creating or burning credentials.
 func methodMatches(routeMethod, requestMethod string) bool {
 	return requestMethod == routeMethod
 }

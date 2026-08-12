@@ -34,8 +34,7 @@ const (
 	// stale between the read and the write, so zero rows were updated and
 	// nothing was written. It is RETRYABLE and never terminal: the row may
 	// still be behind. A title-only write bumps revision without touching
-	// schema_version, so this outcome does not imply the row became current
-	// (docs/plans/phase-2a/task-08-doc-shape-migration.md, B6).
+	// schema_version, so this outcome does not imply the row became current.
 	BackfillLostRace
 )
 
@@ -57,15 +56,13 @@ func (r BackfillResult) String() string {
 // BackfillOne migrates one stored row to the current document version: read,
 // project, decode, validate, then a CAS keyed on the observed schema_version
 // AND revision. It is a system job, not user-scoped, and it leaves revision
-// and updated_at alone (D12) so an editor holding a pre-backfill revision is
+// and updated_at alone so an editor holding a pre-backfill revision is
 // not forced into a conflict by a migration it cannot see.
 //
 // It returns ErrNotFound for an unknown id, and an error -- with no write --
 // when the stored document cannot be projected, decoded, or validated.
 //
-// The rationale for every part of that contract, including why a lost race is
-// a retry signal, lives in
-// docs/plans/phase-2a/task-08-doc-shape-migration.md.
+// See docs/adr/0017-resume-document-versioning.md.
 func (s *Store) BackfillOne(ctx context.Context, id uuid.UUID) (BackfillResult, error) {
 	return s.backfillOne(ctx, id, nil)
 }
@@ -101,9 +98,9 @@ func (s *Store) backfillOne(ctx context.Context, id uuid.UUID, pause func()) (Ba
 		return BackfillUnknown, fmt.Errorf("resume: backfill: decode projected document: %w", err)
 	}
 
-	// encodeParts drops schemaVersion from all three jsonb parts (D4), so
+	// encodeParts drops schemaVersion from all three jsonb parts, so
 	// this field decides only which schema ValidateForStore checks against:
-	// the compiled-in current one, as on every other write path (D19).
+	// the compiled-in current one, as on every other write path.
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err = ValidateForStore(doc); err != nil {
 		return BackfillUnknown, fmt.Errorf("resume: backfill: %w", err)
@@ -118,9 +115,9 @@ func (s *Store) backfillOne(ctx context.Context, id uuid.UUID, pause func()) (Ba
 		pause()
 	}
 
-	// Both legs of the predicate come from the observation above: a
-	// concurrent document write moves schema_version or the parts, and a
-	// title-only write moves revision alone. Either one must lose this CAS.
+	// Both CAS guards come from the observation above. A concurrent document
+	// or title write increments revision; a document write may also change
+	// schema_version. Either kind of user write invalidates this observation.
 	affected, err := s.q.BackfillResumeDocumentCAS(ctx, store.BackfillResumeDocumentCASParams{
 		PersonalDetails:   nextPD,
 		Content:           nextContent,

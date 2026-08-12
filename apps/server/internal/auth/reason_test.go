@@ -1,14 +1,7 @@
 package auth_test
 
-// reason_test.go covers P1.1 item 3 (docs/plans/phase-1-deferred.md): the
-// auth funnel's `reason` log attribute is a CLOSED, compile-checked
-// vocabulary, not free text. P9A is the first contact with a real IdP, and
-// a systematic misconfiguration (clock skew, issuer mismatch, a
-// redirect_uri typo) presents to every user as the same opaque
-// ?error=auth_failed -- the reason attribute in the Warn record is the
-// only operator signal that separates them, so it has to be something an
-// operator can group and alert on, not a sentence somebody can reword at a
-// call site.
+// reason_test.go proves rejection logs use a closed token vocabulary while
+// clients receive one opaque error.
 
 import (
 	"net/http"
@@ -20,11 +13,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
 )
 
-// reasonTokenPattern is the shape every reason token must have to be
-// usable as a log-aggregation grouping key: lowercase, digits, and
-// underscores only -- no spaces, no punctuation, no parentheses. The old
-// free-text strings ("id_token verification failed (issuer, audience,
-// signature, or expiry)") fail this by construction, which is the point.
+// reasonTokenPattern permits stable snake_case log grouping keys only.
 var reasonTokenPattern = regexp.MustCompile(`^[a-z0-9]+(_[a-z0-9]+)*$`)
 
 // TestRejectReason_VocabularyIsClosedAndStable proves the vocabulary is
@@ -74,12 +63,8 @@ func TestRejectReason_UnnamedValueIsNeverSilentlyEmpty(t *testing.T) {
 	}
 }
 
-// TestCallbackRejection_LogsTypedReasonToken drives three genuinely
-// different rejections through the real HTTP surface and proves each logs
-// its OWN stable token -- the operator-facing distinction the closed
-// vocabulary exists to preserve. The browser still sees the single generic
-// ?error=auth_failed for all three (DD-C3), which is exactly why the log
-// has to carry the difference.
+// TestCallbackRejection_LogsTypedReasonToken proves distinct internal failures
+// retain stable operator signals behind one client-facing error.
 func TestCallbackRejection_LogsTypedReasonToken(t *testing.T) {
 	t.Parallel()
 

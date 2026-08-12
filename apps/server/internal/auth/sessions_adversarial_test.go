@@ -1,33 +1,6 @@
-// Package auth_test: independent, spec-derived adversarial tests for
-// Task 9's `/me`, logout, and session-management HTTP surface (task-9-
-// brief.md, AC-AUTH-005). The scenario structure and assertions below were
-// derived WITHOUT reading me.go, sessions_handlers.go, RequireSession's
-// implementation, task-9-report.md, or Task 9's git history -- only
-// task-9-brief.md, docs/specs/aboutme-design.md §3/§4, the binding
-// DD-C11/DD-C5 rulings, and the packages committed at HEAD facfab5 (see
-// notes.md for the full derivation record and per-test rationale).
-//
-// This file is the POST-INTEGRATION reconciliation pass, authored after
-// Task 9 landed (HEAD e79195b): every one of the original 7 ADAPT markers
-// has been resolved against the real, now-committed seams, and every
-// helper this file used has been swapped for the implementer's own
-// identical one wherever me_test.go/sessions_handlers_test.go (the
-// implementer's own 25-test harness, same package) already provides it,
-// per notes.md's integration report. No assertion or scenario was removed
-// or weakened in reconciliation -- only the plumbing connecting them to
-// the real API changed.
-//
-// Harness reuse (already committed by Task 9 or earlier tasks, NOT
-// redefined here): newTestQueries, createTestUser (transaction_test.go);
-// newRowInspectorPool, randomHandle (transaction_adversarial_test.go);
-// sessionTokenHash, setSessionRowLastSeenAt (session_test.go /
-// session_adversarial_test.go); idleTimeout (session_adversarial_test.go);
-// testPublicOrigin, testLogger, noopPinger (handlers_test.go);
-// csrfTokenFor (csrf_test.go); newSessionAPITestService, issueTestSession,
-// sessionRequestCookie, doJSON, meEnvelopeBody, decodeErrorCode
-// (me_test.go); sessionsListEnvelope, assertNoBody, rowRevokedAt,
-// forceReauthenticatedAtStale, forceRotationGraceDead, sessionIDPath
-// (sessions_handlers_test.go).
+// These adversarial HTTP tests cover session ownership, liveness, revocation,
+// rotation delivery, recent reauthentication, and CSRF. See
+// docs/adr/0015-session-rotation-delivery.md.
 package auth_test
 
 import (
@@ -49,13 +22,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-// ---- new helpers this file needs, with no identical existing equivalent --
+// ---- row and response helpers ---------------------------------------------
 
-// forceRotationGraceInFuture directly SQL-updates sessionID's
-// rotation_grace_until to delta from now, revoked_at left untouched --
-// forceRotationGraceDead's (sessions_handlers_test.go) missing "still
-// within grace" complement, needed to pin DD-C5's "live" semantics in
-// both directions against the SAME row.
+// forceRotationGraceInFuture keeps one unrevoked predecessor inside grace.
 func forceRotationGraceInFuture(t *testing.T, sessionID uuid.UUID, delta time.Duration) {
 	t.Helper()
 	pool := newRowInspectorPool(t)
@@ -65,10 +34,7 @@ func forceRotationGraceInFuture(t *testing.T, sessionID uuid.UUID, delta time.Du
 	}
 }
 
-// listedSessionIDs decodes resp (GET /sessions' success envelope) and
-// returns the set of returned session ids, for tests that only need
-// membership/count rather than the full per-entry shape sessionsListEnvelope
-// (sessions_handlers_test.go) already decodes elsewhere.
+// listedSessionIDs returns device-list membership without copying entry fields.
 func listedSessionIDs(t *testing.T, resp *http.Response) map[string]bool {
 	t.Helper()
 	var body sessionsListEnvelope
@@ -83,19 +49,11 @@ func listedSessionIDs(t *testing.T, resp *http.Response) map[string]bool {
 }
 
 // ============================================================================
-// Step 3's required table (brief verbatim, TestMe_CSRFTokenNotInAnyHeaderOrLog
-// renamed to TestMe_CSRFTokenNotInAnyHeaderOrCookie per the dispatching
-// integration owner's explicit instruction).
+// Session API adversarial cases.
 // ============================================================================
 
-// TestMe_CSRFTokenNotInAnyHeaderOrCookie is the direct regression test for
-// design spec §3's CSRF row: "GET /me returns the token in its JSON body
-// (never cookie/URL/log)". It proves both halves: the token IS present
-// (and correct) in the body, and it is ABSENT from every response header
-// value and every Set-Cookie -- not just that some header happens to be
-// missing, but that the exact token string never appears anywhere outside
-// the body. (me_test.go's own TestGetMe_CSRFTokenOnlyInResponseBody covers
-// the same property independently -- authored blind to it.)
+// TestMe_CSRFTokenNotInAnyHeaderOrCookie proves GET /me returns the exact CSRF
+// token in its JSON body and nowhere in response headers or cookies.
 func TestMe_CSRFTokenNotInAnyHeaderOrCookie(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -134,10 +92,9 @@ func TestMe_CSRFTokenNotInAnyHeaderOrCookie(t *testing.T) {
 	}
 }
 
-// TestLogout_ClearsSiteDataHeader pins design spec §3's Logout row exactly:
-// "Delete session row + expire cookie + Clear-Site-Data header", with the
-// literal directive list `"cookies", "storage"` DD-C11 pins, plus DD-C13's
-// 204-no-body success shape.
+// TestLogout_ClearsSiteDataHeader proves logout revokes the server-side session,
+// expires its cookie, emits the exact Clear-Site-Data directives, and returns
+// an empty 204 response.
 func TestLogout_ClearsSiteDataHeader(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -168,14 +125,9 @@ func TestLogout_ClearsSiteDataHeader(t *testing.T) {
 	}
 }
 
-// TestRevokeAll_WithoutRecentReauth_TouchesNothing is the row-count/spy
-// half the brief calls out explicitly: a bug here could revoke everything
-// and then discover it should have refused. Three of the caller's own
-// sessions (including the one making this very request) must all remain
-// completely untouched by a REJECTED revoke-all. (sessions_handlers_
-// test.go's own TestDeleteAllSessions_StaleReauth_RejectsBeforeRevoking
-// covers the same property independently, with two sessions instead of
-// three -- authored blind to it.)
+// TestRevokeAll_WithoutRecentReauth_TouchesNothing proves the recent-reauth
+// check runs before any revocation. All three sessions remain live after a
+// rejected request.
 func TestRevokeAll_WithoutRecentReauth_TouchesNothing(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -209,15 +161,9 @@ func TestRevokeAll_WithoutRecentReauth_TouchesNothing(t *testing.T) {
 	}
 }
 
-// TestSessionsList_NeverLeaksOtherUsersSessions checks both count and ids,
-// per the brief's explicit "never ... even by row-count coincidence"
-// framing: userA has 2 sessions, userB has 3 (deliberately different
-// counts), so an off-by-one or wrong-WHERE-clause bug that happened to
-// return the right COUNT for the wrong reason would still be caught by
-// the id check, and vice versa. (sessions_handlers_test.go's own
-// TestListSessions_OnlyReturnsCallersOwnRows covers the same property
-// independently, with equal 1-vs-1 counts -- authored blind to it; the
-// unequal counts here strengthen beyond that.)
+// TestSessionsList_NeverLeaksOtherUsersSessions checks both count and IDs.
+// Unequal per-user counts catch a wrong ownership filter that might otherwise
+// return the expected count by coincidence.
 func TestSessionsList_NeverLeaksOtherUsersSessions(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -251,21 +197,11 @@ func TestSessionsList_NeverLeaksOtherUsersSessions(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// Strengthening (assignment item 5): DD-C5 indistinguishability, per-
-// session-revoke reauth gate, grace-dead list visibility, current-session
-// cookie clearing, rotation pass-through, invalid-cookie 401, and CSRF
-// enforcement across all three mutating endpoints.
-// ============================================================================
+// ==== ownership, liveness, rotation delivery, and CSRF ======================
 
-// TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes pins DD-C5
-// verbatim: another user's session id, a random id that never existed, and
-// the caller's own already-revoked session id must be byte-identical --
-// status AND body -- not merely "all 404". This is the one DD-C5 case
-// sessions_handlers_test.go's own three separate 404 tests (another-user,
-// unknown, malformed) do NOT cover: the caller's own, already-revoked
-// session, and none of those three cross-check byte-identical bodies
-// against each other the way this test does.
+// TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes requires another
+// user's ID, an unknown ID, and the caller's already-revoked ID to return the
+// same status and byte-identical body. This prevents an ownership oracle.
 func TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -314,14 +250,8 @@ func TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_WithoutRecentReauth_TouchesNothing is the per-session
-// revoke's own version of the required revoke-all row-count/spy test:
-// DD-C11's binding correction added recent reauth to DELETE
-// /sessions/{id} too (spec §4 wins over the plan's earlier session+CSRF-
-// only row) -- this proves the ordering: reauth is checked, and rejected,
-// BEFORE the target row is ever touched. (sessions_handlers_test.go's own
-// TestDeleteSession_WithoutRecentReauth_Returns403AndLeavesSessionLive
-// covers the same property independently -- authored blind to it.)
+// TestDeleteSession_WithoutRecentReauth_TouchesNothing proves per-session
+// revocation checks recent reauthentication before touching the target row.
 func TestDeleteSession_WithoutRecentReauth_TouchesNothing(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -349,16 +279,9 @@ func TestDeleteSession_WithoutRecentReauth_TouchesNothing(t *testing.T) {
 }
 
 // TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace
-// pins DD-C5's "live" semantics both directions in one test, against the
-// SAME row: while a predecessor's rotation_grace_until is still in the
-// future (revoked_at NULL, grace open), it IS live and must appear in the
-// device list -- design decision 1's orthogonality means rotation_grace_until
-// being non-NULL is not itself a death sentence. Once rotation_grace_until
-// has passed (still revoked_at NULL), the SAME row must disappear -- the
-// after-grace absence sessions_handlers_test.go's own
-// TestListSessions_ExcludesGraceDeadRotationPredecessors also covers
-// (authored blind to it), but only in the after-grace direction; the
-// within-grace-visible half here is this suite's own addition.
+// proves a predecessor stays listed while its grace interval is open and
+// disappears once the same interval expires. A non-null grace deadline alone
+// does not make the row dead.
 func TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -396,13 +319,9 @@ func TestSessionsList_GraceDeadPredecessor_VisibleWithinGrace_AbsentAfterGrace(t
 	}
 }
 
-// TestDeleteSession_RevokingCurrentSession_ClearsCookie pins the brief's
-// "revoking the current session also clears its cookie in the response"
-// requirement directly, plus that the session actually stops authenticating
-// afterward at the HTTP boundary (sessions_handlers_test.go's own
-// TestDeleteSession_OwnCurrentSessionID_RevokesAndClearsCookie covers the
-// cookie-clear and row-level revocation independently -- authored blind to
-// it -- but stops short of the follow-up 401 check this test adds).
+// TestDeleteSession_RevokingCurrentSession_ClearsCookie proves revoking the
+// current session clears its cookie and makes the raw token fail at the HTTP
+// boundary.
 func TestDeleteSession_RevokingCurrentSession_ClearsCookie(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -425,18 +344,10 @@ func TestDeleteSession_RevokingCurrentSession_ClearsCookie(t *testing.T) {
 	}
 }
 
-// TestRequireSession_RotatedRequest_CarriesSuccessorCookie is task-9-
-// brief.md's "RequireSession rotation pass-through": a request presenting
-// a session past rotationAge (24h, session.go) must both succeed AND carry
-// a Set-Cookie for the newly-minted successor, in the SAME response --
-// and that response's own body must reflect the successor's row (its
-// fresh csrf_secret per session.go's tryRotate), not the stale
-// predecessor's. Uses SetSessionManagerForTest (export_test.go's Task 9
-// seam) to drive rotation deterministically through the real HTTP chain,
-// the same fake-clock technique me_test.go's own
-// TestGetMe_RotatesSessionOnAuthenticate_SetsNewCookie establishes --
-// this test adds the csrf_secret-matches-the-successor cross-check that
-// one does not make.
+// TestRequireSession_RotatedRequest_CarriesSuccessorCookie proves a request
+// that triggers rotation succeeds and carries the successor cookie in the same
+// response. The response body must also contain the successor's CSRF token,
+// not the predecessor's.
 func TestRequireSession_RotatedRequest_CarriesSuccessorCookie(t *testing.T) {
 	t.Parallel()
 	q := newTestQueries(t)
@@ -489,13 +400,9 @@ func TestRequireSession_RotatedRequest_CarriesSuccessorCookie(t *testing.T) {
 }
 
 // TestRequireSession_InvalidOrExpiredCookie_Returns401AndClearsCookie
-// covers two of ErrSessionInvalid's failure modes at the HTTP boundary: a
-// token shaped like a real one but never issued (me_test.go's own
-// TestGetMe_InvalidSessionToken_Returns401AndClearsCookie covers this case
-// independently, authored blind to it), and a real session that has gone
-// idle-expired (novel coverage -- no existing test in this package drives
-// a genuinely idle-expired session through the real HTTP chain). Both must
-// 401, carry sessionRequiredCode, AND clear the __Host-session cookie.
+// covers two ErrSessionInvalid modes at the HTTP boundary: a well-shaped token
+// that was never issued and an idle-expired session. Both return the same 401
+// code and clear the session cookie.
 func TestRequireSession_InvalidOrExpiredCookie_Returns401AndClearsCookie(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -538,15 +445,9 @@ func TestRequireSession_InvalidOrExpiredCookie_Returns401AndClearsCookie(t *test
 	})
 }
 
-// TestCSRF_CrossOrigin_RejectsAllThreeMutatingEndpoints is the brief's "one
-// cross-origin case each" strengthening item, table-driven across all
-// three DD-C11 mutating endpoints, plus a bonus missing-token subtest per
-// endpoint: both must reject with 403 csrf_rejected (csrf.go's already-
-// committed single no-oracle code) and must not touch any session row.
-// Novel coverage: sessions_handlers_test.go's own suite tests a missing
-// CSRF token on logout and revoke-all, but never a cross-origin Origin on
-// ANY of the three endpoints, and never either failure mode at all for
-// DELETE /sessions/{id}.
+// TestCSRF_CrossOrigin_RejectsAllThreeMutatingEndpoints covers cross-origin and
+// missing-token requests for logout, per-session revoke, and revoke-all. Every
+// case returns csrf_rejected and leaves its session row untouched.
 func TestCSRF_CrossOrigin_RejectsAllThreeMutatingEndpoints(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
@@ -566,10 +467,7 @@ func TestCSRF_CrossOrigin_RejectsAllThreeMutatingEndpoints(t *testing.T) {
 		t.Run(e.name+"/cross-origin", func(t *testing.T) {
 			t.Parallel()
 			userID := createTestUser(t, q)
-			// A freshly issued session already has reauthenticated_at = now
-			// (session.go's Issue), so both DELETE endpoints' recent-reauth
-			// gate is satisfied without a patch -- isolating this subtest to
-			// the CSRF check alone.
+			// Fresh reauthentication isolates this case to the CSRF gate.
 			raw, sess := issueTestSession(t, q, userID)
 
 			resp := doJSON(t, handler, e.method, e.path(sess), "https://evil.example", csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.

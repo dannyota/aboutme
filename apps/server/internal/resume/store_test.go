@@ -1,5 +1,5 @@
-// store_test.go exercises resume.Store against a live Postgres database
-// (spec §9): create (cap-enforced), get/list (projected), delete, and the
+// store_test.go exercises resume.Store against a live Postgres database:
+// create (cap-enforced), get/list (projected), delete, and the
 // revision-CAS writes. Every DB-backed test here is skipped, not failed,
 // when TEST_DATABASE_URL is unset -- UNLESS REQUIRE_TEST_DB=1 is also set,
 // in which case internal/testutil.RequireMigratedTestDatabaseURL fails
@@ -32,13 +32,13 @@ import (
 // newIntegrationStore returns a resume.Store backed by a fresh connection
 // pool against TEST_DATABASE_URL, with the database's schema brought to
 // head first. Unlike internal/user's single-enclosing-transaction test
-// helper, resume.Store opens its OWN transactions per write (B7), so tests
+// helper, resume.Store opens its own transactions per write, so tests
 // need a real pool, not a pre-opened tx -- isolation instead comes from
 // every test creating its own throwaway user (createTestUser) and scoping
 // all assertions to that user's own resumes. The pool itself is also
-// returned (fix round 1) for tests that need to reach the database
-// directly -- bypassing the store's own application-level checks on
-// purpose, e.g. to exercise the D7 trigger's OWN cap enforcement, or to
+// returned for tests that need to reach the database directly -- bypassing
+// the store's own application-level checks on
+// purpose, e.g. to exercise the cap trigger's own enforcement, or to
 // force two rows to share a created_at so the ListResumesForUser query's
 // `, id` tiebreak is actually exercised, not merely coincidentally
 // satisfied.
@@ -78,8 +78,8 @@ func createTestUser(t *testing.T, q *store.Queries) uuid.UUID {
 
 // assertResumeRowEqual compares every column of got against want,
 // including the doc via canonical-byte comparison (not reflect.DeepEqual --
-// see codec_test.go's own byte-stability comments for why). Used by the
-// D17 wrong-user tests and the CAS invalid-doc test to prove a rejected
+// see codec_test.go's own byte-stability comments for why). Wrong-user tests
+// and the CAS invalid-document test use this to prove a rejected
 // write left the row completely untouched.
 func assertResumeRowEqual(t *testing.T, got, want resume.Resume) {
 	t.Helper()
@@ -140,7 +140,7 @@ func assertResumeRowEqual(t *testing.T, got, want resume.Resume) {
 	}
 }
 
-// --- Step 1: happy-path integration tests ---
+// --- Happy-path integration tests ---
 
 func TestStore_Integration_CreateGetRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -211,8 +211,8 @@ func TestStore_Integration_ListOrderingStable(t *testing.T) {
 	// run -- the plain created_at order alone would already produce the
 	// right answer, and the assertion below would pass even if `, id`
 	// were accidentally dropped from ListResumesForUser. Force the first
-	// two rows to share the EXACT same created_at (fix round 1, finding
-	// 5) so the tiebreak is genuinely exercised: wantIDs[0] and
+	// two rows to share the exact same created_at so the tiebreak is genuinely
+	// exercised: wantIDs[0] and
 	// wantIDs[1] are uuidv7 (monotonic with real creation time), so
 	// wantIDs[0] < wantIDs[1] -- with created_at tied, only the id
 	// tiebreak can produce creation order.
@@ -271,7 +271,7 @@ func TestStore_Integration_WrongUser_NotFoundAndRowUntouched(t *testing.T) {
 		t.Fatalf("Create() error: %v", err)
 	}
 
-	// D17: a real id belonging to a DIFFERENT user is ErrNotFound, not a
+	// A real id belonging to a different user is ErrNotFound, not a
 	// distinguishable "forbidden" -- no existence oracle.
 	_, err = s.Get(ctx, otherID, created.ID)
 	if !errors.Is(err, resume.ErrNotFound) {
@@ -290,11 +290,8 @@ func TestStore_Integration_WrongUser_NotFoundAndRowUntouched(t *testing.T) {
 	assertResumeRowEqual(t, afterAttack, created)
 }
 
-// TestStore_Integration_Create_InvalidDoc (fix round 1, finding 4) proves
-// createTx's validation gate rejects an invalid document -- half of the
-// task's headline safety property (SaveDocument's mirror-image case was
-// already covered; Create's own gate was previously verified only by
-// reading the code, never by a test). No row must be created at all.
+// TestStore_Integration_Create_InvalidDoc proves createTx's validation gate
+// rejects an invalid document. No row must be created.
 func TestStore_Integration_Create_InvalidDoc(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
@@ -374,7 +371,7 @@ func TestStore_Integration_Create_TitleCharacterLimit(t *testing.T) {
 	}
 }
 
-// --- Step 2: cap tests ---
+// --- Cap tests ---
 
 func TestStore_Integration_CapEnforcement(t *testing.T) {
 	t.Parallel()
@@ -410,9 +407,9 @@ func TestStore_Integration_CapEnforcement(t *testing.T) {
 	}
 }
 
-// TestStore_Integration_CapEnforcement_TriggerBackstop (fix round 1,
-// finding 3) exercises the D7 DATABASE TRIGGER's own cap enforcement
-// directly: it inserts via q.CreateResume -- the same sqlc-generated
+// TestStore_Integration_CapEnforcement_TriggerBackstop exercises the database
+// trigger's own cap enforcement directly. It inserts via q.CreateResume -- the
+// same sqlc-generated
 // method createTx itself calls -- with none of the store's own
 // LockUserForResumeWrite/CountResumesForUser pre-insert check. Every
 // sequential path through the STORE always has that Go-level check
@@ -420,8 +417,7 @@ func TestStore_Integration_CapEnforcement(t *testing.T) {
 // above never reaches the trigger), so this is the only coverage of the
 // trigger's own SQLSTATE/message against a REAL Postgres-produced error,
 // rather than the synthetic pgconn.PgError double
-// TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage uses. Still
-// sequential -- the N-way race is Task 9's.
+// TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage uses.
 func TestStore_Integration_CapEnforcement_TriggerBackstop(t *testing.T) {
 	t.Parallel()
 	s, q, _, ctx := newIntegrationStore(t)
@@ -470,16 +466,14 @@ func TestStore_Integration_CapEnforcement_TriggerBackstop(t *testing.T) {
 	}
 }
 
-// --- AC-DOC-009: cleared contact value survives the live store ---
+// --- Cleared contact value survives the live store ---
 
 // TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet
-// closes the AC-DOC-009 traceability gap (docs/plans/traceability/ac-doc.md)
-// at the live-store layer: a personalDetails.details entry that is PRESENT
-// with its own value explicitly cleared to "" must survive a real write to
+// proves at the live-store layer that a present personalDetails.details entry
+// whose value is explicitly cleared to "" survives a real write to
 // and read from Postgres, without the entry being dropped from the array or
-// its empty value being fabricated into something else (design spec §3:
-// absence means "never entered", "" means "explicitly cleared" -- neither may
-// be faked).
+// its empty value being fabricated into something else. Absence means "never
+// entered" and "" means "explicitly cleared"; neither may be fabricated.
 //
 // The row is created with the value POPULATED and only then cleared by a
 // SaveDocument, so the assertions distinguish "the store persisted the
@@ -543,7 +537,7 @@ func TestStore_Integration_ClearedContactValue_PreservedThroughCreateGetSaveGet(
 	assertDetailValue(t, "Get() after SaveDocument()", "", gotAfterSave.Doc)
 }
 
-// --- Step 3: CAS tests ---
+// --- Compare-and-swap tests ---
 
 func TestStore_Integration_SaveDocument_CAS(t *testing.T) {
 	t.Parallel()
@@ -740,7 +734,7 @@ func TestStore_Integration_SaveTitle_TitleCharacterLimit(t *testing.T) {
 
 // --- Cap-error mapping: pure unit test, no database ---
 
-// TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage proves the D7
+// TestIsResumeCapExceeded_ExactMatchOnBothCodeAndMessage proves the
 // mapping requires an EXACT match on both SQLSTATE 23514 and the message
 // "resumes_user_cap_exceeded" -- resumes has other CHECK constraints that
 // also raise 23514 (e.g. resumes_title_length_check), and those must never

@@ -1,58 +1,18 @@
 package auth
 
-// reason.go defines the CLOSED, compile-checked vocabulary of
-// operator-facing reasons this package's auth funnel logs (P1.1 item 3,
-// docs/plans/phase-1-deferred.md). It is the log-side counterpart to
-// handlers.go's closed ?error= vocabulary, and the two are deliberately
-// asymmetric: the ?error= codes are what the BROWSER is allowed to learn
-// (DD-C3 collapses almost everything into one generic auth_failed
-// precisely so a caller gets no oracle), while these reasons are what an
-// OPERATOR needs to tell those collapsed cases apart afterwards.
-//
-// Why a distinct type rather than the free-text strings this replaces:
-// P9A is this project's first contact with a real IdP. A systematic
-// misconfiguration -- clock skew against the issuer, an issuer mismatch, a
-// redirect_uri that does not byte-match what was registered -- presents to
-// every single user as the same opaque ?error=auth_failed. The only signal
-// an operator has is the Warn record's reason attribute, so it must be
-// something a log pipeline can group, count, and alert on. A hand-written
-// sentence at each call site is not: two call sites for one cause drift
-// apart, a reworded string silently breaks a saved query, and nothing
-// stops a future caller inventing a fourteenth phrasing.
-//
-// Why an integer enum rather than a named string type: a named string type
-// does NOT close the vocabulary. Go converts an untyped string constant
-// implicitly, so `logRejection(..., "whatever I feel like")` would still
-// compile against a `type rejectReason string` parameter. An integer type
-// admits no string literal at all, so every reason a call site can pass is
-// necessarily one declared below -- which is what "compile-checked" has to
-// mean to be worth anything.
-//
-// Adding a reason is a deliberate, reviewed act, exactly like adding an
-// ?error= code: declare the constant in the block below, give it a token
-// in rejectReasonTokens, and TestRejectReason_VocabularyIsClosedAndStable
-// (reason_test.go) enforces that both halves happened.
+// Rejection reasons form a closed, stable vocabulary for operator logs. Client
+// error codes are deliberately coarser to avoid exposing an authentication
+// oracle. See docs/design/security.md.
 
-// rejectReason identifies WHY the auth funnel rejected a request, for the
-// server-side log only. It never reaches a client: the browser sees the
-// ?error= code alone (handlers.go's closed vocabulary), which is coarser
-// on purpose.
+// rejectReason identifies a server-side rejection cause. It never reaches the
+// client. The integer type prevents callers from passing arbitrary strings.
 type rejectReason int
 
-// The closed vocabulary. Values are deliberately unexported and carry no
-// meaning outside this process -- rejectReasonTokens below maps each to
-// the stable string an operator actually sees, and THAT is the compatible
-// surface (renaming a constant is free; changing its token breaks a saved
-// query, so treat tokens as the contract).
-//
-// reasonUnspecified is the zero value and is never a legitimate reason:
-// it exists so a rejectReason that was never assigned renders as a
-// visible placeholder rather than an empty attribute an operator would
-// read as a missing field.
+// reasonUnspecified makes an unset reason visible in logs.
 const (
 	reasonUnspecified rejectReason = iota
 
-	// ---- Shared /callback funnel, every provider.
+	// Shared callback funnel.
 	reasonTxCookieMissing            // no __Host-oauth-tx cookie, or it is malformed
 	reasonTxInvalid                  // Consume rejected the handle: unknown, expired, replayed, or wrong provider
 	reasonStateMismatch              // the OAuth state parameter is absent or differs from the transaction's
@@ -63,43 +23,37 @@ const (
 	reasonIDTokenVerificationFailed  // signature, issuer, audience, or expiry check failed
 	reasonNonceMismatch              // the id_token's nonce is absent or differs from the transaction's
 	reasonIDTokenClaimsDecodeFailed  // the id_token verified but its claims would not decode
-	reasonEmailNotVerified           // design spec §3's Google rule: email absent, or email_verified != true
+	reasonEmailNotVerified           // Google registration email is absent or unverified
 	reasonEmailAlreadyRegistered     // the verified email already belongs to an account reached another way
-	reasonLinkIdentityAlreadyClaimed // DD-C15: the identity belongs to a user other than the linking one
+	reasonLinkIdentityAlreadyClaimed // the identity belongs to a user other than the linking one
 	reasonLinkOrReauthRejected       // reauth against an unclaimed identity, or the completing session no longer matches
 
-	// ---- LinkedIn-specific.
-	reasonLinkedInRegistrationEmailUnverified // AC-AUTH-002: registration (not linking) needs a verified email
+	// LinkedIn.
+	reasonLinkedInRegistrationEmailUnverified // registration, not linking, needs a verified email
 
-	// ---- GitHub-specific.
+	// GitHub.
 	reasonGitHubUserAPIFailed          // GET /user: non-200, network error, or malformed body
 	reasonGitHubUserIDMissing          // GET /user succeeded but carried no id
 	reasonGitHubUserEmailsAPIFailed    // GET /user/emails: non-200, network error, or malformed body
-	reasonGitHubNoVerifiedPrimaryEmail // design spec §3's GitHub rule: verified primary only
+	reasonGitHubNoVerifiedPrimaryEmail // no verified primary email
 
-	// ---- /start's own rejections, P1.1 item 1.
+	// Authorization start.
 	reasonStartSessionRequired      // link/reauth start with no valid __Host-session cookie
 	reasonStartReauthRequired       // link start whose session's last full OAuth login is stale
 	reasonStartCSRFRejected         // link/reauth start rejected by RequireCSRF (origin, token, or content type)
 	reasonStartPurposeUnsupported   // a POST start asking for something other than link or reauth
-	reasonStartMethodNotAllowed     // link/reauth attempted over GET (P1.1 item 2: those are POST-only), or an unsupported method
+	reasonStartMethodNotAllowed     // link/reauth attempted over GET, or an unsupported method
 	reasonStartRateLimited          // the start routes' own per-(account, IP) budget is exhausted
 	reasonStartClientIPUnresolvable // no trusted, unambiguous client IP, so the request could not even be keyed
 
-	// numRejectReasons is not a reason: it bounds the declared range so
-	// reason_test.go can walk every value and prove each has a token.
+	// numRejectReasons bounds exhaustive token tests.
 	numRejectReasons
 )
 
-// unspecifiedReasonToken is what a rejectReason outside the declared range
-// renders as. Deliberately not "" and deliberately not a plausible cause:
-// it means the code is at fault, not the request.
+// unspecifiedReasonToken marks a missing or invalid internal classification.
 const unspecifiedReasonToken = "unspecified"
 
-// rejectReasonTokens maps each declared reason to the stable, snake_case
-// token an operator groups and alerts on. Keep these values stable:
-// renaming a Go constant costs nothing, but changing a token silently
-// breaks every saved query and alert built on it.
+// rejectReasonTokens are stable because operator queries depend on them.
 var rejectReasonTokens = map[rejectReason]string{
 	reasonTxCookieMissing:                     "tx_cookie_missing",
 	reasonTxInvalid:                           "tx_invalid",
@@ -129,15 +83,8 @@ var rejectReasonTokens = map[rejectReason]string{
 	reasonStartClientIPUnresolvable:           "start_client_ip_unresolvable",
 }
 
-// String returns r's stable operator-facing token, or
-// unspecifiedReasonToken for the zero value and anything else outside the
-// declared range.
-//
-// Every log call site must pass String()'s result, never a rejectReason
-// directly: slog's JSON handler marshals an unrecognized value through
-// encoding/json, which renders this integer-backed type as a bare number
-// and loses the token. Being a Stringer is not enough there (the text
-// handler would honor it; the JSON one this server uses would not).
+// String returns the stable log token. Callers must pass this string to slog;
+// its JSON handler otherwise serializes the integer-backed type as a number.
 func (r rejectReason) String() string {
 	if token, ok := rejectReasonTokens[r]; ok {
 		return token

@@ -4,14 +4,10 @@ Satisfies **AC-REN-006** (purity), **AC-REN-007** (accessibility floor),
 **AC-REN-008** (the 2026-08-11 tokens), and the NEW-M7 re-check inside
 **AC-SEC-001**; structural prerequisite for AC-REN-001/002.
 
-**Authority for everything below:** `docs/specs/templates/contract.md` §§5–7
-(what renders), `docs/specs/templates/tokens.md` §§3–6 (the token vocabulary,
-the derived color roles, the clamp, the point-of-use fallbacks), and
-`docs/specs/templates/print.md` §§3–7 (the DOM class names and the
-`print-color-adjust` requirement this task must satisfy for P7A). Those three
-files are later and more specific than `aboutme-design.md` §5; where they
-disagree with the prose in this plan, they win, and the disagreement is a plan
-bug to report.
+**Authority for everything below:** `docs/design/web.md` and
+`docs/design/templates/`: `contract.md` §§5–7, `tokens.md` §3, `colors.md`
+§§4–5, `geometry.md` §§6–7, and `print.md` §§3–7. Where this plan disagrees with
+those files, stop and correct the plan before implementation.
 
 **Files:** create the renderer tree per the file-structure table
 (`ResumeDocument.vue`, `ResumeHeader.vue`, `LayoutColumns.vue`,
@@ -22,34 +18,52 @@ bug to report.
 `lucide-vue-next` is already installed by Task 0 (B8); this task does not touch
 `package.json`.
 
+Task 4's `bounds.adversarial.test.ts` and `plain-fields.adversarial.test.ts`
+must already be frozen in their first test-only diff. This author reads only
+those two adversarial files, treats their initial failure as the independent
+test-first signal, and never edits them. `paginate.adversarial.test.ts` does not
+exist until this task passes its gate.
+
 **Interfaces (produced):**
 
 ```ts
-// ResumeDocument.vue props — the renderer contract (spec §5). Types come
-// from @aboutme/schema; the renderer never redefines the document shape.
-// Callers MUST pass an already-projected, current-schema_version document —
-// the renderer performs no migration and exposes no schemaVersion prop (D21;
-// spec §5's "handles current schema_version only" guard is satisfied by the
-// server's migrate-on-read projection, not by a renderer-side check).
-interface Props {
-  personalDetails: PersonalDetails;
-  content: Content;
-  customization: Customization;
+// ResumeDocument.vue props — the renderer contract. Resume and the current
+// version constant come from @aboutme/schema; the renderer never redefines or
+// migrates the document shape.
+interface RenderContext {
   lng: string; // resumes.lng — emitted as lang= on the resume root
   mode: "continuous" | "paged"; // Task 6 implements continuous; Task 7 paged
-  assetBase?: string; // default '/assets/' (D14)
+  // Required exactly when document.personalDetails.photo is present. The
+  // controller authorizes and creates this URL; the renderer never uses key.
+  photoUrl?: string;
+}
+interface Props {
+  document: Resume;
+  context: RenderContext;
 }
 
-// clampContrast.ts — pure, its own tested module (tokens.md §5). OKLCH,
-// hue- and chroma-preserving, L stepped by 0.005 toward the direction the
-// surface's relative luminance selects, terminating at #000000 on a light
-// surface or #ffffff on a dark one. Same inputs, same output, in preview,
+// ResumeDocument compares document.schemaVersion with
+// CURRENT_SCHEMA_VERSION before rendering. A mismatch, or a mismatch between
+// photo metadata and context.photoUrl presence, returns a typed render error.
+
+// clampContrast.ts — pure, its own tested module (colors.md §5). It scores
+// black and white by their minimum contrast over every required surface,
+// searches OKLCH L toward the better endpoint, and returns null when even that
+// endpoint cannot satisfy all surfaces. Same inputs, same output, in preview,
 // SSR, and print.
-export function clampContrast(
+export function clampAgainst(
   color: string,
-  surface: string,
+  surfaces: readonly string[],
   target: number,
-): string;
+): string | null;
+
+// The level fill must pass 3:1 against both its actual track and surface. If
+// that pair is unsatisfiable, the track falls back to the surface and the fill
+// uses the single-surface clamp.
+export function deriveLevelColors(
+  accent: string,
+  surface: string,
+): { solid: string; track: string };
 
 // useResumeStyles.ts — pure: Customization → the CSS custom properties of
 // tokens.md §§3–6, in that document's UNPREFIXED vocabulary (--color-*,
@@ -60,7 +74,7 @@ export function clampContrast(
 //
 // The result is NOT one flat root map. Every clamped color role is resolved
 // once per surface, against the surface the element actually paints on
-// (tokens.md §4.2) — code must not hoist a clamped role to the document
+// (colors.md §4.2) — code must not hoist a clamped role to the document
 // root. `header` and `sidebar` are emitted only when
 // effectiveSurfaceTarget() selects that region.
 export interface ResumeStyles {
@@ -71,6 +85,9 @@ export interface ResumeStyles {
 }
 export function useResumeStyles(c: Customization): ResumeStyles;
 ```
+
+The resume root sets `font-synthesis: none`. A browser-facing style test checks
+the computed root value so a missing weight or style cannot be synthesized.
 
 ## Rendering rules pinned here (all golden-visible)
 
@@ -107,42 +124,43 @@ itself (NEW-M7); `email`/`phone`/`location`/`custom` are plain text in v1.
 
 **Links.** `text-decoration: underline` on every inline link — contact anchors,
 entry link slots, and anchors inside rich text — renderer-fixed, identical in
-every template, unsettable by any preset (`tokens.md` §6; contract §9.8 resolved
-2026-08-11). `--color-link` is the color role and nothing else.
+every template, unsettable by any preset (`geometry.md` §6; `limitations.md`
+§9.8). `--color-link` is the color role and nothing else.
 
-**Rich text.** `RichText` calls `sanitizeRichText` (Task 3) on every client
-render; on SSR the string passes through, because Go is the sole SSR
-sanitization authority (ADR 0012).
+**Rich text.** `RichText` emits one `.rich-text` container and calls
+`sanitizeRichText` (Task 3) on every client render. On SSR the string passes
+through, because Go is the sole SSR sanitization authority (ADR 0012).
 
 **Headings.** `heading.style` drives `text-transform` through a CSS var **and**
 `letter-spacing`: `0.06em` for `uppercase`, `0` for `titlecase` and `normal`
 (`tokens.md` §3.3). Because `text-transform` is locale-sensitive in Chromium,
-the resume root carries an explicit `lang` taken from the `lng` prop; without it
+the resume root carries an explicit `lang` taken from `context.lng`; without it
 the print container's locale can change casing and break snapshot determinism
 (`print.md` §7). `showRule` is a bottom border whose `--rule-gap` disappears
 with it.
 
-**The seven optional tokens** (`tokens.md` §2 — all 20 committed presets set
+**The eight optional tokens** (`tokens.md` §2 — all 20 committed presets set
 `header` and `spacing.pageMargin`, four set `surfaceTarget: "header"`, three set
 `"sidebar"`). Each fallback is applied at the point of use and never written
 back into the document:
 
+- `colors.accent` absent → `colors.primary`.
 - `header.align` absent → `left`; `header.detailsLayout` absent → `inline`;
   `header.iconStyle` absent → `outline` (`tokens.md` §3.4). The enum is `none` |
   `outline`; `solid` was dropped 2026-08-11.
-- `spacing.pageMargin` absent → `15mm` on both axes (`tokens.md` §6).
+- `spacing.pageMargin` absent → `15mm` on both axes (`geometry.md` §6).
 - `colors.surface` + `layout.surfaceTarget` resolve through
-  `effectiveSurfaceTarget()` (`tokens.md` §4.1), including both silent
+  `effectiveSurfaceTarget()` (`colors.md` §4.1), including both silent
   degradations to `none`: no `colors.surface`, and `sidebar` at
   `layout.columns: 1`. Both stored states are legal and must render, never
   reject.
 
 **Color roles.** Every color reaching the page is a derived role from
-`tokens.md` §4 — mix in gamma-encoded sRGB (`color-mix(in srgb, …)`, never
+`colors.md` §4 — mix in gamma-encoded sRGB (`color-mix(in srgb, …)`, never
 linear light or OKLab), then clamp. `--color-track` is the one role with **no**
 contrast floor and cannot have one (capped at 1.61:1 on white even for a black
 accent), so a level widget must remain correct when the track is invisible
-(`tokens.md` §4 note) — do not "fix" the track by clamping it.
+(`colors.md` §4 note) — do not "fix" the track by clamping it.
 
 **Level widgets.** `skill`/`language` `sectionDisplay.style` variants
 `text`/`tag`/`bar`/`dots` are each a distinct DOM shape. Level **absent** → name
@@ -151,19 +169,18 @@ of five filled; `0` and absent must render differently (contract §5.6). The
 `text` style renders **no widget at all**.
 
 **DOM class contract (P7A depends on it).** The renderer emits exactly
-`.resume-header`, `.resume-section`, `.section-heading`, `.section-lead`,
-`.entry`, `.entry-header`, `.entry-body` — `print.md` §3's break rules are
-written against these names and silently stop working if they drift.
-`.section-lead` is a wrapper the renderer emits around the heading **and the
-first entry's header**, which is what makes that pairing unbreakable (`print.md`
-§3).
+`.resume-header`, `.resume-section`, `.section-heading`, `.entry`,
+`.entry-header`, `.entry-body` — `print.md` §3's break rules are written against
+these names and silently stop working if they drift. Heading and entry remain
+sibling blocks; chained `break-after: avoid` rules provide the print guarantee
+without an overlapping wrapper.
 
 **Print-fidelity properties the renderer owns.** `print-color-adjust: exact`
 (with the `-webkit-` prefix) goes on the resume root — without it level bars,
 tag chips, and every surface tint vanish from the PDF while remaining in preview
 (`print.md` §6). `useResumeStyles` also emits
 `margin: var(--page-margin-y) var(--page-margin-x)` into the `@page` rule
-(`tokens.md` §6); P7A consumes it and does not recompute it.
+(`geometry.md` §6); P7A consumes it and does not recompute it.
 
 Photo per D14; icons per D13.
 
@@ -178,12 +195,14 @@ Photo per D14; icons per D13.
       `mountSuspended`. Assert non-empty HTML containing the fixture's
       `fullName`. Run → FAIL.
 - [ ] **Step 2: Build bottom-up with TDD per module** (each module: failing unit
-      test → implement → pass): `clampContrast` (table: color × surface × target
-      → expected hex, including the black/white termination case and a
-      near-black surface under dark text), `useResumeStyles` (table:
-      customization → expected root map, plus the per-surface maps for a
-      `header`-tinted and a `sidebar`-tinted preset, plus each of the seven
-      optional tokens absent → its fallback value, plus both
+      test → implement → pass): `clampAgainst` and `deriveLevelColors` (table:
+      color × required surfaces × target → expected result; input that already
+      passes remains unchanged; black and white are scored by their actual
+      minimum contrast; the first hue-preserving passing step wins; no passing
+      endpoint returns `null`; returned endpoints themselves pass),
+      `useResumeStyles` (table: customization → expected root map, plus the
+      per-surface maps for a `header`-tinted and a `sidebar`-tinted preset, plus
+      each of the eight optional tokens absent → its fallback value, plus both
       `effectiveSurfaceTarget` degradations), `formatDate` (all three formats ×
       y-only/y+m × present/closed ranges), `icons` (known key → component,
       unknown → null), `ContactChip` (D12/ADR 0013 matrix: four URL types
@@ -192,12 +211,23 @@ Photo per D14; icons per D13.
       direct NEW-M7 evidence; email/phone/location/custom always text; `label`
       present and non-empty replaces the default label; every anchor is
       underlined), `Photo` (crop math from a fixed rect → expected style
-      bindings; assetBase composition), `DateRange`, `EntryHeader`,
-      `SectionHeading`, then the eight sections (contract §5.2's mapping and
-      §5.6's absent-versus-`0` widget cases), then `LayoutColumns` (2-col
-      placement; 1-col main-then-sidebar order; sidebar tint degrading to `none`
-      at `columns: 1`), then `ResumeHeader`, then `ResumeDocument` (continuous
-      mode only; `paged` throws `not implemented` until Task 7).
+      bindings; explicit `context.photoUrl` use and metadata/context mismatch),
+      `DateRange`, `EntryHeader`, `SectionHeading`, then the eight sections
+      (contract §5.2's mapping and §5.6's absent-versus-`0` widget cases), then
+      `LayoutColumns` (2-col placement; 1-col main-then-sidebar order; sidebar
+      tint degrading to `none` at `columns: 1`), then `ResumeHeader`, then
+      `ResumeDocument` (continuous mode only; `paged` throws `not implemented`
+      until Task 7).
+- [ ] **Step 2a: Contrast regressions.** Include the old direction heuristic's
+      `clampAgainst("#b7b7b7", ["#b7b7b7"], 4.5)` mid-surface counterexample:
+      the algorithm must select the actually passing black direction, not a
+      `relativeLuminance >= 0.5` branch. Include accent `#959595` on white,
+      whose 80%-toward-surface track is `#eaeaea`; the final fill must pass 3:1
+      against both `#ffffff` and its actual returned track. Add an unsatisfiable
+      multi-surface case that returns `null`. Exercise the level helper's
+      failure branch and prove it replaces the derived track with the surface
+      before the single-surface clamp. For every preset surface, assert each
+      filled bar and dot passes 3:1 against both the surface and actual track.
 - [ ] **Step 3: Draft-permissiveness rendering tests** (contract §6, superseding
       D18): render `fixtures/draft-cleared-name-empty-section.json` and
       `draft-partial.json` — no placeholder text, no crash, **empty section
@@ -206,11 +236,15 @@ Photo per D14; icons per D13.
       hidden entries and hidden details absent from the output, separators
       emitted only between two present values.
 - [ ] **Step 4: Class-contract and print-property assertions.** Assert the
-      rendered HTML carries the seven `print.md` §3 class names, that
-      `.section-lead` wraps the heading together with the first entry's header,
-      that the resume root carries `lang` from the `lng` prop and
+      rendered HTML carries the six `print.md` §3 class names, that heading and
+      first entry are non-overlapping siblings with both avoid rules, that the
+      resume root carries `lang` from `context.lng` and
       `print-color-adjust: exact`, and that the emitted `@page` margin resolves
       from `--page-margin-x/y`. These are P7A's inputs; a rename here is a
       silent P7A regression.
-- [ ] **Step 5: Gate + commit.** Full web gate; `make ci` before handoff (ADR
-      0011 gate of record). Commit renderer + test paths.
+- [ ] **Step 5: Renderer-only gate.** Before the pagination adversarial file
+      exists, run
+      `(cd apps/web && npx vitest run test/renderer/bounds.adversarial.test.ts test/renderer/plain-fields.adversarial.test.ts)`,
+      then `make web-lint web-typecheck web-test web-build`. Record the
+      unchanged two-file test diff and this task's separate implementation diff.
+      The integration owner runs `make ci` before integrating the phase.

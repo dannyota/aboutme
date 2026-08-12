@@ -50,13 +50,9 @@ func TestBudgets_ValidateAcceptsDefaultBudgets(t *testing.T) {
 	}
 }
 
-// TestBudgets_ValidateRejectsSubSecondLockPeriod is the regression test
-// for review finding M8: a lockPeriod under one second previously
-// truncated silently to 0 in lockOpts' uint64(lockPeriod/time.Second)
-// (integer division), while lockWait() kept computing outer()'s deadline
-// from the untruncated value — a budget that looks internally consistent
-// but isn't. validate() must catch this before run() ever builds a
-// context deadline from it.
+// TestBudgets_ValidateRejectsSubSecondLockPeriod prevents integer division in
+// lockOpts from silently turning the period into zero while deadline accounting
+// still uses the untruncated duration.
 func TestBudgets_ValidateRejectsSubSecondLockPeriod(t *testing.T) {
 	t.Parallel()
 
@@ -274,17 +270,10 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 // bound.
 const maxCheckElapsed = 2 * time.Second
 
-// TestRun_Check_DoesNotBlockOnAdvisoryLock is the cmd/migrate-level
-// regression test for review finding C1: `migrate -check` (run(true,
-// ...)) must return promptly even while another session holds
-// migrations.LockID applying migrations — this package's own doc comment
-// (main.go's package comment) calls -check "a scriptable drift check,
-// e.g. in a pre-deploy readiness gate", which is only true if it can run
-// *during* a deploy rather than blocking for the full lock-wait budget and
-// then reporting a false failure. Uses a short runBudgets override purely
-// so a regression to lock-taking behavior fails this test in seconds
-// rather than minutes; -check's actual lock-freedom does not depend on
-// budgets at all (see migrations.Status's doc comment).
+// TestRun_Check_DoesNotBlockOnAdvisoryLock proves that -check stays usable as a
+// readiness probe while another runner holds the migration lock. The short
+// budget makes lock-taking regressions fail quickly; correct behavior does not
+// depend on the budget.
 func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	base := requireMigrateTestDatabaseURL(t)
 	dsn := newMigrateTestDatabase(t, base)

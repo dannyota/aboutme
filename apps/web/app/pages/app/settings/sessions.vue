@@ -1,32 +1,14 @@
 <script setup lang="ts">
 import type { AuthProvider } from '../../../composables/useAuth';
 
-/**
- * Session device management: list, per-session revoke, logout-everywhere,
- * and a minimal reauth-gated provider-linking prompt.
- *
- * Revoking your own *current* session is logout, not a generic device
- * removal, so the current row never shows the same "Revoke" action as the
- * other rows (design decision from the task brief).
- *
- * Linking a new provider (`purpose=link`) is a real top-level navigation
- * (like the login page's provider buttons) — it is not a fetchable JSON
- * call, so a stale-reauth rejection can only be observed by the callback
- * landing back on this page with `?error=reauth_required`. `DELETE
- * /sessions/{id}` and `DELETE /sessions` (per-session revoke and
- * logout-everywhere, DD-C11) can *also* return a live `403
- * reauth_required` — the same "confirm it's you" prompt below handles
- * both triggers, with reason-specific copy (`reauthReason`) since only
- * one of them is actually about linking a provider.
- */
+// TODO(P1.1): Replace the privileged OAuth GET anchors below with the
+// CSRF-protected POST flow in docs/adr/0014-oauth-start-methods.md.
 
 interface SessionInfo {
   id: string;
   createdAt: string;
   lastSeenAt: string;
-  // Go: `UA *string` / `IP *string`; OpenAPI: `type: [string, "null"]` —
-  // both nullable (e.g. a request that legitimately carried neither
-  // header), not always-present strings.
+  // Both fields are nullable in OpenAPI and the Go response.
   ua: string | null;
   ip: string | null;
   current: boolean;
@@ -47,18 +29,14 @@ const {
   refresh: refreshMe,
 } = useAuth();
 
-// DD-C9: same reasoning as useAuth's own `/me` call — this must not run
-// during SSR (no proxy, no cookies there), so the real fetch happens
-// client-side only.
+// Server-side rendering has neither the browser cookies nor the local proxy.
 const { data: sessionsResponse } = await useFetch<SessionsEnvelope>(
   '/api/v1/sessions',
   { credentials: 'include', server: false },
 );
 
-// Subsequent refreshes (after a revoke/revoke-all) go through a plain
-// `$fetch` into this override rather than `useFetch`'s own `refresh()`,
-// which is tuned for re-running the same SSR-time request and is not the
-// right tool for "refetch after a client-side mutation."
+// Mutations refresh through the browser rather than rerunning the initial
+// useFetch request.
 const sessionsOverride = ref<SessionInfo[] | null>(null);
 const sessions = computed(
   () => sessionsOverride.value ?? sessionsResponse.value?.data ?? [],
@@ -82,8 +60,7 @@ function hasErrorCode(error: unknown, code: string): boolean {
 }
 
 function isNotFound(error: unknown): boolean {
-  // 404s carry no `{error:{code}}` body distinct from any other 404 in
-  // this app (DD-C5's no-oracle contract) — the status is the signal.
+  // The no-oracle contract makes every absent or unauthorized target the same.
   return (
     typeof error === 'object'
     && error !== null
@@ -92,8 +69,7 @@ function isNotFound(error: unknown): boolean {
   );
 }
 
-// --- Reauth prompt (route-driven from a link/reauth redirect, or
-// live-triggered by a 403 from either DELETE endpoint below) ---
+// Reauthentication can come from a callback or a session mutation.
 
 type ReauthReason = 'link' | 'action';
 
@@ -128,7 +104,7 @@ async function revokeSession(id: string): Promise<void> {
       revokeError.value = 'Could not revoke that session. Try again.';
       return;
     }
-    // 404: already gone (DD-C5) — not an error, just a stale list.
+    // An already-absent session means the stale list can be refreshed.
   }
   await refreshSessions();
 }
@@ -136,27 +112,19 @@ async function revokeSession(id: string): Promise<void> {
 async function revokeAll(): Promise<void> {
   revokeError.value = null;
   try {
-    // DD-C11 (spec-corrected): logout-everywhere is DELETE /sessions —
-    // there is no POST /sessions/revoke-all.
     await mutate('/api/v1/sessions', { method: 'DELETE' });
   } catch (error) {
     if (hasErrorCode(error, 'reauth_required')) {
-      // Logout-everywhere requires recent reauth (spec: "sensitive
-      // operations require recent OAuth reauth"). Nothing was revoked —
-      // show the same "confirm it's you" prompt the link flow uses,
-      // rather than a generic error.
+      // Nothing was revoked, so keep the page state and request reauth.
       triggerReauthPrompt('action');
       return;
     }
     revokeError.value = 'Could not log out everywhere. Try again.';
     return;
   }
-  // Success destroys the current session too (Clear-Site-Data) — there is
-  // nothing left here to refetch; leave for the login screen.
+  // This also destroys the current session, so there is nothing to refresh.
   await navigateTo('/login');
 }
-
-// --- Provider linking (Step 3: minimal reauth-required UX) ---
 
 const linkedProviders = computed(
   () => new Set(identities.value.map((i) => i.provider)),
@@ -174,9 +142,7 @@ async function openAddProvider(): Promise<void> {
   showAddProvider.value = true;
 }
 
-// Closed vocabulary landing here from a rejected `?purpose=link`/`reauth`
-// callback (DD-C15/OAuthCallbackErrorCode) — `reauth_required` is handled
-// by the dedicated prompt above instead of this generic banner.
+// OAuthCallbackErrorCode in OpenAPI is the closed callback vocabulary.
 const linkErrorMessages: Record<string, string> = {
   auth_failed: 'Something went wrong. Please try again.',
   cancelled: 'That was cancelled.',

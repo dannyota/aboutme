@@ -1,82 +1,110 @@
-# Task 14: Authorized staging bring-up (real AWS), runbooks complete, evidence
+# Task 14: Authorized staging activation and evidence
 
-Closes "modules apply cleanly to a staging environment". **This task is
-explicitly real-AWS**, operator-run after the human AWS-authorization
-checkpoint, with spend visibility (D21 sizing).
+This task closes “modules apply cleanly to staging.” It mutates AWS and
+Cloudflare only after the recorded human authorization below.
 
-**Preconditions (hard gate — do not start without all four):**
+## Preconditions
 
-- [ ] P9 local-UAT report is `PASS` at the exact candidate commit, and a fresh
-      independent evidence reviewer returned `PASS` for that same commit.
-- [ ] **Recorded human-owner AWS resource-creation authorization**, including
-      staging-scale spend and approved AWS/Cloudflare mutation scope (see
-      "Escalations pending human owner" #2). **No bootstrap apply, ECR push, DNS
-      mutation, staging apply, or workflow dispatch without it.**
-- [ ] Owner-provided inputs in hand: AWS account/role access, Cloudflare API
-      token (Zone:DNS:Edit, `aboutme.vn` only), `var.oncall_email` value.
-- [ ] Base commit + image digests from Task 8's first build recorded;
-      `secrets-bootstrap.sh --check` green after bootstrap-write.
+- [ ] P9 local UAT and its fresh evidence review are `PASS` at the exact
+      candidate commit.
+- [ ] The human owner records the AWS/Cloudflare resource scope, staging spend,
+      and authorization. No bootstrap apply, image push, DNS change, staging
+      apply, or workflow dispatch occurs before it.
+- [ ] AWS access, the zone-scoped Cloudflare token, on-call destination, and
+      protected GitHub `staging` environment are ready. Plaintext staging Basic
+      credentials exist only in that protected environment/operator store.
+- [ ] Every PI high-risk task has independent frozen tests and a fresh defect
+      review. All local Terraform, policy, script, image, docs, and parity gates
+      pass at the candidate commit.
 
-**Steps:**
+## Staged first activation
 
-- [ ] Sequence per Task 11's ordering: `terraform apply` in `envs/staging` →
-      `dns-apply.sh --apply` → ACM issued → CloudFront deployed →
-      `deploy-staging.yml` dispatch → services stable → synthetic smoke green
-      (CloudFront→Caddy→app→DB via `/readyz`, with staging-gate credentials —
-      D25).
-- [ ] **Bridge-gateway + SSR path end-to-end (Rev 3, D24):** before/at caddy
-      start, verify the bridge gateway address live — record
-      `ip addr show docker0` (or the ECS AMI's equivalent bridge) on the
-      instance proving `var.bridge_gateway_ip` exists, and confirm the caddy
-      task started (its entrypoint guard verifies the `INTERNAL_API_LISTEN`
-      address and refuses otherwise). Then fetch a Nuxt-SSR-rendered page
-      through the staging CloudFront URL (gate credentials) and confirm the full
-      chain **web → internal listener (bridge gateway :8081) → Go**: the caddy
-      internal-listener access log shows the SSR fetch from the web container's
-      bridge address, and the Go server log shows the same request with
-      canonical `X-Real-IP` = that bridge address (the D24 keying ruling
-      observed live). Record both log excerpts in the ledger.
-- [ ] Fail-closed spot-checks (cheap, staging-only, recorded in the ledger):
-      direct-to-EIP request **without** the origin secret → connection refused
-      or 403 (prefix-list + secret, AC-OPS-002 mechanism); `curl` with a forged
-      `X-Forwarded-For` through CloudFront → application rate-limit keying
-      unaffected (observed via server logs' canonical IP); a viewer-sent
-      `X-Origin-Secret` through CloudFront → not forwarded by the ORP, request
-      served normally with exactly one origin-side secret instance (Task 6 Rev 3
-      assertion observed live); unauthenticated request to `staging.aboutme.vn`
-      → gate challenge, not product content (D25); response headers carry HSTS +
-      `X-Robots-Tag: noindex` (Task 6); `terraform plan` immediately after apply
-      → **zero changes** (the cheapest idempotency proof); `terraform destroy` +
-      re-`apply` once → clean both ways (D23), then leave staging **up or down
-      per the integration owner's cost call**, recorded.
-- [ ] Author the `docs/architecture.md` current-state update (staging exists,
-      module map, one Mermaid diagram — the spec's intended-design diagram is
-      not duplicated) **as a diff handed to the integration owner**
-      (owner-serialized file); complete all four runbook seeds;
-      `make docs-fmt && make docs-lint` on files PI owns.
-- [ ] Hand the integration owner: evidence ledger path, filled test references
-      for AC-INF-001…008 in `../traceability/ac-inf.md` (as a diff —
-      owner-serialized), and the master-plan Phase-status row update text ("PI:
-      staging applied at `<commit>`").
+Each transition is fail-closed and records a redacted saved-plan hash, command,
+time, actor, and result. Production promotion uses the same stages.
 
-**Verification:** the recorded command outputs above; every prior task's CI
-checks green at the final commit. What PI does **not** claim: ops drills,
-CloudFront matrix live probing (AC-OPS-015), rotation drill (AC-OPS-016), live
-two-runner migration (AC-OPS-017), real restore timing (AC-OPS-018), alarm
-receipt (AC-OPS-019), SSE soak — all P9A, against this staging environment.
+1. Apply Task 1's bootstrap root once from local state. It creates the state
+   backend, persistent state/secrets KMS keys, GitHub roles, and ECR. Record
+   non-secret outputs and a zero-drift second plan.
+2. Run `secrets-bootstrap.sh`, then its decrypting `--check`, against the
+   persistent staging key. Build all four images through Task 8's protected
+   workflow and record immutable digests.
+3. Create and approve a foundation saved plan with `services_enabled=false` and
+   `distribution_enabled=false`. Apply it to create network/host, private RDS
+   and S3, ECS definitions, ACM certificate, and alarms without a long-running
+   writer or CloudFront distribution.
+4. Run `dns-apply.sh --apply-foundation` for the DNS-only origin A record and
+   ACM validation CNAMEs. Wait with a bounded command until the certificate is
+   `ISSUED`; a timeout leaves services and distribution disabled.
+5. Run the named one-shot DB-bootstrap task. It creates the `aboutme` database
+   and the migrator, app, and restore roles idempotently. Verify grants, default
+   privileges, app DDL denial, and that only the bootstrap/migrate containers
+   receive the migrator secret.
+6. Dispatch Task 12 in first-activation mode. It proves zero writers, takes and
+   verifies the initial snapshot, creates a fresh full saved plan with the
+   issued certificate, distribution, exact invalidation policy/environment,
+   enabled retention schedules, and services at one, then applies. Migrate must
+   finish before Go starts. Wait for ECS stability and `/healthz` plus `/readyz`
+   through CloudFront.
+7. Run `dns-apply.sh --apply-aliases`, then verify apex service and the
+   permanent `www` redirect. Finish with a zero-drift full plan. No single apply
+   is claimed to cross the KMS, certificate, database-role, or first-service
+   bootstrap boundaries.
 
-> **Constraint inherited from Phase 1 (DD-C16) — do not apply a blanket
-> `Referrer-Policy: no-referrer` at the edge.** The
-> `/api/v1/auth/{provider}/start` endpoints reject cross-site initiation for
-> `purpose=link|reauth`: they accept `Sec-Fetch-Site: same-origin` and otherwise
-> fall back to an Origin/Referer same-origin check, failing closed. On browsers
-> that do not send `Sec-Fetch-Site`, stripping the same-origin `Referer` from
-> the app's HTML document leaves the fallback with no signal and **provider
-> linking breaks for those users**. The response-headers policy may set
-> `no-referrer` on `/api/v1/*` (the Go server already does), but the policy
-> applied to the Nuxt document must preserve same-origin referrers —
-> `strict-origin-when-cross-origin` (the browser default) or `same-origin`. This
-> is not discoverable from `apps/web`, which sets no policy of its own; assert
-> it in Task 6's behavior tests and spot-check it in Task 14's bring-up.
+## Live boundary checks
 
----
+- [ ] Record EIP replacement within five minutes of the instance entering
+      running, bootstrap AWS CLI version, bridge-gateway existence, encrypted
+      gp3 root-volume settings, Caddy UID 10001, its sole
+      `CAP_NET_BIND_SERVICE`, writable-directory owner/mode, and a live listener
+      on 443.
+- [ ] From web and every host-mode application container, IMDS at
+      `169.254.169.254` is unreachable. A one-shot task under the server role
+      can still obtain its ECS task credentials at `169.254.170.2` and call
+      `sts:GetCallerIdentity`. Record no credentials or tokens.
+- [ ] Exercise Nuxt SSR through the internal Caddy listener. Credential-free
+      structured logs show the internal marker, path-only URI, request ID, and
+      canonical bridge address. Sentinel OAuth query values, cookies, CSRF,
+      Basic Authorization, origin secrets, and arbitrary query values are absent
+      from captured Caddy and Go logs.
+- [ ] Direct EIP traffic without the origin secret is refused or gets 403. A
+      forged XFF through CloudFront cannot change the canonical rate-limit key.
+      A viewer `X-Origin-Secret` is overwritten once. Origin logs show the
+      origin FQDN, and CloudFront accepted the custom `allExcept` policy. Both
+      origins use HTTPS/443/TLS 1.2 with hostname validation.
+- [ ] Missing/wrong/repeated staging Basic credentials return the exact no-store
+      401 challenge. Correct credentials reach the app, but `Authorization` is
+      absent at Caddy. Every `www.aboutme.vn` path redirects to the apex with
+      308 before auth/origin work and preserves semantic query parameters. HSTS
+      and staging noindex headers are present.
+- [ ] Authenticated privileged OAuth-start POST reaches Go with cookie, Origin,
+      and CSRF intact; the matching GET reaches Go and returns 405. The edge
+      introduces no Referer dependency.
+- [ ] Inspect the private bucket: all public-access-block flags true,
+      `IsPublic=false`, versioning disabled, and no website/ACL. CloudFront has
+      no S3 origin, OAC, or `/assets/*`. IAM simulation proves only the server
+      role can list `resumes/` and act on `resumes/*`; neighbouring prefixes and
+      every other role are denied. The server invalidation action is scoped to
+      this one distribution.
+- [ ] All six Task 10 schedules are enabled, their image commands and roles
+      resolve, and every heartbeat/failure alarm has a source. Run the safe TLS
+      and CIDR checks once. Restore timing and notification receipt remain P9A
+      criteria.
+
+## Disposable staging rehearsal
+
+Stop writers and record the approved data-loss scope. Empty only the named
+staging media bucket, then destroy the disposable environment; bootstrap state,
+persistent secrets KMS key, SSM parameters, and ECR remain. Verify RDS followed
+the staging no-final-snapshot policy and no production resource was addressable.
+Re-run all seven activation stages from empty environment state, including the
+decrypting secret check, certificate validation, DB bootstrap, and full smoke.
+Record whether staging is left up or down for cost control. Production keeps
+deletion protection, a final snapshot, and a non-force-destroy bucket.
+
+## Handoff and verification
+
+Hand the integration owner exact diffs for `docs/architecture.md`, all runbook
+seeds, AC-INF-001…008 evidence, and the master phase status. Run every prior
+task's local checks plus docs gates and record the final candidate. PI does not
+claim the P9A live CloudFront matrix, rotation, two-runner migration, timed
+restore, alarm delivery, or SSE soak.

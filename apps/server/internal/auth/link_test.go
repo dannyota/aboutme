@@ -1,31 +1,7 @@
-// Package auth_test: this package's own (not independently authored)
-// coverage for link.go, added during Task 10 fix round 1 in direct
-// response to Opus review's findings on the original implementation:
-//
-//   - C1 (Critical, DD-C16): the control that closes the reauth-then-link
-//     cross-site chain the review traced. DD-C16 answered it with a
-//     same-site check on GET /auth/{provider}/start; P1.1 item 2 replaced
-//     that with a CSRF-protected POST and an unconditional refusal of
-//     those purposes on the GET. The header table this file used to own
-//     now lives in start_test.go -- see this file's own superseded-test
-//     note below, and start.go's top-of-file comment for the reasoning.
-//   - I4: purpose=reauth against an UNCLAIMED identity must reject with
-//     no identity row created and no reauthenticated_at bump -- otherwise
-//     reauth becomes an un-gated link primitive.
-//   - I5: GitHub's own purpose=link round trip had zero coverage --
-//     link.go's shared resolveLinkOrReauth is provider-generic by
-//     construction, but "generic by construction" is exactly the kind of
-//     claim a wiring bug (the wrong Provider constant passed at a
-//     GitHub-specific call site) can silently defeat without a
-//     provider-specific proof.
-//   - I6: 401 session_required on a link/reauth start with no session at
-//     all -- the most basic rejection a link/reauth start produces had no
-//     dedicated test.
-//
-// link_adversarial_test.go (independently authored, Step 2/3) already
-// covers the reauth-refresh happy path, the already-claimed-by-another-
-// user rejection, the self-relink idempotency case, and the stale-reauth
-// /start rejection -- none of that is duplicated here.
+// Package auth_test exercises link and reauthentication invariants:
+// reauthentication never attaches an identity, each provider callback
+// passes the correct identity to the shared link algorithm, and link or
+// reauthentication starts require a live session.
 package auth_test
 
 import (
@@ -45,22 +21,8 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-// ============================================================================
-// C1 / DD-C16, superseded by P1.1 item 2: link/reauth starts are POST-only
-// ============================================================================
-//
-// This file's original table (TestStart_SameSiteEnforcement_LinkAndReauth)
-// walked every Sec-Fetch-Site/Origin combination against
-// GET /start?purpose=link|reauth, pinning DD-C16's same-site gate: reject
-// cross-site, admit same-origin. P1.1 item 2
-// (docs/plans/phase-1-deferred.md) replaced that gate with a
-// CSRF-protected POST, so the property to pin changed shape -- the GET no
-// longer serves those purposes for ANY caller, which subsumes "rejects
-// them cross-site". The header table now lives in
-// TestStartGET_LinkAndReauthPurposesUnavailable (start_test.go), which
-// asserts the stronger claim against the same combinations, including the
-// same-origin request DD-C16 used to admit; the CSRF chain the POST rides
-// is covered by TestStartPOST_RejectsWithoutCSRFOrSession.
+// Link and reauthentication starts are CSRF-protected POST requests. GET
+// starts accept login only; start_test.go covers the method boundary.
 
 // doGetWithHeaders is doGet's (handlers_test.go) sibling for tests that
 // need to set Sec-Fetch-Site/Origin directly -- a capability neither doGet
@@ -85,15 +47,9 @@ func doGetWithHeaders(t *testing.T, handler http.Handler, path string, headers m
 	return resp
 }
 
-// TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement proves the
-// login start carries no same-site requirement of any kind: an ordinary
-// purpose=login start (the default -- no ?purpose= at all) must succeed
-// even when every same-site signal says the request is cross-site, since
-// a login start must stay reachable from anywhere (a bookmarked or shared
-// "sign in" link, another site's "continue with aboutme" button). This
-// was DD-C16's own carve-out and it survives P1.1 item 2 unchanged --
-// item 2 narrowed what the GET serves, and deliberately did not touch
-// what a login start requires.
+// TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement proves login
+// remains reachable from a cross-site navigation. Link and
+// reauthentication protections must not block the default login purpose.
 func TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement(t *testing.T) {
 	t.Parallel()
 
@@ -112,22 +68,11 @@ func TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// I4: purpose=reauth against an UNCLAIMED identity must reject
-// ============================================================================
+// Reauthentication against an unclaimed identity must reject.
 
 // TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump
-// is fix round 1's I4: the mirror image of link_adversarial_test.go's
-// TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity
-// (which proves reauth against an ALREADY-linked identity refreshes
-// reauthenticated_at and touches nothing in identities). This test proves
-// the other half of "no auto-link via reauth" (design spec §3): reauth
-// against an identity NO ONE has ever linked must reject outright --
-// creating NEITHER an identities row NOR bumping reauthenticated_at.
-// Without this, reauth would be an un-gated link primitive (design spec
-// requires purpose=link's own recent-reauth gate; purpose=reauth has none
-// of its own precisely because it is never supposed to attach anything
-// new).
+// proves reauthentication cannot attach an unclaimed identity or refresh the
+// session. Otherwise reauthentication would become an ungated link path.
 func TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump(t *testing.T) {
 	t.Parallel()
 
@@ -160,7 +105,7 @@ func TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump(t 
 	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q (no auto-link via reauth -- the generic, no-oracle rejection, not identity_already_linked -- nobody else claims this identity either)", got, "auth_failed")
 	}
-	assertRedirectPath(t, loc, wantSettingsSessionsPath) // DD-C15.
+	assertRedirectPath(t, loc, wantSettingsSessionsPath)
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil && sc.Value != raw {
 		t.Errorf("response set a NEW %s cookie (value=%q) distinct from the caller's own, want none or the same rotated value only", auth.SessionCookieName, sc.Value)
 	}
@@ -173,32 +118,14 @@ func TestPurposeReauth_RejectsUnclaimedIdentity_NoIdentityCreatedNoReauthBump(t 
 	}
 }
 
-// ============================================================================
-// I5: GitHub's own purpose=link branch had zero dedicated coverage
-// ============================================================================
+// GitHub's link callback must use the correct provider identity.
 
-// TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser is
-// fix round 1's I5: link.go's resolveLinkOrReauth is provider-generic by
-// construction (it takes a bare auth.Provider/providerUserID pair, never
-// anything GitHub/Google/LinkedIn-specific), but that is a claim about
-// the SHARED function -- it says nothing about whether github.go's own
-// callback actually wires the right Provider constant and providerUserID
-// through to it. A copy-paste slip (e.g. ProviderGoogle hardcoded at a
-// GitHub call site, mirroring the exact class of bug
-// TestGitHubCallback_RejectionLogsProviderAttribute's own doc comment
-// warns about for the login path) would be invisible without a
-// GitHub-specific round trip. Mirrors
-// TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail's (linkedin_
-// adversarial_test.go) DD-C15 assertion shape for GitHub instead of
-// LinkedIn.
+// TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser proves
+// GitHub passes its own provider and subject to shared link resolution.
 //
 // Carries a live __Host-session cookie for linkingUserID on the completing
-// /callback request (fix, gate hardening: resolveLinkOrReauth's
-// purpose=link arm now re-authenticates the completing request via
-// authenticateLinkOrReauthSession -- link.go's own doc comment -- exactly
-// like purpose=reauth already did; a link callback with no session, or one
-// for a different user, is now rejected rather than resolving purely off
-// tx.LinkingUserID).
+// callback. A link callback with no session, or one for a different user,
+// must reject rather than trust tx.LinkingUserID alone.
 func TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser(t *testing.T) {
 	t.Parallel()
 
@@ -240,27 +167,13 @@ func TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser(t *te
 	}
 }
 
-// ============================================================================
-// I6: no session at all on a link/reauth start
-// ============================================================================
+// Link and reauthentication starts require a session.
 
-// TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced is fix
-// round 1's I6, reshaped again by P1.1 item 2. The rejection it covers --
-// a link/reauth start carrying no __Host-session cookie at all -- is
-// unchanged; what changed is the shape it must take. DD-C17 required a
-// 302 to PublicOrigin + "/login" with NO ?error= code, because /start was
-// a top-level browser navigation and a raw JSON body would have rendered
-// as a document to a human, while a distinct code in the URL would have
-// announced (to a history entry, or a referrer on whatever loaded next)
-// that a link attempt for a specific provider was in flight.
-//
-// A POST is a fetch(), so the first half of that reasoning is gone: the
-// caller parses an envelope. The second half is honored more simply than
-// DD-C17 managed -- there is no redirect, so there is no URL for anything
-// to be announced in, and the response is RequireSession's ordinary
+// TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced proves
+// a link or reauthentication start without a session returns the ordinary
 // 401 session_required, identical to every other session-authenticated
-// endpoint's. Nothing about the attempted provider or purpose appears
-// anywhere in it.
+// endpoint. The response does not disclose the attempted provider or
+// purpose in a redirect URL.
 func TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced(t *testing.T) {
 	t.Parallel()
 
@@ -295,29 +208,12 @@ func TestStartPOST_PurposeLinkOrReauth_NoSession_401NothingAnnounced(t *testing.
 	}
 }
 
-// ============================================================================
-// Gate hardening: a pending purpose=link transaction must not survive
-// "log out everywhere" (link.go's authenticateLinkOrReauthSession)
-// ============================================================================
-//
-// Phase 1 whole-branch review, BLOCKING finding: resolveLinkOrReauth's
-// purpose=link arm used to resolve entirely off tx.LinkingUserID (captured
-// once, server-side, at /start time), never re-reading or re-authenticating
-// the completing request's own __Host-session cookie -- unlike
-// purpose=reauth's arm, which always did. DELETE /api/v1/sessions
-// ("log out everywhere," sessions_handlers.go's handleRevokeAllSessions)
-// revokes every session row for the caller but never touches
-// oauth_transactions, so a purpose=link transaction begun before that
-// DELETE stayed fully completable for up to oauthTxTTL=10 minutes
-// afterward -- permanently attaching a provider identity to the account
-// AFTER its own recovery control had just been used, with no unlink
-// endpoint in v1 to undo it. link.go's authenticateLinkOrReauthSession now
-// re-authenticates the completing request for BOTH purposes, so a
-// revoked/dead session cookie rejects the link exactly like it already
-// rejected reauth.
+// A pending link transaction must not survive logout everywhere. The
+// callback reauthenticates its session instead of trusting the user id
+// captured when the transaction began. Otherwise a transaction could
+// attach an identity for up to ten minutes after all sessions were revoked.
 
-// TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere is the
-// BLOCKING finding's own required regression: start a purpose=link
+// TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere starts a link
 // transaction under a live session, revoke every session for that user via
 // DELETE /api/v1/sessions, then complete the /callback still presenting
 // the now-dead session cookie (a browser tab left open on the settings
@@ -336,8 +232,7 @@ func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) 
 	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeLink, linkingUserID)
 
 	// "Log out everywhere," BEFORE the link transaction is ever completed --
-	// this is the exact recovery control the finding says must not be
-	// bypassable by a pending link.
+	// a pending link must not bypass this recovery control.
 	revokeResp := doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if revokeResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE %s status = %d, want %d (setup: logout-everywhere must itself succeed)", auth.SessionsPath, revokeResp.StatusCode, http.StatusNoContent)
@@ -365,7 +260,7 @@ func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) 
 	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q (DD-C3 generic no-oracle rejection -- the completing request's session no longer authenticates)", got, "auth_failed")
 	}
-	assertRedirectPath(t, loc, wantSettingsSessionsPath) // DD-C15.
+	assertRedirectPath(t, loc, wantSettingsSessionsPath)
 
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
 		t.Errorf("response set a %s cookie (value=%q) on a rejected post-logout-everywhere link attempt, want none", auth.SessionCookieName, sc.Value)
@@ -384,28 +279,12 @@ func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) 
 	}
 }
 
-// ============================================================================
-// Gate hardening: a rotated successor cookie must survive a link/reauth
-// authorization mismatch (link.go's authenticateLinkOrReauthSession)
-// ============================================================================
+// A rotated successor cookie must survive a link authorization mismatch.
 
 // TestGoogleCallback_LinkOrReauth_RotatedRequest_MismatchStillCarriesSuccessorCookie
-// is the phase review's companion finding to the logout-everywhere gap
-// above: authenticateLinkOrReauthSession must call SetSessionCookie for a
-// rotated successor token BEFORE comparing sess.UserID against
-// tx.LinkingUserID, not after -- SessionManager.Authenticate may already
-// have minted and durably persisted a successor row (task-7-brief.md's
-// >24h rotation) by the time it returns, and discarding that write on a
-// mismatch (the old ordering) would silently strand the browser on a dead
-// predecessor token, killing its session on its very next request even
-// though the CURRENT request was correctly rejected. Drives a genuine
-// rotation deterministically via a fake clock (SetSessionManagerForTest,
-// the same technique TestRequireSession_RotatedRequest_CarriesSuccessorCookie,
-// sessions_adversarial_test.go, establishes), then completes a
-// purpose=link /callback while signed in as a DIFFERENT user than
-// tx.LinkingUserID -- a shared-browser scenario where the mismatch is a
-// real, correct rejection, but the rotation write underneath it must still
-// reach the browser.
+// proves a persisted rotation reaches the browser even when the later
+// linking-user check rejects the callback. Otherwise the browser keeps a dead
+// predecessor token.
 func TestGoogleCallback_LinkOrReauth_RotatedRequest_MismatchStillCarriesSuccessorCookie(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,7 @@
 # Task 7: Entry upsert/delete and section metadata/order
 
-Design spec §4's three granular content rows:
+Implements three
+[granular content endpoints](../../design/api.md#endpoint-groups):
 `PATCH /resumes/{id}/entries/{sectionKey}` ("upsert ONE entry — identity =
 `entry.id` in body"), `DELETE /resumes/{id}/entries/{sectionKey}/{entryId}`, and
 `PATCH /resumes/{id}/sections/{sectionKey}` ("name / icon / entry order (content
@@ -40,20 +41,21 @@ re-implemented here.
 - [ ] **Step 1: failing upsert tests first.** New id appends and returns the new
       revision; an existing id replaces **in place** (index unchanged, and the
       other entries byte-identical); a half-typed entry with only `id` and the
-      section's discriminator persists and reloads exactly as typed (spec §3's
-      draft level); an entry whose `id` collides with an entry in a
-      **different** section → `422 document_invalid` naming AC-DOC-002's
-      whole-resume uniqueness rule; an entry of the wrong shape for the
-      section's `sectionType` → `422`; a 65th entry in a section → `422` with
-      the row unchanged.
+      section's discriminator persists and reloads exactly as typed under the
+      [draft policy](../../design/data.md#draft-and-publish-validation); an
+      entry whose `id` collides with an entry in a **different** section →
+      `422 document_invalid` naming AC-DOC-002's whole-resume uniqueness rule;
+      an entry of the wrong shape for the section's `sectionType` → `422`; a
+      65th entry in a section → `422` with the row unchanged.
 - [ ] **Step 2: failing delete tests.** Deleting an existing entry removes
       exactly it and bumps the revision; deleting the last entry leaves an empty
-      but present section (a freshly emptied section must stay valid — spec §3's
-      draft permissiveness); deleting an unknown entry id → `404` with **no**
-      revision bump and no idempotency record; a replayed delete returns the
-      stored response.
+      but present section (a freshly emptied section stays valid under the
+      [draft policy](../../design/data.md#draft-and-publish-validation));
+      deleting an unknown entry id → `404` with **no** revision bump and no
+      idempotency record; a replayed delete returns the stored response.
 - [ ] **Step 3: failing section-metadata tests.** `displayName` and `iconKey`
-      set, cleared to `""`, and left absent behave per spec §3's absence rule;
+      set, cleared to `""`, and left absent preserve the
+      [aggregate's absence rule](../../design/data.md#resume-aggregate);
       `entryOrder` reorders entries and rejects a permutation that adds, drops,
       or duplicates an id with `422`; the customization document is
       **byte-identical** before and after every one of these writes — the test
@@ -67,11 +69,14 @@ re-implemented here.
 - [ ] **Step 5: failing contract test.** Handler statuses, codes, and shapes
       agree with `docs/api/openapi.yaml` for all three operations.
 - [ ] **Step 6: implement; green.**
-- [ ] **Step 7: gate.** `make server-build server-vet server-test`;
-      `REQUIRE_TEST_DB=1 … go test ./internal/resumeapi/... -race -count=1 -v`,
-      concurrency at `-count=20`; `make api-check`.
-- [ ] **Step 8: commit** —
-      `git commit -m "feat(resumeapi): add entry and section granular save endpoints" -- apps/server/internal/resumeapi`
+- [ ] **Step 7: gate.** Run `make test-db-up`,
+      `make server-build server-vet server-test`,
+      `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
+      repeat that package command with `-race -count=20`, then run
+      `make api-check`.
+- [ ] **Step 8: handoff.** Report the owned paths, failing-test evidence, exact
+      checks, and concurrency results to the integration owner. Do not stage or
+      commit.
 - [ ] **Step 9: independent defect review.**
 
 ## Acceptance mapping

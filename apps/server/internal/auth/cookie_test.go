@@ -13,12 +13,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 )
 
-// setCookie calls fn (SetOAuthTxCookie or ClearOAuthTxCookie) against a
-// fresh httptest.ResponseRecorder and returns the single cookie it wrote,
-// parsed from the real "Set-Cookie" response header -- not just the
-// pre-serialization *http.Cookie struct -- so a bug in how the header
-// text itself is rendered would be caught too, not only a bug in which
-// struct fields get set.
+// setCookie parses the emitted Set-Cookie header, not an intermediate struct.
 func setCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	t.Helper()
 
@@ -32,14 +27,8 @@ func setCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	return cookies[0]
 }
 
-// TestSetOAuthTxCookie_EmitsPinnedAttributes pins the brief's literal
-// contract: "Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=600". Every
-// attribute is asserted individually (not a substring match against the
-// raw header) so a regression in any one of them -- e.g. a SameSite flip,
-// a dropped Secure (which would silently void the __Host- prefix's
-// guarantees), or a changed Max-Age -- fails this test specifically,
-// rather than being caught only if some unrelated cookie-parsing test
-// happens to notice.
+// TestSetOAuthTxCookie_EmitsPinnedAttributes checks each __Host-oauth-tx
+// attribute independently.
 func TestSetOAuthTxCookie_EmitsPinnedAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -67,23 +56,14 @@ func TestSetOAuthTxCookie_EmitsPinnedAttributes(t *testing.T) {
 	if c.MaxAge != 600 {
 		t.Errorf("MaxAge = %d, want 600 (10 minutes, matching oauthTxTTL)", c.MaxAge)
 	}
-	// __Host- is only meaningful with no Domain attribute at all; the
-	// browser (not this test) is what actually enforces that, but a Domain
-	// value here would mean the cookie stops being __Host- compliant.
+	// A __Host- cookie must not set Domain.
 	if c.Domain != "" {
 		t.Errorf("Domain = %q, want empty (a __Host- cookie must not set Domain)", c.Domain)
 	}
 }
 
-// TestClearOAuthTxCookie_ExpiresWithMatchingAttributes guards the other
-// half of the __Host-oauth-tx contract: a browser only overwrites/deletes
-// a cookie when Path (and, since this is __Host-, the implicit no-Domain
-// and Secure) attributes match exactly what was set. If
-// ClearOAuthTxCookie's Path, Secure, HttpOnly, or SameSite ever drifted
-// from SetOAuthTxCookie's, the clear would silently stop working and a
-// consumed/dead transaction cookie would linger in the browser -- exactly
-// the failure mode the brief calls out for /callback's success and
-// failure paths alike.
+// TestClearOAuthTxCookie_ExpiresWithMatchingAttributes ensures the deletion
+// cookie matches the attributes that identify the stored cookie.
 func TestClearOAuthTxCookie_ExpiresWithMatchingAttributes(t *testing.T) {
 	t.Parallel()
 

@@ -1,18 +1,9 @@
-// Compile-time-only fixture: exercises gen/ts/resume.ts's discriminated
-// union and each entry type's field shape under the draft-permissive
-// contract (design spec §3, revised 2026-08-01): only `id` is required on
-// every entry, every domain field is optional. This file is never run —
-// type-fidelity.test.ts shells out to `tsc --noEmit --strict` on it. A
-// `@ts-expect-error` line that does NOT actually error is itself flagged as
-// a compile error (TypeScript's own semantics for the directive), so every
-// assertion below is a real, enforced check, not an unverified comment.
+// Compile-time fixture for the generated discriminated union and
+// draft-permissive entry fields. Only `id` is required; domain fields are
+// optional. type-fidelity.test.ts checks this file with `tsc --strict`.
 import type { EducationEntry, Section, WorkEntry } from "../gen/ts/resume";
 
-// --- switch (section.sectionType) narrows `entries` to the matching entry type ---
-//
-// This holds regardless of which fields are required: narrowing is about
-// property *existence* per variant, not about which of those properties
-// happen to be optional.
+// sectionType narrows entries to its matching entry type.
 
 function describeSection(section: Section): string {
   switch (section.sectionType) {
@@ -33,9 +24,7 @@ function describeSection(section: Section): string {
     }
     case "skill": {
       const entry = section.entries[0];
-      // level is optional on both skill and language now (every domain
-      // field is), so this is no longer a distinguishing feature between
-      // the two — see the LanguageEntry case below for the same type.
+      // SkillEntry and LanguageEntry both use an optional numeric level.
       const level: number | undefined = entry.level;
       return String(level);
     }
@@ -69,11 +58,9 @@ function describeSection(section: Section): string {
   }
 }
 
-// --- draft-permissive: only `id` is required, every domain field (and
-// isHidden) is optional ---
+// Draft-permissive entries require only id.
 
-// The exact example from design spec §3 and fixtures/draft-partial.json: a
-// work entry with only id and jobTitle typed so far. Must compile.
+// A partially typed work entry must compile.
 const draftPartial: WorkEntry = {
   id: "e1",
   jobTitle: "Engineer",
@@ -85,8 +72,7 @@ const bareEntry: WorkEntry = {
   id: "e1",
 };
 
-// employer is no longer required (draft-permissive) — omitting it, unlike
-// before this contract change, must NOT be an error.
+// Drafts may omit employer.
 const noEmployer: WorkEntry = {
   id: "e1",
   jobTitle: "Engineer",
@@ -113,7 +99,7 @@ const fullWork: WorkEntry = {
   description: "",
 };
 
-// --- Section itself: an entries array must match its own sectionType's entry type ---
+// Section entries must match sectionType.
 
 const workSection: Section = {
   sectionType: "work",
@@ -140,8 +126,7 @@ const mismatchedSection: Section = {
   ],
 };
 
-// Referenced so `tsc --noUnusedLocals`-style drift (should it ever be
-// enabled) doesn't need updating this fixture; harmless no-op otherwise.
+// Keep compile-only declarations referenced under noUnusedLocals.
 void describeSection;
 void draftPartial;
 void bareEntry;

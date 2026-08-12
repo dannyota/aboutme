@@ -1,26 +1,13 @@
-// schema_contract_test.go is the server-side half of the cross-language
-// conformance tripwire (design spec §3, "Codegen fidelity"). Before this
-// file existed, packages/schema/test/conformance.test.ts enumerated every
-// sectionType resume.schema.json declares and proved AJV, the generated TS
-// union, and the hand-written Go dispatch (packages/schema/gen/go/section.go)
-// each handled it — but that suite runs only inside packages/schema, against
-// a Go binary built from packages/schema/gen/go/cmd/conformance. Nothing
-// forced apps/server itself to depend on the generated package at all: the
-// server could grow its own parallel section/sectionType model, drift from
-// the schema, and packages/schema's conformance suite would stay green the
-// whole time, because it was never testing the server.
-//
-// This file closes that gap from the server's side: it imports
-// github.com/dannyota/aboutme/packages/schema/gen/go for real (a genuine
-// compile-time dependency, wired via the repo-root go.work + apps/server's
-// go.mod require — see both), and independently re-derives the sectionType
+// schema_contract_test.go checks the server side of cross-language schema
+// conformance. It imports github.com/dannyota/aboutme/packages/schema/gen/go
+// as a compile-time dependency, wired through the root go.work and the server's
+// go.mod, and independently re-derives the sectionType
 // list from resume.schema.json (deliberately not importing anything from
 // packages/schema/scripts/generate.mjs or trusting conformance.test.ts's
 // derivation — the point is to check the pipeline against the schema file
 // itself, the same discipline conformance.test.ts already applies).
 //
-// Two failure modes, matching the "breaks the server build or this test"
-// requirement:
+// It checks two failure modes:
 //   - TestKnownSectionTypeConstantsCompile references every
 //     schema.SectionType constant apps/server depends on by name. If
 //     packages/schema ever renames or removes one, apps/server fails to
@@ -107,14 +94,11 @@ func sectionTypesFromSchemaFile(t *testing.T) []string {
 	return types
 }
 
-// dispatch is the exhaustive switch a real production consumer of
-// schema.Section must keep in sync with schema.SectionType — apps/server
-// has no section-model consumer of its own yet (see design spec §7:
-// internal/resume/ is a later phase), so this test file is where that
-// discipline is enforced for now. Every case references a
-// github.com/dannyota/aboutme/packages/schema/gen/go constant by name,
-// never a server-local copy of the discriminator string, so a future
-// internal/resume package has no excuse to reintroduce one either.
+// dispatch is the exhaustive switch a production consumer of schema.Section
+// must keep in sync with schema.SectionType. Every case references a generated
+// constant by name, never a
+// server-local copy of the discriminator string. This keeps internal/resume
+// from introducing a parallel discriminator model.
 func dispatch(t schema.SectionType) (recognized bool) {
 	switch t {
 	case schema.Profile,

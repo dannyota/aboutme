@@ -86,8 +86,8 @@ func TestPublicJSONCache_SetsCacheControlAndETag(t *testing.T) {
 	}
 }
 
-// TestCachePolicy_InnerGroupOverridesOuterDefault is the guard for
-// re-review Important I-A. router.go now wires NoStoreCache() as the
+// TestCachePolicy_InnerGroupOverridesOuterDefault proves router.go's
+// outer NoStoreCache default can be overridden. router.go wires it as the
 // outermost DEFAULT on every chain (so rejections carry a cache directive),
 // and its comment relies on a later route group being able to substitute
 // its own policy by wrapping INSIDE the mux. That only holds because
@@ -170,9 +170,9 @@ func TestPublicJSONCache_ETagStableForIdenticalBodyDiffersForDifferentBody(t *te
 	}
 }
 
-// TestPublicJSONCache_HonorsIfNoneMatch_Returns304NoBody proves the
-// mechanism design spec §8's conditional-polling fallback depends on: a
-// client that already has the current ETag gets a bodyless 304, not a
+// TestPublicJSONCache_HonorsIfNoneMatch_Returns304NoBody proves the mechanism
+// conditional polling depends on. A client with the current ETag gets a
+// bodyless 304, not a
 // full re-download.
 func TestPublicJSONCache_HonorsIfNoneMatch_Returns304NoBody(t *testing.T) {
 	t.Parallel()
@@ -271,13 +271,12 @@ func TestRouter_HealthEndpoints_AreNoStore(t *testing.T) {
 	}
 }
 
-// TestRouter_HealthEndpoint_BodyTooLargeStillCarriesNoStore is the
-// regression test for security review finding #4: a health-route response
-// that BodyLimit itself rejects (413) — not just the success path — must
+// TestRouter_HealthEndpoint_BodyTooLargeStillCarriesNoStore proves a
+// health-route response that BodyLimit itself rejects (413) must
 // still carry the documented Cache-Control: no-store policy. The body
-// exceeds api.HealthBodyLimitBytes, the health chain's own dedicated cap
-// (re-review I1) — not the general Options.BodyLimitBytes, which no longer
-// applies to health routes at all.
+// exceeds api.HealthBodyLimitBytes, the health chain's own dedicated cap,
+// not the general Options.BodyLimitBytes, which does not apply to health
+// routes.
 func TestRouter_HealthEndpoint_BodyTooLargeStillCarriesNoStore(t *testing.T) {
 	t.Parallel()
 
@@ -298,20 +297,13 @@ func TestRouter_HealthEndpoint_BodyTooLargeStillCarriesNoStore(t *testing.T) {
 	}
 }
 
-// TestRouter_NonHealthChain_AllRejectionsCarryNoStore is the regression
-// test for the re-review's new I2 (and old finding #4's remainder):
+// TestRouter_NonHealthChain_AllRejectionsCarryNoStore proves
 // NoStoreCache must be the default, outermost cache policy of the
-// non-health chain, so every rejection it can produce in Phase 0 — 404
+// non-health chain, so every rejection it can produce — 404
 // (unknown route), 413 (oversized body), 429 (rate limited), and 400
 // (invalid_client_ip) — carries Cache-Control: no-store, exactly like the
-// health chain already does. Before this fix, otherChain had no cache
-// middleware at all, so every one of these responses shipped with an EMPTY
-// Cache-Control header, letting an intermediary (e.g. CloudFront's default
-// error-caching TTL) serve a stale 404 for a slug published moments later.
-// A successful (200) response is not covered here: Phase 0 ships no
-// product route on this chain to produce one (design spec §6 says later
-// route groups override this default from INSIDE the mux, per-group —
-// e.g. PublicJSONCache once a public JSON endpoint exists).
+// health chain already does. Route groups override this default from inside
+// the mux when they need another policy.
 func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 	t.Parallel()
 
@@ -388,8 +380,7 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 	})
 }
 
-// TestRouter_HealthEndpoints_BypassRateLimit is the regression test for the
-// health-probe exemption decision (security review finding #1): flooding
+// TestRouter_HealthEndpoints_BypassRateLimit proves flooding
 // /healthz far past a tiny configured request budget must never return
 // 429 — infrastructure probes are exempt from the external-viewer limiter
 // entirely, not merely given a generous quota.

@@ -2,13 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// validation/sanitizer-allowlist.v1.json and validation/hostile-corpus.json
-// (design spec §5 sanitizer contract) are the data both bluemonday
-// (apps/server, write path) and DOMPurify (apps/web, client-render path) will be
-// generated/conformance-tested against — that wiring lives outside
-// packages/schema, but the data itself, and its shape, lives here. These
-// tests guard the shape so a future edit can't silently drop a required
-// category or scheme.
+// This package owns the shared sanitizer allowlist and hostile corpus. These
+// tests keep their versions and coverage aligned for the Go and browser
+// consumers. See docs/design/security.md#untrusted-document-content.
 const root = new URL("..", import.meta.url).pathname;
 const allowlist = JSON.parse(
   readFileSync(join(root, "validation", "sanitizer-allowlist.v1.json"), "utf8"),
@@ -83,16 +79,8 @@ describe("hostile-corpus.json", () => {
     }
   });
 
-  // Phase-gate review finding I2: the corpus had zero payloads for two of
-  // the allowlist's own forbidden.urlSchemes (vbscript:, file:) — the
-  // allowlist and the corpus had silently drifted apart, and this suite's
-  // old category check couldn't notice because it only asserted five
-  // hardcoded category names, none of which covered the gap. This test is
-  // deliberately NOT hardcoded to today's scheme list: it derives the
-  // required schemes from allowlist.forbidden.urlSchemes directly, so a
-  // future scheme added there without a matching corpus payload fails here
-  // instead of silently shipping an ungraded sanitizer conformance corpus
-  // (design spec §5 / AC-SEC-003).
+  // Derive coverage from the allowlist so a newly forbidden scheme cannot land
+  // without a payload.
   it("every forbidden.urlSchemes scheme in the allowlist has at least one corpus payload exercising it", () => {
     for (const scheme of allowlist.forbidden.urlSchemes) {
       const covering = corpus.payloads.filter((p: { payload: string }) =>
@@ -105,13 +93,11 @@ describe("hostile-corpus.json", () => {
     }
   });
 
-  // Phase-gate review finding I2: sanitizer-allowlist.v1.json's
-  // linkHardening mandates rel="noopener noreferrer" on every emitted <a>,
-  // but no corpus payload exercised target="_blank" at all — a sanitizer
-  // that dropped rel hardening entirely would still pass the whole corpus.
-  it("covers the mandated rel=\"noopener noreferrer\" hardening on target=\"_blank\" anchors", () => {
-    const relHardeningPayloads = corpus.payloads.filter((p: { payload: string }) =>
-      p.payload.includes('target="_blank"'),
+  // Link hardening needs a target=_blank payload or sanitizer conformance
+  // cannot detect its removal.
+  it('covers the mandated rel="noopener noreferrer" hardening on target="_blank" anchors', () => {
+    const relHardeningPayloads = corpus.payloads.filter(
+      (p: { payload: string }) => p.payload.includes('target="_blank"'),
     );
     expect(
       relHardeningPayloads.length,
@@ -121,18 +107,14 @@ describe("hostile-corpus.json", () => {
     // sanitizer must ADD it, not just correct a wrong one) — this is what
     // "rel-hardening-target-blank-missing-rel" exists for.
     expect(
-      relHardeningPayloads.some((p: { payload: string }) => !p.payload.includes("rel=")),
+      relHardeningPayloads.some(
+        (p: { payload: string }) => !p.payload.includes("rel="),
+      ),
       'expected at least one target="_blank" payload with no rel attribute at all',
     ).toBe(true);
   });
 
-  // Phase-gate re-review finding NEW-M4: the mechanical drift guard above
-  // covers forbidden.urlSchemes but not forbidden.tags, one field over in
-  // the same allowlist object — 7 of 12 forbidden tags (object, embed,
-  // form, input, link, meta, base) had zero corpus coverage. Mirrors the
-  // schemes test exactly: derived from allowlist.forbidden.tags directly,
-  // not hardcoded, so a future forbidden tag added there without a
-  // matching payload fails here.
+  // Derive tag coverage from the allowlist for the same reason as schemes.
   it("every forbidden.tags entry in the allowlist has at least one corpus payload exercising it", () => {
     for (const tag of allowlist.forbidden.tags) {
       const covering = corpus.payloads.filter((p: { payload: string }) =>
@@ -145,10 +127,7 @@ describe("hostile-corpus.json", () => {
     }
   });
 
-  // Phase-gate re-review finding NEW-M4: the two leftovers from I2's own
-  // original "concrete fix" list (an entity-encoded scheme and a
-  // nested/normalization payload) were still absent after I2 was marked
-  // closed on its literally-stated scope (forbidden.urlSchemes coverage).
+  // Literal checks miss entity-encoded schemes and nested-tag normalization.
   it("covers an HTML-entity-encoded scheme (bypasses a literal-string scheme check)", () => {
     const covering = corpus.payloads.filter((p: { payload: string }) =>
       p.payload.includes("&#"),

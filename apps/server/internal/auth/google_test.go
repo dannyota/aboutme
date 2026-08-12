@@ -1,10 +1,6 @@
 // Package auth_test exercises the Google OIDC login flow end to end
-// against oidctest's in-process mock provider (Task 3), through the same
-// real golang.org/x/oauth2 + coreos/go-oidc code paths production uses --
-// see task-4-brief.md Step 2. The adversarial OIDC verification matrix
-// (wrong issuer/audience/signature/nonce/expiry, unverified email) is a
-// separate, independently authored suite per the phase's review workflow
-// and is not duplicated here.
+// against oidctest's in-process mock provider through the same
+// golang.org/x/oauth2 and coreos/go-oidc code paths production uses.
 package auth_test
 
 import (
@@ -26,29 +22,12 @@ func ptrTrue() *bool {
 	return &b
 }
 
-// TestGoogleCallback_NewUser_CreatesUserAndSession is task-4-brief.md
-// Step 2's happy-path test: a first-ever login via Google creates a users
-// row and an identities row, issues a real session (__Host-session
-// cookie), and clears the __Host-oauth-tx cookie used to carry the
-// transaction handle. It drives /start then /callback exactly as a
-// browser would (capturing the Set-Cookie and state/code_challenge from
-// /start's redirect, then presenting them back to /callback), so the PKCE
-// send (oauth2.Config.Exchange with oauth2.VerifierOption) is proven
-// through oidctest's own code_challenge validation (ruling 4a/4c), not
-// merely assumed.
+// TestGoogleCallback_NewUser_CreatesUserAndSession drives a browser-shaped
+// start and callback. It proves account creation, PKCE exchange, session issue,
+// and transaction-cookie clearing.
 //
-// subject/email use uniqueSubject/uniqueEmail (google_adversarial_test.go,
-// same package) rather than fixed literals: this test's own database is
-// shared and persists across every run against TEST_DATABASE_URL (no
-// per-test reset -- see that file's own doc comment), so a fixed
-// "g-sub-1"/"new@example.com" would silently REUSE a row a previous run
-// already created instead of exercising the new-user path a second time,
-// which is exactly what happened here once resolveGoogleUser's name
-// gained a real fallback (fix-round ruling b1): a re-run of this suite
-// found an existing identity for the fixed subject and returned its
-// already-created user (with the OLD full-email name), so the new name
-// assertion below failed against a stale row -- collision-proof
-// identifiers are what a "new user" test genuinely needs.
+// Unique identifiers ensure the persistent test database reaches the new-user
+// branch on every run.
 func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	t.Parallel()
 
@@ -86,11 +65,7 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 		t.Fatal("start response missing __Host-oauth-tx cookie")
 	}
 
-	// A real provider signs the nonce it was sent back into the id_token
-	// verbatim; oidctest.Claims.Nonce is this test's stand-in for that --
-	// registering the exact nonce /start sent is what proves handleGoogle
-	// Callback's own nonce comparison (go-oidc does not check it) actually
-	// matches a genuine round trip.
+	// Echo the start nonce into the signed token; go-oidc does not validate it.
 	p.RegisterCode("code-new-user", oidctest.Claims{
 		Subject:       subject,
 		Email:         email,
@@ -103,9 +78,7 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	if cbResp.StatusCode != 302 {
 		t.Fatalf("GET callback status = %d, want 302", cbResp.StatusCode)
 	}
-	// DD-C7: a SUCCESSFUL callback stays pinned to the bare origin ("/"),
-	// never "/login" -- that path is reserved for a rejection's ?error=
-	// redirect (see handlers_test.go's assertRedirectPath).
+	// Success targets the app root; rejection targets login.
 	if got := cbResp.Header.Get("Location"); got != testPublicOrigin+"/" {
 		t.Errorf("successful callback Location = %q, want %q", got, testPublicOrigin+"/")
 	}
@@ -134,11 +107,7 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	if usr.Email != email {
 		t.Errorf("user.Email = %q, want %q", usr.Email, email)
 	}
-	// Fix-round ruling b1: oidctest.Claims has no Name field at all, so
-	// this happy path always exercises resolveGoogleUser's fallback --
-	// the LOCAL PART of the email, never the full address (see the
-	// dedicated TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart
-	// below for a case where the distinction is even more explicit).
+	// The fixture omits name, forcing the non-leaking local-part fallback.
 	wantName, _, _ := strings.Cut(email, "@")
 	if usr.Name != wantName {
 		t.Errorf("user.Name = %q, want %q (email local part, never the full email)", usr.Name, wantName)
@@ -156,13 +125,8 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	}
 }
 
-// TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow is a
-// second-login smoke check on top of the happy path above: the same
-// (provider, sub) logging in again must authenticate as the SAME user
-// (not create a second one) and must not attempt a second identities
-// insert (identities_provider_subject_key's UNIQUE constraint would
-// surface that as a 500, not silently succeed). subject/email are unique
-// per run (see the happy-path test's doc comment for why that matters).
+// TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow proves a repeat
+// provider identity returns the same user without another identity insert.
 func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T) {
 	t.Parallel()
 
@@ -224,15 +188,8 @@ func TestGoogleCallback_ExistingIdentity_ReusesUser_NoDuplicateRow(t *testing.T)
 	}
 }
 
-// TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail is
-// fix-round ruling b1's dedicated regression test: when Google's optional
-// "name" claim is absent (as it always is from oidctest, which has no
-// Name field), the created user's display name must be the LOCAL PART of
-// the email (the part before "@"), never the full email address -- a
-// later phase renders this value as a display name, and the full email
-// would leak the visitor's address to anyone who can see it.
-// subject/email are unique per run (see the happy-path test's doc
-// comment for why that matters).
+// TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail proves
+// an absent name never exposes the full email as a display name.
 func TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail(t *testing.T) {
 	t.Parallel()
 
@@ -278,12 +235,8 @@ func TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail(t *te
 	}
 }
 
-// newServiceWithOrigin builds a Service backed by q (shared with the
-// caller, unlike newTestService's own fresh newTestQueries each time) at
-// a specific PublicOrigin -- for
-// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin's
-// two-Service scenario below, where /start and /callback deliberately run
-// against different PublicOrigin configurations sharing one database.
+// newServiceWithOrigin lets start and callback use different origins while
+// sharing one database.
 func newServiceWithOrigin(t *testing.T, q *store.Queries, issuer, origin string) http.Handler {
 	t.Helper()
 
@@ -299,20 +252,9 @@ func newServiceWithOrigin(t *testing.T, q *store.Queries, issuer, origin string)
 	return api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
 }
 
-// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin proves
-// handleGoogleCallback's token exchange uses the STORED transaction's own
-// RedirectURI (set once, at Begin) rather than rebuilding one from this
-// Service's own current PublicOrigin config. It simulates PUBLIC_ORIGIN
-// changing mid-flight (a real deploy scenario: an origin migration or
-// config change landing between when a visitor's browser fetched /start
-// and when they complete /callback) with two separate Service instances
-// sharing one database: /start runs against beginOrigin, /callback
-// against a DIFFERENT callbackOrigin. If the Exchange call rebuilt
-// redirect_uri from the CALLBACK Service's own config (the bug this
-// hardening fixes), oidctest.Provider.LastTokenRedirectURI would observe
-// callbackOrigin's callback URL instead of beginOrigin's -- and a real
-// provider, which enforces redirect_uri as an exact match against what it
-// issued the code for, would reject the exchange outright.
+// TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin uses two
+// Service origins sharing one database. The provider must receive the redirect
+// URI stored by /start, even when /callback runs under a new origin.
 func TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin(t *testing.T) {
 	t.Parallel()
 

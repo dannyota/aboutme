@@ -133,8 +133,7 @@ describe('sessions.vue', () => {
     await flushPromises();
 
     expect(deleteAttempted).toBe(true);
-    // DD-C5: DELETE of an already-gone session returns 404 uniformly, and
-    // the UI treats that as "stale row" rather than surfacing an error.
+    // An already-gone session is a stale row, not a user-visible error.
     expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
       false,
     );
@@ -319,8 +318,6 @@ describe('sessions.vue', () => {
   it('sends the CSRF header when logging out everywhere', async () => {
     let receivedHeader: string | undefined;
     let receivedMethod: string | undefined;
-    // DD-C11 (spec-corrected): logout-everywhere is DELETE /sessions —
-    // there is no POST /sessions/revoke-all.
     registerEndpoint('/api/v1/sessions', {
       method: 'DELETE',
       handler: (event) => {

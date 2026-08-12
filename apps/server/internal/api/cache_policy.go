@@ -12,17 +12,16 @@ import (
 // Cache-Control values the middlewares in this file send.
 const (
 	// CacheControlNoStore is the Cache-Control value NoStoreCache sends:
-	// design spec §6 requires it on every authenticated /api response, so
+	// every authenticated API response uses it so
 	// no intermediary — a browser cache, CloudFront, a corporate proxy —
 	// ever stores a copy that could later be served back to a different
 	// account sharing that cache.
 	CacheControlNoStore = "no-store"
 	// CacheControlPublicJSON is the Cache-Control value PublicJSONCache
-	// sends: design spec §6 pairs it with an ETag so a cache must always
+	// sends. It is paired with an ETag so a cache must always
 	// revalidate with the origin (a conditional round-trip) before reusing
 	// a stored response, rather than either serving it blindly or never
-	// caching it at all — the middle ground public resume JSON needs so
-	// §8's conditional-polling fallback can get cheap 304s.
+	// caching it at all. This lets conditional polling get cheap 304s.
 	CacheControlPublicJSON = "no-cache, must-revalidate"
 )
 
@@ -32,7 +31,7 @@ const (
 // doc comment for why that ordering is what makes a rejection path, not
 // just the success path, actually carry the header).
 //
-// It serves two roles (design spec §6, and see router.go): the cache
+// It serves two roles (see router.go): the cache
 // policy for operational route groups (the health endpoints), and the
 // outermost default on the non-health chain so that a rejection —
 // 404/405/413/429/400 — never escapes without a cache policy. Using it as
@@ -51,10 +50,10 @@ func NoStoreCache() Middleware {
 }
 
 // PublicJSONCache returns middleware implementing the public-JSON cache
-// policy (design spec §6, §8): Cache-Control: no-cache, must-revalidate on
+// policy: Cache-Control: no-cache, must-revalidate on
 // every response, plus a content-derived ETag on successful (2xx)
 // responses that short-circuits a matching If-None-Match request straight
-// to 304 Not Modified with no body. This is what makes §8's
+// to 304 Not Modified with no body. This makes the
 // conditional-polling fallback (a client with no working SSE connection
 // re-checking public resume JSON every 30-60s) cheap: an unchanged
 // document costs the client a 304 with no body, not a full re-download.
@@ -65,11 +64,6 @@ func NoStoreCache() Middleware {
 // complete body. Only wrap this around a route that returns a single
 // bounded JSON body — never a streaming or SSE handler, which this would
 // block until the stream ends and then buffer in full.
-//
-// Not yet wired to any route: Phase 0 ships no public JSON endpoint, so
-// there is nothing to wrap this around yet (see router.go's New). Its
-// first consumer arrives with the public resume JSON endpoint a later
-// phase adds — do not invent a route here just to give it one.
 func PublicJSONCache() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

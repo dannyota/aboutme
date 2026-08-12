@@ -4,24 +4,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
-	"math/rand/v2" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- testutil is imported only by _test.go files (never production code); fixtures require a deterministic, seeded PRNG per docs/specs/aboutme-design.md §0's determinism rule, so crypto/rand (unseeded, non-reproducible) would be the wrong tool here, not the safer one. Same judgment already expressed to golangci-lint via the //nolint:gosec below.
+	"math/rand/v2" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- seeded test fixtures require reproducible, non-cryptographic randomness
 )
 
-// NewSeededRand returns a math/rand/v2 generator seeded deterministically
-// from seed: the same seed always produces the same sequence, on every run
-// and every machine. Use this instead of math/rand/v2's package-level
-// functions (rand.IntN et al.), which draw from an auto-seeded global
-// source and are not reproducible across runs — exactly what design spec
-// §0's determinism rule forbids in agent-run tests.
+// NewSeededRand returns a reproducible generator for test fixtures.
 func NewSeededRand(seed uint64) *rand.Rand {
 	return rand.New(rand.NewPCG(seed, seed)) //nolint:gosec // deliberately weak/reproducible: this is a fixture generator, never used for anything security-sensitive
 }
 
-// SeededUUID deterministically derives an RFC 4122 version-4-shaped UUID
-// string from seed: the same seed always yields the same string. This
-// stands in for uuid.New() in fixtures — uuid.New() draws from an
-// unseeded source and is randomized per call, which would make any
-// fixture built from it non-reproducible.
+// SeededUUID derives a reproducible RFC 4122 version-4-shaped fixture ID.
 func SeededUUID(seed uint64) string {
 	r := NewSeededRand(seed)
 	var b [16]byte

@@ -1,50 +1,38 @@
-// Package docmigrate is the doc-shape migration and wire-version machinery
-// for stored resumes (design spec §3 "Doc-shape migrations" and
-// "Wire-version compatibility"; docs/plans/phase-2a/ decisions D13, D18,
-// D19; AC-DOC-010, AC-DOC-012).
-//
-// It does three separable jobs:
+// Package docmigrate converts stored and wire resume documents between
+// released schema versions. See docs/design/data.md and
+// docs/adr/0017-resume-document-versioning.md.
 //
 //   - Project lifts a row's three jsonb parts, plus the row's own
-//     schema_version, forward to the current document version on READ. It is
-//     PURE (D18): it never touches the database, so a read can never bump a
-//     revision or race an autosave.
+//     schema_version, to the current document version without a database
+//     write.
 //   - Convert walks the registered adjacent-version converters in either
 //     direction over a whole document, validating the source and every
-//     target against that version's immutable schema (D13).
+//     target against that version's immutable schema.
 //   - AcceptWire and EmitWire are the transport-agnostic wire boundary: the
-//     server declares, as two DISTINCT sets, which document versions it
-//     accepts from clients and which it emits back. P2B binds these to HTTP;
-//     nothing here knows about transports.
+//     server declares, as two distinct sets, which document versions it
+//     accepts from clients and which it emits back.
 //
 // A converter is func(json.RawMessage) (json.RawMessage, error) over the
-// FULL assembled document, never a typed decode (D13). Typed structs only
-// describe the CURRENT version, so a converter lifting a v1 document cannot
+// full assembled document, never a typed decode. Typed structs only
+// describe the current version, so a converter lifting a v1 document cannot
 // decode it into the current Go type at all -- the type it would decode into
 // does not describe v1's shape. Project therefore assembles the three parts
 // into one document, runs the chain over those bytes, and re-splits the
-// result back into three parts (D4's own decomposition). Typed decode never
-// happens inside this package: the one strict, DisallowUnknownFields decode
+// result back into three parts. Typed decode never happens inside this
+// package: the one strict, DisallowUnknownFields decode
 // (resume.DecodeParts) happens exactly once, at the boundary, in
 // resume.Store's projectRow, after Project has already lifted the parts.
 //
 // Deliberate asymmetry between the read path and the wire boundary: an
 // identity conversion (from == to) is a byte-for-byte passthrough that runs
-// NO validator, so projecting a row already at the current version never
-// turns a read into a validation pass -- D18 keeps reads pure and cheap, and
-// D16 puts document validation on the write path, where internal/resume owns
-// it. AcceptWire and EmitWire validate unconditionally, including at the
+// no validator, so projecting a row already at the current version never
+// turns a read into a validation pass. internal/resume validates documents on
+// writes. AcceptWire and EmitWire validate unconditionally, including at the
 // current version, because there the bytes come from, or go to, a client.
 //
-// D12(ii) binding for P2B: every write path must persist the FULL document
-// through internal/resume's codec (AssembleCanonical/the package-private
-// encodeParts) on every save -- never a granular jsonb_set-style PATCH. A
-// granular patch would let old-shape content re-enter storage through a
-// column the backfill CAS (WHERE schema_version=$old AND
-// revision=$observed) never re-checks, silently undoing a completed
-// backfill. This sentence is P2B's binding-in-writing condition from D12;
-// it is recorded here, verbatim in spirit, because this package is what a
-// violation would corrupt.
+// Every write must persist the full document through internal/resume's codec.
+// A granular jsonb_set-style write could restore an old-shape part after a
+// backfill and violate the row's declared schema version.
 package docmigrate
 
 import (
@@ -62,15 +50,14 @@ import (
 )
 
 // CurrentVersion is the schema version every stored resume is projected to
-// on read (D18) and persisted at on write (D19). It moves only when a second
-// document version is released in packages/schema, which is append-only and
-// requires an adjacent Up/Down pair plus a deliberate change to the declared
-// sets below.
+// on read and used for writes. It moves only when another document version
+// is released in packages/schema. Releases are append-only and require an
+// adjacent Up/Down pair plus a deliberate change to the declared sets below.
 const CurrentVersion int32 = 1
 
 // acceptedVersions and emittedVersions are the production declaration: the
 // document versions this server accepts from clients, and the versions it
-// will emit back. They are DISTINCT sets on purpose -- a release can start
+// will emit back. They are distinct sets on purpose -- a release can start
 // accepting a new version before it emits it, or keep accepting an old one
 // after it stops emitting it -- and they are written out explicitly rather
 // than derived from the released registry, because "released" is a fact
@@ -90,10 +77,8 @@ func AcceptedVersions() []int32 { return slices.Clone(acceptedVersions) }
 // ascending. The returned slice is a copy.
 func EmittedVersions() []int32 { return slices.Clone(emittedVersions) }
 
-// Fail-closed failure modes. They are exported sentinels because P2B has to
-// tell them apart at the HTTP boundary: an unsupported or invalid wire
-// document is the client's fault, while a missing converter or an unknown
-// stored version is a server misconfiguration.
+// Fail-closed failure modes are exported so an HTTP boundary can distinguish
+// a client wire error from a missing converter or unknown stored version.
 var (
 	// ErrUnsupportedVersion means the wire version is not in this
 	// projector's declared accepted (AcceptWire) or emitted (EmitWire) set.
@@ -118,14 +103,14 @@ var (
 )
 
 // ConvertFunc converts one FULL canonical document by exactly one version.
-// It receives and returns whole-document bytes (D13), and is responsible for
+// It receives and returns whole-document bytes and is responsible for
 // setting the document's own schemaVersion to its target -- the target
 // schema's `const` catches a converter that forgets.
 type ConvertFunc func(doc json.RawMessage) (json.RawMessage, error)
 
 // AdjacentConverters is keyed by its LOWER version N and supplies N -> N+1
 // (Up) and N+1 -> N (Down). Both functions are mandatory for every
-// registered pair (D13): a version that can be read but not written back, or
+// registered pair: a version that can be read but not written back, or
 // vice versa, is a one-way door.
 type AdjacentConverters struct {
 	Up   ConvertFunc
@@ -246,9 +231,9 @@ func cloneMap[V any](m map[int32]V) map[int32]V {
 	return out
 }
 
-// NewIdentityProjector returns the projector aboutme runs today: the real
-// released validators, the production accepted/emitted declaration, and no
-// adjacent pairs, because exactly one version is released (D19). Every
+// NewIdentityProjector returns the production projector: the released
+// validators, the accepted/emitted declaration, and no
+// adjacent pairs, because exactly one version is released. Every
 // stored row is already at CurrentVersion, so Project is a pure passthrough.
 // The returned projector is immutable and shared.
 func NewIdentityProjector() *Projector { return identityProjector }
@@ -277,7 +262,7 @@ func (p *Projector) CurrentVersion() int32 { return p.current }
 // not valid JSON, or output invalid for its target schema.
 //
 // from == to is the identity: the exact input bytes come back, with no
-// validator run. That is what keeps a projected read pure and cheap (D18);
+// validator run. That keeps a projected read pure and cheap;
 // the wire boundary validates separately and unconditionally.
 //
 // Convert is NOT gated on the accepted/emitted declarations -- those gate
@@ -412,7 +397,7 @@ func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessag
 // returning the three current-version parts (still undecoded
 // json.RawMessage; the caller's strict decode happens afterwards).
 //
-// It is PURE (D18): it never touches the database, and calling it twice on
+// It is pure: it never touches the database, and calling it twice on
 // the same input always produces the same output. A row already at the
 // current version short-circuits to a byte-for-byte passthrough. A row at a
 // version this build has no schema for fails closed -- never a silent
@@ -437,7 +422,7 @@ func (p *Projector) Project(personalDetails, content, customization json.RawMess
 }
 
 // documentKeys are the only top-level keys a canonical document has: the
-// three stored jsonb parts plus the schema version (D4). The set is fixed
+// three stored jsonb parts plus the schema version. The set is fixed
 // across versions because it is the storage decomposition itself, not a
 // property of any one document shape.
 var documentKeys = []string{"schemaVersion", "personalDetails", "content", "customization"}
@@ -469,7 +454,7 @@ func assembleDocument(personalDetails, content, customization json.RawMessage, v
 }
 
 // splitDocument decomposes a converted document back into the three stored
-// parts (D4). It fails closed unless the document has exactly the four
+// parts. It fails closed unless the document has exactly the four
 // canonical top-level keys and its own schemaVersion equals wantVersion: a
 // converter that invents a fifth top-level key has produced something this
 // storage layout cannot hold, and one that leaves schemaVersion behind has
@@ -512,10 +497,9 @@ func splitDocument(doc json.RawMessage, wantVersion int32) (pd, c, cu json.RawMe
 }
 
 // releasedValidators compiles one ValidateFunc per released schema version,
-// exactly once, at package init -- never lazily and never per call, matching
-// internal/resume's own D1(c) posture. A compilation failure is a hard
-// startup failure: a server that cannot validate a released document shape
-// must not start.
+// exactly once, at package init -- never lazily and never per call. A
+// compilation failure is a hard startup failure: a server that cannot
+// validate a released document shape must not start.
 var releasedValidators = mustReleasedValidators()
 
 func mustReleasedValidators() map[int32]ValidateFunc {
@@ -540,10 +524,10 @@ func mustReleasedValidators() map[int32]ValidateFunc {
 	return out
 }
 
-// newSchemaValidator compiles raw into a ValidateFunc with the same posture
-// internal/resume's D1 compile uses: format assertion on (matching ajv's
-// configuration in packages/schema) and an EMPTY scheme map for the URL
-// loader, so resolving any external $ref -- network or filesystem -- can
+// newSchemaValidator compiles raw into a ValidateFunc with format assertion
+// enabled (matching ajv's configuration in packages/schema) and an empty
+// scheme map for the URL loader. Resolving any external $ref -- network or
+// filesystem -- can
 // never succeed. The schema is registered under its own $id, so its internal
 // $refs resolve exactly as they do in packages/schema.
 func newSchemaValidator(raw []byte) (ValidateFunc, error) {

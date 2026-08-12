@@ -1,14 +1,11 @@
 package auth_test
 
-// start_test.go covers P1.1 items 1 and 2 (docs/plans/phase-1-deferred.md)
-// for the /api/v1/auth/{provider}/start surface:
+// start_test.go covers the /api/v1/auth/{provider}/start surface:
 //
-//   - item 2: link/reauth start is a CSRF-protected POST returning the
-//     authorize URL in the response envelope, replacing DD-C16's same-site
-//     check on a GET. The plain login GET is untouched.
-//   - item 1: auth-route rate limits (composite account+IP), opportunistic
-//     reaping of expired oauth_transactions on the request path, and a
-//     structured log record for every /start rejection.
+//   - Link and reauthentication starts are CSRF-protected POST requests
+//     that return the authorize URL. Login remains a GET.
+//   - Auth-route rate limits use composite account and IP keys. Starts also
+//     reap expired oauth_transactions and log each rejection.
 
 import (
 	"context"
@@ -55,11 +52,9 @@ func doStartPOST(t *testing.T, handler http.Handler, path string, sess store.Ses
 	return doJSON(t, handler, http.MethodPost, path, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 }
 
-// ============================================================================
-// P1.1 item 2: link/reauth start is a CSRF-protected POST
-// ============================================================================
+// Link and reauthentication starts are CSRF-protected POST requests.
 
-// TestStartPOST_Link_ReturnsAuthorizeURL is item 2's happy path: an
+// TestStartPOST_Link_ReturnsAuthorizeURL proves an
 // authenticated, CSRF-validated POST creates the link transaction and
 // hands the caller the authorize URL to navigate to, instead of
 // redirecting the browser itself.
@@ -99,8 +94,7 @@ func TestStartPOST_Link_ReturnsAuthorizeURL(t *testing.T) {
 // TestStartPOST_Reauth_NeedsNoRecentReauth proves purpose=reauth is still
 // reachable from a session whose own reauth window has lapsed -- its
 // entire point is to re-establish recency, so gating it on recency would
-// be circular. DD-C16's same-site check was what made that safe on a GET;
-// the CSRF chain is what makes it safe now.
+// be circular. The CSRF chain protects the POST.
 func TestStartPOST_Reauth_NeedsNoRecentReauth(t *testing.T) {
 	t.Parallel()
 
@@ -118,11 +112,9 @@ func TestStartPOST_Reauth_NeedsNoRecentReauth(t *testing.T) {
 	decodeStartEnvelope(t, resp)
 }
 
-// TestStartPOST_Link_RejectsStaleReauth is DD-C11/DD-C17's recent-reauth
-// gate, kept at /start (never deferred to /callback) so a stale caller
-// never even creates a transaction row -- now answered with the JSON API's
-// own 403 reauth_required rather than DD-C17's redirect, because a POST
-// from the settings page is an API call, not a top-level navigation.
+// TestStartPOST_Link_RejectsStaleReauth pins the recent-reauth gate at
+// /start so a stale caller never creates a transaction row. The API returns
+// 403 reauth_required because the settings page makes a fetch request.
 func TestStartPOST_Link_RejectsStaleReauth(t *testing.T) {
 	t.Parallel()
 
@@ -146,11 +138,8 @@ func TestStartPOST_Link_RejectsStaleReauth(t *testing.T) {
 	}
 }
 
-// TestStartPOST_RejectsWithoutCSRFOrSession is item 2's core claim: the
-// link start now rides the existing CSRF chain, so every way a cross-site
-// page could drive it -- no token, another session's token, a foreign
-// Origin, no session at all -- is rejected by machinery already proven
-// elsewhere, with no second authorization primitive of its own.
+// TestStartPOST_RejectsWithoutCSRFOrSession covers missing or mismatched CSRF,
+// foreign Origin, and missing session through the shared middleware chain.
 func TestStartPOST_RejectsWithoutCSRFOrSession(t *testing.T) {
 	t.Parallel()
 
@@ -233,12 +222,9 @@ func TestStartPOST_RejectsUnsupportedPurpose(t *testing.T) {
 }
 
 // TestStartGET_LinkAndReauthPurposesUnavailable proves the GET no longer
-// serves link/reauth AT ALL -- for anyone, same-site or not. This is
-// strictly stronger than DD-C16's same-site check it replaces: the
-// same-origin row below is the exact request DD-C16 used to ADMIT, and it
-// is now refused too, so the cross-site chain DD-C16 existed to break
-// (forced reauth refresh, then forced link) cannot be assembled from GETs
-// regardless of what headers a browser does or does not send.
+// serves link or reauthentication for any caller, regardless of same-site
+// headers. This prevents a cross-site chain of forced reauthentication
+// followed by forced linking from being assembled from GET requests.
 func TestStartGET_LinkAndReauthPurposesUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -283,8 +269,8 @@ func TestStartGET_LinkAndReauthPurposesUnavailable(t *testing.T) {
 	}
 }
 
-// TestStartGET_LoginUnaffected is item 2's explicit carve-out: the plain
-// login start stays exactly as it was -- a bare GET, reachable from
+// TestStartGET_LoginUnaffected proves the public login start remains a bare
+// GET, reachable from
 // anywhere (a bookmark, an email, another site's "continue with aboutme"
 // button), with no session, CSRF, or same-site requirement of any kind.
 func TestStartGET_LoginUnaffected(t *testing.T) {
@@ -311,14 +297,10 @@ func TestStartGET_LoginUnaffected(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// P1.1 item 1: rate limit, reaper, rejection logging
-// ============================================================================
+// Rate limiting, expired-transaction reaping, and rejection logging.
 
 // TestStart_RateLimited proves the start routes carry their OWN limit,
-// far tighter than the 300/min whole-server default they used to be
-// bounded by alone -- an unauthenticated route that writes a database row
-// per request needs one.
+// because each unauthenticated start request writes a database row.
 func TestStart_RateLimited(t *testing.T) {
 	t.Parallel()
 
@@ -374,9 +356,7 @@ func TestStart_RateLimitKeyedOnAccountAndIP(t *testing.T) {
 }
 
 // TestStart_ReapsExpiredOAuthTransactions proves the request-path reaper:
-// an unauthenticated route that writes one row per request, with no
-// scheduled cleanup job in existence yet (that is P8-priv's), must clear
-// its own expired rows as it goes.
+// the route clears its own expired rows without relying on a scheduled job.
 func TestStart_ReapsExpiredOAuthTransactions(t *testing.T) {
 	t.Parallel()
 
@@ -398,12 +378,8 @@ func TestStart_ReapsExpiredOAuthTransactions(t *testing.T) {
 		t.Fatalf("Begin() live transaction error = %v", err)
 	}
 
-	// No pre-check that the expired row is still present: this package's
-	// tests run in parallel against one database, and a start from ANOTHER
-	// test may legitimately reap it first -- that is the feature working,
-	// not a broken setup. The assertion below stays sound either way,
-	// because nothing else in the system deletes an oauth_transactions row:
-	// if the reaper were broken, the row could only still be there.
+	// Another parallel start may reap the expired row first. The final absence
+	// assertion remains valid either way.
 
 	resp := doGet(t, handler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
 	if resp.StatusCode != http.StatusFound {
@@ -418,11 +394,8 @@ func TestStart_ReapsExpiredOAuthTransactions(t *testing.T) {
 	}
 }
 
-// TestStart_RejectionsAreLogged closes the third half of item 1: every
-// /start rejection now leaves a structured record naming the provider and
-// a typed reason (reason.go's closed vocabulary). Before this, a /start
-// rejection was invisible except as a bare status code in the access log
-// -- an operator could see that link attempts were failing but never why.
+// TestStart_RejectionsAreLogged proves every /start rejection records the
+// provider and a typed reason from reason.go's closed vocabulary.
 func TestStart_RejectionsAreLogged(t *testing.T) {
 	t.Parallel()
 

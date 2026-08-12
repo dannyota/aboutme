@@ -1,13 +1,4 @@
-// Blind adversarial suite B (Phase 2A, Task 10) -- the pure half.
-//
-// Every case here is derived from written contracts only: design spec §3
-// ("Doc-shape migrations", "Wire-version compatibility"), decisions D4, D12,
-// D13, D16, D18, D19, Task 8's Interfaces block, and the exported API as
-// reported by `go doc ./internal/resume/docmigrate`. No implementation body in
-// internal/resume, internal/resume/docmigrate, or internal/store was read
-// before these tests were written and first run.
-//
-// This file owns the matrix row `TestWireConverters_BothDirectionsFailClosed`:
+// This pure suite covers `TestWireConverters_BothDirectionsFailClosed`:
 // synthetic v1<->v2(<->v3) conversion in both directions, old-client
 // preparation, down-emission, source/target validation, and every
 // missing-path arm. The live-database rows live in the sibling package's
@@ -65,7 +56,7 @@ func suiteBPersonalDetailsOf(m map[string]any) (map[string]any, error) {
 
 // suiteBValidatorFor builds a ValidateFunc for one synthetic version. calls,
 // when non-nil, counts every invocation so a test can prove a validator was
-// NOT run (the identity passthrough, D18).
+// not run for the identity passthrough.
 func suiteBValidatorFor(version int32, calls *atomic.Int64) docmigrate.ValidateFunc {
 	return func(doc json.RawMessage) error {
 		if calls != nil {
@@ -168,7 +159,7 @@ func suiteBDocAt(t *testing.T, v int32) json.RawMessage {
 }
 
 // suiteBSplit decomposes a whole document into the three stored jsonb parts,
-// dropping schemaVersion exactly as D4 requires of the stored columns.
+// dropping schemaVersion as the stored columns require.
 func suiteBSplit(t *testing.T, doc json.RawMessage) (pd, c, cu json.RawMessage) {
 	t.Helper()
 	m, err := suiteBDecodeDoc(doc)
@@ -222,10 +213,10 @@ func suiteBNewProjector(t *testing.T, pairs map[int32]docmigrate.AdjacentConvert
 }
 
 // TestSuiteB_NewProjector_FailsClosedOnIncoherentConfig covers every
-// constructor arm Task 8 declares: "a pair missing Up or Down, a pair or
+// constructor arm: a pair missing Up or Down, a pair or
 // declared version with no validator, an empty or duplicated declared set, a
 // version below 1, or a current version that is not itself both accepted and
-// emitted" (D13/D19).
+// emitted.
 func TestSuiteB_NewProjector_FailsClosedOnIncoherentConfig(t *testing.T) {
 	full := func() map[int32]docmigrate.AdjacentConverters {
 		return map[int32]docmigrate.AdjacentConverters{1: suiteBPair(1)}
@@ -382,7 +373,7 @@ func TestSuiteB_NewProjector_CopiesConfiguration(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Convert_WalksBothDirections is D13's core obligation: each
+// TestSuiteB_Convert_WalksBothDirections proves each
 // adjacent pair is exercised Up and Down, single-step and multi-step, and
 // every step validates its source and its output.
 func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
@@ -414,8 +405,8 @@ func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
 			if invalid := suiteBValidatorFor(tc.to, nil)(got); invalid != nil {
 				t.Fatalf("Convert(%d -> %d) output is not valid at v%d: %v", tc.from, tc.to, tc.to, invalid)
 			}
-			// Source + one validation per step (D13: "every step validates
-			// both its source and its output"). A walk that validated only
+			// Source plus one validation per step proves every step validates
+			// both its source and its output. A walk that validated only
 			// the endpoints would let a broken middle converter through.
 			steps := tc.to - tc.from
 			if steps < 0 {
@@ -440,7 +431,7 @@ func TestSuiteB_Convert_WalksBothDirections(t *testing.T) {
 
 // TestSuiteB_Convert_IdentityIsBytewisePassthroughWithNoValidator pins the
 // documented asymmetry: from == to returns the exact input bytes and runs NO
-// validator, which is what keeps a projected read pure and cheap (D18).
+// validator, which keeps a projected read pure and cheap.
 func TestSuiteB_Convert_IdentityIsBytewisePassthroughWithNoValidator(t *testing.T) {
 	var calls atomic.Int64
 	p := suiteBNewProjector(t,
@@ -566,8 +557,8 @@ func TestSuiteB_Convert_FailsClosed(t *testing.T) {
 }
 
 // TestSuiteB_AcceptWire_And_EmitWire_FailClosed is the transport-agnostic
-// boundary P2B consumes: old-client preparation, down-emission, and the
-// declaration gate. "What the server accepts is a declaration, not a
+// boundary an HTTP layer consumes: old-client preparation, down-emission, and
+// the declaration gate. "What the server accepts is a declaration, not a
 // capability" -- an undeclared version must fail even when the chain could
 // convert it.
 func TestSuiteB_AcceptWire_And_EmitWire_FailClosed(t *testing.T) {
@@ -720,8 +711,8 @@ func TestSuiteB_EmitWire_LossyDownConversionFailsClosed(t *testing.T) {
 	}
 }
 
-// TestSuiteB_WireRoundTripPreservesV1Fields is Task 8 Step 2's "round-trip
-// preservation of all v1 fields": an old client's document, accepted at v1 and
+// TestSuiteB_WireRoundTripPreservesV1Fields proves round-trip preservation of
+// all v1 fields: an old client's document, accepted at v1 and
 // emitted back at v1, comes back unchanged.
 func TestSuiteB_WireRoundTripPreservesV1Fields(t *testing.T) {
 	p := suiteBNewProjector(t,
@@ -748,8 +739,8 @@ func TestSuiteB_WireRoundTripPreservesV1Fields(t *testing.T) {
 
 // TestSuiteB_DeclaredVersionSlicesAreCopies pins "Callers receive copies so
 // they cannot mutate the production declaration" for the two package-level
-// declarations, and pins the D19 shape: with exactly one released version both
-// sets are {CurrentVersion}.
+// declarations. With exactly one released version, both sets are
+// {CurrentVersion}.
 func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -789,8 +780,8 @@ func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 	}
 }
 
-// TestSuiteB_IdentityProjector_ProductionDeclarations pins what aboutme runs
-// today: no adjacent pairs, every stored row already current, projection a
+// TestSuiteB_IdentityProjector_ProductionDeclarations pins the production
+// configuration: no adjacent pairs, every stored row already current, projection a
 // pure passthrough, and any other stored version fails closed.
 func TestSuiteB_IdentityProjector_ProductionDeclarations(t *testing.T) {
 	p := docmigrate.NewIdentityProjector()
@@ -828,9 +819,9 @@ func TestSuiteB_IdentityProjector_ProductionDeclarations(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Project_IsPureAndDeterministic pins D18's purity claim at the
+// TestSuiteB_Project_IsPureAndDeterministic pins purity at the
 // function level: same input, same output, every time, with no mutation of the
-// caller's byte slices and no schemaVersion key leaking into the parts (D4).
+// caller's byte slices and no schemaVersion key leaking into the parts.
 func TestSuiteB_Project_IsPureAndDeterministic(t *testing.T) {
 	var calls atomic.Int64
 	p := suiteBNewProjector(t,

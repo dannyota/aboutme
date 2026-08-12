@@ -1,22 +1,8 @@
-// Package auth_test: independent, spec-derived adversarial tests for
-// SessionManager (task-7-brief.md, AC-AUTH-004 "Session rotation >24h is
-// atomic with grace interval"). Originally authored independently, from
-// task-7-brief.md, docs/specs/aboutme-design.md §3's Sessions table, and
-// apps/server/sql/schema.sql's sessions table alone -- at derivation time,
-// `ls apps/server/internal/auth` showed only transaction.go,
-// transaction_test.go, transaction_adversarial_test.go, cookie.go,
-// cookie_test.go; session.go/session_test.go/export_test.go did not exist
-// and were never read. Reconciled against the landed implementation
-// (commit d30b618, merged as 14d37b7) only for its two ADAPT-marked
-// guesses and one predicted (and confirmed) helper-name collision -- see
-// notes.md's integration report for exactly what changed and why.
-//
-// Harness reuse: requireTestDatabaseURL, newTestQueries, createTestUser
-// (transaction_test.go); rowQuerier, newRowInspectorPool, randomHandle
-// (transaction_adversarial_test.go); sessionTokenHash (session_test.go,
-// see its own reconciliation note below) already exist in this package
-// and are reused here rather than duplicated, matching the precedent set
-// by task-2-adversarial/transaction_adversarial_test.go.
+// These adversarial tests prove AC-AUTH-004: one concurrent rotation winner,
+// a bounded predecessor grace interval, inherited absolute expiry and recent
+// reauthentication, and indistinguishable invalid-session outcomes. Row-level
+// queries verify the compare-and-swap and lineage state that black-box return
+// values alone cannot prove. See docs/adr/0015-session-rotation-delivery.md.
 package auth_test
 
 import (
@@ -35,8 +21,7 @@ import (
 
 // ---- mirrored constants -------------------------------------------------
 //
-// These mirror auth's unexported constants (task-7-brief.md's "Produces"
-// section) byte-for-byte. Redeclared here, exactly like
+// These mirror auth's unexported lifecycle constants. Redeclared here, like
 // transaction_adversarial_test.go's txTTL mirrors oauthTxTTL, because this
 // file is black-box (package auth_test) and cannot reference an
 // unexported constant of package auth directly.
@@ -52,65 +37,24 @@ const (
 
 // ---- harness --------------------------------------------------------------
 
-// newTestSessionManager matches, verbatim, the helper-call shape
-// task-7-brief.md's Step 2 sample code uses (`newTestSessionManager(t,
-// clock.Now)`). It opens its own store.Queries via newTestQueries
-// (transaction_test.go) and wraps it with the injected clock.
-//
-// ADAPT reconciliation (clock seam): confirmed, not a guess anymore.
-// export_test.go's own doc comment explains the seam is deliberately an
-// export_test.go-only constructor rather than an exported production one
-// (task-2-report.md's ledger had flagged transaction.go's
-// NewTransactionStoreForTest -- an exported ForTest constructor in
-// transaction.go itself -- as a minor; this is that fix applied to
-// SessionManager from the start). The name and signature guessed here,
-// auth.NewSessionManagerForTest(q *store.Queries, now func() time.Time)
-// *SessionManager, is byte-for-byte what export_test.go defines -- no
-// change needed. session_test.go itself never defines a same-named
-// wrapper (every one of its tests calls auth.NewSessionManager(q) or
-// auth.NewSessionManagerForTest(q, clk.Now) inline), so the
-// newTestSessionManager/newTestSessionManagerWithQueries collision this
-// file's derivation notes flagged as near-certain did not materialize;
-// both helpers below are kept as originally written.
+// newTestSessionManager builds a manager with an injected clock.
 func newTestSessionManager(t *testing.T, now func() time.Time) *auth.SessionManager {
 	t.Helper()
 	return newTestSessionManagerWithQueries(t, newTestQueries(t), now)
 }
 
-// newTestSessionManagerWithQueries is the other half of
-// newTestSessionManager, for tests that also need the same q for
-// createTestUser or a row-level assertion (most of this file): it lets
-// the SessionManager and those other calls share one store.Queries/pool
-// instead of each test opening a second one via newTestSessionManager.
+// newTestSessionManagerWithQueries shares q with row-level assertions.
 func newTestSessionManagerWithQueries(t *testing.T, q *store.Queries, now func() time.Time) *auth.SessionManager {
 	t.Helper()
 	return auth.NewSessionManagerForTest(q, now)
 }
 
-// ADAPT reconciliation (token-hash encoding): confirmed, not a guess
-// anymore -- session_test.go already defines its own sessionTokenHash
-// (raw string) []byte doing exactly sha256.Sum256([]byte(raw)); return
-// sum[:], the same reasoning and the same byte-for-byte implementation
-// this file originally guessed independently. Since both files compile
-// into the same package auth_test, this file's own copy was deleted (a
-// duplicate declaration, not a rename) in favor of reusing theirs; every
-// call site below is unchanged, just now resolving to session_test.go's
-// definition instead of a local one.
-
 // ---- row-state assertion helpers ------------------------------------------
 //
-// store.Queries (Task 1's committed querier.go, confirmed via
-// apps/server/internal/store/querier.go before writing this file) exposes
-// only BeginSessionRotation for the sessions table -- no
-// CreateSession/GetSessionByTokenHash/TouchLastSeenAt/RevokeSession
-// accessors exist yet for a black-box test to call (the brief notes the
-// implementer will append those). Every row-level assertion below goes
-// straight at the table with plain pgx via the shared rowQuerier
-// interface and newRowInspectorPool (both defined in
-// transaction_adversarial_test.go), per the task's own guidance to prefer
-// that over assuming store methods exist.
+// The tests query rows directly when the typed store surface does not expose the
+// state needed to prove concurrency or expiry behavior.
 
-// sessionRowCountForUser reports how many sessions rows exist for userID
+// sessionRowCountForUser returns how many sessions rows exist for userID
 // -- the concurrent-rotation test's core row-level assertion (want
 // exactly 2: predecessor + the one successor, never up to 20).
 func sessionRowCountForUser(ctx context.Context, t *testing.T, db rowQuerier, userID uuid.UUID) int {
@@ -154,14 +98,8 @@ func sessionRowAbsoluteExpiresAt(ctx context.Context, t *testing.T, db rowQuerie
 	return ts
 }
 
-// setSessionRowLastSeenAt directly patches last_seen_at, bypassing
-// Authenticate's own throttled write path entirely. Used to isolate the
-// absolute-expiry tests from the idle-expiry check: calling Authenticate
-// repeatedly to "naturally" keep last_seen_at fresh across a 90+ day
-// span would also repeatedly re-enter the rotation algorithm (every 24h),
-// confounding the one property under test. A direct column patch is the
-// same "go straight at the table" approach as the row-state helpers
-// above, applied to setup instead of assertion.
+// setSessionRowLastSeenAt isolates absolute expiry from idle expiry without
+// triggering authentication or rotation.
 func setSessionRowLastSeenAt(ctx context.Context, t *testing.T, pool *store.Pool, id uuid.UUID, ts time.Time) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `UPDATE sessions SET last_seen_at = $2 WHERE id = $1`, id, ts); err != nil {
@@ -169,28 +107,14 @@ func setSessionRowLastSeenAt(ctx context.Context, t *testing.T, pool *store.Pool
 	}
 }
 
-// ---- Step 2: the named concurrent-rotation adversarial test ---------------
+// ---- concurrent rotation --------------------------------------------------
 
-// TestAuthenticate_ConcurrentRotation_MintsExactlyOneSuccessor is
-// task-7-brief.md's Step 2 test, reproduced in the exact shape the brief
-// gives: 20 goroutines race Authenticate against one already-24h+-old
-// session's raw token. Every one must succeed (the old token is still
-// valid within the grace window); exactly one must have won the rotation
-// CAS and returned a new (rotatedToken, successor) pair; the rest must
-// observe that successor and mint nothing.
-//
-// Failure mode this catches: a naive implementation either (a) mints up
-// to 20 successor rows (no atomic CAS, or a SELECT-then-INSERT race), or
-// (b) 401s the 19 losers instead of transparently authenticating them
-// against the winner's row -- both are explicitly called out as the wrong
-// naive outcomes in task-7-brief.md's Step 2 commentary. Must be
-// deterministic under `-race -count=20`, not just "usually" -- a CAS that
-// is not actually atomic is a global-constraint violation (flaky = broken),
-// not a candidate for a retry loop in this test.
+// TestAuthenticate_ConcurrentRotation_MintsExactlyOneSuccessor races 20 calls.
+// Every call authenticates, but one compare-and-swap winner mints a successor.
 func TestAuthenticate_ConcurrentRotation_MintsExactlyOneSuccessor(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	userID := createTestUser(t, newTestQueries(t))
-	m := newTestSessionManager(t, clock.Now) // matches task-7-brief.md's Step 2 sample call shape verbatim
+	m := newTestSessionManager(t, clock.Now) // All racing calls share one manager and clock.
 	ctx := context.Background()
 	pool := newRowInspectorPool(t)
 
@@ -236,31 +160,14 @@ func TestAuthenticate_ConcurrentRotation_MintsExactlyOneSuccessor(t *testing.T) 
 		t.Fatalf("exactly one goroutine should have won rotation and returned a new token, got %d", gotSuccessors)
 	}
 
-	// Reconciliation note (binding ruling from the coordinator, post-
-	// integration): a stronger assertion originally lived here --  every
-	// one of the 20 results' sess.ID had to be identical, reasoned from
-	// the brief's Authenticate doc comment ("the successor, if this call
-	// triggered *or observed* a rotation"). The landed session.go
-	// deliberately does not do this: a losing/later caller presenting the
-	// predecessor's own token authenticates "against the existing row"
-	// (the brief's own rotation-algorithm prose, and session.go's
-	// Authenticate doc comment and TestAuthenticate_
-	// RotatesAfter24h_SequentialSingleRequest both confirm this -- "still
-	// authenticate -- against itself, not the successor"). The
-	// coordinator's ruling is that the loser's read-race mechanism
-	// (including what it returns) is the implementation's choice; this
-	// suite pins outcomes only: all 20 calls succeed, exactly one of them
-	// mints a successor, and exactly 2 rows exist afterward. The winner's
-	// own returned session id is still checked below, since *that* is
-	// pinned by the algorithm text ("this call won: insert a successor
-	// session ... return the successor").
+	// A losing call may return the predecessor while it remains valid. The
+	// durable constraints are that all calls authenticate, only one token is
+	// minted, exactly two rows remain, and the winner returns the successor.
 	if winnerSessID == origSess.ID {
 		t.Error("the winning call's returned session id == predecessor id, want the new successor's id (rotation did not actually happen)")
 	}
 
-	// Row-level assertion the brief calls for explicitly: query sessions
-	// WHERE user_id = userID -- expect exactly 2 rows total (original +
-	// the one successor), not up to 20.
+	// The row count proves the race created one successor, not up to 20.
 	if got := sessionRowCountForUser(ctx, t, pool, userID); got != 2 {
 		t.Errorf("sessions row count for user = %d, want exactly 2 (predecessor + exactly one successor)", got)
 	}
@@ -279,9 +186,9 @@ func TestAuthenticate_ConcurrentRotation_MintsExactlyOneSuccessor(t *testing.T) 
 	}
 }
 
-// ---- Step 3: the six-row adversarial table, verbatim in intent -----------
+// ---- expiry, activity, and revocation -------------------------------------
 
-// TestAuthenticate_RejectsIdleExpired is Step 3 row 1: a session that
+// TestAuthenticate_RejectsIdleExpired proves a session that
 // hasn't been touched in 31 days (idleTimeout is 30d) must be rejected,
 // with no intervening Authenticate calls to reset the idle clock.
 func TestAuthenticate_RejectsIdleExpired(t *testing.T) {
@@ -303,7 +210,7 @@ func TestAuthenticate_RejectsIdleExpired(t *testing.T) {
 	}
 }
 
-// TestAuthenticate_RejectsAbsoluteExpired is Step 3 row 2: 91 days past
+// TestAuthenticate_RejectsAbsoluteExpired proves 91 days past
 // created_at must reject even with a *recent* last_seen_at, proving
 // absolute expiry is a hard ceiling independent of activity -- not just
 // "idle expiry with a longer window." last_seen_at is patched directly
@@ -334,8 +241,8 @@ func TestAuthenticate_RejectsAbsoluteExpired(t *testing.T) {
 	}
 }
 
-// TestAuthenticate_RotationDoesNotExtendAbsoluteExpiry is Step 3 row 3:
-// rotate once at 25h, then advance to just past the *original*
+// TestAuthenticate_RotationDoesNotExtendAbsoluteExpiry rotates at 25 hours,
+// then advances to just past the original
 // absolute_expires_at -- the whole lineage (predecessor and successor
 // alike) must die together, proving rotation never pushes the absolute
 // ceiling out. This is the core "anchored to the original login" claim in
@@ -386,22 +293,13 @@ func TestAuthenticate_RotationDoesNotExtendAbsoluteExpiry(t *testing.T) {
 	}
 }
 
-// TestAuthenticate_OldTokenRejectedAfterGraceWindow is Step 3 row 4: once
+// TestAuthenticate_OldTokenRejectedAfterGraceWindow proves that once
 // rotationGrace has elapsed, the predecessor's raw token must stop
 // authenticating -- the successor's token must still work (sanity:
 // rejection isn't just "everything is broken").
 //
-// Amended for P1.1 item 4 (docs/plans/phase-1-deferred.md): the window
-// this test walks past now starts at the successor's FIRST USE, not at
-// the rotation itself, so the successor's token is presented once before
-// the clock is advanced. The property under test is unchanged -- a
-// superseded predecessor dies exactly rotationGrace after the successor
-// takes over, and never lingers beyond it. What changed is only WHEN that
-// clock starts: a successor whose single token delivery was lost has
-// never taken over, and killing the predecessor on a timer the client
-// never learned about is what orphaned whole sessions (see
-// TestAuthenticate_UndeliveredSuccessor_PredecessorSurvivesPastGrace,
-// session_test.go, for that companion case).
+// The grace interval starts on the successor's first use. An undelivered and
+// therefore unused successor must not orphan the predecessor.
 func TestAuthenticate_OldTokenRejectedAfterGraceWindow(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	q := newTestQueries(t)
@@ -423,8 +321,7 @@ func TestAuthenticate_OldTokenRejectedAfterGraceWindow(t *testing.T) {
 		t.Fatal("Authenticate() at 25h returned no rotatedToken, want rotation to have occurred")
 	}
 
-	// P1.1 item 4: first use of the successor is what starts the
-	// predecessor's grace countdown (see this test's own doc comment).
+	// First use of the successor starts the predecessor's grace countdown.
 	if _, _, err := m.Authenticate(ctx, rotatedToken); err != nil {
 		t.Fatalf("Authenticate(successor token) first use error = %v", err)
 	}
@@ -439,7 +336,7 @@ func TestAuthenticate_OldTokenRejectedAfterGraceWindow(t *testing.T) {
 	}
 }
 
-// TestAuthenticate_LastSeenAtThrottled is Step 3 row 5: two calls close
+// TestAuthenticate_LastSeenAtThrottled proves two calls close
 // together must not both write last_seen_at (throttle window is 1h). The
 // first call is placed 2h after Issue specifically so it *does* trigger a
 // write (otherwise "unchanged after the second call" would trivially hold
@@ -483,10 +380,9 @@ func TestAuthenticate_LastSeenAtThrottled(t *testing.T) {
 	}
 }
 
-// TestRevoke_IsImmediate_NoGraceWindow is Step 3 row 6: Revoke then
+// TestRevoke_IsImmediate_NoGraceWindow calls Revoke and then
 // Authenticate immediately (no clock advance at all) must already reject.
-// This is design decision 1's orthogonality claim: revoked_at and
-// rotation_grace_until must never be conflated, or a revoked session's
+// revoked_at and rotation_grace_until must remain independent, or a revoked session's
 // token would keep working for up to rotationGrace after the user thought
 // they'd logged out.
 func TestRevoke_IsImmediate_NoGraceWindow(t *testing.T) {
@@ -509,22 +405,12 @@ func TestRevoke_IsImmediate_NoGraceWindow(t *testing.T) {
 	}
 }
 
-// ---- strengthening: no-oracle, revoke-mid-grace, reauth boundary, fixation
+// ---- no-oracle, revoke-mid-grace, reauth boundary, and fixation ------------
 
-// TestAuthenticate_NoOracleAcrossFailureModes strengthens every failure
-// scenario above together, the same way
-// TestConsume_NoOracleAcrossFailureModes strengthens transaction_
-// adversarial_test.go's four required transaction tests: it is not
-// enough that each failure independently satisfies errors.Is(err,
-// ErrSessionInvalid); task-7-brief.md's own comment on ErrSessionInvalid
-// ("not found / revoked / idle-expired / absolute-expired -- one
-// sentinel, same no-oracle reasoning as ErrTransactionInvalid") is
-// explicit that the *text* must also be indistinguishable, or a caller
-// (or an attacker with error-message visibility) gets an oracle to learn
-// which of the four actually happened. A fmt.Errorf("...: %w", ...) wrap
-// that added scenario-specific context in only some branches would pass
-// every individual errors.Is check while still reopening exactly that
-// oracle.
+// TestAuthenticate_NoOracleAcrossFailureModes requires both sentinel identity
+// and exact error text to match across unknown, revoked, idle-expired,
+// absolute-expired, and grace-expired tokens. Scenario-specific wrapping would
+// otherwise expose an oracle while still passing errors.Is checks.
 func TestAuthenticate_NoOracleAcrossFailureModes(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ctx := context.Background()
@@ -605,8 +491,8 @@ func TestAuthenticate_NoOracleAcrossFailureModes(t *testing.T) {
 		if rotateErr != nil {
 			t.Fatalf("old-token-post-grace setup: rotating Authenticate() error: %v", rotateErr)
 		}
-		// P1.1 item 4: the predecessor's grace countdown starts at the
-		// successor's FIRST USE, not at the rotation, so the successor
+		// The predecessor's grace countdown starts at the successor's first use,
+		// not at rotation, so the successor
 		// must actually be used here or the predecessor would still be
 		// alive below -- deliberately, since an unused successor means
 		// its one-shot token delivery was lost.
@@ -635,18 +521,8 @@ func TestAuthenticate_NoOracleAcrossFailureModes(t *testing.T) {
 	}
 }
 
-// TestAuthenticate_RevokedMidGrace_PredecessorCannotAuthenticate
-// strengthens design decision 1's orthogonality claim
-// (rotation_grace_until and revoked_at are independent) into the one
-// combination the Step 3 table doesn't directly cover: a predecessor
-// that is *explicitly* revoked while still inside its own rotation grace
-// window must reject immediately, not stay valid until
-// rotation_grace_until passes. A bug that (incorrectly) treated "still in
-// grace" as an independent source of validity -- rather than checking
-// revoked_at unconditionally, before or in addition to the grace check --
-// would let a session the user explicitly revoked keep authenticating for
-// up to rotationGrace. The successor is asserted unaffected: revoking one
-// row in a lineage must not cascade to a sibling row.
+// TestAuthenticate_RevokedMidGrace_PredecessorCannotAuthenticate proves an
+// explicit revoke overrides open grace without revoking the successor.
 func TestAuthenticate_RevokedMidGrace_PredecessorCannotAuthenticate(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	q := newTestQueries(t)
@@ -688,14 +564,8 @@ func TestAuthenticate_RevokedMidGrace_PredecessorCannotAuthenticate(t *testing.T
 	}
 }
 
-// TestRequireRecentReauth_BoundaryAtExactly15Minutes pins the boundary
-// task-7-brief.md's doc comment states explicitly: "returns
-// ErrReauthRequired if now.Sub(sess.ReauthenticatedAt) > reauthWindow" --
-// strict greater-than, so exactly 15m since reauthenticated_at is still
-// within the window (inclusive), and only the instant after it is not.
-// RequireRecentReauth is a pure function (no DB, no SessionManager), so
-// this test needs neither TEST_DATABASE_URL nor a live session -- a bare
-// store.Session literal is enough.
+// TestRequireRecentReauth_BoundaryAtExactly15Minutes pins the strict
+// greater-than boundary without database state.
 func TestRequireRecentReauth_BoundaryAtExactly15Minutes(t *testing.T) {
 	base := testutil.Epoch
 
@@ -726,15 +596,8 @@ func TestRequireRecentReauth_BoundaryAtExactly15Minutes(t *testing.T) {
 	}
 }
 
-// TestIssue_AlwaysNewRow_FixationProperty pins Issue's doc comment
-// verbatim: "fixation defense: always used at login, never reuses an
-// existing row." Two Issue calls for the same user must produce two
-// distinct rows and two distinct raw tokens -- an implementation that
-// reused or updated an existing row in place (e.g. keyed by user_id, "one
-// active session per user") would defeat the fixation defense the
-// comment claims and would also break "log in from two devices," which
-// the sessions schema (no unique constraint on user_id) clearly allows
-// for.
+// TestIssue_AlwaysNewRow_FixationProperty proves each login gets a distinct
+// token and row, preserving fixation defense and multi-device sessions.
 func TestIssue_AlwaysNewRow_FixationProperty(t *testing.T) {
 	q := newTestQueries(t)
 	userID := createTestUser(t, q)

@@ -1,45 +1,11 @@
-// Store-layer aggregate validation for the resume document (design spec §3
-// "Relational constraints & store-layer invariants" / §5 sanitizer contract).
-//
-// resume.schema.json (JSON Schema) enforces everything expressible as a
-// per-value or single-object constraint. These four rules are NOT
-// expressible there, for the reasons documented at each rule's schema
-// $def/description:
-//
-//   1. Byte-accurate rich-text length. JSON Schema's `maxLength` counts
-//      Unicode code points, not bytes (see richText's description in
-//      resume.schema.json) — a code point can be up to 4 UTF-8 bytes, so no
-//      `maxLength` value can be both a tight AND a sound byte bound.
-//   2. The layout aggregate invariant: every `content` section key appears
-//      EXACTLY ONCE across `customization.layout.sections.main` +
-//      `.sidebar` combined. This spans two different top-level document
-//      fields (`content` and `customization`) — JSON Schema's `uniqueItems`
-//      only dedups within a single array and cannot compare against a
-//      sibling structure.
-//   3. Date range ordering (`start` <= `end`). A cross-field numeric
-//      comparison between two sibling object properties, which JSON
-//      Schema's declarative keyword set cannot express (see dateRange's
-//      description in resume.schema.json).
-//   4. Entry-id uniqueness across the WHOLE resume (AC-DOC-002). JSON
-//      Schema's `uniqueItems` only dedups within a single array; it cannot
-//      catch the same id reused across two different `content` sections
-//      (see content's description in resume.schema.json and
-//      fixtures/store/invalid-duplicate-entry-id.json).
-//
-// This file is the TypeScript half of that store layer; gen/go/store_validate.go
-// is the Go half — both apply the same four rules and are conformance-tested
-// against the same fixtures/store/*.json corpus (see test/store-validation.test.ts
-// and gen/go/store_validate_test.go). Neither half is generated: unlike
-// resume.schema.json's types, these rules have no JSON Schema representation
-// to generate FROM, so both are hand-written and kept in sync by that shared
-// fixture corpus, the same pattern gen/go/section.go already uses for its own
-// hand-written dispatch logic.
-//
-// Callers (apps/server's Go store layer, apps/web's autosave path) run
-// validateDocument on every write, per design spec §3: "The fully assembled
-// aggregate is validated on every write."
+// Aggregate validation that JSON Schema cannot express or the Go write boundary
+// does not execute: UTF-8 byte limits, cross-field placement and date rules,
+// resume-wide ID uniqueness, contact URL schemes, and photo-key traversal.
+// TypeScript and Go share fixtures so verdicts and issue order stay aligned.
+// See docs/design/data.md#bounds-and-invariants and
+// docs/design/security.md#untrusted-document-content.
 
-/** design spec §3 size bounds: ≤16 KB rich text per entry, byte-exact. */
+/** Rich-text limit in UTF-8 bytes; schema maxLength counts code points. */
 export const MAX_RICH_TEXT_BYTES = 16384;
 
 export interface ValidationIssue {
@@ -51,7 +17,7 @@ export interface ValidationIssue {
   message: string;
 }
 
-/** UTF-8 byte length of a string, computed the same way in every runtime (Node, browser, and — via len([]byte(s)) — Go's native string representation). */
+/** UTF-8 byte length across Node and browsers, matching Go string bytes. */
 export function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).length;
 }
@@ -76,22 +42,9 @@ export function validateRichTextByteLength(
   return [];
 }
 
-// The rich-text field(s) each sectionType's entries carry — mirrors
-// resume.schema.json's per-sectionType entry $defs (design spec §3's
-// entry-fields table). "language" has no rich-text field.
-//
-// Phase-gate review finding I1: a plain object literal like this is indexed
-// via the SAME lookup Object.prototype's own keys use, so
-// TABLE[section.sectionType] for a hostile sectionType of "constructor",
-// "__proto__", or "hasOwnProperty" resolved to an inherited Function
-// instead of undefined — bypassing the `?? []` fallback below and crashing
-// `for (const field of fields)` with "fields is not iterable" (a function
-// has no iterator). Go's decode boundary rejects those same sectionType
-// values before any of this code runs ("schema: unknown sectionType"), so
-// this was a real TS-vs-Go behavior divergence, not just a theoretical one.
-// Object.hasOwn checks OWN properties only, never the prototype chain, so it
-// treats every hostile name exactly like any other unrecognized sectionType
-// string: no table entry, zero rich-text fields, nothing to check.
+// Rich-text fields by section discriminator. Own-property lookup is required:
+// hostile values such as "constructor" and "__proto__" must not resolve
+// through Object.prototype.
 const RICH_TEXT_FIELDS_BY_SECTION_TYPE: Record<string, string[]> = {
   profile: ["text"],
   work: ["description"],
@@ -114,24 +67,8 @@ function richTextFieldsFor(sectionType: string | undefined): string[] {
 }
 
 /**
- * Coerces an arbitrary JSON value to an array, returning [] for anything
- * that ISN'T one — not just `null`/`undefined`, which a bare `?? []` alone
- * does not catch.
- *
- * Phase-gate re-review finding NEW-I1: `?? []` only substitutes for
- * `null`/`undefined`, so a document where an array-shaped field instead
- * carries a non-array truthy value — `entries: {a:1}`, `details: "x"`,
- * `main: 5` — still reached `.forEach`/a spread and threw an uncaught
- * TypeError: the exact crash class I1 was raised about, reintroduced by
- * this file's own I1 fix (`validatePersonalDetailUrlSchemes`) and still
- * live at three older call sites. Go's typed decode rejects every one of
- * these shapes at the JSON boundary with a clean error before any of this
- * code runs (e.g. `json: cannot unmarshal object into Go struct field
- * ...details of type []schema.PersonalDetail`); `toArray` gives the
- * untyped TS half — which, per this file's header, receives "whatever a
- * caller passes, untyped JSON in practice" — the same "malformed input
- * becomes nothing to iterate, not a crash" tolerance, without trying to
- * make TS reject what Go's decoder already rejects earlier.
+ * Treats malformed non-arrays as empty so aggregate validation never throws.
+ * Go's typed decoder rejects these shapes before this boundary.
  */
 function toArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -178,15 +115,9 @@ interface LayoutSections {
 }
 
 /**
- * The layout aggregate invariant (design spec §3): every content[key] must
- * appear exactly once across layout.main + layout.sidebar combined. Reports
- * three distinct failure modes so callers/tests can tell them apart:
- *   - "layout-exactly-once": a key placed more than once (within one array —
- *     already unreachable once resume.schema.json's uniqueItems is applied —
- *     or split across both arrays, which uniqueItems cannot catch).
- *   - "layout-missing-content-key": a key placed in the layout that has no
- *     matching entry in content.
- *   - "layout-orphan-content-key": a content key that isn't placed anywhere.
+ * Enforces that every content key appears exactly once across both layout
+ * arrays. Duplicate placements, missing references, and orphan content use
+ * distinct rule IDs. See docs/adr/0009-section-order-authority.md.
  */
 export function validateLayoutSections(
   content: Record<string, DocumentSection> | undefined,
@@ -235,45 +166,15 @@ export function validateLayoutSections(
 }
 
 /**
- * AC-DOC-002 (design spec §3): entry ids are client-generated uuids that
- * must be unique ACROSS THE WHOLE RESUME, not merely within one section.
- * resume.schema.json has no per-array `uniqueItems` on any section's
- * `entries` — even if it did, that would only dedup entries WITHIN one
- * section's own array; it could never catch the same id reused across two
- * DIFFERENT sections (e.g. one `work` entry and one `skill` entry sharing an
- * id), which is exactly the cross-structure gap this rule closes — the same
- * category of gap validateLayoutSections closes for
- * customization.layout.sections. See
- * fixtures/store/invalid-duplicate-entry-id.json.
- *
- * Reports one issue per OCCURRENCE of a duplicated id (not just the first
- * repeat), so a caller can point at every offending entry, not only the
- * second one found.
- *
- * A missing or non-string `id` (unreachable through ajv, which requires
- * `id` and constrains it to `format: "uuid"`, but this file's inputs are
- * "untyped JSON in practice" per this file's header) is treated as the
- * empty string "" — the same value Go's ID field defaults to for an absent
- * JSON key, since Go has no separate "missing" state for a required
- * `string` field. This keeps the two halves' set of REACHABLE documents
- * (a JSON body with the `id` key entirely absent) behaving identically,
- * rather than picking an arbitrary TS-only tolerance for a case Go can
- * actually receive.
+ * Enforces entry-ID uniqueness across the whole resume and reports every
+ * occurrence. Missing or non-string IDs normalize to the empty Go string value
+ * so malformed input has the same result in both implementations.
  */
-// Review finding (Important 2): resume.schema.json permits
-// content.maxProperties=24 sections × entries.maxItems=64 entries/section =
-// 1536 entries, all schema-valid while sharing one id. Interpolating every
-// OTHER occurrence's path into every occurrence's message would be O(N²) —
-// 1536 issues each carrying ~1535 paths — from a single ~70 KB document.
-// MAX_OTHER_PATHS_IN_MESSAGE bounds the interpolated list; anything beyond it
-// is summarized as "and N more" instead of spelled out.
+// A valid document may contain 1,536 entries. Bound peer paths in each issue so
+// one repeated ID cannot produce quadratic response text.
 const MAX_OTHER_PATHS_IN_MESSAGE = 3;
 
-// Formats the "also used at ..." clause for one occurrence of a duplicated
-// id, given every path THAT id occurs at (sortedPaths, pre-sorted once by
-// the caller — see validateEntryIdUniqueness) and the occurrence's own path
-// (excluded from the list it names). Bounded to MAX_OTHER_PATHS_IN_MESSAGE
-// entries plus an "and N more" suffix — see that constant's comment.
+// Formats a bounded, sorted list of the duplicate occurrence's peer paths.
 function formatOtherPaths(sortedPaths: string[], path: string): string {
   const shown: string[] = [];
   for (const p of sortedPaths) {
@@ -303,16 +204,11 @@ export function validateEntryIdUniqueness(
     });
   }
 
-  // Sorted so the emitted order (and, via formatOtherPaths, the exact
-  // message text) matches gen/go/store_validate.go's ValidateEntryIDUniqueness
-  // regardless of Map/property insertion order — the two halves' message
-  // text is part of the store layer's cross-language parity contract.
+  // Sort IDs and paths so emitted messages match Go regardless of map order.
   for (const id of [...pathsById.keys()].sort()) {
     const paths = pathsById.get(id)!;
     if (paths.length <= 1) continue;
-    // Sorted ONCE per duplicated id, not once per occurrence — the
-    // previous version re-sorted an (N-1)-element array N times for an
-    // N-way duplicate.
+    // Sort once per duplicated ID before emitting one issue per occurrence.
     const sortedPaths = [...paths].sort();
     for (const path of sortedPaths) {
       issues.push({
@@ -337,30 +233,14 @@ interface DateRange {
   present: boolean;
 }
 
-// Sortable key for a {y, m?} value. A missing month is treated as month 1
-// (start of year) on both sides of the comparison — a documented
-// simplification: it means start={y:2020} vs. end={y:2020} (same year, both
-// months unknown) compares equal rather than ambiguous, which is the
-// permissive-but-safe choice (never flags two same-year, both-month-absent
-// dates as reversed).
+// Missing months compare as January, so two year-only dates compare equal.
 function yearMonthOrdinal(value: YearMonth): number {
   return value.y * 12 + (value.m ?? 1);
 }
 
 /**
- * design spec §3: start <= end. Only meaningful when `end` is non-null —
- * present:true documents already have end:null enforced by
- * resume.schema.json's dateRange allOf/if-then, so there is nothing to
- * compare.
- *
- * Phase-gate review finding I1: `start` is required by resume.schema.json,
- * but this function receives whatever a caller passes — untyped JSON in
- * practice — so a hostile/malformed `dates` object carrying `end`+`present`
- * but no `start` used to null-deref `dates.start.y` inside
- * yearMonthOrdinal. Go's DateRange.Start is a value type (not a pointer), so
- * the equivalent Go input decodes to a zero YearMonth{Y:0} (ordinal 1)
- * instead of erroring — this guard mirrors that same tolerance instead of
- * throwing, rather than trying to make TS reject what Go silently accepts.
+ * Enforces start<=end when end exists. A malformed missing start yields no
+ * issue instead of throwing, matching Go's zero-value tolerance.
  */
 export function validateDateRange(
   dates: DateRange | null | undefined,
@@ -382,10 +262,7 @@ export function validateDateRange(
   return [];
 }
 
-// sectionTypes whose entries carry a `dates` range (design spec §3's
-// entry-fields table). certificate has a single `date` {y,m?}, not a range,
-// so there is nothing to order-check there; skill/language/profile have no
-// date field at all.
+// Section types with date ranges. Certificates use one date, not a range.
 const DATE_RANGE_SECTION_TYPES = new Set([
   "work",
   "education",
@@ -414,21 +291,9 @@ export function validateDateRanges(
   return issues;
 }
 
-// Detail types explicitly exempted from the https-scheme requirement below
-// (design spec §3: no design-spec-defined value format for these — see
-// resume.schema.json's personalDetail $def description). Every OTHER
-// `type` — the four URL types (website/linkedin/github/twitter) AND any
-// out-of-enum/missing/wrong-case string — is treated as requiring https,
-// fail-closed. Phase-gate re-review finding NEW-M1: an earlier version of
-// this rule allowlisted exactly the four URL type strings
-// (`DETAIL_TYPES_REQUIRING_HTTPS.has(type)`), so a one-character
-// perturbation of `type` — "WEBSITE", "url", "", or a missing key — fell
-// through to "not a URL type, skip" and let `javascript:` straight past
-// the store layer, even though this rule's own doc comment (below) justifies
-// its existence specifically for documents that reach Go's write path
-// without ever running ajv (where such a perturbed `type` is exactly the
-// input ajv is not there to catch). Default-deny closes that: only a type
-// this file KNOWS has no URL semantics is exempt.
+// Only known plain-text contact types are exempt. URL types and malformed
+// discriminators default to the https requirement. See
+// docs/adr/0013-contact-detail-rendering.md.
 const DETAIL_TYPES_WITHOUT_URL_CONSTRAINT = new Set([
   "email",
   "phone",
@@ -451,37 +316,10 @@ interface PersonalDetails {
 }
 
 /**
- * personalDetails.details[] chip URL-scheme hardening (design spec §5;
- * phase-gate review finding C1). resume.schema.json's personalDetail $def
- * now restricts `value` to an https:// URL (or "") when `type` is one of
- * website/linkedin/github/twitter — the same hardening $defs/link already
- * applies to employerLink/schoolLink/titleLink/project link. That schema
- * check is ajv-only (TypeScript); unlike resume.schema.json's types, Go has
- * no JSON-Schema pattern validator at all (gen/go/resume.go's
- * PersonalDetail.Value is a bare, unconstrained string, and its `Type` is a
- * bare `string`-backed type with no `UnmarshalJSON` enum check), so this is
- * the one rule in this file that duplicates something JSON Schema can
- * already express on its own — every other rule here exists BECAUSE JSON
- * Schema can't express it (see this file's header comment). Without a
- * store-layer copy, a document that reaches Go's write path without first
- * passing through ajv (or a future write path that decodes straight into
- * the Go Resume type) would let a hostile "javascript:"/"data:"/"vbscript:"
- * value straight into content.details — and since that same document also
- * never saw ajv's `type: {enum: [...]}` check, `type` cannot be trusted to
- * be one of the eight known values either (NEW-M1): this rule is
- * fail-closed on `type`, not an allowlist of the four URL types.
- *
- * Phase-gate re-review finding NEW-M2: this checks ONLY the scheme prefix —
- * a case-sensitive, anchored "https://" literal — NOT full URI
- * well-formedness. resume.schema.json's `then` branch is `pattern` AND
- * `format: "uri"`; ajv's `format: "uri"` additionally rejects things this
- * function accepts, e.g. an embedded newline/CR/U+2028, embedded whitespace,
- * or a non-ASCII IRI host. That gap is intentionally NOT closed here: the
- * security-relevant half — rejecting a dangerous scheme — is this function's
- * job and is portable (a plain string prefix check, no dependency on a
- * `format` implementation), where chasing exact RE2/JS URI-parser parity
- * would not meaningfully improve security and risks its own divergence bugs.
- * "" (explicitly cleared) stays accepted, draft-permissive.
+ * Requires exact lowercase https:// for linkable or malformed contact types;
+ * an empty value remains valid. This store check protects the Go boundary,
+ * which does not execute JSON Schema. AJV separately checks full URI syntax.
+ * See docs/adr/0013-contact-detail-rendering.md.
  */
 export function validatePersonalDetailUrlSchemes(
   personalDetails: PersonalDetails | undefined,
@@ -489,10 +327,7 @@ export function validatePersonalDetailUrlSchemes(
   const issues: ValidationIssue[] = [];
   const details = toArray<PersonalDetail>(personalDetails?.details);
   details.forEach((detail, index) => {
-    if (
-      !detail ||
-      DETAIL_TYPES_WITHOUT_URL_CONSTRAINT.has(detail.type ?? "")
-    ) {
+    if (!detail || DETAIL_TYPES_WITHOUT_URL_CONSTRAINT.has(detail.type ?? "")) {
       return;
     }
     const value = detail.value;
@@ -512,23 +347,9 @@ export function validatePersonalDetailUrlSchemes(
 }
 
 /**
- * personalDetails.photo.key path-traversal guard (phase-gate re-review
- * finding NEW-M3). resume.schema.json's photo.key pattern is
- * `^[A-Za-z0-9][A-Za-z0-9!_.*'()/-]*$` — a lookahead-free character class
- * that compiles under both ECMA 262 (ajv) and Go's RE2 (design spec §3
- * commits the publish policy to being "generated into Go and TS like the
- * storage schema — never a hand-written validator", so a future Go-side
- * pattern check derived from this file must be able to compile every
- * pattern here). The pattern USED to also forbid a ".." substring via a
- * negative lookahead (`(?!.*\.\.)`), which RE2 cannot compile at all
- * ("invalid or unsupported Perl syntax: `(?!`") — RE2 deliberately excludes
- * backtracking constructs for its linear-time matching guarantee, and JSON
- * Schema 2020-12's own "Regular Expressions" guidance asks authors to stay
- * inside a portable subset for exactly this reason. Since neither language
- * needs a regex to check "does this string contain two consecutive dots" —
- * a plain substring check expresses it directly — the ".." rejection lives
- * here (and in gen/go/store_validate.go's ValidatePhotoKeyTraversal)
- * instead of in the schema pattern.
+ * Rejects ".." in photo object keys. This stays outside the schema pattern
+ * because negative lookahead is not portable to Go RE2; a substring check has
+ * identical TypeScript and Go behavior. See docs/design/security.md#untrusted-media.
  */
 export function validatePhotoKeyTraversal(
   personalDetails: PersonalDetails | undefined,
@@ -551,32 +372,9 @@ interface ResumeDocument {
 }
 
 /**
- * Total order over ValidationIssue, by (path, rule, message) — plain
- * codepoint comparison (`<`/`>`), not `localeCompare`, so the ordering is
- * locale-independent and matches Go's byte-wise string comparison exactly
- * for every value this codebase actually produces (rule ids and paths are
- * fixed ASCII identifiers; message text embeds only ASCII-constrained
- * values — section keys, dates — with one exception: NEW-M1's fail-closed
- * `personal-detail-url-scheme` rule can embed an arbitrary, possibly
- * non-ASCII `type` string in its message. UTF-8 byte order equals Unicode
- * codepoint order by construction, and JS's `<`/`>` on strings compares
- * UTF-16 code units, which equals codepoint order for every character in
- * the Basic Multilingual Plane — the only case where the two engines could
- * disagree is a supplementary-plane codepoint (surrogate pair) landing
- * exactly at a tie-breaking position, an edge case not worth a dependency
- * to close).
- *
- * Phase-gate re-review finding M1 (integration-owner ruling): TS iterated
- * a `Map` in placement order while gen/go/store_validate.go iterated
- * `sortedKeys`/`sortedIntKeys`, so the two halves emitted the SAME set of
- * issues in a DIFFERENT order for the same hostile document. Rather than
- * rewrite each rule function's own internal iteration (touching layout,
- * rich-text, and date-range logic independently, with more surface for a
- * new divergence), this sorts the FINAL combined list once, at the
- * validator's return boundary — the two halves' sub-validators keep
- * whatever internal order they already had; only the caller-visible result
- * is canonicalized. gen/go/store_validate.go's ValidateDocument applies the
- * identical (path, rule, message) sort via sort.SliceStable.
+ * Locale-independent final order by path, rule, then message. Sorting once at
+ * this boundary keeps caller-visible output aligned with Go regardless of each
+ * rule's internal iteration order.
  */
 function compareIssues(a: ValidationIssue, b: ValidationIssue): number {
   if (a.path !== b.path) return a.path < b.path ? -1 : 1;
@@ -586,20 +384,9 @@ function compareIssues(a: ValidationIssue, b: ValidationIssue): number {
 }
 
 /**
- * Runs every store-layer aggregate rule against a full resume document and
- * returns every violation found (not just the first) — mirrors ajv's
- * allErrors: true behavior in test/schema.test.ts, so a single failing write
- * can report every offending field at once instead of one round trip per
- * error.
- *
- * Phase-gate re-review finding NEW-I1: `doc.content` on a `null`/`undefined`
- * (or any non-object) `doc` throws before any per-field guard below ever
- * runs — the top of the crash class, not just another instance of it. Accepts
- * `null`/`undefined` explicitly (unlike the rest of this file's `| undefined`
- * convention) because this is the one function a caller invokes directly
- * with a whole parsed document, which — same as every other input in this
- * file — is untyped JSON in practice, not a value TypeScript's `ResumeDocument`
- * type can actually guarantee at runtime.
+ * Runs every aggregate rule and returns all issues in canonical order. Null,
+ * undefined, and other malformed top-level values yield no issues rather than
+ * throwing at this untyped boundary.
  */
 export function validateDocument(
   doc: ResumeDocument | null | undefined,

@@ -1,20 +1,10 @@
-// Blind adversarial suite B (Phase 2A, Task 10) -- the live-database half.
-//
-// Every case here is derived from written contracts only: design spec §3
-// ("Doc-shape migrations", "Wire-version compatibility"), decisions D4, D12,
-// D13, D16, D17, D18, D19, Task 8's Interfaces block, write-path.md's
-// backfill-vs-autosave sequence, and the exported API as reported by
-// `go doc ./internal/resume` and `go doc ./internal/resume/docmigrate`. No
-// implementation body in internal/resume, internal/resume/docmigrate, or
-// internal/store was read before these tests were written and first run.
-//
-// Matrix rows owned here: TestGet_NeverWrites,
+// This live-database suite covers TestGet_NeverWrites,
 // TestBackfill_LosesToConcurrentAutosave, TestAutosave_AfterBackfill_NoSpurious412,
 // TestBackfill_ConcurrentWithItself_AppliesOnce,
 // TestBackfill_NeverPersistsInvalidProjection,
 // TestProjection_UnknownStoredVersionFailsClosed and
-// TestList_OneBadProjectionFailsAtomically, plus B6 (title-only write causes a
-// retryable lost race) and the accept -> persist -> emit chain over the
+// TestList_OneBadProjectionFailsAtomically, the title-only-write lost-race
+// case, and the accept -> persist -> emit chain over the
 // declared production versions. The pure converter matrix lives in
 // docmigrate/suiteb_wire_adversarial_test.go.
 //
@@ -76,7 +66,7 @@ const suiteBMinimalDoc = `{
 }`
 
 // suiteBRequireBackfillContract pins the three declared BackfillResult values
-// to the order Task 8's Interfaces block gives them, so a later renumbering
+// to their declared order so a later renumbering
 // cannot silently turn "applied" into "skipped" in every assertion below.
 func suiteBRequireBackfillContract(t *testing.T) {
 	t.Helper()
@@ -143,8 +133,8 @@ func suiteBDoc(t *testing.T, fullName string) schema.Resume {
 	return doc
 }
 
-// suiteBParts decomposes a document into the three stored jsonb parts (D4:
-// none of them carries schemaVersion).
+// suiteBParts decomposes a document into the three stored jsonb parts. None
+// carries schemaVersion.
 func suiteBParts(t *testing.T, doc schema.Resume) (pd, c, cu string) {
 	t.Helper()
 	canonical, err := resume.AssembleCanonical(doc)
@@ -451,9 +441,8 @@ func (e *suiteBEnv) suiteBLockRow(t *testing.T, id uuid.UUID) *suiteBGate {
 }
 
 // TestSuiteB_Get_NeverWrites is the matrix's `TestGet_NeverWrites`: reads
-// project but never write, under concurrency (spec §3 "migrate-on-read is
-// projection-only (never writes during GET -- avoids revision bumps racing
-// autosave)"; D18).
+// project but never write under concurrency, which avoids revision bumps
+// racing autosave.
 func TestSuiteB_Get_NeverWrites(t *testing.T) {
 	env := suiteBSetup(t)
 	st := resume.NewStore(env.pool, suiteBSyntheticProjector(t, nil))
@@ -520,8 +509,8 @@ func TestSuiteB_Get_NeverWrites(t *testing.T) {
 	suiteBRequireUntouched(t, "concurrent Get/List", before, env.suiteBSnapshot(t, id))
 }
 
-// TestSuiteB_Backfill_LosesToConcurrentAutosave is write-path.md's sequence
-// diagram, run for real: the backfill observes (vOld, rev R), an autosave
+// TestSuiteB_Backfill_LosesToConcurrentAutosave proves the backfill observes
+// (vOld, rev R), an autosave
 // commits rev R+1 first, and the backfill's CAS then matches zero rows.
 func TestSuiteB_Backfill_LosesToConcurrentAutosave(t *testing.T) {
 	suiteBRequireBackfillContract(t)
@@ -596,8 +585,8 @@ func TestSuiteB_Backfill_LosesToConcurrentAutosave(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Autosave_AfterBackfill_NoSpurious412 is the exact user-visible
-// property D12 exists to protect: a successful backfill changes neither
+// TestSuiteB_Autosave_AfterBackfill_NoSpurious412 proves a successful
+// backfill changes neither
 // revision nor updated_at, so an autosave holding the pre-backfill revision
 // still succeeds instead of returning a spurious 412.
 func TestSuiteB_Autosave_AfterBackfill_NoSpurious412(t *testing.T) {
@@ -810,7 +799,7 @@ func TestSuiteB_Backfill_NeverPersistsInvalidProjection(t *testing.T) {
 			// Distinguishes the JSON-Schema layer from the aggregate layer:
 			// a bad hex color is caught only by the embedded schema, so a
 			// backfill that skipped that layer would persist a document no
-			// user write could ever produce (D1/D16).
+			// user write could ever produce.
 			name: "converter output violates the embedded JSON Schema",
 			down: func(doc json.RawMessage) (json.RawMessage, error) {
 				var m map[string]json.RawMessage
@@ -905,7 +894,7 @@ func TestSuiteB_Projection_UnknownStoredVersionFailsClosed(t *testing.T) {
 
 // TestSuiteB_List_OneBadProjectionFailsAtomically: one unprojectable row makes
 // the whole List fail. A silent omission or a partial result would make
-// corruption look like user deletion (Task 8 Step 4, owner ruling).
+// corruption look like user deletion.
 func TestSuiteB_List_OneBadProjectionFailsAtomically(t *testing.T) {
 	env := suiteBSetup(t)
 	st := resume.NewStore(env.pool, docmigrate.NewIdentityProjector())
@@ -944,8 +933,8 @@ func TestSuiteB_List_OneBadProjectionFailsAtomically(t *testing.T) {
 	}
 }
 
-// TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace is B6: a
-// title-only write bumps revision without touching schema_version, so the
+// TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace proves a title-only
+// write bumps revision without touching schema_version, so the
 // backfill loses the race while the row is still stale. The result must
 // therefore be a retry signal, not "already done" -- a second attempt applies.
 func TestSuiteB_Backfill_TitleOnlyWriteCausesRetryableLostRace(t *testing.T) {
@@ -1057,9 +1046,8 @@ func TestSuiteB_Backfill_AlreadyCurrentSkipsWithoutWriting(t *testing.T) {
 // TestSuiteB_WireAcceptPersistEmit_ProductionVersions walks the declared
 // production versions end to end: accept a wire document, persist the complete
 // document through the store at the current version, read it back, and emit it
-// in a declared supported version. Task 8 Step 2 keeps the synthetic-v2 half of
-// this out of the store deliberately (no fake v2 store codec); this is the part
-// P2A can prove for real, and AC-SAVE-004 completes it over HTTP in P2B.
+// in a declared supported version. Synthetic v2 stays outside the store because
+// there is no fake v2 store codec.
 func TestSuiteB_WireAcceptPersistEmit_ProductionVersions(t *testing.T) {
 	env := suiteBSetup(t)
 	proj := docmigrate.NewIdentityProjector()
@@ -1114,7 +1102,7 @@ func TestSuiteB_WireAcceptPersistEmit_ProductionVersions(t *testing.T) {
 // TestSuiteB_Get_UnknownStoredFieldFailsClosed guards the strict decode on the
 // read path: a stored part carrying a field the current Go type does not
 // declare must fail the read, not be silently dropped and then written back
-// lossily by the next save (Task 8 Step 3c).
+// lossily by the next save.
 func TestSuiteB_Get_UnknownStoredFieldFailsClosed(t *testing.T) {
 	env := suiteBSetup(t)
 	st := resume.NewStore(env.pool, docmigrate.NewIdentityProjector())

@@ -29,7 +29,7 @@ func validDocForTest(t *testing.T) schema.Resume {
 	return doc
 }
 
-// --- D1 adoption conditions ---
+// --- Schema compiler conditions ---
 
 // TestD1a_FormatAssertion_MatchesAjvPosture proves format assertion is
 // enabled and pinned to match packages/schema's ajv configuration
@@ -66,7 +66,7 @@ func TestD1a_FormatAssertion_MatchesAjvPosture(t *testing.T) {
 
 // TestD1a_FormatAssertion_URI mirrors the uuid case for the "uri" format
 // (personalDetails.details[].value under a URL-constrained type, and
-// $defs/link) -- both formats ajv asserts, per this task's brief.
+// $defs/link), both of which ajv asserts.
 func TestD1a_FormatAssertion_URI(t *testing.T) {
 	doc := validDocForTest(t)
 	work := doc.Content["work"]
@@ -124,7 +124,7 @@ func TestD1b_NoURLLoader_RemoteRefFails(t *testing.T) {
 	}
 }
 
-// TestD1b_NoURLLoader_FileRefFails is the other half of D1(b): the
+// TestD1b_NoURLLoader_FileRefFails proves the
 // library's own DEFAULT loader (absent any UseLoader call) is a FileLoader
 // that reads from the local filesystem for "file:" URLs. An empty
 // jsonschema.SchemeURLLoader{} must reject that scheme too -- resolving a
@@ -170,7 +170,7 @@ func TestD1c_CompiledOnceAtPackageInit(t *testing.T) {
 	}
 }
 
-// --- ValidateForStore pipeline (Step 2) ---
+// --- ValidateForStore pipeline ---
 
 // pipelineFixture is one fixture the ValidateForStore choke-point test
 // drives: every packages/schema/fixtures/*.json (excluding the store/
@@ -324,8 +324,8 @@ func TestValidateForStore_IssuesDeterministic(t *testing.T) {
 // issue's own rendered text ("at '/content/zzz/...': ...") would sort
 // alphabetically before the store issue's rendered text ("duplicate-
 // entry-id (content.aaa...): ...") under a naive string sort -- 'a' < 'd'.
-// Round-2 review minor finding: a plain sort.Strings on the rendered
-// messages sorted by WHICH LAYER produced the message (schema issues render
+// A plain sort.Strings on the rendered messages sorts by which layer produced
+// the message (schema issues render
 // "at '/...'", sorting before every rule name), not by path at all.
 func TestValidateForStore_IssuesSortedPathFirstAcrossLayers(t *testing.T) {
 	doc := validDocForTest(t)
@@ -374,10 +374,8 @@ func TestValidateForStore_IssuesSortedPathFirstAcrossLayers(t *testing.T) {
 // fixtures report an issue that actually names the rule/field at fault, not
 // just "invalid" with no detail.
 func TestValidateForStore_MatchingIssue(t *testing.T) {
-	// Every fixtures/store/invalid-*.json fixture (task brief Step 2: "every
-	// fixtures/store/invalid-* fixture rejected ... with a matching issue"),
-	// naming the rule/field actually at fault -- round-2 review minor
-	// finding: only 4 of 11 were checked before. valid-unique-entry-id.json
+	// Every fixtures/store/invalid-*.json fixture must name the rule or field
+	// at fault. valid-unique-entry-id.json
 	// is deliberately excluded: it is the one non-"invalid-*" fixture in
 	// this directory, and is covered separately by
 	// TestValidateForStore_StoreFixtures's accept-case assertion.

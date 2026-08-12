@@ -20,10 +20,10 @@ import (
 )
 
 // Compile-time assertions that the generated shapes match what internal/user
-// and internal/auth build on. A failure here means schema.sql, queries.sql,
-// or the sqlc.yaml overrides drifted from what later tasks expect. The
-// field-level lines pin the nullable-column contract (native pointers, per
-// the design decision above), not just the type names — including the
+// and internal/auth use. A failure here means migrations, queries.sql, or the
+// sqlc.yaml overrides drifted from the expected shape. The
+// field-level lines pin the nullable-column contract (native pointers), not
+// just the type names — including the
 // sqlc.yaml `rename` entries that keep initialism-bearing columns (ua, ip,
 // csrf_secret, pkce_verifier, redirect_uri) from silently reverting to
 // sqlc's default casing (Ua, Ip, CsrfSecret, PkceVerifier, RedirectUri).
@@ -40,10 +40,8 @@ var (
 	_ *netip.Addr = store.Session{}.IP
 	_ []byte      = store.Session{}.TokenHash
 	_ []byte      = store.Session{}.CSRFSecret
-	// RotatedFrom (fix round 3, DD-C14c): the exact rotation-lineage FK a
-	// successor row carries back to its predecessor -- additive to the
-	// original Task 0.3 pin set above, same nullable-native-pointer
-	// contract as every other nullable column here.
+	// RotatedFrom is the exact rotation-lineage foreign key a successor row
+	// carries back to its predecessor.
 	_ *uuid.UUID = store.Session{}.RotatedFrom
 	_ string     = store.OAuthTransaction{}.PKCEVerifier
 	_ string     = store.OAuthTransaction{}.RedirectURI
@@ -51,9 +49,9 @@ var (
 )
 
 // TestSchema_PreservesAuthConstraints is a unit test (no database) that
-// guards two constraints load-bearing for later auth tasks: losing either
+// guards two load-bearing authentication constraints: losing either
 // would silently defeat "one identity per provider subject"
-// (AC-AUTH-004/005) or the link/reauth-must-name-a-user invariant, without
+// or the link/reauth-must-name-a-user invariant, without
 // any compile-time or generated-code signal (sqlc generates fine either
 // way; only a live constraint violation would catch it, and only if a test
 // happens to exercise that exact path).
@@ -140,10 +138,8 @@ func migrationUpSections(t *testing.T) string {
 // Schema setup goes through internal/testutil.RequireMigratedTestDatabaseURL
 // -- the same shared helper internal/auth and internal/store use -- so this
 // package's tests never depend on another package's test binary having
-// already applied migrations first (this package used to open the pool and
-// query "users" directly, with no migration step of its own, silently
-// riding on internal/auth's test setup having run first in the same `go
-// test ./...` invocation).
+// already applied migrations first. Opening the pool and querying users with
+// no migration step would make the test depend on another package's setup.
 func newIntegrationStore(t *testing.T) (*user.Store, context.Context) {
 	t.Helper()
 

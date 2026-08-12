@@ -1,22 +1,19 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-// Design spec §3: a released schema_version's schema file is IMMUTABLE.
-// Goose already gets this treatment for migrations — .github/workflows/ci.yml's
-// `migrations-append-only` job diffs the PR range with --name-status and
-// rejects anything but an addition. Released resume schemas need the same
-// gate, and this test is the proof that the shell logic actually rejects each
-// disallowed status instead of only looking like it does.
-//
-// The script below is the exact body of ci.yml's `released-schema-append-only`
-// job. It runs here against throwaway git repositories — one per case, so no
-// case can observe another's state — covering every name-status the gate must
-// reject (M, D, R) plus the two it must let through (a brand-new version file,
-// and ordinary edits to the working resume.schema.json). The last test in this
-// file pins ci.yml's copy of the script to this one so the two cannot drift.
+// Released schemas are immutable; only a new version file may be added. This
+// suite runs the workflow's exact shell guard against isolated repositories and
+// pins the workflow copy when that job exists. See docs/design/data.md.
 const APPEND_ONLY_SCRIPT = `base="$BASE_SHA"
 changed=$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json' \\
   | grep -E '^(M|D|R)' || true)
@@ -41,9 +38,8 @@ function git(repo: string, args: string[]): string {
   return execFileSync("git", args, { cwd: repo, encoding: "utf8" });
 }
 
-// Builds a throwaway repository whose base commit already carries a RELEASED
-// v1 schema plus the working resume.schema.json, and returns the base SHA the
-// gate diffs against (ci.yml passes the PR base / push before-SHA there).
+// Build a repository with released v1 and working schema files, then return the
+// base commit used by the append-only comparison.
 function baseRepo(): { repo: string; base: string } {
   const repo = mkdtempSync(join(tmpdir(), "aboutme-released-append-only-"));
   repos.push(repo);
@@ -52,14 +48,20 @@ function baseRepo(): { repo: string; base: string } {
   git(repo, ["config", "user.name", "append-only test"]);
   git(repo, ["config", "commit.gpgsign", "false"]);
   mkdirSync(join(repo, "packages", "schema"), { recursive: true });
-  writeFileSync(join(repo, "packages/schema/resume.v1.schema.json"), SCHEMA_BYTES);
+  writeFileSync(
+    join(repo, "packages/schema/resume.v1.schema.json"),
+    SCHEMA_BYTES,
+  );
   writeFileSync(join(repo, "packages/schema/resume.schema.json"), SCHEMA_BYTES);
   git(repo, ["add", "-A"]);
   git(repo, ["commit", "-qm", "base: release v1"]);
   return { repo, base: git(repo, ["rev-parse", "HEAD"]).trim() };
 }
 
-function runGate(mutate: (repo: string) => void): { status: number; output: string } {
+function runGate(mutate: (repo: string) => void): {
+  status: number;
+  output: string;
+} {
   const { repo, base } = baseRepo();
   mutate(repo);
   git(repo, ["add", "-A"]);
@@ -72,13 +74,19 @@ function runGate(mutate: (repo: string) => void): { status: number; output: stri
     encoding: "utf8",
     env: { ...process.env, BASE_SHA: base },
   });
-  return { status: result.status ?? -1, output: `${result.stdout}${result.stderr}` };
+  return {
+    status: result.status ?? -1,
+    output: `${result.stdout}${result.stderr}`,
+  };
 }
 
 describe("released-schema append-only gate", () => {
   it("rejects a MODIFIED released schema", () => {
     const { status, output } = runGate((repo) => {
-      writeFileSync(join(repo, "packages/schema/resume.v1.schema.json"), '{"tampered": true}\n');
+      writeFileSync(
+        join(repo, "packages/schema/resume.v1.schema.json"),
+        '{"tampered": true}\n',
+      );
     });
     expect(status).toBe(1);
     expect(output).toContain("Released schemas are immutable");
@@ -105,20 +113,31 @@ describe("released-schema append-only gate", () => {
     // Rename detection is on by default, so this surfaces as R<score>; if it
     // ever were not, the same change surfaces as D plus A and is still
     // rejected on the D. Either name-status is a failure, which is the point.
-    expect(output).toMatch(/^[RD]\d*\s+packages\/schema\/resume\.v1\.schema\.json/m);
+    expect(output).toMatch(
+      /^[RD]\d*\s+packages\/schema\/resume\.v1\.schema\.json/m,
+    );
   });
 
   it("rejects a released schema modified alongside a legitimately added one", () => {
     const { status } = runGate((repo) => {
-      writeFileSync(join(repo, "packages/schema/resume.v2.schema.json"), '{"released": 2}\n');
-      writeFileSync(join(repo, "packages/schema/resume.v1.schema.json"), '{"tampered": true}\n');
+      writeFileSync(
+        join(repo, "packages/schema/resume.v2.schema.json"),
+        '{"released": 2}\n',
+      );
+      writeFileSync(
+        join(repo, "packages/schema/resume.v1.schema.json"),
+        '{"tampered": true}\n',
+      );
     });
     expect(status).toBe(1);
   });
 
   it("allows a newly ADDED released schema version", () => {
     const { status, output } = runGate((repo) => {
-      writeFileSync(join(repo, "packages/schema/resume.v2.schema.json"), '{"released": 2}\n');
+      writeFileSync(
+        join(repo, "packages/schema/resume.v2.schema.json"),
+        '{"released": 2}\n',
+      );
     });
     expect(status).toBe(0);
     expect(output).toBe("");
@@ -126,23 +145,29 @@ describe("released-schema append-only gate", () => {
 
   it("allows ordinary edits to the working resume.schema.json", () => {
     const { status } = runGate((repo) => {
-      writeFileSync(join(repo, "packages/schema/resume.schema.json"), '{"working": true}\n');
+      writeFileSync(
+        join(repo, "packages/schema/resume.schema.json"),
+        '{"working": true}\n',
+      );
     });
     expect(status).toBe(0);
   });
 
-  // Step 3 of Task 2b is integration-owner-applied: a worker never edits
-  // .github/workflows/ci.yml. Until the owner adds the job this is skipped
-  // (and reported as such); the moment the job lands, it binds ci.yml's copy
-  // of the script to the one proven above, byte for byte.
+  // Keep package tests runnable in a checkout without the workflow. When the
+  // job exists, its script must match the tested guard byte for byte.
   const ciWorkflowPath = "../../.github/workflows/ci.yml";
-  const ciWorkflow = existsSync(ciWorkflowPath) ? readFileSync(ciWorkflowPath, "utf8") : "";
+  const ciWorkflow = existsSync(ciWorkflowPath)
+    ? readFileSync(ciWorkflowPath, "utf8")
+    : "";
   const jobPresent = ciWorkflow.includes("released-schema-append-only:");
 
-  it.skipIf(!jobPresent)("keeps ci.yml's job script identical to the script proven here", () => {
-    const indented = APPEND_ONLY_SCRIPT.split("\n")
-      .map((line) => (line === "" ? line : `          ${line}`))
-      .join("\n");
-    expect(ciWorkflow).toContain(indented);
-  });
+  it.skipIf(!jobPresent)(
+    "keeps ci.yml's job script identical to the script proven here",
+    () => {
+      const indented = APPEND_ONLY_SCRIPT.split("\n")
+        .map((line) => (line === "" ? line : `          ${line}`))
+        .join("\n");
+      expect(ciWorkflow).toContain(indented);
+    },
+  );
 });

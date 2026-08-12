@@ -17,7 +17,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// resumeCapViolationCode/Message are the exact SQLSTATE and MESSAGE the D7
+// resumeCapViolationCode/Message are the exact SQLSTATE and message the
 // trigger (enforce_resume_cap, migrations/00005_add_resume_cap_trigger.sql)
 // raises when it backstops the store's own cap check. Both must match
 // exactly -- other CHECK constraints on resumes (e.g.
@@ -28,26 +28,14 @@ const (
 	resumeCapViolationMessage = "resumes_user_cap_exceeded"
 )
 
-// resumeCap is the 3-resume-per-user limit Create enforces (D7). The D7
-// database trigger enforces the identical limit as a backstop for any
-// writer that bypasses this store.
+// resumeCap is the per-user limit Create enforces. The database trigger
+// enforces the same limit for writers that bypass this store.
 const resumeCap = 3
 
-// Store is the resume-domain store: create (cap-enforced), get/list
-// (projected to docmigrate.CurrentVersion, D18), delete, and the two
-// revision-CAS writes (SaveDocument, SaveTitle). Every write passes
-// through ValidateForStore before encodeParts ever marshals to jsonb
-// (D16). encodeParts is package-private (fix round 1, owner ruling): no
-// package outside internal/resume can produce the three jsonb values at
-// all, so that half of the choke point is an enforced invariant, not just
-// a convention. The other half is NOT enforced by the compiler: the
-// sqlc-generated CreateResume/UpdateResumeDocumentCAS/UpdateResumeTitleCAS
-// methods remain exported (they are generated code, and Task 7's
-// IdempotencyStore.Execute composes createTx/saveDocumentTx/saveTitleTx
-// directly), so "only internal/resume calls them" is a convention this
-// comment must not overstate as more than that. A forbidigo lint rule
-// closing this second half is recorded as a phase-gate follow-up, not
-// built here.
+// Store owns cap enforcement, version projection, and revision-CAS writes for
+// resume aggregates. Its document writes validate the assembled aggregate
+// before encodeParts produces the stored jsonb values. See
+// docs/design/data.md for write ownership.
 type Store struct {
 	pool *store.Pool
 	q    *store.Queries
@@ -55,9 +43,8 @@ type Store struct {
 	now  func() time.Time
 }
 
-// NewStore builds a Store backed by pool, using proj to project stored
-// documents to docmigrate.CurrentVersion on read (D18). Pass
-// docmigrate.NewIdentityProjector() until Task 8's real projector exists.
+// NewStore builds a Store backed by pool. proj converts stored documents to
+// its declared current version on read.
 func NewStore(pool *store.Pool, proj *docmigrate.Projector) *Store {
 	return &Store{
 		pool: pool,
@@ -68,10 +55,7 @@ func NewStore(pool *store.Pool, proj *docmigrate.Projector) *Store {
 }
 
 // Create validates doc, then in one transaction: locks the owner's users
-// row (LockUserForResumeWrite, spec's FOR UPDATE), checks the resume cap,
-// and inserts. Thin wrapper (B7) around createTx: begin a transaction,
-// build qtx := s.q.WithTx(tx), call createTx, and let pgx.BeginFunc commit
-// or roll back based on its returned error.
+// row, checks the resume cap, and inserts.
 func (s *Store) Create(ctx context.Context, userID uuid.UUID, title string, doc schema.Resume) (Resume, error) {
 	if err := validateTitle(title); err != nil {
 		return Resume{}, err
@@ -93,13 +77,11 @@ func (s *Store) Create(ctx context.Context, userID uuid.UUID, title string, doc 
 	return created, nil
 }
 
-// createTx is Create's tx-scoped core (B7, owner ruling): it takes an
+// createTx is Create's transaction-scoped core. It takes an
 // already-open qtx and performs its writes on it, with NO transaction
 // management of its own -- no Begin/Commit/Rollback. Create above is the
-// only caller that opens a transaction around it for the common case;
-// Task 7's IdempotencyStore.Execute is the other, composing this exact
-// cap-check/insert logic inside its own already-open transaction instead
-// of reimplementing it.
+// common wrapper; IdempotencyStore.Execute composes the same logic inside
+// its transaction.
 func (s *Store) createTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID, title string, doc schema.Resume) (Resume, error) {
 	// Create validates before opening its transaction. Repeat the same check
 	// here because IdempotencyStore may call this core from an existing tx.
@@ -107,15 +89,14 @@ func (s *Store) createTx(ctx context.Context, qtx *store.Queries, userID uuid.UU
 		return Resume{}, err
 	}
 
-	// ValidateForStore always validates at docmigrate.CurrentVersion
-	// (D19): force it here so a caller's zero-value or stale
+	// Force the current version so a caller's zero-value or stale
 	// doc.SchemaVersion can never validate against the wrong schema.
 	doc.SchemaVersion = int64(docmigrate.CurrentVersion)
 	if err := ValidateForStore(doc); err != nil {
 		return Resume{}, err
 	}
 
-	// D7: lock the owner row first, matching the trigger's own lock
+	// Lock the owner row first, matching the trigger's own lock
 	// order (belt and suspenders) so the two can never deadlock. This
 	// alone does not make the count race-proof by itself -- it is the
 	// FOR UPDATE lock plus reading the count only after acquiring it,
@@ -157,8 +138,8 @@ func (s *Store) createTx(ctx context.Context, qtx *store.Queries, userID uuid.UU
 }
 
 // Get returns userID's resume id, with Doc projected to
-// docmigrate.CurrentVersion (D18). It returns ErrNotFound both when id
-// does not exist and when it belongs to a different user (D17) -- the two
+// docmigrate.CurrentVersion. It returns ErrNotFound both when id
+// does not exist and when it belongs to a different user; the two
 // cases are indistinguishable by design.
 func (s *Store) Get(ctx context.Context, userID, id uuid.UUID) (Resume, error) {
 	row, err := s.q.GetResumeForUser(ctx, store.GetResumeForUserParams{ID: id, UserID: userID})
@@ -173,7 +154,7 @@ func (s *Store) Get(ctx context.Context, userID, id uuid.UUID) (Resume, error) {
 
 // List returns every resume userID owns, ordered by created_at then id
 // (a stable tiebreak for rows created in the same instant), each with Doc
-// projected to docmigrate.CurrentVersion (D18).
+// projected to docmigrate.CurrentVersion.
 func (s *Store) List(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
 	rows, err := s.q.ListResumesForUser(ctx, userID)
 	if err != nil {
@@ -191,7 +172,7 @@ func (s *Store) List(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
 }
 
 // Delete removes userID's resume id. It returns ErrNotFound both when id
-// does not exist and when it belongs to a different user (D17) -- deleting
+// does not exist and when it belongs to a different user; deleting
 // zero rows because of a WHERE id/user_id mismatch is not distinguishable
 // from deleting zero rows because id never existed.
 func (s *Store) Delete(ctx context.Context, userID, id uuid.UUID) error {
@@ -207,13 +188,12 @@ func (s *Store) Delete(ctx context.Context, userID, id uuid.UUID) error {
 
 // SaveDocument is the CAS document write: ValidateForStore, then
 // UpdateResumeDocumentCAS at schema_version = docmigrate.CurrentVersion.
-// Thin wrapper (B7) around saveDocumentTx -- see createTx's doc comment
-// for the split's rationale.
+// It wraps saveDocumentTx in a transaction.
 //
 // The returned int64 is the NEW revision, not expectedRevision. A CAS miss
 // is never reported as a zero revision: it surfaces as
 // *RevisionMismatchError (the row exists, expectedRevision was stale) or
-// ErrNotFound (no such resume for this user, D17).
+// ErrNotFound (no such resume for this user).
 func (s *Store) SaveDocument(ctx context.Context, userID, id uuid.UUID, doc schema.Resume, expectedRevision int64) (newRevision int64, err error) {
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		rev, txErr := s.saveDocumentTx(ctx, s.q.WithTx(tx), userID, id, doc, expectedRevision)
@@ -229,7 +209,7 @@ func (s *Store) SaveDocument(ctx context.Context, userID, id uuid.UUID, doc sche
 	return newRevision, nil
 }
 
-// saveDocumentTx is SaveDocument's tx-scoped core (B7): no transaction
+// saveDocumentTx is SaveDocument's transaction-scoped core: no transaction
 // management of its own. A 0-row UpdateResumeDocumentCAS (pgx.ErrNoRows,
 // since it is a RETURNING :one query) means either id doesn't exist for
 // userID, or expectedRevision is stale -- afterCASMiss re-reads inside the
@@ -265,14 +245,14 @@ func (s *Store) saveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 }
 
 // SaveTitle is the CAS title write: UpdateResumeTitleCAS at the caller's
-// expectedRevision. Thin wrapper (B7) around saveTitleTx.
+// expectedRevision. It wraps saveTitleTx in a transaction.
 //
 // The returned int64 is the NEW revision, not expectedRevision. A CAS miss
 // is never reported as a zero revision: it surfaces as
 // *RevisionMismatchError (the row exists, expectedRevision was stale) or
-// ErrNotFound (no such resume for this user, D17). It never touches
+// ErrNotFound (no such resume for this user). It never touches
 // schema_version, which is why a backfill racing it loses on the revision
-// leg alone (backfill.go, B6).
+// leg alone.
 func (s *Store) SaveTitle(ctx context.Context, userID, id uuid.UUID, title string, expectedRevision int64) (newRevision int64, err error) {
 	if err = validateTitle(title); err != nil {
 		return 0, err
@@ -292,7 +272,7 @@ func (s *Store) SaveTitle(ctx context.Context, userID, id uuid.UUID, title strin
 	return newRevision, nil
 }
 
-// saveTitleTx is SaveTitle's tx-scoped core (B7): no transaction
+// saveTitleTx is SaveTitle's transaction-scoped core: no transaction
 // management of its own. Same 0-row CAS-miss handling as saveDocumentTx,
 // via the shared afterCASMiss helper.
 func (s *Store) saveTitleTx(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID, title string, expectedRevision int64) (int64, error) {
@@ -326,7 +306,7 @@ func validateTitle(title string) error {
 
 // afterCASMiss re-reads id inside the SAME transaction as a just-failed
 // CAS update (0 rows affected), distinguishing "no such resume for this
-// user" (ErrNotFound, D17: also "not yours") from "the resume exists but
+// user" (ErrNotFound, also "not yours") from "the resume exists but
 // expectedRevision was stale" (*RevisionMismatchError, carrying the
 // winning revision and projected document read by this very call).
 func (s *Store) afterCASMiss(ctx context.Context, qtx *store.Queries, userID, id uuid.UUID) error {
@@ -345,13 +325,12 @@ func (s *Store) afterCASMiss(ctx context.Context, qtx *store.Queries, userID, id
 }
 
 // projectRow assembles row's scalar columns with its three jsonb parts,
-// lifted to the projector's current version (D18), into a Resume.
+// lifted to the projector's current version, into a Resume.
 //
-// Project (fix round 1, owner ruling) returns the three current-version
-// PARTS, not a typed schema.Resume -- docmigrate has no typed-decode
-// dependency on this package (D13: a converter cannot decode a
-// not-yet-current document into the current Go struct at all), so the
-// one strict decode (DecodeParts, DisallowUnknownFields) happens here,
+// Project returns current-version parts, not a typed schema.Resume.
+// docmigrate has no typed-decode dependency on this package: a converter
+// cannot decode a not-yet-current document into the current Go struct. The one
+// strict decode (DecodeParts, DisallowUnknownFields) happens here,
 // once, at the boundary, after projection.
 //
 // The decode version comes from s.proj.CurrentVersion(), not from the
@@ -393,7 +372,7 @@ func toDomain(row store.Resume, doc schema.Resume) Resume {
 	}
 }
 
-// isResumeCapExceeded reports whether err is exactly the D7 trigger's cap
+// isResumeCapExceeded reports whether err is exactly the cap trigger's
 // violation: SQLSTATE 23514 AND message "resumes_user_cap_exceeded". Both
 // must match -- resumes has other CHECK constraints that also raise 23514
 // (e.g. resumes_title_length_check), and those must fall through to a

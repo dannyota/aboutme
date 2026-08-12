@@ -56,7 +56,7 @@ func splitFixture(t *testing.T, name string) rawParts {
 	return parts
 }
 
-// roundTripFixtures are every fixture Step 1 requires a byte-stable
+// roundTripFixtures are every fixture that requires a byte-stable
 // parts->doc->parts round trip for: minimal, full, and the two draft-
 // permissive fixtures (draft-partial has an absent employer/city/etc.;
 // draft-cleared-name-empty-section has an explicitly-cleared "" fullName
@@ -150,7 +150,7 @@ func TestCodec_RoundTrip_ByteStable(t *testing.T) {
 	}
 }
 
-// TestCodec_PartsNeverContainSchemaVersion is D4: the three jsonb parts must
+// TestCodec_PartsNeverContainSchemaVersion proves the three jsonb parts must
 // never carry a "schemaVersion" key -- it lives in the row's own
 // schema_version column, injected back in only by AssembleCanonical/
 // DecodeParts, never stored alongside personalDetails/content/customization.
@@ -243,10 +243,8 @@ func TestCodec_DraftPermissive_AbsentVsEmptyDistinguishable(t *testing.T) {
 	})
 }
 
-// TestCodec_ClearedContactValue_Preserved is AC-DOC-009's remaining gap
-// (docs/plans/traceability/ac-doc.md, design spec §3: "Fixtures must cover a
-// cleared name, cleared contact values, and a freshly created empty
-// section"). draft-cleared-name-empty-section.json already exercises a
+// TestCodec_ClearedContactValue_Preserved covers the cleared contact value
+// fixture. draft-cleared-name-empty-section.json already exercises a
 // cleared fullName and an empty section; this fixture is the "cleared
 // contact values" case -- a personalDetails.details entry that IS present
 // (id/type/isHidden all set) with its own Value field explicitly cleared to
@@ -369,9 +367,7 @@ func TestCodec_UnknownField_StrictDecodeError(t *testing.T) {
 			// content is a map, not a struct, so DisallowUnknownFields cannot
 			// apply to it directly -- but trailing data after the single
 			// JSON value must still be rejected, same as personalDetails and
-			// customization (round-2 review finding: this asymmetry existed
-			// only because the check was originally added to strictUnmarshal
-			// alone, which content's map decode doesn't go through).
+			// customization. content's map decode does not use strictUnmarshal.
 			name:            "trailing data after content's JSON value",
 			personalDetails: base.PersonalDetails,
 			content:         json.RawMessage(`{}garbage`),
@@ -390,7 +386,7 @@ func TestCodec_UnknownField_StrictDecodeError(t *testing.T) {
 
 // TestCodec_AssembleCanonical_IncludesSchemaVersion proves AssembleCanonical
 // marshals the whole document -- including SchemaVersion, which the three
-// jsonb parts never carry themselves (D4) -- into one canonical JSON blob.
+// jsonb parts never carry themselves -- into one canonical JSON blob.
 func TestCodec_AssembleCanonical_IncludesSchemaVersion(t *testing.T) {
 	parts := splitFixture(t, "minimal.json")
 	doc, err := resume.DecodeParts(parts.PersonalDetails, parts.Content, parts.Customization, parts.SchemaVersion)

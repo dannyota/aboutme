@@ -20,7 +20,7 @@ const (
 	// RateLimit (see healthChain's comment below), so nothing upstream
 	// bounds how often a caller can make this server buffer a body in
 	// memory before rejecting it. A small dedicated cap is what keeps that
-	// exemption safe (security review re-review, Important I1).
+	// exemption safe.
 	HealthBodyLimitBytes int64 = 4 * 1024
 	// DefaultReadyTimeout bounds how long each real database ping
 	// performed on /readyz's behalf may take before it is treated as
@@ -30,9 +30,8 @@ const (
 	// success or failure — is reused before a fresh database ping is
 	// attempted; see cachedPinger. One second bounds the amplification an
 	// unbounded flood of /readyz requests could otherwise cause against
-	// the connection pool (security review re-review, new Critical C1),
-	// while still being short enough that a genuine recovery or outage is
-	// reflected in the readiness signal promptly.
+	// the connection pool. It remains short enough to reflect a recovery or
+	// outage promptly.
 	DefaultReadyTTL = time.Second
 )
 
@@ -55,13 +54,10 @@ type Options struct {
 	// client IP and scheme — see TrustedProxies. The zero value (nil)
 	// trusts no one, so callers must supply the deployment's real
 	// trusted-proxy CIDRs explicitly (internal/config's
-	// TRUSTED_PROXY_CIDRS, populated from main.go — see design spec §6)
-	// rather than this package assuming a topology. A security review
-	// found the previous hardcoded LoopbackTrustedProxies() default here
-	// silently wrong for the podman-compose topology, where Caddy reaches
-	// Go over a container network rather than loopback: it made every
-	// client's rate-limit key collapse to the Caddy container's own
-	// address.
+	// TRUSTED_PROXY_CIDRS, populated from main.go) rather than this package
+	// assuming a topology. A loopback default is unsafe when a reverse proxy
+	// reaches Go over a container network because it collapses all client
+	// rate-limit keys to the proxy address. See docs/design/deployment.md.
 	TrustedProxies TrustedProxies
 	// Clock returns the current time, used by RateLimit's token buckets
 	// and by /readyz's readiness cache (see cachedPinger). Defaults to
@@ -86,17 +82,14 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-// New builds the server's top-level HTTP handler: health endpoints wired to
-// pinger for readiness, wrapped in the standard middleware chain (request
-// ID, security headers, structured logging, rate limiting, body-size
-// limit).
+// New builds the server's top-level HTTP handler. It wires pinger into the
+// readiness endpoint and applies the path-specific middleware chains below.
 //
-// Every response this handler produces — including unmatched routes and
-// disallowed methods — uses the standard {"data":...} / {"error":{...}}
-// envelope. Routes are registered without stdlib ServeMux's method-prefix
-// syntax (e.g. "GET /healthz") specifically so 404 and 405 responses can be
-// generated ourselves via WriteError instead of ServeMux's plain-text
-// defaults.
+// Unmatched routes and disallowed methods use the standard error envelope.
+// Registered handlers own their success representation, including JSON,
+// binary media, and streams. Routes omit stdlib ServeMux's method-prefix syntax
+// (e.g. "GET /healthz") so this package can produce enveloped 404 and 405
+// responses via WriteError instead of ServeMux's plain-text defaults.
 //
 // register lets callers (the composition root in cmd/server/main.go)
 // attach additional routes without this package importing the packages
@@ -105,16 +98,15 @@ func (o Options) withDefaults() Options {
 // func receives the same mux built below, before the middleware chain is
 // wrapped around it, so every extra route gets the same RequestID/
 // SecurityHeaders/Logging/RateLimit/BodyLimit treatment as /healthz and
-// /readyz's siblings (design decision 7).
+// /readyz's siblings.
 func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*http.ServeMux)) http.Handler {
 	opts = opts.withDefaults()
 
 	// Readyz never sees the raw pinger directly: cachedPinger memoizes it
 	// behind a single-flight, short-TTL cache (see DefaultReadyTTL) so an
 	// unbounded flood of /readyz requests costs the database at most one
-	// round trip per TTL, regardless of request volume (security review
-	// re-review, new Critical C1) — see the healthChain comment below for
-	// why /readyz has no RateLimit ceiling to begin with.
+	// round trip per TTL, regardless of request volume. See healthChain below
+	// for why /readyz has no RateLimit ceiling.
 	readyPinger := newCachedPinger(pinger, opts.ReadyTimeout, opts.ReadyTTL, opts.Clock)
 
 	mux := http.NewServeMux()
@@ -135,19 +127,15 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 	// health checks, a local operator's curl), not external viewers, and
 	// forcing them through the viewer-keyed limiter risks a false 429/400
 	// that could restart-loop the service on infra whose peer address or
-	// header shape the limiter's client-IP trust boundary doesn't
-	// recognize (security review finding #1). BodyLimit still applies —
-	// an oversized body is a resource-exhaustion risk regardless of who
-	// sends it — but at HealthBodyLimitBytes, not opts.BodyLimitBytes: a
+	// header shape the limiter's client-IP trust boundary doesn't recognize.
+	// BodyLimit still applies because an oversized body is a resource risk.
+	// It uses HealthBodyLimitBytes, not opts.BodyLimitBytes: a
 	// caller that can never be turned away by RateLimit must not also get
-	// the full request-body budget to buffer into memory on every request
-	// (security review re-review, Important I1). NoStoreCache wraps this
-	// whole chain from OUTSIDE BodyLimit, so a 413 rejection still carries
-	// the documented cache policy, not just the success path (security
-	// review finding #4) — /healthz and /readyz are operational endpoints,
-	// never product data, and no intermediary (a monitoring proxy, a
-	// misconfigured CDN behavior) may ever serve a stale result instead of
-	// checking live.
+	// the full request-body budget to buffer into memory on every request.
+	// NoStoreCache wraps this whole chain outside BodyLimit, so a 413 rejection
+	// carries the documented cache policy. /healthz and
+	// /readyz are operational endpoints, never product data. No intermediary
+	// may serve a stale result instead of checking live.
 	healthChain := NoStoreCache()(BodyLimit(HealthBodyLimitBytes)(mux))
 
 	// Every other route: NoStoreCache (outermost — see below), then
@@ -158,9 +146,8 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 	// side effect of where it happens to sit: it is outermost specifically
 	// so every rejection this chain can produce — RateLimit's 429 and its
 	// own 400 invalid_client_ip, BodyLimit's 413, the mux's 404/405 — all
-	// carry Cache-Control: no-store, not just a successful response
-	// (security review re-review, new Important I2; design spec §6). A
-	// later phase's route group substitutes a different policy (e.g.
+	// carry Cache-Control: no-store, not just a successful response. A
+	// public route group can substitute a different policy (for example,
 	// PublicJSONCache for public JSON) by wrapping just that group's
 	// handler INSIDE the mux: that inner middleware's Cache-Control write
 	// happens after this outer one in the call chain and so overrides it
@@ -173,7 +160,7 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 	// Middleware order (outer -> inner): RequestID, SecurityHeaders,
 	// Logging, then the path-based dispatch above.
 	//
-	//   - RequestID stays outermost (unchanged): every later layer,
+	//   - RequestID stays outermost: every later layer,
 	//     including a rejection, needs the ID already in the response and
 	//     in context before it runs.
 	//   - SecurityHeaders comes next, and specifically outside every layer
@@ -213,8 +200,7 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 // which net/http's own ServeMux still resolves to the registered
 // "/healthz" handler, since mux matching happens on the decoded path —
 // compares unequal here and falls through to the rate-limited chain
-// instead of silently taking the RateLimit-exempt branch (security review
-// re-review, Minor 3).
+// instead of silently taking the RateLimit-exempt branch.
 func isHealthPath(escapedPath string) bool {
 	return escapedPath == "/healthz" || escapedPath == "/readyz"
 }

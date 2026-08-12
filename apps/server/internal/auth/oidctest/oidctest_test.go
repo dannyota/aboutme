@@ -106,13 +106,8 @@ func exchangeCode(t *testing.T, p *oidctest.Provider, code string) (idToken stri
 	return body.IDToken, status
 }
 
-// TestProvider_DiscoveryAndTokenRoundTrip is the harness's own proof of
-// life: it exercises real go-oidc discovery, a real token exchange
-// against the mock's /token endpoint, and real go-oidc signature/issuer/
-// audience verification of the result. If go-oidc rejects the mock's
-// token, this test fails — which is the point: it proves the harness
-// produces genuinely valid OIDC responses, not merely shaped-like-JSON
-// ones.
+// TestProvider_DiscoveryAndTokenRoundTrip proves the harness passes real
+// go-oidc discovery, exchange, signature, issuer, and audience checks.
 func TestProvider_DiscoveryAndTokenRoundTrip(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("test-code", oidctest.Claims{
@@ -182,8 +177,8 @@ func TestProvider_RegisterCode_SingleUse(t *testing.T) {
 
 // TestClaims_IssuerOverride proves Claims.Issuer overrides the default
 // (the Provider's own URL) and that go-oidc's own verification — not this
-// test — rejects the resulting issuer mismatch. This is the mechanism
-// later tasks use to test a wrong-issuer rejection.
+// test — rejects the resulting issuer mismatch. Callback tests use this
+// mechanism to exercise wrong-issuer rejection.
 func TestClaims_IssuerOverride(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -264,16 +259,8 @@ func TestClaims_ExpiresAtOverride(t *testing.T) {
 	}
 }
 
-// TestProvider_ExpiresIn_IndependentOfIDTokenExpiry pins the seam between
-// the OAuth2 access token's expires_in and the ID token's own "exp" claim:
-// RFC 6749's access-token lifetime and OIDC's id_token expiry are two
-// different tokens' lifetimes and must not be derived from each other. A
-// Claims.ExpiresAt set in the past — exactly what an expired-ID-token
-// adversarial test registers — must still produce a positive, fixed
-// expires_in; the past exp lives only in the id_token itself, and
-// rejecting it is go-oidc's job at the Verify layer (proven separately by
-// TestClaims_ExpiresAtOverride), not something the token exchange
-// response should pre-empt.
+// TestProvider_ExpiresIn_IndependentOfIDTokenExpiry proves OAuth2 access-token
+// lifetime does not derive from the ID token's exp claim.
 func TestProvider_ExpiresIn_IndependentOfIDTokenExpiry(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{
@@ -466,9 +453,8 @@ func TestProvider_UnregisteredCode_Rejected(t *testing.T) {
 // the overridden value (not the original DefaultClientID) when signing a
 // token, and that go-oidc's own audience check enforces this: a verifier
 // configured with the overridden ClientID accepts the token, one still
-// configured with DefaultClientID rejects it. This is the seam task-4/5's
-// tests use to point a Service at a provider registered under a
-// non-default client id.
+// configured with DefaultClientID rejects it. This lets tests point a Service
+// at a provider registered under a non-default client ID.
 func TestProvider_ClientIDOverride(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.ClientID = "custom-client-id"
@@ -524,10 +510,8 @@ func exchangeViaOAuth2Config(t *testing.T, p *oidctest.Provider, code, verifier 
 
 // TestProvider_PKCE_AcceptsMatchingVerifier proves the /token endpoint
 // accepts an exchange whose code_verifier hashes (S256) to the
-// code_challenge registered for the code -- exercised through a real
-// oauth2.Config.Exchange call (ruling 4c: at least one test must go
-// through this path), the same call production's google.go/linkedin.go
-// make.
+// code_challenge registered for the code. It uses the same
+// oauth2.Config.Exchange path as the production OIDC providers.
 func TestProvider_PKCE_AcceptsMatchingVerifier(t *testing.T) {
 	p := oidctest.NewProvider(t)
 
@@ -589,11 +573,8 @@ func TestProvider_PKCE_RejectsMissingVerifierWhenChallengeRegistered(t *testing.
 	}
 }
 
-// TestProvider_PKCE_NotRequiredWhenChallengeUnregistered guards backward
-// compatibility: a code registered without a CodeChallenge (every test
-// above this one in the file) must keep exchanging successfully with no
-// code_verifier at all -- CodeChallenge is opt-in per code, not a global
-// requirement retrofitted onto every existing test.
+// TestProvider_PKCE_NotRequiredWhenChallengeUnregistered proves PKCE is opt-in
+// per registered code.
 func TestProvider_PKCE_NotRequiredWhenChallengeUnregistered(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	p.RegisterCode("code", oidctest.Claims{Subject: "user-1"})
@@ -604,13 +585,8 @@ func TestProvider_PKCE_NotRequiredWhenChallengeUnregistered(t *testing.T) {
 	}
 }
 
-// TestProvider_TokenError_IsJSONWithErrorCode proves the /token endpoint's
-// error responses are JSON with a proper status, so
-// golang.org/x/oauth2's RetrieveError.ErrorCode actually populates from
-// them (ruling 4b): a bare http.Error's "text/plain" Content-Type makes
-// oauth2 parse the body as an x-www-form-urlencoded query string instead
-// (see internal/token.go's doTokenRoundTrip), silently losing the error
-// code -- this regression test is what proves that's fixed.
+// TestProvider_TokenError_IsJSONWithErrorCode proves JSON errors populate
+// oauth2.RetrieveError.ErrorCode; text/plain would be parsed as form data.
 func TestProvider_TokenError_IsJSONWithErrorCode(t *testing.T) {
 	p := oidctest.NewProvider(t)
 

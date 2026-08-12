@@ -1,8 +1,7 @@
-# Dev stack for aboutme — also the self-hosting artifact (spec §6).
+# General Compose and self-hosting stack. Its current edge is HTTP-only, so it
+# is not the P9 UAT deployment. See deploy/README.md.
 #
-# One origin (http://localhost) fronted by Caddy, mirroring the production
-# route table (spec §2 — see deploy/caddy/Caddyfile for the full table) so
-# cookies/CORS behave identically in dev and prod.
+# Caddy fronts one origin and the route table in deploy/caddy/Caddyfile.
 #
 # Before first run: `cp .env.example .env` (repo root) and set
 # POSTGRES_PASSWORD — there is no baked-in default (see deploy/README.md).
@@ -20,9 +19,8 @@
 # which this project does not own (podman's unqualified-search-registries
 # includes docker.io by default).
 #
-# Network layout (security review re-review, "topology-blind trust"): three
-# disjoint compose networks, not one flat default network shared by every
-# container.
+# Three disjoint networks enforce the trust boundaries in
+# docs/design/deployment.md.
 #   - db:       postgres, migrate, server — the only peers allowed to reach
 #     Postgres.
 #   - edge:     caddy, server ONLY, on a small fixed subnet. This is the
@@ -135,19 +133,9 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      # Trust boundary (design spec §6). In a container Go must accept
-      # connections from Caddy over the compose network, so it cannot bind
-      # loopback here — the boundary is enforced by TRUSTED_PROXY_CIDRS plus
-      # the fact that only Caddy publishes a host port.
+      # Go binds to the private network; only Caddy publishes a host port.
       LISTEN_HOST: "0.0.0.0"
-      # Exactly the `edge` network's fixed subnet below — not a broad
-      # RFC1918 range. The `edge` network carries only caddy and this
-      # server (see the file-header comment), so this genuinely identifies
-      # "requests that arrived from Caddy," not "requests that arrived from
-      # any compose container" (security review re-review, "topology-blind
-      # trust": the previous default trusted three whole RFC1918 ranges,
-      # so any compromised sibling container — postgres, migrate, or web —
-      # was a trusted peer able to assert an arbitrary client-IP header).
+      # Trust exactly the fixed edge subnet shared only by Caddy and Go.
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.90.0.0/28}
       # Origin the browser reaches the stack on — auth cookie scope, OAuth
       # redirect URIs, and CSRF Origin checks all derive from it. The
@@ -235,7 +223,5 @@ networks:
     ipam:
       config:
         - subnet: 10.90.0.0/28
-  # caddy, web — public-page routing only. Never shares a subnet with
-  # `edge`, so web is never a trusted proxy of the Go server (security
-  # review re-review, "topology-blind trust").
+  # caddy, web — public-page routing only; never a trusted Go proxy.
   frontend: {}

@@ -1,104 +1,6 @@
-// Adversarial, spec-derived tests for the LinkedIn OIDC login callback
-// (task-5-brief.md, AC-AUTH-002 "LinkedIn registration without verified
-// email rejected"), originally authored independently -- from
-// task-5-brief.md, the design spec (docs/specs/aboutme-design.md §3
-// "OAuth"), and the packages it names as allowed reads (internal/auth's
-// TransactionStore/cookie/session-cookie helpers, oidctest, the committed
-// Google handler files that define the shared callback pattern,
-// internal/store, internal/config, internal/testutil) -- WITHOUT reading
-// internal/auth/linkedin.go or any Task 5 author test, neither of which
-// existed at authorship time.
-//
-// Reconciled against the landed implementation (LinkedIn merged at
-// ee315b0/97005f3, "Merge branch 'task-5-linkedin'"; this checkout at
-// cc46948, which also includes GitHub login and shared-funnel hardening)
-// for:
-//
-//   - both ADAPT markers, exactly as guessed: auth.LinkedInStartPath/
-//     LinkedInCallbackPath (handlers.go) and the withLinkedInIssuer test
-//     option (handlers_test.go) landed with the identical names this file
-//     assumed;
-//   - mechanical helper collisions with the implementer's own
-//     linkedin_test.go, which independently defined four helpers under
-//     the exact same names this file also (independently) chose:
-//     uniqueLinkedInSubject, beginLinkedIn, doLinkedInCallback,
-//     assertNoLinkedInIdentity. This file's own copies were deleted in
-//     favor of theirs (identical bodies in every case); see notes.md's
-//     integration report;
-//   - a genuine TEST NAME collision, not just a helper one:
-//     linkedin_test.go's own TestLinkedInCallback_RegistrationEmailRule
-//     (its Step 1 TDD test, written from the same brief pseudocode this
-//     file also started from) is the exact same Go identifier this file
-//     originally used for its own, independently-authored version of the
-//     same four-case matrix. Renamed this file's copy to
-//     TestLinkedInCallback_RegistrationEmailRuleAdversarial to keep BOTH
-//     -- two independently-derived tests of AC-AUTH-002's core rule are
-//     the point of the phase's adversarial-review workflow, not
-//     redundancy to collapse into one;
-//   - newTestService's guard (handlers_test.go): it t.Fatals unless at
-//     least one of withGoogleIssuer/withGitHubEndpoint is also supplied,
-//     even for a LinkedIn-only test (linkedin_test.go's own tests already
-//     work around this by passing withGoogleIssuer(p.URL) alongside
-//     withLinkedInIssuer(p.URL), pointed at the same in-process provider,
-//     since a LinkedIn-only test never actually dials Google). Every
-//     newTestService call in this file now does the same;
-//   - reused beginLinkedInTransaction (linkedin_test.go) in place of this
-//     file's own inline TransactionStore.Begin call in the Step 2 link
-//     carve-out test -- equivalent glue, not a scenario change.
-//
-// No test assertion or scenario was weakened in reconciliation. Every
-// change above is glue (names, construction plumbing) or a rename forced
-// by a Go duplicate-declaration error; see notes.md's integration report
-// for the full list.
-//
-// Landed behavior facts this reconciliation encodes (binding rulings
-// applied after this file's original authorship):
-//
-//   - DD-C7: every /callback REJECTION redirects to PublicOrigin+"/login"
-//     (not the bare "/"), carrying ?error=<code> -- already asserted by
-//     the shared assertRejected helper (google_adversarial_test.go, now
-//     itself updated to check this), reused unchanged by every rejection
-//     test in this file;
-//   - DD-C12 (interim, pending Task 10): an unclaimed LinkedIn identity
-//     plus purpose=link attaches to the linking user via CreateIdentity,
-//     never creating a new user row -- exactly this file's own Step 2
-//     carve-out test's expectation, now reconciled to call the
-//     implementer's own beginLinkedInTransaction helper;
-//   - the provider access_denied -> cancelledErrorCode mapping (handlers.go;
-//     mentioned as "in-flight" at original authorship) is landed,
-//     unchanged from what this file already asserted.
-//
-// Scope: every test here drives GET /api/v1/auth/linkedin/start then
-// GET /api/v1/auth/linkedin/callback through the real http.Handler
-// newTestService builds (api.New + Service.RegisterRoutes), not a bypass
-// -- except TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail, which
-// constructs its transaction directly via TransactionStore.Begin (via the
-// shared beginLinkedInTransaction helper) per the brief's own carve-out
-// instruction, since the authenticated "start a link" HTTP surface
-// belongs to Task 10.
-//
-// It covers task-5-brief.md's three steps:
-//
-//   - Step 1's four-case registration email-rule matrix (the heart of
-//     AC-AUTH-002), independently re-derived alongside (not instead of)
-//     linkedin_test.go's own copy -- see the rename note above;
-//   - Step 2's linking carve-out: purpose=link with EmailVerified: nil
-//     must still succeed and attach the identity to the existing user;
-//   - Step 3's standard OIDC adversarial matrix (wrong issuer/audience/
-//     signature/nonce/expiry) plus spec-implied strengthenings
-//     (state-mismatch, missing-tx-cookie, cross-failure no-oracle
-//     equality, and the LinkedIn-specific access_denied -> cancelledErrorCode
-//     check) mirroring google_adversarial_test.go's own table -- genuinely
-//     new coverage: linkedin_test.go's own doc comment explicitly defers
-//     these to "a separate, independently authored suite" (i.e. this
-//     file).
-//
-// Does NOT cover: GitHub (Task 6's own copy of this table), the full
-// Task 10 three-way login-resolution branch (NewUser | ExistingIdentity |
-// EmailCollision) beyond the matrix's own new-user creation case,
-// router-level concerns, or linkedin_test.go's own DD-C12
-// account-mismatch/missing-linking-user safety-net tests (complementary,
-// not duplicated here).
+// These adversarial tests cover LinkedIn's verified-email rule, link carve-out,
+// OIDC and transaction checks, no-oracle behavior, and consent denial. They use
+// the real callback handler. See docs/design/security.md.
 package auth_test
 
 import (
@@ -114,16 +16,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// assertLinkedInLoginAccepted asserts the properties a *successful*
-// registration/login/link callback must have: the exact
-// PublicOrigin+"/" redirect target (DD-C7 pins this apart from a
-// rejection's PublicOrigin+"/login", never the same literal), a
-// non-empty __Host-session cookie, and the __Host-oauth-tx cookie
-// cleared exactly like a rejection also requires (ruling 1 applies to
-// every exit path, not just rejections). Not a mechanical collision with
-// anything in linkedin_test.go (which inlines its own equivalent checks
-// at each of its three success-path call sites instead of a shared
-// helper) -- kept as a genuinely novel, non-colliding helper.
+// assertLinkedInLoginAccepted checks the successful login shape: redirect to
+// the public root, issue a non-empty session cookie, and clear the transaction
+// cookie. Link callbacks have a different success shape and do not use it.
 func assertLinkedInLoginAccepted(t *testing.T, resp *http.Response) {
 	t.Helper()
 
@@ -148,33 +43,14 @@ func assertLinkedInLoginAccepted(t *testing.T, resp *http.Response) {
 	}
 }
 
-// ==== task-5-brief.md Step 1: the registration email-rule matrix -- the
-// heart of AC-AUTH-002 ====
+// ==== registration email rule ====
 
-// TestLinkedInCallback_RegistrationEmailRuleAdversarial is task-5-brief.md
-// Step 1's required table, implemented per its own pseudocode with two
-// deliberate adaptations from the brief's illustrative snippet, both to
-// keep every subtest's assertions unambiguous against this package's
-// shared, never-reset live TEST_DATABASE_URL (the same reasoning
-// google_adversarial_test.go's uniqueSubject/uniqueEmail doc comments
-// already establish for this file's sibling suite):
+// TestLinkedInCallback_RegistrationEmailRuleAdversarial covers verified,
+// unverified, absent-verification, and absent-email claims. Each case uses a
+// unique email, subject, and provider so rows in the shared live test database
+// cannot make a rejected case appear successful.
 //
-//   - the brief's pseudocode reuses the literal "a@example.com" across
-//     three of its four cases; this test instead generates a fresh
-//     uniqueEmail(t) per case, so a rejected case's assertNoUser check is
-//     never confused by an earlier case (e.g. "verified email present")
-//     having already inserted that same literal address;
-//   - a fresh oidctest.Provider and a fresh uniqueLinkedInSubject(t) per
-//     case, exactly as the brief's own comment instructs ("fresh oidctest
-//     provider + fresh subject per case (avoid identities collision
-//     across subtests)").
-//
-// Named ...Adversarial (not the brief's literal
-// TestLinkedInCallback_RegistrationEmailRule) because linkedin_test.go's
-// own Step 1 TDD test already claims that exact identifier -- see this
-// file's header comment. Scenario and assertions are otherwise unchanged
-// from original, independent authorship. See notes.md's ambiguities
-// section for the full reasoning.
+// A nil EmailVerified claim is never treated as true.
 func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 	t.Parallel()
 
@@ -245,41 +121,11 @@ func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 	}
 }
 
-// ==== task-5-brief.md Step 2: the linking carve-out ====
+// ==== linking carve-out ====
 
-// TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail is
-// task-5-brief.md Step 2: a purpose=link transaction with EmailVerified:
-// nil -- the exact claims shape
-// TestLinkedInCallback_RegistrationEmailRuleAdversarial's "email present,
-// verified claim absent" case rejects for registration -- must succeed
-// for linking, attaching the identity to the existing user. This is the
-// brief's own stated highest-value case: "the test that would catch an
-// over-eager fix that makes the email-verified check unconditional."
-//
-// Per the brief, this test constructs the transaction directly via
-// TransactionStore.Begin (through the implementer's own
-// beginLinkedInTransaction helper, linkedin_test.go -- reused rather than
-// duplicated, since it does exactly what this test needs) rather than
-// driving an authenticated GET .../start?purpose=link: that HTTP surface
-// belongs to Task 10. Everything downstream of that -- the
-// GET .../callback handling itself, including the purpose=link branch
-// under test -- IS Task 5's own scope and is driven for real, through the
-// same http.Handler every other test in this file uses.
-//
-// Success-shape assertions updated 2026-08-02 (Task 10, DD-C15): a link
-// success no longer redirects to the bare "/" or issues a session cookie
-// (this test's original assertions, written under DD-C12's interim
-// contract, before Task 10's link algorithm existed) -- it redirects to
-// PublicOrigin+"/app/settings/sessions" and issues NO session cookie at
-// all (the caller, already authenticated, keeps using the one they
-// arrived with). The underlying scenario this test proves -- an
-// unverified-email LinkedIn identity still succeeds for linking, and
-// attaches to the existing user rather than spawning a new one -- is
-// unchanged from original authorship; only the response shape a
-// SUCCESSFUL link produces was corrected. assertLinkedInLoginAccepted
-// (this file) stays exactly as authored -- it now documents a LOGIN
-// success shape specifically and remains correct for every other test in
-// this file that still uses it.
+// TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail proves the link-only
+// email carve-out through the real callback. Direct transaction setup isolates
+// callback behavior; success keeps the caller's current session.
 func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	t.Parallel()
 
@@ -287,7 +133,7 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL))
 
 	existingUserID := createTestUser(t, q)
-	raw, _ := issueTestSession(t, q, existingUserID) // resolveLinkOrReauth's purpose=link arm now re-authenticates the completing request (link.go's authenticateLinkOrReauthSession fix, gate hardening) -- see link_test.go's identical addition for the full reasoning.
+	raw, _ := issueTestSession(t, q, existingUserID) // The callback authenticates the session again before attaching the identity.
 	txCookie, tx := beginLinkedInTransaction(t, q, auth.PurposeLink, existingUserID)
 
 	subject := uniqueLinkedInSubject(t)
@@ -335,15 +181,10 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// ==== task-5-brief.md Step 3: the standard OIDC adversarial matrix,
-// re-run against LinkedIn's own issuer/config wiring ====
+// ==== OIDC rejection matrix ====
 
-// TestLinkedInCallback_RejectsWrongIssuer mirrors
-// TestGoogleCallback_RejectsWrongIssuer (google_adversarial_test.go):
-// go-oidc's own issuer verification -- not application code -- must
-// reject a token whose "iss" doesn't match the discovered LinkedIn
-// provider, through linkedin.go's own discovery/verify wiring
-// independently of google.go's.
+// TestLinkedInCallback_RejectsWrongIssuer proves LinkedIn's verifier rejects a
+// token from another issuer.
 func TestLinkedInCallback_RejectsWrongIssuer(t *testing.T) {
 	t.Parallel()
 
@@ -365,9 +206,8 @@ func TestLinkedInCallback_RejectsWrongIssuer(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsWrongAudience mirrors
-// TestGoogleCallback_RejectsWrongAudience: go-oidc must reject a token
-// whose "aud" doesn't match the Service's configured LinkedIn client id.
+// TestLinkedInCallback_RejectsWrongAudience proves the configured client ID is
+// enforced.
 func TestLinkedInCallback_RejectsWrongAudience(t *testing.T) {
 	t.Parallel()
 
@@ -389,10 +229,7 @@ func TestLinkedInCallback_RejectsWrongAudience(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsTamperedSignature mirrors
-// TestGoogleCallback_RejectsTamperedSignature: go-oidc must reject a
-// token signed with a key other than the one this LinkedIn-issuer
-// oidctest.Provider published at /jwks.json.
+// TestLinkedInCallback_RejectsTamperedSignature uses an unpublished signing key.
 func TestLinkedInCallback_RejectsTamperedSignature(t *testing.T) {
 	t.Parallel()
 
@@ -414,12 +251,7 @@ func TestLinkedInCallback_RejectsTamperedSignature(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsNonceMismatch mirrors
-// TestGoogleCallback_RejectsNonceMismatch -- the brief's own
-// "highest-value regression test in this table" reasoning applies
-// identically here: go-oidc never checks nonce itself, so this is caught
-// only by handleLinkedInCallback's own manual comparison, an easy line to
-// omit when copy-adapting google.go's callback into a new file.
+// TestLinkedInCallback_RejectsNonceMismatch targets the manual nonce check.
 func TestLinkedInCallback_RejectsNonceMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -441,9 +273,7 @@ func TestLinkedInCallback_RejectsNonceMismatch(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsExpiredIDToken mirrors
-// TestGoogleCallback_RejectsExpiredIDToken: go-oidc must reject a token
-// whose "exp" is already in the past.
+// TestLinkedInCallback_RejectsExpiredIDToken uses a past exp claim.
 func TestLinkedInCallback_RejectsExpiredIDToken(t *testing.T) {
 	t.Parallel()
 
@@ -465,15 +295,10 @@ func TestLinkedInCallback_RejectsExpiredIDToken(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// ==== strengthenings mirroring google_adversarial_test.go's own table,
-// applied here because handleLinkedInCallback is structurally a near-
-// duplicate of handleGoogleCallback (and therefore shares its bug
-// classes) ====
+// ==== callback transaction checks ====
 
-// TestLinkedInCallback_RejectsStateMismatch mirrors
-// TestGoogleCallback_RejectsStateMismatch: the OAuth `state` parameter
-// (RFC 6749 §10.12) must be checked against what Begin generated for this
-// exact transaction, independent of the __Host-oauth-tx cookie and PKCE.
+// TestLinkedInCallback_RejectsStateMismatch proves state remains bound to the
+// exact transaction cookie.
 func TestLinkedInCallback_RejectsStateMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -494,10 +319,8 @@ func TestLinkedInCallback_RejectsStateMismatch(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_RejectsMissingTxCookie mirrors
-// TestGoogleCallback_RejectsMissingTxCookie: a callback with a plausible
-// code and state but no __Host-oauth-tx cookie at all must be rejected
-// the same way any other invalid transaction is.
+// TestLinkedInCallback_RejectsMissingTxCookie presents plausible query values
+// without the transaction handle.
 func TestLinkedInCallback_RejectsMissingTxCookie(t *testing.T) {
 	t.Parallel()
 
@@ -518,16 +341,9 @@ func TestLinkedInCallback_RejectsMissingTxCookie(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
-// TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled encodes the
-// binding integration-owner ruling (DD-C4/landed cancelledErrorCode): a
-// callback carrying ?error=access_denied (RFC 6749 §4.1.2.1, the visitor
-// declining consent at the provider) must redirect with the distinct
-// cancelledErrorCode, not the generic auth_failed one -- tested here,
-// independently of Google's own equivalent, specifically to catch
-// linkedin.go forgetting to mirror this check. Reuses assertRejected
-// (which already asserts DD-C7's /login redirect target, cleared tx
-// cookie, and no session cookie) rather than re-deriving those checks
-// inline.
+// TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled proves a
+// provider-declined consent response maps to the distinct canceled code.
+// assertRejected also checks the rejection redirect and cookie effects.
 func TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -540,17 +356,13 @@ func TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) 
 	resp := doGet(t, handler, path, txCookie) //nolint:bodyclose // doGet (handlers_test.go) closes the body itself before returning.
 
 	errorCode := assertRejected(t, resp)
-	if errorCode != "cancelled" { //nolint:misspell // exact, ruling-specified wire value (double-L "cancelled"), matching handlers.go's own cancelledErrorCode const, not a typo for "canceled"
+	if errorCode != "cancelled" { //nolint:misspell // Exact wire value uses double-L "cancelled".
 		t.Errorf("error code = %q, want %q (provider access_denied maps to the distinct code below, not the generic auth_failed)", errorCode, "cancelled") //nolint:misspell // same wire value as above
 	}
 }
 
-// TestLinkedInCallback_OIDCFailures_NoOracleAcrossFailureModes mirrors
-// TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes: the five
-// distinct OIDC verification failures above must be indistinguishable to
-// the browser (no oracle) -- same error code, same response body, and
-// that shared code must be neither email_not_verified nor leak any
-// verification-internals keyword.
+// TestLinkedInCallback_OIDCFailures_NoOracleAcrossFailureModes requires the
+// same error code and body across all OIDC verification failures.
 func TestLinkedInCallback_OIDCFailures_NoOracleAcrossFailureModes(t *testing.T) {
 	t.Parallel()
 

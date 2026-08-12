@@ -1,21 +1,24 @@
 # Task 4: Write-safety HTTP kernel, route table, and per-route policy
 
-The single place every P2B request passes through. It implements design spec
-§4's write-safety paragraph over the whole surface, so no route re-implements
-`If-Match`, idempotency, error mapping, or wire-version handling — and no route
-can forget one. Implements [D2](decisions.md) (stub route table),
-[D3](decisions.md)/[D4](decisions.md) (wire version),
-[D6](decisions.md)–[D9](decisions.md), [D14](decisions.md) (per-path body
-limit), and [D15](decisions.md).
+The single place every P2B request passes through. It implements the
+[resume write-safety contract](../../design/api.md#resume-write-safety) over the
+whole surface, so no route re-implements `If-Match`, idempotency, error mapping,
+or wire-version handling — and no route can forget one. Implements
+[D2](decisions.md) (stub route table), [D3](decisions.md)/[D4](decisions.md)
+(wire version), [D6](decisions.md)–[D9](decisions.md), [D14](decisions.md)
+(streaming photo-path dispatch), and [D15](decisions.md).
 
 **Tier:** High risk (authorization, CSRF chain, idempotency, CAS).
 
 **Files:** create
-`apps/server/internal/resumeapi/{routes.go,chain.go,writesafety.go,wireversion.go,errors.go,persist.go,testutil_test.go}`
-plus their tests, and the seven stub handler files
+`apps/server/internal/resumeapi/{routes.go,chain.go,writesafety.go,wireversion.go,errors.go,persist.go,routes_test.go,chain_test.go,writesafety_test.go,wireversion_test.go,errors_test.go,persist_test.go,testutil_test.go}`
+and the seven stub handler files
 `{resumes.go,entries.go,sections.go,structure.go,personal_details.go,customization.go,photo.go}`;
 modify `apps/server/internal/api/router.go` + `router_test.go` and
-`apps/server/cmd/server/main.go`.
+`apps/server/internal/auth/csrf.go` + `csrf_test.go`, and
+`apps/server/cmd/server/main.go`. `middleware.go` remains unchanged: the photo
+route bypasses its buffering `BodyLimit` and applies `MaxBytesReader` in Task 11
+only after admission.
 
 > **Wave 2 lands as one unit.** `persist.go` calls `sanitizeDocument`, which
 > Task 5 defines in `sanitize_doc.go` in this same package. Neither file
@@ -33,23 +36,116 @@ func New(store *resume.Store, idem *resume.IdempotencyStore,
 
 // RegisterRoutes matches api.New's register signature, exactly as
 // auth.Service.RegisterRoutes does. It wires EVERY P2B route at once; a
-// route whose handler file is still a stub answers 501 not_implemented.
+// route whose handler file is still under construction answers the
+// construction-only 501 not_implemented sentinel. No sentinel may remain at
+// the phase head.
 func (s *Service) RegisterRoutes(mux *http.ServeMux)
 
-// mutate is the one write path (D15). It parses and enforces the write
-// envelope, runs apply inside IdempotencyStore.Execute's transaction, and
-// writes the response. apply receives the stored document down-emitted to
-// the caller's declared wire version as a generic tree, and mutates it in
-// place; the kernel converts back up, sanitizes, validates, and CAS-writes
-// the complete document.
-func (s *Service) mutate(w http.ResponseWriter, r *http.Request, spec mutationSpec)
+// executeMutation is the common write envelope. It parses and enforces the
+// headers, wire version, canonical operation identity, bounds, idempotency,
+// response storage, and error mapping, then invokes exactly one typed
+// transaction operation below.
+func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request,
+    spec mutationSpec)
 
 type mutationSpec struct {
-    Route        string // e.g. "PATCH /resumes/{id}/entries/{sectionKey}"
-    RequireMatch bool   // false only for POST /resumes (D6)
-    Apply        func(ctx applyContext, doc map[string]any) error
-    Status       int    // 200 or 201
+    RegisteredOperation string
+    RequireMatch        bool // false only for POST /resumes (D6)
+    Decode              func(*http.Request) (boundedInput, error)
+    CanonicalTargets    func(boundedInput) ([]string, error)
+    Prepare             func(context.Context, boundedInput,
+        idempotencyInspection) (preparedInput, error)
+    Run                 mutationOperation
+    Finalize            func(context.Context, preparedInput, cleanupIntent,
+        resume.ExecuteResult, error)
 }
+
+type mutationRunResult struct {
+    Response resume.StoredResponse
+    Cleanup  cleanupIntent
+}
+
+type mutationOperation interface {
+    Run(context.Context, *store.Queries, mutationContext,
+        preparedInput) (mutationRunResult, error)
+}
+
+// The package supplies explicit operations for create, existing-resume
+// aggregate mutation, metadata+aggregate CAS, revision-CAS delete, and photo
+// candidate lifecycle. A route registers exactly one operation. Any operation
+// that persists document content must project to current, sanitize, validate,
+// and persist the complete aggregate before it can return success.
+```
+
+`executeMutation` derives the idempotency operation scope from method,
+`RegisteredOperation`, and `CanonicalTargets`. Concrete targets are not moved
+into the request fingerprint. The same key on a different canonical operation is
+a distinct mutation, as ADR 0016 requires.
+
+The explicit operations have these contracts:
+
+- **Create:** rejects `If-Match`, assembles the current document, sanitizes and
+  validates it, then calls `CreateTx`.
+- **Aggregate mutation:** reads the scoped resume, down-emits, applies the route
+  delta, up-accepts, sanitizes, validates, and calls `SaveDocumentTx`.
+- **Metadata mutation:** follows the same full projection and sanitation path,
+  then calls `SaveMetadataAndDocumentTx` so title, language, current document,
+  schema version, and revision commit together.
+- **Delete:** calls revision-aware `DeleteTx`; a miss returns the scoped winner
+  for `412`, while missing/wrong owner stays `404`. Post-commit media cleanup
+  uses only a non-persisted `cleanupIntent` built from the deleted row returned
+  by that transaction.
+- **Photo upload/replace:** owns candidate preparation and compensation, but
+  commits the document through the aggregate operation. A not-attempted or
+  definitely rolled-back commit removes its candidate; an ambiguous commit
+  leaves it for the bounded sweep.
+- **Photo crop:** uses the ordinary JSON aggregate operation. It preserves the
+  key read in that transaction and has no external preparation, cleanup, or
+  object I/O.
+- **Photo delete:** clears the reference through the aggregate operation and
+  returns the transaction-read old key as its cleanup intent.
+
+For operations with no external preparation or cleanup, `Prepare` and `Finalize`
+are no-ops. Resume delete and photo replace/delete use the cleanup intent even
+though resume delete has no external `Prepare`. `Finalize` is a
+telemetry-and-compensation hook: it never returns an error and cannot replace a
+stored HTTP result. Cleanup failure is logged and measured while first response
+and replay keep the same stored success. The upload path uses the same envelope
+in this fixed order: bounded raw read → extract all canonical targets (including
+body-owned `entry.id` where applicable) → build fingerprint → `Inspect` → on a
+fresh key normalize and `Put` a candidate outside PostgreSQL → transactional
+`Execute`/CAS → `Finalize` → stored-response writer. A preflight replay never
+prepares a candidate. A concurrent replay after preparation deletes only that
+request's unreferenced candidate. `CommitNotAttempted` and
+`CommitDefinitelyRolledBack` delete it; an unknown commit outcome retains it. No
+external I/O occurs inside `Run`. Once `Prepare` succeeds, `Finalize` runs for
+every `Execute` result or error.
+
+The envelope captures `mutationRunResult.Cleanup` inside the transaction
+callback but stores only `Response` in the idempotency record. It executes that
+intent only for a fresh `CommitCommitted` result. A replay never repeats old-
+object cleanup. A rollback or unknown outcome never executes the intent because
+the database may still reference its key. Candidate compensation is separate: it
+deletes this request's new candidate on a replay, key conflict,
+`CommitNotAttempted`, or `CommitDefinitelyRolledBack`, and retains it on
+`CommitUnknown`. Tests change the photo key between preflight and the
+transaction and prove cleanup uses only the transaction-returned key. Before an
+intent reaches `media.Backend.Delete`, it must pass D11's exact parser for the
+expected resume ID. An invalid or cross-resume cleanup key is a measured
+telemetry-only failure and never becomes backend I/O.
+
+An idempotency retained-capacity rejection maps to the existing
+`429 rate_limited` response. `Retry-After` is one second while expired backlog
+remains and otherwise rounds up the earliest retained expiry. The rejection
+introduces no undeclared error code.
+
+Task 4 also adds this narrow package-`auth` entry point:
+
+```go
+// RequireCSRFMultipart applies the same token and origin checks as
+// RequireCSRF but accepts only multipart/form-data for a body. The photo POST
+// is its sole caller; RequireCSRF remains JSON-only.
+func RequireCSRFMultipart(allowedOrigin string) api.Middleware
 ```
 
 ## Steps
@@ -62,51 +158,110 @@ type mutationSpec struct {
       `If-Match: "42"`, `If-Match: W/"r42"`, and an empty value →
       `400 precondition_malformed`; `If-Match` on `POST /resumes` →
       `400 precondition_not_supported`. Every rejection writes **no** database
-      row: assert row count and bytes unchanged.
-- [ ] **Step 2: failing envelope and vocabulary tests.** Every response body is
-      `{data}` or `{error:{code,message}}` and nothing else; `details` appears
-      only where [D7](decisions.md) allows it; a test enumerates every
-      `WriteError` call site in the package (parsed from the AST or a registry)
-      and fails on a code outside the closed vocabulary. The `internal/auth`
-      codes `session_required` and `csrf_rejected` are reused verbatim, never
-      redefined.
+      row: assert row count and bytes unchanged. `Idempotency-Key`, `If-Match`,
+      `X-Resume-Schema-Version`, and `Content-Type` are singleton headers:
+      repeated field lines or a comma-folded value fail. On ordinary JSON and
+      DELETE routes, the outer bounded `BodyLimit` may already have buffered the
+      request; rejection still precedes handler decode, idempotency inspection,
+      and transaction. Only the streaming photo upload proves zero body reads
+      for these header failures. Map them to `idempotency_key_invalid`,
+      `precondition_malformed`, `unsupported_schema_version`, and
+      `request_invalid` respectively; upload Content-Type failure remains
+      `415 media_type_unsupported`. Combined-error cases freeze handler
+      precedence as idempotency key → precondition → wire version → bounded
+      decode. The photo route's outer session, CSRF/media type, and upload-rate
+      checks still precede that handler order.
+- [ ] **Step 2: failing envelope and vocabulary tests.** Every response body
+      other than a declared `204` is `{data}` or `{error:{code,message}}` and
+      nothing else; every `204` has zero bytes and no `Content-Type` header on
+      both first response and replay. `details` appears only where
+      [D7](decisions.md) allows it; a test enumerates every `WriteError` call
+      site in the package (parsed from the AST or a registry) and fails on a
+      code outside the closed vocabulary. The `internal/auth` codes
+      `session_required` and `csrf_rejected` are reused verbatim, never
+      redefined. The construction registry permits only `not_implemented` at
+      `501`; a separate phase-head test fails if that literal, status, or any
+      registered stub remains after W3. Resume, entry, and photo DELETE accept
+      an absent body and an optional singleton JSON Content-Type. A positive
+      Content-Length is rejected before any handler read; otherwise a one-byte
+      probe of the bounded outer buffer accepts only immediate EOF. `{}`, one
+      whitespace byte, chunked nonempty data, trailing data, and duplicate or
+      comma-folded Content-Type are `400 request_invalid` before idempotency
+      inspection or transaction. Each accepted delete fingerprints one
+      zero-length payload; the optional Content-Type is transport metadata and
+      does not change replay identity.
 - [ ] **Step 3: failing wire-version tests.** No header → the current version; a
-      declared accepted version → accepted, and the response's
-      `X-Resume-Schema-Version` echoes it; an undeclared, non-numeric, negative,
-      or absurd version → `400 unsupported_schema_version` with
+      declared accepted version → accepted, and every response for which D3
+      declares `X-Resume-Schema-Version` echoes it; an undeclared, non-numeric,
+      negative, or absurd version → `400 unsupported_schema_version` with
       `details.acceptedVersions`; the response document is the one `EmitWire`
-      produced for that version. Drive the non-identity cases through a
-      **synthetic** projector (P2A Task 8's construction), since production v1
-      has one version.
+      produced for that version. Drive v1↔v2 through the production projector,
+      immutable released schemas, and real adjacent converters. Use a synthetic
+      projector only for registry states released data cannot represent, such as
+      a version accepted for writes but not emitted. Enumerate every JSON resume
+      read and every mutation, including all deletes, and prove the header is in
+      scope; prove binary photo GET does not accept or emit it.
 - [ ] **Step 4: failing precondition and idempotency tests.** Stale `If-Match` →
       `412 revision_mismatch` whose `details.revision` and `details.document`
       byte-match a fresh `GET` (AC-SAVE-001); replay of the same key and body →
-      the stored response, byte-identical, with the mutation **not** re-run (spy
-      counter) (AC-SAVE-002); the same key with a different body →
-      `409 idempotency_key_reuse` with zero database deltas; a handler error
-      after a write inside `Apply` leaves neither the mutation nor the record.
-      Record in the package doc, verbatim, that a `csrf_rejected` retry **must
-      reuse the same `Idempotency-Key`** — the forward contract P2A's Task 7 and
-      `../phase-1-deferred.md` hand to P2B and P4.
+      the stored status, approved deterministic headers, and body,
+      byte-identical, with the mutation **not** re-run (spy counter)
+      (AC-SAVE-002). The approved stored headers are `Location`, `ETag`, and
+      `X-Resume-Schema-Version`; JSON `Content-Type` and
+      `Cache-Control: no-store` are deterministic writer/middleware output;
+      `Date` and `X-Request-ID` remain fresh and distinct. The same key with a
+      different body → `409 idempotency_key_reuse` with zero database deltas; a
+      handler error after a transaction operation writes leaves neither the
+      mutation nor the record. Record in the package doc, verbatim, that a
+      `csrf_rejected` retry **must reuse the same `Idempotency-Key`** — the
+      forward contract P2A's Task 7 and `../phase-1-deferred.md` hand to P2B and
+      P4. Assert D18's canonical scope: method, registered operation, and
+      canonical concrete targets. Assert the separate fingerprint: resolved wire
+      version, parsed precondition, other declared semantic inputs, and exact
+      bounded body bytes. Crop hashes its exact JSON bytes. Each bodyless delete
+      hashes zero bytes whether its optional singleton JSON Content-Type is
+      absent or present. The same key on a different concrete target is a
+      distinct mutation, never a replay.
 - [ ] **Step 5: failing route-table test.** Every path and method from Task 1's
       contract is registered; an unregistered method on a registered path is
       `405`; every route is behind `RequireSession` then `RequireCSRF` (assert
       by driving each route with no cookie → `401 session_required`, and each
       mutation with a good cookie but no token → `403 csrf_rejected`); every
-      stub answers `501 not_implemented` until its owning task replaces it. A
-      parallel test asserts the registered set **equals** the OpenAPI document's
-      set — neither side may grow silently.
+      stub answers the construction-only `501 not_implemented` until its owning
+      task replaces it. A parallel test asserts the registered set **equals**
+      the OpenAPI document's set — neither side may grow silently. OpenAPI must
+      never declare the construction sentinel.
 - [ ] **Step 6: failing rate-limit and body-limit tests.** Reads, writes, and
       media upload each use their own policy keyed by account + client IP via
       `api.RateLimiterConfig.Key`, with the numbers read from the budget
-      constants the owner landed; over-limit returns `429` with `Retry-After`
-      before the body is read. A JSON route with a 300 KB body is `413` (global
-      limit) while the photo route accepts a body above 256 KB and rejects above
-      the media budget — the [D14](decisions.md) path-dispatched chain in
-      `api.New`, added the same way the health chain already is.
-- [ ] **Step 7: implement; green.** `mutate` order is fixed and tested: key →
-      precondition → strict decode → wire version → `Execute` → read → down-emit
-      → apply → up-accept → sanitize → validate/bounds → CAS → record → respond.
+      constants the owner landed. Establish the photo route's outer order as
+      session → CSRF and multipart media type → account-and-client-IP upload
+      limit → handler, with every rejection before a body read. Task 11 adds
+      header validation and the permit inside that handler and proves the full
+      order before replacing the stub. Add `auth.RequireCSRFMultipart`; keep
+      `auth.RequireCSRF` JSON-only. A JSON route with a 300 KB body is ordinary
+      `413 body_too_large`. Exact `POST /api/v1/resumes/{id}/photo` bypasses
+      buffering `BodyLimit`; malformed, escaped, near-match, wrong-method, and
+      non-photo paths cannot enter that branch. Task 11 owns its streaming
+      request and file limits, whose overflow is `413 media_too_large`.
+- [ ] **Step 7: implement; green.** The common order is key → precondition →
+      wire version → strict bounded decode → canonical operation/target
+      extraction → semantic fingerprint → inspection → optional external
+      preparation → `Execute` (selected transaction operation → normalized
+      record → commit) → telemetry-only finalize → stored-response writer. Each
+      operation's conditional order matches its contract above; no delete fakes
+      a document write and no create fakes an existing read. Add a completeness
+      test that enumerates every mutating OpenAPI route and proves it registers
+      exactly one operation. Add an invariant test that every operation which
+      persists document bytes reaches the one project/sanitize/validate helper
+      before a store call. The order test uses spies for body reads, inspection,
+      normalization, object I/O, transaction, commit classification, and
+      cleanup; no transposition may pass. A cleanup failure after a fresh
+      commit, or candidate-compensation failure after a concurrent replay, is
+      logged and measured but cannot change the stored success status, headers,
+      or body. Race tests prove a stale preflight key is never put into a
+      cleanup intent, replay never repeats a committed intent, and only a fresh
+      committed result executes the intent returned by its own transaction.
       `Cache-Control: no-store` stays on every response (the outer chain already
       guarantees it; assert it rather than re-add it).
 - [ ] **Step 8: the shared test harness.** `testutil_test.go` builds an
@@ -114,12 +269,13 @@ type mutationSpec struct {
       filesystem media backend, plus helpers to create a user, a session cookie,
       a CSRF token, and a resume. Every wave-3 and wave-4 task uses it, so no
       task invents its own harness.
-- [ ] **Step 9: gate.** `make server-build server-vet server-test`;
-      `REQUIRE_TEST_DB=1 … go test ./internal/resumeapi/... -race -count=1 -v`;
-      `make api-check` (the route-set equality test consumes the document);
-      `make check`.
-- [ ] **Step 10: commit** —
-      `git commit -m "feat(resumeapi): add the resume write-safety kernel and route table" -- apps/server/internal/resumeapi apps/server/internal/api apps/server/cmd/server`
+- [ ] **Step 9: gate.** Run `make test-db-up`,
+      `make server-build server-vet server-test`,
+      `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
+      `make api-check`, and `make check`.
+- [ ] **Step 10: handoff.** Report the owned paths, failing-test evidence, exact
+      checks, route inventory, and remaining construction stubs to the
+      integration owner. Do not stage or commit.
 - [ ] **Step 11: independent defect review.** Ask specifically whether any order
       in Step 7 can be transposed without a test failing, and whether any path
       reaches a write without passing every check.

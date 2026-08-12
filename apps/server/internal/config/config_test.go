@@ -59,13 +59,9 @@ func TestLoad_ValidConfig(t *testing.T) {
 }
 
 // TestLoad_ValidConfig_StagingRequiresTrustBoundary is the staging
-// counterpart of TestLoad_ValidConfig: staging now carries the same
-// client-IP trust-boundary strictness as prod (re-review of security
-// review finding #2 — staging exists to validate the real deployment
-// topology before it reaches prod, so a lenient staging boundary would let
-// a misconfiguration reach prod undetected), so a fully valid staging
-// config must supply TRUSTED_PROXY_CIDRS and parse it exactly like prod
-// does.
+// counterpart of TestLoad_ValidConfig: staging carries the same client-IP
+// trust-boundary strictness as prod. A valid staging config must supply
+// TRUSTED_PROXY_CIDRS and parse it exactly like prod does.
 func TestLoad_ValidConfig_StagingRequiresTrustBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -334,11 +330,8 @@ func TestLoad_ListenHostInvalidValue(t *testing.T) {
 	}
 }
 
-// TestLoad_ListenHostNonLoopbackRejectedInProd guards the specific
-// regression the security review found: main.go used to listen on all
-// interfaces unconditionally, contrary to design spec §6's production
-// requirement that port 8080 never be reachable around Caddy's
-// origin-secret boundary.
+// TestLoad_ListenHostNonLoopbackRejectedInProd proves production cannot
+// expose port 8080 around Caddy's origin-secret boundary.
 func TestLoad_ListenHostNonLoopbackRejectedInProd(t *testing.T) {
 	t.Parallel()
 
@@ -382,10 +375,9 @@ func TestLoad_ListenHostLoopbackAcceptedInProd(t *testing.T) {
 }
 
 // TestLoad_ListenHostNonLoopbackRejectedInStaging is the staging
-// counterpart of TestLoad_ListenHostNonLoopbackRejectedInProd: staging now
-// carries the same production-strictness client-IP trust boundary as prod
-// (re-review of security review finding #2), so it must reject a
-// non-loopback LISTEN_HOST too.
+// counterpart of TestLoad_ListenHostNonLoopbackRejectedInProd. Staging uses
+// the same client-IP trust boundary as prod, so it also rejects a non-loopback
+// LISTEN_HOST.
 func TestLoad_ListenHostNonLoopbackRejectedInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -428,9 +420,8 @@ func TestLoad_ListenHostLoopbackAcceptedInStaging(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RequiredInProd guards the other half of the
-// security review's finding 2: production must fail closed when its
-// client-IP trust configuration is absent, never silently trust no one
+// TestLoad_TrustedProxyCIDRs_RequiredInProd proves production fails closed when
+// its client-IP trust configuration is absent rather than silently trusting no one
 // (which collapses every real client into one bucket) or everyone (a
 // spoofing bypass).
 func TestLoad_TrustedProxyCIDRs_RequiredInProd(t *testing.T) {
@@ -450,10 +441,9 @@ func TestLoad_TrustedProxyCIDRs_RequiredInProd(t *testing.T) {
 }
 
 // TestLoad_TrustedProxyCIDRs_RequiredInStaging is the staging counterpart
-// of TestLoad_TrustedProxyCIDRs_RequiredInProd: staging now fails closed on
-// an absent client-IP trust boundary too (re-review of security review
-// finding #2 — staging exists to validate the real deployment topology
-// before it reaches prod).
+// of TestLoad_TrustedProxyCIDRs_RequiredInProd: staging fails closed on
+// an absent client-IP trust boundary too. Staging validates the real
+// deployment topology before it reaches prod.
 func TestLoad_TrustedProxyCIDRs_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -515,9 +505,8 @@ func TestLoad_TrustedProxyCIDRs_ParsesCommaSeparatedList(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone guards the static half of
-// security review finding #2: a /0 CIDR passes ordinary CIDR syntax
-// validation but trusts every possible peer, silently defeating the
+// TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone proves a /0 CIDR passes
+// ordinary CIDR syntax validation but trusts every possible peer, defeating the
 // client-IP trust boundary rather than merely narrowing it to a wrong
 // range. Load must reject it outright rather than starting successfully
 // with a value this implausible for any deployment topology.
@@ -544,10 +533,8 @@ func TestLoad_TrustedProxyCIDRs_RejectsTrustEveryone(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix is the
-// re-review's regression test for security review finding #2's minor
-// residual (M5): the old check only special-cased a literal /0, which a
-// deployment could trivially evade by splitting the whole IPv4 space into
+// TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix proves a literal
+// /0 check is insufficient because the whole IPv4 space can be split into
 // two /1 prefixes that individually pass ordinary CIDR syntax. Load must
 // instead enforce a minimum prefix length per address family (narrower
 // than /8 for IPv4, /48 for IPv6 is rejected outright) so every configured
@@ -583,8 +570,8 @@ func TestLoad_TrustedProxyCIDRs_RejectsBroaderThanMinimumPrefix(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted proves the minimum-
-// prefix rejection above is specifically about implausibly broad CIDRs, not
+// TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted proves the minimum
+// prefix rejection is specifically about implausibly broad CIDRs, not
 // about broad prefixes in general: a deployment legitimately trusting a
 // large-but-bounded internal range (e.g. all of RFC 1918 10.0.0.0/8, or the
 // IPv6 minimum /48) must still be accepted.
@@ -609,9 +596,9 @@ func TestLoad_TrustedProxyCIDRs_NarrowPrefixesStillAccepted(t *testing.T) {
 	}
 }
 
-// TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix is the regression test
-// for re-review minor M-D: an IPv4-in-IPv6 mapped prefix passed the /48 IPv6
-// minimum-prefix bound yet can never match a real peer, because
+// TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix proves an IPv4-in-IPv6
+// mapped prefix can pass the /48 IPv6 minimum-prefix bound yet can never match
+// a real peer, because
 // api.resolveClientIP Unmap()s every peer address before testing trust — so
 // such a prefix silently trusts nobody. Load must reject it (naming the v4
 // form) rather than accept a value that reads as configured but is inert.
@@ -768,7 +755,7 @@ func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
 
 // ---- GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET --------------------------
 //
-// GitHub login is plain OAuth2, not OIDC (AC-AUTH-003) -- no discovery, no
+// GitHub login is plain OAuth2, not OIDC -- no discovery, no
 // issuer, no nonce -- but its client credentials carry the identical
 // fail-closed requirement as Google's: same optional-in-dev,
 // required-in-prod/staging shape, mirrored test-for-test below.
@@ -1065,9 +1052,8 @@ func TestLoad_PublicOrigin_ValidFormats(t *testing.T) {
 	}
 }
 
-// TestLoad_PublicOrigin_InvalidFormats guards the fail-fast format
-// validation (task-4-brief.md integration-owner ruling): PUBLIC_ORIGIN must
-// parse as scheme://host[:port] only — no path, no trailing slash, no
+// TestLoad_PublicOrigin_InvalidFormats guards fail-fast format validation.
+// PUBLIC_ORIGIN must parse as scheme://host[:port] only — no path, trailing slash,
 // query, no fragment — since it becomes the base of every absolute OAuth
 // redirect/callback URL this server builds (an unnoticed trailing slash or
 // path would silently double up or corrupt every one of them).
@@ -1103,19 +1089,15 @@ func TestLoad_PublicOrigin_InvalidFormats(t *testing.T) {
 	}
 }
 
-// TestLoad_PublicOrigin_Normalization is a security-relevant cheap-win
-// fix: PUBLIC_ORIGIN is compared by EXACT string match against every
-// request's Origin header (auth.originAllowed, csrf.go) and used verbatim
-// to build every absolute OAuth redirect/callback URL. Before this fix,
-// loadPublicOrigin validated the format but stored raw's scheme/host
-// verbatim -- so an operator-entered "https://ABOUTME.vn" (mixed case) or
-// "https://aboutme.vn:443" (an explicit, semantically-default port) passed
-// startup validation cleanly and then 403'd every mutating request in
-// production, because a real browser's Origin header is always
-// normalized (lowercase host, default port omitted) and would never
-// byte-match either shape. Table below proves: (1) scheme+host are
-// lowercased, (2) a DEFAULT port for the scheme (":80" on http, ":443" on
-// https) is stripped, (3) a NON-default port is preserved unchanged, (4)
+// TestLoad_PublicOrigin_Normalization proves the configured transformations
+// run before exact comparison with each request's Origin header
+// (auth.originAllowed, csrf.go) and before it is used to build every OAuth
+// redirect/callback URL. A browser sends a
+// normalized Origin (lowercase host, default port omitted), so mixed-case
+// hosts and explicit default ports must normalize before comparison. The
+// table proves: (1) scheme+host are lowercased, (2) a default port for the
+// scheme (":80" on http, ":443" on https) is stripped, (3) a non-default port
+// is preserved unchanged, (4)
 // an origin already in canonical form round-trips byte-identical.
 func TestLoad_PublicOrigin_Normalization(t *testing.T) {
 	t.Parallel()

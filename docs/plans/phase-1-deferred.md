@@ -1,127 +1,202 @@
-# Phase 1 — deferred items and follow-up scope
+# P1.1 — Authentication contract closure
 
-Recorded at the phase gate so these survive the working ledger, which is
-git-ignored and dies with the phase worktree. Each item was raised by a task
-review, the whole-branch review, or the adversarial review, triaged, and
-deliberately not fixed in Phase 1.
+Status: **Active; server work landed, browser and ordering corrections open**
+(2026-08-12).
 
-## P1.1 — bounded follow-up after P2A, before P2B
+P1.1 closes the remaining differences among the authentication server, settings
+UI, OpenAPI, and acceptance evidence. It is a hard predecessor of P2B and adds
+no migration.
 
-This unit missed its original pre-P2A window; P2A has already appended migration
-heads `00004`/`00005` on its isolated branch. P1.1 needs no migration, so the
-integration owner now schedules it immediately after P2A and makes it a hard
-predecessor of P2B. The pieces remain one bounded auth hardening/reliability
-unit rather than four unowned deferrals.
+## Authority
 
-| #   | Item                                                                                                                                                                                                                                                                                                                                                                                     | Why it is not "later"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Auth-route rate limits + `oauth_transactions` reaper + `/start` rejection logging.** `GET /api/v1/auth/{provider}/start` is unauthenticated, writes one transaction row per request, is bounded only by the global 300/min per-IP default, is never reaped, and its rejections emit no log record. `?error=email_already_registered` is also an account-existence oracle at that rate. | The master plan makes each phase the owner of its own routes' policies; P1 is the owning phase for auth routes. The `RateLimit` middleware already supports composite account+IP keys.                                                                                                                                                                                                                                                                                                                                |
-| 2   | **Make link/reauth start a CSRF-protected `POST`** returning the authorize URL, instead of DD-C16's same-site check on a `GET`.                                                                                                                                                                                                                                                          | DD-C16 is verified fail-closed, but it is a second authorization primitive parallel to the CSRF machinery, and it depends on `Sec-Fetch-Site` or a same-origin `Referer` surviving the edge. P8-sec's job is security headers, and a global `Referrer-Policy: no-referrer` is standard hardening — it would break linking silently for browsers without Fetch Metadata. A POST rides the existing chain, needs no DD-C17 companion, and P11's bearer client gets it free. Cost rises once P5B owns the settings page. |
-| 3   | **Typed reason constants for funnel logs** instead of free-text `reason` strings.                                                                                                                                                                                                                                                                                                        | P9A is the first contact with a real IdP. A systematic misconfiguration (clock skew, issuer mismatch, redirect_uri) presents to every user as `auth_failed`, and the only operator signal is free text in a Warn log.                                                                                                                                                                                                                                                                                                 |
-| 4   | **Session rotation's single-delivery orphan.** A successor's raw token is delivered on exactly one response and is never stored (only its sha256), so a lost response orphans the session: the predecessor dies 60s later and the live successor is unreachable. Over ~90 rotations in a 90-day lifetime, a 0.1% per-response loss rate orphans ~9% of sessions.                         | Not a security defect — a wrong failure shape for a product whose thesis is "don't make people log in again". The remedy compatible with the current schema is to defer the predecessor's death until the successor is first used.                                                                                                                                                                                                                                                                                    |
+- [Security design](../design/security.md)
+- [API design](../design/api.md)
+- [ADR 0014: privileged OAuth starts](../adr/0014-oauth-start-methods.md)
+- [ADR 0015: session rotation delivery](../adr/0015-session-rotation-delivery.md)
+- [Current OpenAPI](../api/openapi.yaml)
 
-## Forward-binding decisions
+## Current baseline
 
-**DD-C9 is load-bearing for session survival, not just hydration.**
-Authenticated `/api/v1` fetches are `server: false`. If one runs during SSR, it
-rotates the session and delivers the successor cookie into Nitro, which discards
-it — killing the user's session 60 seconds later, deterministically, on every
-page load past the 24h rotation age. **P4's `useApi` must hard-code
-`server: false`** and should be the only authenticated fetch path, ideally
-enforced by an ESLint restriction while there are still few call sites.
+| Concern                                                    | Current state                                                 | Required closure                                           |
+| ---------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| Auth route limits, transaction reaping, and rejection logs | Implemented and tested                                        | Reverify in the final auth gate                            |
+| Privileged OAuth start                                     | Server and OpenAPI require authenticated, CSRF-protected POST | Replace settings-page GET anchors and add browser coverage |
+| Session rotation delivery                                  | Successor-first-use grace is implemented and tested           | Reverify lineage and lost-delivery cases                   |
+| Identity order                                             | SQL orders only by `created_at`                               | Add `id` as the deterministic tiebreaker                   |
+| Contract evidence                                          | OpenAPI prose is corrected                                    | Regenerate, run conformance, and close P1.1 evidence       |
 
-**Mobile (P11) constraints, decided now so P11 extends this model instead of
-forking it.** (a) DD-C16 rejects native clients by construction — a Custom Tab
-sends `Sec-Fetch-Site: none`; P11 adds a _parallel bearer-authenticated_ start
-and never relaxes the web one. (b) CSRF must be structured as "auth mode decided
-once at `RequireSession`; CSRF required iff mode == cookie" — never "skip CSRF
-if an `Authorization` header is present", which is the bypass shape. (c)
-Rotation delivers credentials only via `Set-Cookie` today; the transport needs
-an abstraction, the lifecycle does not. (d) Mobile sessions land in the same
-`sessions` table with a `kind` column, or `GET /sessions` — the user-facing
-device list, and the recovery control DD-C14 exists to make trustworthy — will
-lie by omission.
+## Task 0 — Freeze independent adversarial tests
 
-**The `sessions_rotated_from_key` unique index stays.** Dropping it would
-preserve the option of minting a second successor per predecessor, but that
-remedy multiplies live credentials from one lineage _and_ reopens the
-`:one`-with-a-non-unique-predicate ambiguity that caused a real defect during
-this phase. The better remedy for the orphan (defer predecessor death until the
-successor is first used) is fully compatible with keeping the index. Recorded so
-the decision is not re-argued from scratch.
+Before Tasks 1 and 2 authors inspect an implementation diff, one fresh test-only
+worker derives its cases from the authority documents and P11-001 through
+P11-005. It owns only these new files:
 
-**DD-C6's Content-Type gate is not the load-bearing CSRF control** —
-exact-Origin plus the synchronizer token are. When P2B adds media upload,
-`multipart/form-data` is permitted for that route on those grounds, rather than
-base64-in-JSON or an ad-hoc carve-out.
+- `apps/web/test/sessions-privileged-start-adversarial.test.ts`
+- `apps/server/internal/auth/me_order_adversarial_test.go`
 
-## The unstated assumption, now stated
+The web test mounts the settings surface as a black box. It proves link and
+reauthentication use bodiless CSRF-protected POST requests, never fall back to
+GET, preserve the one-retry CSRF rule, validate `authorizeUrl`, and navigate
+only after a valid response. The live-database test inserts equal-time
+identities in reverse UUID order and proves `/me` returns `(created_at, id)`
+order.
 
-**The entire auth model is a pure function of one exact origin string.**
-`__Host-` cookies carry no `Domain`, CSRF compares `Origin` by exact equality,
-DD-C16 and DD-C17 derive from it, and the `redirect_uri` registered with three
-providers is built from it. Consequences that were never written down:
+The test worker records that matrix before reading product code or author tests.
+It may then inspect existing harness code only to make the new tests compile.
+The integration owner starts or verifies the one shared test database before the
+worker runs:
 
-- **`www` and the apex are different cookie jars.** A visitor who signs in on
-  one and is later served the other is logged out, and only one is registered
-  with the providers. The deployment must redirect one to the other before
-  launch.
-- **Plain HTTP cannot authenticate at all.** `Secure` is unconditional. A
-  self-hoster on a LAN hostname over HTTP cannot sign in — a real product
-  decision that was never made explicitly.
-- **Safari rejects `Secure` cookies over `http://localhost`**, so local
-  development in Safari cannot sign in, and the failure funnels into the
-  deliberately opaque `auth_failed`.
+```sh
+(cd apps/web && npm test -- test/sessions-privileged-start-adversarial.test.ts)
+(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/auth -run '^TestMeIdentityOrderAdversarial$' -count=1 -v)
+```
 
-This fails closed everywhere at once, and every failure mode is opaque by
-design. It belongs in the spec and as a PI/P9A gate item.
+Both tests must fail for the missing correction before implementation starts.
+They then freeze. Tasks 1 and 2 authors may run these files but never edit them.
+A contract defect in a frozen test stops dispatch for a fresh test-only
+correction; it is not handed to an implementation author.
 
-## Correctly deferred to a named phase
+## Task 1 — Settings-page POST flow
 
-- Dead-session GC and the scheduled/global retention sweep remain **P8-priv**;
-  dead rows are invisible to `GET /sessions` and otherwise persist forever. P1.1
-  separately owns opportunistic request-path reaping of expired
-  `oauth_transactions`, so unauthenticated `/start` traffic cannot grow that
-  table unchecked before the scheduled job exists.
-- Session-lifecycle audit logging → **P8-priv** (which already owns the 180-day
-  retention for a log that does not yet exist; its emission points are all in
-  `internal/auth`). Needs a traceability row naming the owner.
-- The `users` → `sessions` cascade firing the self-FK's `SET NULL` against rows
-  in the same delete set is untested → **the phase that lands account
-  deletion**.
-- A `session_revoked` NOTIFY so long-lived SSE streams close on revocation,
-  logout-everywhere, and account deletion; `last_seen_at` is only touched by
-  `Authenticate`, so a session whose sole activity is one held-open stream
-  idle-expires while in use → **P6A**, which already builds the LISTEN/NOTIFY
-  hub.
-- The `csrf_rejected` retry must reuse the same `Idempotency-Key`; `mutate()`
-  does this correctly today by rebuilding from the same options, but by accident
-  rather than by contract → **P2B/P4**.
-- `oidctest` harness fidelity (text/plain token errors, single-`aud`,
-  `/authorize` 404, wall-clock signing) — test-only, no production surface.
-- Web polish: a11y labels, `useHead` titles, sticky link banner, raw ISO
-  timestamps → **P5B**.
+Own `apps/web/app/composables/useAuth.ts`,
+`apps/web/app/pages/app/settings/sessions.vue`,
+`apps/web/test/{useAuth,useAuth-csrf-rotation,sessions,sessions-csrf-gating}.test.ts`,
+and the bounded browser evidence. Reuse `useAuth().mutate` so the call carries
+the current CSRF token and performs the existing one-time token refresh. Change
+the helper to add `Content-Type: application/json` only when `body` is present;
+the privileged bodiless POST must omit that header. Existing JSON mutations must
+retain it.
 
-## Housekeeping, unowned
+For link and reauthentication:
 
-- **`internal/user` has zero production importers.** It survives for its
-  schema-drift assertions. Either delete it and move those assertions into
-  `internal/store`, or route user creation through it — before P8-priv's
-  `DELETE /me` has to choose.
-- **AC-AUTH-003's no-OIDC guard is file-shaped.** It parses exactly
-  `internal/auth/github.go`, but GitHub's callback path now also runs through
-  the shared funnel and `provider_http.go`. Neither imports go-oidc today, so
-  nothing is broken — but the guard no longer covers what it claims. Widen it to
-  the package minus `google.go`/`linkedin.go`.
-- Untested branches on paths P2B and P8-priv will hit first: `RevokeForUser`'s
-  already-revoked and unknown-id arms, the I2/I3 unique-violation recovery arms,
-  the exact-instant grace boundary, nil-`AvatarKey` round-trip, citext
-  case-insensitivity.
-- Stale doc comments in a codebase where long doc comments _are_ the design
-  record: `handlers.go`'s "GitHub follows in a later task"; the
-  closed-vocabulary comment missing `reauth_required`;
-  `redirectStartCSRFRejected`'s name (it does not redirect); "same-transaction
-  re-read" (it is a pool, not a transaction); the `math/rand` suppression citing
-  reasoning that is the opposite of its own.
-- go-oidc's discovery and JWKS fetches are time-bounded but not size-bounded;
-  truncated and malformed bodies are indistinguishable in operator logs.
+1. Call `POST /api/v1/auth/{provider}/start?purpose=link|reauth` with no body.
+2. Read `{data:{authorizeUrl}}` from the successful response.
+3. Parse an absolute URL, reject credentials, fragments, malformed values, and
+   every scheme except HTTPS. Match the provider to its fixed production
+   authorization host/path. The only HTTP exception is an exact same-origin
+   loopback URL under `/__uat/oauth/` while the current origin is also loopback;
+   it exists for the isolated local harness. Then perform a top-level browser
+   navigation. `javascript:`, `data:`, foreign loopback targets, and a valid
+   HTTPS URL for the wrong provider all fail closed.
+4. Keep the existing error state when the request, response shape, or navigation
+   fails. Never fall back to a privileged GET.
+
+Tests cover every provider, both purposes, one CSRF refresh, a second CSRF
+failure, malformed success data, request failure, and preserved session revoke
+actions. They assert a bodiless start has no `Content-Type`, while JSON
+mutations still use `application/json`.
+
+The browser check uses the project Playwright MCP server pinned in `.mcp.json`.
+Start `make dev-native`, then use `browser_run_code` in a fresh isolated context
+to register `page.route` handlers for `/api/v1/me`, `/api/v1/sessions`, and
+`/api/v1/auth/*/start` before opening
+`http://localhost:20080/app/settings/sessions`. Exercise one link control and
+one reauthentication prompt. For each start request, record the method, complete
+URL, headers, and body; fulfill
+`{"data":{"authorizeUrl":"http://localhost:20080/__uat/oauth/p1-authorized"}}`;
+and assert the page performs that top-level navigation. The request must be
+POST, carry the query purpose and CSRF header, have no body, and omit
+`Content-Type`. Save the MCP accessibility snapshot and network evidence under
+`.superpowers/acceptance/p1.1/<commit>/<run-id>/`. Full provider round trips
+remain part of P9 HTTPS UAT.
+
+## Task 2 — Deterministic identity order
+
+Own a serialized source window for `apps/server/sql/queries.sql` and the focused
+store and `/me` tests. The integration owner runs sqlc once and applies the
+reserved generated output.
+
+Change `ListIdentitiesByUserID` to `ORDER BY created_at ASC, id ASC`. Add a
+same-timestamp fixture whose insertion order differs from UUID order. Prove the
+store, `/me`, and settings default provider all use the same result. Run
+`make sqlc-gen` once and inspect the generated diff before `make sqlc-check`.
+
+## Task 3 — Contract and guard confirmation
+
+OpenAPI must state all of these together:
+
+- GET starts login only and rejects a privileged purpose without creating a
+  transaction.
+- POST is authenticated, CSRF-protected, bodiless, and takes `purpose` in the
+  query string.
+- POST returns `{data:{authorizeUrl}}`; the caller navigates after success.
+- Shared callback errors do not claim that privileged GET starts can create link
+  or reauthentication transactions.
+- `/me` states that identities are ordered by `(created_at, id)`, oldest first.
+
+The integration owner regenerates the TypeScript client only if the source
+changes. Extend the static GitHub no-OIDC guard to cover the complete shared
+callback path while excluding the Google and LinkedIn OpenID Connect files.
+
+## Execution and ownership
+
+Task 0 freezes before Tasks 1 and 2 start. Tasks 1 and 2 may then run in
+parallel because their files are disjoint. Task 3 runs after both against the
+integrated contract. Generated client/sqlc output, root manifests, and
+acceptance records remain integration-owner files; Tasks 2 and 3 own their named
+source files.
+
+| Task | Exclusive author paths                                                                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0    | `apps/web/test/sessions-privileged-start-adversarial.test.ts`; `apps/server/internal/auth/me_order_adversarial_test.go`                                      |
+| 1    | `apps/web/app/composables/useAuth.ts`; `apps/web/app/pages/app/settings/sessions.vue`; the four named web tests above; git-ignored browser evidence          |
+| 2    | `apps/server/sql/queries.sql`; `apps/server/internal/auth/me_test.go`; generated sqlc output is integration-owner only                                       |
+| 3    | `docs/api/openapi.yaml`; `docs/api/test/openapi.test.ts`; `apps/server/internal/auth/github_adversarial_test.go`; generated client is integration-owner only |
+
+Workers report their diffs and exact check output without staging or committing.
+The integration owner verifies and integrates only these paths.
+
+Authentication, sessions, and CSRF are high risk. Task 0 supplies the fresh
+spec-derived black-box tests and freezes them before the implementation authors
+start. The implementation authors also write their own failing tests first. A
+different fresh reviewer inspects the integrated diff; authors fix findings and
+an independent reviewer rechecks them.
+
+## Acceptance and checks
+
+P1.1 closes only when one unchanged candidate satisfies all of these:
+
+- No settings control starts link or reauthentication with GET.
+- The browser POST flow and server route agree on method, query, CSRF, response,
+  and navigation.
+- Equal-time identities have one deterministic `(created_at, id)` order through
+  SQL, `/me`, and the settings UI.
+- Login GET, privileged POST, callbacks, session rotation, device revocation,
+  and no-oracle errors retain their existing security properties.
+- OpenAPI, generated client, code, and tests agree.
+- The frozen [P1.1 acceptance catalog](phase-1-1-acceptance-catalog-r1.md)
+  remains unchanged during the run.
+
+Required checks:
+
+```sh
+make sqlc-check
+make api-check
+make server-build server-vet server-test
+make web-lint web-typecheck web-test web-build
+make ci
+make scan
+```
+
+Run the bounded Playwright MCP procedure described in Task 1 and record the
+configured MCP package, Chrome version, calls, and evidence hashes. The phase
+defect review and frozen acceptance run must both pass at the same commit.
+
+## Downstream handoffs
+
+| Constraint or debt                                                                                      | Owner                               |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Authenticated Nuxt fetches stay browser-only so server rendering cannot lose a rotated successor cookie | P4 API composable and lint boundary |
+| A CSRF refresh retry reuses the same idempotency key                                                    | P2B write client and P4 autosave    |
+| Native mobile adds a separate bearer-authenticated start; it never weakens cookie CSRF                  | P11                                 |
+| Dead-session retention, auth audit records, and scheduled cleanup                                       | P8 privacy                          |
+| Session revocation closes active Server-Sent Event streams                                              | P6A                                 |
+| Account deletion proves the users-to-sessions cascade and rotation lineage behavior                     | P8 privacy                          |
+| Provider response-size limits and real-provider failure diagnostics                                     | P9A security and operations gate    |
+| `internal/user` either gains a production owner or its drift checks move to `internal/store`            | P8 account lifecycle                |
+
+The exact application origin remains one value. Session cookies have no
+`Domain`, CSRF compares the serialized origin exactly, and provider redirect
+URIs derive from that origin. Production redirects `www` to the apex before
+authentication. Native HTTP development cannot prove authenticated browser flows
+because the cookies are always `Secure`; P9 uses the isolated HTTPS origin.

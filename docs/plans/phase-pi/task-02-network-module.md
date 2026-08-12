@@ -1,5 +1,8 @@
 # Task 2: Network module — VPC, prefix-list ingress, private DB subnets, EIP auto-reassociation
 
+**Tier:** High risk for the instance profile, metadata boundary, host firewall,
+and origin TLS-key storage.
+
 **Files:** `deploy/aws/modules/network/**` (+ `tests/*.tftest.hcl`), env-root
 wiring, `docs/runbooks/eip-recovery.md` seed.
 
@@ -16,17 +19,41 @@ wiring, `docs/runbooks/eip-recovery.md` seed.
       user-data association script; (d) the ASG has min=max=desired=1 and the
       launch template sets `instance_type = var.instance_type`; (e) **private
       subnets exist (2 AZs) with no route to an IGW and no NAT** — they exist
-      solely for the DB subnet group (Task 3).
+      solely for the DB subnet group (Task 3); (f) the launch ENI has
+      `associate_public_ip_address = true`, which supplies bounded bootstrap
+      egress before the EIP is associated; (g) metadata options require IMDSv2,
+      disable v1, and use hop limit 1; (h) the 30 GiB gp3 root volume is
+      encrypted with `alias/aws/ebs`, delete-on-termination, and not magnetic.
 - [ ] Implement: VPC (public subnets across 2 AZs — the single node lives in
       one; **plus 2 private subnets for RDS**), IGW, SG per the tests, EIP,
-      ASG(1) + launch template (arm64 ECS-optimized AMI pinned per the
-      guardrail; user data associates the EIP by allocation ID and emits a
-      CloudWatch metric on failure; SSM Session Manager access via instance role
-      — no SSH key pairs).
+      ASG(1) + launch template. Resolve the latest stable ECS-optimized Amazon
+      Linux 2023 arm64 AMI at scaffold time, then pin and record its exact image
+      ID; do not float an SSM alias at apply. The instance role has only ECS
+      registration, SSM Session Manager, the one EIP association, and the one
+      CloudWatch metric namespace; no application SSM or media access. User data
+      first verifies the pinned `aws` CLI is present and records its version,
+      then associates the EIP by allocation ID with at most 30 attempts ten
+      seconds apart. It emits one failure metric without secrets and exits
+      nonzero after five minutes. Initial public IPv4 egress is removed from the
+      interface only by the successful EIP replacement path.
+- [ ] Before ECS starts tasks, a persistent systemd unit installs and verifies
+      two metadata rules: `DOCKER-USER` rejects bridge-container traffic to
+      `169.254.169.254/32`, while leaving ECS task credentials at
+      `169.254.170.2` reachable; host `OUTPUT` rejects IMDS for the dedicated
+      Caddy, server, migrate, web, and ops UIDs fixed by Task 5. Root-owned ECS
+      and SSM agents retain the minimum instance-profile path. A rendered-user-
+      data test asserts rule order, persistence across service restart, fail-
+      closed startup, IMDSv2 settings, CLI probe, and bounded retry. Task 14
+      probes denial from bridge and host-mode application containers while a
+      server task still obtains its task-role identity.
+- [ ] The same pre-ECS unit creates `/var/lib/caddy` and `/var/log/caddy` owned
+      by UID/GID 10001 with mode 0700, then verifies both before starting ECS.
+      No other task UID can read the persisted origin TLS material or access
+      logs.
 - [ ] Seed `docs/runbooks/eip-recovery.md`: what auto-reassociation does, manual
       recovery commands, and the P9A drill hook ("terminate the instance; verify
-      the replacement re-associates within N minutes").
-      `make docs-fmt && make docs-lint`.
+      the replacement re-associates within five minutes after EC2 reports the
+      replacement running"). `make docs-fmt && make docs-lint`.
 
 **Verification:** `terraform test` (mocked, in CI — no credentials); `validate`;
 parity check still green. Real-AWS behavior (does the user-data script actually

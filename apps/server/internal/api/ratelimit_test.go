@@ -170,14 +170,12 @@ func TestRateLimit_TrustedPeer_KeysByCanonicalHeader(t *testing.T) {
 	}
 }
 
-// TestRateLimit_MissingOrMalformedCanonicalHeader_Rejected is the
-// regression test for security review finding #1: a trusted proxy's
-// request must carry exactly one syntactically valid bare-IP
+// TestRateLimit_MissingOrMalformedCanonicalHeader_Rejected proves a trusted
+// proxy's request must carry exactly one syntactically valid bare-IP
 // TrustedClientIPHeader value, or the request is rejected outright (400)
-// rather than silently falling back to the socket peer address — the old
-// fallback collapsed every viewer behind that proxy into one shared bucket
-// keyed on the proxy's own address whenever the header was absent or
-// unparseable, a cross-tenant denial of service.
+// rather than falling back to the socket peer address. A fallback would put
+// every viewer behind that proxy in one shared bucket, creating a cross-tenant
+// denial of service.
 func TestRateLimit_MissingOrMalformedCanonicalHeader_Rejected(t *testing.T) {
 	t.Parallel()
 
@@ -270,7 +268,7 @@ func TestRateLimit_UntrustedPeer_UnparseableRemoteAddr_Rejected(t *testing.T) {
 
 // TestRateLimit_NormalizesIPv4MappedIPv6 proves clientIP normalizes via
 // Unmap: an address and its IPv4-in-IPv6 form must key identically, per
-// design spec §6's "normalize via Unmap().String()" requirement.
+// the required normalization through Unmap().String().
 func TestRateLimit_NormalizesIPv4MappedIPv6(t *testing.T) {
 	t.Parallel()
 
@@ -297,7 +295,7 @@ func TestRateLimit_NormalizesIPv4MappedIPv6(t *testing.T) {
 }
 
 // TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing simulates
-// the full deployment chain design spec §6 describes — an attacker-
+// the full deployment chain — an attacker-
 // supplied X-Forwarded-For, a real viewer IP, and a request arriving from
 // Caddy's trusted address carrying the single canonical header Caddy
 // itself determined — and proves two things at once: the viewer is keyed
@@ -318,9 +316,7 @@ func TestRateLimit_FullSimulatedChain_ForgedHeaderChangesNothing(t *testing.T) {
 	viewer := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	viewer.RemoteAddr = "127.0.0.1:443"                           // Caddy, the trusted hop
 	viewer.Header.Set(api.TrustedClientIPHeader, "198.51.100.42") // what Caddy validated
-	// A raw X-Forwarded-For that, if this server still parsed it (the
-	// pre-fix behavior), would key on the CloudFront edge address instead
-	// of the real viewer — exactly the cross-tenant DoS the review found.
+	// A raw X-Forwarded-For must not override the validated viewer address.
 	viewer.Header.Set("X-Forwarded-For", "203.0.113.66, 70.132.0.1")
 
 	rec1 := httptest.NewRecorder()
@@ -541,9 +537,8 @@ func TestRateLimit_KeyStore_ReclaimsOnlyExpiredEntries(t *testing.T) {
 	}
 }
 
-// TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting is
-// the regression test for security review finding 3: when the store is at
-// MaxKeys and every entry is still active (not expired), admitting a new
+// TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting proves
+// that when the store is at MaxKeys and every entry is active, admitting a new
 // key must NOT evict an arbitrary active entry — that would hand an
 // attacker a fresh bucket via key churn. Key A's own budget must be
 // completely undisturbed by B's admission.
@@ -586,9 +581,9 @@ func TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting(t *te
 	}
 }
 
-// TestRateLimit_MaxKeyChurn_BoundedThroughputViaOverflow is the retained
-// "maximum-key churn" regression test: with the store saturated by active
-// entries, flooding in many additional distinct (e.g. forged) keys must
+// TestRateLimit_MaxKeyChurn_BoundedThroughputViaOverflow proves that with the
+// store saturated by active entries, flooding in many additional distinct
+// (e.g. forged) keys must
 // not each get their own fresh bucket. Every key beyond the store's
 // capacity shares one overflow bucket, so their combined admitted
 // throughput is bounded at exactly one key's normal budget, however many
@@ -700,8 +695,7 @@ func TestClientIP_TrustedProxy_UsesCanonicalHeader(t *testing.T) {
 
 // TestClientIP_TrustedProxyMissingHeader_FailsClosed proves ClientIP fails
 // closed (ok=false) rather than falling back to the trusted proxy's own
-// RemoteAddr when the canonical header is absent — the same fail-closed
-// contract resolveClientIP documents (security review finding #1): a
+// RemoteAddr when the canonical header is absent. A
 // caller like session issuance must not silently record the proxy's own
 // address as if it were the viewer's.
 func TestClientIP_TrustedProxyMissingHeader_FailsClosed(t *testing.T) {
@@ -714,7 +708,7 @@ func TestClientIP_TrustedProxyMissingHeader_FailsClosed(t *testing.T) {
 }
 
 // TestAccountKeyFunc_DistinctAccountsGetDistinctKeys proves AccountKeyFunc
-// reads the account ID a later phase's auth middleware would stash in
+// reads the account ID auth middleware stores in
 // context via WithAccountID.
 func TestAccountKeyFunc_DistinctAccountsGetDistinctKeys(t *testing.T) {
 	t.Parallel()
@@ -742,7 +736,7 @@ func TestAccountKeyFunc_DistinctAccountsGetDistinctKeys(t *testing.T) {
 }
 
 // TestCompositeKeyFunc_BothDimensionsMustMatchForSameKey proves design
-// spec §3's per-account+IP requirement: a composite key changes if EITHER
+// the per-account-and-IP requirement: a composite key changes if either
 // the account or the IP changes, so neither dimension alone determines the
 // bucket.
 func TestCompositeKeyFunc_BothDimensionsMustMatchForSameKey(t *testing.T) {
@@ -873,8 +867,7 @@ func TestRateLimit_CompositeKey_UnresolvableIP_Rejected(t *testing.T) {
 	}
 }
 
-// TestRateLimit_RejectedRequestsDoNotOweTokens is the regression test for
-// the "phantom debt" half of security review finding #3: a burst of
+// TestRateLimit_RejectedRequestsDoNotOweTokens proves a burst of
 // rejected requests beyond the budget must not leave the bucket owing
 // anything beyond what was actually admitted — after exactly one Window,
 // exactly Requests admissions must succeed again, no fewer.
@@ -926,8 +919,7 @@ func TestRateLimit_RejectedRequestsDoNotOweTokens(t *testing.T) {
 	}
 }
 
-// TestRateLimit_SaturatedStore_ScanIsAmortizedNotPerRequest is the
-// regression test for the other half of security review finding #3: once a
+// TestRateLimit_SaturatedStore_ScanIsAmortizedNotPerRequest proves that once a
 // saturated store's entry becomes expired, a flood of new distinct keys
 // arriving faster than the store's internal sweep cooldown must not each
 // pay a fresh O(MaxKeys) expired-entry scan — only the first is allowed to
@@ -938,8 +930,8 @@ func TestRateLimit_RejectedRequestsDoNotOweTokens(t *testing.T) {
 // plausible sweep cooldown) so an entry can expire almost immediately,
 // combined with the shared overflow limiter's own budget as an observable
 // probe: if a second flood request had instead reclaimed its own dedicated
-// slot (i.e. the store re-scanned on every request — the bug this test
-// guards against), the overflow limiter's meanwhile-refilled token would be
+// slot (i.e. the store re-scanned on every request), the overflow limiter's
+// meanwhile-refilled token would be
 // left untouched for a third request to also succeed. Amortized scanning
 // instead routes the second AND third requests through the shared overflow
 // limiter, so the third finds it already spent and is rejected.
@@ -1034,34 +1026,26 @@ func TestRateLimit_ConcurrentDistinctKeys_NoRaceUnderSaturation(t *testing.T) {
 	wg.Wait()
 }
 
-// TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne is the
-// regression test for OLD Important 3 (non-atomic admission): a security
-// re-review found that lookup/creation, the expiry decision, and first-
-// token consumption were three separate critical sections, so a newly
-// inserted (still fully-refilled, not-yet-consumed) entry could be
-// observed as "expired" and evicted by another concurrent distinct key
-// before its own first token was consumed. Under MaxKeys=1, this let an
-// unbounded stream of distinct (e.g. forged) keys each evict the previous
-// one and grant itself a fresh private bucket — bypassing the shared
-// overflow bound the store exists to enforce. With admission, the expiry
-// decision, and first-token consumption now one atomic operation under the
-// store lock, at most one of many concurrent distinct keys can ever land
-// the store's one dedicated slot; every other key must share the one
-// overflow bucket.
+// TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne proves
+// lookup, expiry, and first-token consumption form one critical section. A
+// newly inserted entry must consume its first token before another key can
+// observe it as fully refilled and evict it. Under MaxKeys=1, at most one of
+// many concurrent distinct keys can occupy the dedicated slot; every other
+// key shares the overflow bucket.
 func TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne(t *testing.T) {
 	t.Parallel()
 
-	// The buggy interleaving (insert a new entry, release the store lock,
+	// The forbidden interleaving (insert a new entry, release the store lock,
 	// THEN consume its first token — leaving a window where another
 	// goroutine's admission can observe the still-unconsumed entry as
 	// "expired" and evict it) depends on real OS thread scheduling landing
-	// inside a very narrow gap. A single trial can miss it even on the
-	// unfixed code. Many independent trials, each against a fresh limiter
-	// (so no state bleeds between them), make detection reliable without
-	// any sleep or scheduler-hint hack: under the fix, the outcome below is
-	// a mathematical guarantee (one atomic critical section covering
-	// lookup, the expiry decision, and the first reserve), so every trial
-	// must pass identically — this can never become flaky going forward.
+	// inside a very narrow gap. A single trial can miss it in a non-atomic
+	// implementation. Many independent trials, each against a
+	// fresh limiter (so no state bleeds between them), make detection reliable
+	// without any sleep or scheduler-hint hack. The outcome below is a
+	// mathematical guarantee when one critical section covers
+	// lookup, the expiry decision, and the first reserve, so every trial must
+	// pass identically.
 	const trials = 30
 	const distinctKeys = 50
 
@@ -1104,10 +1088,9 @@ func TestRateLimit_ConcurrentDistinctKeys_AtomicAdmission_MaxKeysOne(t *testing.
 	}
 }
 
-// TestRateLimit_ConcurrentRejections_DoNotOweTokens_Regression reproduces
-// the re-review's own probe for OLD Important 4 ("ReserveN phantom debt on
-// concurrent rejections"): the prior sequential regression test
-// (TestRateLimit_RejectedRequestsDoNotOweTokens) could not observe this —
+// TestRateLimit_ConcurrentRejections_DoNotOweTokens_Regression proves
+// concurrent rejected reservations do not leave phantom token debt. A
+// sequential test cannot observe this:
 // x/time/rate's ReserveN always advances the bucket's internal
 // bookkeeping, even for a reservation that will later be canceled, and
 // when many concurrent reservations interleave, a later one can advance
@@ -1163,12 +1146,8 @@ func TestRateLimit_ConcurrentRejections_DoNotOweTokens_Regression(t *testing.T) 
 	}
 }
 
-// TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression is the
-// re-review's regression test for OLD Minor 1 (clock rollback can grant a
-// token early): the prior rollback test
-// (TestRateLimit_ClockRollback_DoesNotFreezeRefillForever) only proved
-// eventual recovery, never that a backward step couldn't itself manufacture
-// a token ahead of schedule. This reproduces the re-review's probe exactly:
+// TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression proves a backward
+// clock step cannot manufacture a token ahead of schedule:
 // two requests admitted with real capacity to spare, a clock rollback, a
 // request whose wall-clock-relative due time has not yet arrived (must
 // still be rejected even once the clock resumes forward past the rollback
@@ -1213,7 +1192,7 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 	}
 
 	// Clock resumes forward to t=130s: still 30s short of the correct
-	// t=160s due time. A buggy implementation that let the t=70s rollback
+	// t=160s due time. An implementation that lets the t=70s rollback
 	// re-anchor the bucket's internal clock would admit here early.
 	clock.Set(testutil.Epoch.Add(130 * time.Second))
 	rec = httptest.NewRecorder()
@@ -1232,8 +1211,7 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 	}
 }
 
-// TestRateLimit_TrustedProxiesMismatch_LogsWarningOnceNotPerRequest is the
-// regression test for the runtime half of security review finding #2: when
+// TestRateLimit_TrustedProxiesMismatch_LogsWarningOnceNotPerRequest proves that when
 // TrustedProxies is configured but doesn't match the request's real peer
 // (e.g. TRUSTED_PROXY_CIDRS set to the wrong subnet), RateLimit must log a
 // distinct, high-severity warning so an operator notices the
@@ -1243,9 +1221,7 @@ func TestRateLimit_ClockRollback_NoEarlyTokenGranted_Regression(t *testing.T) {
 // this still asserts exactly one log line; see
 // TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval for proof the
 // condition stays observable across a live incident rather than being
-// silenced forever after the first request (the re-review's Minor 2: the
-// old sync.Once-based "once per process" mechanism meant an operator
-// investigating an ongoing mismatch saw nothing in the current log window).
+// silenced after the first request.
 func TestRateLimit_TrustedProxiesMismatch_LogsWarningOnceNotPerRequest(t *testing.T) {
 	t.Parallel()
 
@@ -1309,8 +1285,7 @@ func TestRateLimit_TrustedProxiesMatch_NoWarningLogged(t *testing.T) {
 	}
 }
 
-// TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval is the
-// regression test for the re-review's Minor 2: a persistent trust-boundary
+// TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval proves a persistent trust-boundary
 // mismatch must stay observable for as long as it persists, not fall
 // silent after the very first request the way a sync.Once-guarded warning
 // would. Once the injected clock advances past the throttle interval, a
@@ -1364,17 +1339,11 @@ func TestRateLimit_TrustedProxiesMismatch_ReLogsAfterInterval(t *testing.T) {
 	}
 }
 
-// TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket is the
-// regression test for the re-review's Minor 4: the old fail-closed
-// invalid_client_ip 400 path returned before ever calling limiter.allow,
-// so it cost the sending peer nothing — a trusted peer that kept sending a
-// missing/malformed canonical header got unlimited free rejections on a
-// request path that was completely unmetered (re-review minor M-C notes
-// this bounds handler work, not log volume: RateLimit sits inside Logging,
-// so a 429 is logged exactly like a 400). The 400 path must now charge a
-// token from a bucket keyed on the peer's own raw socket address, so once
-// that peer's own budget is exhausted it gets 429 like everything else, not
-// another free 400.
+// TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket proves the
+// invalid_client_ip path charges the sending peer. A trusted peer repeatedly
+// sending a missing or malformed canonical header must exhaust a bucket keyed
+// on its raw socket address and receive 429. This bounds handler work, not log
+// volume: RateLimit sits inside Logging, so a 429 is logged like a 400.
 func TestRateLimit_InvalidClientIP_ChargesSendingPeersBucket(t *testing.T) {
 	t.Parallel()
 
@@ -1453,21 +1422,18 @@ func TestRateLimit_InvalidClientIP_DifferentPeersMeteredIndependently(t *testing
 	}
 }
 
-// TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep is the
-// regression test for re-review minor M-B: the saturated-store eviction
-// sweep is gated on the injected clock (nextSweepAt), so a backward clock
-// step used to suppress every sweep for the whole rollback span — the same
-// class of bug clampedLimiter already fixes for token refill. The limiter
-// now clamps the sweep clock to a monotonic high-water mark, so a rollback
+// TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep proves the
+// saturated-store eviction sweep is gated on the injected clock
+// (nextSweepAt), so a backward clock
+// step must not suppress sweeps for the whole rollback span. The limiter
+// clamps the sweep clock to a monotonic high-water mark, so a rollback
 // can neither skip a due sweep nor let reclaimable capacity go unreclaimed.
 //
 // The scenario drives the clock forward through real requests to a high
 // water mark at which one tracked entry is fully refilled (reclaimable),
-// then rolls the clock back an hour and admits a brand-new key. Before the
-// fix the new key is denied — the sweep is suppressed, so the store stays
-// full and the newcomer falls to the already-spent overflow bucket; after
-// the fix the due sweep runs, reclaims the idle entry, and the new key gets
-// its own bucket.
+// then rolls the clock back an hour and admits a brand-new key. The due sweep
+// must reclaim the idle entry instead of sending the new key to the spent
+// overflow bucket.
 func TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep(t *testing.T) {
 	t.Parallel()
 
@@ -1509,10 +1475,9 @@ func TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep(t *testing.T) {
 
 	// The clock jumps backward an hour (e.g. an NTP correction). A new key D
 	// arrives. The sweep IS due — A has been reclaimable for five windows of
-	// real time — so D must get a private bucket. Before the fix, the
-	// rolled-back clock is < nextSweepAt, the sweep is skipped, the store
-	// stays full, and D falls to the overflow bucket whose only token C
-	// already spent — a spurious 429.
+	// real time — so D must get a private bucket. Comparing the rolled-back
+	// clock directly with nextSweepAt would skip the sweep and send D to the
+	// overflow bucket whose only token C already spent.
 	clock.Set(testutil.Epoch.Add(5*time.Second - time.Hour))
 	if got := send("203.0.113.4"); got != http.StatusOK { // D
 		t.Fatalf("D after a -1h clock step: status = %d, want %d — a backward clock step must not "+

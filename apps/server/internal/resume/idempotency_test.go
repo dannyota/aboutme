@@ -1,14 +1,12 @@
 // idempotency_test.go exercises resume.IdempotencyStore against a live
-// Postgres database (task-7-brief.md, D11): first-run, replay, rejected
-// key reuse, mutate-error rollback, expiry-as-absence (Step 1); deterministic
-// same-key contention around the real saveDocumentTx CAS core (Step 2); and
-// composition with resume.Store's real cap-checked createTx across multiple
-// keys, including cap rejection surfacing from inside mutate (Step 2b). Every
+// Postgres database: first run, replay, rejected key reuse, mutation rollback,
+// expiry as absence, deterministic same-key contention around the real CAS
+// core, and composition with resume.Store's cap-checked createTx across multiple
+// keys, including cap rejection surfacing from inside mutate. Every
 // DB-backed test here goes through the same
 // internal/testutil helper internal/auth, internal/user, internal/store,
 // and resume's own store_test.go use, so it never depends on another
-// package's test binary having applied migrations first. Task 9 retains the
-// independent blind N-caller adversarial suite.
+// package's test binary having applied migrations first.
 package resume_test
 
 import (
@@ -33,17 +31,17 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-// idempotencyTestRoute is a placeholder route string -- P2B mints the real
-// route names; IdempotencyStore treats it as an opaque part of the unique
-// key, so any stable string exercises the same logic.
+// idempotencyTestRoute is a placeholder route string. IdempotencyStore treats
+// it as an opaque part of the unique key, so any stable string exercises the
+// same logic.
 const idempotencyTestRoute = "PUT /api/v1/resumes/{id}"
 
 // newIntegrationIdempotencyStore returns a resume.IdempotencyStore driven by
 // now instead of the real wall clock (so expiry is proven by advancing an
 // injected clock, never a real sleep), plus the resume.Store sharing the
-// SAME connection pool -- Step 2/2b's tests need it so their mutate
-// closures can call (*resume.Store).CreateTxForTest directly, proving
-// Execute composes with Task 6's real cap-checked create core rather than
+// same connection pool. Mutation closures can call
+// (*resume.Store).CreateTxForTest directly, proving
+// Execute composes with the real cap-checked create core rather than
 // reimplementing it. Mirrors store_test.go's own newIntegrationStore, with
 // an injectable clock added.
 func newIntegrationIdempotencyStore(t *testing.T, now func() time.Time) (*resume.IdempotencyStore, *resume.Store, *store.Queries, *store.Pool, context.Context) {
@@ -142,7 +140,7 @@ func userRowLockedForResumeWrite(ctx context.Context, pool *store.Pool, userID u
 	return false, fmt.Errorf("owner-row lock probe: %w", err)
 }
 
-// --- Step 1: sequential semantics ---
+// --- Sequential semantics ---
 
 func TestIdempotencyStore_Execute_FirstRun_RunsMutateAndStores(t *testing.T) {
 	t.Parallel()
@@ -473,14 +471,11 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 	assertJSONEqual(t, secondRow.ResponseBody, secondResp.Body)
 }
 
-// TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges covers the
-// regression where two same-key Execute calls both reached a real CAS mutation
-// before either inserted its idempotency row. The loser could then surface
-// RevisionMismatch from saveDocumentTx and never reach the unique insert whose
-// conflict path was supposed to converge it on the winner. The channels below
-// hold the winning transaction open after its CAS write and start the contender
-// while that write is uncommitted; no sleeps or scheduler timing assumptions
-// are involved.
+// TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges proves a
+// same-key contender waits for the winning CAS mutation and then replays or
+// rejects from its stored result. The channels hold the winner open after its
+// CAS write and start the contender while that write is uncommitted; no sleeps
+// or scheduler timing assumptions are involved.
 func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -550,7 +545,7 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 
 			// Execute must hold the same users-row lock Create uses before it
 			// invokes mutate. This is both the serialization invariant and a
-			// deterministic way for the test to distinguish the pre-fix path
+			// deterministic way for the test to observe the critical section
 			// while still releasing every goroutine after an assertion failure.
 			ownerLocked, probeErr := userRowLockedForResumeWrite(ctx, pool, userID)
 			if probeErr != nil {
@@ -587,10 +582,9 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 
 			<-contenderStarted
 			if !ownerLocked {
-				// Before serialization existed, waiting here forced the old CAS
-				// loser path deterministically: it entered mutate and then blocked
-				// on the winner's uncommitted resume-row update. With the required
-				// owner lock, the contender cannot reach this callback at all.
+				// Without the owner lock, wait until the contender enters mutate and
+				// blocks on the winner's uncommitted resume-row update. With the lock,
+				// the contender cannot reach this callback.
 				<-contenderEnteredMutate
 			}
 			close(releaseWinner)
@@ -656,7 +650,7 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 	}
 }
 
-// --- Step 2b: composition across multiple keys, including cap rejection ---
+// --- Composition across multiple keys, including cap rejection ---
 
 func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 	t.Parallel()

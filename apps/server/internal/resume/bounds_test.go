@@ -17,7 +17,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 )
 
-// bounds_test.go is the size-bounds harness (task brief Step 3/3b): a
+// bounds_test.go is the size-bounds harness: a
 // named-bound limit/limit+1 matrix, a completeness guard that fails loudly
 // if a schema bound has no covering test, and a generated cross-language
 // verdict-parity corpus consumed by both this file (jsonschema/v6) and
@@ -29,7 +29,7 @@ func strp(s string) *string { return &s }
 
 // boundUUID returns a deterministic, distinct, format:uuid-valid string for
 // index n. Committed generated fixtures must never depend on a random or
-// time-based source (CLAUDE.md: tests/generators are deterministic).
+// time-based source.
 func boundUUID(n int) string {
 	return fmt.Sprintf("00000000-0000-0000-0000-%012d", n)
 }
@@ -62,10 +62,8 @@ func baseDocForBounds() schema.Resume {
 }
 
 // Section builders that go through the schema package's own sanctioned
-// NewXSection constructors (round 2 review finding 1: hand-built Section{}
-// literals bypass the same guarantee the constructors themselves once
-// bypassed too -- using the real constructors here means this harness now
-// exercises the exact API a real caller uses, not a stand-in for it). All
+// NewXSection constructors. Using the real constructors means this harness
+// exercises the exact API a caller uses, not a stand-in. All
 // three pass nil for displayName/iconKey (both optional in
 // resume.schema.json; an empty, as opposed to absent, iconKey fails its own
 // pattern), since none of these bound cases care about display metadata.
@@ -203,9 +201,8 @@ type boundCase struct {
 	// Aliases lists every OTHER schema path (as walkSchemaBounds reports it)
 	// that this case's (Keyword, Limit) test is DELIBERATELY treated as also
 	// covering -- an explicit, listed exemption to the "one representative
-	// document per value class" economy (task brief Step 3: "one pair per
-	// distinct maxLength class"), never an automatic one keyed on the
-	// numeric value alone. Round-2 review finding 2: keying coverage on
+	// document per value class" economy, never an automatic one keyed on the
+	// numeric value alone. Keying coverage on
 	// (keyword, limit) alone let a brand-new field that happened to reuse an
 	// EXISTING limit (e.g. a hypothetical new maxLength:160 field) pass
 	// silently, with nothing recorded about why. Every path found in the
@@ -295,8 +292,7 @@ var namedBounds = []boundCase{
 		// oneOf[1] is "work" (oneOf order: profile, work, education, skill,
 		// language, certificate, project, custom -- see resume.schema.json's
 		// $defs.section). The other 7 branches declare the IDENTICAL
-		// maxItems:64 on their own "entries" array; per the brief's "one
-		// pair per distinct maxItems class" economy this is exercised as one
+		// maxItems:64 on their own "entries" array. This is exercised as one
 		// representative document, with the other 7 explicitly named below
 		// (not silently assumed) -- see boundCase.Aliases's comment.
 		BoundPath: "$.$defs.section.oneOf[1].properties.entries.maxItems",
@@ -367,8 +363,8 @@ var namedBounds = []boundCase{
 		IssueSubstr: "maxItems",
 	},
 	{
-		// Round-2 review finding 2: main and sidebar are two DIFFERENT
-		// schema paths sharing the same maxItems:24 value -- reachability is
+		// Main and sidebar are two different schema paths sharing the same
+		// maxItems:24 value. Reachability is
 		// per-path (does layout.sections.SIDEBAR specifically carry this
 		// bound through the pipeline?), not per-value, and the main-array
 		// case above never exercises sidebar at all. Cheap enough to give
@@ -602,13 +598,12 @@ var namedBounds = []boundCase{
 		},
 		IssueSubstr: "maxLength",
 	},
-	// Round-2 review finding 3: every row above is maxLength/maxItems/
-	// maxProperties/byte-size -- none depends on D1(a)'s format ASSERTION
+	// Every row above is maxLength/maxItems/
+	// maxProperties/byte-size -- none depends on format assertion
 	// (as opposed to mere annotation), so deleting AssertFormat() from
 	// validate.go would leave the ENTIRE parity corpus green; only the two
-	// one-sided Go-only D1a tests would catch it, and the brief designates
-	// the parity test as THE enforcement for D1(a). These two rows are
-	// invalid ONLY via format, tying D1(a) to the parity corpus for real
+	// one-sided Go-only format tests would catch it. These two rows are
+	// invalid only via format, tying format assertion to the parity corpus
 	// (Keyword is "" -- format is not a maxLength/maxItems/maxProperties
 	// bound, so these are outside the completeness guard's schema walk, same
 	// as MaxDocumentBytes above).
@@ -738,8 +733,7 @@ func walkSchemaBounds(t *testing.T) map[string]map[int][]string {
 // one message per (keyword, limit, path) triple that is covered by
 // NEITHER -- sorted, for deterministic output. Extracted from
 // TestBoundsCompletenessGuard so TestMissingBoundCoverage_* can exercise it
-// directly against synthetic input, independent of the real schema (round-2
-// review finding 2's own regression test).
+// directly against synthetic input, independent of the real schema.
 func missingBoundCoverage(found map[string]map[int][]string, cases []boundCase) []string {
 	// covered[keyword][limit] is the set of paths some case explicitly
 	// claims (its own BoundPath, or a listed Alias) -- keyed by PATH, not
@@ -793,9 +787,9 @@ func TestBoundsCompletenessGuard(t *testing.T) {
 }
 
 // TestMissingBoundCoverage_CatchesNewPathReusingAnExistingLimit is the
-// round-2 review finding 2 regression test: a hypothetical NEW schema field
+// guard for a hypothetical new schema field
 // ($defs.tagline.maxLength) that happens to reuse an EXISTING, already-
-// tested limit (160, claimed today by fullname-jobtitle-title-maxlength)
+// tested limit (160, already claimed by fullname-jobtitle-title-maxlength)
 // must still be reported missing -- proving coverage is keyed by path, not
 // silently granted by value alone. This is entirely synthetic (no real
 // schema file is touched): it feeds a "found" map missingBoundCoverage
@@ -824,7 +818,7 @@ func TestMissingBoundCoverage_CatchesNewPathReusingAnExistingLimit(t *testing.T)
 	}
 }
 
-// --- generated cross-language verdict-parity corpus (Step 3b, D1(e)) ---
+// --- Generated cross-language verdict-parity corpus ---
 
 const boundsFixturesSubdir = "bounds"
 
@@ -867,8 +861,8 @@ var storeFixtureSchemaExpectations = map[string]bool{ // name -> schema-valid
 	"valid-unique-entry-id.json":                      true,
 }
 
-// generatedBoundsCorpus computes the corpus files + manifest this task
-// commits, purely from namedBounds + storeFixtureSchemaExpectations/
+// generatedBoundsCorpus computes the committed corpus files and manifest
+// from namedBounds + storeFixtureSchemaExpectations/
 // storeFixtureExpectations -- the single generation function both the drift
 // check and (if REGENERATE_BOUNDS_CORPUS=1) the regeneration path use.
 func generatedBoundsCorpus(t *testing.T) (files map[string][]byte, doc boundsManifestDoc) {
@@ -997,7 +991,7 @@ func TestBoundsCorpus_MatchesCommitted(t *testing.T) {
 	}
 }
 
-// --- cross-language verdict parity: the Go half (D1(e)) ---
+// --- Cross-language verdict parity: the Go half ---
 
 // TestSchemaVerdictParity_Go runs jsonschema/v6 -- via the SAME compiled
 // schema ValidateForStore uses -- over the COMMITTED bounds corpus, the

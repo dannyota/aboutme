@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Native development stack: Go server, Nuxt dev server, and Caddy as host
-# processes on one origin, against the single Postgres container's
-# aboutme_dev database (AGENTS.md, "Resource discipline"). The compose
-# stack is UAT-only.
+# Native development stack: Go server, Nuxt, and Caddy on one origin, backed by
+# the shared Postgres container's aboutme_dev database. See
+# docs/runbooks/native-development.md.
 #
 #   scripts/dev-native.sh up      start everything (idempotent)
 #   scripts/dev-native.sh down    stop exactly what up started
@@ -17,16 +16,13 @@ set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROOT=$PWD
 
-# Ports are the owner ruling recorded in AGENTS.md's port table; they are
-# not configurable here, because a divergent port silently breaks
-# PUBLIC_ORIGIN-derived behaviour (cookies, CSRF, OAuth redirects).
+# Fixed ports keep PUBLIC_ORIGIN-derived cookies, CSRF, and redirects aligned.
 readonly CADDY_PORT=20080
 readonly SERVER_PORT=20081
 readonly WEB_PORT=20030
 readonly PUBLIC_ORIGIN="http://localhost:${CADDY_PORT}"
 
-# The native dev DSN names aboutme_dev, not aboutme: test suites truncate
-# the latter (AGENTS.md, "Resource discipline").
+# Native development and tests use separate logical databases.
 DEV_DATABASE_URL=${ABOUTME_DEV_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable}
 DEV_LOG_LEVEL=${ABOUTME_DEV_LOG_LEVEL:-info}
 

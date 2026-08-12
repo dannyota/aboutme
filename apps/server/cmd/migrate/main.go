@@ -1,28 +1,6 @@
-// Command migrate applies aboutme's embedded Postgres migrations, or (with
-// -check) reports pending migrations without applying them.
-//
-// It is the runtime half of docs/specs/aboutme-design.md §3's "Schema
-// management" contract: migration SQL is embedded via go:embed
-// (github.com/dannyota/aboutme/apps/server/migrations), so this binary
-// needs no external files, no migration tooling on PATH, and no network
-// access beyond the database. New migrations are hand-written into
-// apps/server/migrations, which is the single source of truth for both
-// what goose applies and what sqlc generates internal/store from.
-//
-// Concurrent safety: Apply acquires a Postgres session-level advisory
-// lock before applying anything and releases it after, via goose's own
-// Provider (see the migrations package). Two runners started against the
-// same database at the same time do not double-apply: the second one
-// blocks on the lock, and once it acquires it, re-checks the database and
-// finds nothing left to do.
-//
-// Deadline budgets: runBudgets splits the outer context timeout into an
-// explicit lock-wait budget and a separate migration budget, with the
-// outer timeout strictly greater than their sum (plus a little slack for
-// connecting and status bookkeeping). A single shared timeout for both
-// phases would let a runner that legitimately waits the full lock-wait
-// budget for a concurrent deploy acquire the lock with no time left to
-// actually apply or check anything — see runBudgets' doc comment.
+// Command migrate applies embedded goose migrations or reports pending work
+// with -check. The provider serializes runners with a PostgreSQL advisory lock.
+// See docs/design/data.md and docs/design/deployment.md.
 //
 // Usage:
 //

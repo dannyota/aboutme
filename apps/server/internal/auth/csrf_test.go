@@ -1,12 +1,5 @@
-// Package auth_test exercises RequireCSRF (csrf.go): the fail-closed CSRF
-// check AC-SEC-002 requires on every mutating cookie-authenticated
-// request -- exact Origin (Referer scheme+host fallback), Content-Type,
-// and a constant-time token match against the session's csrf_secret.
-// Hermetic: no database. Sessions are store.Session values built directly
-// in-process with a controlled CSRFSecret, the same "package auth_test
-// constructs store.Session literals directly" convention cookie_test.go
-// and session_adversarial_test.go already use for hermetic and live-DB
-// tests respectively.
+// Package auth_test exercises the fail-closed CSRF checks for mutating,
+// cookie-authenticated requests. These tests are hermetic.
 package auth_test
 
 import (
@@ -25,10 +18,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// allowedTestOrigin is the allowedOrigin RequireCSRF is configured with
-// throughout this file -- the shape config.PublicOrigin has in
-// production (scheme://host, no trailing slash), an arbitrary stand-in
-// value here.
+// allowedTestOrigin has the scheme-and-host shape required by PublicOrigin.
 const allowedTestOrigin = "http://localhost"
 
 // csrfTokenFor returns the X-CSRF-Token header value a legitimate client
@@ -50,14 +40,7 @@ func csrfTestSession(fill byte) store.Session {
 	return store.Session{ID: uuid.New(), CSRFSecret: secret}
 }
 
-// requestBody returns an io.Reader for body, or nil for an empty string --
-// nil produces a request with no body at all (Body == nil, ContentLength
-// == 0), matching a real bodiless mutating request (e.g. logout, most
-// spec'd DELETEs) rather than a request with an empty JSON body. A
-// non-empty body goes through strings.NewReader, which
-// httptest.NewRequestWithContext (via http.NewRequestWithContext)
-// recognizes and uses to set ContentLength automatically -- exactly what
-// hasBody (csrf.go) inspects.
+// requestBody returns nil for a bodiless request so ContentLength remains zero.
 func requestBody(body string) io.Reader {
 	if body == "" {
 		return nil
@@ -97,70 +80,9 @@ func assertCSRFRejected(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-// TestRequireCSRF_Matrix is the CSRF matrix: every combination of method,
-// Origin, Referer, Content-Type, request body, and token that determines
-// whether a mutating cookie-authenticated request is allowed through.
-//
-// Rows 1-13 are task-8-brief.md's Step 1 matrix verbatim (each given a
-// "{}" body so the Content-Type check in rows that set one is actually
-// exercised rather than skipped by DD-C6's bodiless carve-out below).
-// Row 14 ("charset suffix content-type allowed") is required by the
-// integration owner's original Content-Type ruling: the brief asked for a
-// row proving each side of the decision, and the missing/wrong-content-
-// type rows already cover the reject side.
-//
-// Row 15 pins the newly-accepted Content-Type variants that motivated the
-// switch to mime.ParseMediaType in the first place: row 14 only covers the
-// old two-literal allowlist's exact charset spelling
-// ("; charset=utf-8", with the leading space); row 15 uses
-// "application/json;charset=UTF-8" (no space before charset, uppercase
-// encoding name) -- a shape real fetch()/XHR clients also send, which the
-// old literal allowlist would have rejected.
-//
-// Rows 16-19 were added after Opus review of task 8 caught a defect in
-// that original ruling (not in its implementation): requiring
-// Content-Type on every mutating request 403s every bodiless mutating
-// endpoint (POST /auth/logout, most spec'd DELETEs) the moment they're
-// wired. The corrected ruling, DD-C6 (csrf.go), only checks Content-Type
-// when the request actually carries a body:
-//
-//   - Row 16/17 prove a bodiless DELETE/POST with a valid Origin and
-//     token succeeds with no Content-Type at all.
-//   - Row 18 proves the carve-out is about Content-Type, not about CSRF
-//     itself: a request that *does* carry a body (deliberately
-//     form-encoded-shaped, "foo=bar" -- the classic auto-submitting
-//     cross-site HTML form vector, which never sets Content-Type:
-//     application/json) is still rejected. This is the defense-in-depth
-//     row; row 7 (adjusted to also carry a "{}" body under the new
-//     ruling) is the generic version of the same check.
-//   - Row 19 completes the original decode-first requirement: a token
-//     that is the *same* session's secret, correctly shaped, but encoded
-//     with the standard base64 alphabet/padding (StdEncoding) instead of
-//     the RawURLEncoding the header contract requires, must still be
-//     rejected -- proving the compare is anchored to the documented
-//     encoding, not merely "some encoding of the right bytes."
-//
-// A second review pass (round 2) confirmed hasBody's original
-// ContentLength > 0 check classified a real server's chunked/h2 request
-// (ContentLength == -1) as bodiless, letting it silently skip the
-// Content-Type gate -- see hasBody's own doc comment (csrf.go) for the
-// fix; no new row was added for that specific fix since httptest cannot
-// produce a request shaped the way a real chunked request would be by the
-// time RequireCSRF sees it (net/http.Server, not this test file, is what
-// sets ContentLength = -1) -- the RED evidence for that fix instead used
-// a hand-built *http.Request, recorded in task-8-report.md, not this
-// matrix.
-//
-// Rows 20-22 (phase gate hardening) pin three Origin shapes an attacker
-// might expect a looser check to accept: the literal string "null" (an
-// opaque origin -- a sandboxed iframe, a file:// page, or certain
-// redirected cross-origin requests all send exactly this), a host that
-// carries the allowed origin as a literal PREFIX with an attacker-chosen
-// suffix appended (".evil.test" is a different host entirely, not a
-// subdomain relationship, but a prefix/substring check would wrongly
-// treat it as related), and a trailing-slash variant of the allowed
-// origin. originAllowed's exact `==` comparison already rejects all
-// three -- these are pinned regressions, not fixes for a found defect.
+// TestRequireCSRF_Matrix covers method, origin or Referer, body media type,
+// token value, and token encoding. The hostile origins catch substring and
+// normalization checks that would accept a different origin.
 func TestRequireCSRF_Matrix(t *testing.T) {
 	t.Parallel()
 
@@ -197,14 +119,7 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 		{"bodiless POST (logout-shaped) skips content-type check", "POST", "http://localhost", "", "", validToken, "", http.StatusOK},
 		{"body present without content-type still rejected (form-style body)", "POST", "http://localhost", "", "", validToken, "foo=bar", http.StatusForbidden},
 		{"same session's secret, wrong base64 encoding (standard alphabet/padding)", "POST", "http://localhost", "", "application/json", base64.StdEncoding.EncodeToString(sess.CSRFSecret), "{}", http.StatusForbidden},
-		// Rows 20-22 (security-relevant cheap-win hardening): pin
-		// originAllowed's exact-string-match contract (csrf.go) against
-		// three shapes a naive Origin check (substring/prefix, or a
-		// scheme+host-only comparison that tolerates a trailing slash)
-		// could wrongly accept. originAllowed already does a bare Go `==`
-		// against allowedOrigin, so these pass today -- the rows exist to
-		// keep it that way as a pinned regression, not because a defect
-		// was found.
+		// These rows require an exact origin match.
 		{"Origin: null (opaque origin -- sandboxed iframe, file://, etc.)", "POST", "null", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"suffix-host origin (allowed origin as a literal prefix, evil suffix appended)", "POST", "http://localhost.evil.test", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"trailing-slash origin", "POST", "http://localhost/", "", "application/json", validToken, "{}", http.StatusForbidden},
@@ -244,12 +159,8 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 }
 
 // TestRequireCSRF_SafeMethodsBypassWithoutSession proves GET, HEAD, and
-// OPTIONS pass through untouched -- not merely "with a valid session
-// present" (the matrix's GET row), but even when no session was ever put
-// in context at all, and even with a cross-origin Origin header. Only
-// task-8-brief.md's matrix exercises GET; this covers HEAD and OPTIONS
-// too, per the brief's own "GET/HEAD/OPTIONS pass through untouched"
-// requirement.
+// OPTIONS pass through even without a session and with a cross-origin
+// Origin header.
 func TestRequireCSRF_SafeMethodsBypassWithoutSession(t *testing.T) {
 	t.Parallel()
 

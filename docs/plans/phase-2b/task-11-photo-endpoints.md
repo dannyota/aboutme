@@ -1,101 +1,272 @@
-# Task 11: Per-resume photo upload, read, replace, and delete
+# Task 11: Per-resume photo intake and lifecycle
 
-The master plan's P2B task line: "media upload endpoint + storage abstraction
-(local in dev, S3 in prod) — this covers the **per-resume photo**; the
-account-level `users.avatar_key` is populated from the OAuth profile fetch in P1
-(no separate upload)". Spec §3 puts the photo in the document
-(`personalDetails.photo`, `key` = an S3 object key, not a URL) and §5 renders it
-with a CSS crop. Implements [D11](decisions.md), [D12](decisions.md),
-[D13](decisions.md), and [D14](decisions.md).
+This task implements [D11–D14, D18, and D19](decisions.md) and the
+[photo-intake design](../../design/api.md#photo-intake). Account avatar import
+is separate and has no upload route in v1.
 
-**Tier:** High risk (untrusted binary input, resource bounds, authorization).
+**Tier:** High risk (untrusted binary input, memory and time bounds,
+authorization, non-transactional object writes).
 
-**Files:** modify `apps/server/internal/resumeapi/photo.go` (replacing Task 4's
-stub); create `photo_test.go`, `photo_contract_test.go`.
+**Files:** create
+`apps/server/internal/media/{admission.go,admission_test.go,normalize.go,normalize_test.go,photo_key.go,photo_key_test.go}`;
+modify `apps/server/internal/resumeapi/photo.go` to replace Task 4's stub;
+create `photo_test.go` and `photo_contract_test.go`. Task 3 has already pinned
+the image dependency. This task does not edit `go.mod` or `go.sum`.
 
-## Behavior
+## HTTP behavior
 
-| Operation                    | Contract                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /resumes/{id}/photo`   | `multipart/form-data`, exactly one part named `file`. Sniffs the content type from the bytes, accepts only `image/jpeg`, `image/png`, `image/webp`, stores under a server-derived key, and writes `personalDetails.photo.key` through the ordinary write path (`If-Match`, `Idempotency-Key`, validation, CAS). `200` with the updated resume |
-| `GET /resumes/{id}/photo`    | Streams the object to the **owner only**, with the stored content type, `Cache-Control: private, no-cache, must-revalidate`, and a strong `ETag` derived from the key; honors `If-None-Match` with `304`. No photo → `404 media_not_found`                                                                                                    |
-| `DELETE /resumes/{id}/photo` | Clears `personalDetails.photo` through the same write path and deletes the object. No photo → `404 media_not_found`. `204`                                                                                                                                                                                                                    |
+| Operation                    | Contract                                                                                                                                                                                                                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /resumes/{id}/photo`   | Accept one bounded raw multipart `file` part, normalize it, store a private immutable candidate, and commit its server-derived key through the ordinary `If-Match`, idempotency, validation, and CAS path. Replacement clears any old crop because it refers to different pixels. Return `200` with the updated resume. |
+| `GET /resumes/{id}/photo`    | Stream the normalized object to the owner only with its canonical media type, authenticated-API `Cache-Control: no-store`, a key-derived strong ETag, and conditional `304` support. No photo returns `404 media_not_found`.                                                                                            |
+| `PATCH /resumes/{id}/photo`  | Accept only `{crop: PhotoCrop or null}`. Change or clear the crop while preserving the key read inside the CAS transaction. No photo is `404 media_not_found`; success is `200` with the updated resume. No object I/O occurs.                                                                                          |
+| `DELETE /resumes/{id}/photo` | Clear the document reference through the same write path, then delete the exact old object. No photo returns `404 media_not_found`. Return `204`.                                                                                                                                                                       |
 
-**The key is server-derived** (D11):
-`resumes/{resumeID}/photo-{32 lowercase hex from crypto/rand}.{ext}`, `ext` from
-the **sniffed** type. A client-supplied key is never read from the request, and
-a `photo` object in a `personal-details` body is rejected by Task 9.
+The key is `resumes/{resumeID}/photo-{32 lowercase hex from crypto/rand}.{ext}`.
+`resumeID` is the owning row's canonical lowercase hyphenated UUID. `ext` is
+exactly `jpg` or `png`. One media-package constructor and parser own that
+grammar. Every GET and post-commit delete validates the stored key against the
+expected resume ID before backend I/O. A malformed or cross-resume key never
+reaches a backend. The normalizer supplies the extension; no request field,
+filename, input type, or metadata influences the key or extension.
 
-**Order of operations on upload** (deliberate, and tested): sniff and bound
-first, then `Put` the object, then the document CAS write. A CAS failure
-therefore leaves one orphan object, which is collected by the prefix sweep at
-resume delete (D13's accepted residual). The reverse order would leave a
-document referencing an object that does not exist — a broken image for the user
-rather than an invisible byte on disk.
+```go
+// entropy is exactly 16 injected random bytes, rendered as 32 lowercase hex.
+func NewResumePhotoKey(resumeID uuid.UUID, ext string,
+    entropy [16]byte) (string, error)
 
-**Replace** reads the previous key from the document inside the request, writes
-the new object and the new document, then deletes the previous object **after**
-the commit; a delete failure is logged, not surfaced.
+// ParseResumePhotoKey accepts only the constructor's byte-for-byte grammar and
+// requires the embedded UUID to equal expectedResumeID.
+func ParseResumePhotoKey(key string,
+    expectedResumeID uuid.UUID) (extension string, err error)
+```
 
-**`multipart/form-data` is permitted on this route only** — the forward-binding
-decision in `../phase-1-deferred.md`: DD-C6's `Content-Type` gate is not the
-load-bearing CSRF control, exact `Origin` plus the synchronizer token are. Every
-other route keeps requiring `application/json`.
+The crop PATCH uses the ordinary bounded JSON chain and write-rate policy, not
+the upload permit or upload-rate policy. Its exact body is
+`{crop: PhotoCrop|null}` at the declared wire version. `null` removes the `crop`
+property; it does not store JSON null. A value follows exactly the released
+version's `$defs.photoCrop` required fields and bounds. The route adds no hidden
+key, aspect-ratio, or geometry field. It hashes the exact accepted JSON bytes,
+then reads the current photo inside the idempotency transaction, changes only
+its crop, and persists the complete current document before emitting the
+declared version.
+
+## Intake boundary
+
+The upload path follows this order:
+
+1. Authenticate, validate CSRF and exact Origin, enforce the upload rate limit,
+   validate the multipart media type and boundary, `Idempotency-Key`,
+   `If-Match`, wire version, canonical target, and declared `Content-Length`,
+   then acquire the one task-wide photo permit before reading the body. A
+   declared length over 2,162,688 bytes is `413 media_too_large`. Wait at most
+   one second for the permit. A miss returns `503 media_busy` with
+   `Retry-After: 1` and does not read.
+2. This exact route bypasses the ordinary buffering `BodyLimit`; Step 1 has
+   already rejected a declared oversized request. After admission, set the
+   60-second read boundary with `http.NewResponseController(w).SetReadDeadline`,
+   wrap the body in `http.MaxBytesReader(w, r.Body, 2162688)`, and stream it
+   without a temporary file. Limit the raw file part to 2,097,152 bytes. Use
+   `NextRawPart`, never `ParseMultipartForm`. Require one part named `file`;
+   reject transfer encodings, extra parts, non-empty bytes after the closing
+   boundary, and filenames over 255 UTF-8 bytes.
+3. Build D18's operation scope from method, the exact `uploadResumePhoto`
+   `operationId`, and canonical resume ID. Hash the separate fingerprint fields:
+   resolved wire version, parsed `If-Match` revision, and exact file bytes.
+   Multipart framing, boundary text, part headers, and filename are excluded.
+   Call `IdempotencyStore.Inspect` before decode; return a committed replay or
+   reuse error without normalization or object `Put`. `Execute` remains the
+   concurrency authority after candidate creation.
+4. Normalize synchronously. Five seconds is the fail-closed measured release
+   gate defined below, not a request-time cancellation timer. The permit remains
+   held until every decoder and pixel buffer stops; cancellation never leaves a
+   detached goroutine. Record elapsed time, but do not turn the release
+   threshold into a per-request rejection. Write the normalized candidate under
+   a separate cancellable five-second object-store deadline.
+
+Unsupported container bytes return `415 media_type_unsupported`. A declared or
+observed request overflow, a wrapped `*http.MaxBytesError`, and a file byte at
+limit+1 all return `413 media_too_large`. Malformed multipart returns
+`400 request_invalid`. A recognized image rejected by the normalization contract
+returns `422 media_invalid` with only the closed reason values in D19. Permit
+exhaustion returns `503 media_busy`. Decoder and backend details never enter a
+response or log.
+
+## Normalization
+
+The normalizer independently scans the container and uses JPEG, PNG, or WebP
+decoders. Before full decode, it checks source width and height in `1..8192` and
+an overflow-safe pixel product at most 16,777,216. Full decode must confirm the
+same bounds. APNG, animated WebP, invalid chunk or segment lengths, truncation,
+dimension disagreement, and data after the terminal container marker fail.
+
+Apply one valid Exif orientation in `1..8`; no tag means 1. Reject malformed,
+duplicate, or conflicting orientation metadata. Convert to 8-bit NRGBA, treat
+decoded samples as sRGB, and strip all source metadata and profiles. Output is:
+
+- opaque pixels: baseline 4:2:0 JPEG, quality 85, maximum edge 2,048;
+- any non-opaque pixel: non-interlaced PNG with fixed `png.BestSpeed`, maximum
+  edge 1,024.
+
+Use `golang.org/x/image/draw.CatmullRom` and never upscale. Preserve aspect
+ratio with the long edge fixed to the chosen limit and the short edge rounded to
+the nearest positive pixel. If output exceeds 2,097,152 bytes, retry opaque
+images at `1792, 1536, 1280, 1024, 768, 512` or alpha images at
+`896, 768, 640, 512`, skipping sizes that would upscale. Reject a result still
+over the limit at 512. Repeated normalization with the same pinned toolchain and
+input must produce byte-identical output.
+
+## Object and database lifecycle
+
+A fresh request normalizes before `Put`, writes a random private candidate, then
+calls transactional `Execute`. A replay, key reuse, stale CAS, validation error,
+or definite transaction failure best-effort deletes the candidate. An ambiguous
+commit leaves it private because the database may reference it. The 48-hour
+orphan sweep repairs unreachable candidates.
+
+Candidate creation is bounded and collision-safe. Generate a key and call the
+create-only backend at most three times. `ErrAlreadyExists` deletes nothing and
+retries with new randomness; another error stops. Three collisions return the
+existing `500 internal_error` without a database/idempotency write and without
+deleting any collided key. Compensation tracks and may delete only the key this
+request successfully created.
+
+Replacement reads the prior key inside the CAS transaction, returns it as the
+non-persisted cleanup intent, commits a new key with no crop, then deletes that
+old object only for the fresh committed result. Delete clears the reference and
+returns its transaction-read key before deleting bytes. Resume deletion gets the
+same intent from its deleted row. A replay never repeats an old-object intent.
+Request paths never perform prefix deletion. Cleanup treats `media.ErrNotFound`
+as success. A cleanup failure is logged without the key or backend detail,
+measured, and left to the sweep. Live data never points at an object
+intentionally removed by cleanup.
+
+Cleanup validates the transaction-returned key against the exact grammar and
+expected resume ID before calling `Delete`. If validation fails after a photo
+deletion, photo replacement, or resume deletion has committed, cleanup performs
+no object I/O, records a key-invariant metric without the key, and leaves the
+unreachable bytes for the reference-aware sweep. This telemetry-only failure
+cannot replace the stored success. Owner GET of an invalid stored key returns
+`500 internal_error` without object I/O. Crop also validates its
+transaction-read key; an invalid or cross-resume value returns
+`500 internal_error`, writes nothing, and makes no object call. This is an
+internal invariant failure, not a client-writable key path.
 
 ## Steps
 
-- [ ] **Step 1: failing authorization and CSRF tests first.** All three
-      operations with no session → `401`; the two mutations with no CSRF token →
-      `403`; all three against another user's real resume id → responses
-      byte-identical to a nonexistent id; `multipart/form-data` accepted here
-      and **rejected** on every other mutating route; a JSON body on the upload
-      route → `415`.
-- [ ] **Step 2: failing bounds and type tests.** A body above the media budget →
-      `413 media_too_large` with **no object written** (assert the backend is
-      empty); a body at the budget accepted; a `.jpg` filename whose bytes are a
-      PDF, an SVG, or HTML → `415 media_type_unsupported` (the sniff decides,
-      never the filename or the client's `Content-Type`); a zero-byte part →
-      `415`; two parts, a part with the wrong name, and no part at all →
-      `400 request_invalid`; a part whose declared size and actual size disagree
-      → rejected without a partial object.
-- [ ] **Step 3: failing key tests.** The generated key matches the schema's
-      photo-key pattern and passes the traversal check; two uploads for the same
-      resume produce different keys; the key contains the resume id as its
-      prefix segment; a key is never taken from the request under any field name
-      (assert by sending `key`, `photo`, and `filename` fields containing
-      `../../other/secret.jpg` and observing the stored key).
-- [ ] **Step 4: failing lifecycle tests.** Upload then `GET` returns the same
-      bytes and content type; `If-None-Match` with the returned `ETag` → `304`;
-      replace deletes the previous object and leaves exactly one under the
-      prefix; delete clears `personalDetails.photo` and removes the object;
-      `GET` after delete → `404`; a stale `If-Match` on upload or delete → `412`
-      **and no object written or removed**.
-- [ ] **Step 5: failing idempotency test.** A replayed upload with the same key
-      and body returns the stored response and does **not** write a second
-      object; a different body under the same key → `409` with no object
-      written.
-- [ ] **Step 6: failing backend-parity test.** The whole suite runs against the
-      filesystem backend by default and against the S3-compatible backend when
-      `TEST_S3_ENDPOINT` is set, with no behavioral difference.
-- [ ] **Step 7: failing contract test.** Handler statuses, codes, media types,
-      and headers agree with `docs/api/openapi.yaml`.
-- [ ] **Step 8: implement; green.**
-- [ ] **Step 9: gate.** `make server-build server-vet server-test`;
-      `REQUIRE_TEST_DB=1 … go test ./internal/resumeapi/... -race -count=1 -v`;
-      then the same with `REQUIRE_TEST_S3=1` and the local service up;
-      `make api-check`; `make semgrep`.
-- [ ] **Step 10: commit** —
-      `git commit -m "feat(resumeapi): add per-resume photo upload, read, and delete" -- apps/server/internal/resumeapi`
-- [ ] **Step 11: independent defect review**, asked specifically about resource
-      exhaustion on upload, whether any input can influence the stored key, and
-      whether the owner-only read can be bypassed.
+- [ ] **Step 1: authorization and admission tests first.** Prove session, CSRF,
+      Origin, ownership indistinguishability, route-only multipart allowance,
+      upload rate limiting before body read, one-per-task admission, one-second
+      busy response, and permit release on every exit. A counting body must show
+      zero reads for each rejected session, CSRF, rate, header, and permit case.
+- [ ] **Step 2: transport boundary tests.** Exercise request and file limits at
+      the exact byte and byte+1 boundaries, short bodies with large declared
+      lengths, chunked bodies, truncated boundaries, wrong/missing/duplicate
+      parts, transfer encodings, a 255-byte and 256-byte filename, extra fields,
+      and non-empty epilogues. Cover direct and wrapped `MaxBytesError` values;
+      every overflow is `media_too_large`, and every rejection leaves both
+      stores unchanged. Assert no complete-request buffering occurs before the
+      handler's streaming read.
+- [ ] **Step 3: normalizer tests.** Cover JPEG, PNG, lossy and lossless WebP;
+      every Exif orientation; no orientation; duplicate, malformed, and
+      conflicting orientation; APNG and animated WebP; zero and over-limit
+      dimensions; pixel-product overflow; 16-bit PNG conversion; truncated and
+      inconsistent containers; legal metadata holding HTML; JPEG/PNG/WebP with
+      trailing HTML; and known decoder-regression fixtures. Assert output type,
+      dimensions, alpha rule, fixed ladders, byte ceiling, determinism, and
+      absence of Exif/GPS/XMP/IPTC/comments/thumbnails/ICC/source chunks.
+- [ ] **Step 4: key and read tests.** Prove the key pattern, randomness,
+      three-attempt collision bound, create-only same-key concurrency that
+      leaves the winner's referenced bytes unchanged, resume-ID prefix,
+      canonical lowercase UUID and extension, constructor/parser round trip, no
+      request influence, private conditional GET, strong ETag, `304`, and that
+      GET returns normalized bytes rather than the source container. Inject
+      malformed and another-resume stored keys: GET returns `500` and cleanup
+      skips them, with zero backend calls and no key value in logs or metrics.
+      `If-None-Match` is singleton; repeated lines, comma folding, weak tags, or
+      malformed values fail as `400 request_invalid` without a backend read. An
+      exact current strong tag returns `304`; a different well-formed strong tag
+      returns the full `200` response.
+- [ ] **Step 4a: crop tests.** Limit and limit-plus-one each `x`, `y`, `width`,
+      and `height`; reject unknown fields, a supplied key, missing coordinates,
+      non-finite values, and crop without a current photo. A valid crop and
+      `null` clear both use the ordinary JSON write limiter and full-aggregate
+      CAS, preserve the transaction-read key byte-for-byte, bump the parent
+      revision, and perform zero object calls. `null` removes the property.
+      Validate against the exact declared-version `$defs.photoCrop`; do not add
+      an unversioned shape. Race replacement against crop and prove stale
+      `If-Match` cannot attach a crop to a different key. Replacement success
+      always stores the new key with crop absent, even when the old photo had a
+      crop.
+- [ ] **Step 5: lifecycle and failure-injection tests.** Cover upload, replace,
+      photo delete, absent cleanup, stale CAS, validation failure, definite and
+      ambiguous commit outcomes, response loss, candidate-delete failure, and
+      old-object-delete failure. Race a preflight read with a transaction-time
+      photo-key change; only the key returned inside the winning transaction may
+      enter the cleanup intent. Assert exact row and object state after each
+      fault and prove replay never repeats that intent. Photo delete and
+      whole-resume delete share the same canonical-key check, reference-first
+      order, telemetry-only cleanup failure, and replay rules.
+- [ ] **Step 6: idempotency and concurrency tests.** Hash raw file-part bytes,
+      not multipart framing or names, as one fingerprint field. A committed
+      replay returns before decode and `Put`; changed wire version,
+      precondition, or bytes within the same operation scope and key returns
+      `409`. The same key on another canonical resume target is a distinct
+      mutation. Deterministically race two fresh inspections and prove `Execute`
+      selects one database winner and compensation leaves only its referenced
+      object. For crop, the same key and exact JSON bytes replay without a
+      revision bump; different bytes under that operation/key return `409`;
+      neither path makes an object call.
+- [ ] **Step 7: freeze and run the resource gate.** Before task dispatch, freeze
+      `apps/server/internal/media/testdata/normalization-benchmark-manifest.json`
+      with exact fixture hashes for every accepted boundary and decoder
+      regression, pinned toolchain, local host identity, CPU quota, exact 512
+      MiB controlled-cgroup settings, **selected production Graviton instance
+      class and task CPU/memory settings**, three warm-ups, twenty measured
+      samples per fixture, and ignored raw-evidence path
+      `.superpowers/p2b/media-normalization/<commit>/results.json`. Missing or
+      placeholder fields block dispatch; the production target is frozen now
+      even though AWS execution waits for P9A authorization. The manifest also
+      records the complete `systemd-run --user --scope` command that applies its
+      CPU/memory properties and invokes
+      `(cd apps/server && go test ./internal/media -run '^TestNormalizationBudget$' -count=1 -v)`.
+      Each sample runs in a fresh helper process; `/usr/bin/time -v` maximum RSS
+      minus a no-decode helper baseline defines RSS delta, and monotonic elapsed
+      time defines duration. Retain every raw result, not only aggregates. After
+      implementation, run each fixture synchronously; any measured sample over
+      five seconds or peak resident-set-size delta over 192 MiB fails the gate.
+      Separately prove the 60-second streaming-read and five-second `Put`
+      deadlines cancel their I/O, every exit releases the permit, and no
+      decoder, goroutine, buffer, candidate, or write survives a returned
+      response. Do not implement a detached request-time decoder timeout.
+      Preserve the manifest and corpus for P9A's required rerun on the selected
+      production ARM64 Graviton class and task cgroup.
+- [ ] **Step 8: backend and contract parity.** Run the complete lifecycle suite
+      on filesystem and fail-closed S3 backends. Assert every status, error,
+      header, and media type against `docs/api/openapi.yaml`.
+- [ ] **Step 9: implement; green.** Keep container parsing and normalization in
+      `internal/media`; the HTTP handler owns only request policy and lifecycle.
+- [ ] **Step 10: gate.** Run `make test-db-up`, `make test-s3-up`,
+      `make server-build server-vet server-test`, `make server-test-p2b`,
+      `make server-test-s3`, `make server-test-p2b-s3`, `make api-check`, and
+      `make semgrep`. The integration owner must have applied the shared targets
+      from `integration-handoffs.md`; no target may skip when its service is
+      absent.
+- [ ] **Step 11: handoff.** Report the owned paths, failing-test evidence, exact
+      checks, frozen benchmark manifest, raw resource evidence, and lifecycle
+      fault matrix to the integration owner. Do not stage or commit.
+- [ ] **Step 12: independent defect review.** Review resource exhaustion, parser
+      differentials, metadata removal, key influence, timeout cleanup,
+      authorization, and ambiguous-commit handling.
 
 ## Acceptance mapping
 
-| Row          | What this task contributes                                                     |
-| ------------ | ------------------------------------------------------------------------------ |
-| AC-MEDIA-001 | Owner-only, bounded, content-sniffed upload; rejection before any object write |
-| AC-MEDIA-002 | Server-derived, pattern-valid, unguessable key; no client influence            |
-| AC-MEDIA-003 | Replace and delete remove the previous object; no reachable orphan             |
-| AC-MEDIA-004 | The HTTP surface behaves identically on both storage backends                  |
-| AC-MEDIA-005 | Records that the account avatar has no upload surface (documented, not built)  |
+| Row          | What this task contributes                                                   |
+| ------------ | ---------------------------------------------------------------------------- |
+| AC-MEDIA-001 | Owner-only format and byte-boundary enforcement before object writes         |
+| AC-MEDIA-002 | Server-derived traversal-safe immutable key with no request influence        |
+| AC-MEDIA-003 | Crop/key preservation, crop-clearing replacement, and reference-first delete |
+| AC-MEDIA-004 | Complete HTTP lifecycle parity on both storage backends                      |
+| AC-MEDIA-006 | Failure compensation and ambiguous-commit safety                             |
+| AC-MEDIA-008 | Canonical output, orientation, metadata removal, and trailing-data rejection |
+| AC-MEDIA-009 | Dimension, pixel, concurrency, time, and measured memory bounds              |

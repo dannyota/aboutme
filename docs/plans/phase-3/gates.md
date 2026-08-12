@@ -1,61 +1,64 @@
-# Phase exit criteria
+# Phase 3 exit criteria
 
-- [ ] `make schema-check` green, including the new generated sanitizer/template
-      artifacts and their faithfulness tests;
-      `cd apps/server && go build     ./... && go vet ./... && go test ./...`
-      green (workspace resolves `gen/go`).
-- [ ] `make server-build server-vet server-test` and `make semgrep` green with
-      `internal/sanitize` present; the corpus-output artifact committed and
-      byte-stable across two runs.
-- [ ] `make web-lint web-typecheck web-test web-build` green — including all 40
-      goldens byte-stable (20 presets × both pagination modes, rendered twice
-      per run — the 2026-08-11 coverage ruling, `tokens.md` §4.2), the DOMPurify
-      corpus + cross-agreement fixed-point suite, fonts sha256/cmap/enum tests,
-      the import-rule negative fixtures, and the harness-absence build test.
-- [ ] `make web-e2e` (or the documented container invocation, output recorded)
-      green: 7 zero-tolerance screenshots — the six named presets
-      (`classic-serif`, `engineer-compact`, `modern-sidebar`, `executive-band`,
-      `consulting-formal`, `academic-dense`) plus the continuous-mode case, per
-      Task 11 Step 3 — offline-fonts proof with zero external request attempts,
-      all corpus payloads neutralized in the real browser with zero
-      dialogs/pageerrors/CSP violations on the sanitized path, and the CSP
-      backstop holding on the raw path.
-- [ ] Both blind adversarial suites (Task 4) authored before implementation
-      diffs were read (attested in the task reports), landed unweakened, and
-      green; the render-bounds number recorded and handed to the integration
-      owner.
-- [ ] All four sanitizer surfaces demonstrated: bluemonday (Task 2), DOMPurify
-      (Task 3), SSR (Task 9 Step 3), real browser + CSP (Task 11 Step 4) — the
-      complete AC-SEC-001 evidence set.
-- [ ] `docs/plans/traceability/`: AC-SEC-001 and AC-SEC-003 references filled;
-      AC-SEC-004's NEW-M7 note resolved to the Task 6 chip tests; AC-REN-001…008
-      rows filled (or the phase gate records why not).
-- [ ] Requested integration-owner artifacts resolved: `web-e2e`/`web-e2e-update`
-      targets + CI job exist (or the gate records the standing exception).
-- [ ] Every task delivered per its ADR 0011 risk tier (the risk-tier column of
-      the task index in [`README.md`](README.md)): high-risk tasks get author
-      TDD, then a fresh worker deriving tests from the spec before reading the
-      diff, then a fresh reviewer; normal-risk tasks get author TDD plus
-      `make ci`. The sanitizer tasks additionally covered by the Task 4
-      independence trail. No author signed off its own work anywhere in the
-      phase.
-- [ ] **Automated phase-acceptance catalog (B1).** `docs/plans/uat-phase-3.md`
-      exists, authored by the integration owner **before** this phase's
-      acceptance run and left unmodified during it (pattern:
-      `docs/plans/uat-phase-1.md` — run preconditions, acceptance-ID-mapped
-      scenarios, `BLOCKED` counts as `FAIL`); a fresh worker that cannot edit
-      product code, tests, snapshots, seeds, or criteria (ADR 0011) executes it
-      fail-closed and its report is attached to the gate.
-- [ ] **Phase defect review (ADR 0011).** A reviewer who authored none of the
-      phase's design or implementation has read the phase diff once, covering
-      defects, design consistency, interface stability, traceability closure,
-      and adversarial challenge (at minimum: the D3/D5/D10 owner rulings, D2's
-      agreement definition, and the blind-suite independence claims) as items
-      within that single reading — this replaces the separate per-task defect
-      review.
-- [ ] **Evidence pinned to the shipping commit (B1).** Every UAT row and the
-      adversarial review's findings are pinned to the exact commit being
-      shipped; any product-code commit landing after they ran makes every row or
-      finding that probes a changed path stale, and those scenarios are re-run
-      at a new pinned commit before this bullet is satisfied.
-- [ ] `make docs-fmt && make docs-lint` green for every `.md` touched.
+Every item passes at one unchanged candidate commit.
+
+## Contracts and implementation
+
+- [ ] Resume schema v1 and retained output are byte-unchanged. V2 is released
+      through the manifest, generated types, adjacent converters, and current
+      registry. Catalog IDs, schema enum, and preset IDs agree exactly.
+- [ ] Every font asset passes AC-FONT-001 against its exact official source,
+      license, Reserved Font Names, final hashes, internal names, and declared
+      asset policy. Required notices ship.
+- [ ] Coverage labels match the final bytes. Selected faces and fallbacks load
+      locally with no third-party request. The declared English, Vietnamese, and
+      renderer punctuation fixtures use only bundled fonts.
+- [ ] Go and client sanitizers derive from one allowlist and pass the shared
+      hostile corpus. SSR ships no Node DOM sanitizer. Browser output produces
+      no dialog, page error, or unexplained CSP violation.
+- [ ] The renderer is pure and renders every section, optional state, contact
+      rule, template, and both display modes without losing content or order.
+- [ ] All preset apply operations satisfy ADR 0008 and all section iteration
+      satisfies ADR 0009.
+- [ ] HTML goldens are byte-stable across two renders. The named screenshot
+      subset passes at zero tolerance in the pinned, locally runnable AMD64
+      browser environment. Both actual-PDF fragmentation cases raster and pass
+      at zero tolerance. P9A owns the production ARM64 launch-gate rerun.
+- [ ] The production build excludes the renderer harness. Import and
+      nondeterminism negative fixtures fail for the intended reason.
+
+## Checks and traceability
+
+- [ ] `(cd packages/schema/gen/go && go test ./... -count=1)` and
+      `make schema-check api-check server-build server-vet server-test` pass.
+- [ ] `make web-lint web-typecheck web-test web-build` and the pinned-browser
+      E2E command pass. Baseline update flags are absent and no retry occurs.
+      Its commit/run result directory was new, and every Playwright reporter and
+      comparison artifact remained below `PLAYWRIGHT_RESULTS_DIR`.
+- [ ] `make ci` and `make scan` pass once at the candidate commit.
+- [ ] The browser source-boundary test diff predates its implementation. Its
+      tracked and untracked secret-like negative controls pass, the explicit
+      manifest and archive hashes are recorded, and the fresh boundary reviewer
+      reports no blocking finding.
+- [ ] Independent sanitizer and render-bound suites were derived before their
+      authors read the implementation diff and remain unweakened. One frozen
+      test-only diff contains only the plain-field and bounds suites and
+      predates Task 6. A second pagination-only test diff, written by a
+      different fresh author after the Task 6 renderer gate, predates Task 7.
+      Evidence records both diffs separately.
+- [ ] AC-SEC-001, the P3 half of AC-SEC-003, AC-REN-001…009, and AC-FONT-001 are
+      `PROVEN` with exact evidence. P2B write, P5A public-read, and P7A
+      internal-print-read sanitizer handoffs remain assigned to their owning
+      gates.
+
+## Phase gates
+
+- [ ] A fresh reviewer that authored none of the phase reports no blocking
+      defect in behavior, design fit, license handling, interface stability,
+      assumptions, or traceability. Fixes receive independent re-review.
+- [ ] A fresh acceptance worker runs a catalog frozen before the run, edits no
+      code, tests, fixtures, snapshots, seeds, or criteria, and reports every
+      row `PASS` at the exact commit. `FAIL`, `BLOCKED`, missing evidence, or an
+      undisclosed retry fails the phase. The fresh catalog author owns
+      `docs/plans/phase-3/acceptance-catalog-r1.md` and freezes it before this
+      worker starts; a correction uses the next revision.

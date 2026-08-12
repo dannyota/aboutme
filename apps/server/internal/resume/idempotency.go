@@ -18,16 +18,13 @@ import (
 // IdempotencyTTL is how long an idempotency record remains valid after
 // Execute writes it. There is no scheduled reaping job: response_body holds
 // user content, so Execute's own opportunistic reap of the calling user's
-// expired rows (D11 owner ruling) is what actually enforces this bound, on
-// the next request that user makes -- not a background sweep.
-const IdempotencyTTL = 24 * time.Hour // D11; flagged for review
+// expired rows enforces this bound on the user's next request.
+const IdempotencyTTL = 24 * time.Hour
 
 // idempotencyRecordUniqueViolationCode and idempotencyRecordUniqueConstraint
-// are the exact SQLSTATE and constraint name
-// idempotency_records_user_route_key_key (sql/schema.sql's UNIQUE (user_id,
-// route, idempotency_key)) raises if a conflicting record reaches the insert
-// despite Execute's user-row serialization. Checking both -- not the code
-// alone -- distinguishes this defensive backstop from any other unique
+// identify the unique violation raised when a conflicting record reaches the
+// insert despite Execute's user-row serialization. Checking both, not only the
+// code, distinguishes this defensive backstop from any other unique
 // constraint violation the table might one day gain.
 const (
 	idempotencyRecordUniqueViolationCode = "23505"
@@ -53,14 +50,12 @@ type StoredResponse struct {
 var ErrIdempotencyKeyReuse = errors.New(
 	"resume: idempotency key reused with a different request body")
 
-// IdempotencyStore is the transactional idempotency-record primitive
-// implementing D11. Execute serializes a user's contenders on the same users-row
-// lock resume creation already uses, before it looks up the key or invokes
-// mutate. A committed same-key winner is therefore replayed (or rejected for a
-// different request hash) without invoking a waiting contender's callback. See
-// Execute's own doc comment for the callback contract, and this package's doc
-// comment (codec.go) for the forward contract this gives P2B/P4's
-// csrf_rejected retry.
+// IdempotencyStore provides transactional idempotency. Execute serializes a
+// user's contenders on the user-row lock that resume creation uses before it
+// looks up the key or invokes mutate. A waiting contender replays a committed
+// same-key winner, or rejects a different request hash, without invoking its
+// callback. See Execute's doc comment for the callback contract and
+// docs/adr/0016-transactional-idempotency.md.
 type IdempotencyStore struct {
 	pool *store.Pool
 	q    *store.Queries
@@ -86,7 +81,7 @@ func NewIdempotencyStore(pool *store.Pool) *IdempotencyStore {
 // through the pool, network call, file write, or other external effect would not
 // share the idempotency transaction's commit/rollback outcome.
 //
-// Flow (D11):
+// Flow:
 //
 //  1. In one committed preflight statement, reap this user's own expired
 //     records. response_body holds user content, so this opportunistic delete
@@ -98,10 +93,9 @@ func NewIdempotencyStore(pool *store.Pool) *IdempotencyStore {
 //     idempotency decision.
 //  3. Defensively delete the same key if it is expired (covering a row inserted
 //     after the preflight), then look up a live record for (userID, route, key).
-//     If one exists: its
-//     hash equal to bodyHash means this is an ordinary replay (stored
-//     response returned, mutate never invoked, nothing written); its hash
-//     different means the key was reused for a different request
+//     A matching hash means this is an ordinary replay (stored response
+//     returned, mutate never invoked, nothing written). A different hash
+//     means the key was reused for a different request
 //     (ErrIdempotencyKeyReuse, mutate never invoked, nothing written). No
 //     live record (never written, or reaped above as expired) means
 //     this is treated as a fresh request: fall through to mutate.

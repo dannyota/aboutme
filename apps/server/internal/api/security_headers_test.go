@@ -78,7 +78,7 @@ func TestSecurityHeaders_HSTSPresentViaTrustedProxyHTTPS(t *testing.T) {
 
 // TestSecurityHeaders_HSTSAbsentWhenProxyHintComesFromUntrustedPeer proves
 // the same spoofing-resistance property as rate limiting's client-IP
-// decision: X-Forwarded-Proto is only honored when it arrives via a
+// handling: X-Forwarded-Proto is only honored when it arrives via a
 // trusted proxy peer. A direct, untrusted client claiming https must not
 // get HSTS just by setting the header itself.
 func TestSecurityHeaders_HSTSAbsentWhenProxyHintComesFromUntrustedPeer(t *testing.T) {
@@ -163,9 +163,8 @@ func TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy(t *testing.T)
 	}
 }
 
-// TestRouter_New_DefaultOptions_NeverTrustsAnyPeer is the regression test
-// for security review finding 2: router.go used to hardcode
-// LoopbackTrustedProxies() unconditionally, which was silently wrong for
+// TestRouter_New_DefaultOptions_NeverTrustsAnyPeer proves api.New does not
+// hardcode LoopbackTrustedProxies(), which is wrong for
 // any topology (e.g. podman-compose) where Caddy doesn't reach Go over
 // loopback. api.New must not assume a topology on the caller's behalf — a
 // zero-value Options (no TrustedProxies configured) must trust no peer at
