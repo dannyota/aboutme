@@ -1,11 +1,9 @@
-// docmigrate_test.go is Task 8's Step 1 (adjacent conversion + projection)
-// and Step 2 (synthetic old-client preparation and supported-version
-// emission) suite.
+// docmigrate_test.go covers adjacent conversion, projection, synthetic
+// old-client preparation, and supported-version emission.
 //
 // Everything here runs against SYNTHETIC released versions, because
-// production has exactly one (D19: a second version is append-only and does
-// not exist yet). The synthetic v2/v3 schemas are DERIVED from the real
-// immutable resume.v1.schema.json -- only `$id` and `$defs/schemaVersion/
+// production has exactly one. The synthetic v2/v3 schemas are derived from
+// the real immutable resume.v1.schema.json -- only `$id` and `$defs/schemaVersion/
 // const` change -- so:
 //
 //   - version 1 always validates against the REAL immutable contract, which
@@ -123,7 +121,7 @@ func derivedSchema(t *testing.T, version int) []byte {
 }
 
 // compileValidator compiles raw into a docmigrate.ValidateFunc using the
-// same posture internal/resume's D1 compile uses: format assertion on, no
+// same posture internal/resume uses: format assertion on, no
 // URL loader at all.
 func compileValidator(t *testing.T, raw []byte) docmigrate.ValidateFunc {
 	t.Helper()
@@ -216,8 +214,8 @@ func downHeadline(target int32, prefix string) docmigrate.ConvertFunc {
 	}
 }
 
-// syntheticV2 builds the two-version projector Steps 1 and 2 use: real
-// immutable v1, derived v2, one adjacent pair, current = 2.
+// syntheticV2 builds a two-version projector from immutable v1, derived v2,
+// one adjacent pair, and current = 2.
 func syntheticV2(t *testing.T) *docmigrate.Projector {
 	t.Helper()
 	p, err := docmigrate.NewProjector(
@@ -268,7 +266,7 @@ func schemaVersionOf(t *testing.T, doc json.RawMessage) int32 {
 }
 
 // splitDoc splits a full document into the three stored jsonb parts, the way
-// a resumes row holds them (D4).
+// a resumes row holds them.
 func splitDoc(t *testing.T, doc json.RawMessage) (pd, content, customization json.RawMessage) {
 	t.Helper()
 	var parts struct {
@@ -282,7 +280,7 @@ func splitDoc(t *testing.T, doc json.RawMessage) (pd, content, customization jso
 	return parts.PersonalDetails, parts.Content, parts.Customization
 }
 
-// --- Step 1: production declarations ---
+// --- Production declarations ---
 
 func TestDeclarations_ProductionSetsAreV1Only(t *testing.T) {
 	t.Parallel()
@@ -342,7 +340,7 @@ func TestDeclarations_ReturnedSlicesCannotMutateInternalState(t *testing.T) {
 	}
 }
 
-// --- Step 1: identity conversion and projection are byte-stable ---
+// --- Identity conversion and projection are byte-stable ---
 
 func TestIdentityProjector_ConvertIsByteStable(t *testing.T) {
 	t.Parallel()
@@ -390,7 +388,7 @@ func TestIdentityProjector_CurrentVersion(t *testing.T) {
 
 // TestIdentityProjector_UnknownStoredVersion_FailsClosed: a row claiming a
 // version this build has no schema for must fail, never pass through
-// unconverted (D19).
+// unconverted.
 func TestIdentityProjector_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	t.Parallel()
 	p := docmigrate.NewIdentityProjector()
@@ -403,7 +401,7 @@ func TestIdentityProjector_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	}
 }
 
-// --- Step 1: adjacent conversion, both directions ---
+// --- Adjacent conversion, both directions ---
 
 func TestConvert_AdjacentUpAndDown(t *testing.T) {
 	t.Parallel()
@@ -490,9 +488,9 @@ func TestConvert_MultiStepChain(t *testing.T) {
 // TestConvert_IdentityDoesNotValidate pins the deliberate asymmetry between
 // the READ path and the WIRE boundary: an identity conversion is a pure
 // byte passthrough and runs no validator, so projecting a row that is
-// already current never turns a read into a validation pass (D18 keeps
-// reads pure and cheap; D16 owns validation, on writes). The wire boundary
-// (AcceptWire/EmitWire) validates unconditionally -- see its own tests.
+// already current never turns a read into a validation pass. Reads stay pure
+// and cheap; writes own validation. The wire boundary (AcceptWire/EmitWire)
+// validates unconditionally -- see its own tests.
 func TestConvert_IdentityDoesNotValidate(t *testing.T) {
 	t.Parallel()
 
@@ -511,7 +509,7 @@ func TestConvert_IdentityDoesNotValidate(t *testing.T) {
 	}
 }
 
-// TestConvert_FailsClosed covers every conversion failure mode Step 1 names.
+// TestConvert_FailsClosed covers every conversion failure mode.
 func TestConvert_FailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -641,7 +639,7 @@ func TestConvert_FailsClosed(t *testing.T) {
 	})
 }
 
-// --- Step 1: constructor fails closed ---
+// --- Constructor fails closed ---
 
 func TestNewProjector_FailsClosed(t *testing.T) {
 	t.Parallel()
@@ -843,7 +841,7 @@ func mustConvert(t *testing.T, p *docmigrate.Projector, doc json.RawMessage, fro
 	return out
 }
 
-// --- Step 1: projection over the three stored parts ---
+// --- Projection over the three stored parts ---
 
 func TestProject_ConvertsAndResplits(t *testing.T) {
 	t.Parallel()
@@ -874,7 +872,7 @@ func TestProject_ConvertsAndResplits(t *testing.T) {
 	if !bytes.Equal(normalize(t, gotCustomization), normalize(t, customization)) {
 		t.Errorf("projection changed customization:\n got %s\nwant %s", gotCustomization, customization)
 	}
-	// No stored part may ever carry schemaVersion (D4).
+	// No stored part may ever carry schemaVersion.
 	for name, part := range map[string]json.RawMessage{
 		"personalDetails": gotPD, "content": gotContent, "customization": gotCustomization,
 	} {
@@ -971,10 +969,10 @@ func TestProject_FailsClosed(t *testing.T) {
 	})
 }
 
-// --- Step 2: old-client preparation and supported-version emission ---
+// --- Old-client preparation and supported-version emission ---
 
 // TestWire_OldClientDocumentAcceptedThenEmitted is the transport-agnostic
-// boundary P2B binds to HTTP: a v1 ("old client") document is prepared into
+// boundary an HTTP layer uses: a v1 ("old client") document is prepared into
 // the current canonical shape, target-validated there, and can then be
 // emitted back in a DECLARED supported version, validated against that
 // version's immutable schema, with every v1 field preserved.

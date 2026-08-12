@@ -1,78 +1,25 @@
 #!/usr/bin/env node
-// Regenerates packages/schema/gen/{go,ts}/resume.{go,ts} from
-// resume.schema.json. Run: npm run generate (from packages/schema), or
-// `make schema-gen` from the repo root.
+// Generates current and retained Go and TypeScript types from the declared
+// JSON Schema files. Run `npm run generate` here or `make schema-gen` at the
+// repository root.
 //
-// TypeScript uses json-schema-to-typescript (jstt): it understands `$ref`,
-// `allOf`, and `required`/optional natively and emits `oneOf` as a real
-// discriminated union, so `Section` comes out as eight distinct variants
-// (`{sectionType: "work"; entries: WorkEntry[]}` | ...). Entries themselves
-// are draft-permissive (design spec §3, revised 2026-08-01): every domain
-// field is optional, only `id` is required, so each entry type's fields are
-// all `field?: T` except `id: Uuid`.
-//
-// Go still uses quicktype: it has no discriminated-union output for Go
-// (nothing does — Go has no sum types), so `content`'s eight-variant oneOf
-// is generated as eight separate named structs (ProfileEntry, WorkEntry,
-// ...) and section.go (hand-written, NOT generated — see that file) adds a
-// dispatch layer on top: a `Section` type with one typed slice per
-// sectionType (WorkEntries []WorkEntry, ...), of which exactly one is
-// populated, plus MarshalJSON/UnmarshalJSON translating to/from the wire
-// format's single "entries" array. `gen/go/resume.go` generates every type
-// `section.go` builds on (the 8 entry structs, SectionType, and the shared
-// envelope types) but not `Section` itself.
-//
-// Determinism: both tools' raw output is byte-identical across repeated
-// runs on an unchanged input (verified empirically — no timestamps, no
-// random ordering), so no output-side normalization pass is needed. What
-// *does* need help is each tool's understanding of the schema itself; see
-// buildSharedCodegenSchema and buildGoCodegenSchema below for what's
-// adjusted and why.
-//
-// Codegen fidelity (design spec §3, "Codegen fidelity" row): every
-// discriminator and entry $def Go generates is *derived from the schema at
-// generation time* by deriveSectionVariants, below — reading
-// $defs.section.oneOf, never a hardcoded list. A hardcoded list would
-// reproduce identically on every regeneration even if it silently omitted a
-// sectionType the schema declares, since "regenerate and byte-compare"
-// (test/gen.test.ts) only proves the generator is deterministic, not that
-// it's faithful to the schema — a hardcoded omission IS deterministic.
-// test/conformance.test.ts is the faithfulness check: it enumerates every
-// sectionType from the schema independently and asserts ajv, the generated
-// TS union, and the Go dispatch (gen/go/section.go, hand-written — see that
-// file) each handle it.
-//
-// Investigated and ruled out, in case someone re-treads this (all against
-// quicktype 26.0.0 / json-schema-to-typescript 15.0.4, resume.schema.json
-// as of this script's last edit — Go's map[string]<oneOf> collapse is the
-// hard problem here; jstt sidesteps it entirely by emitting a real union):
-//   - `quicktype --no-combine-classes` and `--no-maps`, on the unmodified
-//     schema, hoping either would stop the entries item type from
-//     collapsing when content's map value fans out over 8 different entry
-//     $defs: no effect on either flag, output identical to the baseline
-//     (an empty `type EntryElement struct{}`). The collapse happens where
-//     quicktype unifies 8 different item types into one Go map-value type;
-//     neither flag touches that step.
-//   - Feeding quicktype each entry $def as its own top-level input (`-S
-//     resume.schema.json profileEntry.schema.json workEntry.schema.json
-//     ...`, each pointer file `{"$ref": "<$id>#/$defs/workEntry"}`) without
-//     first stripping `unevaluatedProperties`: still every generated struct
-//     came out empty — confirms the empty-struct bug is really about
-//     `unevaluatedProperties` (fix 1 below), independent of the map
-//     collapse, since it reproduces even for a single isolated entry type
-//     with no map/oneOf involved.
-//   - Naming those same per-$def pointer files `<key>.schema.json` (e.g.
-//     `workEntry.schema.json`): quicktype named the resulting Go type
-//     `WorkEntrySchema`, not `WorkEntry` — for a positional multi-file
-//     input, quicktype names the top level after the *file's own
-//     basename*, ignoring the referenced $def's `title` (title only wins
-//     when quicktype reaches the same $def by walking properties from a
-//     single main schema file, e.g. YearMonth/DateRange below). Renaming
-//     the pointer files to `<DesiredName>.json` (no `.schema` segment)
-//     fixed it — see generateGo's pointerFiles construction.
+// json-schema-to-typescript emits the TypeScript discriminated union directly.
+// quicktype emits the Go entry structs, while hand-written section.go provides
+// the Section dispatch that Go cannot represent as a sum type. In-memory schema
+// transforms below compensate for generator limits; AJV validates the unchanged
+// source schema. Section variants are derived from $defs.section.oneOf, and
+// test/conformance.test.ts checks generator fidelity independently. See
+// docs/design/repository.md.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -89,7 +36,8 @@ const quicktypeBin = join(packageRoot, "node_modules", ".bin", "quicktype");
 // modules of their own, so nothing in go.work changes when a version is added.
 const GO_MODULE_PATH = "github.com/dannyota/aboutme/packages/schema/gen/go";
 
-const generatedHeader = (sourceName) => `// Code generated from ${sourceName}. DO NOT EDIT.`;
+const generatedHeader = (sourceName) =>
+  `// Code generated from ${sourceName}. DO NOT EDIT.`;
 
 // The $def backing the (otherwise-unreferenced) SectionType enum — see
 // deriveSectionVariants for the per-sectionType entry list, which is
@@ -100,23 +48,15 @@ function toPascalCase(key) {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-// Derives the entry $def backing each sectionType straight from the
-// schema's own `$defs.section.oneOf` — never a hardcoded list (design spec
-// §3, "Codegen fidelity"; see this file's header comment). A hardcoded list
-// would silently and *deterministically* reproduce an omitted sectionType
-// on every regeneration; deriving from the schema means a 9th oneOf branch
-// is picked up automatically the next time this script runs, and
-// test/conformance.test.ts independently enumerates the same oneOf to
-// prove gen/go/section.go's hand-written dispatch was updated to match.
-//
-// Returns variants ordered as they appear in the schema (also their
-// declaration order in gen/go/resume.go), and throws if $defs.section.oneOf
-// disagrees with $defs.sectionType's enum — an inconsistency in the schema
-// itself, not something codegen should silently paper over.
+// Derive entry definitions from the schema, in declaration order. Fail when
+// section.oneOf and sectionType.enum disagree instead of generating a partial
+// contract.
 function deriveSectionVariants(schema) {
   const oneOf = schema.$defs?.section?.oneOf;
   if (!Array.isArray(oneOf) || oneOf.length === 0) {
-    throw new Error("generate.mjs: resume.schema.json's $defs.section.oneOf is missing or empty.");
+    throw new Error(
+      "generate.mjs: resume.schema.json's $defs.section.oneOf is missing or empty.",
+    );
   }
 
   const variants = oneOf.map((branch, index) => {
@@ -160,15 +100,9 @@ function deriveSectionVariants(schema) {
 function buildSharedCodegenSchema(schema) {
   const clone = structuredClone(schema);
 
-  // 1. `unevaluatedProperties` (JSON Schema 2020-12) isn't evaluated by
-  // either quicktype's or jstt's schema readers. On the eight entry $defs
-  // (each an `allOf` of entryBase + its own fields, closed with
-  // `unevaluatedProperties: false`) quicktype collapses the type to empty
-  // rather than merging the allOf branches; jstt instead just ignores the
-  // keyword and leaves the type open (an `[k: string]: unknown` index
-  // signature — see fix 3). Stripping it is a no-op for validation (that's
-  // ajv's job against the real file) and lets both tools fall back to their
-  // normal allOf handling.
+  // Neither generator evaluates JSON Schema 2020-12 unevaluatedProperties.
+  // Removing it from the type-only copy lets both merge entry allOf branches;
+  // AJV still enforces it against the source schema.
   const stripUnevaluatedProperties = (node) => {
     if (Array.isArray(node)) {
       node.forEach(stripUnevaluatedProperties);
@@ -183,40 +117,24 @@ function buildSharedCodegenSchema(schema) {
   };
   stripUnevaluatedProperties(clone);
 
-  // 2. dateRange's `allOf` is JSON Schema's if/then conditional validation
-  // (present ⇒ end === null), not type composition — the only other allOf
-  // in this schema is the entry $defs' entryBase-plus-fields composition.
-  // jstt treats any object with both `properties` and `allOf` as needing to
-  // merge in the allOf branches, and if/then branches have no `properties`
-  // of their own, jstt's merge collapses dateRange to `{ [k: string]:
-  // unknown }`, discarding start/end/present entirely. quicktype already
-  // handles this fine on its own (dateRange came out correct in every
-  // quicktype trial while developing this generator), so this strip only
-  // matters for jstt. It's runtime-only logic either way (AC-DOC-003 defers
-  // the present/end relationship to the store layer, same as this schema's
-  // own comment on dateRange says), so dropping it for codegen purposes is
-  // safe.
+  // dateRange allOf contains if/then validation, not type composition. jstt
+  // otherwise collapses its properties to unknown. The store layer enforces
+  // the relationship against real values.
   for (const def of Object.values(clone.$defs ?? {})) {
     if (
       def &&
       typeof def === "object" &&
       Array.isArray(def.allOf) &&
-      def.allOf.some((branch) => branch && typeof branch === "object" && "if" in branch)
+      def.allOf.some(
+        (branch) => branch && typeof branch === "object" && "if" in branch,
+      )
     ) {
       delete def.allOf;
     }
   }
 
-  // 3. `link`'s `anyOf: [{const: ""}, {format: "uri"}]` refines a sibling
-  // `"type": "string"` for ajv's benefit (validation only — TS/Go types
-  // don't need to distinguish "empty string" from "URI string", both are
-  // just `string`). jstt reads the "type" and the "anyOf" as two separate
-  // partial schemas and intersects them at every use site, producing
-  // `employerLink: Link & Link1` (Link = `"" | {}`, Link1 = `string`) —
-  // technically sound (the intersection still reduces to `string`) but
-  // confusing, and it exports two dangling aliases for what's just a
-  // string. Replacing the $def with a plain string schema keeps the
-  // description but drops the refinement quicktype and jstt don't need.
+  // link's anyOf refines string validation but not its generated type. Use a
+  // plain string in the type-only copy to avoid duplicate intersection aliases.
   if (clone.$defs?.link) {
     clone.$defs.link = {
       description: clone.$defs.link.description,
@@ -225,25 +143,20 @@ function buildSharedCodegenSchema(schema) {
     };
   }
 
-  // 4. `$defs` entries without a "title" get each tool's best-guess name.
-  // For types shared by several properties (e.g. the {y, m} shape used by
-  // both dateRange.start/end and certificateEntry.date) quicktype can't
-  // derive a name from any single property and falls back to one
-  // synthesized from the *input filename* — unstable if this script's temp
-  // file name ever changes. jstt instead already names every $def after its
-  // own key by default, so this step is load-bearing for quicktype and
-  // redundant-but-harmless for jstt. Doing it once here keeps one codegen
-  // schema serving both.
+  // Give every reusable definition a stable name. quicktype otherwise derives
+  // some names from the temporary input filename.
   for (const [key, def] of Object.entries(clone.$defs ?? {})) {
-    if (def && typeof def === "object" && !("title" in def) && !("const" in def)) {
+    if (
+      def &&
+      typeof def === "object" &&
+      !("title" in def) &&
+      !("const" in def)
+    ) {
       def.title = toPascalCase(key);
     }
   }
 
-  // Force the root document's generated name to "Resume" regardless of the
-  // schema's own human-readable title ("Resume document"), matching
-  // quicktype's `--top-level Resume` flag (belt and suspenders — jstt
-  // prefers a root "title" over the name passed to compile()).
+  // jstt prefers the schema title over compile()'s requested root name.
   clone.title = "Resume";
 
   return clone;
@@ -265,24 +178,15 @@ function buildGoCodegenSchema(sharedSchema) {
     type: "object",
     additionalProperties: false,
   };
-  clone.$defs.content.additionalProperties = { $ref: "#/$defs/__sectionPlaceholder" };
+  clone.$defs.content.additionalProperties = {
+    $ref: "#/$defs/__sectionPlaceholder",
+  };
   return clone;
 }
 
-// TypeScript-only: a `$ref` carrying a sibling `description` (added
-// 2026-08-11 by customization.colors.surface, the schema's first documented
-// reference) is an annotation on the *use site*, not a different shape. jstt
-// treats such a node as its own schema, so it emits a SECOND alias for the
-// referenced $def and points the property at the duplicate — `surface?:
-// HexColor1` beside `accent?: HexColor`, with `export type HexColor1 =
-// string` dangling next to the identical `HexColor`. That is the same wart
-// buildSharedCodegenSchema's fix 3 removes for `link`, arriving by a
-// different route. quicktype has no such problem: it resolves the $ref to
-// the same Go type and keeps the description as the field's doc comment, so
-// this strip is deliberately TS-only and the Go output stays documented.
-// Dropping an annotation cannot change a type, and resume.schema.json keeps
-// the description either way — ajv validates the real file, and
-// gen/go/rawschema.go embeds it verbatim.
+// jstt treats a $ref with a sibling description as a new shape and emits a
+// duplicate alias. Drop that use-site annotation only from the TypeScript
+// type-copy; the source schema and embedded raw schema retain it.
 function buildTsCodegenSchema(sharedSchema) {
   const clone = structuredClone(sharedSchema);
 
@@ -309,8 +213,7 @@ function runQuicktype(args) {
   execFileSync(quicktypeBin, args, { stdio: "inherit" });
 }
 
-// `sectionMode` decides what happens to the placeholder `type Section
-// struct{}` quicktype emits for buildGoCodegenSchema's stand-in:
+// sectionMode controls the placeholder Section emitted by quicktype:
 //
 //   "dispatch"  — the CURRENT convenience output (gen/go/resume.go): strip the
 //                 placeholder, because the hand-written gen/go/section.go in
@@ -319,22 +222,21 @@ function runQuicktype(args) {
 //                 replace the placeholder with `type Section =
 //                 json.RawMessage`. A retained package holds only generated
 //                 files, so there is no hand-written dispatch to point at, and
-//                 raw JSON is the honest representation anyway: D13 defines a
-//                 converter as func(json.RawMessage) (json.RawMessage, error)
-//                 over the full document precisely because typed dispatch only
-//                 exists for the current version. Keeping the empty struct
-//                 instead would compile while silently claiming a v<N> section
-//                 has no fields.
-function generateGo(sharedSchema, tmpDir, outFile, { packageName, sourceName, sectionMode }) {
+//                 converters operate on raw full-document JSON. Keeping the
+//                 empty struct would falsely claim a released section has no
+//                 fields.
+function generateGo(
+  sharedSchema,
+  tmpDir,
+  outFile,
+  { packageName, sourceName, sectionMode },
+) {
   const goSchema = buildGoCodegenSchema(sharedSchema);
   const id = goSchema.$id;
   const variants = deriveSectionVariants(sharedSchema);
 
-  // quicktype names a positional multi-file input after the *file's own
-  // basename*, not the referenced $def's title (unlike a $ref reached by
-  // walking properties from a single main file, where title wins — see this
-  // file's "Investigated and ruled out" header comment). So each pointer
-  // file here is named exactly after the Go type it should produce.
+  // quicktype names positional inputs from their basenames, so each pointer
+  // filename must match the intended Go type.
   const schemaFilePath = join(tmpDir, "resume.schema.json");
   writeFileSync(schemaFilePath, JSON.stringify(goSchema, null, 2));
 
@@ -396,7 +298,9 @@ function generateGo(sharedSchema, tmpDir, outFile, { packageName, sourceName, se
       "// the whole document, never a typed decode).\n" +
       "type Section = json.RawMessage\n\n";
   } else if (sectionMode !== "dispatch") {
-    throw new Error(`generate.mjs: unknown sectionMode ${JSON.stringify(sectionMode)}.`);
+    throw new Error(
+      `generate.mjs: unknown sectionMode ${JSON.stringify(sectionMode)}.`,
+    );
   }
 
   const body =
@@ -411,24 +315,26 @@ function generateGo(sharedSchema, tmpDir, outFile, { packageName, sourceName, se
 }
 
 async function generateTs(sharedSchema, outFile, { sourceName }) {
-  const ts = await compileTypeScript(buildTsCodegenSchema(sharedSchema), "Resume", {
-    bannerComment: "",
-    style: { semi: true },
-    // Every object $def in resume.schema.json except entryBase (folded away
-    // once nothing references it — see below) already sets its own
-    // `additionalProperties` explicitly; this only supplies the default for
-    // the couple of places that rely on it being closed implicitly.
-    additionalProperties: false,
-    // Without this, `maxItems: 16`/`64` array fields (personalDetails,
-    // section entries) expand into a union of every fixed-length tuple from
-    // 0 to maxItems instead of `T[]` — unreadable and not what maxItems
-    // means here (a runtime bound ajv enforces, not a type-level one).
-    ignoreMinAndMaxItems: true,
-    // Prefer `unknown` over `any` for any residual underspecified schema
-    // (there shouldn't be any after buildSharedCodegenSchema's fixes, but
-    // `unknown` fails safe if a future schema change reintroduces one).
-    unknownAny: true,
-  });
+  const ts = await compileTypeScript(
+    buildTsCodegenSchema(sharedSchema),
+    "Resume",
+    {
+      bannerComment: "",
+      style: { semi: true },
+      // Every object $def in resume.schema.json except entryBase (folded away
+      // once nothing references it — see below) already sets its own
+      // `additionalProperties` explicitly; this only supplies the default for
+      // the couple of places that rely on it being closed implicitly.
+      additionalProperties: false,
+      // Without this, `maxItems: 16`/`64` array fields (personalDetails,
+      // section entries) expand into a union of every fixed-length tuple from
+      // 0 to maxItems instead of `T[]` — unreadable and not what maxItems
+      // means here (a runtime bound ajv enforces, not a type-level one).
+      ignoreMinAndMaxItems: true,
+      // Prefer `unknown` over `any` for any residual underspecified schema.
+      unknownAny: true,
+    },
+  );
 
   writeFileSync(outFile, `${generatedHeader(sourceName)}\n\n${ts}`);
 }
@@ -445,12 +351,8 @@ function chunkBase64(base64, width = 96) {
   return lines;
 }
 
-// Go-only (decision D2): resume.schema.json lives outside gen/go's own
-// module (see gen/go/go.mod), so go:embed cannot reach it — a Go source file
-// can only //go:embed a path inside (or below) its own module root. This
-// generates gen/go/rawschema.go instead: a plain Go source file exposing
-// schema.RawSchema []byte, base64-encoding resume.schema.json's exact bytes
-// at generation time.
+// resume.schema.json is outside gen/go's module, so go:embed cannot reach it.
+// Generate a Go source constant containing the schema's exact bytes instead.
 //
 // Base64, not a Go string literal: resume.schema.json contains a literal
 // backtick (inside a description string), which raw string literals cannot
@@ -460,7 +362,11 @@ function chunkBase64(base64, width = 96) {
 // hand-roll. Base64's alphabet has neither problem, so the embedding is a
 // straight, deterministic transcoding of rawSchemaBytes with no escaping
 // logic at all.
-function generateRawSchema(rawSchemaBytes, outFile, { packageName, sourceName, verifiedBy }) {
+function generateRawSchema(
+  rawSchemaBytes,
+  outFile,
+  { packageName, sourceName, verifiedBy },
+) {
   const base64Lines = chunkBase64(rawSchemaBytes.toString("base64"));
   const literal = base64Lines.map((line) => `\t"${line}" +\n`).join("");
 
@@ -500,22 +406,16 @@ func mustDecodeRawSchemaBase64() []byte {
   execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
 }
 
-// Reads released-versions.json — the ONLY thing that tells this script which
-// released schemas exist and where each one lives. Deliberately no directory
-// scan and no "highest resume.v*.schema.json wins" rule (design spec §3,
-// "Wire-version compatibility"): implicit discovery would quietly promote a
-// stray, half-finished, or reverted file to a released contract, and it would
-// make "which schema did this build generate from?" depend on the working
-// tree's filenames rather than on a reviewed, append-only declaration.
-//
-// Everything structural is validated here rather than assumed, because a
-// malformed manifest would otherwise surface as confusing codegen output
-// instead of an error naming the actual problem.
+// released-versions.json is the only release registry. Do not infer releases
+// from filenames, because a stray file must not become a contract. Validate its
+// structure here so failures name the manifest field, not generated output.
 function readReleasedManifest() {
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const versions = manifest.versions;
   if (!Array.isArray(versions) || versions.length === 0) {
-    throw new Error("generate.mjs: released-versions.json's `versions` is missing or empty.");
+    throw new Error(
+      "generate.mjs: released-versions.json's `versions` is missing or empty.",
+    );
   }
 
   let previous = 0;
@@ -577,7 +477,10 @@ function readReleasedManifest() {
 // instead of passing the document through unconverted.
 function generateReleasedGo(manifest, outFile) {
   const imports = manifest.versions
-    .map((entry) => `\tschemav${entry.version} "${GO_MODULE_PATH}/v${entry.version}"`)
+    .map(
+      (entry) =>
+        `\tschemav${entry.version} "${GO_MODULE_PATH}/v${entry.version}"`,
+    )
     .join("\n");
 
   const entries = manifest.versions
@@ -759,8 +662,8 @@ async function main() {
     mkdirSync(goDir, { recursive: true });
     mkdirSync(tsDir, { recursive: true });
 
-    // The current convenience outputs: what apps/server and apps/web actually
-    // compile against today, generated from the working resume.schema.json.
+    // Applications compile against these current outputs from the working
+    // resume.schema.json.
     generateGo(sharedSchema, tmpDir, join(goDir, "resume.go"), {
       packageName: "schema",
       sourceName: "resume.schema.json",
@@ -784,29 +687,44 @@ async function main() {
     for (const entry of manifest.versions) {
       const versionSchemaPath = join(packageRoot, entry.schema);
       const versionBytes = readFileSync(versionSchemaPath);
-      const versionShared = buildSharedCodegenSchema(JSON.parse(versionBytes.toString("utf8")));
+      const versionShared = buildSharedCodegenSchema(
+        JSON.parse(versionBytes.toString("utf8")),
+      );
       const versionGoDir = join(packageRoot, entry.goPackage);
       const versionTsFile = join(packageRoot, entry.tsTypes);
       mkdirSync(versionGoDir, { recursive: true });
       mkdirSync(dirname(versionTsFile), { recursive: true });
 
-      const versionTmpDir = mkdtempSync(join(tmpdir(), `aboutme-schema-codegen-v${entry.version}-`));
+      const versionTmpDir = mkdtempSync(
+        join(tmpdir(), `aboutme-schema-codegen-v${entry.version}-`),
+      );
       try {
-        generateGo(versionShared, versionTmpDir, join(versionGoDir, "resume.go"), {
-          packageName: `schemav${entry.version}`,
-          sourceName: entry.schema,
-          sectionMode: "rawSection",
-        });
+        generateGo(
+          versionShared,
+          versionTmpDir,
+          join(versionGoDir, "resume.go"),
+          {
+            packageName: `schemav${entry.version}`,
+            sourceName: entry.schema,
+            sectionMode: "rawSection",
+          },
+        );
       } finally {
         rmSync(versionTmpDir, { recursive: true, force: true });
       }
-      await generateTs(versionShared, versionTsFile, { sourceName: entry.schema });
+      await generateTs(versionShared, versionTsFile, {
+        sourceName: entry.schema,
+      });
       generateRawSchema(versionBytes, join(versionGoDir, "rawschema.go"), {
         packageName: `schemav${entry.version}`,
         sourceName: entry.schema,
         verifiedBy: `gen/go/released_test.go asserts this\n// byte-equals ../../../${entry.schema} read directly at test time, and\n// test/gen.test.ts's regenerate-and-byte-compare check covers this file\n// too.`,
       });
-      written.push(`${entry.goPackage}/resume.go`, `${entry.goPackage}/rawschema.go`, entry.tsTypes);
+      written.push(
+        `${entry.goPackage}/resume.go`,
+        `${entry.goPackage}/rawschema.go`,
+        entry.tsTypes,
+      );
     }
 
     generateReleasedGo(manifest, join(goDir, "released.go"));

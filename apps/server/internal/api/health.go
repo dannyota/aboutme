@@ -16,13 +16,10 @@ type DBPinger interface {
 // cachedPinger wraps a DBPinger behind a single-flight, TTL-memoized cache:
 // at most one real Ping is ever in flight at a time, and its result —
 // success OR failure — is reused by every caller for ttl afterward. This is
-// what bounds /readyz's database cost regardless of request volume
-// (security review re-review, new Critical C1): health endpoints are
-// deliberately exempt from the viewer-keyed RateLimit (see router.go's
-// healthChain comment — a false 429/400 on infra probes risks a
-// restart-loop), which used to mean an unauthenticated flood of /readyz
-// requests each performed its own pooled-connection round trip, with no
-// ceiling at all. A failing ping is cached exactly like a succeeding one,
+// what bounds /readyz's database cost regardless of request volume. Health
+// endpoints are deliberately exempt from the viewer-keyed RateLimit. See
+// router.go's healthChain comment: a false 429/400 on infra probes risks a
+// restart loop. A failing ping is cached exactly like a succeeding one,
 // deliberately: caching only successes would let a sustained flood against
 // an already-down database retrigger a fresh connection-pool acquisition
 // on every single request — a thundering herd against the very dependency

@@ -1,109 +1,6 @@
-// Adversarial, spec-derived tests for the GitHub plain-OAuth2 login
-// callback (task-6-brief.md Step 2, AC-AUTH-003 "GitHub receives no OIDC
-// nonce/iss checks"), originally authored independently -- from
-// task-6-brief.md, the design spec (docs/specs/aboutme-design.md §3
-// "OAuth"), and the packages it names as allowed reads (internal/auth's
-// TransactionStore/cookie helpers, the committed Google handler files that
-// define the shared callback pattern, internal/store, internal/config,
-// internal/testutil) -- WITHOUT reading internal/auth/github.go or any
-// Task 6 author test, neither of which existed at authorship time.
-//
-// Reconciled against the landed implementation (GitHub merged at a106f5a,
-// hardened at cc46948 "fix(auth): reclassify GitHub REST failures as
-// rejections and prove PKCE"; this checkout at c64e052, which also
-// includes LinkedIn login and that provider's own independent adversarial
-// suite) for:
-//
-//   - both ADAPT markers, exactly as guessed: auth.GitHubStartPath/
-//     GitHubCallbackPath (github.go) and the withGitHubEndpoint test option
-//     (handlers_test.go) landed with the identical names this file assumed;
-//   - mechanical helper collisions with the implementer's own
-//     github_test.go, which independently defined a GitHub REST stub and
-//     unique-id helper under different names than this file's own guesses:
-//     newGitHubStub/gitHubStubOption/withTokenResponse/withUser/withEmails/
-//     withEmailsAPIMalformedJSON/ghEmail/uniqueGitHubUserID/
-//     beginGitHubFlow/doGitHubCallback. This file's own equivalents
-//     (ghAdversarialStub, ghAdvStubConfig, ghAdvEmail, withAdvTokenResponse,
-//     withAdvUser, withAdvEmails, withAdvMalformedEmailsJSON, uniqueGitHubID,
-//     beginGitHub, doCallbackGitHub) were deleted in favor of theirs
-//     (functionally identical in every case); see notes.md's integration
-//     report;
-//   - newTestService's guard (handlers_test.go): it now t.Fatals only when
-//     EVERY provider override is empty, and withGitHubEndpoint alone
-//     satisfies it -- the earlier hard "Google issuer always required"
-//     requirement this file's pre-integration draft worked around
-//     (newGitHubTestService) no longer exists, so that wrapper was deleted;
-//     every test here now calls the real newTestService(t,
-//     withGitHubEndpoint(...)) directly, exactly like github_test.go's own
-//     tests do;
-//   - DD-C7 (every /callback rejection redirects to PublicOrigin+"/login",
-//     not the bare "/"): already asserted by the shared assertRejected
-//     helper (google_adversarial_test.go, itself updated for this), reused
-//     unchanged by every rejection test in this file;
-//   - DD-C10 (fix round 2 item 2, github.go's handleGitHubCallback doc
-//     comment): a GitHub REST failure -- non-200 status, network error, or
-//     a malformed/undecodable response body from EITHER /user or
-//     /user/emails -- is a provider-side failure funneled through
-//     redirectAuthFailed (302 ?error=auth_failed), never writeInternalError's
-//     500. This file's malformed-JSON tests assert exactly that code;
-//   - the access_denied -> cancelledErrorCode mapping (handlers.go;
-//     mentioned as landed-for-Google-only at original authorship, now
-//     confirmed landed for GitHub too at github.go's own handleGitHubCallback)
-//     is unchanged from what this file already asserted as its one bonus
-//     test beyond the brief's named scope.
-//
-// One deliberate, disclosed scope narrowing: github.go's GET /user and GET
-// /user/emails calls both route through the exact same shared
-// s.githubAPIGet helper (github.go), whose non-200-status and
-// decode-error branches are therefore identical code regardless of which
-// endpoint is called -- confirmed by reading github.go directly during
-// this reconciliation (this task's derivation phase, when github.go did
-// not exist, is over; the coordinator's integration message explicitly
-// authorized reading it now). github_test.go's own DD-C10 coverage already
-// exercises both branches once each (TestGitHubCallback_UserAPINon200_RedirectsAuthFailed
-// for the status branch, TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed
-// for the decode branch). This file's own pre-integration draft had a
-// SECOND, separate malformed-JSON test targeting /user specifically (with
-// its own bespoke stub) -- since that would only re-exercise the
-// already-covered decode branch through the identical shared function via
-// a different URL path, it was consolidated into one test
-// (TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails below)
-// rather than kept as a second, code-path-redundant test. Nothing about
-// the malformed-JSON SCENARIO'S assertions was weakened by this -- the one
-// remaining test adds a real, novel assertion (assertNoLeakedParsingDetails)
-// that github_test.go's own equivalent test does not make, on top of the
-// shared DD-C10 contract.
-//
-// Every other test's scenario and assertions are unchanged from this
-// file's original, independent authorship -- no assertion was weakened to
-// make anything pass; see notes.md's integration report for the full
-// verification record.
-//
-// Scope: every test here drives GET /api/v1/auth/github/start then
-// GET /api/v1/auth/github/callback through the real http.Handler
-// newTestService builds (api.New + Service.RegisterRoutes), not a bypass.
-// It covers task-6-brief.md Step 2's three required rows (no verified
-// primary email; the cross-provider mix-up defense -- direct AC-AUTH-003
-// evidence; the static no-OIDC-import regression guard) plus this task's
-// assigned strengthenings (the primary-unverified-does-not-fall-back-to-
-// verified-secondary email-selection case; a malformed provider REST
-// response producing an opaque, non-leaking rejection; the numeric GitHub
-// user id -> provider_user_id string conversion, pinned against two
-// boundary-shaped ids designed to catch a float64-typed-id bug class) and
-// one bonus test beyond that assignment (GitHub's own access_denied ->
-// its own distinct error code mapping, not covered by github_test.go at all).
-//
-// Does NOT cover: the plain happy path (github_test.go's own
-// TestGitHubCallback_NewUser_UsesVerifiedPrimaryEmail and
-// TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge), the two
-// DD-C10 cases github_test.go already covers directly (non-200 /user,
-// malformed /user/emails -- this file's own malformed-JSON test targets
-// the same /user/emails endpoint deliberately, adding a leak-scan on top
-// rather than duplicating a third, code-path-identical variant), log
-// attribution (github_test.go's own TestGitHubCallback_RejectionLogsProviderAttribute),
-// email-collision (Task 10's job), router-level concerns, or Google/
-// LinkedIn (google_adversarial_test.go/linkedin_adversarial_test.go's own
-// copies of this same exercise against their own provider mechanics).
+// These adversarial tests cover GitHub's verified-primary email rule, provider
+// binding, absence of OIDC logic, opaque provider failures, numeric IDs, and
+// consent denial. See docs/design/security.md.
 package auth_test
 
 import (
@@ -126,13 +23,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// ==== assertions specific to this file (GitHub-flavored siblings of google_adversarial_test.go's) ====
+// ==== GitHub-specific assertions ====
 
-// assertNoGitHubIdentity is assertNoIdentity's (google_adversarial_test.go)
-// GitHub-provider sibling -- that helper hardcodes auth.ProviderGoogle, so
-// it cannot be reused directly here, and no provider-parameterized version
-// exists anywhere in this package (confirmed: neither github_test.go nor
-// linkedin_adversarial_test.go define one either).
+// assertNoGitHubIdentity proves rejection created no GitHub identity.
 func assertNoGitHubIdentity(t *testing.T, q *store.Queries, providerUserID string) {
 	t.Helper()
 
@@ -145,18 +38,8 @@ func assertNoGitHubIdentity(t *testing.T, q *store.Queries, providerUserID strin
 	}
 }
 
-// assertNoLeakedParsingDetails scans body for substrings that would leak
-// GitHub-REST-response-parsing internals to the browser -- the same
-// no-oracle/no-leak reasoning as
-// TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes
-// (google_adversarial_test.go) applied to a different failure class: a
-// malformed upstream JSON response is this server's own defensive
-// rejection of bad input from GitHub, not a distinct, nameable failure
-// mode the browser should ever be able to fingerprint. Not covered by
-// github_test.go's own DD-C10 tests, which only check the outward
-// status/cookie/error-code shape (assertGitHubRejectedAuthFailed), never
-// response body content -- this is this file's own, genuinely additive
-// assertion.
+// assertNoLeakedParsingDetails rejects upstream parsing details that would let
+// a browser fingerprint GitHub failure modes.
 func assertNoLeakedParsingDetails(t *testing.T, body string) {
 	t.Helper()
 
@@ -169,16 +52,8 @@ func assertNoLeakedParsingDetails(t *testing.T, body string) {
 	}
 }
 
-// randomIDAtLeast returns a random int64 in [min, min+~536,870,911], for
-// generating realistic-but-collision-resistant GitHub user ids without
-// hardcoding small literals (e.g. 1, 42) that would collide across
-// repeated runs against this package's shared, never-reset
-// TEST_DATABASE_URL. Distinct from github_test.go's own
-// uniqueGitHubUserID (rand.Int64N(1<<62)): that generator does not
-// deterministically guarantee a value past a specific magnitude boundary
-// (e.g. 2^32 or 2^53), which TestGitHubCallback_NumericIDConvertsToStringProviderUserID
-// below needs by construction, not by probability -- kept for that reason,
-// not a mechanical duplicate.
+// randomIDAtLeast avoids shared-database collisions while forcing boundary
+// tests above min.
 func randomIDAtLeast(t *testing.T, min int64) int64 {
 	t.Helper()
 
@@ -190,18 +65,12 @@ func randomIDAtLeast(t *testing.T, min int64) int64 {
 	return min + offset
 }
 
-// ==== task-6-brief.md Step 2's three required rows ====
+// ==== verified-primary email selection ====
 
-// TestGitHubCallback_NoVerifiedPrimaryEmail is the brief's first required
-// row: no entry in /user/emails has both primary: true and verified: true
-// (here: the primary entry is unverified, and the one other entry is
-// neither primary nor verified) -- design spec §3's GitHub rule is
-// "verified primary only". task-6-brief.md's own ruling (integration owner,
-// binding) pins the SAME email_not_verified code the OIDC providers use
-// for this outcome, "for a consistent client-side error contract even
-// though the underlying check is entirely different" (github.go has no
-// email_verified claim at all -- this is an /user/emails array scan, not a
-// token claim; confirmed by reading github.go's primaryVerifiedGitHubEmail).
+// TestGitHubCallback_NoVerifiedPrimaryEmail proves that the email list must
+// contain one entry with both primary and verified set. The failure uses the
+// same email_not_verified wire code as the OIDC providers even though GitHub
+// proves the property through its REST email list rather than an ID-token claim.
 func TestGitHubCallback_NoVerifiedPrimaryEmail(t *testing.T) {
 	t.Parallel()
 
@@ -223,7 +92,7 @@ func TestGitHubCallback_NoVerifiedPrimaryEmail(t *testing.T) {
 
 	errorCode := assertRejected(t, resp)
 	if errorCode != "email_not_verified" {
-		t.Errorf("error code = %q, want %q (task-6-brief.md ruling: same code as the OIDC providers for a consistent client contract)", errorCode, "email_not_verified")
+		t.Errorf("error code = %q, want %q (same code as the OIDC providers)", errorCode, "email_not_verified")
 	}
 
 	assertNoGitHubIdentity(t, q, strconv.FormatInt(githubID, 10))
@@ -231,42 +100,20 @@ func TestGitHubCallback_NoVerifiedPrimaryEmail(t *testing.T) {
 	assertNoUser(t, q, unverifiedOtherEmail)
 }
 
-// TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider is the
-// brief's second required row and the direct positive evidence for
-// AC-AUTH-003's "no OIDC checks" half: a transaction begun for
-// ProviderGoogle, presented (cookie + state) to GitHub's own callback
-// endpoint, must be rejected. GitHub has no iss claim to catch this itself
-// (design spec §3: "GitHub gets no OIDC checks") -- transaction.go's
-// Consume provider check (Task 2, already committed:
-// `if row.Provider != string(expectedProvider) { return ..., ErrTransactionInvalid }`)
-// is GitHub's ACTUAL mix-up defense here, exercised end-to-end through the
-// real HTTP callback handler (confirmed by reading github.go:
-// handleGitHubCallback calls `s.tx.Consume(ctx, handle, ProviderGitHub)`),
-// not just against TransactionStore directly
-// (transaction_adversarial_test.go's own TestConsume_RejectsProviderMismatch
-// already covers the store-level contract in isolation; this test proves
-// github.go's callback actually wires ProviderGitHub into that call, and
-// is the only test in this package doing so for GitHub specifically).
+// TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider proves the
+// callback passes ProviderGitHub to transaction consumption. GitHub has no
+// issuer claim, so this provider-bound transaction check is its mix-up defense.
 //
-// The GitHub stub started here is deliberately never hit: Consume's
-// provider-mismatch rejection happens before any GitHub network I/O at all
-// (confirmed by reading handleGitHubCallback: ReadOAuthTxCookie+Consume
-// run before the state check, the access_denied check, or the token
-// exchange) -- a broken request to an httptest.Server this test controls
-// the lifecycle of is safe either way, no real network egress occurs
-// regardless.
+// The GitHub stub is deliberately never hit: provider mismatch is rejected
+// before state validation, consent handling, or token exchange.
 func TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider(t *testing.T) {
 	t.Parallel()
 
 	gh := newGitHubStub(t) // intentionally unconfigured/never hit -- see doc comment
 	handler, q := newTestService(t, withGitHubEndpoint(gh.URL))
 
-	// Begin a transaction for a DIFFERENT provider directly against the
-	// same TransactionStore this Service uses internally -- exactly the
-	// RFC 9700 §4.4 mix-up scenario design spec §3 describes: the
-	// __Host-oauth-tx cookie is Path=/ and would be sent to any
-	// /api/v1/auth/*/callback path by a real browser, including a
-	// different provider's.
+	// A Path=/ transaction cookie can reach another provider's callback, so
+	// begin the transaction for Google and present it to GitHub.
 	ts := auth.NewTransactionStore(q)
 	handle, tx, err := ts.Begin(context.Background(), auth.ProviderGoogle, auth.PurposeLogin, uuid.Nil,
 		testPublicOrigin+"/api/v1/auth/google/callback")
@@ -283,29 +130,13 @@ func TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider(t *testing.T
 		t.Errorf("error code = %q, want %q (DD-C3: ErrTransactionInvalid -- including a cross-provider mismatch -- funnels to the generic code, no oracle distinguishing it from any other rejected transaction)", errorCode, "auth_failed")
 	}
 
-	// No specific email/provider_user_id was ever established for this
-	// callback (rejected before any GitHub API interaction at all), so
-	// there is no scoped row to check beyond what assertRejected already
-	// covers -- the same reasoning handlers_test.go's own
-	// TestGoogleCallback_MissingTxCookie_RedirectsAuthFailed documents for
-	// its own analogous case. q is used above (auth.NewTransactionStore(q)),
-	// not dead.
+	// Rejection occurs before GitHub establishes an email or provider user ID,
+	// so there is no provider-scoped identity row to query here.
 }
 
-// TestGitHubCallback_NoOIDCImportInPackage is the brief's third required
-// row: a deterministic, no-network static check (go/parser, per the
-// integration owner's ruling) that internal/auth/github.go imports neither
-// coreos/go-oidc nor any jwt package -- making AC-AUTH-003 regression-proof
-// against someone "helpfully" adding an issuer/nonce check to this file
-// later. This is the one required row github_test.go itself does not
-// cover at all (its own doc comment explicitly defers "the adversarial
-// matrix ... [and] the static no-OIDC-import check" to "a separate,
-// independently authored suite" -- this file). Checked against actual
-// import declarations (go/parser, ImportsOnly mode), not a raw text grep
-// across the whole file, so a comment or string literal merely mentioning
-// "oidc" or "jwt" (e.g. this file's own doc comments, or github.go's own
-// doc comment explaining exactly why it must never import go-oidc) can
-// never produce a false positive.
+// TestGitHubCallback_NoOIDCImportInPackage parses import declarations to prove
+// github.go contains no OIDC or JWT dependency. Parsing imports avoids false
+// positives from comments or string literals.
 func TestGitHubCallback_NoOIDCImportInPackage(t *testing.T) {
 	t.Parallel()
 
@@ -336,19 +167,12 @@ func TestGitHubCallback_NoOIDCImportInPackage(t *testing.T) {
 	}
 }
 
-// ==== assigned strengthening: email-selection matrix (spec: "find the entry with primary: true, verified: true") ====
+// ==== verified-primary email selection edge case ====
 
 // TestGitHubCallback_EmailSelection_PrimaryUnverified_DoesNotFallBackToVerifiedSecondary
-// is this task's assigned strengthening's highest-value case: the primary
-// entry exists but is unverified, and a DIFFERENT, verified, non-primary
-// entry is also present. A buggy "any verified email will do"
-// implementation (rather than the spec's strict "primary: true, verified:
-// true" pair) would silently register the visitor under the verified
-// secondary instead of rejecting the login -- this is exactly the failure
-// mode TestGitHubCallback_NoVerifiedPrimaryEmail above (no verified email
-// at all) cannot distinguish from a correct implementation, and
-// github_test.go's own happy-path test (which only ever presents a
-// correctly-flagged primary) never exercises at all.
+// rejects a verified secondary email when the primary email is unverified.
+// This catches an implementation that accepts any verified entry instead of
+// requiring one entry to be both primary and verified.
 func TestGitHubCallback_EmailSelection_PrimaryUnverified_DoesNotFallBackToVerifiedSecondary(t *testing.T) {
 	t.Parallel()
 
@@ -381,21 +205,16 @@ func TestGitHubCallback_EmailSelection_PrimaryUnverified_DoesNotFallBackToVerifi
 	assertNoGitHubIdentity(t, q, strconv.FormatInt(githubID, 10))
 }
 
-// ==== assigned strengthening: malformed upstream JSON -> opaque failure, never a leak or a 500 ====
+// ==== malformed provider response ====
 
 // TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails
 // strengthens github_test.go's own
 // TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed (same
 // stub, same scenario -- GET /user/emails responding 200 with a body that
 // isn't valid JSON at all) with the one assertion that test doesn't make:
-// the response body must not leak any parsing-failure detail (DD-C10 is an
-// opaque rejection, not merely a redirect with the right code). See this
-// file's header comment for why a second, separate test targeting /user's
-// own malformed-JSON case was deliberately NOT also kept: github.go's
-// GET /user and GET /user/emails calls share the exact same decode-error
-// code path (s.githubAPIGet), so a second test here would exercise
-// identical code through a different URL, not a genuinely different
-// defect class.
+// the response body must not leak any parsing-failure detail. GET /user and
+// GET /user/emails share githubAPIGet, so one malformed JSON case proves the
+// shared decode-error path.
 func TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails(t *testing.T) {
 	t.Parallel()
 
@@ -419,7 +238,7 @@ func TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails(t *testing
 	assertNoGitHubIdentity(t, q, strconv.FormatInt(githubID, 10))
 }
 
-// ==== assigned strengthening: numeric id -> provider_user_id string conversion, pinned ====
+// ==== numeric ID conversion ====
 
 // TestGitHubCallback_NumericIDConvertsToStringProviderUserID pins the
 // "numeric user id" -> identities.provider_user_id (a text column) string
@@ -427,12 +246,8 @@ func TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails(t *testing
 // plausible bug class: an id decoded through a float64-typed intermediate
 // (Go's json.Unmarshal default for interface{}, or a github struct field
 // mistakenly typed float64 instead of int64) rather than a proper integer
-// type -- github.go's real githubUser.ID field IS correctly typed int64
-// (confirmed by reading github.go), so this is regression-proofing, not a
-// currently-failing assertion. Both cases use randomIDAtLeast's
-// deterministic-by-construction magnitude (not github_test.go's own
-// probabilistic uniqueGitHubUserID) since the whole point is guaranteeing
-// the boundary is actually crossed, not merely likely to be.
+// type. Both cases use randomIDAtLeast so the magnitude boundary is crossed
+// by construction.
 func TestGitHubCallback_NumericIDConvertsToStringProviderUserID(t *testing.T) {
 	t.Parallel()
 
@@ -502,31 +317,14 @@ func TestGitHubCallback_NumericIDConvertsToStringProviderUserID(t *testing.T) {
 	}
 }
 
-// ==== bonus strengthening: provider-signaled cancel (fix-round ruling b2, applied uniformly) ====
+// ==== provider consent denial ====
 
-// TestGitHubCallback_ProviderAccessDenied_RedirectsCancelled is not one of
-// task-6-brief.md's three named Step 2 rows or this task's explicitly
-// assigned strengthenings -- it is added because the integration owner's
-// binding ruling for this task states plainly that this provider-declined
-// outcome applies to GitHub the same way it applies to the other two
-// providers, and handlers.go's fix-round ruling b2 -- landed for Google
-// (handlers_test.go's TestGoogleCallback_ProviderAccessDenied_RedirectsCancelled)
-// and LinkedIn (linkedin_adversarial_test.go's
-// TestLinkedInCallback_ProviderAccessDenied_RedirectsCancelled) -- is now
-// confirmed landed for GitHub too (github.go's own handleGitHubCallback
-// checks `r.URL.Query().Get("error") == "access_denied"` and calls
-// redirectWithError with cancelledErrorCode, after the state check and
-// before the code check, identical to Google's ordering). github_test.go
-// itself has no test for this at all, so this fills a genuine gap: a
-// callback carrying ?error=access_denied (RFC 6749 §4.1.2.1) gets its own
-// distinct error code, not the generic auth_failed.
+// TestGitHubCallback_ProviderAccessDenied_RedirectsCancelled proves an
+// RFC 6749 access_denied response gets the distinct canceled code rather than
+// the generic authentication-failure code.
 //
-// The real state from a genuinely begun transaction is required here (not
-// an arbitrary value): handleGitHubCallback's landed ordering checks
-// `state` BEFORE `error=access_denied`, so this test must pass state
-// validation before it can actually reach the access_denied branch under
-// test, rather than being rejected earlier for an unrelated reason that
-// happens to also redirect with a different, non-matching error code.
+// The callback needs state from a real transaction because state validation
+// precedes consent-denial handling.
 func TestGitHubCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	t.Parallel()
 
@@ -538,7 +336,7 @@ func TestGitHubCallback_ProviderAccessDenied_RedirectsCancelled(t *testing.T) {
 	resp := doGet(t, handler, path, txCookie) //nolint:bodyclose // doGet (handlers_test.go) closes the body itself before returning.
 
 	errorCode := assertRejected(t, resp)
-	const wantErrorCode = "cancelled" //nolint:misspell // exact, ruling-specified wire value (double-L "cancelled"), not a typo for "canceled"
+	const wantErrorCode = "cancelled" //nolint:misspell // Exact wire value uses double-L "cancelled".
 	if errorCode != wantErrorCode {
 		t.Errorf("error code = %q, want %q (fix-round ruling b2, applied identically to GitHub per this task's binding ruling on provider-declined consent)", errorCode, wantErrorCode)
 	}

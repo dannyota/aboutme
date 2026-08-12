@@ -13,17 +13,17 @@ import (
 )
 
 // resumeSchemaID is resume.schema.json's own $id -- the resource key the
-// embedded schema is registered and compiled under (D1).
+// embedded schema is registered and compiled under.
 const resumeSchemaID = "https://aboutme.vn/schema/resume/v1"
 
 // compileCount counts how many times mustCompileSchema has run. It exists
 // only so export_test.go can prove compiledSchema below was compiled
-// exactly once, at package init (D1 condition (c)) -- never lazily, never
+// exactly once, at package init -- never lazily, never
 // per call.
 var compileCount int
 
 // newSchemaCompiler builds the *jsonschema.Compiler this package always
-// uses, with both D1 conditions (a) and (b) applied:
+// uses, with two fail-closed settings:
 //
 //   - AssertFormat(): format assertion enabled, matching packages/schema's
 //     ajv configuration (addFormats(new Ajv2020({allErrors:true,
@@ -43,7 +43,7 @@ func newSchemaCompiler() *jsonschema.Compiler {
 }
 
 // compiledSchema is compiled exactly ONCE, at package init, from the
-// embedded schema.RawSchema (D1 condition (c)): never lazily, never
+// embedded schema.RawSchema: never lazily, never
 // per-call. A compilation failure here is a hard startup failure (panic),
 // since a server that cannot validate resume documents must not start.
 var compiledSchema = mustCompileSchema()
@@ -78,10 +78,10 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("resume: %d validation issue(s): %s", len(e.Issues), strings.Join(e.Issues, "; "))
 }
 
-// ValidateForStore is the single write-path choke point (D16/D1): canonical
+// ValidateForStore is the single write-path choke point: canonical
 // marshal -> JSON-Schema validation (embedded schema.RawSchema) ->
 // MaxDocumentBytes -> schema.ValidateDocument (the store-layer aggregate
-// rules, including Task 2's entry-id uniqueness). Every layer runs
+// rules, including entry-id uniqueness). Every layer runs
 // regardless of whether an earlier one already failed -- schema.
 // ValidateDocument operates on the typed Go value directly and never
 // depends on the JSON-Schema layer having passed -- so a single call
@@ -135,12 +135,8 @@ func ValidateForStore(doc schema.Resume) error {
 // issueEntry pairs a rendered issue message (text) with the dotted/
 // bracketed path it applies to (path), so ValidateForStore can sort by path
 // FIRST and text only as a tiebreaker -- genuinely "path-first", not merely
-// an accident of which layer's message happens to start with an earlier
-// letter (round-2 review minor finding: plain sort.Strings on the rendered
-// text alone sorted schema issues -- which all render as "at '/...': ..." --
-// strictly before every store issue, which render as "rule (path): ...",
-// regardless of the paths actually involved, since 'a' < every rule name's
-// first letter). path uses store's own dotted/bracketed convention
+// an accident of which layer's message starts with an earlier letter. Path
+// uses the store's dotted/bracketed convention
 // ("content.work.entries[0].jobTitle"), including for schema issues, so the
 // two layers' paths compare meaningfully against each other, not just
 // within their own layer.
@@ -185,7 +181,7 @@ func collectSchemaIssueEntries(ve *jsonschema.ValidationError, out *[]issueEntry
 // JSON-pointer-with-leading-slash rendering ("/content/work/entries/0/
 // jobTitle") -- '/' sorts before every letter, so leaving it in place would
 // make every schema issue sort before every store issue regardless of path,
-// the same layer-segregation bug this function exists to avoid.
+// the same layer-segregated ordering this function prevents.
 func instanceLocationPath(segments []string) string {
 	var b strings.Builder
 	for _, s := range segments {

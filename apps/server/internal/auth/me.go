@@ -1,12 +1,7 @@
 package auth
 
-// me.go implements GET /api/v1/me (design spec §3, "CSRF" row; Task 9):
-// the authenticated caller's own user record, a fresh CSRF token, and the
-// list of OAuth providers this user has a linked identity for. This is
-// the ONLY place a CSRF token is ever produced -- never a header, cookie,
-// URL, or log line (see csrfTokenForSession) -- pairing with csrf.go's
-// RequireCSRF, which reads the matching X-CSRF-Token header back on every
-// mutating cookie-authenticated request.
+// GET /api/v1/me returns the authenticated user, linked providers, and the
+// synchronizer token required for mutating cookie-authenticated requests.
 
 import (
 	"encoding/base64"
@@ -16,12 +11,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// meUser is GET /me's "user" sub-object, pinned to exactly this shape
-// (task-9-brief.md's corrected contract): id, email, name, and avatarKey
-// (nullable) -- matching store.User's own public fields one-to-one, and
-// nothing else (never token_hash/csrf_secret -- which don't exist on
-// store.User at all -- nor created_at/updated_at, which the contract
-// doesn't call for).
+// meUser is the public user shape returned by GET /me.
 type meUser struct {
 	ID        string  `json:"id"`
 	Email     string  `json:"email"`
@@ -29,10 +19,7 @@ type meUser struct {
 	AvatarKey *string `json:"avatarKey"`
 }
 
-// meIdentity is one entry of GET /me's "identities" list: which provider
-// this user has a linked identity for. Just the provider -- never the
-// provider's own subject/user id, an internal correlation key with no
-// reason to ever reach the client.
+// meIdentity exposes the provider but never its internal subject.
 type meIdentity struct {
 	Provider string `json:"provider"`
 }
@@ -45,17 +32,12 @@ type meResponse struct {
 	Identities []meIdentity `json:"identities"`
 }
 
-// handleMe implements GET /api/v1/me. It reads the session RequireSession
-// already authenticated and put in context -- it never re-authenticates
-// or reads the __Host-session cookie itself.
+// handleMe relies on the session already stored by RequireSession.
 func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
 	if !ok {
-		// Defense in depth: RequireSession (handlers.go) is documented to
-		// always run first and populate this. Never reachable through
-		// RegisterRoutes' real wiring, but fail closed rather than panic
-		// if that ordering were ever violated.
+		// Fail closed if middleware ordering is broken.
 		rejectSession(w)
 		return
 	}
@@ -89,13 +71,8 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// csrfTokenForSession returns the CSRF token a legitimate client holding
-// sess must echo back on the X-CSRF-Token header (csrf.go's
-// validCSRFToken): sess's raw csrf_secret, base64.RawURLEncoding-encoded
-// -- the exact encoding validCSRFToken decodes before its constant-time
-// compare. GET /me is the only production call site: the design spec's
-// CSRF row is explicit that this token is returned in the response body
-// here and nowhere else (never a header, cookie, URL, or log line).
+// csrfTokenForSession encodes the secret the client must echo in
+// X-CSRF-Token. It is returned only in the GET /me response body.
 func csrfTokenForSession(sess store.Session) string {
 	return base64.RawURLEncoding.EncodeToString(sess.CSRFSecret)
 }

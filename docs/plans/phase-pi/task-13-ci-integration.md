@@ -21,7 +21,7 @@ gate of record, not only in CI. `staging-plan` is credentialed and stays out of
       `route-table-test-prod` (Task 7's e2e job with the pinned caddy binary,
       alongside the existing `route-table` job).
 - [ ] Author the credentialed `staging-plan` job: manual `workflow_dispatch`
-      only, after the AWS-authorization gate; OIDC → `ci-plan` (read-only),
+      only, after the AWS-authorization gate; OIDC → `ci-plan-staging`,
       `terraform     plan -lock=false` against the staging backend, plan summary
       posted; **never** on `push` or `pull_request` (public repo, fork secrets).
       Author and lint the workflow before AWS authorization, but do not dispatch

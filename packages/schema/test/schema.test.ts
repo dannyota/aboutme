@@ -18,9 +18,8 @@ const allowlist = JSON.parse(
 const fixture = (name: string) =>
   JSON.parse(readFileSync(join(root, "fixtures", name), "utf8"));
 
-// withFileTypes + isFile() skips fixtures/store/: that directory holds
-// fixtures for the P2A store-layer test (duplicate entry ids can't be
-// expressed in JSON Schema), not this schema test.
+// Store fixtures cover aggregate rules that JSON Schema cannot express, so this
+// top-level scan skips their directory.
 const names = readdirSync(join(root, "fixtures"), { withFileTypes: true })
   .filter((entry) => entry.isFile())
   .map((entry) => entry.name);
@@ -129,11 +128,7 @@ describe("resume schema", () => {
     ).toBe(true);
   });
 
-  // Hole 3 (phase-gate review): resume.schema.json:39 used to accept any URI
-  // format, so "javascript:alert(1)" validated in a structured link field
-  // (employerLink/schoolLink/titleLink/project link). The #/$defs/link
-  // pattern now restricts to exactly the sanitizer allowlist's urlSchemes
-  // (https, mailto, tel — validation/sanitizer-allowlist.v1.json).
+  // Structured links admit only the schemes in the sanitizer allowlist.
   describe("link scheme allowlist (hole 3: dangerous URL schemes)", () => {
     const withEmployerLink = (employerLink: string) => ({
       ...fixture("minimal.json"),
@@ -156,7 +151,7 @@ describe("resume schema", () => {
       ["mailto:ada@example.com", true],
       ["tel:+84900000000", true],
       ["", true], // explicitly cleared — still draft-permissive
-      ["javascript:alert(1)", false], // the reviewer's exact proof-of-concept
+      ["javascript:alert(1)", false], // direct hostile scheme
       ["JavaScript:alert(1)", false], // mixed-case scheme obfuscation
       ["JAVASCRIPT:alert(1)", false], // upper-case scheme obfuscation
       ["   javascript:alert(1)", false], // leading-whitespace obfuscation
@@ -169,18 +164,8 @@ describe("resume schema", () => {
     });
   });
 
-  // Finding C1 (phase-gate review of commit 34c21a6): the hole-3 fix above
-  // scoped $defs/link down to https/mailto/tel for employerLink/schoolLink/
-  // titleLink/project link, but missed personalDetails.details[].value —
-  // even though four of its eight `type` values (website, linkedin, github,
-  // twitter) are URLs, and the repo's own fixtures/full.json fixture stores
-  // them as such (see fixtures/invalid-dangerous-detail-url-scheme.json,
-  // which is full.json with exactly that one field swapped to a hostile
-  // scheme). resume.schema.json's personalDetail $def now scopes `value` to
-  // https:// only (not $defs/link's full https/mailto/tel set — a
-  // linkedin/github/twitter/website chip is never a mailto:/tel: target)
-  // when `type` is one of those four, via an allOf/if-then, the same
-  // conditional-schema pattern dateRange already uses.
+  // URL-valued contact chips admit https only. Email, phone, location, and
+  // custom values remain draft-permissive and unconstrained here.
   describe("personalDetail.value URL-scheme allowlist (finding C1: dangerous URL schemes in contact chips)", () => {
     const withDetail = (type: string, value: string) => ({
       ...fixture("minimal.json"),
@@ -198,7 +183,7 @@ describe("resume schema", () => {
     });
 
     it.each([
-      ["website", "javascript:alert(document.cookie)", false], // the reviewer's exact proof-of-concept
+      ["website", "javascript:alert(document.cookie)", false], // direct hostile scheme
       ["website", "data:text/html,<script>alert(1)</script>", false],
       ["website", "//evil.example.com", false], // protocol-relative
       ["linkedin", "javascript:alert(1)", false],
@@ -234,8 +219,7 @@ describe("resume schema", () => {
     }
   });
 
-  // Hole 2 (phase-gate review): resume.schema.json:533's layout.sections
-  // arrays had no maxItems, so a request body could pad them arbitrarily.
+  // Bound layout arrays so distinct padding cannot evade uniqueItems.
   it("rejects a layout.sections array padded past maxItems (DoS guard)", () => {
     const doc = fixture("minimal.json");
     const tooMany = Array.from({ length: 25 }, (_, i) =>
@@ -253,11 +237,8 @@ describe("resume schema", () => {
     ).toBe(false);
   });
 
-  // Draft permissiveness (design spec §3, revised 2026-08-01): personalDetails
-  // (including fullName), details, and section metadata (displayName,
-  // iconKey) must stay optional/emptyable so autosave never blocks on a
-  // half-typed document. See fixtures/draft-cleared-name-empty-section.json
-  // for the fixture-level assertion; these confirm the specific fields.
+  // Drafts keep personal details and section metadata optional or clearable.
+  // See docs/design/data.md#draft-and-publish-validation.
   describe("draft permissiveness is not weakened by the new rules", () => {
     it('accepts a cleared fullName ("") and an absent details array', () => {
       expect(
@@ -296,14 +277,8 @@ describe("resume schema", () => {
     });
   });
 
-  // Phase-gate re-review finding NEW-M3: photo.key's pattern used to
-  // include a negative lookahead ((?!.*\.\.)) to reject a ".." substring,
-  // which is outside JSON Schema's portable regex subset and does not
-  // compile under Go's RE2 engine (design spec §3 commits any future
-  // generated Go pattern-validator to reading this same file). The
-  // lookahead is gone; ".." rejection moved to validation/store.ts's
-  // validatePhotoKeyTraversal / gen/go/store_validate.go's
-  // ValidatePhotoKeyTraversal (see test/store-validation.test.ts).
+  // JSON Schema patterns must compile under Go's RE2 engine. The portable
+  // pattern checks shape; the store validators reject ".." traversal.
   describe("photo.key pattern (finding NEW-M3: RE2 portability)", () => {
     const withPhotoKey = (key: string) => ({
       ...fixture("minimal.json"),
@@ -322,44 +297,27 @@ describe("resume schema", () => {
       ["resumes/018f0000-0000-7000-8000-000000000001/photo-original.jpg", true],
       ["https://evil.example.com/x.jpg", false], // ":" not in the allowed character set
       ["a\nb.jpg", false],
-      [".hidden.jpg", false], // first char must be alnum (NEW-M5)
-      ["_x.jpg", false], // first char must be alnum (NEW-M5)
+      [".hidden.jpg", false], // first character must be alphanumeric
+      ["_x.jpg", false], // first character must be alphanumeric
     ])("%s -> valid=%s", (key, expected) => {
       expect(validate(withPhotoKey(key))).toBe(expected);
     });
 
-    // Documents the deliberate, reviewed trade-off (NOT a regression): the
-    // schema layer alone now accepts a ".." traversal string that doesn't
-    // ALSO trip the (unrelated, still-enforced) first-char-must-be-alnum
-    // rule — the store layer is where ".." is actually rejected. See
-    // test/store-validation.test.ts's "photo.key path-traversal guard"
-    // block. ("../../other-user/secret.jpg" is NOT a useful case here: it
-    // starts with ".", so the first-char anchor rejects it regardless of
-    // the lookahead removal — "a/../b.jpg" isolates the lookahead's absence
-    // specifically.)
-    it("no longer rejects a mid-string \"..\" at the schema layer (moved to the store layer)", () => {
+    // "a/../b.jpg" isolates the store-only traversal rule because it passes
+    // the schema's first-character and safe-character checks.
+    it('no longer rejects a mid-string ".." at the schema layer (moved to the store layer)', () => {
       expect(validate(withPhotoKey("a/../b.jpg"))).toBe(true);
     });
   });
 
-  // The three owner-approved customization additions (2026-08-11):
-  //   1. spacing.pageMargin {x, y} in millimetres
-  //   2. colors.surface + layout.surfaceTarget (a fillable tinted region)
-  //   3. customization.header (the resume's top block, NOT section headings)
-  //
-  // Every one of them is introduced OPTIONAL. Design spec §3 states the rule
-  // outright — "New fields are always introduced optional, so adding one
-  // never becomes an all-document migration" — and the required-key
-  // assertions below are what enforces it: they pin the exact required sets
-  // that existed before this change, so a later commit that promotes any of
-  // these to `required` fails here instead of silently invalidating every
-  // stored document.
+  // New fields begin optional so an addition does not invalidate stored
+  // documents. These assertions pin the required-key sets. See
+  // docs/design/data.md#draft-and-publish-validation.
   describe("customization additions: pageMargin, surface, header", () => {
     const customization = () => fixture("minimal.json").customization;
 
-    // Merges a patch into minimal.json's customization. Nested one level,
-    // which is all these three additions need (spacing.*, colors.*,
-    // layout.*, and the new top-level `header`).
+    // Merge one nested customization level for spacing, colors, layout, and
+    // the top-level header object.
     const withCustomization = (
       patch: Record<string, unknown>,
     ): Record<string, unknown> => {
@@ -417,21 +375,21 @@ describe("resume schema", () => {
       });
 
       it("a document carrying none of the three additions is still valid", () => {
-        expect(validate(fixture("minimal.json")), ajv.errorsText(validate.errors)).toBe(true);
+        expect(
+          validate(fixture("minimal.json")),
+          ajv.errorsText(validate.errors),
+        ).toBe(true);
       });
     });
 
-    // 1. spacing.pageMargin — bounded millimetres, both axes present or the
-    // whole object absent.
+    // spacing.pageMargin uses bounded millimetres; both axes are present or
+    // the whole object is absent.
     describe("spacing.pageMargin", () => {
       const margin = (value: unknown) =>
         withCustomization({ spacing: { pageMargin: value } });
 
-      // Read at collection time to build the it.each matrix below, so the
-      // bounds the cases probe are always the schema's own. The `??`
-      // fallbacks only keep collection alive while the fields don't exist
-      // yet (TDD red); the shape assertion right below is what proves they
-      // really are declared.
+      // Build the case matrix from schema bounds. The shape assertion below
+      // reports a missing declaration directly.
       const axis = custProps().spacing.properties?.pageMargin?.properties?.x;
       const min: number = axis?.minimum ?? 0;
       const max: number = axis?.maximum ?? 40;
@@ -473,7 +431,7 @@ describe("resume schema", () => {
       });
     });
 
-    // 2. colors.surface + layout.surfaceTarget — a fillable colour region.
+    // colors.surface and layout.surfaceTarget define a fillable region.
     describe("colors.surface and layout.surfaceTarget", () => {
       it("colors.surface reuses the hexColor $def", () => {
         expect(custProps().colors.properties.surface).toEqual({
@@ -485,12 +443,12 @@ describe("resume schema", () => {
       it.each([
         ["#f4f4f5", true],
         ["#FFF", false], // hexColor is six digits
-        ["", false], // no cleared form for a colour (contract.md §6)
+        ["", false], // colors have no cleared form
         ["rebeccapurple", false],
       ])("colors.surface %s -> valid=%s", (value, expected) => {
-        expect(validate(withCustomization({ colors: { surface: value } }))).toBe(
-          expected,
-        );
+        expect(
+          validate(withCustomization({ colors: { surface: value } })),
+        ).toBe(expected);
       });
 
       it("surfaceTarget is exactly none | header | sidebar", () => {
@@ -546,11 +504,13 @@ describe("resume schema", () => {
         expect(description).toMatch(/columns/);
         expect(description).toMatch(/sidebar/);
         expect(description).toMatch(/renders? as .?none.?/i);
-        expect(description).toMatch(/never an error|rather than erroring|not an error/i);
+        expect(description).toMatch(
+          /never an error|rather than erroring|not an error/i,
+        );
       });
     });
 
-    // 3. customization.header — the resume's TOP BLOCK, not section headings.
+    // customization.header controls the resume top block, not section headings.
     describe("customization.header", () => {
       const header = (value: unknown) => withCustomization({ header: value });
       const complete = {
@@ -567,10 +527,11 @@ describe("resume schema", () => {
           ["align", "detailsLayout", "iconStyle"].sort(),
         );
         expect(def.properties.align.enum).toEqual(["left", "center"]);
-        expect(def.properties.detailsLayout.enum).toEqual(["inline", "stacked"]);
-        // "solid" was removed by owner ruling 2026-08-11 (tokens.md §3.4):
-        // it was defined as the FILLED lucide glyph, and lucide ships no
-        // filled family.
+        expect(def.properties.detailsLayout.enum).toEqual([
+          "inline",
+          "stacked",
+        ]);
+        // Lucide has no filled icon family.
         expect(def.properties.iconStyle.enum).toEqual(["none", "outline"]);
       });
 
@@ -579,7 +540,7 @@ describe("resume schema", () => {
         [{ ...complete, align: "center" }, true],
         [{ ...complete, detailsLayout: "stacked" }, true],
         [{ ...complete, iconStyle: "none" }, true],
-        [{ ...complete, iconStyle: "solid" }, false], // removed from the enum, 2026-08-11
+        [{ ...complete, iconStyle: "solid" }, false], // unsupported icon family
         [{ align: "left", detailsLayout: "inline" }, false], // missing iconStyle
         [{ align: "left", iconStyle: "outline" }, false], // missing detailsLayout
         [{ detailsLayout: "inline", iconStyle: "outline" }, false], // missing align
@@ -594,10 +555,7 @@ describe("resume schema", () => {
       });
     });
 
-    // NAMING HAZARD: customization.heading means SECTION headings;
-    // customization.header means the resume's top block (name, headline,
-    // contact details). Both descriptions must state the distinction, or the
-    // next person to read the schema conflates them.
+    // The similar names govern distinct regions; both descriptions must say so.
     describe("heading vs header: both descriptions state the distinction", () => {
       it("heading's description scopes it to section headings and points at header", () => {
         const description: string = custProps().heading.description;

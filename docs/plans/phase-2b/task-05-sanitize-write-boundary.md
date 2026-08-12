@@ -8,9 +8,9 @@ point, not one call per handler.
 
 **Tier:** High risk (rich-text sanitization).
 
-**Prerequisite:** `apps/server/internal/sanitize` from P3 Task 2. The delivery
-index runs P3 in step 04, ahead of P2B in step 05 — see open question Q1 in the
-task report if that ordering changes.
+**Hard prerequisite:** P3 passed both phase gates with v2 current.
+`apps/server/internal/sanitize` from P3 Task 2 is this task's direct code
+dependency and must be landed, independently reviewed, and green.
 
 **Files:** create
 `apps/server/internal/resumeapi/{sanitize_doc.go,sanitize_doc_test.go}`. Task 4
@@ -50,9 +50,10 @@ func sanitizeDocument(doc schema.Resume) schema.Resume
       corpus in an entry's rich text is neutralized in the persisted document; a
       benign fragment is unchanged; sanitization is **idempotent**
       (`sanitizeDocument(sanitizeDocument(d)) == sanitizeDocument(d)`); a
-      `nil`/absent field stays absent and an empty string stays empty (spec §3:
-      absence is meaningful, `""` means explicitly cleared — sanitization must
-      not fabricate or drop either); a hidden entry is sanitized like any other.
+      `nil`/absent field stays absent and an empty string stays empty (the
+      [resume aggregate](../../design/data.md#resume-aggregate) gives those
+      states different storage meaning, so sanitization must not fabricate or
+      drop either); a hidden entry is sanitized like any other.
 - [ ] **Step 3: failing order test.** Sanitization runs **before** validation
       and the size bounds: construct rich text that is under the 16 KB byte
       bound only after sanitization strips a hostile wrapper, and assert it is
@@ -66,11 +67,13 @@ func sanitizeDocument(doc schema.Resume) schema.Resume
       just the function. Without this the invariant is structural but unguarded,
       the blind spot P2A's Task 8 Step 3c documents.
 - [ ] **Step 5: implement; green.**
-- [ ] **Step 6: gate.** `make server-build server-vet server-test`;
-      `REQUIRE_TEST_DB=1 … go test ./internal/resumeapi/... -race -count=1`;
-      `make semgrep`.
-- [ ] **Step 7: commit** —
-      `git commit -m "feat(resumeapi): sanitize rich text on every write path" -- apps/server/internal/resumeapi`
+- [ ] **Step 6: gate.** Run `make test-db-up`,
+      `make server-build server-vet server-test`,
+      `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1)`,
+      and `make semgrep`.
+- [ ] **Step 7: handoff.** Report the owned paths, failing-test evidence, exact
+      checks, and rich-text completeness set to the integration owner. Do not
+      stage or commit.
 - [ ] **Step 8: independent defect review** by a worker that authored neither
       this task nor Task 4.
 

@@ -23,7 +23,7 @@ import (
 // Package-level var initializers run exactly once, at package init, before
 // any test executes -- so a value of 1 here (checked before any of this
 // package's exported functions are even called) already proves the schema
-// was compiled once at init, not lazily on first use. D1 condition (c).
+// was compiled once at init, not lazily on first use.
 func CompileCountForTest() int {
 	return compileCount
 }
@@ -37,14 +37,14 @@ func CompiledSchemaPointerForTest() *jsonschema.Schema {
 
 // NewSchemaCompilerForTest exposes the exact compiler construction
 // (AssertFormat + no URL loader) ValidateForStore's package-init compile
-// uses, so a test can prove the no-URL-loader condition (D1 condition (b))
+// uses, so a test can prove the no-URL-loader condition
 // against the real configuration rather than a similar-looking stand-in.
 func NewSchemaCompilerForTest() *jsonschema.Compiler {
 	return newSchemaCompiler()
 }
 
 // IsResumeCapExceededForTest exposes isResumeCapExceeded (store.go) to
-// package resume_test, so a test can prove the D7 cap-violation mapping
+// package resume_test, so a test can prove the cap-violation mapping
 // requires an EXACT match on both the SQLSTATE and the message -- not the
 // SQLSTATE alone, which other CHECK constraints on resumes also raise --
 // without going through a live database.
@@ -52,27 +52,20 @@ func IsResumeCapExceededForTest(err error) bool {
 	return isResumeCapExceeded(err)
 }
 
-// EncodePartsForTest exposes encodeParts (codec.go), now package-private
-// (fix round 1, owner ruling: it is the function that actually produces
-// the three jsonb values a write persists, so it is the half of the D16
-// choke point the compiler can enforce), so tests can still exercise the
+// EncodePartsForTest exposes the package-private encodeParts so tests exercise the
 // exact function ValidateForStore's own callers use, rather than a
 // reimplementation of it.
 func EncodePartsForTest(doc schema.Resume) (personalDetails, content, customization json.RawMessage, err error) {
 	return encodeParts(doc)
 }
 
-// CreateTxForTest exposes (*Store).createTx (store.go, B7's tx-scoped create
-// core) to package resume_test, so Task 7's IdempotencyStore composition
-// tests (idempotency_test.go) can call the REAL cap-checked create logic --
-// composed inside IdempotencyStore.Execute's own transaction exactly as
-// P2B's eventual caller will -- rather than a hand-rolled INSERT stand-in
-// that would prove nothing about the composition.
+// CreateTxForTest exposes (*Store).createTx so idempotency tests can compose
+// Execute with the real cap-checked create logic instead of an INSERT stand-in.
 func (s *Store) CreateTxForTest(ctx context.Context, qtx *store.Queries, userID uuid.UUID, title string, doc schema.Resume) (Resume, error) {
 	return s.createTx(ctx, qtx, userID, title, doc)
 }
 
-// SaveDocumentTxForTest exposes (*Store).saveDocumentTx solely so Task 7's
+// SaveDocumentTxForTest exposes (*Store).saveDocumentTx so
 // idempotency contention tests can compose Execute with the real revision-CAS
 // write inside Execute's supplied transaction. Production callers use
 // SaveDocument; this test-only seam does not widen the shipped API.
@@ -90,8 +83,8 @@ func NewIdempotencyStoreForTest(pool *store.Pool, now func() time.Time) *Idempot
 	return &IdempotencyStore{pool: pool, q: store.New(pool), now: now}
 }
 
-// BackfillOneForTest exposes (*Store).backfillOne's pause seam, so Task 8's
-// backfill_test.go can stage the read/CAS interleavings D12 depends on
+// BackfillOneForTest exposes (*Store).backfillOne's pause seam so
+// backfill_test.go can stage read/CAS interleavings
 // deterministically instead of racing them. pause runs after the document has
 // been read, projected, validated and re-encoded, and immediately before the
 // CAS -- exactly the window a concurrent autosave or title write occupies.

@@ -1,23 +1,5 @@
-// api-contract.test.ts is the consumer half of AC-API-001.
-//
-// It lives in test/nuxt/ on purpose. `.nuxt/tsconfig.app.json` includes
-// `app/**/*` and `test/nuxt/**/*` and nothing else from this repo, so this
-// is the only place a type assertion can be checked inside the REAL Nuxt
-// program — with `~` aliases and Nuxt's auto-imports resolving exactly as
-// they do in app code. A type assertion written in test/*.test.ts would be
-// erased unchecked by vitest, which is why test/api-client.test.ts has to
-// shell out to tsc for its half.
-//
-// KNOWN GAP (reported with P0F, not introduced by it): `npm run typecheck`
-// is currently vacuous. It runs `vue-tsc --noEmit` against a root
-// tsconfig.json that is solution-style — `"files": []` plus `references`
-// — and without `--build` that program contains no files at all, so it
-// type-checks nothing and passes on any error. Verified by planting a
-// deliberate type error under app/ and watching typecheck exit 0. The
-// exported assertions below therefore compile-check only under
-// `vue-tsc --build --noEmit`, which currently also surfaces a pre-existing
-// error in app/composables/useAuth.ts. The runtime cases in this file do
-// run today, under `make web-test`.
+// This file is included in Nuxt's TypeScript program, so its assertions check
+// the same aliases and auto-imports as application code.
 import { describe, expect, it } from 'vitest';
 import type { paths } from '~/api/generated/openapi';
 import { API_BASE_PATH, createApiClient } from '~/api/client';
@@ -26,12 +8,7 @@ import type { AuthUser } from '~/composables/useAuth';
 type MeResponses = paths['/me']['get']['responses'];
 type MeOk = MeResponses['200']['content']['application/json'];
 
-/**
- * The generated `GET /me` user must remain assignable to the hand-written
- * `AuthUser` that `useAuth` exposes to every page. If the contract's
- * `User` schema changes shape, this stops compiling — instead of the app
- * silently reading a field the API no longer sends.
- */
+// Keep the generated GET /me user assignable to useAuth's public type.
 export function assertMeUserSatisfiesAuthUser(payload: MeOk): AuthUser | null {
   // `data` is optional in the generated intersection: the /me 200 `allOf`
   // refinement does not restate `required: [data]`. Narrow rather than

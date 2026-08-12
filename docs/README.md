@@ -1,61 +1,72 @@
-# aboutme documentation
+# Documentation
 
-Map of `docs/` — what lives where, and the rules for each kind of document.
+This directory separates intended design, current behavior, delivery work, and
+operational procedures. Put each fact in the document type that owns it, then
+link to that source instead of copying the contract.
 
-| Directory                                    | Contents                                                                                                                                                                  | Mutability                                                   |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [`specs/`](specs/)                           | Design specs. A spec is a decision record of _what we intend to build_ and why; approval dates live inside the doc. A large spec is a directory with a `README.md` index. | Frozen once approved; corrections go in a new spec or an ADR |
-| [`plans/`](plans/)                           | Implementation plans: master `implementation-plan.md` (phases, gates, agent workflow) plus one directory per phase (`plans/phase-<id>/`).                                 | Living until executed; checkbox tasks tracked during run     |
-| [`plans/traceability/`](plans/traceability/) | The acceptance-criteria matrix, split into one file per acceptance-ID prefix (`ac-auth.md`, `ac-doc.md`, …).                                                              | Living; rows closed by their owning phase                    |
-| [`adr/`](adr/)                               | Architecture Decision Records, numbered `NNNN-<slug>.md`. One decision per file: context → decision → consequences.                                                       | Immutable; superseding requires a new ADR that links back    |
-| [`api/`](api/)                               | `openapi.yaml` — the `/api/v1` contract, lint, and conformance tests. Generated TypeScript client tooling is a queued pre-P2B correction; Dart is deferred to P11.        | Living; changes reviewed like code                           |
-| [`research/`](research/)                     | External-product research notes gathered as evidence. **Not project authority** — findings become authoritative only when adopted into a spec, ADR, plan, or runbook.     | Living; superseded by re-research                            |
-| [`runbooks/`](runbooks/)                     | Operational procedures: deploy, rollback, restore drill, EIP recovery, secret rotation.                                                                                   | Living                                                       |
-| `architecture.md` _(added at scaffold)_      | Current-state system overview reconciled with code, deployment configuration, and OpenAPI.                                                                                | Living                                                       |
-| `self-hosting.md` _(added at scaffold)_      | Operator guide for self-hosters (podman compose); linked from the root README.                                                                                            | Living                                                       |
+## Authority
 
-Root-level (not in `docs/`, added at scaffold): `README.md`, `CONTRIBUTING.md`,
-`SECURITY.md`, `LICENSE`.
+| Question                                          | Authority                                                                |
+| ------------------------------------------------- | ------------------------------------------------------------------------ |
+| What should the product and system become?        | [`design/`](design/README.md)                                            |
+| What does the HTTP API implement now?             | [`api/openapi.yaml`](api/openapi.yaml)                                   |
+| What does the repository implement now?           | Code, deployment configuration, and [`architecture.md`](architecture.md) |
+| Why was an architecture choice accepted?          | [`adr/`](adr/README.md)                                                  |
+| What runs next, and which gates apply?            | [`plans/`](plans/README.md)                                              |
+| Which acceptance criterion owns a requirement?    | [`plans/traceability/`](plans/traceability/README.md)                    |
+| How is an implemented operation performed?        | [`runbooks/`](runbooks/README.md)                                        |
+| How does a contributor or operator get started?   | [`guides/`](guides/README.md)                                            |
+| How should documentation and comments be written? | [`standards/`](standards/README.md)                                      |
 
-## Conventions
+The design wins over a plan. Code, deployment configuration, and OpenAPI must
+agree about implemented behavior. A disagreement between those artifacts is a
+defect, not permission to choose one silently.
 
-- **Mermaid** (not ASCII) for diagrams in all `.md` files.
-- Formatting/linting: `make docs-fmt` / `make docs-lint` (Prettier +
-  markdownlint-cli2 — configs at repo root); CI enforces both.
-- ADR template: `## Context` / `## Decision` / `## Consequences`; status line
-  (`Accepted | Superseded by NNNN`) at the top.
-- Authority hierarchy: the design spec owns intended product/architecture and
-  wins over implementation plans; code, deployment configuration, and OpenAPI
-  jointly own current behavior; `architecture.md` and runbooks own current
-  narrative/operations; accepted ADRs explain or supersede decisions. A
-  disagreement is a defect to repair across the affected authorities, not a
-  reason to choose the convenient artifact.
+## Directory map
 
-## Current documents
+| Path                                     | Contents                                                    | Lifecycle                                                |
+| ---------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
+| [`design/`](design/README.md)            | Intended product, architecture, and template contract       | Draft until approved; frozen by revision after approval  |
+| [`adr/`](adr/README.md)                  | One proposed or accepted decision per record                | Draft until accepted; accepted records are append-only   |
+| [`api/`](api/README.md)                  | OpenAPI source, contract tests, and client-generation notes | Living with implemented HTTP behavior                    |
+| [`plans/`](plans/README.md)              | Roadmap, active phase plans, budgets, gates, and evidence   | Active plans are living; completed records are immutable |
+| [`research/`](research/flowcv/README.md) | External observations used as evidence                      | Not project authority                                    |
+| [`guides/`](guides/README.md)            | Setup and usage guidance                                    | Living with supported workflows                          |
+| [`runbooks/`](runbooks/README.md)        | Exact operating, verification, and recovery procedures      | Added only when the operation exists                     |
+| [`standards/`](standards/README.md)      | Documentation and code-comment rules                        | Living repository policy                                 |
+| [`specs/`](specs/aboutme-design.md)      | Compatibility links for the retired layout                  | No new documents                                         |
 
-- [Current-state architecture](architecture.md) — what is implemented on `main`
-  now.
-- [aboutme design](specs/aboutme-design.md) — intended v1 product and
-  architecture (`DRAFT v3`; two independent review rounds applied).
-- [Template system spec](specs/templates/README.md) — the contract, design
-  tokens, and print behavior every resume template implements (`DRAFT v1`);
-  per-preset rationale docs live in
-  [`specs/templates/presets/`](specs/templates/presets/), and the committed
-  presets themselves in `packages/schema/templates/`.
-- [FlowCV research](research/flowcv/README.md) — reference evidence from a
-  comparable product; not project authority.
-- [Numbered implementation roadmap](plans/implementation-plan.md#numbered-delivery-index)
-  — done/current/next delivery waves and phase gates.
-- [Phase 2A automated acceptance catalog](plans/uat-phase-2a.md) — immutable
-  fail-closed criteria for the current data-layer phase gate; the historical
-  filename retains the older `UAT` terminology.
-- [Phase 9 local manual UAT plan](plans/phase-9-local-uat.md) — main-session
-  user validation of the complete Podman deployment through Playwright MCP
-  before AWS authorization.
-- [OpenAPI contract](api/openapi.yaml) — current health, auth, identity, and
-  session HTTP surface.
-- [Self-hosting guide](self-hosting.md) — the runnable podman compose stack.
+Root [`README.md`](../README.md), [`CONTRIBUTING.md`](../CONTRIBUTING.md),
+[`SECURITY.md`](../SECURITY.md), and [`LICENSE`](../LICENSE) cover repository
+entry points and project policy.
 
-`UAT` is reserved for the P9 local and P9A staging user-workflow gates. Earlier
-`uat-phase-*` catalogs and reports are immutable automated phase-acceptance
-history; their filenames, criteria, corrections, and verdicts are not rewritten.
+## Current entry points
+
+- [Draft v4 design](design/README.md)
+- [Current-state architecture](architecture.md)
+- [Implementation roadmap](plans/implementation-plan.md)
+- [Template system](design/templates/README.md)
+- [OpenAPI contract](api/openapi.yaml)
+- [Self-hosting guide](guides/self-hosting.md)
+- [Native development runbook](runbooks/native-development.md)
+- [Local UAT runbook](runbooks/local-uat.md)
+
+Draft v4 is not approved or frozen. Approval rules live in the
+[design index](design/README.md#approval-rule).
+
+## Writing and checks
+
+- Use relative links inside `docs/`.
+- Use Mermaid for Markdown diagrams.
+- Keep living Markdown files near 300 lines. Split larger subjects into a
+  directory with a `README.md` index and focused pages.
+- Do not rewrite completed phase records or acceptance catalogs.
+- Move long-lived design reasoning out of code comments and into the owning
+  design page or ADR.
+- Run `make docs-fmt` and `make docs-lint` after Markdown or YAML changes.
+
+The full rules are in [`standards/engineering.md`](standards/engineering.md).
+
+`UAT` means the P9 local and P9A staging user-workflow gates. Earlier files
+named `uat-phase-*` are immutable automated acceptance history; their names do
+not redefine the term.

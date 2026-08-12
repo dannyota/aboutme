@@ -5,18 +5,12 @@ import (
 	"net/http"
 )
 
-// OAuthTxCookieName is the __Host- prefixed cookie carrying the raw OAuth
-// transaction handle (see transaction.go's TransactionStore.Begin)
-// between /authorize and /callback. The __Host- prefix is enforced by
-// every browser that implements it: it requires Secure, no Domain
-// attribute, and Path=/ -- all set below -- so the cookie can never be
-// set by, or sent to, anything other than this exact host over HTTPS.
+// OAuthTxCookieName carries the raw OAuth transaction handle between the
+// authorization start and callback. Its __Host- prefix requires Secure,
+// Path=/, and no Domain attribute.
 const OAuthTxCookieName = "__Host-oauth-tx"
 
-// oauthTxCookieMaxAge is oauthTxTTL expressed in the whole seconds
-// http.Cookie.MaxAge wants (600), computed from oauthTxTTL rather than
-// hardcoded so the cookie and the database row it points at can never
-// drift out of sync with each other.
+// oauthTxCookieMaxAge keeps the cookie lifetime aligned with the database row.
 var oauthTxCookieMaxAge = int(oauthTxTTL.Seconds())
 
 // ErrOAuthTxCookieMissing is returned by ReadOAuthTxCookie when the
@@ -41,21 +35,13 @@ func ReadOAuthTxCookie(r *http.Request) (string, error) {
 	return c.Value, nil
 }
 
-// ClearOAuthTxCookie deletes the __Host-oauth-tx cookie by re-setting it
-// with an empty value and a negative Max-Age, matching every attribute
-// SetOAuthTxCookie sets: a browser only overwrites/deletes a cookie when
-// its Path (and, for a __Host- prefixed name, the implicit no-Domain and
-// Secure) attributes match exactly. Call this on both the success and
-// failure paths of /callback so a consumed or dead transaction cookie
-// never lingers in the browser.
+// ClearOAuthTxCookie deletes the transaction cookie. Callback handlers must
+// call it on every exit path so a consumed or invalid handle does not linger.
 func ClearOAuthTxCookie(w http.ResponseWriter) {
 	http.SetCookie(w, oauthTxCookie("", -1))
 }
 
-// oauthTxCookie builds the __Host-oauth-tx cookie shared by
-// SetOAuthTxCookie and ClearOAuthTxCookie, so every attribute that must
-// match between setting and clearing it (Path, Secure, HttpOnly,
-// SameSite) is written in exactly one place.
+// oauthTxCookie keeps the attributes used to set and clear the cookie identical.
 func oauthTxCookie(value string, maxAge int) *http.Cookie {
 	return &http.Cookie{
 		Name:     OAuthTxCookieName,

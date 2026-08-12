@@ -1,7 +1,4 @@
-// Package auth_test exercises the __Host-session cookie helpers. These
-// tests are hermetic (no database): SetSessionCookie and
-// ClearSessionCookie only touch net/http.ResponseWriter -- the same
-// convention cookie_test.go already uses for __Host-oauth-tx.
+// Package auth_test exercises the hermetic __Host-session cookie helpers.
 package auth_test
 
 import (
@@ -12,12 +9,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 )
 
-// setSessionCookie calls fn (SetSessionCookie or ClearSessionCookie)
-// against a fresh httptest.ResponseRecorder and returns the single cookie
-// it wrote, parsed from the real "Set-Cookie" response header -- the same
-// approach cookie_test.go's setCookie takes, so a bug in how the header
-// text itself is rendered is caught too, not only a bug in which struct
-// fields get set.
+// setSessionCookie parses the emitted Set-Cookie header.
 func setSessionCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	t.Helper()
 
@@ -31,13 +23,8 @@ func setSessionCookie(t *testing.T, fn func(http.ResponseWriter)) *http.Cookie {
 	return cookies[0]
 }
 
-// TestSetSessionCookie_EmitsPinnedAttributes pins the spec's literal
-// contract (docs/specs/aboutme-design.md §3's sessions table):
-// "__Host-session: Secure; HttpOnly; SameSite=Lax; Path=/ (no Domain)",
-// with Max-Age equal to the absolute session timeout (90 days) -- ruling
-// 5 of task-4-brief.md's dispatch. Every attribute is asserted
-// individually, the same cookie_test.go precedent, so a regression in any
-// one of them fails this test specifically.
+// TestSetSessionCookie_EmitsPinnedAttributes checks each attribute from
+// docs/design/security.md independently.
 func TestSetSessionCookie_EmitsPinnedAttributes(t *testing.T) {
 	t.Parallel()
 
@@ -72,13 +59,8 @@ func TestSetSessionCookie_EmitsPinnedAttributes(t *testing.T) {
 	}
 }
 
-// TestClearSessionCookie_ExpiresWithMatchingAttributes guards the other
-// half of the __Host-session contract: a browser only overwrites/deletes a
-// cookie when its Path (and, since this is __Host-, the implicit no-Domain
-// and Secure) attributes match exactly what was set. If
-// ClearSessionCookie's Path, Secure, HttpOnly, or SameSite ever drifted
-// from SetSessionCookie's, the clear would silently stop working and a
-// dead session cookie would linger in the browser after logout.
+// TestClearSessionCookie_ExpiresWithMatchingAttributes ensures the deletion
+// cookie matches the attributes that identify the stored cookie.
 func TestClearSessionCookie_ExpiresWithMatchingAttributes(t *testing.T) {
 	t.Parallel()
 

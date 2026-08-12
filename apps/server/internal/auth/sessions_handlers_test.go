@@ -1,18 +1,5 @@
-// Package auth_test exercises task-9-brief.md Step 2's remaining
-// session-management HTTP surface: POST /api/v1/auth/logout, GET+DELETE
-// /api/v1/sessions (device list, logout-everywhere), and DELETE
-// /api/v1/sessions/{id} (per-session revoke). These tests run against a
-// live Postgres database (spec §9) and reuse every helper me_test.go (same
-// package) defines -- newSessionAPITestService, issueTestSession,
-// sessionRequestCookie, doJSON, decodeErrorCode -- rather than duplicating
-// them.
-//
-// Response-shape ruling (coordinator addendum DD-C13, 2026-08-02, resolving
-// an ambiguity the concurrently-derived adversarial suite surfaced): GET
-// /sessions succeeds with 200 and a bodied {"data":[...]} envelope; the
-// three mutating endpoints (logout, DELETE /sessions/{id}, DELETE
-// /sessions) succeed with 204 No Content and NO body at all -- the
-// {"data":...} envelope applies to bodied responses only.
+// Package auth_test exercises logout, device listing, per-session revocation,
+// and logout-everywhere against live Postgres.
 package auth_test
 
 import (
@@ -44,8 +31,7 @@ type sessionsListEnvelope struct {
 	} `json:"data"`
 }
 
-// assertNoBody fails the test unless resp's body is completely empty --
-// DD-C13's 204-means-no-body requirement.
+// assertNoBody fails the test unless a 204 response body is empty.
 func assertNoBody(t *testing.T, resp *http.Response) {
 	t.Helper()
 
@@ -91,7 +77,7 @@ func forceReauthenticatedAtStale(t *testing.T, sessionID uuid.UUID) {
 
 // forceRotationGraceDead directly SQL-updates sessionID's
 // rotation_grace_until to a past instant while leaving revoked_at NULL --
-// simulating Task 7's grace-dead rotation predecessor (a row whose
+// simulating a grace-dead rotation predecessor whose
 // successor already exists and whose grace window has since elapsed)
 // without driving the real >24h rotation algorithm end to end, which
 // would require reconciling a fake clock against the real
@@ -109,7 +95,7 @@ func forceRotationGraceDead(t *testing.T, sessionID uuid.UUID) {
 
 // forceSessionIdleExpired directly SQL-updates sessionID's last_seen_at
 // to older than idleTimeout (30d, session_adversarial_test.go's mirrored
-// constant), while leaving revoked_at NULL -- fix round 1, finding I1:
+// constant), while leaving revoked_at NULL.
 // ListLiveSessionsForUser/RevokeSessionForUser must both treat this
 // exactly like a grace-dead predecessor, not as a still-live session.
 func forceSessionIdleExpired(t *testing.T, sessionID uuid.UUID) {
@@ -124,8 +110,7 @@ func forceSessionIdleExpired(t *testing.T, sessionID uuid.UUID) {
 
 // forceSessionAbsoluteExpired directly SQL-updates sessionID's
 // absolute_expires_at to one hour in the past, while leaving revoked_at
-// and last_seen_at untouched -- fix round 1, finding I1's absolute-expiry
-// counterpart to forceSessionIdleExpired above.
+// and last_seen_at untouched.
 func forceSessionAbsoluteExpired(t *testing.T, sessionID uuid.UUID) {
 	t.Helper()
 
@@ -167,9 +152,8 @@ func TestLogout_RevokesCurrentSessionAndClearsCookie(t *testing.T) {
 	}
 }
 
-// TestLogout_LeavesOtherLiveSessionsUntouched is fix round 2's finding
-// N3: logout (and its rotation-lineage sweep, DD-C14/DD-C14b) must never
-// revoke a session that isn't part of the caller's current rotation
+// TestLogout_LeavesOtherLiveSessionsUntouched proves logout and its
+// rotation-lineage sweep never revoke a session outside the caller's current
 // lineage -- insurance against a future relaxation of
 // revokeLineagePartners' own queries accidentally broadening their scope
 // beyond the exact predecessor/successor pair.
@@ -192,8 +176,7 @@ func TestLogout_LeavesOtherLiveSessionsUntouched(t *testing.T) {
 	}
 }
 
-// TestLogout_ResponseCarriesClearSiteDataHeader is task-9-brief.md's own
-// pinned wire value, checked exactly.
+// TestLogout_ResponseCarriesClearSiteDataHeader pins the wire value.
 func TestLogout_ResponseCarriesClearSiteDataHeader(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -262,15 +245,13 @@ func newRotationCapableTestService(t *testing.T) (http.Handler, *store.Queries, 
 	return handler, q, clk, sm
 }
 
-// TestLogout_RotatedRequest_RevokesPredecessorToo is fix round 1's
-// finding I2 (design owner ruling DD-C14): logout kills the whole
-// credential LINEAGE, not just the successor row the logout request was
+// TestLogout_RotatedRequest_RevokesPredecessorToo proves logout kills the
+// whole credential lineage, not just the successor row the logout request was
 // itself authenticated with. Issues a session, ages it past rotationAge
 // via a fake clock, drives a request that rotates it (GET /me), then logs
 // out using the SUCCESSOR's own cookie -- the OLD (predecessor) raw token
-// must stop authenticating immediately, not merely remain valid for up to
-// rotationGrace (60s) the way it would have before this fix (the exact
-// exposure the review traced).
+// must stop authenticating immediately, not merely remain valid for the
+// rotation grace interval.
 func TestLogout_RotatedRequest_RevokesPredecessorToo(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -300,27 +281,21 @@ func TestLogout_RotatedRequest_RevokesPredecessorToo(t *testing.T) {
 		t.Fatalf("logout with the successor's own cookie status = %d, want %d", logoutResp.StatusCode, http.StatusNoContent)
 	}
 
-	// The exposure this fix closes: the OLD (predecessor) raw token must
-	// no longer authenticate at all -- not merely "until its grace window
-	// expires."
+	// Logout must kill the predecessor immediately, not after grace.
 	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if after.StatusCode != http.StatusUnauthorized {
 		t.Errorf("GET %s with the PREDECESSOR's raw token after logout (via the successor) status = %d, want %d (DD-C14: logout must kill the whole lineage)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
 	}
 
-	// For completeness: the successor's own token is of course also dead
-	// (ordinary logout behavior, not this fix's own novel assertion).
+	// The presented successor must also be dead.
 	afterSuccessor := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(successor.Value)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if afterSuccessor.StatusCode != http.StatusUnauthorized {
 		t.Errorf("GET %s with the successor's own raw token after its own logout status = %d, want %d", auth.MePath, afterSuccessor.StatusCode, http.StatusUnauthorized)
 	}
 }
 
-// TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo
-// is DD-C14's DELETE /sessions/{id} counterpart to
-// TestLogout_RotatedRequest_RevokesPredecessorToo above: revoking one's
-// own CURRENT session by id, after an in-flight rotation, must revoke the
-// predecessor too.
+// TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo proves
+// targeted revocation kills the presented successor and its predecessor.
 func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -349,9 +324,8 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 	// copies reauthenticated_at forward from the predecessor unchanged
 	// (session.go's tryRotate, by design -- rotation must never itself
 	// satisfy the recent-reauth gate), which by the fake clock's own
-	// 25h-advanced "now" is stale -- touch it fresh (by the SAME fake
-	// clock the Service under test reads) so only DD-C14's own behavior
-	// is under test here, not an unrelated reauth rejection.
+	// 25h-advanced "now" is stale. Touch it using the same fake clock so
+	// the test isolates lineage revocation from the reauthentication gate.
 	pool := newRowInspectorPool(t)
 	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1`, successorSess.ID, clk.Now()); err != nil {
 		t.Fatalf("touch successor's reauthenticated_at fresh: %v", err)
@@ -369,8 +343,7 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 }
 
 // TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie
-// is fix round 3's required test for DD-C14c item 6: the caller,
-// authenticated via a rotation SUCCESSOR B, names its PREDECESSOR A -- a
+// authenticates via rotation successor B and names predecessor A, a
 // DIFFERENT id, not their own current session -- in DELETE
 // /sessions/{id}. The lineage sweep on A finds and revokes its own live
 // successor, which is B: the caller's own current session dies as an
@@ -405,9 +378,8 @@ func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t 
 
 	// DELETE /sessions/{id} requires a RECENT reauthentication. Rotation
 	// copies reauthenticated_at forward from A unchanged, which by the
-	// fake clock's own 25h-advanced "now" is stale -- touch B's fresh
-	// (by the SAME fake clock the Service under test reads) so only
-	// DD-C14c's own behavior is under test here.
+	// fake clock's own 25h-advanced "now" is stale. Touch B using the same
+	// fake clock so the test isolates lineage revocation.
 	pool := newRowInspectorPool(t)
 	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1`, bRow.ID, clk.Now()); err != nil {
 		t.Fatalf("touch B's reauthenticated_at fresh: %v", err)
@@ -434,20 +406,9 @@ func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t 
 	}
 }
 
-// TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor is fix
-// round 2's required test for finding DD-C14b (owner ruling, extends
-// DD-C14): a rotation RACE-LOSER request -- one presenting an old token
-// still within ITS OWN grace window, after some OTHER request already
-// won the rotation and minted a successor -- authenticates AS THE
-// PREDECESSOR, holding its own legitimately-correct CSRF secret (unlike
-// fix round 1's scenario, this one genuinely passes CSRF, since the
-// client never needed to know a not-yet-existent successor secret).
-// Logging out with that token must not leave the LIVE successor
-// authenticating for its own full idle/absolute lifetime -- logout
-// claiming success (204) without ending the session. Forces the rotation
-// directly via SessionManager.Authenticate (simulating the winning side
-// of a real concurrent race deterministically) rather than racing two
-// real HTTP requests against each other.
+// TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor models a race
+// loser logging out with a predecessor still inside grace. Direct rotation
+// setup makes the race deterministic; logout must revoke its live successor.
 func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T) {
 	handler, q, clk, sm := newRotationCapableTestService(t)
 
@@ -459,13 +420,7 @@ func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T)
 
 	clk.Advance(25 * time.Hour) // past rotationAge (24h)
 
-	// Force the rotation OUTSIDE the HTTP request under test -- exactly
-	// like a genuine race would leave a losing concurrent request still
-	// holding rawA while some OTHER request already won and minted B.
-	// Authenticate returns the GOVERNING (successor) session on a
-	// winning rotation, not the predecessor -- so successorB below is B,
-	// not A; A's own row (and its now-set rotation_grace_until) is
-	// fetched separately to confirm setup.
+	// Rotate before the HTTP request so it presents the losing predecessor.
 	successorB, rawB, err := sm.Authenticate(context.Background(), rawA)
 	if err != nil {
 		t.Fatalf("Authenticate() (forcing the rotation) error = %v", err)
@@ -494,7 +449,7 @@ func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T)
 		t.Fatalf("logout with the race-loser predecessor token status = %d, want %d", logoutResp.StatusCode, http.StatusNoContent)
 	}
 
-	// The exposure this fix closes: B (the LIVE successor) must no
+	// B, the live successor, must no
 	// longer authenticate either, not just A.
 	afterB := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawB)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if afterB.StatusCode != http.StatusUnauthorized {
@@ -502,10 +457,9 @@ func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T)
 	}
 }
 
-// TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth is fix
-// round 2's required "non-current-revoke lineage case": DD-C14b applies
-// the same lineage sweep to ANY target DELETE /sessions/{id} names, not
-// just the caller's own current session -- a caller who sees BOTH halves
+// TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth proves
+// the same lineage sweep applies to any target DELETE /sessions/{id} names,
+// not just the caller's current session. A caller who sees both halves
 // of a still-open rotation pair in their own device list (a within-grace
 // predecessor and its live successor) and picks the OLDER (predecessor)
 // row to revoke must not be able to leave the successor live.
@@ -561,25 +515,9 @@ func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing
 	}
 }
 
-// TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched is fix
-// round 3's required deterministic blast-radius test (DD-C14c item 5),
-// replacing fix round 2's flaky version of this property: three
-// INDEPENDENT (non-lineage) sessions for the SAME user, all minted at the
-// EXACT SAME frozen-clock instant (byte-identical created_at, asserted
-// below) -- the precise collision shape that broke fix round 2's
-// timestamp-reconstruction successor query. That query matched on
-// `created_at = successor_created_at` alone with no tiebreak; when TWO
-// unrelated same-user rows shared that instant, pgx's `:one` silently
-// took whichever one Postgres happened to return first -- observed
-// flaky ~1-in-3 under `-shuffle=on`, sometimes revoking the wrong,
-// completely unrelated session instead of leaving it alone.
-//
-// DD-C14c's exact `rotated_from` foreign key makes this collision
-// structurally impossible to mishandle: neither session here was ever
-// rotated from another, so revoking the target (and its now-a-no-op
-// lineage sweep) must never touch either of the other two, no matter how
-// their timestamps line up. Run with `-race -count=10 -shuffle=on` as
-// this fix's own required demonstration of determinism.
+// TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched proves lineage
+// selection uses rotated_from, not timestamps. Three unrelated rows share one
+// instant; revoking one must leave the others live.
 func TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched(t *testing.T) {
 	handler, q, _, sm := newRotationCapableTestService(t)
 
@@ -597,10 +535,7 @@ func TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched(t *testing.T
 		t.Fatalf("Issue() (current) error = %v", err)
 	}
 
-	// The frozen clock (newRotationCapableTestService never advances it
-	// in this test) means all three share the exact same instant --
-	// asserted directly so this test fails loudly, not silently, if that
-	// setup assumption ever stops holding.
+	// Equal timestamps remove time ordering from the target-selection proof.
 	if !targetSess.CreatedAt.Equal(otherSess.CreatedAt) || !otherSess.CreatedAt.Equal(currentSess.CreatedAt) {
 		t.Fatalf("test setup broken: created_at values are not byte-identical (target=%v other=%v current=%v), want a frozen clock to make them exactly equal",
 			targetSess.CreatedAt, otherSess.CreatedAt, currentSess.CreatedAt)
@@ -702,9 +637,9 @@ func TestListSessions_ExcludesRevokedSessions(t *testing.T) {
 	}
 }
 
-// TestListSessions_ExcludesGraceDeadRotationPredecessors is Task 7's
-// ledger obligation, exercised directly: a session whose rotation_grace_until
-// has passed but whose revoked_at is still NULL (a rotation predecessor
+// TestListSessions_ExcludesGraceDeadRotationPredecessors proves a session
+// whose rotation_grace_until has passed but whose revoked_at is still NULL
+// (a rotation predecessor
 // whose successor already exists) must never appear in the caller's own
 // device list, even though revoked_at alone wouldn't reject it.
 func TestListSessions_ExcludesGraceDeadRotationPredecessors(t *testing.T) {
@@ -733,11 +668,8 @@ func TestListSessions_ExcludesGraceDeadRotationPredecessors(t *testing.T) {
 	}
 }
 
-// TestListSessions_ExcludesIdleExpiredSessions is fix round 1's finding
-// I1: the original ListLiveSessionsForUser only excluded revoked and
-// grace-dead rows, silently listing an idle-expired session (last_seen_at
-// older than idleTimeout, 30d) as a live device -- one of sessionDead's
-// four death modes it was missing.
+// TestListSessions_ExcludesIdleExpiredSessions proves a session with
+// last_seen_at older than idleTimeout is absent from the device list.
 func TestListSessions_ExcludesIdleExpiredSessions(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -764,8 +696,8 @@ func TestListSessions_ExcludesIdleExpiredSessions(t *testing.T) {
 	}
 }
 
-// TestListSessions_ExcludesAbsoluteExpiredSessions is fix round 1's
-// finding I1's absolute-expiry counterpart to the idle-expiry test above.
+// TestListSessions_ExcludesAbsoluteExpiredSessions proves absolute expiry hides
+// a session from the device list.
 func TestListSessions_ExcludesAbsoluteExpiredSessions(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -842,7 +774,7 @@ func sessionIDPath(id uuid.UUID) string {
 
 // TestDeleteSession_OwnCurrentSessionID_RevokesAndClearsCookie: revoking
 // the session the request is itself authenticated with clears its cookie
-// in this same response (task-9-brief.md's explicit requirement).
+// in the same response.
 func TestDeleteSession_OwnCurrentSessionID_RevokesAndClearsCookie(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -889,8 +821,7 @@ func TestDeleteSession_OwnOtherSessionID_RevokesWithoutClearingCurrentCookie(t *
 }
 
 // TestDeleteSession_AnotherUsersSessionID_Returns404AndLeavesItLive is
-// task-9-brief.md's explicit requirement: revoking another user's session
-// id returns 404 (never 403 -- DD-C5's no-oracle contract), and the
+// the no-oracle case: revoking another user's session id returns 404, and the
 // target session is never actually touched.
 func TestDeleteSession_AnotherUsersSessionID_Returns404AndLeavesItLive(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
@@ -951,8 +882,7 @@ func TestDeleteSession_MalformedSessionID_Returns404(t *testing.T) {
 }
 
 // TestDeleteSession_WithoutRecentReauth_Returns403AndLeavesSessionLive is
-// DD-C11's per-session-revoke reauth gate (the spec correction that added
-// recent-reauth to this endpoint, not just DELETE /sessions): a stale
+// the per-session-revoke reauthentication gate: a stale
 // reauthenticated_at rejects the request before RevokeForUser ever runs.
 func TestDeleteSession_WithoutRecentReauth_Returns403AndLeavesSessionLive(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
@@ -973,8 +903,8 @@ func TestDeleteSession_WithoutRecentReauth_Returns403AndLeavesSessionLive(t *tes
 	}
 }
 
-// TestDeleteSession_OwnDeadSessionID_Returns404 is fix round 1's finding
-// M5 (self-consistency with I1): revoking one's own session id must 404,
+// TestDeleteSession_OwnDeadSessionID_Returns404 proves revoking one's own
+// dead session id returns 404,
 // not succeed, when that session is already dead by ANY of sessionDead's
 // predicates -- grace-dead, idle-expired, or absolute-expired -- exactly
 // mirroring what GET /sessions already excludes from the device list. A
@@ -1059,9 +989,8 @@ func TestDeleteAllSessions_RevokesEveryLiveSessionForCaller(t *testing.T) {
 }
 
 // TestDeleteAllSessions_StaleReauth_RejectsBeforeRevoking is
-// task-9-brief.md Step 2's explicitly required spy/row-count assertion: a
-// stale reauthenticated_at must reject the request with 403
-// reauth_required BEFORE RevokeAll ever touches a row -- proven here by
+// a row-level proof that stale reauthenticated_at returns 403
+// reauth_required before RevokeAll touches a row. It proves this by
 // asserting, directly against the table, that every one of the caller's
 // sessions still has revoked_at NULL afterward, and that they still
 // authenticate.

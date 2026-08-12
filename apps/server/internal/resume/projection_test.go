@@ -1,8 +1,6 @@
-// projection_test.go is Task 8's store-level half: the live-database proof
-// that reads PROJECT and never write (D18), that the one strict decode on
-// the read path is load-bearing (Step 3c), and that List is fail-closed and
-// atomic when a single row cannot be projected or decoded (Step 4's owner
-// ruling).
+// projection_test.go proves against a live database that reads project without
+// writing, strict decode is load-bearing, and List fails atomically when one
+// row cannot be projected or decoded.
 //
 // Every identifier here is prefixed `pj` so this file never collides with
 // the sibling suites that share package resume_test.
@@ -226,7 +224,7 @@ func pjHeadline(t *testing.T, doc schema.Resume) string {
 	return *doc.PersonalDetails.Headline
 }
 
-// --- Step 1 (live half): reads project and never write ---
+// --- Reads project and never write ---
 
 func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T) {
 	t.Parallel()
@@ -305,7 +303,7 @@ func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T
 
 // TestStore_Integration_Get_UnknownStoredVersion_FailsClosed: a row claiming
 // a version no converter chain reaches must fail the read, never be served
-// as if it were current (D19).
+// as if it were current.
 func TestStore_Integration_Get_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, docmigrate.NewIdentityProjector())
@@ -324,14 +322,13 @@ func TestStore_Integration_Get_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	}
 }
 
-// --- Step 3c: the strict decode on the read path is load-bearing ---
+// --- The strict decode on the read path is load-bearing ---
 
 // TestStore_Integration_Get_UnknownFieldInStoredPart_FailsClosed is the
 // DISCRIMINATING test for resume.DecodeParts on the read path. Swap
 // projectRow's DecodeParts for a plain json.Unmarshal and this is the test
 // that fails: the injected field is silently dropped on read, and the next
-// SaveDocument would then persist the truncated document. Without it the
-// strict decode is structural but unguarded (Task 6 re-review, 2026-08-03).
+// SaveDocument would then persist the truncated document.
 func TestStore_Integration_Get_UnknownFieldInStoredPart_FailsClosed(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, docmigrate.NewIdentityProjector())
@@ -356,12 +353,11 @@ func TestStore_Integration_Get_UnknownFieldInStoredPart_FailsClosed(t *testing.T
 	}
 }
 
-// --- Step 4: List is fail-closed and atomic ---
+// --- List is fail-closed and atomic ---
 
 // TestStore_Integration_List_OneCorruptRow_FailsWholeList: a partial list
 // would make corruption look like the user deleting a resume, so one
-// undecodable row fails the whole call with no partial result (owner
-// ruling).
+// undecodable row fails the whole call with no partial result.
 func TestStore_Integration_List_OneCorruptRow_FailsWholeList(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := pjStore(t, docmigrate.NewIdentityProjector())

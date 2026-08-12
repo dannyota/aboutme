@@ -100,9 +100,7 @@ export interface paths {
          * Begin "Sign in with Google"
          * @description Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to Google's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/google/callback` consumes.
          *
-         *     A `HEAD` request on this path is rejected with `405`, not treated as a bodyless `GET` (DD-C8): this `GET` has a real server-side side effect (a database-backed transaction row) on every request that reaches it, so a link-preview/prefetch crawler must never be able to trigger it.
-         *
-         *     `?purpose=link`/`reauth` (Task 10, see the `purpose` parameter) requires a valid `sessionCookie` — `security: []` above describes only the default `purpose=login`'s own requirement. No `csrfToken` is required even then: `GET` is never a CSRF-checked method anywhere in this API (only mutating methods are), and this route's real side effect — creating the transaction row this description opens with — is a deliberate, documented exception to that general "GET has no side effect" rule, not one this contract protects with a synchronizer token.
+         *     A `HEAD` request is rejected with `405`, not treated as a bodyless `GET`, because a successful request creates a database-backed transaction. `GET` accepts only the login purpose. A `link` or `reauth` purpose returns `405` with `Allow: POST` before a session lookup, database write, or cookie is set.
          */
         get: operations["getAuthGoogleStart"];
         put?: never;
@@ -112,7 +110,7 @@ export interface paths {
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
-         *     Why a `POST` (P1.1 item 2, `docs/plans/phase-1-deferred.md`): a link/reauth start is a privileged operation on the caller's own account, so it belongs behind the same `csrfToken` + exact-`Origin` chain as every other mutation. It previously ran on the `GET` above, gated by a same-site-initiation check (DD-C16) — a second authorization primitive parallel to the CSRF machinery that depended on `Sec-Fetch-Site` or a same-origin `Referer` surviving the edge, and would have broken silently under a global `Referrer-Policy: no-referrer`. The `GET` now refuses those two purposes outright, for every caller.
+         *     Link and reauthentication starts are privileged account actions. They therefore use `POST` behind the normal session, CSRF token, and exact-Origin checks. `GET` refuses both purposes.
          */
         post: operations["postAuthGoogleStart"];
         delete?: never;
@@ -151,23 +149,23 @@ export interface paths {
          *       `reauthenticated_at` against an ALREADY-linked identity only.
          *
          *
-         *     Always redirects (DD-C4) — this is a top-level browser navigation, never a JSON response:
+         *     Always redirects. This is a top-level browser navigation, never a JSON response:
          *
          *     - **Success**: `302` to the app's own origin (`/`) for
          *       `purpose=login`, or to `/app/settings/sessions` for
-         *       `purpose=link`/`reauth` (DD-C15) — with the `__Host-session`
+         *       `purpose=link`/`reauth` — with the `__Host-session`
          *       cookie set for `purpose=login` only.
          *
          *     - **Rejected**: `302` to `/login?error=<code>` for `purpose=login`,
          *       or to `/app/settings/sessions?error=<code>` for `purpose=link`/
-         *       `reauth` (DD-C7/DD-C15), with one of `OAuthCallbackErrorCode`'s
-         *       codes and no session cookie set. DD-C3's no-oracle contract
-         *       means every internal rejection reason not explicitly listed
+         *       `reauth`, with one of `OAuthCallbackErrorCode`'s codes and no
+         *       session cookie set. The no-oracle contract means every internal
+         *       rejection reason not explicitly listed
          *       collapses into the generic `auth_failed` code — the response
          *       never lets a caller distinguish which specific check failed.
          *
          *
-         *     `__Host-oauth-tx` is cleared on every exit path, success or rejection alike (ruling 1).
+         *     `__Host-oauth-tx` is cleared on every exit path, success or rejection alike.
          */
         get: operations["getAuthGoogleCallback"];
         put?: never;
@@ -187,7 +185,7 @@ export interface paths {
         };
         /**
          * Begin "Sign in with GitHub"
-         * @description Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. Same `HEAD`-rejected contract as `GET /auth/google/start` (DD-C8), and the same `?purpose=link`/ `reauth` session requirement — see that operation's own description for both.
+         * @description Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
          */
         get: operations["getAuthGitHubStart"];
         put?: never;
@@ -197,7 +195,7 @@ export interface paths {
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
-         *     Why a `POST` (P1.1 item 2, `docs/plans/phase-1-deferred.md`): a link/reauth start is a privileged operation on the caller's own account, so it belongs behind the same `csrfToken` + exact-`Origin` chain as every other mutation. It previously ran on the `GET` above, gated by a same-site-initiation check (DD-C16) — a second authorization primitive parallel to the CSRF machinery that depended on `Sec-Fetch-Site` or a same-origin `Referer` surviving the edge, and would have broken silently under a global `Referrer-Policy: no-referrer`. The `GET` now refuses those two purposes outright, for every caller.
+         *     Link and reauthentication starts are privileged account actions. They therefore use `POST` behind the normal session, CSRF token, and exact-Origin checks. `GET` refuses both purposes.
          */
         post: operations["postAuthGitHubStart"];
         delete?: never;
@@ -215,7 +213,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with GitHub"
-         * @description Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code, and — for `purpose=login` only — fetches the authenticated user's verified primary email from GitHub's REST API (AC-AUTH-003) — deliberately plain OAuth2, never OIDC: no ID token, no issuer/audience/ signature/nonce to verify. `purpose=link`/`reauth` never fetches email at all (no email check for linking — see below). Otherwise follows the exact same purpose-dependent resolution and always-redirect contract as `GET /auth/google/callback` (DD-C3/DD-C4/DD-C7/DD-C15) — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets.
+         * @description Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code, and — for `purpose=login` only — fetches the authenticated user's verified primary email from GitHub's REST API (AC-AUTH-003) — deliberately plain OAuth2, never OIDC: no ID token, no issuer/audience/ signature/nonce to verify. `purpose=link`/`reauth` never fetches email at all (no email check for linking — see below). Otherwise follows the exact same purpose-dependent resolution and always-redirect contract as `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets.
          */
         get: operations["getAuthGitHubCallback"];
         put?: never;
@@ -235,7 +233,7 @@ export interface paths {
         };
         /**
          * Begin "Sign in with LinkedIn"
-         * @description Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. Same `HEAD`-rejected contract as `GET /auth/google/start` (DD-C8), and the same `?purpose=link`/ `reauth` session requirement — see that operation's own description for both.
+         * @description Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
          */
         get: operations["getAuthLinkedInStart"];
         put?: never;
@@ -245,7 +243,7 @@ export interface paths {
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
-         *     Why a `POST` (P1.1 item 2, `docs/plans/phase-1-deferred.md`): a link/reauth start is a privileged operation on the caller's own account, so it belongs behind the same `csrfToken` + exact-`Origin` chain as every other mutation. It previously ran on the `GET` above, gated by a same-site-initiation check (DD-C16) — a second authorization primitive parallel to the CSRF machinery that depended on `Sec-Fetch-Site` or a same-origin `Referer` surviving the edge, and would have broken silently under a global `Referrer-Policy: no-referrer`. The `GET` now refuses those two purposes outright, for every caller.
+         *     Link and reauthentication starts are privileged account actions. They therefore use `POST` behind the normal session, CSRF token, and exact-Origin checks. `GET` refuses both purposes.
          */
         post: operations["postAuthLinkedInStart"];
         delete?: never;
@@ -263,7 +261,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with LinkedIn"
-         * @description Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves the local user per `purpose`, exactly like `GET /auth/google/callback` (DD-C3/DD-C4/DD-C7/DD-C15) — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets, with ONE LinkedIn-specific difference: `purpose=login`'s registration path (an UNKNOWN identity only — an existing identity's repeat login never re-checks email at all, matching every other provider) requires a verified email exactly like Google, EXCEPT LinkedIn's OIDC `email`/`email_verified` claims are OPTIONAL — an absent `email_verified` claim is never treated as true (design spec §3, AC-AUTH-002). `purpose=link`/`reauth` never checks email at all (design spec §3: "linking to an existing account still allowed" without a verified email).
+         * @description Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves the local user per `purpose`, exactly like `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets, with ONE LinkedIn-specific difference: `purpose=login`'s registration path (an UNKNOWN identity only — an existing identity's repeat login never re-checks email at all, matching every other provider) requires a verified email exactly like Google, EXCEPT LinkedIn's OIDC `email`/`email_verified` claims are OPTIONAL — an absent `email_verified` claim is never treated as true (AC-AUTH-002). `purpose=link`/`reauth` never checks email; linking an existing account remains allowed without a verified email.
          */
         get: operations["getAuthLinkedInCallback"];
         put?: never;
@@ -283,9 +281,9 @@ export interface paths {
         };
         /**
          * The caller's own account, a fresh CSRF token, and linked providers
-         * @description Returns the authenticated caller's own user record, a fresh CSRF token, and which OAuth providers they have a linked identity for.
+         * @description Returns the authenticated caller's own user record, a fresh CSRF token, and which OAuth providers they have a linked identity for. Identities are ordered by `(created_at, id)`, oldest first, so clients have a stable default reauthentication provider even when timestamps are equal.
          *
-         *     The CSRF token is returned **only** here, in the response body — never in a header, cookie, URL, or log line (design spec §3's CSRF row). A client must echo it back on the `X-CSRF-Token` header for every mutating cookie-authenticated request (see the `csrfToken` security scheme).
+         *     The CSRF token is returned **only** here, in the response body — never in a header, cookie, URL, or log line. A client must echo it back on the `X-CSRF-Token` header for every mutating cookie-authenticated request (see the `csrfToken` security scheme).
          */
         get: operations["getMe"];
         put?: never;
@@ -366,7 +364,7 @@ export interface paths {
          *
          *     Clears the caller's own `__Host-session` cookie and sets `Clear-Site-Data` whenever the caller's OWN current session dies as part of this request — whether `id` named it directly, OR a DIFFERENT id was named and the caller's current session turned out to be THAT target's lineage partner (predecessor or successor). Revoking a session unrelated to the caller's own current one leaves both response artifacts, and the current session itself, untouched.
          *
-         *     An `id` that doesn't exist, belongs to a DIFFERENT user, is already revoked, is idle-expired, is absolute-expired, or is a grace-dead rotation predecessor all return the exact same `404` (DD-C5's no-oracle contract) — never a distinct `403` that would confirm the id exists for someone else, or a distinct `410`/`400` that would confirm it once existed but is merely dead.
+         *     An `id` that doesn't exist, belongs to a DIFFERENT user, is already revoked, is idle-expired, is absolute-expired, or is a grace-dead rotation predecessor all return the same `404` under the no-oracle contract — never a distinct `403` that would confirm the id exists for someone else, or a distinct `410`/`400` that would confirm it once existed but is merely dead.
          */
         delete: operations["deleteSession"];
         options?: never;
@@ -432,7 +430,7 @@ export interface components {
             avatarKey: string | null;
         };
         /**
-         * @description One linked OAuth provider identity (design spec §3 `identities` table). `GET /me` exposes only the provider itself — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client.
+         * @description One linked OAuth provider identity. `GET /me` exposes only the provider itself — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client.
          * @example {
          *       "provider": "google"
          *     }
@@ -442,7 +440,7 @@ export interface components {
             provider: "google" | "github" | "linkedin";
         };
         /**
-         * @description One of the caller's own LIVE sessions (design spec §3 "Device visibility"), as returned by `GET /sessions`. Explicitly revoked, idle-expired, absolute-expired, and grace-dead rotation-predecessor sessions are never included — see `GET /sessions`' own operation description for the full exclusion rule.
+         * @description One of the caller's own live sessions, as returned by `GET /sessions`. Explicitly revoked, idle-expired, absolute-expired, and grace-dead rotation-predecessor sessions are never included — see `GET /sessions`' own operation description for the full exclusion rule.
          * @example {
          *       "id": "018f5b6a-9a3e-7c21-8b1e-000000000002",
          *       "createdAt": "2026-08-01T12:00:00Z",
@@ -473,7 +471,9 @@ export interface components {
             current: boolean;
         };
         /**
-         * @description The closed vocabulary of `?error=` codes a `GET /auth/{provider}/callback` rejection redirect — and, as of DD-C17 (fix round 2), a `purpose=link` `GET /auth/{provider}/start` rejection redirect — can carry (DD-C3): no other value is ever produced; a client should treat an unrecognized value the same as `auth_failed`. A `purpose=login` `/callback` rejection redirects to `/login?error=<code>`; a `purpose=link` or `purpose=reauth` `/callback` rejection redirects to `/app/settings/sessions?error=<code>` instead (DD-C15) — the settings page that initiated it, since that caller was already authenticated. `/start` itself produces only ONE of these codes, `reauth_required` (see below) — its other two rejection classes (DD-C17) are a bare `/login` redirect with no code at all, and an unchanged `403 csrf_rejected` JSON body, neither of which uses this vocabulary.
+         * @description The closed OAuth error vocabulary the web client handles. Callback rejection redirects use all values except `reauth_required`. A login callback redirects to `/login?error=<code>`; a link or reauthentication callback redirects to `/app/settings/sessions?error=<code>`. An unrecognized callback value is handled as `auth_failed`.
+         *
+         *     `reauth_required` is included because the authenticated `POST /auth/{provider}/start?purpose=link` operation returns it in a JSON error. No `/start` operation redirects with an error query.
          *
          *     - `auth_failed`: the generic code for every rejection not
          *       explicitly listed below (transaction invalid/expired/replayed,
@@ -481,14 +481,12 @@ export interface components {
          *       etc.) — deliberately no oracle distinguishing which check
          *       failed. For `purpose=link`/`reauth`, this also covers a
          *       `purpose=reauth` attempt against a provider identity that isn't
-         *       already linked (design spec: "no auto-link via reauth") and the
-         *       completing request's session no longer matching the one that
-         *       began the flow.
+         *       already linked and the completing request having no valid session
+         *       for the user who began the flow.
          *
          *     - `email_not_verified`: the provider's own account has an
-         *       unverified (or absent) email (design spec §3's Google/LinkedIn
-         *       rule). `purpose=login` only — linking never requires a verified
-         *       email (design spec §3).
+         *       unverified (or absent) email. `purpose=login` only — linking
+         *       never requires a verified email.
          *
          *     - `cancelled`: the visitor declined consent at the provider
          *       (`error=access_denied` echoed back on the callback, RFC 6749
@@ -498,38 +496,32 @@ export interface components {
          *       email already belongs to an existing account reached via a
          *       DIFFERENT provider (or the same provider under a different
          *       identity) — no automatic cross-provider email merge
-         *       (AC-AUTH-001, design decision 5). Carries an additional
+         *       (AC-AUTH-001). Carries an additional
          *       `&provider=<p>` query param naming the provider THIS callback is
          *       for (already public — it's the URL path) — never the existing
          *       account's own provider, which the response must not name (a
          *       targeted-phishing hint).
          *
-         *     - `identity_already_linked`: `purpose=link`/`reauth` only (DD-C15,
-         *       design decision 5). The provider identity this callback resolved
+         *     - `identity_already_linked`: `purpose=link`/`reauth` only. The
+         *       provider identity this callback resolved
          *       is already claimed by a DIFFERENT user than the one who started
          *       the flow. No row is mutated and no session is issued for either
          *       user. Kept distinct from `auth_failed` — unlike most rejections
          *       here — because the actor is authenticated and the condition is
          *       one they can act on.
          *
-         *     - `reauth_required`: DD-C17 (fix round 2) — the ONLY code `GET
-         *       /auth/{provider}/start` itself ever produces (never `/callback`).
-         *       `purpose=link` only: the caller's session is valid, but its last
-         *       full OAuth login is more than 15 minutes old, checked BEFORE any
-         *       transaction row is created. Redirects to
-         *       `/app/settings/sessions?error=reauth_required` — the settings
-         *       page already renders this exact code and prompts for step-up.
-         *       The same wire value the session-management JSON API's own
-         *       `RequireRecentReauth` rejections use (`DELETE /sessions`,
-         *       `DELETE /sessions/{id}`), reused rather than reinvented so a
-         *       shared frontend prompt can key off one literal regardless of
-         *       which surface produced it.
+         *     - `reauth_required`: `POST /auth/{provider}/start?purpose=link`
+         *       only, never a callback query. The session is valid, but its last
+         *       full OAuth login is more than 15 minutes old. The server checks
+         *       this before creating a transaction. Session revocation endpoints
+         *       use the same JSON error code so one prompt can handle each
+         *       sensitive action.
          * @enum {string}
          */
         OAuthCallbackErrorCode: "auth_failed" | "email_not_verified" | "cancelled" | "email_already_registered" | "identity_already_linked" | "reauth_required";
     };
     responses: {
-        /** @description The start routes' own rate limit (P1.1 item 1, per `(account, client IP)`) is exhausted — far tighter than the whole-server default, because a start is unauthenticated on the `GET` branch and writes a database row on every request that reaches its handler. Carries `Retry-After` in whole seconds. */
+        /** @description The start routes' own rate limit is exhausted. Anonymous sign-in `GET` starts are keyed by client IP. Authenticated link and reauthentication `POST` starts are keyed by `(account, client IP)`. Both are tighter than the whole-server default because each accepted start writes a database row. Carries `Retry-After` in whole seconds. */
         AuthStartRateLimited: {
             headers: {
                 /** @description Whole seconds to wait before retrying. */
@@ -551,20 +543,20 @@ export interface components {
     };
     parameters: {
         /**
-         * @description Why this OAuth transaction is being started (Task 10, design decision 5). On `GET` only `login` is served, and it is the default: any value other than the two POST-only literals — including an absent parameter — is treated as `login`, since an unrecognized value is never a distinct error (the same no-invented-oracle reasoning `OAuthCallbackErrorCode` documents for `/callback`).
+         * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
          *
          *     - `login` (default): an ordinary, unauthenticated sign-in/
          *       registration attempt. Reachable from anywhere — a bookmarked or
          *       shared link, another site's "continue with aboutme" button —
          *       with no session, CSRF, or same-site requirement at all.
          *
-         *     - `link` / `reauth`: **not served by `GET`** (P1.1 item 2). Both
+         *     - `link` / `reauth`: **not served by `GET`**. Both
          *       are `405` here, with `Allow: POST`, before any session read,
          *       database access, or cookie is set — see the `POST` operation on
          *       the same path, and `AuthLinkPurpose` below.
          *
          *
-         *     The refusal is deliberately unconditional rather than cross-site-only. It replaces DD-C16's same-site-initiation check (`Sec-Fetch-Site: same-origin`, else `Origin`/`Referer`), which admitted same-origin `GET` link/reauth starts and rejected the rest. Refusing every caller is strictly stronger: the chain DD-C16 existed to break — a cross-site page forcing a `reauth` start, which silently refreshes the recent-reauth window, then forcing a `link` start that now passes the gate the first step refreshed — cannot be assembled out of `GET`s at all, and that holds without depending on a header surviving the edge.
+         *     The unconditional refusal prevents a cross-site page from chaining reauthentication and linking through browser navigations. Privileged starts use the CSRF-protected `POST` operation instead.
          * @example login
          */
         AuthPurpose: "login";
@@ -579,8 +571,8 @@ export interface components {
          *
          *     - `reauth`: refresh the caller's own session's
          *       `reauthenticated_at` via a fresh round trip against an
-         *       ALREADY-linked provider (the compensating control the phase's
-         *       long idle/absolute session timeouts require before a sensitive
+         *       ALREADY-linked provider (the compensating control the long
+         *       idle and absolute session timeouts require before a sensitive
          *       operation). Deliberately does NOT itself require a recent
          *       reauthentication — that would be circular, since its whole point
          *       is to establish one. What makes that safe is that this route is
@@ -590,12 +582,12 @@ export interface components {
          */
         AuthLinkPurpose: "link" | "reauth";
         /**
-         * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutating request. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+         * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
          * @example "r42"
          */
         IfMatch: string;
         /**
-         * @description Client-generated UUID scoping this mutation to `(user, route, mutation UUID)`. Replaying the same key with an identical body returns the original stored response; replaying it with a different body is rejected as a domain conflict.
+         * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
          * @example 018f0f3e-9e3a-7000-8000-000000000001
          */
         IdempotencyKey: string;
@@ -757,20 +749,20 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Why this OAuth transaction is being started (Task 10, design decision 5). On `GET` only `login` is served, and it is the default: any value other than the two POST-only literals — including an absent parameter — is treated as `login`, since an unrecognized value is never a distinct error (the same no-invented-oracle reasoning `OAuthCallbackErrorCode` documents for `/callback`).
+                 * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
                  *
                  *     - `login` (default): an ordinary, unauthenticated sign-in/
                  *       registration attempt. Reachable from anywhere — a bookmarked or
                  *       shared link, another site's "continue with aboutme" button —
                  *       with no session, CSRF, or same-site requirement at all.
                  *
-                 *     - `link` / `reauth`: **not served by `GET`** (P1.1 item 2). Both
+                 *     - `link` / `reauth`: **not served by `GET`**. Both
                  *       are `405` here, with `Allow: POST`, before any session read,
                  *       database access, or cookie is set — see the `POST` operation on
                  *       the same path, and `AuthLinkPurpose` below.
                  *
                  *
-                 *     The refusal is deliberately unconditional rather than cross-site-only. It replaces DD-C16's same-site-initiation check (`Sec-Fetch-Site: same-origin`, else `Origin`/`Referer`), which admitted same-origin `GET` link/reauth starts and rejected the rest. Refusing every caller is strictly stronger: the chain DD-C16 existed to break — a cross-site page forcing a `reauth` start, which silently refreshes the recent-reauth window, then forcing a `link` start that now passes the gate the first step refreshed — cannot be assembled out of `GET`s at all, and that holds without depending on a header surviving the edge.
+                 *     The unconditional refusal prevents a cross-site page from chaining reauthentication and linking through browser navigations. Privileged starts use the CSRF-protected `POST` operation instead.
                  * @example login
                  */
                 purpose?: components["parameters"]["AuthPurpose"];
@@ -790,7 +782,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Either a method this path does not serve at all (`HEAD` included — DD-C8), or a `GET` carrying `?purpose=link`/`reauth`, which are served only by the `POST` below (P1.1 item 2). The second case carries `Allow: POST`. */
+            /** @description Either an unsupported method, including `HEAD`, or a `GET` carrying `?purpose=link` or `?purpose=reauth`. The latter purposes are served only by `POST` and return `Allow: POST`. */
             405: {
                 headers: {
                     [name: string]: unknown;
@@ -816,8 +808,8 @@ export interface operations {
                  *
                  *     - `reauth`: refresh the caller's own session's
                  *       `reauthenticated_at` via a fresh round trip against an
-                 *       ALREADY-linked provider (the compensating control the phase's
-                 *       long idle/absolute session timeouts require before a sensitive
+                 *       ALREADY-linked provider (the compensating control the long
+                 *       idle and absolute session timeouts require before a sensitive
                  *       operation). Deliberately does NOT itself require a recent
                  *       reauthentication — that would be circular, since its whole point
                  *       is to establish one. What makes that safe is that this route is
@@ -926,20 +918,20 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Why this OAuth transaction is being started (Task 10, design decision 5). On `GET` only `login` is served, and it is the default: any value other than the two POST-only literals — including an absent parameter — is treated as `login`, since an unrecognized value is never a distinct error (the same no-invented-oracle reasoning `OAuthCallbackErrorCode` documents for `/callback`).
+                 * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
                  *
                  *     - `login` (default): an ordinary, unauthenticated sign-in/
                  *       registration attempt. Reachable from anywhere — a bookmarked or
                  *       shared link, another site's "continue with aboutme" button —
                  *       with no session, CSRF, or same-site requirement at all.
                  *
-                 *     - `link` / `reauth`: **not served by `GET`** (P1.1 item 2). Both
+                 *     - `link` / `reauth`: **not served by `GET`**. Both
                  *       are `405` here, with `Allow: POST`, before any session read,
                  *       database access, or cookie is set — see the `POST` operation on
                  *       the same path, and `AuthLinkPurpose` below.
                  *
                  *
-                 *     The refusal is deliberately unconditional rather than cross-site-only. It replaces DD-C16's same-site-initiation check (`Sec-Fetch-Site: same-origin`, else `Origin`/`Referer`), which admitted same-origin `GET` link/reauth starts and rejected the rest. Refusing every caller is strictly stronger: the chain DD-C16 existed to break — a cross-site page forcing a `reauth` start, which silently refreshes the recent-reauth window, then forcing a `link` start that now passes the gate the first step refreshed — cannot be assembled out of `GET`s at all, and that holds without depending on a header surviving the edge.
+                 *     The unconditional refusal prevents a cross-site page from chaining reauthentication and linking through browser navigations. Privileged starts use the CSRF-protected `POST` operation instead.
                  * @example login
                  */
                 purpose?: components["parameters"]["AuthPurpose"];
@@ -959,7 +951,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Either a method this path does not serve at all (`HEAD` included — DD-C8), or a `GET` carrying `?purpose=link`/`reauth`, which are served only by the `POST` below (P1.1 item 2). The second case carries `Allow: POST`. */
+            /** @description Either an unsupported method, including `HEAD`, or a `GET` carrying `?purpose=link` or `?purpose=reauth`. The latter purposes are served only by `POST` and return `Allow: POST`. */
             405: {
                 headers: {
                     [name: string]: unknown;
@@ -985,8 +977,8 @@ export interface operations {
                  *
                  *     - `reauth`: refresh the caller's own session's
                  *       `reauthenticated_at` via a fresh round trip against an
-                 *       ALREADY-linked provider (the compensating control the phase's
-                 *       long idle/absolute session timeouts require before a sensitive
+                 *       ALREADY-linked provider (the compensating control the long
+                 *       idle and absolute session timeouts require before a sensitive
                  *       operation). Deliberately does NOT itself require a recent
                  *       reauthentication — that would be circular, since its whole point
                  *       is to establish one. What makes that safe is that this route is
@@ -1095,20 +1087,20 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Why this OAuth transaction is being started (Task 10, design decision 5). On `GET` only `login` is served, and it is the default: any value other than the two POST-only literals — including an absent parameter — is treated as `login`, since an unrecognized value is never a distinct error (the same no-invented-oracle reasoning `OAuthCallbackErrorCode` documents for `/callback`).
+                 * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
                  *
                  *     - `login` (default): an ordinary, unauthenticated sign-in/
                  *       registration attempt. Reachable from anywhere — a bookmarked or
                  *       shared link, another site's "continue with aboutme" button —
                  *       with no session, CSRF, or same-site requirement at all.
                  *
-                 *     - `link` / `reauth`: **not served by `GET`** (P1.1 item 2). Both
+                 *     - `link` / `reauth`: **not served by `GET`**. Both
                  *       are `405` here, with `Allow: POST`, before any session read,
                  *       database access, or cookie is set — see the `POST` operation on
                  *       the same path, and `AuthLinkPurpose` below.
                  *
                  *
-                 *     The refusal is deliberately unconditional rather than cross-site-only. It replaces DD-C16's same-site-initiation check (`Sec-Fetch-Site: same-origin`, else `Origin`/`Referer`), which admitted same-origin `GET` link/reauth starts and rejected the rest. Refusing every caller is strictly stronger: the chain DD-C16 existed to break — a cross-site page forcing a `reauth` start, which silently refreshes the recent-reauth window, then forcing a `link` start that now passes the gate the first step refreshed — cannot be assembled out of `GET`s at all, and that holds without depending on a header surviving the edge.
+                 *     The unconditional refusal prevents a cross-site page from chaining reauthentication and linking through browser navigations. Privileged starts use the CSRF-protected `POST` operation instead.
                  * @example login
                  */
                 purpose?: components["parameters"]["AuthPurpose"];
@@ -1128,7 +1120,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Either a method this path does not serve at all (`HEAD` included — DD-C8), or a `GET` carrying `?purpose=link`/`reauth`, which are served only by the `POST` below (P1.1 item 2). The second case carries `Allow: POST`. */
+            /** @description Either an unsupported method, including `HEAD`, or a `GET` carrying `?purpose=link` or `?purpose=reauth`. The latter purposes are served only by `POST` and return `Allow: POST`. */
             405: {
                 headers: {
                     [name: string]: unknown;
@@ -1154,8 +1146,8 @@ export interface operations {
                  *
                  *     - `reauth`: refresh the caller's own session's
                  *       `reauthenticated_at` via a fresh round trip against an
-                 *       ALREADY-linked provider (the compensating control the phase's
-                 *       long idle/absolute session timeouts require before a sensitive
+                 *       ALREADY-linked provider (the compensating control the long
+                 *       idle and absolute session timeouts require before a sensitive
                  *       operation). Deliberately does NOT itself require a recent
                  *       reauthentication — that would be circular, since its whole point
                  *       is to establish one. What makes that safe is that this route is
@@ -1301,6 +1293,7 @@ export interface operations {
                              * @example kQ2f9Z3sV1n8LhTt7v0wYb-example
                              */
                             csrfToken: string;
+                            /** @description Linked identities ordered by `(created_at, id)`, oldest first. */
                             identities: components["schemas"]["Identity"][];
                         };
                     };
@@ -1496,7 +1489,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No live session with this id belongs to the caller (unknown id, already revoked, or belongs to someone else — indistinguishable by design, DD-C5). */
+            /** @description No live session with this id belongs to the caller (unknown id, already revoked, or belongs to someone else — indistinguishable by design). */
             404: {
                 headers: {
                     [name: string]: unknown;

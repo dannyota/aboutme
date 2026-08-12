@@ -35,13 +35,11 @@ type BackfillResumeDocumentCASParams struct {
 	Revision          int64
 }
 
-// D12, all three omissions deliberate -- do NOT "fix" them: this does not
-// bump `revision` (a backfill rewrites storage to something byte-identical
-// to what every reader was already served, so nothing observable changes),
-// does not bump `updated_at` (which tracks user-visible change), and is not
-// user-scoped (it is a system job).
-// Fully named params (owner decision 2026-08-03): the from/to schema
-// versions are both int32 and sqlc's positional naming would emit
+// This system backfill intentionally does not change revision or updated_at:
+// it persists the same projected document already served to readers. It is
+// not user-scoped. See docs/adr/0017-resume-document-versioning.md.
+// Fully named parameters distinguish the from/to schema versions. Both are
+// int32, and sqlc's positional naming would emit
 // `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
 // A caller swapping them silently rewrites current rows back to the old
 // version. Named args make the pair unswappable at the call site.
@@ -179,12 +177,8 @@ type CreateIdentityParams struct {
 	ProviderUserID string
 }
 
-// internal/auth's login-resolution algorithm calls
-// GetIdentityByProviderSubject first specifically to avoid racing
-// identities_provider_subject_key's UNIQUE (provider, provider_user_id) in
-// the common case; Task 10's link algorithm handles the
-// already-claimed-by-another-user case explicitly instead of relying on
-// this insert to fail.
+// The caller checks the provider subject first for the common case. The
+// database uniqueness constraint remains the concurrency backstop.
 func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error) {
 	row := q.db.QueryRow(ctx, createIdentity, arg.UserID, arg.Provider, arg.ProviderUserID)
 	var i Identity
@@ -322,11 +316,9 @@ type CreateSessionParams struct {
 // which passes the predecessor's user_id, reauthenticated_at,
 // absolute_expires_at, ua, and ip through unchanged so a rotation never
 // extends absolute expiry or silently satisfies the recent-reauth gate.
-// rotated_from (fix round 3, DD-C14c) is NULL for Issue's own fresh-login
-// insert, and the predecessor's own id for tryRotate's successor insert --
-// the exact, database-enforced (sessions_rotated_from_key) lineage link
-// FindLiveSuccessorSession below and the row's own rotated_from column
-// (no query needed for the predecessor direction) both depend on.
+// rotated_from is NULL for a fresh login and contains the predecessor id
+// for a rotated successor. The partial unique index makes this an exact,
+// one-successor lineage link.
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error) {
 	row := q.db.QueryRow(ctx, createSession,
 		arg.UserID,
@@ -371,8 +363,9 @@ type CreateUserParams struct {
 }
 
 // Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
-// become type-safe Go methods in internal/store via `make generate`. See
-// docs/specs/aboutme-design.md §3 "Schema management".
+// become type-safe Go methods in internal/store via `make generate`.
+// Relational schema changes belong in apps/server/migrations; see
+// docs/design/data.md.
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
 	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.Name, arg.AvatarKey)
 	var i User
@@ -397,9 +390,9 @@ type DeleteExpiredIdempotencyRecordsForUserParams struct {
 	ExpiresAt time.Time
 }
 
-// D11 opportunistic reaping: every Execute commits this per-user cleanup
-// before its mutation transaction, so expiry enforcement survives a rejected
-// key reuse or mutation error instead of depending on a future global job.
+// Every Execute commits this per-user cleanup before its mutation transaction,
+// so expiry enforcement survives a rejected key reuse or mutation error
+// instead of depending on a future global job.
 func (q *Queries) DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredIdempotencyRecordsForUser, arg.UserID, arg.ExpiresAt)
 	if err != nil {
@@ -423,18 +416,12 @@ type DeleteExpiredOAuthTransactionsParams struct {
 	MaxRows int32
 }
 
-// P1.1 item 1 (docs/plans/phase-1-deferred.md): opportunistic
-// request-path reaping, the same shape D11 already uses for
-// idempotency_records. GET /auth/{provider}/start is unauthenticated and
-// writes one row here per request; nothing reaps them, and the scheduled
-// global sweep belongs to P8-priv, which does not exist yet. Every start
-// therefore clears a bounded batch of already-expired rows before
-// creating its own.
+// OAuth start is unauthenticated and writes one row per request. Each start
+// therefore clears a bounded batch of expired rows before creating its own.
 //
 // Bounded by an explicit LIMIT rather than an unqualified DELETE: this
 // runs on a request path, so its worst case must be a constant, not a
-// function of however large the table grew during an outage of whatever
-// eventually reaps it. The inner SELECT drives the index
+// function of table size. The inner SELECT drives the index
 // oauth_transactions_expires_at_idx directly, oldest first, so repeated
 // calls make monotonic progress instead of rescanning the same rows.
 //
@@ -498,25 +485,10 @@ const findLiveSuccessorSession = `-- name: FindLiveSuccessorSession :one
 SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE rotated_from = $1 AND revoked_at IS NULL
 `
 
-// Fix round 3, finding DD-C14c (owner ruling: schema change, replacing
-// fix round 1/2's timestamp-reconstruction queries): given a session
-// that may itself be a rotation PREDECESSOR, finds the exact successor
-// row it was rotated INTO, if that successor is still live (revoked_at
-// IS NULL). Exact by construction, not a heuristic: rotated_from is a
-// foreign key tryRotate's successor insert (internal/auth/session.go)
-// sets once, at INSERT time, to the predecessor's own id, and
-// sessions_rotated_from_key (sql/schema.sql) is a partial UNIQUE index
-// on it -- a predecessor has AT MOST ONE successor, enforced by the
-// database itself, not merely by BeginSessionRotation's CAS. This
-// replaces fix round 1/2's FindImmediatePredecessorSession/
-// FindImmediateSuccessorSession, which reconstructed the link from
-// rotation_grace_until/created_at timing alone: that approach was proven
-// to silently match ANY same-user session sharing the same microsecond
-// (pgx's :one takes the first row silently), which a frozen-clock test
-// (or, in principle, sufficiently concurrent real traffic) can trigger --
-// see task-9-report.md's fix round 3 section. The predecessor direction
-// needs no equivalent query at all: a session's own rotated_from column,
-// already in hand on any row already read, IS the answer.
+// Finds the exact unrevoked successor through rotated_from. The partial unique
+// index in migration 00003 permits at most one successor per predecessor;
+// timestamps must never be used to reconstruct this lineage. The reverse
+// direction is already present in a session row's rotated_from value.
 func (q *Queries) FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error) {
 	row := q.db.QueryRow(ctx, findLiveSuccessorSession, rotatedFrom)
 	var i Session
@@ -592,12 +564,8 @@ const getResumeByID = `-- name: GetResumeByID :one
 SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE id = $1
 `
 
-// System-job read for the D12 CAS backfill (Task 8). BackfillOne is not
-// user-scoped -- exactly like BackfillResumeDocumentCAS and
-// ListResumeIDsBelowSchemaVersion, which pages its candidates -- so it
-// cannot use the D17 ownership-scoped GetResumeForUser. Read-only: it adds
-// no write path, so it needs no entry in the
-// go-resume-write-outside-domain-store manifest.
+// System-job read for the document-version backfill. It is intentionally
+// not user-scoped, unlike product reads. It adds no write path.
 func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error) {
 	row := q.db.QueryRow(ctx, getResumeByID, id)
 	var i Resume
@@ -657,16 +625,9 @@ const getSessionByID = `-- name: GetSessionByID :one
 SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE id = $1
 `
 
-// Fix round 2, finding DD-C14b: DELETE /sessions/{id}'s lineage sweep
-// (sessions_handlers.go's revokeLineagePartners) needs the just-revoked
-// TARGET session's own id/rotated_from/user_id to look up its rotation
-// lineage partner(s) -- RevokeSessionForUser only reports a row count,
-// not the row itself, and the target is not always the caller's own
-// current session (sess, already fully in hand from context), so a
-// second read is unavoidable here. revoked_at is already set to
-// non-NULL by the time this runs (it always runs strictly after a
-// successful RevokeForUser), but every other column this caller needs
-// is untouched by that UPDATE.
+// Loads a target so the caller can revoke its rotation partner.
+// RevokeSessionForUser returns only a row count, and the target need not be the
+// caller's current session, so the lineage values require this read.
 func (q *Queries) GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByID, id)
 	var i Session
@@ -753,9 +714,7 @@ const listIdentitiesByUserID = `-- name: ListIdentitiesByUserID :many
 SELECT id, user_id, provider, provider_user_id, created_at FROM identities WHERE user_id = $1 ORDER BY created_at
 `
 
-// Task 9's GET /me: every provider identity linked to user_id, oldest
-// first (created_at) so the first-ever linked provider always sorts
-// first.
+// Ordered by creation time, oldest first.
 func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error) {
 	rows, err := q.db.Query(ctx, listIdentitiesByUserID, userID)
 	if err != nil {
@@ -798,21 +757,16 @@ type ListLiveSessionsForUserParams struct {
 	Now        time.Time
 }
 
-// Task 9's GET /sessions device list (design spec §3): every session
-// belonging to user_id that is still LIVE as of now -- mirrors
-// session.go's sessionDead exactly, predicate for predicate (fix round 1,
-// finding I1: the original version only excluded revoked/grace-dead rows,
-// silently listing idle-expired and absolute-expired sessions as live
-// devices with no GC to ever remove them):
+// Lists sessions that internal/auth also considers live:
 //
 //   - not explicitly revoked (revoked_at IS NULL);
 //   - not idle-expired: last_seen_at >= idle_cutoff, where idle_cutoff =
-//     now - idleTimeout is computed in GO (session.go's own constant) and
+//     now - idleTimeout is computed in Go (session.go's own constant) and
 //     passed as a query arg, never re-literalled as a SQL interval here;
 //   - not absolute-expired: absolute_expires_at >= now;
 //   - not a grace-dead rotation predecessor: rotation_grace_until IS NULL
-//     OR rotation_grace_until >= now -- a session rotation has already
-//     superseded keeps revoked_at NULL but has rotation_grace_until in
+//     OR rotation_grace_until >= now -- a superseded session keeps
+//     revoked_at NULL but has rotation_grace_until in
 //     the past, and that row must never appear in the caller's own
 //     device list, exactly like an explicitly revoked one, just not
 //     marked that way.
@@ -820,8 +774,7 @@ type ListLiveSessionsForUserParams struct {
 // sqlc.arg(...)::timestamptz casts are explicit so both parameters' Go
 // types are plain (non-pointer) time.Time regardless of the nullable
 // columns they're compared against. Ordered newest-created first, with id
-// as a deterministic tiebreaker for two rows created in the same instant
-// (fix round 1, M4).
+// as a deterministic tiebreaker for equal creation times.
 func (q *Queries) ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error) {
 	rows, err := q.db.Query(ctx, listLiveSessionsForUser, arg.UserID, arg.IdleCutoff, arg.Now)
 	if err != nil {
@@ -967,7 +920,7 @@ type RevokeSessionParams struct {
 // Idempotent: revoking an already-revoked (or nonexistent) session id
 // affects zero rows rather than erroring, so logout/revoke can be retried
 // safely. revoked_at is immediate and orthogonal to rotation_grace_until
-// (design decision 1) -- this never touches that column.
+// and this query never changes that column.
 func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) error {
 	_, err := q.db.Exec(ctx, revokeSession, arg.ID, arg.RevokedAt)
 	return err
@@ -992,19 +945,10 @@ type RevokeSessionForUserParams struct {
 	Now        time.Time
 }
 
-// Ownership-checked counterpart to RevokeSession: only revokes id if it
-// also belongs to user_id AND is still LIVE by the exact same predicates
-// ListLiveSessionsForUser uses below (fix round 1, findings I1/M5): a
-// session that is already idle-expired, absolute-expired, or a grace-dead
-// rotation predecessor must revoke ZERO rows here too -- otherwise a
-// caller could "revoke" a row GET /sessions' own device list already
-// refuses to show them, which is exactly the self-inconsistency the
-// review caught. Returns the affected row count so a caller can
-// distinguish "revoked" (1) from "no such LIVE session for this user" (0)
-// -- internal/auth.SessionManager.RevokeForUser's own caller (Task 9's
-// DELETE /sessions/{id}) turns 0 into a 404, not a 403, so it never
-// confirms whether the id exists for someone else, is merely dead, or
-// belongs to another user.
+// Revokes only a live session owned by user_id. The live predicates match
+// ListLiveSessionsForUser so a hidden expired session cannot be reported as
+// revoked. The affected-row count lets the caller return the same absence
+// result for missing, expired, and differently owned sessions.
 func (q *Queries) RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeSessionForUser,
 		arg.ID,
@@ -1033,11 +977,10 @@ type StartSessionRotationGraceParams struct {
 	ID         uuid.UUID
 }
 
-// P1.1 item 4 (docs/plans/phase-1-deferred.md): starts a rotation
-// PREDECESSOR's grace countdown, called when its successor is first used
-// (internal/auth.SessionManager.Authenticate). BeginSessionRotation above
-// parks the predecessor's rotation_grace_until at min(now + rotationAge,
-// its own absolute_expires_at) -- non-NULL, so the rotation CAS still
+// Starts a predecessor's short grace period after its successor is first
+// used. BeginSessionRotation parks rotation_grace_until at
+// min(now + rotationAge, its own absolute_expires_at) -- non-NULL, so the
+// rotation CAS still
 // admits exactly one winner, far enough out that a successor whose one and
 // only raw-token delivery was lost never orphans the lineage, and bounded
 // so a predecessor that is never superseded in practice still expires on a
@@ -1085,8 +1028,7 @@ type TouchReauthenticatedAtParams struct {
 }
 
 // Records that this session's lineage just completed a full OAuth login
-// (design decision 2) -- called only after a real reauth round trip
-// (internal/auth.SessionManager.TouchReauthenticated), never by rotation.
+// after a real reauthentication round trip, never by rotation.
 func (q *Queries) TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error {
 	_, err := q.db.Exec(ctx, touchReauthenticatedAt, arg.ID, arg.ReauthenticatedAt)
 	return err

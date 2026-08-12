@@ -7,7 +7,10 @@
   with a `migrate` entrypoint; `PGPASSWORD` never spliced into `DATABASE_URL`),
   `caddy/Caddyfile` (dev), `server.Dockerfile` (builds `server` + `migrate`
   binaries; Chromium seam reserved for P7A), `web.Dockerfile`. **`deploy/aws/`
-  does not exist yet** — spec §6/§7 reserve it for Terraform.
+  does not exist yet**. The [repository boundaries](../../design/repository.md)
+  assign deployment artifacts to `deploy/`, and the
+  [production topology](../../design/deployment.md#production-topology) defines
+  the target.
 - The dev Caddyfile carries an explicit **"DEV ONLY — do not promote
   unchanged"** marker naming this phase: it sets `X-Real-IP` from the immediate
   peer, which behind CloudFront is the **edge**, recreating the cross-tenant DoS
@@ -28,10 +31,12 @@
   this exactly: Go binds `127.0.0.1:8080`, Caddy proxies via loopback,
   `TRUSTED_PROXY_CIDRS=127.0.0.1/32`. **The web tier does NOT share that
   namespace** — see D24.
-- Fixed port contract (P0/spec §6): Caddy `80/443` (prod SG exposes only 443 —
-  see decision D14), Go `127.0.0.1:8080`, Nuxt `127.0.0.1:3000` (satisfied in
-  prod via the bridge port publication in D24); desired count 1 per service; no
-  service discovery.
+- PI port map: Caddy `80/443` (the production SG exposes only 443; see D14), Go
+  `127.0.0.1:8080`, and Nuxt `127.0.0.1:3000` (satisfied through D24's bridge
+  port publication). The
+  [production topology](../../design/deployment.md#production-topology) fixes
+  one task per service and no application load balancer; PI adds no service
+  discovery.
 - CI jobs at base:
   `docs, schema, api, server, web, server-integration, migrations-append-only, semgrep, route-table, sqlc-drift`
   (`.github/workflows/ci.yml`). Makefile targets relevant here: `docs-fmt`,

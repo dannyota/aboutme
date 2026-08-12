@@ -1,221 +1,84 @@
-# Phase 2A — Resume domain & store (implementation plan)
+# Phase 2A — Resume domain and store
 
-> **Adopted Rev 3 (2026-08-03).** Rev 2's independent adversarial findings and
-> owner corrections remain binding. Rev 3 is the execution-status and
-> spec-consistency correction: it records Tasks 1–6 as reviewed and Task 7's
-> review/re-review findings, restores the immutable v1 schema plus bidirectional
-> adjacent-converter contract required by design §3, and makes the phase gates
-> explicit. Acceptance rows `AC-DOC-010`, `AC-DOC-011`, `AC-DOC-012`, and
-> `AC-SAVE-003` already exist in `../traceability/`.
->
-> **Checkpoint integration (owner direction, 2026-08-03):** reviewed Tasks 1–7
-> and their title/lint/idempotency corrections were integrated into `main` at
-> `5805ddc` before phase exit. This is a development checkpoint only: all open
-> tasks and every phase gate below remain binding, and P2B stays blocked.
->
-> **For agentic workers (once adopted):** execute with
-> superpowers:subagent-driven-development, one task per fresh subagent, Opus 5
-> defect review between tasks. Steps use checkboxes: `[x]` records completed
-> author work and `[ ]` remains an open action/gate. Every task's tests are
-> written **before** implementation (TDD): write the failing test, observe the
-> failure, implement, observe the pass, then review and commit.
+Status: **Task 12 and phase gates remain** (verified at `9edca31`, 2026-08-12).
 
-**Goal:** the resume domain's data layer — `resumes`, `slug_tombstones`, and
-`idempotency_records` tables with every spec §3 constraint and the DB-enforced
-3-resume cap trigger; a single validated store layer all resume writes pass
-through (JSON-Schema bounds, aggregate invariants, entry-id uniqueness, date
-ranges, byte-exact size bounds — every bound with a limit+1 test); revision CAS
-write safety; the idempotency record primitive; and the doc-shape migration
-machinery (projection-only on read, CAS on write, CAS backfill) — all proven
-against a live Postgres via the shared migration-applying test helper. No HTTP
-surface: P2B owns endpoints, media, and OpenAPI changes.
+This phase owns the resume relational schema, validated aggregate store,
+revision compare-and-swap (CAS), transactional idempotency, immutable document
+versions, pure projection, and CAS backfill. It has no HTTP surface.
 
-**Execution base:** the phase started from `ad357d3` ("Merge Phase 1:
-authentication and sessions", 2026-08-02). Remaining workers start from current
-`main` at or after checkpoint `5805ddc`, run `git rev-parse HEAD`, and confirm
-that ancestry before starting — worktree agents have checked out stale commits
-before; verify, don't assume.
+The phase began under a declarative SQL and Atlas plan.
+[ADR 0010](../../adr/0010-goose-only-migrations.md) retired that workflow.
+Released task records still describe it as history; current work uses
+hand-written goose migrations as the only relational schema source.
 
-**Migration head:** the phase targeted `00003_add_sessions_rotated_from` and the
-integrated checkpoint now carries `00004_add_resume_tables` plus
-`00005_add_resume_cap_trigger`. Remaining work treats `00005` as the current
-head and never edits a released migration or `atlas.sum` by hand outside the
-pipeline described in Task 3. P1.1 needs no migration. Schema-head changes are
-serialized through the integration owner; one merges at a time.
+## Current state
 
-## Contents
+| Task | Deliverable                                       | State                        |
+| ---- | ------------------------------------------------- | ---------------------------- |
+| 1    | Historical Atlas drift-gate extension             | Superseded by ADR 0010       |
+| 2    | Shared validation and embedded current schema     | Landed                       |
+| 2b   | Immutable v1 schema and released-version registry | Landed                       |
+| 3    | Resume tables, constraints, and cap trigger       | Landed                       |
+| 4    | sqlc queries and generated store                  | Landed                       |
+| 5    | Codec, validation, and bounds                     | Landed                       |
+| 6    | Owner-scoped store and revision CAS               | Landed                       |
+| 6a   | Cleared-contact round trip                        | Landed                       |
+| 6b   | Generated-write boundary review                   | Superseded; review rule only |
+| 7    | Transactional idempotency                         | Landed                       |
+| 8    | Projection, converters, and CAS backfill          | Landed                       |
+| 9    | Independent write-safety suite                    | Landed                       |
+| 10   | Independent document-migration suite              | Landed                       |
+| 11   | Bounds matrix and completeness guard              | Landed                       |
+| 12   | Traceability, docs, and handoffs                  | Pending                      |
+| Gate | Phase defect review and phase acceptance          | Pending                      |
 
-Reference sections of this plan:
+`Landed` does not claim that the phase gates passed. P2B and P3 remain blocked
+on this phase until Task 12 and both gates close at the exact candidate commit.
 
-- [Design decisions this plan makes beyond the spec](decisions.md)
-- [File structure produced by this phase](file-structure.md)
-- [The write path this phase builds](write-path.md)
-- [Integration handoffs (owner-applied, not worker-applied)](integration-handoffs.md)
-- [Phase exit criteria](exit-criteria.md)
+## Remaining order
 
-One file per task, in execution order:
+1. Update every P2A-owned traceability row with an explicit state and concrete
+   test evidence. Apply or assign every integration handoff.
+2. Run the affected local checks and `make ci` once at the candidate commit.
+3. Have a fresh reviewer inspect the complete phase diff for defects, design
+   fit, interface stability, assumptions, and traceability.
+4. Fix blocking findings and obtain independent re-review.
+5. Freeze [acceptance catalog revision 2](acceptance-catalog-r2.md). A fresh
+   acceptance worker runs it without editing code, tests, fixtures, or criteria.
 
-- [Task 1: Extend the data-drift gate (unblocks the trigger)](task-01-drift-gate.md)
-- [Task 2: Schema-package additions — entry-id uniqueness (AC-DOC-002) + embedded raw schema (D2)](task-02-schema-entry-id-uniqueness.md)
-- [Task 2b: Establish the immutable v1 schema and released-version registry (AC-DOC-012)](task-02b-immutable-v1-schema.md)
-- [Task 3: `resumes`, `slug_tombstones`, `idempotency_records` DDL + 3-resume trigger + migrations 00004/00005](task-03-resume-tables-and-migrations.md)
-- [Task 4: sqlc queries + regenerated store layer](task-04-sqlc-queries.md)
-- [Task 5: Document codec + validation pipeline — every size bound with a limit+1 test](task-05-codec-and-validation.md)
-- [Task 6: Resume store — create (cap), get/list (projected), delete, revision CAS](task-06-resume-store.md)
-- [Task 6a: Preserve a cleared contact value through validation and live writes (AC-DOC-009)](task-06a-cleared-contact-value.md)
-- [Task 6b: Mechanically restrict generated resume writes to the domain store](task-06b-write-chokepoint.md)
-- [Task 7: Idempotency record store (replay / reject / rollback primitive)](task-07-idempotency-store.md)
-- [Task 8: Doc-shape migration machinery — projection-only read, CAS write persistence, CAS backfill, wire-version declarations](task-08-doc-shape-migration.md)
-- [Task 9: Blind adversarial suite A — write-safety and cap concurrency matrix](task-09-blind-suite-write-safety.md)
-- [Task 10: Blind adversarial suite B — doc-migration purity and CAS-vs-autosave races](task-10-blind-suite-doc-migration.md)
-- [Task 11: Blind adversarial suite C — independently-derived size-bound limit+1 matrix](task-11-blind-suite-bounds.md)
-- [Task 12: Traceability closure, docs, and integration handoffs](task-12-traceability-closure.md)
+## Authorities
 
-## Task status index
+- [Data design](../../design/data.md)
+- [API write-safety design](../../design/api.md)
+- [Document-version ADR](../../adr/0017-resume-document-versioning.md)
+- [Idempotency ADR](../../adr/0016-transactional-idempotency.md)
+- [Numeric budgets](../budgets.md)
+- [Traceability](../traceability/README.md)
 
-This is the owner-facing execution ledger. A task is not complete until its
-independent defect review is green; implementation alone is reported separately.
+The detailed task files below are execution records. Completed files stay as
+written even where a later ADR superseded their workflow.
 
-| Task | Deliverable                                    | State                                      |
-| ---- | ---------------------------------------------- | ------------------------------------------ |
-| 1    | Drift-gate support for trigger/function DDL    | **Complete and independently reviewed** ✅ |
-| 2    | Shared validation + embedded current schema    | **Complete and independently reviewed** ✅ |
-| 2b   | Immutable `resume.v1.schema.json` foundation   | **Required before Task 8**                 |
-| 3    | Resume tables, cap trigger, migrations         | **Complete and independently reviewed** ✅ |
-| 4    | sqlc queries and generated store               | **Complete and independently reviewed** ✅ |
-| 5    | Codec and full-bounds validation               | **Complete and independently reviewed** ✅ |
-| 6    | Resume CRUD, ownership, cap, and revision CAS  | **Complete and independently reviewed** ✅ |
-| 6a   | Cleared-contact draft fixture + live roundtrip | **Required before phase gate**             |
-| 6b   | Generated-write-method mechanical restriction  | **Required before phase gate**             |
-| 7    | Transactional idempotency primitive            | **Complete and independently reviewed** ✅ |
-| 8    | Projection, bidirectional wire conversion, CAS | **Blocked on Task 2b**                     |
-| 9    | Blind write-safety/concurrency suite           | **Pending**                                |
-| 10   | Blind projection/backfill race suite           | **Pending**                                |
-| 11   | Blind independently derived bounds suite       | **Pending**                                |
-| 12   | Traceability, docs, and integration handoffs   | **Pending**                                |
-| Gate | Design, adversarial, UAT, and evidence reviews | **Pending**                                |
+## Task files
 
-### Immediate next-action order
+- [Decisions](decisions.md), [write path](write-path.md),
+  [file structure](file-structure.md),
+  [integration handoffs](integration-handoffs.md), and
+  [exit criteria](exit-criteria.md)
+- [Tasks 1–5](task-01-drift-gate.md),
+  [2](task-02-schema-entry-id-uniqueness.md),
+  [2b](task-02b-immutable-v1-schema.md),
+  [3](task-03-resume-tables-and-migrations.md), [4](task-04-sqlc-queries.md),
+  [5](task-05-codec-and-validation.md)
+- [Tasks 6–8](task-06-resume-store.md), [6a](task-06a-cleared-contact-value.md),
+  [6b](task-06b-write-chokepoint.md), [7](task-07-idempotency-store.md),
+  [8](task-08-doc-shape-migration.md)
+- [Independent suites 9](task-09-blind-suite-write-safety.md) and
+  [10](task-10-blind-suite-doc-migration.md),
+  [bounds task 11](task-11-blind-suite-bounds.md), and
+  [closure task 12](task-12-traceability-closure.md)
 
-1. Execute and independently review Task 2b (retained immutable v1 schema/types
-   and released-version registries).
-2. Execute and independently review Task 6a (cleared-contact shared fixture and
-   live round-trip).
-3. Execute integration-owner Task 6b and its independent security/defect review
-   (mechanical generated-write choke point).
-4. Execute and independently review Task 8 (projection, adjacent conversion,
-   wire declarations, and CAS backfill).
-5. Run Tasks 9, 10, and 11 with three separate fresh blind-test authors, then
-   route any product finding to a separate implementation author and re-review.
-6. Close Task 12 traceability, documentation, and P2B handoffs.
-7. Run the phase design/consistency review, traceability closure, fresh
-   adversarial review, immutable UAT catalog, and independent evidence
-   verification at the exact candidate commit. Only then mark P2A complete and
-   unlock dependent phases; checkpoint `5805ddc` did neither.
+## Acceptance ownership
 
-**Spec:** `../../specs/aboutme-design.md` §3 — the `resumes` and
-`slug_tombstones` rows of the data-model table; "Relational constraints &
-store-layer invariants" (all bullets); "Entry fields per sectionType";
-"Optionality: draft-permissive, publish-strict"; the aggregate invariant bullet;
-the doc-shape-migrations bullet; "Schema management" (declarative pattern + the
-**wire-version compatibility** row: P2A owns both adjacent conversion directions
-and synthetic old-client preparation/emission; P2B owns the real HTTP
-persistence proof); §4 "Write-safety" (revision CAS + idempotency semantics —
-the HTTP surface itself is P2B). **Master plan:** `../implementation-plan.md`
-"Phase 2A — Resume domain & store" including the carried drift-gate limitation
-note, plus "Global constraints", "Agent workflow", "Integration discipline",
-"Testing strategy" (the Write-safety/concurrency row is owned here).
-**Budgets:** `../budgets.md` — request body ≤ 256 KB (P0B middleware, already
-enforced, not re-implemented here) and **resume document total ≤ 512 KB (P2A
-store)**. **Traceability:** claims and gaps in the table below.
-
-## Traceability rows claimed by this phase
-
-| ID          | Statement                                                        | Claimed by      |
-| ----------- | ---------------------------------------------------------------- | --------------- |
-| AC-DOC-001  | Max 3 resumes per user, DB-enforced                              | Tasks 3, 6, 9   |
-| AC-DOC-002  | Entry ids unique across the whole resume                         | Tasks 2, 5      |
-| AC-DOC-003  | Date ranges (start ≤ end) — "not yet wired into live writes"     | Task 5 (wiring) |
-| AC-DOC-004  | Every document bound has a limit+1 test                          | Tasks 5, 11     |
-| AC-DOC-007  | Rich text ≤ 16 KB UTF-8 bytes — "not yet wired into live writes" | Task 5 (wiring) |
-| AC-DOC-008  | Layout exactly-once aggregate — "not yet wired into live writes" | Task 5 (wiring) |
-| AC-DOC-009  | Cleared contact value remains draft-valid and round-trips        | Task 6a         |
-| AC-DOC-010  | Projection-only read, CAS write/backfill                         | Task 8          |
-| AC-DOC-011  | Resume document total ≤ 512 KB at the store                      | Tasks 5, 11     |
-| AC-DOC-012  | Immutable schemas + bidirectional wire compatibility             | Tasks 2b, 8     |
-| AC-SAVE-003 | Idempotency store replay/reject/rollback                         | Tasks 7, 9      |
-
-The following boundary is intentionally deferred and must remain visible:
-
-- Customization delta paths from a fixed allowlist (spec §3 size-bounds bullet)
-  — deferred to P2B with the delta-applying endpoint (decision D14); it has no
-  row either way. Flagged so it is not lost.
-
-## Existing foundation this plan builds on (verified at `ad357d3`)
-
-| Piece                                                            | What's already there                                                                                                                                                                                                                                                                                                                            |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/server/internal/store`                                     | sqlc-generated `Queries` (+ `WithTx(tx pgx.Tx)`), hand-written `Pool` (`MaxPoolSize` 20); sqlc.yaml overrides: `uuid → uuid.UUID`, `jsonb → json.RawMessage`, nullable → native pointers                                                                                                                                                        |
-| `apps/server/internal/testutil`                                  | `RequireMigratedTestDatabaseURL(t)` — skip-or-fail-closed DSN helper **plus** advisory-locked migration apply; **every DB-backed test in this phase uses it**; also `Clock` (injectable time) and deterministic id helpers                                                                                                                      |
-| `apps/server/sql/schema.sql`                                     | Declarative source of truth (auth tables); sqlc + Atlas both read it                                                                                                                                                                                                                                                                            |
-| `apps/server/migrations/`                                        | `00001_extensions` (hand-written; the precedent for non-Atlas-diffable DDL), `00002_add_auth_tables`, `00003_add_sessions_rotated_from`, `atlas.sum`; 4-scenario harness (`harness_test.go`) incl. two-runner advisory-lock test                                                                                                                |
-| `apps/server/cmd/migrate/gen`                                    | Atlas-diff → goose pipeline; `checkExtensionDeclarations` (name-set cross-check precedent); `checkNoUndiffableObjects` — **unconditionally rejects** trigger/function/view/sequence in `schema.sql` until this phase extends it (its doc comment says so)                                                                                       |
-| `packages/schema` (via `go.work` + `replace`)                    | `resume.schema.json` (frozen v1), generated `schema.Resume`/entry types, hand-written `Section` (strict decode, `DisallowUnknownFields`), hand-written `store_validate.go` (`ValidateDocument`: rich-text bytes, layout aggregate, date ranges, URL schemes, photo traversal) + `validation/store.ts` TS half, shared `fixtures/store/*` corpus |
-| `packages/schema/fixtures/store/invalid-duplicate-entry-id.json` | Staged for AC-DOC-002; **no validator or test consumes it yet** in either language                                                                                                                                                                                                                                                              |
-| `apps/server/internal/auth`                                      | The established local patterns to follow: error sentinels, injected `now func() time.Time`, `export_test.go` seams, table-driven tests, adversarial `_adversarial_test.go` files                                                                                                                                                                |
-
-## Environment facts (verified 2026-08-02 at `ad357d3`)
-
-- Go 1.26.5; sqlc v1.31.1; Atlas **community v1.2.0** (the pinned version the
-  drift gate enforces); Postgres 18.4 (`docker.io/library/postgres:18.4-alpine`
-  via `make test-db-up`) — native `uuidv7()`, used for every new surrogate key.
-- Run all Go commands from inside `apps/server` (the root `go.work` ties it to
-  `packages/schema/gen/go`; `go build ./...` at the repo root matches no
-  packages). If any command materializes a root `go.work.sum`, hand it to the
-  integration owner to commit — never delete it.
-- `make server-test-db` is the DB-backed gate: it sets `REQUIRE_TEST_DB=1`
-  (fails closed on a missing DSN), includes `./internal/resume/...`, and passes
-  `-race -count=1`. The integration-owner change landed in `6efd179` and is
-  retained in checkpoint `5805ddc`.
-- `go test` caches passing results — every ad-hoc live-DB invocation in this
-  plan carries `-count=1`.
-- The migration harness (`make server-migration-test`) automatically covers new
-  migration files in its empty→head / prev→head / concurrent / partial-failure
-  scenarios; Task 3 adds object-existence and behavior assertions on top, not a
-  parallel harness.
-- No OpenAPI change in this phase: P2A ships no HTTP surface. `make api-check`
-  appears in no task's gate for that reason.
-
-## Global constraints (inherited, plus phase-specific)
-
-- Latest stable, pinned exactly (`go get x@latest`, commit the resolved
-  `go.mod`/`go.sum`; never hand-write versions).
-- Google Go style; `gofmt`/`goimports`; table-driven tests; Conventional
-  Commits; no AI/agent mentions, no trailers.
-- Determinism: inject `now func() time.Time` into every type with a TTL or
-  time-dependent behavior (idempotency TTL, tombstone timestamps); no
-  `time.Sleep`-based assertions; concurrency tests must pass under
-  `-race -count=20`, not "usually" (flaky = broken).
-- `apps/server` keeps passing `go build ./... && go vet ./... && go test ./...`
-  (hermetic — DB-backed cases self-skip without `TEST_DATABASE_URL`) after every
-  task.
-- Generated artifacts (`internal/store/*.go` from sqlc, `migrations/*.sql` from
-  the pipeline, `packages/schema/gen/*` from `generate.mjs`) are committed but
-  never hand-edited — change the source and regenerate. The two deliberate
-  hand-written exceptions are goose migration files for DDL Atlas cannot diff
-  (Task 3, following `00001_extensions.sql`'s precedent) and the documented
-  hand-written files inside `gen/go` (`section.go`, `store_validate.go` — their
-  headers say so).
-- Stage only explicit owned paths (`git add -- <paths>`); never `git add .`;
-  inspect `git diff --cached --name-only` before every commit; never stage
-  `.env`, `CLAUDE.md`, `AGENTS.md`, or another worker's files.
-- Schema head, `migrations/`, `atlas.sum`, generated `internal/store`, and
-  lockfiles are serialized through the integration owner — Tasks 2–4 are the
-  only tasks that touch them, in order.
-- **Serialized against Phase 3 (owner ruling on B10):**
-  `packages/schema/scripts/generate.mjs`, `packages/schema/gen/**`,
-  `packages/schema/test/gen.test.ts`, and `apps/server/go.{mod,sum}` are
-  contested with P3's T1/T8 and join the serialized-artifact list. Task 2 and
-  Task 5 each require an **exclusive-ownership window** on those paths, granted
-  and sequenced by the integration owner before dispatch; a worker finding
-  uncommitted changes in them stops and reports rather than merging around them.
+P2A owns AC-DOC-001/002/003/004/007/008/009/010/011/012 and AC-SAVE-003. P2B
+adds HTTP evidence for revision mismatch and wire-version persistence. The
+customization-delta allowlist is P2B's AC-SAVE-005.

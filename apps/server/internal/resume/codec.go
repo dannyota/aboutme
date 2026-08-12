@@ -1,26 +1,14 @@
-// Package resume is the P2A document codec and store-layer validation
-// pipeline: the single write-path choke point every resume write passes
-// through (docs/plans/phase-2a/, decisions D1/D4/D16/D19).
+// Package resume owns the document codec and store-layer validation boundary.
 //
-// A stored resume is four Postgres columns: schema_version (int) plus three
-// jsonb columns (personal_details, content, customization). The wire/domain
-// shape (schema.Resume) is one JSON object carrying schemaVersion alongside
-// those same three keys. This package is the only place that assembles the
-// four columns into the one document shape, or decomposes the one shape
-// back into the four columns (D4) -- callers never do this by hand.
-//
-// Task 7's IdempotencyStore (idempotency.go) is this package's transactional
-// idempotency-record primitive (D11): same-user contenders serialize on the
-// users row before lookup or mutation. After one same-key call commits, waiting
-// contenders skip their callback and replay its stored response, while a reused
-// key carrying a different request body is rejected. Callbacks must nevertheless
-// use only their supplied transaction and have no external side effects: a
-// transaction error or uncertain commit can still require a safe retry. This is
-// the written contract -- not an accident -- that makes the web client's
-// csrf_rejected retry (docs/plans/phase-1-deferred.md) safe: that retry reuses
-// the same Idempotency-Key by construction, so a committed first mutation is
-// replayed rather than committed a second time. P2B and P4 build on this
-// guarantee; they do not need to re-derive it.
+// A stored resume document uses schema_version plus three jsonb columns:
+// personal_details, content, and customization. The row also has scalar
+// metadata. The wire/domain shape (schema.Resume) carries schemaVersion beside
+// those same three keys. This package owns the current-version codec;
+// docmigrate owns assembly and splitting during version conversion. Other
+// callers do neither by hand. IdempotencyStore composes writes inside one
+// transaction and forbids external side effects in its callback. See
+// docs/design/data.md and
+// docs/adr/0016-transactional-idempotency.md.
 package resume
 
 import (
@@ -31,20 +19,17 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
-// MaxDocumentBytes is the P2A store-layer size bound on the canonical
-// assembled document (docs/plans/budgets.md: "Resume document total ...
-// 512 KB", P2A store). Measured on AssembleCanonical's output (D10): the
-// marshaled full document, including the injected schemaVersion, independent
-// of jsonb's internal on-disk representation.
+// MaxDocumentBytes is the store-layer size bound on the canonical assembled
+// document; see docs/plans/budgets.md. It measures AssembleCanonical's output,
+// including schemaVersion, independent of jsonb's on-disk representation.
 const MaxDocumentBytes = 512 * 1024
 
 // AssembleCanonical marshals doc -- including its SchemaVersion field, which
-// the three stored jsonb columns never carry themselves (D4) -- into the
+// the three stored jsonb columns never carry themselves -- into the
 // canonical full-document JSON used for JSON-Schema validation and the
-// MaxDocumentBytes bound (D10). doc.SchemaVersion is whatever the caller set
+// MaxDocumentBytes bound. doc.SchemaVersion is whatever the caller set
 // it to: DecodeParts injects it from the row's own schema_version column: a
-// caller assembling a brand-new document sets it directly (D19: always
-// CurrentVersion for anything that reaches ValidateForStore).
+// caller assembling a brand-new document sets it directly.
 func AssembleCanonical(doc schema.Resume) ([]byte, error) {
 	out, err := json.Marshal(doc)
 	if err != nil {
@@ -56,8 +41,8 @@ func AssembleCanonical(doc schema.Resume) ([]byte, error) {
 // DecodeParts strict-decodes the three stored jsonb parts -- personalDetails,
 // content, customization, exactly as they'd be read back from their three
 // Postgres columns -- plus the row's separate schema_version column, into one
-// schema.Resume (D4: this is the only assembly point). "Strict" means an
-// unknown field anywhere in personalDetails or customization is a decode
+// schema.Resume. "Strict" means an unknown field anywhere in personalDetails
+// or customization is a decode
 // error, not a silently-dropped field; within content, each section's
 // entries are strict-decoded the same way by schema.Section's own
 // UnmarshalJSON (gen/go/section.go) -- a field foreign to an entry's
@@ -96,16 +81,12 @@ func DecodeParts(personalDetails, content, customization json.RawMessage, schema
 
 // encodeParts is DecodeParts' inverse: it decomposes doc into the three
 // jsonb parts a caller persists into personal_details/content/customization
-// (D4). schemaVersion is deliberately dropped from all three -- it lives in
+// columns. schemaVersion is deliberately dropped from all three -- it lives in
 // doc.SchemaVersion and belongs to the row's own schema_version column,
 // never inside a jsonb part.
 //
-// Package-private (fix round 1, owner ruling): this is the function that
-// actually produces the three jsonb values a write persists, so it is the
-// half of the D16 write-path choke point the compiler can enforce -- no
-// package outside internal/resume can call it. store.go's export_test.go
-// seam (EncodePartsForTest) re-exposes it for tests that need the exact
-// function ValidateForStore's own callers use.
+// Package-private so no package outside internal/resume can produce the three
+// jsonb values a document write persists. export_test.go exposes a test seam.
 func encodeParts(doc schema.Resume) (personalDetails, content, customization json.RawMessage, err error) {
 	personalDetails, err = json.Marshal(doc.PersonalDetails)
 	if err != nil {

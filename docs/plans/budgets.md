@@ -1,65 +1,131 @@
 # Numeric budgets
 
-Enforced in P7A (resource bounds) and P9A (staging rehearsal). A budget breach
-fails the gate; changing a number requires a reviewed commit citing evidence.
+Each owning phase enforces its rows. P9A repeats production-shaped latency and
+resource measurements. A hard-budget breach fails the gate; changing a number
+requires a reviewed change with evidence.
 
-| Budget                                   | Target                               | Where enforced |
-| ---------------------------------------- | ------------------------------------ | -------------- |
-| API p95 latency (read, warm)             | ≤ 150 ms                             | P9A synthetic  |
-| API p95 latency (granular PATCH)         | ≤ 250 ms                             | P9A synthetic  |
-| Public SSR page p95 (origin, uncached)   | ≤ 400 ms                             | P9A synthetic  |
-| PDF render wall time                     | ≤ 20 s hard timeout, p95 ≤ 8 s       | P7A            |
-| Concurrent renders                       | 1 (v1)                               | P7A            |
-| Render queue depth                       | ≤ 8, then 503 + readiness unhealthy  | P7A            |
-| Whole server task memory (Go + Chromium) | ≤ 512 MiB cgroup                     | P7A, P9A       |
-| pgx pool size                            | ≤ 20, below Postgres max_connections | P0B config     |
-| SSE concurrent connections per task      | ≤ 2000                               | P6A stress     |
-| SSE file descriptors headroom            | ≥ 25% below ulimit                   | P6A stress     |
-| SSE heartbeat interval                   | 25 s (< CloudFront idle timeout)     | P6A, P9A       |
-| Request body                             | ≤ 256 KB                             | P0B middleware |
-| Resume document total                    | ≤ 512 KB                             | P2A store      |
-| Resume title length                      | ≤ 160 characters                     | P2A DB + store |
-| `lng` tag length                         | ≤ 35 characters                      | P2A DB         |
-| Idempotency record TTL                   | 24 h                                 | P2A store      |
+| Budget                                    | Target                               | Where enforced                            |
+| ----------------------------------------- | ------------------------------------ | ----------------------------------------- |
+| API p95 latency (read, warm)              | ≤ 150 ms                             | P9A synthetic                             |
+| API p95 latency (granular PATCH)          | ≤ 250 ms                             | P9A synthetic                             |
+| Public SSR page p95 (origin, uncached)    | ≤ 400 ms                             | P9A synthetic                             |
+| PDF render wall time                      | ≤ 20 s hard timeout, p95 ≤ 8 s       | P7A                                       |
+| Concurrent renders                        | 1 (v1)                               | P7A                                       |
+| Render queue depth                        | ≤ 8, then 503 + readiness unhealthy  | P7A                                       |
+| Whole server task memory (Go + Chromium)  | ≤ 512 MiB cgroup                     | P7A, P9A                                  |
+| pgx pool size                             | ≤ 20, below Postgres max_connections | P0B config                                |
+| SSE concurrent connections per task       | ≤ 2000                               | P6A stress                                |
+| SSE file descriptors headroom             | ≥ 25% below ulimit                   | P6A stress                                |
+| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)     | P6A, P9A                                  |
+| Request body                              | ≤ 256 KB                             | P0B middleware                            |
+| Global API requests per client IP         | ≤ 300/min                            | P0B middleware                            |
+| In-memory rate-limiter keys               | ≤ 10,000                             | P0B middleware                            |
+| OAuth starts per account and client IP    | ≤ 30/min                             | P1 auth                                   |
+| OAuth cleanup batch                       | ≤ 200 rows/start                     | P1 auth                                   |
+| Resume photo multipart body               | ≤ 2,162,688 bytes                    | P2B route                                 |
+| Resume photo file / normalized object     | ≤ 2,097,152 bytes                    | P2B media                                 |
+| Resume photo source edge / pixels         | ≤ 8,192 px / 16,777,216 pixels       | P2B media                                 |
+| Resume photo normalized edge              | ≤ 2,048 px opaque / 1,024 px alpha   | P2B media                                 |
+| Concurrent photo intake                   | 1 per server task; wait ≤ 1 s        | P2B media                                 |
+| Photo body read / object write            | ≤ 60 s / 5 s hard deadline           | P2B media                                 |
+| Photo normalization                       | ≤ 5 s; synchronous                   | P2B controlled-host gate; P9A launch gate |
+| Photo normalization peak RSS delta        | ≤ 192 MiB                            | P2B controlled-host gate; P9A launch gate |
+| Resume document total                     | ≤ 512 KB                             | P2A store                                 |
+| Resume title length                       | ≤ 160 characters                     | P2A DB + store                            |
+| `lng` tag length                          | ≤ 35 characters                      | P2A DB                                    |
+| Idempotency record TTL                    | 24 h                                 | P2A store                                 |
+| Idempotency cleanup batch                 | ≤ 200 rows/mutation                  | P2B store                                 |
+| Retained idempotency records/account      | ≤ 50,000 after new-key insert        | P2B store                                 |
+| Retained idempotency stored bytes/account | ≤ 1 GiB after new-key insert         | P2B store                                 |
+| Global idempotency expiry sweep           | hourly; 1,000/page; 10,000/run       | P8 privacy                                |
+| Resume reads per account and IP           | ≤ 600/min                            | P2B middleware                            |
+| Resume writes per account and IP          | ≤ 240/min                            | P2B middleware                            |
+| Photo uploads per account and IP          | ≤ 20/h                               | P2B middleware                            |
+| Structure commands per request            | ≤ 100                                | P2B handler                               |
+| Customization deltas per request          | ≤ 100                                | P2B handler                               |
+| Media orphan minimum age                  | ≥ 48 h                               | P8-priv job                               |
+| Media orphan sweep page / run             | 1,000 / 10,000 objects               | P8-priv job                               |
+| Media orphan delete concurrency           | ≤ 4                                  | P8-priv job                               |
 
-**Provenance of the P2A rows.** The 512 KB document total is spec §3. The other
-three are ratified plan decisions, not spec numbers, landed here 2026-08-02 so
-the DDL and the store constant cite one authority instead of forking it: **title
-≤ 160** matches the schema's `maxLength` class for the same kind of short
-display string (`fullName`, `headline`, `jobTitle`) and is enforced twice —
-`resumes_title_length_check` in the database and the store's validation
-pipeline; **`lng` ≤ 35** is the BCP 47 tag ceiling, a length bound only (the tag
-itself is unvalidated — the documented i18n boundary); **idempotency TTL 24 h**
-bounds how long a replayed key returns its stored response, and P2A enforces it
-opportunistically: every `Execute` first commits a reap of the calling user's
-expired rows, even when key reuse or the later mutation is rejected, because
-`response_body` holds user content and a TTL nothing enforces is not a TTL. The
-mutation and its new idempotency record remain atomic in a following
-transaction. Changing any of these numbers follows this file's rule: a reviewed
-commit citing evidence.
+**P2A rationale.** The [data design](../design/data.md#bounds-and-invariants)
+owns the 512 KiB document limit. Title length is enforced in both PostgreSQL and
+the aggregate validator. The `lng` row is the database's coarse stored-length
+bound. The P2B HTTP boundary validates and canonicalizes non-empty BCP 47 tags,
+then rejects a canonical form over 35 characters before persistence; read
+projection maps invalid or overlong legacy data to `und`. The 24-hour
+idempotency lifetime bounds the replay window. Request-path cleanup removes at
+most 200 rows for the caller in deterministic oldest-first order without making
+one request pay for an unbounded backlog. A per-user usage row caps every
+retained record and its stored body and approved deterministic headers, so an
+expired backlog cannot escape the storage bound. The hourly P8 sweep is the
+retention guarantee for inactive users; it deletes at most 10,000 expired rows
+per run in 1,000-row pages and alarms on backlog or age.
+[ADR 0016](../adr/0016-transactional-idempotency.md) owns mutation and
+replay-record atomicity.
 
-## Benchmark protocol (mandatory — a number without this is not a gate)
+**Provenance of the P2B rows.** The photo part remains at exactly 2 MiB; the
+request gets 64 KiB of multipart framing allowance. Header inspection precedes
+full decode. Each source edge is at most 8,192 pixels and the overflow-safe
+pixel product is at most 16,777,216. That admits common 4,032×3,024 photos while
+bounding an eight-byte-per-pixel working image at 128 MiB. One task-wide permit
+and a measured 192 MiB peak-RSS delta keep normalization within the 512 MiB
+whole-task limit. Opaque output is at most 2,048 pixels on its longest edge;
+alpha output is at most 1,024. Both remain at or below 2 MiB after canonical
+encoding.
 
-Added 2026-08-01 after adversarial review: thresholds alone are unenforceable. A
-synthetic run over tiny documents can satisfy every latency target while
-representative documents fail in production. Every target above is measured
-under this protocol, and the evidence is retained with the run.
+The body-read and object-write limits have cancellable I/O boundaries and are
+request deadlines. The in-process image decoders are synchronous and have no
+general cancellation boundary. Five seconds is therefore measured, not a timer
+that returns while a decoder still runs. P2B applies it provisionally to the
+frozen hostile and boundary image corpus on a pinned local controlled-cgroup
+profile. P9A repeats the same corpus on the selected ARM64 Graviton instance and
+512 MiB task cgroup as a launch gate. A request returns only after normalization
+stops and releases the task-wide permit. A failing fixture blocks its phase or
+launch, or requires a reviewed isolated-worker design; it never creates detached
+work.
 
-| Parameter          | Requirement                                                                                                                                                             |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fixture corpus     | Three sizes measured separately: `minimal.json`, `full.json` (typical), and a **worst-case document at the 512 KB bound** with max sections/entries and 16 KB rich text |
-| Hardware / limits  | The **production cgroup and instance class** (ARM64 Graviton), not a developer laptop                                                                                   |
-| Concurrency        | Stated per target; SSE measured with connection **churn**, not just steady state                                                                                        |
-| Warm-up            | Discarded warm-up period before sampling; cold-start measured separately and reported as its own number                                                                 |
-| Duration & samples | Minimum sustained duration and sample count declared per target; single-shot numbers are not accepted                                                                   |
-| Percentile method  | Explicit (e.g. HdrHistogram); **queue time is included** in latency, never excluded                                                                                     |
-| Repeatability      | Repeat runs; a target passes only if it holds across runs, not on a best-of                                                                                             |
-| Evidence           | Raw results retained and linked from the phase's UAT report                                                                                                             |
+Reads at 600/min and writes at 240/min permit several editor tabs above the
+expected one-second autosave cadence without making the limit inert. Photo
+uploads at 20/h contain binary abuse without blocking normal crop and
+replacement work. All three route policies use the account-and-client-IP
+composite key.
 
-**Hard safety limits vs SLOs.** Distinguish them: the 512 MiB cgroup, the render
-timeout, the queue depth, and the pgx pool ceiling are **hard limits** —
-exceeding them is a failure regardless of load. The latency numbers are **SLOs**
-— measured against the corpus above and reviewed, not enforced per request.
+The global API limiter permits 300 requests per client IP each minute and keeps
+at most 10,000 keys. OAuth start adds a 30-per-minute account-and-client-IP
+policy and reaps at most 200 expired transactions per start. Structure and
+customization requests accept at most 100 ordered operations each; the 256 KiB
+transport ceiling remains a separate byte bound.
+
+An orphan object is never public, but retained bytes still need a bound. The
+weekly sweep ignores objects younger than 48 hours, reads at most 1,000 keys per
+page and 10,000 per run, and deletes with concurrency four. It retries each
+object up to three times with capped exponential backoff, exposes backlog and
+failure metrics, and supports dry-run mode. A backlog at the run ceiling alerts
+and continues from a stored cursor on the next run.
+
+## Benchmark protocol
+
+A threshold without a reproducible measurement is not a gate. A synthetic run
+over tiny documents can pass while representative documents fail. Measure each
+applicable target under this protocol and retain the raw evidence.
+
+| Parameter          | Requirement                                                                                                                                                                                                                                              |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixture corpus     | Three sizes measured separately: `minimal.json`, `full.json` (typical), and a **worst-case document at the 512 KB bound** with max sections/entries and 16 KB rich text                                                                                  |
+| Hardware / limits  | P2B pins the local host identity, toolchain, CPU quota, and 512 MiB controlled cgroup for its provisional gate. P9A repeats on the selected production ARM64 Graviton class and task cgroup; an unpinned laptop run is never accepted as launch evidence |
+| Concurrency        | Stated per target; SSE measured with connection **churn**, not just steady state                                                                                                                                                                         |
+| Warm-up            | Discarded warm-up period before sampling; cold-start measured separately and reported as its own number                                                                                                                                                  |
+| Duration & samples | Minimum sustained duration and sample count declared per target; single-shot numbers are not accepted                                                                                                                                                    |
+| Percentile method  | Explicit (e.g. HdrHistogram); **queue time is included** in latency, never excluded                                                                                                                                                                      |
+| Repeatability      | Repeat runs; a target passes only if it holds across runs, not on a best-of                                                                                                                                                                              |
+| Evidence           | Raw results retained and linked from the phase's UAT report                                                                                                                                                                                              |
+
+**Hard safety limits vs measured gates and SLOs.** The 512 MiB cgroup, render
+timeout, queue depth, and pgx pool ceiling are hard runtime limits.
+Normalization's five-second ceiling is a measured P2B provisional gate and P9A
+launch gate because its in-process decoder cannot be killed safely. The latency
+numbers are service-level objectives (SLOs), measured against the corpus above
+and not enforced per request.
 
 **Baseline before freeze.** The riskiest limits (512 MiB whole-task memory with
 Chromium, 2000 SSE connections) are **baselined with a real measurement in P7A

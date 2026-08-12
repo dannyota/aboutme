@@ -1,5 +1,5 @@
-// backfill_test.go is Task 8 Step 3: the live-database proof of the D12 CAS
-// backfill's three outcomes and, above all, of what BackfillLostRace MEANS --
+// backfill_test.go proves the CAS backfill's three outcomes against a live
+// database and, above all, what BackfillLostRace means:
 // a retry signal, never "already done".
 //
 // The interleavings are staged, not raced: BackfillOneForTest (export_test.go)
@@ -44,7 +44,7 @@ func bfSeedOldVersionRow(ctx context.Context, t *testing.T, s *resume.Store, use
 }
 
 // bfProjectedDoc marshals what a reader is served for id right now, so "the
-// backfill changed nothing observable" (D12(i)) can be compared as bytes.
+// backfill changed nothing observable" can be compared as bytes.
 func bfProjectedDoc(ctx context.Context, t *testing.T, s *resume.Store, userID, id uuid.UUID) []byte {
 	t.Helper()
 	got, err := s.Get(ctx, userID, id)
@@ -69,8 +69,8 @@ func bfSchemaVersion(ctx context.Context, t *testing.T, pool *store.Pool, id uui
 
 // --- Applied ---
 
-// TestStore_Integration_BackfillOne_OldVersionRow_Applied is D12's core
-// claim: the row's stored bytes move to the current version while revision
+// TestStore_Integration_BackfillOne_OldVersionRow_Applied proves the row's
+// stored bytes move to the current version while revision
 // and updated_at do not move at all, and -- the assertion that makes
 // "nothing observable changes" more than a claim -- a reader is served
 // byte-identical documents immediately before and immediately after.
@@ -108,7 +108,7 @@ func TestStore_Integration_BackfillOne_OldVersionRow_Applied(t *testing.T) {
 		t.Errorf("personal_details was not rewritten; the backfill persisted nothing new:\n %s", after.PersonalDetails)
 	}
 
-	// D12(i): the projected document a reader is served is byte-identical
+	// The projected document a reader is served is byte-identical
 	// across the backfill. Before, it was converted on the fly; after, it is
 	// read straight from storage.
 	docAfter := bfProjectedDoc(ctx, t, s, userID, created.ID)
@@ -152,7 +152,7 @@ func TestStore_Integration_BackfillOne_AlreadyCurrent_SkippedCurrent(t *testing.
 // --- LostRace: a concurrent autosave in the read/CAS gap ---
 
 // TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace stages the
-// interleaving D12 cares about: the backfill reads (schema_version=vOld,
+// required interleaving: the backfill reads (schema_version=vOld,
 // revision=R), a user's autosave commits R+1, and only then does the CAS run.
 // The CAS matches no row, nothing is written, and the caller is told to
 // re-observe -- not that the row is done.
@@ -206,9 +206,9 @@ func TestStore_Integration_BackfillOne_ConcurrentAutosaveInGap_LostRace(t *testi
 	}
 }
 
-// --- LostRace: B6, a title-only write in the read/CAS gap ---
+// --- LostRace: a title-only write in the read/CAS gap ---
 
-// TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace is B6. A title
+// TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace proves a title
 // write touches `title` and `revision` and never `schema_version`, so the CAS
 // misses on the revision leg alone. This is the case that proves
 // BackfillLostRace cannot be read as "the row became current underneath me":
@@ -265,7 +265,7 @@ func TestStore_Integration_BackfillOne_TitleOnlyWriteInGap_LostRace(t *testing.T
 // TestStore_Integration_BackfillOne_AutosaveAfterBackfill_KeepsRevision is the
 // user-visible consequence of not bumping revision: a client that read the row
 // before the backfill, and saves after it, must NOT be told its revision is
-// stale (P2B's 412). A backfill that bumped revision would 412 every open
+// stale. A backfill that bumped revision would reject every open
 // editor on the migrated row.
 func TestStore_Integration_BackfillOne_AutosaveAfterBackfill_KeepsRevision(t *testing.T) {
 	t.Parallel()

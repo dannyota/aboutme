@@ -1,87 +1,84 @@
 # aboutme
 
-Open-source resume builder and hosted display service. Build a polished resume
-in a live editor, then publish it at a clean, memorable URL —
-`aboutme.vn/your-name` — with first-class SEO and AI-answer-engine (GEO)
-support.
+aboutme is an AGPL-3.0 resume builder and hosted display service. A person can
+build resumes in one account and publish each resume at its own URL. Accounts do
+not have public profile pages.
 
-**Status: Phase 2A (resume domain/store) is in progress.** Phase 0 foundations
-and Phase 1 authentication/session work are merged. The reviewed Phase 2A
-checkpoint through Task 7 is now integrated into `main`; Tasks 2b, 6a/6b, 8–12,
-adversarial suites, and phase gates still remain. Follow the
-[numbered delivery index](docs/plans/implementation-plan.md#numbered-delivery-index)
-for the current checkpoint and next work.
+Status: Phase 2A Tasks 1–11 are on `main`. Task 12 and both phase gates remain.
+Authentication and session management are implemented, but P1.1 still has a
+known settings-page mismatch. Resume HTTP, editing, rendering, publishing, and
+production deployment remain planned. See the
+[delivery index](docs/plans/implementation-plan.md#delivery-index).
 
-The current design authority is
-[`docs/specs/aboutme-design.md`](docs/specs/aboutme-design.md). Its header still
-marks it `DRAFT`; accepted ADRs record decisions that supersede individual
-clauses.
+The intended product and architecture live in the
+[Draft v4 design](docs/design/README.md). It is not yet approved. The
+[current-state architecture](docs/architecture.md) records what exists now.
 
 ## Implemented now
 
-- Versioned resume-schema generation and drift checks, OpenAPI lint/contract
-  tests, Go/Nuxt scaffolds, migration tooling, CI gates, and the podman compose
-  development stack. Generated OpenAPI TypeScript client tooling is a known
-  follow-up before P2B.
-- Google, GitHub, and LinkedIn sign-in; opaque sessions, CSRF protection,
-  device/session management, explicit account linking, and matching Nuxt pages.
-- Health/readiness endpoints, trusted-proxy client-IP handling, rate limiting,
-  security/cache headers, and the Caddy route boundary.
-- Resume tables, schema-derived validation, bounded codec/store operations,
-  revision CAS (compare-and-swap), and transactional idempotency primitives. No
-  resume HTTP route is exposed yet.
+- Google, GitHub, and LinkedIn sign-in; explicit provider linking; opaque
+  sessions; CSRF protection; current-user and session-management APIs.
+- Health and readiness probes, request bounds, security and cache headers,
+  trusted-proxy client-IP handling, and rate limiting.
+- A committed TypeScript API client generated from OpenAPI, with contract and
+  drift checks.
+- Goose-only relational migrations, sqlc data access, immutable resume schema
+  v1, bounded validation, owner-scoped resume store operations, revision
+  compare-and-swap, transactional idempotency, projection, and backfill.
+- Twenty draft template preset JSON files.
 
-Resume CRUD HTTP endpoints, the editor/renderer, publishing, realtime, print,
-cloud infrastructure, and production deployment remain planned work.
+## Planned v1
 
-## Planned v1 highlights
+- A section-based editor with live preview and debounced autosave.
+- Per-resume publishing, PDF control, search indexing control, and clean slug
+  URLs.
+- One Vue renderer for editor preview, public HTML, PDF, and generated images.
+- Server-rendered public pages, structured data, sitemap, markdown resumes, and
+  `llms.txt`.
+- Private, authorization-gated resume photos.
 
-- **Editor** — section-based resumes (work, education, skills, custom …), rich
-  text, deep design customization, templates; instant live preview with
-  debounced autosave.
-- **Publishing** — each resume gets its own URL (`/{slug}`); users stay
-  invisible. Per-resume toggles: public on/off, PDF download, SEO+GEO indexing.
-- **SEO/GEO** — server-side rendering, JSON-LD (`ProfilePage`/`Person`),
-  og-image, sitemap, and a markdown variant (`/{slug}.md`) + `llms.txt` for AI
-  engines.
-- **Auth** — Google / GitHub / LinkedIn sign-in only (no passwords).
-- **PDF** — pixel-identical server render of the same layout engine.
-- **Mobile** — Flutter app planned against the same versioned API.
+Flutter is deferred until after the web service launches.
 
-## Architecture (short version)
+## Repository
 
-Go API + Nuxt (Vue 3) SSR sharing one resume renderer; PostgreSQL with jsonb
-resume documents; SSE for live refresh; headless Chromium for PDF/og-image. See
-[`docs/README.md`](docs/README.md) for the documentation map.
+| Path              | Responsibility                                                                 |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `apps/server`     | Go API, authentication, resume domain/store, and future public and render work |
+| `apps/web`        | Nuxt SSR, authenticated UI, generated API client, and future editor/renderer   |
+| `apps/mobile`     | Deferred Flutter client                                                        |
+| `packages/schema` | Resume JSON Schema, immutable releases, generated types, fixtures, and presets |
+| `deploy`          | Compose deployment and Caddy route table                                       |
+| `docs`            | Design, ADRs, API contract, plans, guides, standards, and runbooks             |
 
-| Directory         | Contents                                                          |
-| ----------------- | ----------------------------------------------------------------- |
-| `apps/server`     | Go API (auth, resumes, publishing, SSE, PDF pipeline)             |
-| `apps/web`        | Nuxt 4 / Vue 3 (editor + public pages + the shared renderer)      |
-| `apps/mobile`     | Flutter app (placeholder)                                         |
-| `packages/schema` | Resume-document JSON Schema → generated Go/TS types (Dart in P11) |
-| `deploy`          | podman compose (dev/self-host); AWS deployment is planned         |
-| `docs`            | Specs, ADRs, API contract, runbooks                               |
+See the [documentation map](docs/README.md) for authority and lifecycle rules.
 
 ## Development
 
-Use the pinned Node version in [`apps/web/.nvmrc`](apps/web/.nvmrc) for root
-docs tooling and the Nuxt app. The server's pinned Go version is declared in
-[`apps/server/go.mod`](apps/server/go.mod). Flutter tooling is deferred with
-P11.
+Use the pinned Node version in [`apps/web/.nvmrc`](apps/web/.nvmrc) and the Go
+version in [`apps/server/go.mod`](apps/server/go.mod).
 
 ```sh
-npm ci            # install doc tooling
-make docs-lint    # lint markdown + formatting
-make docs-fmt     # format + fix + re-lint
+npm ci
+(cd apps/web && npm ci)
+make dev-native
 ```
+
+Open `http://localhost:20080`. The command starts the one shared PostgreSQL
+container and native Go, Nuxt, and Caddy processes. Stop only the native
+processes with `make dev-native-down`.
+
+See the [native development runbook](docs/runbooks/native-development.md) for
+status, logs, ports, and database rules. Run `make check` for the fast local
+gate and `make ci` before handoff.
 
 ## Self-hosting
 
-See the [podman compose self-hosting guide](docs/self-hosting.md). It describes
-the currently runnable slice and its authentication/TLS limitations.
+The current Compose artifact supports local deployment evaluation. It does not
+yet provide the HTTPS/443 path required for authentication UAT or safe public
+exposure. See the [self-hosting guide](docs/guides/self-hosting.md) for its
+exact scope and limits.
 
 ## License
 
-[AGPL-3.0](LICENSE). If you run a modified version of this software as a
-service, you must make your modified source available to its users.
+[AGPL-3.0](LICENSE). A modified version offered as a network service must make
+its corresponding source available to that service's users.

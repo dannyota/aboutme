@@ -129,7 +129,7 @@ func TestLogging_RecordsOnlyFirstWriteHeaderCall(t *testing.T) {
 // wrapper doesn't break streaming responses: composed the same way api.New
 // wires the middleware chain (RequestID -> Logging -> BodyLimit -> handler),
 // a handler using http.ResponseController to flush must actually reach the
-// underlying ResponseWriter. This matters for SSE endpoints (spec §2, §8),
+// underlying ResponseWriter. This matters for SSE endpoints,
 // which flush events through this exact chain.
 func TestLogging_PreservesFlushThroughResponseController(t *testing.T) {
 	t.Parallel()

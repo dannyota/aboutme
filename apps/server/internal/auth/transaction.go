@@ -1,8 +1,5 @@
-// Package auth implements the OAuth transaction core: the short-lived,
-// single-use transaction store that ties an /authorize redirect to its
-// /callback (state, PKCE, nonce), and the __Host-oauth-tx cookie (see
-// cookie.go) that carries its handle between the two. See
-// docs/specs/aboutme-design.md §3.
+// Package auth implements the OAuth and session boundary described in
+// docs/design/security.md.
 package auth
 
 import (
@@ -21,10 +18,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// Provider identifies the external OAuth/OIDC identity provider an OAuth
-// transaction (and, later, an identities row) belongs to. Values match
-// the schema's CHECK (provider IN (...)) on both oauth_transactions and
-// identities exactly.
+// Provider values must match the database checks for transactions and identities.
 type Provider string
 
 // The supported OAuth/OIDC providers.
@@ -45,19 +39,13 @@ const (
 	PurposeReauth Purpose = "reauth"
 )
 
-// oauthTxTTL is how long a transaction remains valid after Begin, and the
-// cookie's Max-Age=600 (see cookie.go's oauthTxCookieMaxAge): the cookie
-// and the database row it points at always expire together.
+// oauthTxTTL also governs the transaction cookie lifetime.
 const oauthTxTTL = 10 * time.Minute
 
-// randomTokenBytes is the size, in raw bytes, of a generated handle,
-// state, or nonce before base64url-encoding: 32 raw bytes yields the
-// 43-character base64.RawURLEncoding string the spec requires.
+// randomTokenBytes gives handles, state, and nonces 256 bits of entropy.
 const randomTokenBytes = 32
 
-// Transaction is the in-flight OAuth transaction Begin creates and
-// Consume later returns: everything the caller needs to build the
-// provider authorize URL (Begin) or complete the callback (Consume).
+// Transaction binds an authorization start to its callback.
 type Transaction struct {
 	Provider      Provider
 	Purpose       Purpose
@@ -68,12 +56,8 @@ type Transaction struct {
 	RedirectURI   string
 }
 
-// ErrTransactionInvalid is returned by Consume for every way a
-// transaction can fail to validate: unknown handle, expired, already
-// consumed, or provider mismatch. These four are deliberately collapsed
-// into one sentinel rather than distinguished -- see Consume's doc
-// comment -- so a caller (and, in turn, an attacker probing a handle)
-// never gets an oracle to learn which of the four actually happened.
+// ErrTransactionInvalid collapses unknown, expired, replayed, and wrong-provider
+// handles into one no-oracle result.
 var ErrTransactionInvalid = errors.New("auth: oauth transaction invalid")
 
 // TransactionStore creates and atomically consumes OAuth transactions
@@ -89,24 +73,13 @@ func NewTransactionStore(q *store.Queries) *TransactionStore {
 	return &TransactionStore{q: q, now: time.Now}
 }
 
-// NewTransactionStoreForTest builds a TransactionStore backed by q that
-// uses now instead of the real wall clock. It exists so tests (which, by
-// this package's own convention, live in the external package
-// auth_test and therefore cannot reach TransactionStore's unexported
-// clock field directly) can exercise Begin/Consume's expiry logic
-// deterministically -- e.g. advancing a fake clock past oauthTxTTL --
-// without a real sleep. Every non-test caller uses NewTransactionStore.
+// NewTransactionStoreForTest injects a clock for deterministic expiry tests.
 func NewTransactionStoreForTest(q *store.Queries, now func() time.Time) *TransactionStore {
 	return &TransactionStore{q: q, now: now}
 }
 
-// Begin creates a transaction row, returning the raw cookie handle (never
-// persisted in cleartext -- only its SHA-256 hash is, in handle_hash) and
-// the Transaction for the caller to build the provider authorize URL
-// from. The handle, state, and nonce are each 32 crypto/rand bytes,
-// base64.RawURLEncoding-encoded; the PKCE verifier comes from the pinned
-// golang.org/x/oauth2's own oauth2.GenerateVerifier(). nonce is left
-// empty for ProviderGitHub, which has no OIDC ID token to bind one to.
+// Begin stores only the handle hash and returns the raw cookie handle. Handle,
+// state, and OIDC nonce are independent random values. GitHub has no nonce.
 func (s *TransactionStore) Begin(ctx context.Context, provider Provider, purpose Purpose, linkingUserID uuid.UUID, redirectURI string) (string, Transaction, error) {
 	handle, err := randomToken()
 	if err != nil {
@@ -153,30 +126,10 @@ func (s *TransactionStore) Begin(ctx context.Context, provider Provider, purpose
 	return handle, transactionFromRow(row), nil
 }
 
-// Consume atomically marks the transaction identified by handle consumed
-// and returns it, or ErrTransactionInvalid. It collapses four distinct
-// failure modes into that one sentinel, deliberately:
-//
-//   - handle unknown (never issued, or from a different database/env)
-//   - the transaction has expired (past oauthTxTTL since Begin)
-//   - the transaction was already consumed (replay)
-//   - expectedProvider != the transaction's own Provider
-//
-// The first three are already indistinguishable at the SQL layer: the
-// underlying UPDATE's WHERE clause (handle_hash = $1 AND consumed_at IS
-// NULL AND expires_at > $2) matches no row for any of them, so pgx
-// reports the same pgx.ErrNoRows regardless of which is true. The fourth
-// -- expectedProvider must equal tx.Provider -- is the RFC 9700 §4.4
-// mix-up defense: a transaction created for one provider must never
-// validate against a different provider's callback endpoint, even though
-// the __Host-oauth-tx cookie is Path=/ and would be sent to any
-// /api/v1/auth/*/callback path. It is checked here in Go, after the row
-// has already been atomically claimed by the UPDATE above -- not before
-// -- so a mismatched-provider attempt still burns the transaction (it
-// can't be retried against the correct provider either), and every
-// failure path returns the exact same error: an attacker probing a
-// handle gets no oracle to distinguish "wrong provider" from "already
-// used" from "never existed".
+// Consume atomically claims one live transaction. Unknown, expired, replayed,
+// and wrong-provider handles return ErrTransactionInvalid. Provider validation
+// runs after the claim, so a mismatch also consumes the transaction and cannot
+// be retried against another callback.
 func (s *TransactionStore) Consume(ctx context.Context, handle string, expectedProvider Provider) (Transaction, error) {
 	now := s.now()
 	row, err := s.q.ConsumeOAuthTransaction(ctx, store.ConsumeOAuthTransactionParams{
@@ -197,9 +150,7 @@ func (s *TransactionStore) Consume(ctx context.Context, handle string, expectedP
 	return transactionFromRow(row), nil
 }
 
-// transactionFromRow converts a store.OAuthTransaction row (the
-// generated, database-shaped type) into this package's own Transaction
-// (the shape callers outside internal/store work with).
+// transactionFromRow converts the database shape to the auth shape.
 func transactionFromRow(row store.OAuthTransaction) Transaction {
 	tx := Transaction{
 		Provider:     Provider(row.Provider),
@@ -217,10 +168,7 @@ func transactionFromRow(row store.OAuthTransaction) Transaction {
 	return tx
 }
 
-// randomToken returns a 43-character base64url (no padding) encoding of
-// randomTokenBytes cryptographically random bytes -- used for the
-// transaction handle, the OAuth state parameter, and the OIDC nonce
-// alike.
+// randomToken returns an unpadded base64url random value.
 func randomToken() (string, error) {
 	b := make([]byte, randomTokenBytes)
 	if _, err := rand.Read(b); err != nil {
@@ -229,11 +177,7 @@ func randomToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// hashHandle returns the SHA-256 hash of handle, the form stored in
-// oauth_transactions.handle_hash: the handle is a bearer credential,
-// hashed at rest exactly like the session token (schema.sql's
-// oauth_transactions comment, design decision 3), so a database read (or
-// leak) never discloses a usable handle.
+// hashHandle returns the at-rest SHA-256 form of the bearer handle.
 func hashHandle(handle string) []byte {
 	sum := sha256.Sum256([]byte(handle))
 	return sum[:]

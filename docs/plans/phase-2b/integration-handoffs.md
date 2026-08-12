@@ -1,28 +1,50 @@
-# Integration handoffs (owner-applied, not worker-applied)
+# Phase 2B integration handoffs
 
-Shared integration files belong to the main session alone. A worker that needs
-one of these changed reports the exact change and stops.
+Shared integration files belong to the integration owner. Workers report the
+exact requested change and stop at that boundary.
 
-| Shared file                     | Needed change                                                                                                                                                                                                                  | When           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| `../budgets.md`                 | **Four new rows, before dispatch** (prerequisite, not a P2B worker edit): photo upload ≤ 2 MiB; resume read limit 600/min; resume write limit 240/min; media upload 20/h — all keyed account+IP, all enforced in P2B (D9, D14) | Before wave 1  |
-| `../budgets.md`                 | Provenance paragraph for those four numbers, in the style of the existing P2A provenance note                                                                                                                                  | Before wave 1  |
-| root `Makefile`                 | `test-s3-up` / `test-s3-down` (pinned MinIO + one-shot bucket, mirroring `test-db-up`); add `./internal/media/...` and `./internal/resumeapi/...` to `server-test-db`; add `REQUIRE_TEST_S3=1` to the gate invocation          | Task 3, Task 4 |
-| `.github/workflows/ci.yml`      | Object-storage service (or the documented standing exception) for the S3 conformance job; keep the OpenAPI drift job green over the new surface                                                                                | Task 3, Task 1 |
-| `scripts/ci.sh`                 | Include the media and resumeapi suites in the local gate of record                                                                                                                                                             | Task 4         |
-| `../traceability/README.md`     | New `AC-MEDIA` prefix row, file link, and corrected totals (12 → 13 prefixes)                                                                                                                                                  | Task 15        |
-| `../implementation-plan.md`     | Phase-status row when the gates pass; strike media/avatar upload from the named traceability gaps                                                                                                                              | Gate           |
-| `../../specs/aboutme-design.md` | Owner decision on the missing `/assets` row in the §2 authoritative route table (open question Q2) — a spec edit or an explicit deferral to P5A/PI                                                                             | Before Task 11 |
-| `docs/api/openapi.yaml`         | Any contract amendment a route task finds necessary lands as a **separate reviewed commit** by the owner, never inside a route task's diff (D1)                                                                                | On demand      |
-| `apps/server/go.mod` / `go.sum` | AWS SDK for Go v2 pin — one exclusive window, Task 3 only                                                                                                                                                                      | Task 3         |
+## Required inputs at dispatch
 
-## Forward handoffs this phase creates
+- Photo and route-rate limits plus orphan-sweep bounds are in
+  [`../budgets.md`](../budgets.md).
+- AC-MEDIA-001…009 and AC-SAVE-005 exist before dispatch.
+- The design chooses private live-gated media and no direct `/assets` route.
+- `Error.details`, the local S3-compatible service, and mutable resume `lng`
+  metadata are adopted plan inputs.
+- P3 passed both gates with v2 current, real v1↔v2 converters, and the Go
+  rich-text sanitizer. P3 renderer tests own context-safe escaping of plain-text
+  fields; P2B preserves those fields as text and sanitizes only schema-declared
+  rich text.
 
-| To phase | Handoff                                                                                                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| P4       | `useApi` must hard-code `server: false` (P1's DD-C9); the autosave retry after a `csrf_rejected` **must reuse the same `Idempotency-Key`** — P2B makes that safe and the contract is written in the kernel's package doc |
-| P4       | The `412` body's `details.document` is the rebase input the editor's conflict path consumes; its shape is fixed by D7                                                                                                    |
-| P5A      | The public photo read path. P2B serves the owner-only route; the public/CDN surface arrives with the public resume page and needs the `/assets` question (Q2) answered first                                             |
-| P5A      | Publish endpoints reuse this phase's kernel verbatim (`If-Match`, idempotency, error vocabulary); `409` is already reserved for slug conflicts                                                                           |
-| PI       | Media configuration is endpoint/credential-only: PI points `MEDIA_*` at real S3 and changes no application code (D10)                                                                                                    |
-| P8-priv  | Account deletion must sweep every `resumes/{resumeID}/` prefix for the deleted user's resumes; P2B's sweep helper is the reusable piece                                                                                  |
+## Shared changes during execution
+
+| File                                    | Change                                                                                                                                                   | Owner / time                              |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Root `Makefile`                         | Add D10's exact `test-s3-up`, `test-s3-down`, and fail-closed `server-test-s3` targets after T3; add `server-test-p2b` and `server-test-p2b-s3` after T4 | Integration owner before each author gate |
+| `.github/workflows/ci.yml`              | Run S3 conformance with the pinned service                                                                                                               | Integration owner after T3                |
+| `scripts/ci.sh`                         | Include media and resume API suites                                                                                                                      | Integration owner after T4                |
+| `docs/api/openapi.yaml`                 | Dedicated correction if a route finds T1's contract wrong                                                                                                | Integration owner on demand               |
+| `apps/web/app/api/generated/openapi.ts` | Regenerate from T1's accepted OpenAPI source                                                                                                             | Integration owner after T1                |
+| `apps/server/go.mod`                    | Exact AWS SDK and image/text dependency source pins                                                                                                      | T3 exclusive source window                |
+| `apps/server/go.sum`                    | Apply the lockfile result from T3's exact module commands                                                                                                | Integration owner after T3                |
+| `../implementation-plan.md`             | Record phase state only after both gates                                                                                                                 | Integration owner at gate                 |
+
+`server-test-p2b` runs, from `apps/server`,
+`REQUIRE_TEST_DB=1 TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} TEST_MEDIA_BACKEND=fs go test ./internal/resumeapi/... -race -count=1 -v`.
+`server-test-p2b-s3` sources only `.dev/test-s3.env`, changes
+`TEST_MEDIA_BACKEND` to `s3`, and runs the same command. `server-test-s3`
+sources that file and runs
+`REQUIRE_TEST_S3=1 go test ./internal/media/... -race -count=1 -v`. All three
+fail when required state is absent. None starts or stops the shared database.
+
+## Forward handoffs
+
+| Phase   | Contract                                                                                 |
+| ------- | ---------------------------------------------------------------------------------------- |
+| P4      | Authenticated fetches are client-only; CSRF retry reuses the same idempotency key        |
+| P4      | `412 details.document` is the editor rebase input                                        |
+| P5A     | `GET /public/resumes/{slug}/photo` applies the same live-state and generic-404 boundary  |
+| P5A     | Publish commands reuse the write-safety kernel and invalidation surface inventory        |
+| P7A     | Chromium rendering and photo intake share the one task-wide heavy-work permit            |
+| PI      | Production points the S3 backend at private S3; it does not add public object routing    |
+| P8-priv | Account deletion removes current references; the bounded job uses `ListPage` for orphans |

@@ -1,20 +1,5 @@
-// Package auth_test's GitHub coverage (task-6-brief.md Step 1): the
-// happy-path login test, and newGitHubStub, its in-process test double for
-// GitHub's REST surface. Unlike Google/LinkedIn (google_test.go,
-// oidctest), GitHub login is plain OAuth2 with no OIDC discovery, no
-// signed ID token, and no nonce (design spec §3, AC-AUTH-003) -- so this
-// stub needs no signing key or JWKS, just three plain JSON endpoints:
-// POST /login/oauth/access_token (token exchange), GET /user (numeric id
-// + login), and GET /user/emails (the array handleGitHubCallback scans
-// for the primary+verified entry). golang.org/x/oauth2's own
-// Exchange/Client code -- the same library the production code uses --
-// runs its real token-exchange and bearer-auth logic against this server,
-// not a hand-rolled stub of oauth2's internals.
-//
-// The adversarial matrix (unverified/no-verified-primary email, the
-// cross-provider mix-up defense, and the static no-OIDC-import check) is a
-// separate, independently authored suite per the phase's review workflow
-// (task-6-brief.md Step 2) and is not duplicated here.
+// Package auth_test exercises GitHub OAuth2 against an in-process token, user,
+// and email API. GitHub has no OIDC token or nonce checks.
 package auth_test
 
 import (
@@ -55,37 +40,19 @@ type gitHubStubConfig struct {
 	userName    string
 	emails      []ghEmail
 
-	// codeChallenge is the PKCE (RFC 7636) S256 code_challenge a real
-	// authorization server would have remembered from the /authorize
-	// request that issued code. Empty (the default) means PKCE is not
-	// enforced for this code -- /login/oauth/access_token accepts an
-	// exchange with no code_verifier at all. It is set post-construction
-	// via SetCodeChallenge, not a gitHubStubOption, because the real
-	// value is only known after /start actually runs (Begin generates
-	// a fresh PKCEVerifier per transaction) -- see
-	// TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge.
+	// codeChallenge is set after /start because Begin generates the verifier.
+	// Empty disables PKCE enforcement for the registered code.
 	codeChallenge string
 
 	// userAPIStatus, when non-zero, makes GET /user respond with this
-	// HTTP status and an empty body instead of a normal stubGitHubUser --
-	// fix round 2 item 2's DD-C10 regression coverage (a provider-side
-	// GitHub REST failure, e.g. GitHub's own /user endpoint returning 500).
+	// HTTP status and an empty body instead of a normal stubGitHubUser.
 	userAPIStatus int
 
 	// emailsAPIMalformedJSON, when true, makes GET /user/emails respond
-	// 200 with a body that is not valid JSON at all -- fix round 2 item
-	// 2's other DD-C10 regression case (a malformed/undecodable response,
-	// as distinct from a bad status code).
+	// 200 with a body that is not valid JSON.
 	emailsAPIMalformedJSON bool
 
-	// userAPIOversizedBody, when true, makes GET /user respond 200 with a
-	// SYNTACTICALLY VALID JSON body deliberately larger than
-	// auth.MaxProviderResponseBytesForTest -- security-relevant cheap-win
-	// regression coverage for githubAPIGet's io.LimitReader cap (github.go):
-	// without that cap, this body decodes successfully (the padding field
-	// is simply ignored, the same as any other unrecognized JSON field);
-	// with it, the read is truncated mid-body and json.Decode fails on the
-	// resulting incomplete JSON.
+	// userAPIOversizedBody emits valid JSON beyond the production response cap.
 	userAPIOversizedBody bool
 }
 
@@ -124,27 +91,22 @@ func withEmails(emails []ghEmail) gitHubStubOption {
 	return func(c *gitHubStubConfig) { c.emails = emails }
 }
 
-// withUserAPIStatus makes GET /user respond with status and an empty body
-// -- fix round 2 item 2's DD-C10 regression coverage: a non-200 from
-// GitHub's own /user endpoint (e.g. a transient 500) must funnel through
+// withUserAPIStatus makes GET /user respond with status and an empty body.
+// A non-200 from GitHub's /user endpoint must funnel through
 // redirectAuthFailed (302 ?error=auth_failed), not writeInternalError's
 // 500, since this is a provider-side failure, not a local one.
 func withUserAPIStatus(status int) gitHubStubOption {
 	return func(c *gitHubStubConfig) { c.userAPIStatus = status }
 }
 
-// withEmailsAPIMalformedJSON makes GET /user/emails respond 200 with a
-// body that fails to decode as JSON at all -- fix round 2 item 2's other
-// DD-C10 regression case: a malformed response is exactly as much a
-// provider-side failure as a bad status code, so it must funnel through
+// withEmailsAPIMalformedJSON makes GET /user/emails return malformed JSON.
+// A malformed response is a provider-side failure, so it must funnel through
 // the same redirectAuthFailed path, not writeInternalError.
 func withEmailsAPIMalformedJSON() gitHubStubOption {
 	return func(c *gitHubStubConfig) { c.emailsAPIMalformedJSON = true }
 }
 
-// withUserAPIOversizedBody makes GET /user respond with a body larger
-// than githubAPIGet's own response-size cap -- see
-// gitHubStubConfig.userAPIOversizedBody's own doc comment.
+// withUserAPIOversizedBody exceeds githubAPIGet's response cap.
 func withUserAPIOversizedBody() gitHubStubOption {
 	return func(c *gitHubStubConfig) { c.userAPIOversizedBody = true }
 }
@@ -205,13 +167,7 @@ type tokenErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// writeTokenError writes a token-endpoint error response as JSON, so
-// golang.org/x/oauth2's own error decoding (doTokenRoundTrip's
-// Content-Type switch) parses it as JSON rather than
-// application/x-www-form-urlencoded -- mirroring oidctest.Provider's own
-// writeTokenError (oidctest.go), whose doc comment explains why a bare
-// http.Error's text/plain Content-Type would silently lose the error
-// code.
+// writeTokenError uses JSON so oauth2 preserves the error code.
 func (gh *gitHubStub) writeTokenError(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -245,12 +201,8 @@ func (gh *gitHubStub) serveToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// PKCE (RFC 7636): a code registered with a code_challenge (via
-	// SetCodeChallenge) requires a matching code_verifier on this exchange
-	// -- mirrors oidctest.Provider.serveToken's own PKCE check
-	// (oidctest.go). Checked after the code lookup above so a PKCE-failed
-	// exchange still consumes the attempt the same way a real
-	// authorization server's behavior would for any failed exchange.
+	// Consume the code before PKCE validation so a failed exchange still
+	// burns the attempt.
 	if cfg.codeChallenge != "" {
 		verifier := r.PostFormValue("code_verifier")
 		if verifier == "" || oauth2.S256ChallengeFromVerifier(verifier) != cfg.codeChallenge {
@@ -270,7 +222,7 @@ func (gh *gitHubStub) serveToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// requireBearerToken reports whether r carries the exact "Authorization:
+// requireBearerToken checks whether r carries the exact "Authorization:
 // Bearer <accessToken>" header golang.org/x/oauth2.Config.Client attaches
 // automatically once Exchange has returned a token -- writing 401 and
 // returning false otherwise, so a /user or /user/emails call made without
@@ -314,9 +266,7 @@ func (gh *gitHubStub) serveUser(w http.ResponseWriter, r *http.Request) {
 	if cfg.userAPIOversizedBody {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		// A syntactically valid JSON object, deliberately larger than
-		// auth.MaxProviderResponseBytesForTest -- see
-		// gitHubStubConfig.userAPIOversizedBody's own doc comment.
+		// Keep the oversized body valid JSON until the read cap.
 		if _, err := w.Write([]byte(`{"id":` + strconv.FormatInt(cfg.userID, 10) + `,"login":"` + cfg.userLogin + `","padding":"`)); err != nil {
 			gh.t.Errorf("github stub: writing oversized user response prefix: %v", err)
 			return
@@ -367,14 +317,7 @@ func (gh *gitHubStub) serveEmails(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// uniqueGitHubUserID returns a collision-proof positive int64 for this
-// test run. github.go stringifies this into
-// identities.provider_user_id, so a fixed literal (unlike this file's
-// deliberately fixed "octocat" login/name, which carries no uniqueness
-// constraint) would silently reuse a row a previous run already created
-// against the same shared TEST_DATABASE_URL (no per-test reset -- see
-// google_adversarial_test.go's uniqueSubject/uniqueEmail doc comment for
-// the established convention this mirrors).
+// uniqueGitHubUserID avoids identity collisions in the persistent test database.
 func uniqueGitHubUserID(t *testing.T) int64 {
 	t.Helper()
 	id := rand.Int64N(1 << 62) //nolint:gosec // test-only row-collision avoidance, not a security-sensitive value
@@ -384,19 +327,9 @@ func uniqueGitHubUserID(t *testing.T) int64 {
 	return id
 }
 
-// TestGitHubCallback_NewUser_UsesVerifiedPrimaryEmail is task-6-brief.md
-// Step 1's required happy-path test: a first-ever GitHub login creates a
-// users row using the ONE email entry that is both primary and verified
-// (never the unverified or the non-primary-but-verified entries also
-// present in the stubbed /user/emails response) and an identities row
-// keyed by the numeric /user id, stringified. It drives /start then
-// /callback exactly as a browser would (capturing the Set-Cookie and
-// state/code_challenge from /start's redirect, then presenting them back
-// to /callback), proving the PKCE send (oauth2.Config.Exchange with
-// oauth2.VerifierOption) the same way google_test.go's own happy-path test
-// does for Google -- github.go's stub doesn't enforce PKCE itself (unlike
-// oidctest, which validates code_challenge/code_verifier), but the
-// exchange still exercises the real client-side send.
+// TestGitHubCallback_NewUser_UsesVerifiedPrimaryEmail proves account creation
+// selects the only email that is both primary and verified. The browser-shaped
+// round trip also exercises the real OAuth2 exchange.
 func TestGitHubCallback_NewUser_UsesVerifiedPrimaryEmail(t *testing.T) {
 	t.Parallel()
 
@@ -489,51 +422,12 @@ func TestGitHubCallback_NewUser_UsesVerifiedPrimaryEmail(t *testing.T) {
 	}
 }
 
-// TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge is fix
-// round 2 item 4's PKCE proof: design spec §3 requires "authorization-code
-// + PKCE S256 even as confidential client" for every provider, GitHub
-// included, but TestGitHubCallback_NewUser_UsesVerifiedPrimaryEmail above
-// never actually EXERCISES that -- its stub (no SetCodeChallenge call)
-// accepts any exchange, code_verifier or not, so it would keep passing
-// even if github.go's Exchange call silently dropped
-// oauth2.VerifierOption(tx.PKCEVerifier) entirely. This test closes that
-// gap: it captures the REAL code_challenge /start generated (exactly the
-// way google_test.go's happy path captures Google's), registers it on the
-// stub via SetCodeChallenge, and only then completes the callback --
-// serveToken (github_test.go) now requires a code_verifier that
-// S256-hashes to this exact code_challenge, so a callback that succeeds
-// here is direct evidence the client actually sent one derived from the
-// same PKCEVerifier Begin generated for this transaction, not merely that
-// oauth2.Config.Exchange was called at all.
-//
-// Regression evidence (fix round 2 item 4's required RED transcript, run
-// against a live TEST_DATABASE_URL): with github.go's Exchange call
-// temporarily changed from
-//
-//	oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
-//
-// to
-//
-//	oauth2Cfg.Exchange(ctx, code)
-//
-// (dropping the PKCE verifier option), running
-//
-//	TEST_DATABASE_URL=postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable \
-//	  go test ./internal/auth/... -run TestGitHubCallback_SendsPKCEVerifier -v -count=1
-//
-// produced:
-//
-//	=== RUN   TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge
-//	    github_test.go:496: callback response missing a non-empty __Host-session cookie -- the token exchange must have failed the stub's PKCE check (no code_verifier sent, or one that doesn't match)
-//	--- FAIL: TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge (0.04s)
-//	FAIL
-//
-// (the callback still redirected 302, per DD-C3/DD-C4's generic
-// rejection contract, but with no session cookie -- github.go's token
-// exchange failed against the stub's now-enforced PKCE check, exactly
-// the failure this test exists to catch). Restoring the VerifierOption
-// call was then re-verified to pass again (see this dispatch's fix
-// report for the exact commands run both ways).
+// TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge proves the
+// confidential-client flow still uses PKCE S256. The ordinary happy-path
+// stub accepts an exchange without a verifier, so this test registers the
+// challenge produced by /start and makes the token endpoint require a
+// verifier whose S256 hash matches it. A successful callback therefore
+// proves the verifier came from the same transaction.
 func TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge(t *testing.T) {
 	t.Parallel()
 
@@ -565,12 +459,8 @@ func TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge(t *testing.T
 		t.Fatal("start response missing __Host-oauth-tx cookie")
 	}
 
-	// Only NOW does the stub require a matching code_verifier: registering
-	// this before /start ran would be impossible (the real code_challenge
-	// doesn't exist yet -- Begin generates a fresh PKCEVerifier per
-	// transaction), and registering it not at all (as the happy-path test
-	// above does) would never force github.go's Exchange call to actually
-	// send one.
+	// Register the generated challenge only after /start so the callback must
+	// send the matching verifier.
 	gh.SetCodeChallenge(codeChallenge)
 
 	cbPath := auth.GitHubCallbackPath + "?code=code-pkce&state=" + url.QueryEscape(state)
@@ -593,16 +483,9 @@ func TestGitHubCallback_SendsPKCEVerifier_MatchesStartCodeChallenge(t *testing.T
 	}
 }
 
-// ==== fix round 2 item 2: DD-C10 (provider-side GitHub REST failures) ====
+// ==== Provider-side GitHub REST failures ====
 
-// beginGitHubFlow drives GET auth.GitHubStartPath (via the shared doGet)
-// and returns the __Host-oauth-tx cookie it set and the state query
-// param -- no nonce (GitHub has no ID token; see transaction.go's Begin,
-// which leaves Transaction.Nonce empty for ProviderGitHub). Mirrors
-// google_adversarial_test.go's beginGoogle for the Google flow; factored
-// out here because the two DD-C10 tests below both need it and
-// duplicating it a third time (on top of the two happy-path tests above,
-// which predate this helper and are left as-is) was no longer worth it.
+// beginGitHubFlow returns the transaction cookie and state. GitHub has no nonce.
 func beginGitHubFlow(t *testing.T, handler http.Handler) (txCookie *http.Cookie, state string) {
 	t.Helper()
 
@@ -637,14 +520,8 @@ func doGitHubCallback(t *testing.T, handler http.Handler, code, state string, co
 	return doGet(t, handler, path, cookies...) //nolint:bodyclose // doGet (handlers_test.go) closes the body itself before returning.
 }
 
-// assertGitHubRejectedAuthFailed asserts the DD-C3/DD-C4 shape every
-// /callback rejection must have (mirrors google_adversarial_test.go's
-// assertRejected, narrowed to the one error code both DD-C10 tests below
-// produce): a 302 redirect to the login page with ?error=auth_failed
-// (never a raw JSON error or a 200), the __Host-oauth-tx cookie cleared,
-// and no __Host-session cookie -- proving a provider-side GitHub REST
-// failure is treated as an ordinary rejected login, never an internal
-// server error the visitor can do nothing about.
+// assertGitHubRejectedAuthFailed checks the redirect, generic code, cleared
+// transaction cookie, and absent session cookie.
 func assertGitHubRejectedAuthFailed(t *testing.T, resp *http.Response) {
 	t.Helper()
 
@@ -666,13 +543,8 @@ func assertGitHubRejectedAuthFailed(t *testing.T, resp *http.Response) {
 	}
 }
 
-// TestGitHubCallback_UserAPINon200_RedirectsAuthFailed is fix round 2
-// item 2's first required DD-C10 case: GitHub's own GET /user endpoint
-// returning a non-200 status (a transient 500, here) is a provider-side
-// failure -- GitHub being briefly unavailable or erroring is an ordinary,
-// retryable condition, not a defect in this server -- so it must funnel
-// through redirectAuthFailed (302 ?error=auth_failed), never
-// writeInternalError's 500.
+// TestGitHubCallback_UserAPINon200_RedirectsAuthFailed treats a transient
+// provider status as an opaque login rejection, not a local 500.
 func TestGitHubCallback_UserAPINon200_RedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
@@ -688,8 +560,8 @@ func TestGitHubCallback_UserAPINon200_RedirectsAuthFailed(t *testing.T) {
 	assertGitHubRejectedAuthFailed(t, resp)
 }
 
-// TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed is fix
-// round 2 item 2's second required DD-C10 case: GitHub's GET
+// TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed proves
+// GitHub's GET
 // /user/emails responding 200 with a body that isn't valid JSON at all
 // (a malformed/undecodable response, distinct from a bad status code) is
 // equally a provider-side failure, and must funnel through the same
@@ -712,16 +584,8 @@ func TestGitHubCallback_EmailsAPIMalformedJSON_RedirectsAuthFailed(t *testing.T)
 	assertGitHubRejectedAuthFailed(t, resp)
 }
 
-// TestGitHubCallback_UserAPIOversizedBody_RedirectsAuthFailed is
-// security-relevant cheap-win regression coverage: githubAPIGet
-// (github.go) now wraps the response body it decodes in
-// io.LimitReader(maxProviderResponseBytes) before handing it to
-// json.Decode, so an oversized GET /user response is truncated mid-body
-// rather than read into memory unbounded. The truncated body is no longer
-// valid JSON, so this decode failure funnels through the exact same
-// provider-side-failure path (redirectAuthFailed, DD-C10) as a non-200
-// status or a malformed body already do above -- it is not a new failure
-// class, just a new way to reach the existing one.
+// TestGitHubCallback_UserAPIOversizedBody_RedirectsAuthFailed proves the
+// response-size cap turns oversized valid JSON into an opaque provider failure.
 func TestGitHubCallback_UserAPIOversizedBody_RedirectsAuthFailed(t *testing.T) {
 	t.Parallel()
 
@@ -740,33 +604,15 @@ func TestGitHubCallback_UserAPIOversizedBody_RedirectsAuthFailed(t *testing.T) {
 	assertGitHubRejectedAuthFailed(t, resp)
 }
 
-// ==== fix round 2 item 5: log attribution ====
+// ==== Log attribution ====
 
-// TestGitHubCallback_RejectionLogsProviderAttribute mirrors
-// TestGoogleCallback_RejectionLogsProviderAttribute (handlers_test.go):
-// proves logRejection's output identifies GitHub, specifically, as the
-// provider whose callback was rejected -- the shared funnel
-// (redirectWithError/redirectAuthFailed) is reused by every provider
-// Service registers, so its log message is deliberately provider-neutral
-// ("auth: callback rejected"), and the "provider" attribute is the only
-// thing that still lets an operator filter or correlate by provider in a
-// multi-provider log stream. This is also the only test in this package
-// that can catch a specific, easy-to-make mistake: passing the WRONG
-// Provider constant (e.g. ProviderGoogle) into one of GitHub's own
-// redirectWithError/redirectAuthFailed/writeInternalError call sites --
-// every other GitHub test in this file asserts on status code and cookie
-// shape, which are IDENTICAL regardless of which Provider constant was
-// logged, so only a log assertion like this one discriminates a swapped
-// constant (the same reasoning LinkedIn's own equivalent test documents).
+// TestGitHubCallback_RejectionLogsProviderAttribute catches a wrong provider
+// constant at GitHub's shared rejection funnel.
 func TestGitHubCallback_RejectionLogsProviderAttribute(t *testing.T) {
 	t.Parallel()
 
 	logger, logBuf := newCapturingLogger()
-	// This request never reaches a real GitHub call (it's rejected at the
-	// missing-tx-cookie check, the very first line of handleGitHubCallback),
-	// so any non-empty override satisfies newTestService's guard --
-	// auth.UnroutableTestSentinel documents that explicitly rather than a
-	// bare, unexplained literal.
+	// Missing transaction state rejects before provider I/O.
 	handler, _ := newTestService(t, withGitHubEndpoint(auth.UnroutableTestSentinel), withLogger(logger))
 
 	resp := doGet(t, handler, auth.GitHubCallbackPath+"?code=whatever&state=whatever") //nolint:bodyclose // doGet closes the body itself before returning.

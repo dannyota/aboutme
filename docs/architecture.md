@@ -1,57 +1,89 @@
-# Architecture (current state)
+# Current-state architecture
 
-> Living document: describes what is **implemented on `main` now**. Intended
-> product architecture lives in
-> [`specs/aboutme-design.md`](specs/aboutme-design.md); execution status lives
-> in the
-> [numbered delivery index](plans/implementation-plan.md#numbered-delivery-index).
+This document describes the repository at `main` commit `9edca31`, verified on
+2026-08-12. The [design](design/README.md) owns intended behavior. The
+[roadmap](plans/implementation-plan.md) owns delivery state and gates.
 
-## Implemented on `main`
-
-Phase 0 foundations, Phase 1 authentication/sessions, and the reviewed Phase 2A
-checkpoint through Task 7 are on `main`:
-
-- Caddy fronts one local origin and routes the Nuxt SSR app and Go API. The
-  podman compose stack includes PostgreSQL and a fail-closed one-shot migration
-  service.
-- The Go service exposes `/healthz`, `/readyz`, the three provider OAuth flows,
-  `/api/v1/me`, logout, session listing, per-session revoke, and
-  logout-everywhere. Request bounds, cache/security headers, CSRF, trusted-proxy
-  client-IP handling, and rate limiting wrap the routes.
-- PostgreSQL stores users, identities, OAuth transactions, opaque sessions,
-  resumes, slug tombstones, and idempotency records. Declarative SQL, sqlc
-  output, and append-only goose migrations are guarded by live-database drift
-  and migration tests.
-- The resume domain validates schema and aggregate bounds, preserves ownership
-  boundaries, enforces the three-resume cap, performs revision CAS
-  (compare-and-swap), and serializes idempotent mutations transactionally. It
-  has no HTTP surface yet.
-- Nuxt serves the landing/login pages and session settings UI. Resume-schema
-  generation, OpenAPI lint/conformance tests, linting, typechecking,
-  vulnerability scanning, and builds are wired into CI. Generated OpenAPI
-  TypeScript client tooling is not implemented yet and is queued before P2B.
+## Running system
 
 ```mermaid
 graph LR
     B[Browser] --> C[Caddy]
-    C --> N[Nuxt SSR]
+    C --> W[Nuxt SSR]
     C --> G[Go API]
     G --> P[(PostgreSQL)]
-    G --> O[Google / GitHub / LinkedIn]
+    G --> O[Google, GitHub, and LinkedIn]
 ```
 
-## Active Phase 2A remainder
+| Component  | Implemented responsibility                                                                   |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go        |
+| Go server  | Health, authentication, sessions, users, resume domain/store primitives, and request policy  |
+| Nuxt       | Landing and login pages, authenticated user state, session settings, and typed API transport |
+| PostgreSQL | Auth records, sessions, users, resume aggregates, slug tombstones, and idempotency records   |
 
-Tasks 1–7 and their corrective reviews are integrated. Immutable v1 schema and
-bidirectional wire compatibility (Task 2b/8), the cleared-contact proof, the
-mechanical generated-write restriction, blind suites, traceability closure, and
-all phase gates remain. This checkpoint makes the data-layer primitives
-available for continued development; it does not mark P2A complete or unlock
-P2B.
+Daily development runs Go, Nuxt, and Caddy as native processes at
+`http://localhost:20080`. They use the `aboutme_dev` database in the one shared
+`aboutme-test-db` container. See the
+[native development runbook](runbooks/native-development.md).
 
-## Not implemented yet
+The Compose deployment has four long-lived containers plus a one-shot migration
+container. PostgreSQL is not published to the host. Caddy is the only published
+service. The current Compose Caddyfile serves HTTP; this is suitable for
+deployment smoke checks but does not yet satisfy the P9 HTTPS-on-443 UAT
+contract.
 
-Resume HTTP endpoints and media (P2B), the renderer/sanitizer/templates (P3),
-the editor (P4), publish/public surfaces (P5), SSE (P6), print/og-image (P7),
-privacy jobs (P8), AWS infrastructure (PI), staging/production deployment, and
-Flutter remain future phases.
+## Implemented HTTP surface
+
+The [OpenAPI document](api/openapi.yaml) is the exact HTTP authority. The
+implemented surface includes:
+
+- `GET` and `HEAD` health and readiness probes;
+- Google and LinkedIn OpenID Connect plus GitHub OAuth login;
+- authenticated, CSRF-protected provider link and reauthentication starts;
+- current-user lookup, logout, session listing, per-session revoke, and
+  logout-everywhere;
+- JSON envelopes, request IDs, body bounds, security and cache headers,
+  trusted-proxy client-IP handling, and rate limiting.
+
+The committed TypeScript API types are generated from OpenAPI. The web client
+uses those types through `openapi-fetch`, and `make api-check` detects drift.
+
+Resume HTTP routes are not implemented.
+
+## Implemented resume data layer
+
+Phase 2A Tasks 1–11 are present, but Task 12 and both phase gates remain. The
+landed slice provides:
+
+- immutable resume schema v1 and released-version registries;
+- hand-written, append-only goose migrations as the sole relational schema
+  source;
+- sqlc-generated data access from those migrations and `sql/queries.sql`;
+- schema-derived bounds, aggregate validation, and a bounded codec;
+- owner-scoped CRUD primitives, a three-resume cap, revision compare-and-swap,
+  and transactional idempotency;
+- pure document projection, compare-and-swap backfill, independent write and
+  migration suites, and a bounds completeness guard.
+
+Twenty template preset JSON files are committed. Their design contract remains
+draft, and the renderer, sanitizer, and licensed font assets have not landed.
+
+## Known contract defects
+
+- The settings page starts provider linking and reauthentication with GET links.
+  The server and OpenAPI require authenticated CSRF-protected POST, then
+  navigation to the returned authorization URL. P1.1 remains open.
+- `GET /me` currently inherits identity order from SQL ordered only by
+  `created_at`. The settings page uses the first identity as its default
+  reauthentication provider, so P1.1 must add the `id` tiebreaker required by
+  the design.
+- The current Compose route serves HTTP. P9 requires the complete image-based
+  deployment at an HTTPS origin on port 443. The UAT harness must close this gap
+  before acceptance can run.
+
+## Not implemented
+
+Resume HTTP and media, sanitizing and rendering, the editor, public publishing,
+Server-Sent Events, PDF and image rendering, privacy jobs, production
+infrastructure, staging, production deployment, and Flutter remain planned.

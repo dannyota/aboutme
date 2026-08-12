@@ -69,13 +69,7 @@ function hasErrorCode(error: unknown, code: string): boolean {
 }
 
 export function useAuth(): UseAuthReturn {
-  // DD-C9: authenticated `/api/v1` fetches must not run during SSR — Nitro
-  // has no proxy and no browser cookies at that point, so an SSR-time
-  // attempt resolves against the wrong (unauthenticated) target, and
-  // Nuxt's hydration guard then treats that bad result as authoritative
-  // and never refetches, leaving the page permanently empty on a hard
-  // load. `server: false` defers the real fetch to the client, where the
-  // cookie and the Caddy proxy both exist.
+  // Authenticated reads wait for the browser, where the cookie and proxy exist.
   const { data, refresh: refreshMe } = useFetch<MeEnvelope>(
     '/api/v1/me',
     { credentials: 'include', server: false },
@@ -92,19 +86,8 @@ export function useAuth(): UseAuthReturn {
     await refreshMe();
   }
 
-  /**
-   * Every CSRF-protected mutating call goes through here rather than a
-   * bare `$fetch`.
-   *
-   * CSRF×rotation (owner ruling): a session's token rotates after 24h,
-   * and the rotating response carries both the new cookie and a fresh
-   * CSRF secret — so a client still holding the pre-rotation token gets
-   * `403 csrf_rejected` on its very next mutation, once a day, through no
-   * fault of its own. Refetching `/me` picks up the new secret in one
-   * round trip, so this refetches once and retries once; a *second*
-   * `csrf_rejected` (a genuinely forged/expired request, not rotation)
-   * surfaces to the caller instead of retrying forever.
-   */
+  // Rotation can invalidate the cached CSRF token. Refresh and retry once;
+  // surface a second rejection so forged or expired requests cannot loop.
   async function mutate<T = void>(
     url: string,
     options: MutateOptions,

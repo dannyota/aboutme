@@ -12,13 +12,21 @@ only — D13) for the integration owner (owner-serialized).
       validation CNAMEs, `staging` CNAME/alias → CloudFront domain. Production
       names render from the same code path with production outputs (parity).
 - [ ] Implement with `--check` (diff live DNS vs outputs, exit nonzero on drift
-      — this becomes a P9A/P10 pre-flight) and `--apply` modes; `cf` CLI v0.5+
-      per CLAUDE.md; never a Cloudflare Terraform provider (D19). Grey-cloud
-      enforced on every record the script manages.
-- [ ] Document ordering in the script header: secrets-bootstrap → terraform
-      apply (cert pending validation) → `dns-apply.sh --apply` (validation
-      records) → ACM issues → CloudFront deploys. This ordering note **is** the
-      executable answer to the cert-vs-DNS chicken-and-egg.
+      — this becomes a P9A/P10 pre-flight) and two apply stages; `cf` CLI v0.5+
+      per D19; never a Cloudflare Terraform provider. `--apply-foundation`
+      writes only the DNS-only origin A record and ACM validation CNAMEs.
+      `--apply-aliases` writes apex/staging and canonical redirect aliases only
+      after Terraform outputs a deployed distribution domain. Grey-cloud is
+      enforced on every record.
+- [ ] Document and test the two Terraform stages in the script header. The
+      foundation saved plan has `services_enabled=false` and
+      `distribution_enabled=false`, but creates the EIP, persistent data plane,
+      and ACM certificate and outputs validation records. Apply it, run
+      `--apply-foundation`, and wait until ACM is `ISSUED`. Only then create and
+      approve a **new** full saved plan with `distribution_enabled=true`; after
+      apply, run `--apply-aliases`. CloudFront is never planned against a
+      pending certificate, and no alias points at a missing distribution. Task
+      14 and the production promotion use this same staged contract.
 
 **Verification:** script harness green in CI (no network); shellcheck.
 Real-AWS/Cloudflare execution happens in Task 14 (stated).

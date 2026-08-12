@@ -1,33 +1,51 @@
-# apps/web
+# Nuxt web app
 
-Nuxt 4 / Vue 3 — editor SPA, SSR public pages, and (later) the single shared
-resume renderer (`components/resume/`). Layout and responsibilities: spec
-§5/§7 ([`docs/specs/aboutme-design.md`](../../docs/specs/aboutme-design.md)).
+`apps/web` is a self-contained Nuxt 4 and Vue 3 package. It is not part of an
+npm workspace. Intended UI and renderer boundaries live in the
+[web design](../../docs/design/web.md).
 
-Self-contained npm package — not part of a workspaces setup. Run all commands
-from this directory.
+## Implemented surface
 
-## Scripts
+- Server-rendered landing and login pages.
+- Client-side authenticated user state.
+- Session and device settings with CSRF-aware mutations.
+- A committed TypeScript API client generated from
+  [`docs/api/openapi.yaml`](../../docs/api/openapi.yaml).
 
-| Command              | Purpose                                    |
-| -------------------- | ------------------------------------------ |
-| `npm run dev`        | Dev server on port 3000                    |
-| `npm run build`      | Production build                           |
-| `npm run lint`       | ESLint (Google TypeScript style)           |
-| `npm run typecheck`  | `vue-tsc --noEmit`                         |
-| `npm run test`       | Vitest (component tests, Nuxt environment) |
+The settings page still uses GET links to start provider linking and
+reauthentication. The implemented server contract requires authenticated POST,
+then navigation to the returned authorization URL. This P1.1 defect remains
+open.
 
-## Runtime config
+The editor, public resume pages, sanitizer, and shared resume renderer have not
+landed.
 
-`NUXT_PUBLIC_API_BASE` — Go API base path, defaults to `/api/v1` (same-origin;
-Caddy routes `/api/v1/*` to the server — see spec §2 route table).
+## API client
 
-## Status
+`app/api/generated/openapi.ts` is generated and must not be hand-edited.
+`app/api/client.ts` is the typed `openapi-fetch` transport. Regenerate and check
+the client from the repository root:
 
-Phase 0/1 slice: SSR landing page (`/`), provider login page (`/login`),
-client-only authenticated `/me` state, and session/device settings at
-`/app/settings/sessions` with CSRF-aware mutations. ESLint, typecheck, Vitest,
-and the production build are CI gates.
+```sh
+make api-gen
+make api-check
+```
 
-The editor, public resume pages, and isolated `components/resume/` renderer
-arrive in later phases.
+## Commands
+
+Run package commands from this directory:
+
+- `npm run dev`: start Nuxt on its default development port.
+- `npm run build`: build the production application.
+- `npm run lint`: run ESLint.
+- `npm run typecheck`: run `vue-tsc --build --noEmit`.
+- `npm run test`: run Vitest.
+- `npm run api:gen`: regenerate the committed OpenAPI types.
+- `npm run api:drift`: check generated types without changing the tree.
+
+Daily full-stack development uses `make dev-native`, which runs Nuxt on port
+`20030` behind Caddy at `http://localhost:20080`. See the
+[native development runbook](../../docs/runbooks/native-development.md).
+
+`NUXT_PUBLIC_API_BASE` defaults to `/api/v1`. Browser calls stay on the Caddy
+origin.

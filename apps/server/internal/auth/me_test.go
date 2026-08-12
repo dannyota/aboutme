@@ -1,21 +1,6 @@
-// Package auth_test exercises GET /api/v1/me (task-9-brief.md Step 1):
-// the envelope shape, the CSRF-token-in-body-only contract, and
-// RequireSession's own success/failure/rotation behavior as GET /me
-// exercises it. These tests run against a live Postgres database (spec
-// §9), reusing this package's existing live-DB harness (newTestQueries/
-// createTestUser, transaction_test.go) instead of duplicating it.
-//
-// Unlike handlers_test.go's newTestService (which requires an OAuth
-// provider endpoint override), the helpers here build a bare Service via
-// auth.NewService directly: none of GET /me, POST /auth/logout, GET/
-// DELETE /sessions, or DELETE /sessions/{id} ever drives an OAuth route,
-// and a session for these tests is minted directly via
-// auth.NewSessionManager(q).Issue -- the exact same underlying database
-// the test HTTP handler's own RequireSession/Authenticate reads from, so
-// it authenticates through the real chain exactly like a session issued
-// by a genuine OAuth login would. sessions_handlers_test.go (same
-// package) reuses every helper defined in this file rather than
-// duplicating them.
+// Package auth_test exercises GET /api/v1/me and shared session API helpers
+// against live Postgres. Tests issue sessions directly, then use the real HTTP
+// middleware chain.
 package auth_test
 
 import (
@@ -36,11 +21,8 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-// newSessionAPITestService builds a bare Service (auth.NewService, not
-// handlers_test.go's NewServiceForTest) wrapped in the same api.New
-// router wiring cmd/server/main.go uses, for Task 9's session-
-// authenticated JSON API tests. No OAuth provider endpoint override is
-// required or accepted here -- see this file's own package doc comment.
+// newSessionAPITestService builds the production router without OAuth test
+// endpoints because these tests drive only session APIs.
 func newSessionAPITestService(t *testing.T) (http.Handler, *store.Queries) {
 	t.Helper()
 
@@ -53,10 +35,7 @@ func newSessionAPITestService(t *testing.T) (http.Handler, *store.Queries) {
 	return handler, q
 }
 
-// issueTestSession mints a real session for userID directly against q,
-// bypassing the OAuth login round trip entirely -- see this file's own
-// package doc comment for why that's still a faithful test of the real
-// RequireSession/Authenticate path.
+// issueTestSession mints a row used by the real RequireSession path.
 func issueTestSession(t *testing.T, q *store.Queries, userID uuid.UUID) (raw string, sess store.Session) {
 	t.Helper()
 
@@ -74,12 +53,8 @@ func sessionRequestCookie(raw string) *http.Cookie {
 	return requestCookie(auth.SessionCookieName, raw)
 }
 
-// doJSON issues a method request for path against handler, with an
-// optional Origin header, X-CSRF-Token header, body, and cookies --
-// covering every request shape Task 9's tests need across GET/POST/
-// DELETE. origin/csrfToken are skipped when empty, so a GET-only caller
-// can omit both. The response body is readable after return (see
-// handlers_test.go's doGet for why closing here doesn't prevent that).
+// doJSON sends a request with optional Origin, CSRF token, body, and cookies.
+// The recorder body remains readable after Close.
 func doJSON(t *testing.T, handler http.Handler, method, path, origin, csrfToken string, body string, cookies ...*http.Cookie) *http.Response {
 	t.Helper()
 
@@ -148,8 +123,8 @@ func decodeErrorCode(t *testing.T, resp *http.Response) string {
 
 // ---- happy path -----------------------------------------------------------
 
-// TestGetMe_ReturnsUserCSRFTokenAndIdentitiesEnvelope is task-9-brief.md
-// Step 1's core assertion: the full envelope shape
+// TestGetMe_ReturnsUserCSRFTokenAndIdentitiesEnvelope pins the full envelope
+// shape
 // {data:{user:{id,email,name,avatarKey}, csrfToken, identities:[{provider}]}},
 // with the user fields matching the caller's own row, csrfToken decoding
 // (base64.RawURLEncoding) to exactly the session's own csrf_secret, and
@@ -246,16 +221,10 @@ func TestGetMe_AvatarKeyNull_SerializesAsJSONNull(t *testing.T) {
 	}
 }
 
-// ---- CSRF-token-in-body-only (Step 1's explicit regression assertion) -----
+// ---- CSRF token appears only in the response body -------------------------
 
-// TestGetMe_CSRFTokenOnlyInResponseBody is Step 1's own explicit
-// requirement: csrfToken must be present in the body and absent from
-// every response header and from any Set-Cookie -- a direct regression
-// test for design spec §3's "never cookie/URL/log" CSRF rule. (A
-// separately, independently authored adversarial test covers this same
-// property under its own name -- task-9-brief.md Step 3, out of this
-// task's scope -- this is Step 1's own required assertion, not a
-// duplicate of that one.)
+// TestGetMe_CSRFTokenOnlyInResponseBody proves the token never enters response
+// headers or cookies.
 func TestGetMe_CSRFTokenOnlyInResponseBody(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -336,10 +305,7 @@ func TestGetMe_InvalidSessionToken_Returns401AndClearsCookie(t *testing.T) {
 	}
 }
 
-// TestGetMe_WrongMethod_Returns405 proves the route itself enforces GET
-// only (handlers.go's local route() helper, exact-match per DD-C8 --
-// see handlers_test.go's TestService_RegisterRoutes_WrongMethod_Returns405
-// for the same convention applied to the OAuth routes).
+// TestGetMe_WrongMethod_Returns405 proves the route accepts only exact GET.
 func TestGetMe_WrongMethod_Returns405(t *testing.T) {
 	handler, _ := newSessionAPITestService(t)
 
@@ -351,7 +317,7 @@ func TestGetMe_WrongMethod_Returns405(t *testing.T) {
 
 // TestGetMe_RotatesSessionOnAuthenticate_SetsNewCookie proves
 // RequireSession forwards Authenticate's rotation outcome onto the
-// response: a session past task-7-brief.md's 24h rotation age must still
+// response: a session past the 24-hour rotation age must still
 // authenticate GET /me successfully AND carry a new __Host-session
 // Set-Cookie for the rotated successor -- exercised through the real HTTP
 // chain, not SessionManager directly (session_test.go/

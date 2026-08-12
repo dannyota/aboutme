@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "description": "Shared XSS payload corpus (design spec §5 sanitizer contract) that bluemonday (write-path) and DOMPurify (client-render-path) are both conformance-tested against, alongside packages/schema/validation/sanitizer-allowlist.v1.json. Every payload here MUST come out with its attack surface neutralized (dangerous element/attribute/scheme stripped, safe text content preserved where applicable) from both sanitizers. Categories cover, at minimum, the reviewer-verified hole (design spec §5 / phase-gate review): javascript: URLs, data: URLs, vbscript: URLs, file: URLs, protocol-relative URLs, mixed-case/whitespace-obfuscated scheme variants, inline event-handler attributes, and the mandated rel=\"noopener noreferrer\" hardening on every emitted <a> (phase-gate review finding I2: test/sanitizer-corpus.test.ts's \"every forbidden scheme has a corpus payload\" test derives its scheme list from sanitizer-allowlist.v1.json's forbidden.urlSchemes, so this corpus cannot silently drift behind that allowlist again).",
+  "description": "Shared hostile rich-text corpus for Go write-sanitizer and browser client-sanitizer conformance. Every case must neutralize dangerous tags, attributes, and URL schemes while preserving safe text when applicable. Coverage tests derive required forbidden tags and schemes from sanitizer-allowlist.v1.json. Emitted links must receive rel=\"noopener noreferrer\". See docs/design/security.md.",
   "payloads": [
     {
       "id": "js-scheme-bare",
       "category": "javascript-scheme",
       "payload": "javascript:alert(1)",
-      "description": "Bare javascript: URL — the reviewer's original proof-of-concept, verified to pass resume.schema.json:39's old unrestricted format:uri check."
+      "description": "Bare javascript: URL exercises direct scheme rejection."
     },
     {
       "id": "js-scheme-in-anchor-href",
@@ -60,19 +60,19 @@
       "id": "vbscript-scheme-in-anchor-href",
       "category": "vbscript-scheme",
       "payload": "<a href=\"vbscript:msgbox(1)\">click me</a>",
-      "description": "vbscript: URL — sanitizer-allowlist.v1.json:27's forbidden.urlSchemes names this explicitly (legacy IE scheme; still worth rejecting since a sanitizer configured only against javascript:/data: would otherwise pass it through)."
+      "description": "Legacy vbscript: URL. It catches a sanitizer that rejects only javascript: and data:."
     },
     {
       "id": "file-scheme-in-anchor-href",
       "category": "file-scheme",
       "payload": "<a href=\"file:///etc/passwd\">click me</a>",
-      "description": "file: URL — sanitizer-allowlist.v1.json:27's forbidden.urlSchemes names this explicitly. Not an XSS vector in a browser context, but a local-file-disclosure vector if a sanitizer's URL-scheme allowlist is misconfigured with AllowURLSchemes(\"https\",\"mailto\",\"tel\",\"file\") — exactly the failure mode phase-gate review finding I2 flagged as unguarded by this corpus."
+      "description": "file: URL exercises the local-file disclosure boundary. It catches an allowlist that admits file alongside https, mailto, and tel."
     },
     {
       "id": "rel-hardening-target-blank-missing-rel",
       "category": "rel-hardening",
       "payload": "<a href=\"https://example.com\" target=\"_blank\">click me</a>",
-      "description": "An otherwise-fully-allowed https: link with target=\"_blank\" and no rel at all. sanitizer-allowlist.v1.json's linkHardening mandates rel=\"noopener noreferrer\" on every emitted <a> regardless of what (if anything) the source HTML specified — a sanitizer that passes this payload through without ADDING that rel value fails conformance (design spec §5: target=\"_blank\" without noopener lets the opened page's window.opener navigate the referrer, a reverse-tabnabbing vector)."
+      "description": "Allowed https: link with target=\"_blank\" and no rel. The sanitizer must add rel=\"noopener noreferrer\" to prevent opener access and referrer disclosure."
     },
     {
       "id": "rel-hardening-target-blank-weak-rel",
@@ -102,7 +102,7 @@
       "id": "event-handler-svg-onload",
       "category": "event-handler-attribute",
       "payload": "<svg onload=\"alert(1)\"></svg>",
-      "description": "SVG onload payload; <svg> is explicitly forbidden outright (design spec §5), and onload is an event-handler attribute regardless."
+      "description": "SVG onload payload. Both the <svg> tag and onload event attribute are forbidden."
     },
     {
       "id": "event-handler-anchor-onclick",
@@ -114,7 +114,7 @@
       "id": "iframe-js-src",
       "category": "forbidden-tag",
       "payload": "<iframe src=\"javascript:alert(1)\"></iframe>",
-      "description": "<iframe> is forbidden outright (design spec §5: no iframes) independent of its src scheme; this payload doubles up forbidden-tag and javascript-scheme."
+      "description": "The forbidden <iframe> tag carries a javascript: source, exercising both tag and scheme rejection."
     },
     {
       "id": "style-tag-expression",
@@ -126,55 +126,55 @@
       "id": "object-data-js",
       "category": "forbidden-tag",
       "payload": "<object data=\"javascript:alert(1)\"></object>",
-      "description": "<object> is explicitly forbidden (sanitizer-allowlist.v1.json:18); phase-gate re-review finding NEW-M4 — one of 7 forbidden.tags entries with zero prior corpus coverage."
+      "description": "Forbidden <object> tag with a javascript: data value."
     },
     {
       "id": "embed-src-js",
       "category": "forbidden-tag",
       "payload": "<embed src=\"javascript:alert(1)\">",
-      "description": "<embed> is explicitly forbidden (sanitizer-allowlist.v1.json:19); phase-gate re-review finding NEW-M4."
+      "description": "Forbidden <embed> tag with a javascript: source."
     },
     {
       "id": "form-action-js",
       "category": "forbidden-tag",
       "payload": "<form action=\"javascript:alert(1)\"><button>go</button></form>",
-      "description": "<form> is explicitly forbidden (sanitizer-allowlist.v1.json:20); phase-gate re-review finding NEW-M4."
+      "description": "Forbidden <form> tag with a javascript: action."
     },
     {
       "id": "input-autofocus-onfocus",
       "category": "forbidden-tag",
       "payload": "<input onfocus=\"alert(1)\" autofocus>",
-      "description": "<input> is explicitly forbidden (sanitizer-allowlist.v1.json:21); doubles up forbidden-tag and event-handler-attribute (onfocus). Phase-gate re-review finding NEW-M4."
+      "description": "Forbidden <input> tag with an onfocus event attribute."
     },
     {
       "id": "link-rel-stylesheet-js",
       "category": "forbidden-tag",
       "payload": "<link rel=\"stylesheet\" href=\"javascript:alert(1)\">",
-      "description": "<link> is explicitly forbidden (sanitizer-allowlist.v1.json:22) — distinct from the ALLOWED attribute named \"rel\" on <a> (sanitizer-allowlist.v1.json:6); this is the HTML tag. Phase-gate re-review finding NEW-M4."
+      "description": "Forbidden HTML <link> tag. This is distinct from the allowed rel attribute on <a>."
     },
     {
       "id": "meta-refresh-js",
       "category": "forbidden-tag",
       "payload": "<meta http-equiv=\"refresh\" content=\"0;url=javascript:alert(1)\">",
-      "description": "<meta> is explicitly forbidden (sanitizer-allowlist.v1.json:23) — a meta-refresh redirect is a classic tag-level vector distinct from any attribute-level check. Phase-gate re-review finding NEW-M4."
+      "description": "Forbidden <meta> refresh redirect, which requires tag-level rejection."
     },
     {
       "id": "base-href-js",
       "category": "forbidden-tag",
       "payload": "<base href=\"javascript:alert(1)/\">",
-      "description": "<base> is explicitly forbidden (sanitizer-allowlist.v1.json:24) — rewrites the base URL every relative link on the page resolves against. Phase-gate re-review finding NEW-M4."
+      "description": "Forbidden <base> tag, which can retarget every relative link on the page."
     },
     {
       "id": "js-scheme-html-entity-encoded",
       "category": "obfuscated-scheme",
       "payload": "<a href=\"&#106;avascript:alert(1)\">click me</a>",
-      "description": "HTML numeric-character-reference-encoded scheme (&#106; = 'j'). Browsers decode HTML entities in attribute values before resolving the URL, so a sanitizer that pattern-matches the literal string \"javascript:\" without first HTML-decoding the attribute value is bypassed. Phase-gate re-review finding NEW-M4 (one of the two leftovers from I2's original remedy list)."
+      "description": "HTML numeric-character-reference-encoded scheme (&#106; = 'j'). Browsers decode attribute entities before URL resolution, bypassing a literal javascript: match."
     },
     {
       "id": "nested-script-tag-stripping-bypass",
       "category": "nested-tag-normalization",
       "payload": "<scr<script>ipt>alert(1)</scr</script>ipt>",
-      "description": "A sanitizer that removes the substring \"<script>\"/\"</script>\" via a single non-recursive pass (rather than re-parsing the result, or parsing with a real HTML parser) leaves \"<script>\" behind once the inner tag is stripped: \"<scr\" + \"ipt>\" -> \"<script>\". Phase-gate re-review finding NEW-M4 (the second I2 leftover)."
+      "description": "A single non-recursive substring-removal pass can leave <script> after stripping the nested tag. A real HTML parser or repeated normalization must neutralize it."
     }
   ]
 }

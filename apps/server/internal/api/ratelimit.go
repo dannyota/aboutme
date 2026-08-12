@@ -19,10 +19,9 @@ import (
 // zero.
 const (
 	// DefaultRateLimitRequests is the whole-server request budget RateLimit
-	// enforces when wired with a zero-value RateLimiterConfig (design spec
-	// §0/§3): generous enough not to affect normal interactive use, but a
-	// real ceiling against scripted abuse. Later phases layer stricter,
-	// endpoint-specific limits (auth, slug claims, render) on top by
+	// enforces with a zero-value RateLimiterConfig. It permits normal
+	// interactive use while setting a ceiling on scripted abuse. Route groups
+	// layer stricter endpoint-specific limits (auth, slug claims, render) by
 	// wrapping just those routes in their own
 	// RateLimit(RateLimiterConfig{...}) call.
 	DefaultRateLimitRequests = 300
@@ -61,8 +60,7 @@ type RateLimiterConfig struct {
 	MaxKeys int
 	// Key derives the rate-limit key for a request. Defaults to IPKeyFunc.
 	// See KeyFunc, AccountKeyFunc, and CompositeKeyFunc for composing a
-	// stricter policy (e.g. design spec §3's per-account+IP slug-claim
-	// limit) on top of a specific route group.
+	// stricter route policy.
 	Key KeyFunc
 	// Logger receives RateLimit's own operational warnings — currently
 	// just the rate-limited client-IP trust boundary mismatch warning (see
@@ -102,8 +100,8 @@ func (c RateLimiterConfig) withDefaults() RateLimiterConfig {
 //
 // RateLimit is a reusable building block, not one fixed global policy:
 // call it again with a stricter RateLimiterConfig around a specific route
-// group (auth, slug claims, render — design spec §3) to layer a tighter
-// limit on top of the whole-server default wired in router.go.
+// group (auth, slug claims, or render) to layer a tighter limit on the
+// whole-server default wired in router.go.
 //
 // Keys come from cfg.Key, which defaults to IPKeyFunc — itself gated on
 // cfg.TrustedProxies. See TrustedProxies for why getting that wrong is a
@@ -121,13 +119,12 @@ func RateLimit(cfg RateLimiterConfig) Middleware {
 			// required, fail-closed production state, see
 			// internal/config's TRUSTED_PROXY_CIDRS), yet this request's
 			// socket peer isn't in it. Either something is reaching this
-			// process around the intended proxy hop, or — security review
-			// finding #2 — TRUSTED_PROXY_CIDRS simply doesn't match the
-			// real deployment topology (e.g. the wrong subnet), silently
+			// process around the intended proxy hop, or TRUSTED_PROXY_CIDRS
+			// doesn't match the real deployment topology, silently
 			// degrading every such request to the untrusted-peer branch.
-			// warner throttles this to at most once per
-			// trustMismatchWarnInterval rather than logging it for real —
-			// see trustMismatchWarner for why a one-shot warning is the
+			// trustMismatchWarner throttles this to at most once per
+			// trustMismatchWarnInterval rather than logging per request. See
+			// trustMismatchWarner for why a one-shot warning is the
 			// wrong shape for a condition that, once true, stays true for
 			// every subsequent request until an operator fixes it.
 			if len(cfg.TrustedProxies) > 0 && !cfg.TrustedProxies.trusts(r.RemoteAddr) {
@@ -138,25 +135,21 @@ func RateLimit(cfg RateLimiterConfig) Middleware {
 			if !ok {
 				// cfg.Key could not determine a trusted, unambiguous key —
 				// see IPKeyFunc/resolveClientIP for when this happens.
-				// Rejecting outright, rather than falling back to some
-				// default key, is the fix for security review finding #1:
-				// a silent fallback here used to let a trusted proxy's
+				// Reject outright rather than falling back to a default key.
+				// A fallback would let a trusted proxy's
 				// missing or malformed canonical header collapse every
 				// viewer behind it into one shared bucket.
 				//
-				// That fail-closed path must itself be bounded (re-review
-				// Minor 4): charge a token from a bucket keyed on the raw
-				// sending peer address — a distinct "peer:" namespace from
-				// the normal "ip:" keys IPKeyFunc uses, so this never
-				// collides with or steals budget from any viewer's own
-				// bucket — before writing the 400. A peer that keeps
+				// Bound that fail-closed path by charging a bucket keyed on the
+				// raw sending peer address before writing the 400. Its "peer:"
+				// namespace is distinct from the normal "ip:" keys IPKeyFunc uses,
+				// so it cannot spend any viewer's budget. A peer that keeps
 				// sending a missing/malformed canonical header (e.g. a
-				// compromised trusted proxy) exhausts its OWN budget and
+				// compromised trusted proxy) exhausts its own budget and
 				// gets 429 like everything else, instead of unlimited free
-				// 400s. The point is metering, not log reduction (re-review
-				// minor M-C): RateLimit sits inside Logging, so a 429 is
-				// logged exactly like a 400 — this doesn't cut the log line,
-				// it puts a ceiling on a request path that was otherwise
+				// 400s. The point is metering, not log reduction. RateLimit sits
+				// inside Logging, so a 429 is logged like a 400. This does not cut
+				// log volume; it puts a ceiling on a request path that was otherwise
 				// completely unmetered for any peer inside TRUSTED_PROXY_CIDRS.
 				if peerKey, peerOK := peerBucketKey(r); peerOK {
 					if allowed, retryAfter := limiter.allow(peerKey, now); !allowed {
@@ -199,15 +192,10 @@ func peerBucketKey(r *http.Request) (string, bool) {
 }
 
 // trustMismatchWarnInterval bounds how often trustMismatchWarner re-emits
-// RateLimit's client-IP trust-boundary mismatch warning: at most once per
-// this interval of the configured Clock's time, not once per process
-// (re-review Minor 2). The condition it detects is persistent — if
-// TRUSTED_PROXY_CIDRS doesn't match the real topology, every request trips
-// it for as long as the misconfiguration exists — so a one-shot warning
-// (the previous sync.Once) meant an operator investigating a live incident
-// saw nothing in the current log window, and a single benign stray peer at
-// startup could permanently silence a later, genuine mismatch. One minute
-// keeps the condition visible in any reasonable log-tailing window while
+// RateLimit's client-IP trust-boundary warning. A mismatch trips on every
+// request until the configuration changes, but a one-shot warning can
+// disappear from the current log window. One minute keeps the condition
+// visible in any reasonable log-tailing window while
 // still being far coarser than per-request.
 const trustMismatchWarnInterval = time.Minute
 
@@ -228,8 +216,8 @@ func (w *trustMismatchWarner) maybeWarn(logger *slog.Logger, now time.Time, remo
 
 	// Clamp to a monotonic high-water mark so a backward clock step (an NTP
 	// correction, a VM migration pause) cannot make now.Sub(lastWarnedAt)
-	// negative and thereby silence this warning for the whole rollback span —
-	// re-review minor M-B. The condition this warns about is persistent, so
+	// negative and thereby silence this warning for the whole rollback span.
+	// The condition this warns about is persistent, so
 	// falling silent during a rollback is exactly when an operator most needs
 	// to still see it.
 	now = w.clock.clamp(now)
@@ -263,7 +251,7 @@ func retryAfterSeconds(d time.Duration) int {
 // interval of cfg.Clock's time, never once per request. Without this, a
 // sustained flood of distinct new keys against a full store would pay an
 // O(MaxKeys) map scan, holding l.mu, on every single request — a
-// denial-of-service vector in its own right (security review finding #3).
+// denial-of-service vector in its own right.
 // One second is frequent enough to reclaim capacity for genuine key
 // turnover promptly, while bounding the added scan cost to a small,
 // constant amortized overhead regardless of request rate.
@@ -299,22 +287,16 @@ const evictionSweepCooldown = time.Second
 // allow performs lookup/admission, the expiry decision, and the resulting
 // limiter's first token check as ONE operation under l.mu — never
 // releasing the lock between "this key now has an entry" and "that entry's
-// first token is spent" (security review re-review, "non-atomic
-// admission"). The earlier, two-step version released l.mu right after
-// inserting a brand-new (still fully-refilled, unconsumed) entry and only
-// reserved its first token afterward; a concurrent admission for a
-// different key, arriving in that gap, could observe the still-full entry
-// as indistinguishable from a genuinely expired one and evict it. At
-// MaxKeys=1 this let an unbounded stream of distinct keys each evict the
-// previous one and grant itself a fresh private bucket, one after another,
-// defeating the shared-overflow bound the store exists to enforce.
+// first token is spent." Otherwise a concurrent admission could evict a
+// newly inserted, still-full entry before its first token is consumed and
+// defeat the shared-overflow bound.
 type rateLimiter struct {
 	cfg   RateLimiterConfig
 	limit rate.Limit // events per second, derived once from cfg
 	burst int        // == cfg.Requests
 
 	mu          sync.Mutex
-	clock       monotonicClamp // guarded by mu; clamps allow's clock so a rollback can't skip a due sweep (M-B)
+	clock       monotonicClamp // guarded by mu; prevents a rollback from skipping a due sweep
 	entries     map[string]*clampedLimiter
 	overflow    *clampedLimiter
 	nextSweepAt time.Time // zero value: the first saturated request always sweeps
@@ -341,7 +323,7 @@ func (l *rateLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 
 	// Clamp to a monotonic high-water mark before the expiry decision below,
 	// so a backward clock step can't push now below nextSweepAt and suppress
-	// a due eviction sweep for the whole rollback span (re-review minor M-B).
+	// a due eviction sweep for the whole rollback span.
 	// Each per-key clampedLimiter still clamps independently; this only makes
 	// the store-level sweep clock non-decreasing too.
 	now = l.clock.clamp(now)
@@ -386,8 +368,7 @@ func (l *rateLimiter) evictExpiredLocked(now time.Time) {
 // so, consumes it: true means the token was taken; false means it wasn't
 // (and the returned duration is how long until it would be available).
 //
-// Built on AllowN rather than the earlier ReserveN+CancelAt pair
-// (security review re-review, "phantom debt on concurrent rejections"):
+// Built on AllowN rather than a ReserveN+CancelAt pair:
 // x/time/rate's ReserveN always advances the limiter's internal
 // bookkeeping (lastEvent in particular), even for a reservation that will
 // be canceled immediately after, and CancelAt cannot always fully reverse
@@ -432,7 +413,7 @@ func admitNow(lim *clampedLimiter, now time.Time) (bool, time.Duration) {
 // did — which would otherwise suppress that decision for the whole rollback
 // span. Three places reuse it: clampedLimiter (so x/time/rate never
 // re-anchors a bucket backward), rateLimiter.allow (so a rollback can't skip
-// a due eviction sweep — re-review minor M-B), and trustMismatchWarner (so a
+// a due eviction sweep), and trustMismatchWarner (so a
 // rollback can't silence the trust-boundary warning).
 //
 // It carries no lock of its own; each user guards its monotonicClamp with
@@ -459,10 +440,9 @@ func (m *monotonicClamp) clamp(now time.Time) time.Time {
 // mutates x/time/rate's internal lim.last to that smaller value (its
 // reserveN sets lim.last = t, the caller's raw, un-clamped time, whenever
 // it grants the request), which corrupts every later call's elapsed-time
-// math until real time catches back up past the rollback point — the
-// symptom the re-review's clock-rollback probe demonstrated is not
-// prevented by AllowN alone (security review re-review, Minor 1). Clamping
-// here, one layer above x/time/rate, means x/time/rate itself never
+// math until real time catches back up past the rollback point. AllowN alone
+// does not prevent this. Clamping here, one layer above x/time/rate, means
+// x/time/rate itself never
 // observes a time smaller than the largest one it has already seen for
 // this specific bucket.
 type clampedLimiter struct {
@@ -501,15 +481,13 @@ func (c *clampedLimiter) Limit() rate.Limit {
 // KeyFunc derives the rate-limit key for a request, and whether one could
 // be derived at all. RateLimiterConfig.Key defaults to IPKeyFunc; see
 // IPKeyFunc, AccountKeyFunc, and CompositeKeyFunc for the building blocks a
-// stricter per-route policy — e.g. design spec §3's per-account+IP limit on
-// slug claims — composes from. A KeyFunc's output is bounded: every
-// implementation here derives it from a parsed IP address and/or an opaque
-// account ID, never from an unbounded or attacker-sized input.
+// stricter per-route policy composes from. Every KeyFunc here returns a
+// bounded value derived from a parsed IP address or opaque account ID,
+// never an unbounded attacker-controlled input.
 //
 // The second return is false when no key could be safely derived (e.g.
 // IPKeyFunc when resolveClientIP fails); RateLimit rejects the request
-// outright in that case rather than treating "" as a valid, sharable key —
-// see security review finding #1.
+// outright in that case rather than treating "" as a valid, sharable key.
 type KeyFunc func(r *http.Request, trusted TrustedProxies) (string, bool)
 
 // IPKeyFunc keys solely on the request's client IP (see resolveClientIP).
@@ -522,8 +500,8 @@ func IPKeyFunc(r *http.Request, trusted TrustedProxies) (string, bool) {
 	return "ip:" + addr.String(), true
 }
 
-// AccountKeyFunc keys solely on the authenticated account ID a later
-// phase's auth middleware stores in the request context via
+// AccountKeyFunc keys solely on the authenticated account ID that auth
+// middleware stores in the request context via
 // WithAccountID. An unauthenticated request has no account in context and
 // keys on the empty account ID, so every anonymous caller would collide on
 // one bucket — AccountKeyFunc must not be used alone on a route reachable
@@ -538,10 +516,10 @@ func AccountKeyFunc(r *http.Request, _ TrustedProxies) (string, bool) {
 
 // CompositeKeyFunc returns a KeyFunc joining every funcs' output into one
 // key, so e.g. CompositeKeyFunc(AccountKeyFunc, IPKeyFunc) limits each
-// (account, IP) pair independently — design spec §3's slug-claim
-// requirement, which neither dimension alone can express: a per-IP-only
-// limit lets one account exhaust it from many IPs (or vice versa), and a
-// per-account-only limit can't rate-limit pre-authentication attempts by
+// (account, IP) pair independently, which neither dimension alone can
+// express. A per-IP-only limit lets one account exhaust it from many IPs
+// (or vice versa), and a per-account-only limit can't rate-limit
+// pre-authentication attempts by
 // IP at all. The composite fails (second return false) if any component
 // KeyFunc does, so e.g. an unresolvable client IP still rejects the
 // request rather than silently degrading to the account dimension alone.
@@ -568,7 +546,7 @@ const accountIDContextKey rateLimitContextKey = 0
 
 // WithAccountID returns a copy of ctx carrying accountID for
 // AccountKeyFunc (and any CompositeKeyFunc built from it) to read back via
-// AccountIDFromContext. A later phase's auth middleware calls this once it
+// AccountIDFromContext. Auth middleware calls this once it
 // has authenticated the request, before RateLimit's handler runs on it.
 func WithAccountID(ctx context.Context, accountID string) context.Context {
 	return context.WithValue(ctx, accountIDContextKey, accountID)
@@ -591,8 +569,8 @@ func AccountIDFromContext(ctx context.Context) (string, bool) {
 // TCP connection and cannot be forged by the client, so this is the one
 // part of the trust decision an attacker cannot spoof.
 //
-// This must match the real deployment topology (design spec §6 "Client-IP
-// trust boundary"), and getting it wrong fails in different directions
+// This must match the real deployment topology; see
+// docs/design/deployment.md. Getting it wrong fails in different directions
 // depending on which way it's wrong:
 //   - Too broad (or defaulted to "trust everyone") lets any direct client
 //     set its own TrustedClientIPHeader and pick any key it likes,
@@ -611,7 +589,7 @@ func AccountIDFromContext(ctx context.Context) (string, bool) {
 type TrustedProxies []netip.Prefix
 
 // LoopbackTrustedProxies returns the trusted-proxy set for this project's
-// production topology (design spec §6): Go bound to 127.0.0.1, reached
+// production topology: Go bound to 127.0.0.1, reached
 // only by Caddy over loopback (host networking, no ALB). It is NOT
 // generally correct for podman-compose dev/self-host, where Caddy reaches
 // Go as a separate container over the compose network rather than
@@ -684,18 +662,18 @@ func peerAddr(remoteAddr string) (netip.Addr, bool) {
 // has itself verified the CloudFront origin-secret, restricted forwarded
 // headers to CloudFront's origin-facing ranges, and stripped every
 // client-supplied forwarding header, to the single validated viewer
-// address (design spec §6 "Client-IP trust boundary"). Caddy — not Go — is
-// the one place that reconciles a multi-hop X-Forwarded-For chain (e.g.
-// CloudFront appending the viewer address, a proxy in front of it
+// address. Caddy — not Go — is the one place that reconciles a multi-hop
+// X-Forwarded-For chain (e.g. CloudFront appending the viewer address, then a
+// proxy in front of it
 // appending its own) into one address; Go trusts this header's value only
 // when the request's socket peer is in TrustedProxies (see clientIP) and
 // never parses X-Forwarded-For itself.
 const TrustedClientIPHeader = "X-Real-IP"
 
 // canonicalHeaderIP resolves the single, strictly-parsed client IP a
-// trusted proxy asserted via TrustedClientIPHeader. Design spec §6 requires
-// the header to carry exactly one bare address — never a port, never a
-// list — so this deliberately does NOT reuse peerAddr's host:port-tolerant
+// trusted proxy asserted via TrustedClientIPHeader. The deployment contract
+// requires exactly one bare address — never a port or list — so this does not
+// reuse peerAddr's host:port-tolerant
 // parsing: a proxy asserting "203.0.113.5:8080" here is already violating
 // the contract and must be rejected, not silently corrected the way a real
 // RemoteAddr's own trailing port is.
@@ -729,11 +707,10 @@ func canonicalHeaderIP(r *http.Request) (netip.Addr, bool) {
 //     address, not the viewer's, and never X-Forwarded-For, which this
 //     server does not parse at all. A trusted hop whose header is missing,
 //     repeated, malformed, oversized, or port-bearing fails closed (false)
-//     rather than falling back to RemoteAddr: doing so used to collapse
+//     rather than falling back to RemoteAddr. A fallback would collapse
 //     every viewer behind that proxy into one bucket keyed on the proxy's
-//     own address the moment the header was absent or malformed (security
-//     review finding #1) — silently sharing a bucket with every other
-//     viewer is a worse outcome than rejecting the one malformed request.
+//     own address. Forcing every viewer to share that bucket is worse than
+//     rejecting the malformed request.
 //   - If r did not arrive from a trusted proxy, RemoteAddr is the real
 //     socket peer and is used directly via peerAddr; an unparseable
 //     RemoteAddr also fails closed rather than being used as a raw,
@@ -749,8 +726,7 @@ func resolveClientIP(r *http.Request, trusted TrustedProxies) (netip.Addr, bool)
 // port), and whether one could be determined at all — the same trust
 // decision resolveClientIP/IPKeyFunc already make, exposed for a caller
 // outside this package that needs the address itself rather than a
-// rate-limit key derived from it. internal/auth's session issuance
-// (design spec §3's sessions.ip column) is the first such caller: it must
+// rate-limit key derived from it. Session issuance must
 // record the request's real, trust-boundary-resolved client IP — never a
 // raw r.RemoteAddr, which at a trusted proxy hop is Caddy's own address,
 // not the viewer's — and must never re-derive its own copy of this
@@ -768,7 +744,7 @@ func ClientIP(r *http.Request, trusted TrustedProxies) (string, bool) {
 // requestIsHTTPS reports whether r arrived over HTTPS: either TLS
 // terminated on this process directly, or r arrived via a trusted proxy
 // (see TrustedProxies) asserting X-Forwarded-Proto: https. Caddy
-// terminates TLS for CloudFront -> Caddy -> Go (design spec §6) and always
+// terminates TLS for CloudFront -> Caddy -> Go and always
 // sets this header, so in production this is the path SecurityHeaders'
 // HSTS decision actually takes.
 func requestIsHTTPS(r *http.Request, trusted TrustedProxies) bool {

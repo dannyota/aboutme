@@ -6,11 +6,10 @@ import "net/http"
 // tests can assert against the exact strings without duplicating them.
 const (
 	// ContentSecurityPolicy is the Content-Security-Policy value
-	// SecurityHeaders sends. It is maximally strict: this server only ever
-	// serves JSON and generated PDFs, never HTML (the SSR HTML CSP is the
-	// Nuxt app's own concern — design spec §5), so every fetch/script/
-	// style/frame/form directive is disabled outright rather than
-	// allowlisted.
+	// SecurityHeaders sends. This server never serves HTML; JSON, media, PDFs,
+	// and event streams do not need browser subresources. The Nuxt app owns the
+	// policy for its server-rendered HTML, so this middleware disables every
+	// fetch, script, style, frame, and form source.
 	ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 	// ReferrerPolicy is the Referrer-Policy value SecurityHeaders sends: it
 	// withholds the Referer header on any request a client's browser makes
@@ -23,23 +22,21 @@ const (
 	XContentTypeOptions = "nosniff"
 	// StrictTransportSecurityValue is the Strict-Transport-Security value
 	// SecurityHeaders sends when requestIsHTTPS reports true: two years,
-	// including subdomains. It deliberately omits "preload" — submitting
-	// to browsers' HSTS preload list is a separate, hard-to-reverse
-	// operational decision for the deploy phase, not something to bake
-	// into the middleware default.
+	// including subdomains. It omits "preload" because enrollment in
+	// browsers' HSTS preload list is separate and hard to reverse.
 	StrictTransportSecurityValue = "max-age=63072000; includeSubDomains"
 )
 
 // SecurityHeaders returns middleware that sets baseline security response
-// headers (design spec §0, §3) on every response it wraps — including
+// headers on every response it wraps — including
 // error responses written by later middleware (RateLimit's 429,
 // BodyLimit's 413) and the router's own 404/405 — because it sets headers
 // on the ResponseWriter before calling next, and headers set before the
 // first WriteHeader/Write are honored no matter which handler downstream
 // ends up writing the response.
 //
-// trusted controls the Strict-Transport-Security decision the same way it
-// controls RateLimit's client-IP decision: see TrustedProxies.
+// trusted controls whether proxy scheme assertions affect HSTS, using the
+// same trust boundary RateLimit uses for client IPs. See TrustedProxies.
 func SecurityHeaders(trusted TrustedProxies) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

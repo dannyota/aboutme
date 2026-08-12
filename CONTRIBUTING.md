@@ -1,33 +1,53 @@
 # Contributing
 
-Thanks for your interest in aboutme!
+Contributions should keep the design, implemented contracts, tests, and
+documentation in agreement.
 
-## Ground rules
+## Before changing code
 
-- **Design first.** Non-trivial changes start from the spec
-  ([`docs/specs/aboutme-design.md`](docs/specs/aboutme-design.md)) and the ADRs
-  in [`docs/adr/`](docs/adr/). If your change contradicts a recorded decision,
-  open an issue to discuss before writing code.
-- **Style.** Google style guides: [Go](https://google.github.io/styleguide/go/)
-  and Google TypeScript style (enforced via ESLint). `gofmt`/`goimports` are
-  mandatory.
-- **Quality gates.** PRs must pass CI: linters (`golangci-lint`, ESLint,
-  `vue-tsc`), tests, `govulncheck`, semgrep, schema-drift check, and
-  `make docs-lint` for documentation.
-- **Docs.** Mermaid (not ASCII) for diagrams in `.md` files. Run `make docs-fmt`
-  before committing doc changes. Docs conventions:
-  [`docs/README.md`](docs/README.md).
-- **Secrets.** Never commit credentials. `.env` is git-ignored; add new
-  variables to `.env.example` with empty values.
+1. Read the [design](docs/design/README.md), relevant
+   [Architecture Decision Records](docs/adr/README.md), and the active
+   [implementation plan](docs/plans/implementation-plan.md).
+2. Check the [OpenAPI contract](docs/api/openapi.yaml), schema, code, and tests
+   that own current behavior.
+3. Add or update a failing test for behavior changes before implementing the
+   smallest fix.
 
-## Workflow
+If the design, OpenAPI, code, and deployment configuration disagree, describe
+the conflict in the issue or pull request. Do not choose one silently.
 
-1. Open or comment on an issue describing the change.
-2. Fork/branch, implement with tests.
-3. `make docs-fmt` if docs changed; ensure CI is green.
-4. Open a PR with a clear description of what and why.
+## Style and safety
 
-## License
+- Follow the Google Go and TypeScript style guides. Use `gofmt`, `goimports`,
+  and the configured ESLint rules.
+- Keep comments focused on constraints the code cannot express. Put design
+  rationale in `docs/design/` or an ADR.
+- Use Mermaid for diagrams in Markdown.
+- Never commit credentials or personal data. Add new configuration names with
+  empty values to `.env.example`.
+- Do not hand-edit generated artifacts or released migrations.
 
-By contributing you agree that your contributions are licensed under
+Documentation rules and lifecycle terms are in
+[`docs/standards/engineering.md`](docs/standards/engineering.md).
+
+## Checks
+
+Run the narrowest check while developing, then the full local gate before
+handoff:
+
+```sh
+make check
+make ci
+```
+
+For documentation changes, run `make docs-fmt` and `make docs-lint`. The
+[root Makefile](Makefile) lists component checks and generation drift gates.
+
+## Pull requests
+
+Describe the change and its purpose, name the affected contracts and tests, and
+report the exact checks you ran. Link any design or ADR update needed to explain
+a changed decision.
+
+By contributing, you agree that your contribution is licensed under
 [AGPL-3.0](LICENSE).

@@ -1,10 +1,11 @@
 # Task 9: Personal details + the old-client wire-version proof
 
-Design spec §4's `PATCH /resumes/{id}/personal-details` row ("whole object"),
-and **AC-SAVE-004** — the row the spec's wire-version-compatibility line assigns
-to P2B: "P2B binds that machinery to the real HTTP path and proves an old-client
-write is projected, target-validated, persisted as the complete current
-document, and emitted in a declared supported version."
+Implements `PATCH /resumes/{id}/personal-details` from the
+[endpoint groups](../../design/api.md#endpoint-groups) and **AC-SAVE-004**, the
+wire-version compatibility row assigned to P2B: "P2B binds that machinery to the
+real HTTP path and proves an old-client write is projected, target-validated,
+persisted as the complete current document, and emitted in a declared supported
+version."
 
 **Tier:** High risk (schema/version handling, CAS).
 
@@ -17,13 +18,16 @@ document, and emitted in a declared supported version."
 The body is the **whole** `personalDetails` object at the caller's declared wire
 version — not a delta. Whole-object replacement is what makes clearing a field
 expressible: an absent key means "never entered" and `""` means "explicitly
-cleared" (spec §3), and a delta protocol cannot distinguish "omitted because
-unchanged" from "cleared" without a sentinel the spec forbids.
+cleared" under the [resume aggregate](../../design/data.md#resume-aggregate),
+and a delta protocol cannot distinguish "omitted because unchanged" from
+"cleared" without a sentinel the spec forbids.
 
 `personalDetails.photo` is **not** writable here: the photo key is
-server-derived (D11) and set only by the upload endpoint. A body carrying
-`photo` is `422 document_invalid` — accepting it would be a client-supplied
-object-key write, which is exactly what D11 exists to prevent.
+server-derived (D11), and crop has its own photo PATCH. Whole-object replacement
+applies only to client-owned personal-detail fields. Inside the transaction the
+handler copies the current server-owned `photo` unchanged into the replacement;
+a request body carrying `photo` is `422 document_invalid`. This prevents a name
+or contact edit from clearing the reference and leaking an orphan.
 
 ## Steps
 
@@ -34,40 +38,52 @@ object-key write, which is exactly what D11 exists to prevent.
       cleared-contact case AC-DOC-009 pins at the store layer, proven here at
       the HTTP layer); a 17th `details` entry → `422`; a contact value with a
       non-`https` scheme for a URL-typed chip → `422` (AC-SEC-004's HTTP
-      evidence); a body carrying `photo` → `422`.
-- [ ] **Step 2: failing wire-version end-to-end tests (AC-SAVE-004).** With a
-      **synthetic** projector whose `CurrentVersion` is 2 and whose accepted set
-      includes 1 — the construction P2A Task 8 built and tested — drive real
-      HTTP requests: 1. a request declaring `X-Resume-Schema-Version: 1` with a
-      v1 body is accepted, converted up, validated at v2, and **persisted as the
-      complete current-version document** (assert the stored row's
-      `schema_version` and its full parts, not just the response); 2. the
-      response body is emitted at v1 and the response header echoes
-      `X-Resume-Schema-Version: 1`; 3. no v1 field is lost across the round trip
-      (write at v1, read at v1, byte-compare); 4. a request declaring an
-      **undeclared** version fails closed with `400 unsupported_schema_version`
-      and writes nothing; 5. a `GET` declaring v1 emits a v1 document while
-      storage stays at v2 — reads never write (P2A D18), asserted on stored
-      bytes, `revision`, and `updated_at`.
-- [ ] **Step 3: failing identity test.** In the production v1 configuration the
-      whole path is the identity: absent header, `X-Resume-Schema-Version: 1`,
-      and an explicit current version all produce byte-identical stored
-      documents and responses.
-- [ ] **Step 4: failing granular-old-client test.** The same v1-declared request
-      through `PATCH …/entries/{sectionKey}` is applied at v1 and persisted at
-      current — proving the down-emit/apply/up-accept model ([D4](decisions.md))
-      works for a **fragment**, not only for a whole object. This is the case
-      the spec's wording does not spell out and that a whole-document-only
-      implementation would silently fail.
+      evidence); a body carrying `photo` → `422`. Upload a photo, then replace
+      personal details and prove the transaction-read key and crop remain
+      byte-identical. Race a photo replacement against the details PATCH and
+      prove stale preflight state cannot restore an old key.
+- [ ] **Step 2: failing wire-version end-to-end tests (AC-SAVE-004).** Use the
+      production projector after P3: current v2, accepted and emitted versions
+      v1 and v2, immutable released schemas, and the real adjacent converters.
+      Drive real HTTP requests: 1. a request declaring
+      `X-Resume-Schema-Version: 1` with a released-v1 body is accepted,
+      converted up, validated at v2, and **persisted as the complete
+      current-version document** (assert the stored row's `schema_version` and
+      all parts, not only the response); 2. the response is emitted at v1 and
+      echoes the v1 header; 3. every field representable in v1 survives a
+      write-at-v1/read-at-v1 byte comparison; 4. an undeclared version fails
+      closed with `400 unsupported_schema_version` and writes nothing; 5. a
+      `GET` declaring v1 emits v1 while storage stays byte-identical v2, with
+      unchanged `revision` and `updated_at`. Synthetic projectors are forbidden
+      for these released-version proofs.
+- [ ] **Step 3: failing current-version identity test.** With current v2,
+      absence of the header and explicit `X-Resume-Schema-Version: 2` produce
+      byte-identical stored documents and responses. The explicit v1 case must
+      traverse the real converters and is covered in Step 2.
+- [ ] **Step 4: hand off the granular old-client proof.** Task 13's suite is
+      frozen in WF before implementation. After all W3 route files land, the W4
+      integration run executes
+      `writesafety_adversarial_test.go::TestWireVersion_AcceptProjectPersistEmit`
+      sends a v1 entry delta through the real entry route, proves down-emit →
+      fragment apply → up-accept, and asserts the complete stored row is current
+      v2. Run
+      `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi -run '^TestWireVersion_AcceptProjectPersistEmit$' -race -count=1 -v)`.
+      This task reports its fixture and projector setup for that later run; its
+      own gate does not depend on a sibling route. It never edits the blind file
+      or Task 7's route/tests.
 - [ ] **Step 5: failing contract test.** Handler statuses, codes, and the
       request/response shapes agree with `docs/api/openapi.yaml`, including the
-      `X-Resume-Schema-Version` header on both sides.
+      `X-Resume-Schema-Version` header on both sides. Validate a request
+      carrying `photo` against OpenAPI and prove `PersonalDetailsPatch` rejects
+      it; prove the separate `PhotoCropPatch` is not accepted on this route.
 - [ ] **Step 6: implement; green.**
-- [ ] **Step 7: gate.** `make server-build server-vet server-test`;
-      `REQUIRE_TEST_DB=1 … go test ./internal/resumeapi/... -race -count=1 -v`;
-      `make api-check`.
-- [ ] **Step 8: commit** —
-      `git commit -m "feat(resumeapi): add personal-details saves and wire-version negotiation" -- apps/server/internal/resumeapi`
+- [ ] **Step 7: gate.** Run `make test-db-up`,
+      `make server-build server-vet server-test`,
+      `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
+      and `make api-check`.
+- [ ] **Step 8: handoff.** Report the owned paths, failing-test evidence, exact
+      checks, released-version fixtures, and stored-row assertions to the
+      integration owner. Do not stage or commit.
 - [ ] **Step 9: independent defect review**, asked specifically whether any
       accepted-version path can persist a non-current document, and whether an
       emitted version can leak a field the target schema does not declare.

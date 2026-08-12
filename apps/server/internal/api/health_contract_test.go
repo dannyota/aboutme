@@ -1,15 +1,8 @@
 // health_contract_test.go pins the /healthz and /readyz contract between
-// docs/api/openapi.yaml and the real Go handlers (design spec §2, health
-// row): the phase-gate review that found them disagreeing — OpenAPI said
-// text/plain, the Go handler always wrote a JSON envelope — resolved in
-// favor of the Go handler (the envelope is the API-wide contract and
-// machine-parseable probes beat human-readable ones), so the document was
-// fixed to match. This test is what keeps them from drifting apart again:
-// it parses the document, then drives api.New()'s real handlers — the same
-// construction router_test.go uses — over a real httptest.Server (not a
-// bare httptest.ResponseRecorder; see TestRouter_Healthz_HeadRequest_
-// ReturnsOKWithEmptyBody in router_test.go for why HEAD's empty-body
-// promise can only be observed over a real transport) and fails if either
+// docs/api/openapi.yaml and the real Go handlers. It parses the document,
+// then drives api.New()'s real handlers over a real httptest.Server. A
+// ResponseRecorder cannot prove an empty HEAD body; see TestRouter_Healthz_
+// HeadRequest_ReturnsOKWithEmptyBody. The test fails if either
 // side disagrees on status code, Content-Type, or response body shape for
 // GET and HEAD on both endpoints.
 package api_test
@@ -146,8 +139,7 @@ func operationFor(t *testing.T, doc oaDoc, path, method string) oaOperation {
 
 // documentedJSONResponse returns the "application/json" media type entry
 // for status on op, failing the test if that status isn't documented at
-// all, or is documented under a different media type (e.g. the text/plain
-// this contract used to disagree on).
+// all, or is documented under a different media type such as text/plain.
 func documentedJSONResponse(t *testing.T, op oaOperation, method, path string, status int) oaMediaType {
 	t.Helper()
 

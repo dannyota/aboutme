@@ -19,9 +19,9 @@ type Config struct {
 	// e.g. "127.0.0.1" (loopback only) or "0.0.0.0" (all interfaces).
 	// Defaults to "127.0.0.1" and, when Env is "prod" or "staging", must
 	// resolve to a loopback address: production's only supported topology
-	// (design spec §6) has Caddy as the sole process ever allowed to reach
-	// this one directly, always over loopback, so port 8080 must never be
-	// reachable any other way, and staging enforces the same boundary so a
+	// has Caddy as the sole process allowed to reach this server directly,
+	// always over loopback, so port 8080 must never be reachable any other
+	// way. Staging enforces the same boundary so a
 	// misconfiguration is caught before it reaches prod. A compose/self-host
 	// topology that instead reaches this process over a container network
 	// must set LISTEN_HOST explicitly to an interface Caddy's container can
@@ -37,9 +37,7 @@ type Config struct {
 	// trailing slash) this server is served at, e.g. "https://aboutme.vn".
 	// It has no safe default — dev, staging, and prod are each served from
 	// a different origin — so, like Env, Load requires it and fails fast
-	// rather than silently guessing. Later phases use it to build absolute
-	// OAuth redirect/callback URLs and validate the CSRF Origin header;
-	// this phase only loads and stores it.
+	// rather than silently guessing. OAuth URLs and CSRF validation use it.
 	PublicOrigin string
 	// TrustedProxyCIDRs is the set of reverse-proxy hops this server
 	// treats as able to assert a request's real client IP and scheme (see
@@ -55,7 +53,7 @@ type Config struct {
 	// isn't something this package can know in advance.
 	TrustedProxyCIDRs []netip.Prefix
 	// GoogleClientID is the OAuth2 client id for "Sign in with Google"
-	// (docs/specs/aboutme-design.md §3 OAuth). Required (non-empty) when
+	// (see docs/design/security.md). Required (non-empty) when
 	// Env is "prod" or "staging" — same fail-closed, staging-shares-prod
 	// pattern as TrustedProxyCIDRs, since a production/staging server
 	// cannot genuinely offer Google login without real credentials.
@@ -68,8 +66,7 @@ type Config struct {
 	// semantics.
 	GoogleClientSecret string
 	// GitHubClientID is the OAuth2 client id for "Sign in with GitHub"
-	// (docs/specs/aboutme-design.md §3 OAuth: plain OAuth2, no OIDC —
-	// AC-AUTH-003). Same required-in-prod/staging, optional-in-dev
+	// (plain OAuth2, not OIDC). Same required-in-prod/staging, optional-in-dev
 	// semantics as GoogleClientID.
 	GitHubClientID string
 	// GitHubClientSecret is the OAuth2 client secret paired with
@@ -77,7 +74,7 @@ type Config struct {
 	// semantics.
 	GitHubClientSecret string
 	// LinkedInClientID is the OAuth2 client id for "Sign in with LinkedIn"
-	// (docs/specs/aboutme-design.md §3 OAuth). Same required-in-prod/
+	// (see docs/design/security.md). Same required-in-prod/
 	// staging, optional-in-dev semantics as GoogleClientID.
 	LinkedInClientID string
 	// LinkedInClientSecret is the OAuth2 client secret paired with
@@ -239,31 +236,20 @@ func loadEnv(raw string) (string, error) {
 // like Env: there is no safe default (dev/staging/prod each serve from a
 // different origin), so Load fails fast rather than silently guessing.
 //
-// Format is also validated (task-4-brief.md's first real consumer:
-// building absolute OAuth redirect/callback URLs by concatenating
-// PublicOrigin with a path): raw must parse as scheme://host[:port] and
-// nothing else — no userinfo, no path (including a bare trailing slash,
-// which parses as Path "/"), no query, no fragment. An unnoticed trailing
-// slash or path here would silently double up or corrupt every absolute
+// OAuth redirect and callback URLs concatenate PublicOrigin with a path.
+// Raw must therefore parse as scheme://host[:port] with no userinfo, path
+// (including a bare trailing slash, which parses as Path "/"), query, or
+// fragment. An unnoticed trailing slash or path would corrupt every absolute
 // URL this server builds from it, so this fails fast at startup rather
 // than surfacing as a broken redirect later.
 //
-// After validation, the result is NORMALIZED (security-relevant cheap-win
-// fix): scheme and host are lowercased, and a port that is the scheme's
-// own DEFAULT (":80" for http, ":443" for https) is stripped. This
-// matters because PublicOrigin is never treated as "a URL to parse and
-// compare structurally" downstream — csrf.go's originAllowed compares it
-// against a request's Origin header with a bare Go `==`, and every
-// absolute OAuth redirect/callback URL this server builds concatenates it
-// verbatim. A real browser always sends Origin in this exact normalized
-// form (RFC 6454): lowercase scheme/host, default port omitted. An
-// operator-entered "https://ABOUTME.vn" or "https://aboutme.vn:443" was
-// previously stored byte-for-byte as typed — a value that passes every
-// check above, starts the server successfully, and then silently 403s
-// every mutating request in production (originAllowed never matches),
-// discovered only after deploy. Normalizing once, here, means the
-// stored value is always the one a real browser's Origin header can
-// actually equal.
+// After validation, scheme and host are lowercased, and a scheme's default
+// port (":80" for http, ":443" for https) is stripped. This avoids common
+// mismatches because csrf.go compares PublicOrigin with the Origin header by
+// exact string equality, and OAuth URLs concatenate it verbatim. Operators
+// must still supply the browser-serialized form for representations this
+// function does not canonicalize, including internationalized domain names
+// and equivalent IPv6 spellings.
 func loadPublicOrigin(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -307,7 +293,7 @@ func loadPublicOrigin(raw string) (string, error) {
 // (loadTrustedProxyCIDRs). Both "prod" and "staging" require it — staging
 // exists specifically to validate the real deployment topology before it
 // reaches prod, so a lenient staging boundary would let a misconfiguration
-// reach prod undetected (re-review of security review finding #2).
+// reach prod undetected.
 func requiresProductionTrustBoundary(env string) bool {
 	return env == "prod" || env == "staging"
 }
@@ -315,7 +301,7 @@ func requiresProductionTrustBoundary(env string) bool {
 // loadListenHost validates raw as an IP address to bind, defaulting to
 // defaultListenHost when unset. When env requires production trust-boundary
 // strictness (see requiresProductionTrustBoundary) it additionally requires
-// the result to be a loopback address (design spec §6): binding anything
+// the result to be a loopback address: binding anything
 // else would make port 8080 reachable around Caddy's origin-secret boundary
 // entirely.
 func loadListenHost(raw, env string) (string, error) {
@@ -339,13 +325,9 @@ func loadListenHost(raw, env string) (string, error) {
 // narrowest (i.e. numerically smallest bit count, so widest address range)
 // prefix length TRUSTED_PROXY_CIDRS may configure per address family.
 // Anything broader is too implausible to be a real deployment's actual
-// reverse-proxy hop and silently approaches "trust everyone" (design spec
-// §6, re-review of security review finding #2, minor M5). A single
-// literal-/0 special case was evadable by splitting the whole address space
-// into two half-width prefixes (e.g. "0.0.0.0/1,128.0.0.0/1") that each
-// individually passed; validating every configured prefix against this
-// bound on its own closes that split-evasion case along with any other
-// implausibly broad single CIDR.
+// reverse-proxy hop and silently approaches "trust everyone." Checking every
+// prefix also rejects an address space split into individually broad ranges,
+// such as "0.0.0.0/1,128.0.0.0/1".
 const (
 	minTrustedProxyPrefixBitsIPv4 = 8
 	minTrustedProxyPrefixBitsIPv6 = 48
@@ -384,11 +366,9 @@ func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
 		// An IPv4-in-IPv6 mapped prefix (e.g. "::ffff:0.0.0.0/104") is
 		// judged against the IPv6 minimum below, yet can never match a real
 		// peer: api.resolveClientIP Unmap()s every peer address before
-		// testing it, so a v4-mapped trusted prefix silently trusts nobody
-		// (re-review of security review finding #2, minor M-D). Reject it
-		// with a message pointing at the plain IPv4 form, rather than accept
-		// a value that reads as configured but is inert — the exact
-		// silent-misconfiguration this validation exists to prevent.
+		// testing it, so a v4-mapped trusted prefix silently trusts nobody.
+		// Reject it with a message pointing at the plain IPv4 form rather than
+		// accept an inert value that appears configured.
 		if prefix.Addr().Is4In6() {
 			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS: invalid value %q: "+
 				"%s is an IPv4-in-IPv6 mapped prefix, which never matches a real peer "+
@@ -427,8 +407,8 @@ func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
 // before it reaches prod), kept as its own named predicate rather than
 // reusing that function directly: the two concerns — client-IP trust
 // boundary vs. OAuth provider credentials — are unrelated and should not
-// be coupled by sharing one function that merely happens to have the same
-// body today.
+// be coupled by sharing one function that merely has the same boolean
+// expression.
 func requiresProductionOAuthCredentials(env string) bool {
 	return env == "prod" || env == "staging"
 }
@@ -462,9 +442,8 @@ func loadGoogleCredentials(rawClientID, rawClientSecret, env string) (clientID, 
 // Required (both, non-empty) when env requires production OAuth
 // credentials (see requiresProductionOAuthCredentials) — the same
 // fail-closed, staging-shares-prod pattern as loadGoogleCredentials.
-// GitHub login itself is plain OAuth2, not OIDC (AC-AUTH-003: no
-// discovery, no issuer, no nonce), but its client credentials carry the
-// identical requirement: a production or staging server cannot genuinely
+// GitHub login itself is plain OAuth2, not OIDC, but its client credentials
+// carry the identical requirement: a production or staging server cannot genuinely
 // offer "Sign in with GitHub" without real credentials, so Load fails fast
 // rather than booting and only failing later, per-request, against the
 // real GitHub endpoint. Optional outside that — both empty is a valid dev

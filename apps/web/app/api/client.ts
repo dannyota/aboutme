@@ -1,42 +1,13 @@
 /**
- * client.ts — the web app's typed HTTP client.
- *
- * `./generated/openapi.ts` is produced from `docs/api/openapi.yaml` by a
- * pinned `openapi-typescript` (`make api-gen`) and is drift-checked
- * against the contract by `make api-check`. This module is the only
- * hand-written part: it turns those path/schema types into a real client
- * with `openapi-fetch`, so a request URL, method, or response shape that
- * the contract does not describe cannot compile.
- *
- * ## Two clients, because the contract has two servers
- *
- * `openapi.yaml` serves the product API from `/api/v1`, but overrides
- * `/healthz` and `/readyz` back to the bare site root — health is
- * infrastructure, not product API, so a future `/api/v2` must never break
- * orchestrator or synthetic checks (design doc §2 route table).
- *
- * One `openapi-fetch` client has exactly one `baseUrl`, so a single
- * client over all of `paths` would silently send `/api/v1/healthz`, which
- * nothing serves. Splitting the path map instead makes that a compile
- * error: the versioned client does not accept `/healthz`, and the ops
- * client does not accept a versioned path.
- *
- * ## Base paths are relative, and therefore browser-only
- *
- * Dev and prod are one origin (Caddy routes `/api/v1/*` to the Go API),
- * so the defaults below are paths, not absolute URLs. `Request` resolves
- * a relative URL against the document — which exists in the browser and
- * does not exist in Nitro during SSR. Server-side callers must pass an
- * absolute `baseUrl`. Authenticated calls must not run during SSR at all
- * (see `useAuth`'s DD-C9 note): there is no browser cookie to send.
+ * Typed OpenAPI clients for the versioned product API and root health probes.
+ * Each client has one base URL. Relative defaults are browser-only; a
+ * server-side caller must supply an absolute base URL. Authenticated calls stay
+ * in the browser because server-side rendering has no browser session cookie.
  */
 import createClient, { type Client, type ClientOptions } from 'openapi-fetch';
 import type { paths } from './generated/openapi';
 
-/**
- * The operations `openapi.yaml` pins to the unversioned site root via a
- * path-level `servers` override.
- */
+/** Operations that OpenAPI pins to the unversioned site root. */
 export const OPS_PATHS = ['/healthz', '/readyz'] as const;
 
 /** Unversioned liveness/readiness surface, served from the site root. */
