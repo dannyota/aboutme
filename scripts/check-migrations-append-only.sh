@@ -27,7 +27,10 @@ base_has_baseline() {
 reject_sql_changes() {
   local diff=$1 changed
   changed=$(printf '%s\n' "$diff" |
-    awk -F '\t' '$1 ~ /^(M|D|R|T)/ && $0 ~ /\.sql$/ { print }')
+    awk -F '\t' '
+      $1 ~ /^(M|D|T)/ && $2 ~ /\.sql$/ { print; next }
+      $1 ~ /^R/ && ($2 ~ /\.sql$/ || $3 ~ /\.sql$/) { print }
+    ')
   if [ -n "$changed" ]; then
     printf '%s\n' 'UAT-baselined migrations are immutable; only new files may be added:' >&2
     printf '%s\n' "$changed" >&2
@@ -64,6 +67,9 @@ check_local() {
     status=$?
     if [ "$status" -ne 1 ]; then
       fail "could not resolve $1"
+    fi
+    if git rev-parse --verify --quiet "$1" >/dev/null; then
+      fail "local base is not a commit: $1"
     fi
     printf 'no %s commit to compare against; skipped\n' "$1"
     return 0

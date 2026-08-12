@@ -48,6 +48,10 @@ assert_hosted_sql_rejected() {
     mv "$repo/apps/server/migrations/00001_released.sql" \
       "$repo/apps/server/migrations/00001_renamed.sql"
     ;;
+  renamed-out)
+    mv "$repo/apps/server/migrations/00001_released.sql" \
+      "$repo/apps/server/migrations/00001_released.retired"
+    ;;
   type-changed)
     rm "$repo/apps/server/migrations/00001_released.sql"
     ln -s missing.sql "$repo/apps/server/migrations/00001_released.sql"
@@ -91,6 +95,39 @@ assert_rejected() {
 assert_rejected unstaged unstaged
 assert_rejected staged staged
 assert_rejected hidden-index hidden-index
+
+assert_local_sql_rename_out_rejected() {
+  local label=$1 mode=$2 repo="$WORK/$1" output="$WORK/$1.out"
+  new_repo "$repo" true
+  mv "$repo/apps/server/migrations/00001_released.sql" \
+    "$repo/apps/server/migrations/00001_released.retired"
+  case "$mode" in
+  staged)
+    git -C "$repo" add -A -- apps/server/migrations
+    ;;
+  hidden-index)
+    git -C "$repo" add -A -- apps/server/migrations
+    git -C "$repo" show HEAD:apps/server/migrations/00001_released.sql \
+      >"$repo/apps/server/migrations/00001_released.sql"
+    ;;
+  unstaged) ;;
+  *) return 2 ;;
+  esac
+  if run_local "$repo" >"$output" 2>&1; then
+    printf 'migration-append-only-test: %s rename out of SQL passed\n' \
+      "$label" >&2
+    return 1
+  fi
+  grep -Fq 'apps/server/migrations/00001_released.sql' "$output" || {
+    printf 'migration-append-only-test: %s did not report the source migration\n' \
+      "$label" >&2
+    return 1
+  }
+}
+
+assert_local_sql_rename_out_rejected rename-out-unstaged unstaged
+assert_local_sql_rename_out_rejected rename-out-staged staged
+assert_local_sql_rename_out_rejected rename-out-hidden-index hidden-index
 
 repo=$WORK/baseline-deleted
 new_repo "$repo" true
@@ -158,9 +195,19 @@ if run_commits "$repo" HEAD not-a-commit >/dev/null 2>&1; then
   exit 1
 fi
 
+repo=$WORK/local-non-commit-base
+new_repo "$repo" true
+tree=$(git -C "$repo" rev-parse 'HEAD^{tree}')
+git -C "$repo" update-ref refs/remotes/origin/main "$tree"
+if run_local "$repo" >/dev/null 2>&1; then
+  echo "migration-append-only-test: local non-commit base passed as absent" >&2
+  exit 1
+fi
+
 assert_hosted_sql_rejected modified
 assert_hosted_sql_rejected deleted
 assert_hosted_sql_rejected renamed
+assert_hosted_sql_rejected renamed-out
 assert_hosted_sql_rejected type-changed
 
 repo=$WORK/hosted-marker-tamper

@@ -173,10 +173,16 @@ jobs:
           # it: `${{ }}` expansion happens before the shell sees the line.
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          base="$BASE_SHA"
+          if ! base=$(git rev-parse --verify --quiet "$BASE_SHA^{commit}") ||
+            ! head=$(git rev-parse --verify --quiet "HEAD^{commit}"); then
+            echo "Could not resolve released-schema comparison commits." >&2
+            exit 1
+          fi
           approved_old_v1_sha256="2da37bb75297fefe32a920e3fae960100f0a99236ba4dc21ef25ae6b3f61f13f"
           approved_new_v1_sha256="879858284bc3cb4092d1d671466a9c620e27abf134aecedce070b6f21e4e5866"
-          if ! diff=$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json'); then
+          # Compare the event base and candidate trees directly. A merge-base
+          # diff can hide a released-schema reversion after rewritten history.
+          if ! diff=$(git diff --name-status "$base" "$head" -- 'packages/schema/resume.v*.schema.json'); then
             echo "Could not compare released schemas with base." >&2
             exit 1
           fi
@@ -184,7 +190,7 @@ jobs:
           approved_v1_change=$(printf 'M\tpackages/schema/resume.v1.schema.json')
           if [ "$changed" = "$approved_v1_change" ]; then
             base_v1_sha256=$(git show "$base:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
-            head_v1_sha256=$(git show "HEAD:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
+            head_v1_sha256=$(git show "$head:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
             if [ "$base_v1_sha256" = "$approved_old_v1_sha256" ] && [ "$head_v1_sha256" = "$approved_new_v1_sha256" ]; then
               changed=""
             fi
