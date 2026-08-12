@@ -43,6 +43,16 @@ describe('sanitizeRichText client policy', () => {
       '<a href="https://example.com" rel="noopener noreferrer">safe</a>',
     );
   });
+
+  it('keeps target only when the input value is exactly _blank', () => {
+    expect(
+      sanitizeRichText(
+        '<a href="https://example.com" target="_blank ">safe</a>',
+      ),
+    ).toBe(
+      '<a href="https://example.com" rel="noopener noreferrer">safe</a>',
+    );
+  });
 });
 
 describe('neutralization predicate controls', () => {

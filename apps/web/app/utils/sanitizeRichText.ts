@@ -42,6 +42,15 @@ let hooksInstalled = false;
 const installHooks = (): void => {
   if (hooksInstalled || purifier === undefined) return;
 
+  purifier.addHook('beforeSanitizeAttributes', (element) => {
+    if (element.nodeType !== 1 || element.tagName.toLowerCase() !== 'a') return;
+
+    const target = element.getAttribute('target');
+    if (target !== null && target !== '_blank') {
+      element.removeAttribute('target');
+    }
+  });
+
   purifier.addHook('uponSanitizeAttribute', (element, attribute) => {
     const tag = element.tagName.toLowerCase();
     const name = attribute.attrName.toLowerCase();
