@@ -4,6 +4,7 @@ import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
 const doc = parse(readFileSync("docs/api/openapi.yaml", "utf8"));
+const authProviders = ["google", "github", "linkedin"] as const;
 
 describe("openapi contract", () => {
   it("lints clean", () => {
@@ -66,8 +67,10 @@ describe("openapi contract", () => {
     expect(doc.servers[0].url).toMatch(/\/api\/v1$/);
     for (const path of ["/healthz", "/readyz"]) {
       const override = doc.paths[path]?.servers;
-      expect(override, `${path} should have a path-level servers override`)
-        .toBeTruthy();
+      expect(
+        override,
+        `${path} should have a path-level servers override`,
+      ).toBeTruthy();
       expect(override[0].url).not.toMatch(/\/api\/v1$/);
     }
   });
@@ -78,6 +81,82 @@ describe("openapi contract", () => {
     expect(doc.components.parameters.IfMatch.name).toBe("If-Match");
     expect(doc.components.parameters.IdempotencyKey.name).toBe(
       "Idempotency-Key",
+    );
+  });
+
+  it("pins login GET and privileged POST OAuth start contracts", () => {
+    const authPurpose = doc.components.parameters.AuthPurpose;
+    expect(authPurpose.schema.enum).toEqual(["login"]);
+    expect(authPurpose.description).toContain("not served by `GET`");
+
+    const authLinkPurpose = doc.components.parameters.AuthLinkPurpose;
+    expect(authLinkPurpose.in).toBe("query");
+    expect(authLinkPurpose.required).toBe(true);
+    expect(authLinkPurpose.schema.enum).toEqual(["link", "reauth"]);
+
+    const authStartResponse = doc.components.schemas.AuthStartResponse;
+    expect(authStartResponse.required).toEqual(["data"]);
+    expect(authStartResponse.properties.data.required).toEqual([
+      "authorizeUrl",
+    ]);
+
+    for (const provider of authProviders) {
+      const start = doc.paths[`/auth/${provider}/start`];
+      expect(start.get.security, `${provider} login GET is public`).toEqual([]);
+      expect(start.get.parameters).toEqual([
+        { $ref: "#/components/parameters/AuthPurpose" },
+      ]);
+      expect(
+        start.get.responses["405"],
+        `${provider} GET rejects privileged purposes`,
+      ).toBeTruthy();
+      expect(start.get.description).toMatch(/link.*reauth.*405/is);
+      expect(start.get.description).toMatch(
+        /before (?:a session lookup, database write|any transaction)/i,
+      );
+
+      expect(start.post.security).toEqual([
+        { sessionCookie: [], csrfToken: [] },
+      ]);
+      expect(start.post.parameters).toEqual([
+        { $ref: "#/components/parameters/AuthLinkPurpose" },
+      ]);
+      expect(
+        start.post.requestBody,
+        `${provider} privileged POST stays bodiless`,
+      ).toBeUndefined();
+      expect(start.post.responses["302"]).toBeUndefined();
+      expect(
+        start.post.responses["200"].content["application/json"].schema.$ref,
+      ).toBe("#/components/schemas/AuthStartResponse");
+      expect(start.post.description).toContain("top-level navigation");
+
+      const callbackDescription =
+        doc.paths[`/auth/${provider}/callback`].get.description;
+      expect(callbackDescription).not.toMatch(
+        new RegExp(`GET /auth/${provider}/start`, "i"),
+      );
+    }
+
+    const callbackErrors =
+      doc.components.schemas.OAuthCallbackErrorCode.description;
+    expect(callbackErrors).toContain(
+      "`POST /auth/{provider}/start?purpose=link`",
+    );
+    expect(callbackErrors).toContain("No `/start` operation redirects");
+  });
+
+  it("documents deterministic linked-identity order on /me", () => {
+    const me = doc.paths["/me"].get;
+    const identities =
+      me.responses["200"].content["application/json"].schema.allOf[1].properties
+        .data.properties.identities;
+
+    expect(me.description).toContain(
+      "Identities are ordered by `(created_at, id)`, oldest first",
+    );
+    expect(identities.description).toContain(
+      "Linked identities ordered by `(created_at, id)`, oldest first",
     );
   });
 });
