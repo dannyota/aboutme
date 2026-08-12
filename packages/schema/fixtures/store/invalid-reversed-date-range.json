@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "personalDetails": {
     "fullName": "Ada Lovelace",
     "headline": "Analytical Engineer",
@@ -263,7 +263,7 @@
   },
   "customization": {
     "font": {
-      "family": "Be Vietnam Pro",
+      "family": "be-vietnam-pro",
       "baseSizePx": 15
     },
     "colors": {

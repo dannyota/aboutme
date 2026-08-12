@@ -355,7 +355,7 @@ func TestCodec_UnknownField_StrictDecodeError(t *testing.T) {
 			name:            "unknown top-level key in customization",
 			personalDetails: base.PersonalDetails,
 			content:         base.Content,
-			customization:   json.RawMessage(`{"font":{"family":"Inter","baseSizePx":14},"colors":{"primary":"#1a1a1a","text":"#1a1a1a","background":"#ffffff"},"spacing":{"sectionGap":16,"entryGap":8,"lineHeight":1.4},"heading":{"style":"normal","showRule":false},"layout":{"columns":1,"sections":{"main":[],"sidebar":[]}},"sectionDisplay":{"skill":{"style":"text"},"language":{"style":"text"}},"pageFormat":"a4","dateFormat":"MM/YYYY","bogus":true}`),
+			customization:   json.RawMessage(`{"font":{"family":"inter","baseSizePx":14},"colors":{"primary":"#1a1a1a","text":"#1a1a1a","background":"#ffffff"},"spacing":{"sectionGap":16,"entryGap":8,"lineHeight":1.4},"heading":{"style":"normal","showRule":false},"layout":{"columns":1,"sections":{"main":[],"sidebar":[]}},"sectionDisplay":{"skill":{"style":"text"},"language":{"style":"text"}},"pageFormat":"a4","dateFormat":"MM/YYYY","bogus":true}`),
 		},
 		{
 			name:            "a field foreign to workEntry inside content",
@@ -407,8 +407,8 @@ func TestCodec_AssembleCanonical_IncludesSchemaVersion(t *testing.T) {
 	if !ok {
 		t.Fatal("canonical document has no schemaVersion key")
 	}
-	if string(sv) != "1" {
-		t.Errorf("schemaVersion = %s, want 1", sv)
+	if string(sv) != "2" {
+		t.Errorf("schemaVersion = %s, want 2", sv)
 	}
 	for _, key := range []string{"personalDetails", "content", "customization"} {
 		if _, ok := generic[key]; !ok {
@@ -422,7 +422,7 @@ func TestCodec_EncodeParts_Minimal_MatchesSchemaType(t *testing.T) {
 	// generated schema types cleanly (a caller re-reading them, e.g. across
 	// a store round trip through Postgres, gets back a well-typed value).
 	doc := schema.Resume{
-		SchemaVersion:   1,
+		SchemaVersion:   int64(schema.CurrentVersion),
 		PersonalDetails: schema.PersonalDetails{},
 		Content:         map[string]schema.Section{},
 		Customization: schema.Customization{

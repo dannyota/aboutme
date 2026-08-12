@@ -1,7 +1,18 @@
 // Compile-time fixture for the generated discriminated union and
 // draft-permissive entry fields. Only `id` is required; domain fields are
 // optional. type-fidelity.test.ts checks this file with `tsc --strict`.
-import type { EducationEntry, Section, WorkEntry } from "../gen/ts/resume";
+import type {
+  EducationEntry,
+  Customization,
+  Section,
+  WorkEntry,
+} from "../gen/ts/resume";
+
+type Family = Customization["font"]["family"];
+
+const catalogFamily: Family = "be-vietnam-pro";
+// @ts-expect-error: v1 display names are not v2 catalog IDs.
+const retiredDisplayName: Family = "Be Vietnam Pro";
 
 // sectionType narrows entries to its matching entry type.
 
@@ -98,6 +109,9 @@ const fullWork: WorkEntry = {
   dates: { start: { y: 2020 }, end: null, present: true },
   description: "",
 };
+
+void catalogFamily;
+void retiredDisplayName;
 
 // Section entries must match sectionType.
 

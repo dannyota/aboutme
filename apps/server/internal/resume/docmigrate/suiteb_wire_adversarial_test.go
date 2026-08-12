@@ -4,8 +4,9 @@
 // missing-path arm. The live-database rows live in the sibling package's
 // docmigrate_adversarial_suiteb_test.go.
 //
-// Synthetic version family used throughout (the tests own it; production has
-// exactly one released version, so a second one has to be fabricated):
+// Synthetic version family used throughout. The tests own it so they can cover
+// paths beyond production's released versions without depending on the font
+// converter:
 //
 //	vN  ==  {"schemaVersion": N, "personalDetails": {...}, "content": {...},
 //	         "customization": {...}}
@@ -21,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -814,8 +816,7 @@ func TestSuiteB_WireRoundTripPreservesV1Fields(t *testing.T) {
 
 // TestSuiteB_DeclaredVersionSlicesAreCopies pins "Callers receive copies so
 // they cannot mutate the production declaration" for the two package-level
-// declarations. With exactly one released version, both sets are
-// {CurrentVersion}.
+// declarations. Production accepts and emits both immutable versions.
 func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -829,9 +830,9 @@ func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 			if len(first) == 0 {
 				t.Fatalf("%s() is empty; the server must declare at least the current version", tc.name)
 			}
-			want := []int32{docmigrate.CurrentVersion}
-			if len(first) != len(want) || first[0] != want[0] {
-				t.Errorf("%s() = %v, want %v (one released version, D19)", tc.name, first, want)
+			want := []int32{1, 2}
+			if !slices.Equal(first, want) {
+				t.Errorf("%s() = %v, want %v", tc.name, first, want)
 			}
 			ascending := true
 			for i := 1; i < len(first); i++ {
@@ -856,16 +857,15 @@ func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 }
 
 // TestSuiteB_IdentityProjector_ProductionDeclarations pins the production
-// configuration: no adjacent pairs, every stored row already current, projection a
-// pure passthrough, and any other stored version fails closed.
+// configuration: current rows pass through and unknown versions fail closed.
 func TestSuiteB_IdentityProjector_ProductionDeclarations(t *testing.T) {
 	p := docmigrate.NewIdentityProjector()
 	if got := p.CurrentVersion(); got != docmigrate.CurrentVersion {
 		t.Errorf("NewIdentityProjector().CurrentVersion() = %d, want %d", got, docmigrate.CurrentVersion)
 	}
 
-	doc := suiteBDocAt(t, docmigrate.CurrentVersion)
-	pd, c, cu := suiteBSplit(t, doc)
+	doc := fullCurrentDoc(t)
+	pd, c, cu := splitDoc(t, doc)
 	gotPD, gotC, gotCU, err := p.Project(pd, c, cu, docmigrate.CurrentVersion)
 	if err != nil {
 		t.Fatalf("Project at the current version: %v", err)

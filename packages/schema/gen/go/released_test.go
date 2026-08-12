@@ -18,14 +18,16 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	schemav1 "github.com/dannyota/aboutme/packages/schema/gen/go/v1"
+	schemav2 "github.com/dannyota/aboutme/packages/schema/gen/go/v2"
 )
 
-func TestReleasedVersions_ContainsExactlyVersionOne(t *testing.T) {
+func TestReleasedVersions_ContainsExactlyVersionsOneAndTwo(t *testing.T) {
 	got := ReleasedVersions()
-	want := []int{1}
+	want := []int{1, 2}
 	if len(got) != len(want) {
 		t.Fatalf("ReleasedVersions() = %v, want %v", got, want)
 	}
@@ -34,8 +36,24 @@ func TestReleasedVersions_ContainsExactlyVersionOne(t *testing.T) {
 			t.Fatalf("ReleasedVersions() = %v, want %v", got, want)
 		}
 	}
-	if CurrentVersion != 1 {
-		t.Fatalf("CurrentVersion = %d, want 1", CurrentVersion)
+	if CurrentVersion != 2 {
+		t.Fatalf("CurrentVersion = %d, want 2", CurrentVersion)
+	}
+}
+
+func TestWireVersionDeclarations_ReturnFreshSlices(t *testing.T) {
+	for name, get := range map[string]func() []int{
+		"accepted": AcceptedVersions,
+		"emitted":  EmittedVersions,
+	} {
+		first := get()
+		if !slices.Equal(first, []int{1, 2}) {
+			t.Fatalf("%s versions = %v, want [1 2]", name, first)
+		}
+		first[0] = 99
+		if got := get(); !slices.Equal(got, []int{1, 2}) {
+			t.Fatalf("%s versions escaped by reference: %v", name, got)
+		}
 	}
 }
 
@@ -44,6 +62,21 @@ func TestReleasedVersions_ReturnsAFreshSlice(t *testing.T) {
 	first[0] = 99
 	if second := ReleasedVersions(); second[0] != 1 {
 		t.Fatalf("ReleasedVersions()[0] = %d after a caller mutated an earlier result, want 1", second[0])
+	}
+}
+
+func TestReleasedSchemaFor_V2ByteEqualsItsImmutableFile(t *testing.T) {
+	got, err := ReleasedSchemaFor(2)
+	if err != nil {
+		t.Fatalf("ReleasedSchemaFor(2): %v", err)
+	}
+	path := filepath.Join("..", "..", got.Schema)
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	if !bytes.Equal(got.RawSchema, want) || !bytes.Equal(schemav2.RawSchema, want) {
+		t.Fatal("released v2 bytes differ from its immutable file")
 	}
 }
 
@@ -87,7 +120,7 @@ func TestRawSchema_DerivesFromTheCurrentReleasedVersion(t *testing.T) {
 }
 
 func TestReleasedSchemaFor_UnknownVersionFailsClosed(t *testing.T) {
-	for _, version := range []int{0, 2, -1, math.MinInt, math.MaxInt} {
+	for _, version := range []int{0, 3, -1, math.MinInt, math.MaxInt} {
 		got, err := ReleasedSchemaFor(version)
 		if err == nil {
 			t.Fatalf("ReleasedSchemaFor(%d) returned %+v and no error; unknown versions must fail closed", version, got)

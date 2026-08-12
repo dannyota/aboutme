@@ -54,7 +54,7 @@ func baseCustomizationForBounds() schema.Customization {
 // (empty content) every bound case mutates a copy of.
 func baseDocForBounds() schema.Resume {
 	return schema.Resume{
-		SchemaVersion:   1,
+		SchemaVersion:   int64(schema.CurrentVersion),
 		PersonalDetails: schema.PersonalDetails{FullName: strp("Ada Lovelace")},
 		Content:         map[string]schema.Section{},
 		Customization:   baseCustomizationForBounds(),

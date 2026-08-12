@@ -4,7 +4,7 @@
   "description": "Two-column serif document with a warm ecru rail: claret title-case headings, credentials at the top of the rail, one ink throughout.",
   "customization": {
     "font": {
-      "family": "Alegreya",
+      "family": "alegreya",
       "baseSizePx": 14
     },
     "colors": {

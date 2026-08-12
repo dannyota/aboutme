@@ -4,7 +4,7 @@
   "description": "One-column pure black on white with no accent, no rules, no tints and no level widgets: every distinction survives a photocopier.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 14
     },
     "colors": {

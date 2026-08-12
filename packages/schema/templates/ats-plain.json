@@ -4,7 +4,7 @@
   "description": "One column, black on white, no icons or level widgets — what a text extractor reads is what the document stores.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 14
     },
     "colors": {

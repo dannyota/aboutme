@@ -4,7 +4,7 @@
   "description": "One-column Letter document in navy and grey: left title block, title-case ruled headings, tight vertical rhythm, no fills.",
   "customization": {
     "font": {
-      "family": "Inter",
+      "family": "inter",
       "baseSizePx": 13
     },
     "colors": {

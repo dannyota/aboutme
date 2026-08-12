@@ -4,7 +4,7 @@
   "description": "Two-column contemporary sans with a tinted sidebar carrying skills, languages and certificates.",
   "customization": {
     "font": {
-      "family": "Be Vietnam Pro",
+      "family": "be-vietnam-pro",
       "baseSizePx": 14
     },
     "colors": {

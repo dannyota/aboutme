@@ -36,7 +36,7 @@ follows the exclusive windows below.
 | 2    | Go sanitizer package                                        | High   | Implemented |
 | 3    | Client DOMPurify wrapper and agreement tests                | High   | Implemented |
 | 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Landed      |
-| 5B   | Immutable document v2 font catalog and converters           | High   | Pending     |
+| 5B   | Immutable document v2 font catalog and converters           | High   | Landed      |
 | 6    | Pure renderer in continuous mode                            | High   | Pending     |
 | 7    | Pure pagination engine and editor paged wrapper             | High   | Pending     |
 | 8    | Preset registry, validation, and apply semantics            | Normal | Pending     |
@@ -85,9 +85,9 @@ graph TD
     T11 --> G
 ```
 
-T1, T2, T3, and T5 have landed. T6 and T8 can start as soon as T5B releases
-schema v2; T7 follows T6 because pagination consumes the renderer's measured
-blocks. Each author writes that task's adversarial cases from
+T1, T2, T3, T5, and T5B have landed. T6 and T8 are unblocked. T7 follows T6
+because pagination consumes the renderer's measured blocks. Each author writes
+that task's adversarial cases from
 [adversarial coverage](adversarial-coverage.md) as part of the task.
 
 ## Exclusive shared-file windows

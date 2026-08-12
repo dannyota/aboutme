@@ -4,7 +4,7 @@
   "description": "Single-column compliance document: one ink, a stacked contact block, ruled uppercase headings, Letter page at 25 mm margins and numeric MM/YYYY dates.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 14
     },
     "colors": {

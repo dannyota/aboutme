@@ -4,7 +4,7 @@
   "description": "A one-column serif page at book proportions — wide margins, open leading, no rules — for a CV that is read rather than scanned.",
   "customization": {
     "font": {
-      "family": "Alegreya",
+      "family": "alegreya",
       "baseSizePx": 16
     },
     "colors": {

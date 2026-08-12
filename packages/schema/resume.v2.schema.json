@@ -1,0 +1,711 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aboutme.vn/schema/resume/v2",
+  "title": "Resume document v2",
+  "description": "Current resume document shape. See docs/design/data.md for the aggregate and versioning contract.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+    "personalDetails": { "$ref": "#/$defs/personalDetails" },
+    "content": { "$ref": "#/$defs/content" },
+    "customization": { "$ref": "#/$defs/customization" }
+  },
+  "required": ["schemaVersion", "personalDetails", "content", "customization"],
+  "additionalProperties": false,
+
+  "$defs": {
+    "schemaVersion": {
+      "description": "Document-shape version. This schema validates version 2 only; see docs/design/data.md#document-versions.",
+      "type": "integer",
+      "const": 2
+    },
+
+    "sanitizerAllowlistVersion": {
+      "description": "Rich-text sanitizer allowlist version shared by the Go write boundary and client-only DOMPurify. See docs/design/security.md#untrusted-document-content.",
+      "const": 1
+    },
+
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+
+    "richText": {
+      "description": "Sanitized HTML. maxLength bounds code points; the aggregate validator enforces the 16 KiB UTF-8 limit. See docs/design/data.md#bounds-and-invariants.",
+      "type": "string",
+      "maxLength": 16384
+    },
+
+    "link": {
+      "description": "Optional draft link: absent, empty, or an exact lowercase https, mailto, or tel URI. See docs/design/data.md#draft-and-publish-validation.",
+      "type": "string",
+      "maxLength": 2048,
+      "anyOf": [
+        { "const": "" },
+        { "format": "uri", "pattern": "^(https://|mailto:|tel:)" }
+      ]
+    },
+
+    "sectionType": {
+      "type": "string",
+      "enum": [
+        "profile",
+        "work",
+        "education",
+        "skill",
+        "language",
+        "certificate",
+        "project",
+        "custom"
+      ]
+    },
+
+    "sectionKey": {
+      "description": "Built-in lowercase section key or UUID custom-section key, bounded to 36 characters. See docs/design/data.md#resume-aggregate.",
+      "type": "string",
+      "pattern": "^[a-z]+$|^[0-9a-f-]{36}$",
+      "maxLength": 36
+    },
+
+    "iconKey": {
+      "description": "Kebab-case Lucide icon name. See docs/design/templates/contract.md.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 64
+    },
+
+    "yearMonth": {
+      "type": "object",
+      "properties": {
+        "y": { "type": "integer", "minimum": 1900, "maximum": 2100 },
+        "m": { "type": "integer", "minimum": 1, "maximum": 12 }
+      },
+      "required": ["y"],
+      "additionalProperties": false
+    },
+
+    "dateRange": {
+      "description": "Date range with a required start. Present ranges have a null end; completed ranges have an end. The store checks ordering. See docs/design/data.md#bounds-and-invariants.",
+      "type": "object",
+      "properties": {
+        "start": { "$ref": "#/$defs/yearMonth" },
+        "end": {
+          "anyOf": [{ "$ref": "#/$defs/yearMonth" }, { "type": "null" }]
+        },
+        "present": { "type": "boolean" }
+      },
+      "required": ["start", "end", "present"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "present": { "const": true } } },
+          "then": { "properties": { "end": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "present": { "const": false } } },
+          "then": { "properties": { "end": { "type": "object" } } }
+        }
+      ]
+    },
+
+    "entryBase": {
+      "description": "Draft entry base. Only id is required; absent and explicitly cleared fields remain distinct. See docs/design/data.md#draft-and-publish-validation.",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "isHidden": { "type": "boolean" }
+      },
+      "required": ["id"]
+    },
+
+    "profileEntry": {
+      "description": "Draft-permissive profile entry. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "text": { "$ref": "#/$defs/richText" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "workEntry": {
+      "description": "Draft-permissive work entry. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "jobTitle": { "type": "string", "maxLength": 160 },
+            "employer": { "type": "string", "maxLength": 160 },
+            "employerLink": { "$ref": "#/$defs/link" },
+            "city": { "type": "string", "maxLength": 120 },
+            "country": { "type": "string", "maxLength": 120 },
+            "dates": { "$ref": "#/$defs/dateRange" },
+            "description": { "$ref": "#/$defs/richText" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "educationEntry": {
+      "description": "Draft-permissive education entry. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "degree": { "type": "string", "maxLength": 160 },
+            "school": { "type": "string", "maxLength": 160 },
+            "schoolLink": { "$ref": "#/$defs/link" },
+            "city": { "type": "string", "maxLength": 120 },
+            "country": { "type": "string", "maxLength": 120 },
+            "dates": { "$ref": "#/$defs/dateRange" },
+            "description": { "$ref": "#/$defs/richText" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "skillEntry": {
+      "description": "Draft-permissive skill entry with an optional proficiency level from 0 to 5. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "maxLength": 120 },
+            "level": { "type": "integer", "minimum": 0, "maximum": 5 },
+            "infoHtml": { "$ref": "#/$defs/richText" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "languageEntry": {
+      "description": "Draft-permissive language entry selected by its parent sectionType. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "maxLength": 120 },
+            "level": { "type": "integer", "minimum": 0, "maximum": 5 }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "certificateEntry": {
+      "description": "Draft-permissive certificate entry with an optional single year-month date. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "maxLength": 160 },
+            "titleLink": { "$ref": "#/$defs/link" },
+            "issuer": { "type": "string", "maxLength": 160 },
+            "date": { "$ref": "#/$defs/yearMonth" },
+            "description": { "$ref": "#/$defs/richText" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "projectEntry": {
+      "description": "Draft-permissive project entry. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "maxLength": 160 },
+            "link": { "$ref": "#/$defs/link" },
+            "dates": { "$ref": "#/$defs/dateRange" },
+            "description": { "$ref": "#/$defs/richText" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "customEntry": {
+      "description": "Draft-permissive custom entry. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "allOf": [
+        { "$ref": "#/$defs/entryBase" },
+        {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "maxLength": 160 },
+            "titleLink": { "$ref": "#/$defs/link" },
+            "subtitle": { "type": "string", "maxLength": 160 },
+            "city": { "type": "string", "maxLength": 120 },
+            "dates": { "$ref": "#/$defs/dateRange" },
+            "description": { "$ref": "#/$defs/richText" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+
+    "section": {
+      "description": "Draft section selected by sectionType. Only sectionType and entries are required. See docs/design/data.md#resume-aggregate.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "profile" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/profileEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "work" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/workEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "education" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/educationEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "skill" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/skillEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "language" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/languageEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "certificate" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/certificateEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "project" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/projectEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sectionType": { "const": "custom" },
+            "displayName": { "$ref": "#/$defs/displayName" },
+            "iconKey": { "$ref": "#/$defs/iconKey" },
+            "entries": {
+              "type": "array",
+              "maxItems": 64,
+              "items": { "$ref": "#/$defs/customEntry" }
+            }
+          },
+          "required": ["sectionType", "entries"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "displayName": {
+      "description": "Optional section title; an empty string is an explicit draft value. See docs/design/data.md#draft-and-publish-validation.",
+      "type": "string",
+      "maxLength": 80
+    },
+
+    "content": {
+      "description": "Map of at most 24 section keys to sections. The store enforces document-wide entry ID uniqueness. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/sectionKey" },
+      "additionalProperties": { "$ref": "#/$defs/section" },
+      "maxProperties": 24
+    },
+
+    "photoCrop": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 },
+        "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      },
+      "required": ["x", "y", "width", "height"],
+      "additionalProperties": false
+    },
+
+    "photo": {
+      "description": "Resume-specific private photo object key and optional crop; the key is not a URL. See docs/design/security.md#untrusted-media.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "Server-owned private-media key with a bounded safe character set. Aggregate validation rejects traversal; see docs/design/security.md#untrusted-media.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9!_.*'()/-]*$"
+        },
+        "crop": { "$ref": "#/$defs/photoCrop" }
+      },
+      "required": ["key"],
+      "additionalProperties": false
+    },
+
+    "personalDetail": {
+      "description": "One contact item; array order is display order. See docs/design/data.md#resume-aggregate.",
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "email",
+            "phone",
+            "location",
+            "website",
+            "linkedin",
+            "github",
+            "twitter",
+            "custom"
+          ]
+        },
+        "label": { "type": "string", "maxLength": 40 },
+        "value": {
+          "description": "Draft contact value. URL contact types accept only an exact lowercase https URI or an empty string. See docs/adr/0013-contact-detail-rendering.md.",
+          "type": "string",
+          "maxLength": 256
+        },
+        "isHidden": { "type": "boolean" }
+      },
+      "required": ["id", "type", "value", "isHidden"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "Restricts website, LinkedIn, GitHub, and Twitter contact values to https links. Other contact types remain bounded draft text. See docs/adr/0013-contact-detail-rendering.md.",
+          "if": {
+            "properties": {
+              "type": { "enum": ["website", "linkedin", "github", "twitter"] }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "description": "Website and profile contacts accept an empty draft value or an exact lowercase https URI. See docs/design/data.md#draft-and-publish-validation.",
+                "type": "string",
+                "anyOf": [
+                  { "const": "" },
+                  { "format": "uri", "pattern": "^https://" }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "personalDetails": {
+      "description": "Draft personal details; fullName and details may be absent or empty. See docs/design/data.md#draft-and-publish-validation.",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string", "maxLength": 160 },
+        "headline": { "type": "string", "maxLength": 160 },
+        "photo": { "$ref": "#/$defs/photo" },
+        "details": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/personalDetail" }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "hexColor": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    },
+
+    "customization": {
+      "description": "Resume presentation settings. See docs/design/templates/README.md.",
+      "type": "object",
+      "properties": {
+        "font": {
+          "type": "object",
+          "properties": {
+            "family": {
+              "type": "string",
+              "description": "Stable version-2 font catalog ID in manifest rank order. See docs/design/fonts.md#version-2-catalog.",
+              "enum": [
+                "be-vietnam-pro",
+                "inter",
+                "noto-sans",
+                "noto-serif",
+                "roboto",
+                "open-sans",
+                "plus-jakarta-sans",
+                "work-sans",
+                "nunito-sans",
+                "montserrat",
+                "fira-sans",
+                "barlow",
+                "alegreya",
+                "spectral",
+                "literata",
+                "newsreader",
+                "space-mono",
+                "crimson-pro",
+                "eb-garamond",
+                "aleo",
+                "cormorant-garamond",
+                "roboto-serif",
+                "roboto-mono",
+                "dm-sans",
+                "atkinson-hyperlegible-next",
+                "source-sans-3"
+              ]
+            },
+            "baseSizePx": { "type": "integer", "minimum": 10, "maximum": 20 }
+          },
+          "required": ["family", "baseSizePx"],
+          "additionalProperties": false
+        },
+        "colors": {
+          "type": "object",
+          "properties": {
+            "primary": { "$ref": "#/$defs/hexColor" },
+            "text": { "$ref": "#/$defs/hexColor" },
+            "background": { "$ref": "#/$defs/hexColor" },
+            "accent": { "$ref": "#/$defs/hexColor" },
+            "surface": {
+              "description": "Optional fill color for the region selected by layout.surfaceTarget; absence falls back to colors.background. See docs/design/templates/colors.md.",
+              "$ref": "#/$defs/hexColor"
+            }
+          },
+          "required": ["primary", "text", "background"],
+          "additionalProperties": false
+        },
+        "spacing": {
+          "type": "object",
+          "properties": {
+            "sectionGap": { "type": "number", "minimum": 0, "maximum": 64 },
+            "entryGap": { "type": "number", "minimum": 0, "maximum": 64 },
+            "lineHeight": { "type": "number", "minimum": 1, "maximum": 2.5 },
+            "pageMargin": {
+              "description": "Optional horizontal and vertical page margins in millimetres, each from 0 to 40. Absence renders as 15 mm. See docs/design/templates/print.md.",
+              "type": "object",
+              "properties": {
+                "x": { "type": "number", "minimum": 0, "maximum": 40 },
+                "y": { "type": "number", "minimum": 0, "maximum": 40 }
+              },
+              "required": ["x", "y"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["sectionGap", "entryGap", "lineHeight"],
+          "additionalProperties": false
+        },
+        "heading": {
+          "description": "Styles section headings. This is distinct from customization.header, which contains the resume top block and fullName. See docs/design/templates/contract.md.",
+          "type": "object",
+          "properties": {
+            "style": {
+              "type": "string",
+              "enum": ["uppercase", "titlecase", "normal"]
+            },
+            "showRule": { "type": "boolean" }
+          },
+          "required": ["style", "showRule"],
+          "additionalProperties": false
+        },
+        "header": {
+          "description": "Optional presentation of the top resume header containing the photo, fullName, headline, and contacts. It is distinct from customization.heading, which styles section headings. See docs/design/templates/contract.md.",
+          "type": "object",
+          "properties": {
+            "align": {
+              "description": "Horizontal alignment for the complete top block. See docs/design/templates/contract.md.",
+              "type": "string",
+              "enum": ["left", "center"]
+            },
+            "detailsLayout": {
+              "description": "Displays contact details inline or stacked while preserving array order. See docs/design/templates/contract.md.",
+              "type": "string",
+              "enum": ["inline", "stacked"]
+            },
+            "iconStyle": {
+              "description": "Contact-detail icon style for the top header: none or the Lucide outline glyph. See docs/design/templates/tokens.md.",
+              "type": "string",
+              "enum": ["none", "outline"]
+            }
+          },
+          "required": ["align", "detailsLayout", "iconStyle"],
+          "additionalProperties": false
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "columns": { "type": "integer", "enum": [1, 2] },
+            "surfaceTarget": {
+              "description": "Region filled by colors.surface. With layout.columns set to 1, sidebar renders as none; that degradation is not an error and does not rewrite the draft. See docs/design/templates/contract.md.",
+              "type": "string",
+              "enum": ["none", "header", "sidebar"]
+            },
+            "sections": {
+              "description": "Orders section keys in main and sidebar columns. The store requires every content key exactly once across both arrays. See docs/design/data.md#resume-aggregate.",
+              "type": "object",
+              "properties": {
+                "main": {
+                  "type": "array",
+                  "maxItems": 24,
+                  "uniqueItems": true,
+                  "items": { "$ref": "#/$defs/sectionKey" }
+                },
+                "sidebar": {
+                  "type": "array",
+                  "maxItems": 24,
+                  "uniqueItems": true,
+                  "items": { "$ref": "#/$defs/sectionKey" }
+                }
+              },
+              "required": ["main", "sidebar"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["columns", "sections"],
+          "additionalProperties": false
+        },
+        "sectionDisplay": {
+          "description": "Display style for skill and language proficiency. See docs/design/templates/contract.md.",
+          "type": "object",
+          "properties": {
+            "skill": {
+              "type": "object",
+              "properties": {
+                "style": {
+                  "type": "string",
+                  "enum": ["text", "tag", "bar", "dots"]
+                }
+              },
+              "required": ["style"],
+              "additionalProperties": false
+            },
+            "language": {
+              "type": "object",
+              "properties": {
+                "style": {
+                  "type": "string",
+                  "enum": ["text", "tag", "bar", "dots"]
+                }
+              },
+              "required": ["style"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["skill", "language"],
+          "additionalProperties": false
+        },
+        "pageFormat": {
+          "type": "string",
+          "enum": ["a4", "letter"]
+        },
+        "dateFormat": {
+          "type": "string",
+          "enum": ["MM/YYYY", "Mon YYYY", "YYYY"]
+        }
+      },
+      "required": [
+        "font",
+        "colors",
+        "spacing",
+        "heading",
+        "layout",
+        "sectionDisplay",
+        "pageFormat",
+        "dateFormat"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

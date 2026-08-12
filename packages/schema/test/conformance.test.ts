@@ -125,11 +125,11 @@ function minimalSectionPayload(sectionType: string) {
 
 function minimalValidResume(sectionType: string) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     personalDetails: { fullName: "Ada Lovelace", details: [] },
     content: { [sectionType]: minimalSectionPayload(sectionType) },
     customization: {
-      font: { family: "Inter", baseSizePx: 14 },
+      font: { family: "inter", baseSizePx: 14 },
       colors: { primary: "#1a1a1a", text: "#1a1a1a", background: "#ffffff" },
       spacing: { sectionGap: 16, entryGap: 8, lineHeight: 1.4 },
       heading: { style: "normal", showRule: false },

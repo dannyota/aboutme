@@ -4,7 +4,7 @@
   "description": "One-column warm sans at 15 px with a tinted identity band and wide entry spacing, so a short first-job history fills the page.",
   "customization": {
     "font": {
-      "family": "Source Sans 3",
+      "family": "source-sans-3",
       "baseSizePx": 15
     },
     "colors": {

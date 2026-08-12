@@ -10,7 +10,7 @@ model.
 | Path                     | Role                                                                  |
 | ------------------------ | --------------------------------------------------------------------- |
 | `resume.schema.json`     | Working JSON Schema 2020-12 source for the current document version   |
-| `resume.v1.schema.json`  | Immutable released v1 snapshot                                        |
+| `resume.v*.schema.json`  | Immutable released snapshots                                          |
 | `released-versions.json` | Append-only manifest of released snapshots and retained types         |
 | `scripts/generate.mjs`   | Sole generator entry point                                            |
 | `gen/go/` and `gen/ts/`  | Committed current and retained generated types and version registries |
@@ -19,8 +19,8 @@ Do not hand-edit generated files. Release a new document version by adding its
 snapshot and manifest entry, updating the working schema, then regenerating.
 Never change a released snapshot or manifest entry.
 
-The planned licensed font expansion requires document schema v2 because v1's
-font identifiers are immutable. See the
+Document schema v2 uses the licensed font catalog's stable IDs while retaining
+v1's immutable display-name identifiers. See the
 [font catalog design](../../docs/design/fonts.md) and
 [P3 font release task](../../docs/plans/phase-3/task-05b-font-schema-v2.md).
 
@@ -33,8 +33,7 @@ font identifiers are immutable. See the
 - `validation/store.ts` and `gen/go/store_validate.go` implement matching
   cross-field checks that JSON Schema cannot express.
 - `validation/sanitizer-allowlist.v1.json` and `validation/hostile-corpus.json`
-  define the future cross-runtime sanitizer conformance inputs. Sanitizer
-  implementations have not landed.
+  define the generated cross-runtime sanitizer policy and conformance inputs.
 
 The Go and TypeScript validators consume the same fixture corpus. Divergent
 behavior fails both suites.

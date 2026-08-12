@@ -4,7 +4,7 @@
   "description": "One-column portfolio sheet on bone paper: centred nameplate, no rules, and olive chips for skills and languages as the page's only fills.",
   "customization": {
     "font": {
-      "family": "Be Vietnam Pro",
+      "family": "be-vietnam-pro",
       "baseSizePx": 15
     },
     "colors": {

@@ -83,7 +83,7 @@ var (
 // verb so a document can place exactly the content keys it declares (the
 // aggregate invariant).
 const wsaCustomizationJSON = `"customization":{` +
-	`"font":{"family":"Inter","baseSizePx":14},` +
+	`"font":{"family":"inter","baseSizePx":14},` +
 	`"colors":{"primary":"#1a1a1a","text":"#1a1a1a","background":"#ffffff"},` +
 	`"spacing":{"sectionGap":16,"entryGap":8,"lineHeight":1.4},` +
 	`"heading":{"style":"normal","showRule":false},` +
@@ -231,7 +231,7 @@ func wsaCanonicalLen(t *testing.T, doc schema.Resume) int {
 // wsaEmptyDocJSON is fixtures/minimal.json with a settable fullName, so each
 // concurrent writer's document is distinguishable in the winner assertions.
 func wsaEmptyDocJSON(fullName string) string {
-	return `{"schemaVersion":1,"personalDetails":{"fullName":"` + fullName +
+	return `{"schemaVersion":2,"personalDetails":{"fullName":"` + fullName +
 		`","details":[]},"content":{},` + fmt.Sprintf(wsaCustomizationJSON, "") + `}`
 }
 
@@ -244,7 +244,7 @@ func wsaDoc(t *testing.T, fullName string) schema.Resume {
 // wsaWorkDocJSON builds a one-section document from raw work-entry literals,
 // placing that section exactly once in layout.
 func wsaWorkDocJSON(entries []string) string {
-	return `{"schemaVersion":1,"personalDetails":{"fullName":"Ada Lovelace","details":[]},` +
+	return `{"schemaVersion":2,"personalDetails":{"fullName":"Ada Lovelace","details":[]},` +
 		`"content":{"work":{"sectionType":"work","entries":[` + strings.Join(entries, ",") + `]}},` +
 		fmt.Sprintf(wsaCustomizationJSON, `"work"`) + `}`
 }
@@ -1126,7 +1126,7 @@ func TestIdempotency_DifferentBodyNeverExecutes(t *testing.T) {
 func TestValidation_RejectionWritesNothing(t *testing.T) {
 	overRichText := wsaWorkDocJSON([]string{wsaWorkEntryJSON(1, schema.MaxRichTextBytes+1)})
 	duplicateEntryIDs := wsaWorkDocJSON([]string{wsaWorkEntryJSON(2, 4), wsaWorkEntryJSON(2, 5)})
-	orphanLayoutKey := `{"schemaVersion":1,"personalDetails":{"fullName":"Ada","details":[]},` +
+	orphanLayoutKey := `{"schemaVersion":2,"personalDetails":{"fullName":"Ada","details":[]},` +
 		`"content":{},` + fmt.Sprintf(wsaCustomizationJSON, `"work"`) + `}`
 	reversedDates := wsaWorkDocJSON([]string{
 		`{"id":"` + wsaUUID(3).String() + `","dates":{"start":{"y":2024},"end":{"y":2020},"present":false}}`,
