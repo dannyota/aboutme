@@ -11,7 +11,7 @@ or wire-version handling — and no route can forget one. Implements
 **Tier:** High risk (authorization, CSRF chain, idempotency, CAS).
 
 **Files:** create
-`apps/server/internal/resumeapi/{routes.go,chain.go,writesafety.go,wireversion.go,errors.go,persist.go,routes_test.go,chain_test.go,writesafety_test.go,wireversion_test.go,errors_test.go,persist_test.go,testutil_test.go}`
+`apps/server/internal/resumeapi/{doc.go,routes.go,chain.go,writesafety.go,wireversion.go,errors.go,persist.go,routes_test.go,chain_test.go,writesafety_test.go,wireversion_test.go,errors_test.go,persist_test.go,execution_order_test.go,operations_test.go,persistence_live_test.go,testutil_test.go}`
 and the seven stub handler files
 `{resumes.go,entries.go,sections.go,structure.go,personal_details.go,customization.go,photo.go}`;
 modify `apps/server/internal/api/router.go` + `router_test.go` and
@@ -162,7 +162,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
 
 ## Steps
 
-- [ ] **Step 1: failing header-contract tests.** Table-driven over every write
+- [x] **Step 1: failing header-contract tests.** Table-driven over every write
       route, asserting the exact status and code from [D8](decisions.md):
       missing `Idempotency-Key` → `400 idempotency_key_required`; non-UUID key →
       `400 idempotency_key_invalid`; missing `If-Match` where required →
@@ -183,7 +183,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       precedence as idempotency key → precondition → wire version → bounded
       decode. The photo route's outer session, CSRF/media type, and upload-rate
       checks still precede that handler order.
-- [ ] **Step 2: failing envelope and vocabulary tests.** Every response body
+- [x] **Step 2: failing envelope and vocabulary tests.** Every response body
       other than a declared `204` is `{data}` or `{error:{code,message}}` and
       nothing else; every `204` has zero bytes and no `Content-Type` header on
       both first response and replay. `details` appears only where
@@ -202,7 +202,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       inspection or transaction. Each accepted delete fingerprints one
       zero-length payload; the optional Content-Type is transport metadata and
       does not change replay identity.
-- [ ] **Step 3: failing wire-version tests.** No header → the current version; a
+- [x] **Step 3: failing wire-version tests.** No header → the current version; a
       declared accepted version → accepted, and every response for which D3
       declares `X-Resume-Schema-Version` echoes it; an undeclared, non-numeric,
       negative, or absurd version → `400 unsupported_schema_version` with
@@ -213,7 +213,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       a version accepted for writes but not emitted. Enumerate every JSON resume
       read and every mutation, including all deletes, and prove the header is in
       scope; prove binary photo GET does not accept or emit it.
-- [ ] **Step 4: failing precondition and idempotency tests.** Stale `If-Match` →
+- [x] **Step 4: failing precondition and idempotency tests.** Stale `If-Match` →
       `412 revision_mismatch` whose `details.revision` and `details.document`
       byte-match a fresh `GET` (AC-SAVE-001); replay of the same key and body →
       the stored status, approved deterministic headers, and body,
@@ -234,7 +234,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       hashes zero bytes whether its optional singleton JSON Content-Type is
       absent or present. The same key on a different concrete target is a
       distinct mutation, never a replay.
-- [ ] **Step 5: failing route-table test.** Every path and method from Task 1's
+- [x] **Step 5: failing route-table test.** Every path and method from Task 1's
       contract is registered; an unregistered method on a registered path is
       `405`; every route is behind `RequireSession` then `RequireCSRF` (assert
       by driving each route with no cookie → `401 session_required`, and each
@@ -243,7 +243,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       task replaces it. A parallel test asserts the registered set **equals**
       the OpenAPI document's set — neither side may grow silently. OpenAPI must
       never declare the construction sentinel.
-- [ ] **Step 6: failing rate-limit and body-limit tests.** Reads, writes, and
+- [x] **Step 6: failing rate-limit and body-limit tests.** Reads, writes, and
       media upload each use their own policy keyed by account + client IP via
       `api.RateLimiterConfig.Key`, with the numbers read from the budget
       constants the owner landed. Establish the photo route's outer order as
@@ -256,7 +256,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       buffering `BodyLimit`; malformed, escaped, near-match, wrong-method, and
       non-photo paths cannot enter that branch. Task 11 owns its streaming
       request and file limits, whose overflow is `413 media_too_large`.
-- [ ] **Step 7: implement; green.** The common order is key → precondition →
+- [x] **Step 7: implement; green.** The common order is key → precondition →
       wire version → strict bounded decode → canonical operation/target
       extraction → semantic fingerprint → inspection → optional external
       preparation → `Execute` (selected transaction operation → normalized
@@ -278,7 +278,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       winning transaction enters the queue. `Cache-Control: no-store` stays on
       every response (the outer chain already guarantees it; assert it rather
       than re-add it).
-- [ ] **Step 7a: close the limiter expiry contract.** Add fake-clock tests that
+- [x] **Step 7a: close the limiter expiry contract.** Add fake-clock tests that
       reclaim a fully refilled entry, keep an unrefilled entry from idle expiry
       with periodic allowed and rejected requests, expire an unrefilled entry
       only after 24 hours with no request, prove a rejection resets the idle
@@ -286,7 +286,7 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       another active entry. Update `internal/api/ratelimit.go` with the smallest
       state needed; retain the overflow and concurrent-admission tests
       unchanged.
-- [ ] **Step 8: the shared test harness.** `testutil_test.go` builds an
+- [x] **Step 8: the shared test harness.** `testutil_test.go` builds an
       `httptest` server over the real router with a live database and the
       filesystem media backend, plus helpers to create a user, a session cookie,
       a CSRF token, and a resume. Every wave-3 and wave-4 task uses it, so no
@@ -295,9 +295,45 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
       `make api-check`, and `make check`.
-- [ ] **Step 10: handoff.** Report the owned paths, failing-test evidence, exact
+- [x] **Step 10: handoff.** Report the owned paths, failing-test evidence, exact
       checks, route inventory, and remaining construction stubs to the
       integration owner. Do not stage or commit.
+
+## Implementation record
+
+The live router registers all 15 OpenAPI routes: 12 mutations and three reads.
+Each mutation has one concrete operation kind while its W3 handler remains a
+construction-only `501`. The common kernel now owns singleton headers, strict
+body decoding, wire-version projection, canonical idempotency scope, transaction
+execution, response replay, rollback classification, and fail-closed candidate
+cleanup. The three exact limiter budgets and the 24-hour idle policy are
+enforced with an injected clock. The photo upload route alone bypasses the
+buffering JSON body limit.
+
+The first focused tests failed on the missing multipart CSRF entry point, photo
+body-limit exception, limiter expiry, route operation registry, execution-order
+seams, and production v1/v2 projection. Later discriminating tests caught double
+sanitization, zero-length multipart requests without a media type, and a
+pre-save hook that could mutate the validated aggregate. Each case now has a
+regression test.
+
+Green checks before the final fast gate:
+
+- `make server-build server-vet server-test`
+- `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`
+- `make server-test-db server-test-integration server-migration-test`
+- `make api-check`
+- `(cd apps/server && GOGC=50 golangci-lint run ./internal/resumeapi/... ./internal/api/... ./internal/auth/... ./cmd/server/...)`
+
+`make check` was run. Its schema, API, server, vulnerability, SQL drift,
+migration, and released-schema stages passed. It remains red on the existing
+repository-wide lint baseline: 12 Markdown findings in the two verbatim Source
+Sans 3 license copies and 82 Go findings outside this task's owned paths. The
+targeted owned-path linter reports zero issues. Step 9 remains open until that
+baseline is repaired without changing license text.
+
+All 15 construction stubs remain for W3. The connected scan and fresh review
+remain at W4.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
 order in Step 7 can be transposed without a test failing, whether any path

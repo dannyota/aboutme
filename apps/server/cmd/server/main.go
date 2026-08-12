@@ -19,6 +19,10 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
+	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -55,6 +59,23 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
 	}
+	blobs, err := newMediaBackend(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("create media backend: %w", err)
+	}
+	projector := docmigrate.NewIdentityProjector()
+	resumeService := resumeapi.New(
+		resume.NewStore(pool, projector),
+		resume.NewIdempotencyStore(pool),
+		projector,
+		blobs,
+		resumeapi.Options{
+			Logger:         logger,
+			SessionManager: auth.NewSessionManager(store.New(pool)),
+			PublicOrigin:   cfg.PublicOrigin,
+			TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		},
+	)
 
 	handler := api.New(logger, pool, api.Options{
 		// TrustedProxyCIDRs is validated by internal/config (required and
@@ -62,7 +83,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, authService.RegisterRoutes)
+	}, authService.RegisterRoutes, resumeService.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -73,6 +94,24 @@ func run() error {
 
 	logger.Info("starting", "env", cfg.Env)
 	return serve(ctx, logger, ln, handler)
+}
+
+func newMediaBackend(ctx context.Context, cfg config.Config) (media.Backend, error) {
+	switch cfg.MediaBackend {
+	case "fs":
+		return media.NewFS(cfg.MediaFSDir)
+	case "s3":
+		return media.NewS3(ctx, media.S3Config{
+			Bucket:          cfg.MediaBucket,
+			Region:          cfg.MediaRegion,
+			Endpoint:        cfg.MediaEndpoint,
+			AccessKeyID:     cfg.MediaAccessKeyID,
+			SecretAccessKey: cfg.MediaSecretAccessKey,
+			ForcePathStyle:  cfg.MediaForcePathStyle,
+		})
+	default:
+		return nil, fmt.Errorf("unsupported configured backend %q", cfg.MediaBackend)
+	}
 }
 
 // serve runs handler on ln until ctx is done, then drains in-flight

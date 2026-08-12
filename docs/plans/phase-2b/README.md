@@ -88,8 +88,8 @@ the root Makefile, workflows, manifests, and shared scripts.
 | 1    | Complete OpenAPI contract and client regeneration  | Normal | Landed  |
 | 2    | Transaction seam and metadata CAS query            | High   | Landed  |
 | 3    | Media backends and local S3-compatible service     | High   | Landed  |
-| 4    | Write-safety kernel, routes, and policies          | High   | Pending |
-| 5    | Sanitizer walk at the aggregate write boundary     | High   | Pending |
+| 4    | Write-safety kernel, routes, and policies          | High   | Landed  |
+| 5    | Sanitizer walk at the aggregate write boundary     | High   | Landed  |
 | 6    | Resume list, create, read, metadata update, delete | High   | Pending |
 | 7    | Entry and section metadata commands                | High   | Pending |
 | 8    | Atomic section structure command                   | High   | Pending |
@@ -122,6 +122,9 @@ Task details:
 | W2   | T4 kernel and T5 sanitizer wiring | Integrate together; choke-point tests pass            |
 | W3   | T6–T11 disjoint route files       | Route tests pass; every construction-only 501 is gone |
 | W4   | Phase review and exit checklist   | Candidate is unchanged and every criterion passes     |
+
+W2 has landed. Its shared router harness exposes all 15 construction stubs for
+W3, with the write-safety and sanitizer choke points already enforced.
 
 W3 file authoring runs in parallel, but its build, race, database, and S3
 verification commands queue in at most two batches of three workers. The

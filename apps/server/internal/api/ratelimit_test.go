@@ -537,6 +537,140 @@ func TestRateLimit_KeyStore_ReclaimsOnlyExpiredEntries(t *testing.T) {
 	}
 }
 
+// TestRateLimit_KeyStore_ReclaimsUnrefilledEntryAfterHardIdleExpiry proves
+// the 24-hour idle bound is independent of token refill. A very slow bucket
+// must not pin one of the bounded key slots forever after its client vanishes.
+func TestRateLimit_KeyStore_ReclaimsUnrefilledEntryAfterHardIdleExpiry(t *testing.T) {
+	t.Parallel()
+
+	clock := testutil.NewClockAtEpoch()
+	handler := api.RateLimit(api.RateLimiterConfig{
+		Requests: 1,
+		Window:   48 * time.Hour,
+		Clock:    clock.Now,
+		MaxKeys:  1,
+	})(allowHandler())
+	send := func(ip string) int {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, rateLimitedReq(ip+":1", ""))
+		return rec.Code
+	}
+
+	if got := send("203.0.113.10"); got != http.StatusOK {
+		t.Fatalf("A at epoch: status = %d, want %d", got, http.StatusOK)
+	}
+	if got := send("203.0.113.20"); got != http.StatusOK {
+		t.Fatalf("B via overflow at epoch: status = %d, want %d", got, http.StatusOK)
+	}
+	clock.Advance(24*time.Hour + time.Second)
+	if got := send("203.0.113.30"); got != http.StatusOK {
+		t.Fatalf("C after A's hard idle expiry: status = %d, want %d", got, http.StatusOK)
+	}
+}
+
+// TestRateLimit_KeyStore_RejectionRefreshesIdleClock proves last activity is
+// recorded for denied requests too. Otherwise a caller continuously probing
+// an exhausted key would be granted a fresh private bucket at 24 hours.
+func TestRateLimit_KeyStore_RejectionRefreshesIdleClock(t *testing.T) {
+	t.Parallel()
+
+	clock := testutil.NewClockAtEpoch()
+	handler := api.RateLimit(api.RateLimiterConfig{
+		Requests: 1,
+		Window:   48 * time.Hour,
+		Clock:    clock.Now,
+		MaxKeys:  1,
+	})(allowHandler())
+	send := func(ip string) int {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, rateLimitedReq(ip+":1", ""))
+		return rec.Code
+	}
+
+	if got := send("203.0.113.10"); got != http.StatusOK {
+		t.Fatalf("A at epoch: status = %d, want %d", got, http.StatusOK)
+	}
+	if got := send("203.0.113.20"); got != http.StatusOK {
+		t.Fatalf("B via overflow at epoch: status = %d, want %d", got, http.StatusOK)
+	}
+	clock.Advance(23 * time.Hour)
+	if got := send("203.0.113.10"); got != http.StatusTooManyRequests {
+		t.Fatalf("A rejection at 23h: status = %d, want %d", got, http.StatusTooManyRequests)
+	}
+	clock.Advance(2 * time.Hour)
+	if got := send("203.0.113.30"); got != http.StatusTooManyRequests {
+		t.Fatalf("C two hours after A's rejection: status = %d, want %d; rejection must reset idle expiry", got, http.StatusTooManyRequests)
+	}
+}
+
+func TestRateLimit_KeyStore_PeriodicAllowedAndRejectedActivityPreventsIdleExpiry(t *testing.T) {
+	t.Parallel()
+
+	clock := testutil.NewClockAtEpoch()
+	handler := api.RateLimit(api.RateLimiterConfig{
+		Requests: 1,
+		Window:   6 * time.Hour,
+		Clock:    clock.Now,
+		MaxKeys:  1,
+	})(allowHandler())
+	send := func(ip string) int {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, rateLimitedReq(ip+":1", ""))
+		return recorder.Code
+	}
+
+	if got := send("203.0.113.10"); got != http.StatusOK {
+		t.Fatalf("initial activity status = %d, want 200", got)
+	}
+	for elapsed := 6 * time.Hour; elapsed <= 30*time.Hour; elapsed += 6 * time.Hour {
+		clock.Advance(6 * time.Hour)
+		if got := send("203.0.113.10"); got != http.StatusOK {
+			t.Fatalf("allowed activity at %v status = %d, want 200", elapsed, got)
+		}
+		if got := send("203.0.113.10"); got != http.StatusTooManyRequests {
+			t.Fatalf("rejected activity at %v status = %d, want 429", elapsed, got)
+		}
+	}
+	if got := send("203.0.113.20"); got != http.StatusOK {
+		t.Fatalf("new key via overflow status = %d, want 200", got)
+	}
+	if got := send("203.0.113.10"); got != http.StatusTooManyRequests {
+		t.Fatalf("active original key status = %d, want 429; it must not have been idle-evicted", got)
+	}
+}
+
+func TestRateLimit_KeyStore_BackwardClockCannotExpireAnActiveEntry(t *testing.T) {
+	t.Parallel()
+
+	clock := testutil.NewClockAtEpoch()
+	handler := api.RateLimit(api.RateLimiterConfig{
+		Requests: 1,
+		Window:   48 * time.Hour,
+		Clock:    clock.Now,
+		MaxKeys:  1,
+	})(allowHandler())
+	send := func(ip string) int {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, rateLimitedReq(ip+":1", ""))
+		return recorder.Code
+	}
+
+	if got := send("203.0.113.10"); got != http.StatusOK {
+		t.Fatalf("initial status = %d, want 200", got)
+	}
+	clock.Advance(23 * time.Hour)
+	if got := send("203.0.113.10"); got != http.StatusTooManyRequests {
+		t.Fatalf("activity at 23h status = %d, want 429", got)
+	}
+	clock.Set(testutil.Epoch.Add(-24 * time.Hour))
+	if got := send("203.0.113.20"); got != http.StatusOK {
+		t.Fatalf("new key during rollback via overflow status = %d, want 200", got)
+	}
+	if got := send("203.0.113.10"); got != http.StatusTooManyRequests {
+		t.Fatalf("original key during rollback status = %d, want 429; rollback must not create idle age", got)
+	}
+}
+
 // TestRateLimit_KeyStore_FullOfActiveEntries_OverflowsInsteadOfEvicting proves
 // that when the store is at MaxKeys and every entry is active, admitting a new
 // key must NOT evict an arbitrary active entry — that would hand an

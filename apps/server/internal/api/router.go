@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Default values used when the corresponding Options field is zero.
@@ -156,6 +159,8 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 	otherChain := NoStoreCache()(
 		RateLimit(RateLimiterConfig{TrustedProxies: opts.TrustedProxies, Clock: opts.Clock})(
 			BodyLimit(opts.BodyLimitBytes)(mux)))
+	photoUploadChain := NoStoreCache()(
+		RateLimit(RateLimiterConfig{TrustedProxies: opts.TrustedProxies, Clock: opts.Clock})(mux))
 
 	// Middleware order (outer -> inner): RequestID, SecurityHeaders,
 	// Logging, then the path-based dispatch above.
@@ -183,6 +188,10 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 			healthChain.ServeHTTP(w, r)
 			return
 		}
+		if isPhotoUploadPath(r.Method, r.URL.EscapedPath()) {
+			photoUploadChain.ServeHTTP(w, r)
+			return
+		}
 		otherChain.ServeHTTP(w, r)
 	})
 	handler = Logging(logger)(handler)
@@ -203,6 +212,23 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 // instead of silently taking the RateLimit-exempt branch.
 func isHealthPath(escapedPath string) bool {
 	return escapedPath == "/healthz" || escapedPath == "/readyz"
+}
+
+// isPhotoUploadPath identifies the one streaming route that must bypass the
+// ordinary buffering BodyLimit. It accepts only the canonical lowercase UUID
+// spelling and an unescaped exact path, so malformed and near-match requests
+// stay on the bounded JSON chain.
+func isPhotoUploadPath(method, escapedPath string) bool {
+	if method != http.MethodPost || strings.Contains(escapedPath, "%") {
+		return false
+	}
+	parts := strings.Split(escapedPath, "/")
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "api" || parts[2] != "v1" ||
+		parts[3] != "resumes" || parts[5] != "photo" {
+		return false
+	}
+	id, err := uuid.Parse(parts[4])
+	return err == nil && id.String() == parts[4]
 }
 
 // route restricts handler to the given HTTP method, responding 405 Method

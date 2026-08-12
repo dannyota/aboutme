@@ -196,6 +196,46 @@ func TestRouter_BodyLimitAppliesToAllRoutes(t *testing.T) {
 	}
 }
 
+// TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit freezes D14's exact
+// dispatch boundary. Only a canonical POST photo path reaches the mux without
+// the ordinary JSON buffer; wrong methods and near-match paths retain it.
+func TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit(t *testing.T) {
+	t.Parallel()
+
+	register := func(mux *http.ServeMux) {
+		mux.Handle("/api/v1/resumes/{id}/photo", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+	}
+	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10}, register)
+	canonicalID := "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f"
+
+	for _, tc := range []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+	}{
+		{"exact POST", http.MethodPost, "/api/v1/resumes/" + canonicalID + "/photo", http.StatusNoContent},
+		{"wrong method", http.MethodPatch, "/api/v1/resumes/" + canonicalID + "/photo", http.StatusRequestEntityTooLarge},
+		{"noncanonical UUID", http.MethodPost, "/api/v1/resumes/" + strings.ToUpper(canonicalID) + "/photo", http.StatusRequestEntityTooLarge},
+		{"missing id", http.MethodPost, "/api/v1/resumes//photo", http.StatusRequestEntityTooLarge},
+		{"near suffix", http.MethodPost, "/api/v1/resumes/" + canonicalID + "/photos", http.StatusRequestEntityTooLarge},
+		{"non-photo path", http.MethodPost, "/api/v1/resumes/" + canonicalID, http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, bytes.NewReader(bytes.Repeat([]byte("a"), 20)))
+			req.ContentLength = 20
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body=%s)", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+		})
+	}
+}
+
 // decodeErrorEnvelope unmarshals rec's body as {"error":{"code","message"}}
 // and fails the test if it isn't shaped that way — every non-2xx response
 // from this router must use the standard envelope, never a stdlib default
