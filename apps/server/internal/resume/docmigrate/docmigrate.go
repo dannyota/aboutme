@@ -42,6 +42,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"slices"
 	"strconv"
 
@@ -419,8 +420,9 @@ func (p *Projector) EmitWire(doc json.RawMessage, version int32) (json.RawMessag
 
 // jsonSemanticallyEqual compares JSON values without treating whitespace,
 // object-key order, or string escaping as changes. Arrays remain ordered.
-// JSON numbers retain their exact token spelling through UseNumber; canonical
-// resume documents use one generated spelling for each numeric value.
+// JSON numbers retain their exact decimal value through UseNumber and are
+// compared as arbitrary-precision rationals, so equivalent spellings match
+// without rounding distinct values through float64.
 func jsonSemanticallyEqual(left, right json.RawMessage) (bool, error) {
 	decode := func(raw json.RawMessage) (any, error) {
 		dec := json.NewDecoder(bytes.NewReader(raw))
@@ -462,7 +464,18 @@ func jsonValuesEqual(left, right any) (bool, error) {
 		return ok && left == right, nil
 	case json.Number:
 		right, ok := right.(json.Number)
-		return ok && left.String() == right.String(), nil
+		if !ok {
+			return false, nil
+		}
+		leftRat, ok := new(big.Rat).SetString(left.String())
+		if !ok {
+			return false, errors.New("cannot compare left JSON number exactly")
+		}
+		rightRat, ok := new(big.Rat).SetString(right.String())
+		if !ok {
+			return false, errors.New("cannot compare right JSON number exactly")
+		}
+		return leftRat.Cmp(rightRat) == 0, nil
 	case []any:
 		right, ok := right.([]any)
 		if !ok || len(left) != len(right) {
