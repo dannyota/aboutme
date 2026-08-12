@@ -40,7 +40,11 @@ type Querier interface {
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) error
+	// Returns PostgreSQL's normalized jsonb representation of the stored body
+	// and approved headers plus the exact stored byte count, so the first
+	// response and every replay use identical bytes and no caller recomputes
+	// capacity accounting in Go.
+	CreateIdempotencyRecord(ctx context.Context, arg CreateIdempotencyRecordParams) (CreateIdempotencyRecordRow, error)
 	// The caller checks the provider subject first for the common case. The
 	// database uniqueness constraint remains the concurrency backstop.
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
@@ -61,10 +65,21 @@ type Querier interface {
 	// Relational schema changes belong in apps/server/migrations; see
 	// docs/design/data.md.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
-	// Every Execute commits this per-user cleanup before its mutation transaction,
-	// so expiry enforcement survives a rejected key reuse or mutation error
-	// instead of depending on a future global job.
-	DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (int64, error)
+	// Deletes exactly this key's record if (and only if) it has expired, and
+	// reports the counters to release — zero rows deleted still returns one
+	// aggregate row of zeros.
+	DeleteExpiredIdempotencyRecordForKey(ctx context.Context, arg DeleteExpiredIdempotencyRecordForKeyParams) (DeleteExpiredIdempotencyRecordForKeyRow, error)
+	// The bounded request-path cleanup: at most limit_rows of the calling
+	// user's expired records, deterministically oldest first by
+	// (expires_at, id) on the composite index. FOR UPDATE SKIP LOCKED keeps
+	// concurrent cleanup bounded and deadlock-free. Always returns one
+	// aggregate row, even when nothing was deleted.
+	DeleteExpiredIdempotencyRecordsForUser(ctx context.Context, arg DeleteExpiredIdempotencyRecordsForUserParams) (DeleteExpiredIdempotencyRecordsForUserRow, error)
+	// The P8-priv scheduled sweep's bounded page: oldest expired rows across
+	// all users, grouped per user so the sweep can release each user's exact
+	// counters (once per returned user) before committing that cleanup
+	// transaction.
+	DeleteExpiredIdempotencyRecordsGlobal(ctx context.Context, arg DeleteExpiredIdempotencyRecordsGlobalParams) ([]DeleteExpiredIdempotencyRecordsGlobalRow, error)
 	// OAuth start is unauthenticated and writes one row per request. Each start
 	// therefore clears a bounded batch of expired rows before creating its own.
 	//
@@ -80,15 +95,38 @@ type Querier interface {
 	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
-	DeleteIdempotencyRecordIfExpired(ctx context.Context, arg DeleteIdempotencyRecordIfExpiredParams) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
+	// Revision-CAS delete returning the deleted row, so the caller can
+	// validate the stored photo key and enqueue media cleanup in the same
+	// transaction. Zero rows (stale revision, wrong owner, or missing id)
+	// surfaces as pgx.ErrNoRows; the caller re-reads to distinguish staleness
+	// from absence without creating an existence oracle.
+	DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error)
+	// Records exact-key cleanup work in the caller's transaction (ADR 0019).
+	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
+	// table's own check constraint rejects a malformed or cross-resume key.
+	EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error)
 	// Finds the exact unrevoked successor through rotated_from. The partial unique
 	// index in migration 00003 permits at most one successor per predecessor;
 	// timestamps must never be used to reconstruct this lineage. The reverse
 	// direction is already present in a session row's rotated_from value.
 	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
+	// Inputs for the capacity Retry-After decision: while an expired retained
+	// row remains the caller retries in one second (the next mutation's
+	// bounded cleanup frees space); otherwise the earliest retained expiry
+	// says when space can next appear.
+	// earliest_expiry falls back to the caller's own now when the user retains
+	// no records at all (capacity rejection with zero retained records cannot
+	// normally happen); the caller maps any earliest_expiry <= now to the
+	// one-second branch.
+	GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error)
 	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	// Locks (creating if absent) the caller's usage row inside the current
+	// transaction. The no-op DO UPDATE assignment is what makes the conflict
+	// arm take the row lock and return the existing row; user_id itself never
+	// appears in a SET clause.
+	GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, userID uuid.UUID) (IdempotencyUsage, error)
 	// System-job read for the document-version backfill. It is intentionally
 	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
@@ -124,6 +162,16 @@ type Querier interface {
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
 	LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// Normalizes a candidate response through the same jsonb representation an
+	// insert would store and reports the exact byte count the usage
+	// reservation must account for — the one canonical byte expression shared
+	// with backfill, insert, and cleanup.
+	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
+	// Releases exactly the counters of physically deleted records, in the same
+	// transaction as their deletion. The migration's purge-then-backfill order
+	// plus transactional maintenance guarantee this can never underflow the
+	// non-negative checks.
+	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
@@ -164,11 +212,23 @@ type Querier interface {
 	// Records that this session's lineage just completed a full OAuth login
 	// after a real reauthentication round trip, never by rotation.
 	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
+	// Conditionally admits one new retained record of record_bytes stored
+	// bytes within the caps. Zero rows (pgx.ErrNoRows) means the insert would
+	// exceed a cap and the caller must reject with the typed capacity error
+	// without committing the mutation.
+	TryReserveIdempotencyUsage(ctx context.Context, arg TryReserveIdempotencyUsageParams) (TryReserveIdempotencyUsageRow, error)
 	// The returned revision is the NEW revision (revision + 1), never the
 	// caller's expected one. A stale or non-matching $3 updates zero rows and
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into
 	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeDocumentCAS(ctx context.Context, arg UpdateResumeDocumentCASParams) (int64, error)
+	// The P2B full-aggregate metadata write (D15/D17): title, lng, and the
+	// caller's complete already-projected document under ONE revision CAS. The
+	// returned revision is the NEW revision. A stale or non-matching $3
+	// updates zero rows and surfaces as pgx.ErrNoRows, which internal/resume
+	// turns into *RevisionMismatchError or ErrNotFound. user_id never appears
+	// in a SET clause (the cap trigger fires on UPDATE OF user_id).
+	UpdateResumeMetadataAndDocumentCAS(ctx context.Context, arg UpdateResumeMetadataAndDocumentCASParams) (int64, error)
 	// The returned revision is the NEW revision (revision + 1), never the
 	// caller's expected one. A stale or non-matching $3 updates zero rows and
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into

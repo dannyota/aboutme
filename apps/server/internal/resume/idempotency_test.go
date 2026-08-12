@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -87,16 +88,29 @@ func createIdempotencyRecord(ctx context.Context, t *testing.T, q *store.Queries
 	userID uuid.UUID, route string, key uuid.UUID, hash [32]byte, expiresAt time.Time,
 ) {
 	t.Helper()
-	if err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
-		UserID:         userID,
-		Route:          route,
-		IdempotencyKey: key,
-		RequestHash:    hash[:],
-		ResponseStatus: 200,
-		ResponseBody:   json.RawMessage(`{"seeded":true}`),
-		ExpiresAt:      expiresAt,
-	}); err != nil {
+	created, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
+		UserID:          userID,
+		Route:           route,
+		IdempotencyKey:  key,
+		RequestHash:     hash[:],
+		ResponseStatus:  200,
+		ResponseBody:    json.RawMessage(`{"seeded":true}`),
+		ResponseHeaders: json.RawMessage(`{}`),
+		ExpiresAt:       expiresAt,
+	})
+	if err != nil {
 		t.Fatalf("CreateIdempotencyRecord() error = %v", err)
+	}
+	if _, err := q.GetOrCreateIdempotencyUsageForUpdate(ctx, userID); err != nil {
+		t.Fatalf("GetOrCreateIdempotencyUsageForUpdate() error = %v", err)
+	}
+	if _, err := q.TryReserveIdempotencyUsage(ctx, store.TryReserveIdempotencyUsageParams{
+		UserID:      userID,
+		RecordBytes: int64(created.StoredBytes),
+		MaxRecords:  50_000,
+		MaxBytes:    1 << 30,
+	}); err != nil {
+		t.Fatalf("TryReserveIdempotencyUsage() error = %v", err)
 	}
 }
 
@@ -116,6 +130,25 @@ type idempotencyExecuteResult struct {
 	replayed bool
 	err      error
 }
+
+type queryRowFailureTx struct {
+	pgx.Tx
+	queryFragment string
+	err           error
+}
+
+func (tx *queryRowFailureTx) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
+	if strings.Contains(query, tx.queryFragment) {
+		return queryRowFailure{err: tx.err}
+	}
+	return tx.Tx.QueryRow(ctx, query, args...)
+}
+
+type queryRowFailure struct {
+	err error
+}
+
+func (row queryRowFailure) Scan(...any) error { return row.err }
 
 // userRowLockedForResumeWrite reports whether another transaction already
 // holds the users-row lock that serializes resume/idempotency writes. NOWAIT
@@ -157,16 +190,17 @@ func TestIdempotencyStore_Execute_FirstRun_RunsMutateAndStores(t *testing.T) {
 		return wantResp, nil
 	}
 
-	got, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash, mutate)
+	got, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, hash, mutate)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if replayed {
 		t.Errorf("Execute() replayed = true, want false (first use of a fresh key)")
 	}
-	if got.Status != wantResp.Status || !bytes.Equal(got.Body, wantResp.Body) {
+	if got.Status != wantResp.Status {
 		t.Errorf("Execute() = %+v, want %+v", got, wantResp)
 	}
+	assertJSONEqual(t, got.Body, wantResp.Body)
 	if calls != 1 {
 		t.Errorf("mutate called %d times, want exactly 1", calls)
 	}
@@ -181,6 +215,9 @@ func TestIdempotencyStore_Execute_FirstRun_RunsMutateAndStores(t *testing.T) {
 		t.Errorf("stored record ResponseStatus = %d, want %d", row.ResponseStatus, wantResp.Status)
 	}
 	assertJSONEqual(t, row.ResponseBody, wantResp.Body)
+	if !bytes.Equal(got.Body, row.ResponseBody) {
+		t.Errorf("first response body = %s, want normalized stored bytes %s", got.Body, row.ResponseBody)
+	}
 	if !bytes.Equal(row.RequestHash, hash[:]) {
 		t.Errorf("stored RequestHash = %x, want %x", row.RequestHash, hash)
 	}
@@ -201,12 +238,9 @@ func TestIdempotencyStore_Execute_Replay_SameKeySameHash_SkipsMutate(t *testing.
 		return firstResp, nil
 	}
 
-	first, _, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash, mutate)
+	first, _, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, hash, mutate)
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
-	}
-	if first.Status != firstResp.Status || !bytes.Equal(first.Body, firstResp.Body) {
-		t.Errorf("first Execute() = %+v, want %+v (a fresh run returns mutate's own value, untouched)", first, firstResp)
 	}
 	firstRow, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 		UserID: userID, Route: idempotencyTestRoute, IdempotencyKey: key,
@@ -214,19 +248,19 @@ func TestIdempotencyStore_Execute_Replay_SameKeySameHash_SkipsMutate(t *testing.
 	if err != nil {
 		t.Fatalf("GetIdempotencyRecord() after first call error = %v", err)
 	}
+	if first.Status != int(firstRow.ResponseStatus) || !bytes.Equal(first.Body, firstRow.ResponseBody) {
+		t.Errorf("first Execute() = %+v, want normalized stored response {Status:%d Body:%s}", first, firstRow.ResponseStatus, firstRow.ResponseBody)
+	}
+	assertJSONEqual(t, first.Body, firstResp.Body)
 
-	second, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash, mutate)
+	second, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, hash, mutate)
 	if err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
 	if !replayed {
 		t.Errorf("second Execute() replayed = false, want true")
 	}
-	// "byte-identical" means identical to what is actually STORED -- not to
-	// the pre-storage Go literal the first call returned directly without
-	// a DB round trip (jsonb re-serializes on write, e.g. adding a space
-	// after ":"). second's bytes must match firstRow's stored bytes
-	// exactly: both are reads of the exact same persisted row.
+	// First and replay both use PostgreSQL's normalized stored bytes.
 	if second.Status != int(firstRow.ResponseStatus) || !bytes.Equal(second.Body, firstRow.ResponseBody) {
 		t.Errorf("second Execute() = %+v, want the STORED response {Status:%d Body:%s}", second, firstRow.ResponseStatus, firstRow.ResponseBody)
 	}
@@ -255,7 +289,7 @@ func TestIdempotencyStore_Execute_DifferentHash_RejectsReuse(t *testing.T) {
 	otherHash := sha256.Sum256([]byte("a different body"))
 	firstResp := resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"n":1}`)}
 
-	if _, _, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, firstHash,
+	if _, _, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, firstHash,
 		func(qtx *store.Queries) (resume.StoredResponse, error) { return firstResp, nil },
 	); err != nil {
 		t.Fatalf("first Execute() error = %v", err)
@@ -268,7 +302,7 @@ func TestIdempotencyStore_Execute_DifferentHash_RejectsReuse(t *testing.T) {
 	}
 
 	calls := 0
-	_, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, otherHash,
+	_, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, otherHash,
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
 			calls++
 			return resume.StoredResponse{Status: 999, Body: json.RawMessage(`{"should":"never persist"}`)}, nil
@@ -312,7 +346,7 @@ func TestIdempotencyStore_Execute_DifferentHash_ReapPersistsOnRejectedReuse(t *t
 	createIdempotencyRecord(ctx, t, q, userID, expiredRoute, expiredKey, expiredHash, clock.Now().Add(-time.Second))
 
 	otherHash := sha256.Sum256([]byte("different body"))
-	_, replayed, err := idem.Execute(ctx, userID, targetRoute, targetKey, otherHash,
+	_, replayed, err := idem.ExecuteForTest(ctx, userID, targetRoute, targetKey, otherHash,
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
 			t.Fatal("mutate called for a live key with a different request hash")
 			return resume.StoredResponse{}, nil
@@ -344,7 +378,7 @@ func TestIdempotencyStore_Execute_MutateError_RollsBackWriteAndPersistsNothing(t
 	errMutateFailed := errors.New("test: mutate failed after writing")
 
 	var writtenID uuid.UUID
-	_, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash,
+	_, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, hash,
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
 			created, createErr := rs.CreateTxForTest(ctx, qtx, userID, "Should Roll Back", doc)
 			if createErr != nil {
@@ -388,7 +422,7 @@ func TestIdempotencyStore_Execute_MutateError_ReapPersistsWhileMutationRollsBack
 	failedHash := sha256.Sum256([]byte("request whose mutation fails"))
 	errMutateFailed := errors.New("test: mutation failed after writing")
 	var writtenID uuid.UUID
-	_, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, failedKey, failedHash,
+	_, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, failedKey, failedHash,
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
 			created, createErr := rs.CreateTxForTest(ctx, qtx, userID, "Must Roll Back", doc)
 			if createErr != nil {
@@ -422,7 +456,7 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 	hash := sha256.Sum256([]byte("first request"))
 	firstResp := resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"n":1}`)}
 
-	if _, _, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash,
+	if _, _, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, hash,
 		func(qtx *store.Queries) (resume.StoredResponse, error) { return firstResp, nil },
 	); err != nil {
 		t.Fatalf("first Execute() error = %v", err)
@@ -440,7 +474,7 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 
 	secondResp := resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"n":2}`)}
 	calls := 0
-	got, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash,
+	got, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, hash,
 		func(qtx *store.Queries) (resume.StoredResponse, error) {
 			calls++
 			return secondResp, nil
@@ -455,9 +489,10 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 	if calls != 1 {
 		t.Errorf("mutate called %d times, want exactly 1 (a fresh execution)", calls)
 	}
-	if got.Status != secondResp.Status || !bytes.Equal(got.Body, secondResp.Body) {
-		t.Errorf("Execute() past TTL = %+v, want the NEW response %+v", got, secondResp)
+	if got.Status != secondResp.Status {
+		t.Errorf("Execute() past TTL = %+v, want status %d", got, secondResp.Status)
 	}
+	assertJSONEqual(t, got.Body, secondResp.Body)
 
 	secondRow, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 		UserID: userID, Route: idempotencyTestRoute, IdempotencyKey: key,
@@ -469,6 +504,9 @@ func TestIdempotencyStore_Execute_ExpiredRecord_TreatedAsFreshAndReplaced(t *tes
 		t.Errorf("record after expiry = same ID %v as before, want a REPLACED row", secondRow.ID)
 	}
 	assertJSONEqual(t, secondRow.ResponseBody, secondResp.Body)
+	if !bytes.Equal(got.Body, secondRow.ResponseBody) {
+		t.Errorf("fresh response body = %s, want normalized stored bytes %s", got.Body, secondRow.ResponseBody)
+	}
 }
 
 // TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges proves a
@@ -517,7 +555,7 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 			winnerResult := make(chan idempotencyExecuteResult, 1)
 			var winnerCalls atomic.Int32
 			go func() {
-				resp, replayed, executeErr := winnerStore.Execute(ctx, userID, idempotencyTestRoute, key, winnerHash,
+				resp, replayed, executeErr := winnerStore.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, winnerHash,
 					func(qtx *store.Queries) (resume.StoredResponse, error) {
 						winnerCalls.Add(1)
 						revision, saveErr := rs.SaveDocumentTxForTest(ctx, qtx, userID, created.ID, winnerDoc, created.Revision)
@@ -566,7 +604,7 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 			contenderResult := make(chan idempotencyExecuteResult, 1)
 			var contenderCalls atomic.Int32
 			go func() {
-				resp, replayed, executeErr := contenderStore.Execute(ctx, userID, idempotencyTestRoute, key, contenderHash,
+				resp, replayed, executeErr := contenderStore.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, contenderHash,
 					func(qtx *store.Queries) (resume.StoredResponse, error) {
 						contenderCalls.Add(1)
 						close(contenderEnteredMutate)
@@ -594,9 +632,10 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 			if gotWinner.err != nil || gotWinner.replayed {
 				t.Errorf("winner Execute() = {replayed:%v err:%v}, want {false nil}", gotWinner.replayed, gotWinner.err)
 			}
-			if gotWinner.resp.Status != ready.resp.Status || !bytes.Equal(gotWinner.resp.Body, ready.resp.Body) {
-				t.Errorf("winner Execute() response = %+v, want callback response %+v", gotWinner.resp, ready.resp)
+			if gotWinner.resp.Status != ready.resp.Status {
+				t.Errorf("winner Execute() status = %d, want callback status %d", gotWinner.resp.Status, ready.resp.Status)
 			}
+			assertJSONEqual(t, gotWinner.resp.Body, ready.resp.Body)
 			if winnerCalls.Load() != 1 {
 				t.Errorf("winner mutate calls = %d, want 1", winnerCalls.Load())
 			}
@@ -614,6 +653,9 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 				t.Errorf("stored request hash = %x, want winning hash %x", record.RequestHash, winnerHash)
 			}
 			assertJSONEqual(t, record.ResponseBody, ready.resp.Body)
+			if !bytes.Equal(gotWinner.resp.Body, record.ResponseBody) {
+				t.Errorf("winner response body = %s, want normalized stored bytes %s", gotWinner.resp.Body, record.ResponseBody)
+			}
 
 			if tt.contenderUsesSameHash {
 				if gotContender.err != nil || !gotContender.replayed {
@@ -672,7 +714,7 @@ func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 			}
 			return resume.StoredResponse{Status: 201, Body: body}, nil
 		}
-		if _, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash, mutate); err != nil {
+		if _, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, key, hash, mutate); err != nil {
 			t.Fatalf("Execute() #%d error = %v", i, err)
 		} else if replayed {
 			t.Errorf("Execute() #%d replayed = true, want false (first use of a fresh key)", i)
@@ -699,7 +741,7 @@ func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 		_, createErr := rs.CreateTxForTest(ctx, qtx, userID, "Resume 4 (over cap)", doc)
 		return resume.StoredResponse{}, createErr
 	}
-	_, replayed, err := idem.Execute(ctx, userID, idempotencyTestRoute, fourthKey, fourthHash, mutate)
+	_, replayed, err := idem.ExecuteForTest(ctx, userID, idempotencyTestRoute, fourthKey, fourthHash, mutate)
 	if !errors.Is(err, resume.ErrCapExceeded) {
 		t.Fatalf("Execute() 4th error = %v, want resume.ErrCapExceeded", err)
 	}
@@ -722,5 +764,1139 @@ func TestIdempotencyStore_Execute_ComposesRealCapCheckAcrossKeys(t *testing.T) {
 	}
 	if len(list) != 3 {
 		t.Errorf("List() after rejected 4th = %d resumes, want 3 (still capped)", len(list))
+	}
+}
+
+// --- P2B inspection and commit-outcome contract ---
+
+func TestIdempotencyStore_Inspect_DecidesWithoutReservingOrCleaning(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	key := uuid.New()
+	hash := sha256.Sum256([]byte("inspect body"))
+
+	if got, replayed, err := idem.Inspect(ctx, userID, idempotencyTestRoute, key, hash); err != nil || replayed || got.Status != 0 {
+		t.Fatalf("Inspect(absent) = (%+v, %t, %v), want zero, false, nil", got, replayed, err)
+	}
+	var usageRows int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&usageRows); err != nil {
+		t.Fatalf("count usage rows after absent Inspect: %v", err)
+	}
+	if usageRows != 0 {
+		t.Errorf("usage rows after absent Inspect = %d, want 0", usageRows)
+	}
+
+	want := resume.StoredResponse{
+		Status:  200,
+		Body:    json.RawMessage(`{"z":1,"a":2}`),
+		Headers: map[string]string{"ETag": `"2"`},
+	}
+	result, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash,
+		func(*store.Queries) (resume.StoredResponse, error) { return want, nil })
+	if err != nil {
+		t.Fatalf("Execute() seed error: %v", err)
+	}
+	if result.Replayed || result.Outcome != resume.CommitCommitted {
+		t.Fatalf("Execute() seed result = %+v, want fresh committed", result)
+	}
+
+	got, replayed, err := idem.Inspect(ctx, userID, idempotencyTestRoute, key, hash)
+	if err != nil || !replayed {
+		t.Fatalf("Inspect(live same hash) = (%+v, %t, %v), want replay", got, replayed, err)
+	}
+	if got.Status != result.Response.Status || !bytes.Equal(got.Body, result.Response.Body) || !reflect.DeepEqual(got.Headers, result.Response.Headers) {
+		t.Errorf("Inspect(live) = %+v, want stored Execute response %+v", got, result.Response)
+	}
+
+	otherHash := sha256.Sum256([]byte("different inspect body"))
+	if _, replayed, err := idem.Inspect(ctx, userID, idempotencyTestRoute, key, otherHash); !errors.Is(err, resume.ErrIdempotencyKeyReuse) || replayed {
+		t.Errorf("Inspect(changed hash) = (replayed=%t, err=%v), want false, ErrIdempotencyKeyReuse", replayed, err)
+	}
+
+	clock.Advance(resume.IdempotencyTTL + time.Second)
+	if got, replayed, err := idem.Inspect(ctx, userID, idempotencyTestRoute, key, hash); err != nil || replayed || got.Status != 0 {
+		t.Errorf("Inspect(expired) = (%+v, %t, %v), want zero, false, nil", got, replayed, err)
+	}
+	var retained int64
+	if err := pool.QueryRow(ctx, `SELECT retained_records FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&retained); err != nil {
+		t.Fatalf("read usage after expired Inspect: %v", err)
+	}
+	if retained != 1 {
+		t.Errorf("retained records after expired Inspect = %d, want 1 (Inspect does not clean)", retained)
+	}
+}
+
+func TestIdempotencyStore_Inspect_TwoMissesStillConvergeAtExecute(t *testing.T) {
+	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	userID := createTestUser(t, q)
+	key := uuid.New()
+	hash := sha256.Sum256([]byte("inspect race"))
+
+	type inspectResult struct {
+		replayed bool
+		err      error
+	}
+	inspectResults := make(chan inspectResult, 2)
+	startInspect := make(chan struct{})
+	for range 2 {
+		go func() {
+			<-startInspect
+			_, replayed, err := idem.Inspect(ctx, userID, idempotencyTestRoute, key, hash)
+			inspectResults <- inspectResult{replayed: replayed, err: err}
+		}()
+	}
+	close(startInspect)
+	for range 2 {
+		got := <-inspectResults
+		if got.err != nil || got.replayed {
+			t.Fatalf("concurrent Inspect = (replayed=%t, err=%v), want miss", got.replayed, got.err)
+		}
+	}
+
+	type executeOutcome struct {
+		result resume.ExecuteResult
+		err    error
+	}
+	executeResults := make(chan executeOutcome, 2)
+	startExecute := make(chan struct{})
+	var calls atomic.Int32
+	mutate := func(*store.Queries) (resume.StoredResponse, error) {
+		calls.Add(1)
+		return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"winner":true}`)}, nil
+	}
+	for range 2 {
+		go func() {
+			<-startExecute
+			result, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash, mutate)
+			executeResults <- executeOutcome{result: result, err: err}
+		}()
+	}
+	close(startExecute)
+
+	replays := 0
+	var bodies [2]json.RawMessage
+	for i := range 2 {
+		got := <-executeResults
+		if got.err != nil || got.result.Outcome != resume.CommitCommitted {
+			t.Fatalf("Execute after concurrent misses = (%+v, %v), want committed", got.result, got.err)
+		}
+		if got.result.Replayed {
+			replays++
+		}
+		bodies[i] = got.result.Response.Body
+	}
+	if calls.Load() != 1 || replays != 1 {
+		t.Errorf("after two Inspect misses: callback calls=%d replays=%d, want 1 and 1", calls.Load(), replays)
+	}
+	if !bytes.Equal(bodies[0], bodies[1]) {
+		t.Errorf("winner/replay bodies differ: %s vs %s", bodies[0], bodies[1])
+	}
+}
+
+func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
+	_, rs, q, pool, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	clock := testutil.NewClockAtEpoch()
+	response := resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"ok":true}`)}
+
+	assertPair := func(t *testing.T, result resume.ExecuteResult) {
+		t.Helper()
+		if result.Replayed && result.Outcome != resume.CommitCommitted {
+			t.Fatalf("invalid ExecuteResult pair: Replayed=true with outcome %v", result.Outcome)
+		}
+	}
+
+	t.Run("cleanup begin failure is not attempted", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		injected := errors.New("begin cleanup failed")
+		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
+			func(context.Context) (pgx.Tx, error) { return nil, injected }, nil)
+		var calls atomic.Int32
+		result, err := idem.Execute(ctx, userID, idempotencyTestRoute, uuid.New(), sha256.Sum256([]byte("cleanup begin")),
+			func(*store.Queries) (resume.StoredResponse, error) { calls.Add(1); return response, nil })
+		if !errors.Is(err, injected) || result.Outcome != resume.CommitNotAttempted || calls.Load() != 0 {
+			t.Errorf("Execute() = (%+v, %v), calls=%d; want CommitNotAttempted, injected error, 0 calls", result, err, calls.Load())
+		}
+		assertPair(t, result)
+	})
+
+	t.Run("cleanup query failure after begin is not attempted", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		key := uuid.New()
+		hash := sha256.Sum256([]byte("cleanup query failure seed"))
+		createIdempotencyRecord(ctx, t, q, userID, "POST cleanup-query-failure-seed", key, hash,
+			clock.Now().Add(-time.Hour))
+
+		injected := errors.New("delete expired cleanup records failed")
+		var begins atomic.Int32
+		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
+			func(ctx context.Context) (pgx.Tx, error) {
+				tx, err := pool.Begin(ctx)
+				if err != nil {
+					return nil, err
+				}
+				begins.Add(1)
+				return &queryRowFailureTx{
+					Tx: tx, queryFragment: "-- name: DeleteExpiredIdempotencyRecordsForUser", err: injected,
+				}, nil
+			}, nil)
+		var calls atomic.Int32
+		result, err := idem.Execute(ctx, userID, idempotencyTestRoute, uuid.New(),
+			sha256.Sum256([]byte("cleanup query failure")),
+			func(*store.Queries) (resume.StoredResponse, error) {
+				calls.Add(1)
+				return response, nil
+			})
+		if !errors.Is(err, injected) || result.Outcome != resume.CommitNotAttempted ||
+			result.Replayed || calls.Load() != 0 || begins.Load() != 1 {
+			t.Errorf("Execute() = (%+v, %v), calls=%d begins=%d; want CommitNotAttempted, injected error, 0 calls, 1 begin",
+				result, err, calls.Load(), begins.Load())
+		}
+		assertPair(t, result)
+		if _, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+			UserID: userID, Route: "POST cleanup-query-failure-seed", IdempotencyKey: key,
+		}); err != nil {
+			t.Errorf("expired record after failed cleanup query: %v", err)
+		}
+		assertIdempotencyUsageMatchesRows(ctx, t, pool, userID)
+		locked, err := userRowLockedForResumeWrite(ctx, pool, userID)
+		if err != nil {
+			t.Fatalf("probe owner lock after cleanup rollback: %v", err)
+		}
+		if locked {
+			t.Error("cleanup transaction still holds the owner-row lock after Execute returned")
+		}
+	})
+
+	t.Run("mutation begin failure is not attempted", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		injected := errors.New("begin mutation failed")
+		begins := 0
+		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
+			func(ctx context.Context) (pgx.Tx, error) {
+				begins++
+				if begins == 2 {
+					return nil, injected
+				}
+				return pool.Begin(ctx)
+			}, nil)
+		var calls atomic.Int32
+		result, err := idem.Execute(ctx, userID, idempotencyTestRoute, uuid.New(), sha256.Sum256([]byte("mutation begin")),
+			func(*store.Queries) (resume.StoredResponse, error) { calls.Add(1); return response, nil })
+		if !errors.Is(err, injected) || result.Outcome != resume.CommitNotAttempted || calls.Load() != 0 || begins != 2 {
+			t.Errorf("Execute() = (%+v, %v), calls=%d begins=%d; want CommitNotAttempted, 0 calls, 2 begins", result, err, calls.Load(), begins)
+		}
+		assertPair(t, result)
+	})
+
+	for _, tc := range []struct {
+		name        string
+		commitErr   error
+		wantOutcome resume.CommitOutcome
+	}{
+		{name: "server rollback at commit is definite", commitErr: pgx.ErrTxCommitRollback, wantOutcome: resume.CommitDefinitelyRolledBack},
+		{name: "server pg error at commit is definite", commitErr: &pgconn.PgError{Code: "40001", Message: "serialization failure"}, wantOutcome: resume.CommitDefinitelyRolledBack},
+		{name: "transaction resolution pg error is unknown", commitErr: &pgconn.PgError{Code: "08007", Message: "transaction resolution unknown"}, wantOutcome: resume.CommitUnknown},
+		{name: "statement completion pg error is unknown", commitErr: &pgconn.PgError{Code: "40003", Message: "statement completion unknown"}, wantOutcome: resume.CommitUnknown},
+		{name: "connection loss at commit is unknown", commitErr: errors.New("connection lost during commit"), wantOutcome: resume.CommitUnknown},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := createTestUser(t, q)
+			idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now, nil,
+				func(context.Context, pgx.Tx) error { return tc.commitErr })
+			key := uuid.New()
+			var createdID uuid.UUID
+			result, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, sha256.Sum256([]byte(tc.name)),
+				func(qtx *store.Queries) (resume.StoredResponse, error) {
+					created, createErr := rs.CreateTx(ctx, qtx, userID, tc.name, nil, validDocForTest(t))
+					createdID = created.ID
+					return response, createErr
+				})
+			if err == nil || result.Outcome != tc.wantOutcome || result.Replayed {
+				t.Errorf("Execute() = (%+v, %v), want outcome %v with error and no replay", result, err, tc.wantOutcome)
+			}
+			assertPair(t, result)
+			assertIdempotencyRecordAbsent(ctx, t, q, userID, idempotencyTestRoute, key)
+			if createdID != uuid.Nil {
+				if _, getErr := rs.Get(ctx, userID, createdID); !errors.Is(getErr, resume.ErrNotFound) {
+					t.Errorf("Get(created after injected commit error) = %v, want ErrNotFound", getErr)
+				}
+			}
+		})
+	}
+
+	t.Run("lost commit response after commit stays unknown and may persist", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		injected := errors.New("connection lost after commit")
+		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now, nil,
+			func(ctx context.Context, tx pgx.Tx) error {
+				if err := tx.Commit(ctx); err != nil {
+					t.Fatalf("injected underlying commit: %v", err)
+				}
+				return injected
+			})
+		key := uuid.New()
+		var createdID uuid.UUID
+		result, err := idem.Execute(ctx, userID, "POST committed-then-lost", key,
+			sha256.Sum256([]byte("committed then lost")),
+			func(qtx *store.Queries) (resume.StoredResponse, error) {
+				created, createErr := rs.CreateTx(ctx, qtx, userID, "committed then lost", nil, validDocForTest(t))
+				createdID = created.ID
+				return response, createErr
+			})
+		if !errors.Is(err, injected) || result.Outcome != resume.CommitUnknown || result.Replayed {
+			t.Fatalf("Execute() = (%+v, %v), want non-replayed CommitUnknown with injected error", result, err)
+		}
+		assertPair(t, result)
+		if _, getErr := rs.Get(ctx, userID, createdID); getErr != nil {
+			t.Errorf("Get(committed mutation after lost response): %v", getErr)
+		}
+		if _, getErr := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+			UserID: userID, Route: "POST committed-then-lost", IdempotencyKey: key,
+		}); getErr != nil {
+			t.Errorf("GetIdempotencyRecord(committed after lost response): %v", getErr)
+		}
+	})
+
+	t.Run("success and replay are committed", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		idem := resume.NewIdempotencyStoreForTest(pool, clock.Now)
+		key := uuid.New()
+		hash := sha256.Sum256([]byte("success and replay"))
+		first, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash,
+			func(*store.Queries) (resume.StoredResponse, error) { return response, nil })
+		if err != nil || first.Replayed || first.Outcome != resume.CommitCommitted {
+			t.Fatalf("first Execute() = (%+v, %v), want fresh committed", first, err)
+		}
+		second, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash,
+			func(*store.Queries) (resume.StoredResponse, error) {
+				return resume.StoredResponse{}, errors.New("replay callback ran")
+			})
+		if err != nil || !second.Replayed || second.Outcome != resume.CommitCommitted {
+			t.Fatalf("replay Execute() = (%+v, %v), want replayed committed", second, err)
+		}
+		assertPair(t, first)
+		assertPair(t, second)
+	})
+}
+
+// --- P2B bounded retention and capacity accounting ---
+
+func seedIdempotencyRows(ctx context.Context, t *testing.T, pool *store.Pool,
+	userID uuid.UUID, routePrefix string, count int, firstExpiry time.Time,
+) {
+	t.Helper()
+	if count <= 0 {
+		return
+	}
+	_, err := pool.Exec(ctx, `
+		INSERT INTO idempotency_records
+		    (user_id, route, idempotency_key, request_hash,
+		     response_status, response_body, response_headers, expires_at)
+		SELECT $1, $2 || lpad(g::text, 6, '0'), uuidv7(),
+		       decode(repeat('00', 32), 'hex'), 200,
+		       '{"seeded":true}'::jsonb, '{}'::jsonb,
+		       $3::timestamptz + g * interval '1 microsecond'
+		FROM generate_series(0, $4::integer - 1) AS g`,
+		userID, routePrefix, firstExpiry, count)
+	if err != nil {
+		t.Fatalf("seed %d idempotency rows for %s: %v", count, routePrefix, err)
+	}
+}
+
+func refreshIdempotencyUsage(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID) {
+	t.Helper()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO idempotency_usage (user_id, retained_records, stored_bytes)
+		SELECT user_id, count(*)::bigint,
+		       COALESCE(sum(octet_length(response_body::text) +
+		                    octet_length(response_headers::text)), 0)::bigint
+		FROM idempotency_records WHERE user_id = $1 GROUP BY user_id
+		ON CONFLICT (user_id) DO UPDATE
+		SET retained_records = EXCLUDED.retained_records,
+		    stored_bytes = EXCLUDED.stored_bytes`, userID)
+	if err != nil {
+		t.Fatalf("refresh idempotency usage: %v", err)
+	}
+}
+
+func assertIdempotencyUsageMatchesRows(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID) {
+	t.Helper()
+	var gotRecords, gotBytes, wantRecords, wantBytes int64
+	if err := pool.QueryRow(ctx, `
+		SELECT retained_records, stored_bytes
+		FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&gotRecords, &gotBytes); err != nil {
+		t.Fatalf("read idempotency usage: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*)::bigint,
+		       COALESCE(sum(octet_length(response_body::text) +
+		                    octet_length(response_headers::text)), 0)::bigint
+		FROM idempotency_records WHERE user_id = $1`, userID).Scan(&wantRecords, &wantBytes); err != nil {
+		t.Fatalf("recompute idempotency usage: %v", err)
+	}
+	if gotRecords != wantRecords || gotBytes != wantBytes {
+		t.Errorf("usage counters = (%d records, %d bytes), rows = (%d records, %d bytes)",
+			gotRecords, gotBytes, wantRecords, wantBytes)
+	}
+}
+
+func TestIdempotencyStore_Execute_BoundedOldestFirstCleanup(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	neighborID := createTestUser(t, q)
+
+	seedIdempotencyRows(ctx, t, pool, userID, "cleanup-expired-", 201, clock.Now().Add(-2*time.Hour))
+	seedIdempotencyRows(ctx, t, pool, userID, "cleanup-live-", 1, clock.Now().Add(time.Hour))
+	seedIdempotencyRows(ctx, t, pool, neighborID, "neighbor-expired-", 2, clock.Now().Add(-2*time.Hour))
+	refreshIdempotencyUsage(ctx, t, pool, userID)
+	refreshIdempotencyUsage(ctx, t, pool, neighborID)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin EXPLAIN transaction: %v", err)
+	}
+	defer tx.Rollback(context.Background()) //nolint:errcheck // cleanup after read-only plan evidence
+	if _, err := tx.Exec(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
+		t.Fatalf("disable seqscan for plan evidence: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL enable_bitmapscan = off`); err != nil {
+		t.Fatalf("disable bitmap scan for ordered-index plan evidence: %v", err)
+	}
+	rows, err := tx.Query(ctx, `
+		EXPLAIN (COSTS OFF)
+		SELECT id FROM idempotency_records
+		WHERE user_id = $1 AND expires_at <= $2
+		ORDER BY expires_at, id LIMIT 200 FOR UPDATE SKIP LOCKED`, userID, clock.Now())
+	if err != nil {
+		t.Fatalf("EXPLAIN cleanup selection: %v", err)
+	}
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			rows.Close()
+			t.Fatalf("scan cleanup plan: %v", err)
+		}
+		plan.WriteString(line)
+		plan.WriteByte('\n')
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		t.Fatalf("read cleanup plan: %v", err)
+	}
+	rows.Close()
+	if !strings.Contains(plan.String(), "idempotency_records_user_expires_id_idx") {
+		t.Errorf("bounded cleanup plan does not use composite index:\n%s", plan.String())
+	}
+
+	if _, err := idem.Execute(ctx, userID, "POST cleanup-first", uuid.New(), sha256.Sum256([]byte("cleanup first")),
+		func(*store.Queries) (resume.StoredResponse, error) {
+			return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"ok":1}`)}, nil
+		}); err != nil {
+		t.Fatalf("first cleanup Execute(): %v", err)
+	}
+
+	var expiredCount int64
+	var remainingRoute string
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*)::bigint, min(route)
+		FROM idempotency_records
+		WHERE user_id = $1 AND route LIKE 'cleanup-expired-%'`, userID).Scan(&expiredCount, &remainingRoute); err != nil {
+		t.Fatalf("read expired remainder: %v", err)
+	}
+	if expiredCount != 1 || remainingRoute != "cleanup-expired-000200" {
+		t.Errorf("expired remainder = (%d, %q), want newest single row cleanup-expired-000200", expiredCount, remainingRoute)
+	}
+	var liveCount, neighborCount int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1 AND route LIKE 'cleanup-live-%'`, userID).Scan(&liveCount); err != nil {
+		t.Fatalf("count live rows: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1 AND route LIKE 'neighbor-expired-%'`, neighborID).Scan(&neighborCount); err != nil {
+		t.Fatalf("count neighbor rows: %v", err)
+	}
+	if liveCount != 1 || neighborCount != 2 {
+		t.Errorf("live/neighbor rows after cleanup = %d/%d, want 1/2", liveCount, neighborCount)
+	}
+	assertIdempotencyUsageMatchesRows(ctx, t, pool, userID)
+	assertIdempotencyUsageMatchesRows(ctx, t, pool, neighborID)
+
+	if _, err := idem.Execute(ctx, userID, "POST cleanup-second", uuid.New(), sha256.Sum256([]byte("cleanup second")),
+		func(*store.Queries) (resume.StoredResponse, error) {
+			return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"ok":2}`)}, nil
+		}); err != nil {
+		t.Fatalf("second cleanup Execute(): %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1 AND route LIKE 'cleanup-expired-%'`, userID).Scan(&expiredCount); err != nil {
+		t.Fatalf("count final expired rows: %v", err)
+	}
+	if expiredCount != 0 {
+		t.Errorf("expired rows after second cleanup = %d, want 0", expiredCount)
+	}
+	assertIdempotencyUsageMatchesRows(ctx, t, pool, userID)
+}
+
+func TestIdempotencyStore_Execute_ConcurrentCleanupStaysBounded(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	seedIdempotencyRows(ctx, t, pool, userID, "concurrent-expired-", 401, clock.Now().Add(-2*time.Hour))
+	refreshIdempotencyUsage(ctx, t, pool, userID)
+
+	type result struct {
+		result resume.ExecuteResult
+		err    error
+	}
+	results := make(chan result, 2)
+	start := make(chan struct{})
+	var callbacks atomic.Int32
+	for i := range 2 {
+		i := i
+		go func() {
+			<-start
+			got, err := idem.Execute(ctx, userID, fmt.Sprintf("POST concurrent-cleanup-%d", i), uuid.New(),
+				sha256.Sum256([]byte(fmt.Sprintf("cleanup-%d", i))),
+				func(*store.Queries) (resume.StoredResponse, error) {
+					callbacks.Add(1)
+					return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"ok":true}`)}, nil
+				})
+			results <- result{result: got, err: err}
+		}()
+	}
+	close(start)
+	for range 2 {
+		got := <-results
+		if got.err != nil || got.result.Outcome != resume.CommitCommitted {
+			t.Fatalf("concurrent cleanup Execute() = (%+v, %v), want committed", got.result, got.err)
+		}
+	}
+	if callbacks.Load() != 2 {
+		t.Errorf("callbacks = %d, want 2 distinct-key mutations", callbacks.Load())
+	}
+	var remaining int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1 AND route LIKE 'concurrent-expired-%'`, userID).Scan(&remaining); err != nil {
+		t.Fatalf("count concurrent cleanup remainder: %v", err)
+	}
+	if remaining != 1 {
+		t.Errorf("expired rows after two concurrent cleanups = %d, want 1 (two bounded batches of 200)", remaining)
+	}
+	assertIdempotencyUsageMatchesRows(ctx, t, pool, userID)
+}
+
+func setIdempotencyUsage(ctx context.Context, t *testing.T, pool *store.Pool,
+	userID uuid.UUID, records, storedBytes int64,
+) {
+	t.Helper()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO idempotency_usage (user_id, retained_records, stored_bytes)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET retained_records = EXCLUDED.retained_records,
+		    stored_bytes = EXCLUDED.stored_bytes`, userID, records, storedBytes)
+	if err != nil {
+		t.Fatalf("set idempotency usage: %v", err)
+	}
+}
+
+func assertCapacityError(t *testing.T, err error, wantRetryAfter int64) {
+	t.Helper()
+	if !errors.Is(err, resume.ErrIdempotencyCapacity) {
+		t.Fatalf("error = %v, want ErrIdempotencyCapacity", err)
+	}
+	var capacity *resume.IdempotencyCapacityError
+	if !errors.As(err, &capacity) {
+		t.Fatalf("error type = %T, want *IdempotencyCapacityError", err)
+	}
+	if capacity.RetryAfterSeconds != wantRetryAfter {
+		t.Errorf("RetryAfterSeconds = %d, want %d", capacity.RetryAfterSeconds, wantRetryAfter)
+	}
+}
+
+func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, rs, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+
+	t.Run("record cap rejects before callback", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		setIdempotencyUsage(ctx, t, pool, userID, 50_000, 0)
+		var calls atomic.Int32
+		result, err := idem.Execute(ctx, userID, "POST record-cap", uuid.New(), sha256.Sum256([]byte("record cap")),
+			func(*store.Queries) (resume.StoredResponse, error) {
+				calls.Add(1)
+				return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"no":true}`)}, nil
+			})
+		assertCapacityError(t, err, 1)
+		if result.Outcome != resume.CommitDefinitelyRolledBack || result.Replayed || calls.Load() != 0 {
+			t.Errorf("result=%+v calls=%d, want definite rollback, no replay, no callback", result, calls.Load())
+		}
+	})
+
+	t.Run("record count exactly at boundary commits", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		response := resume.StoredResponse{
+			Status: 200,
+			Body:   json.RawMessage(`{"recordBoundary":true}`),
+		}
+		normalized, err := q.NormalizeIdempotencyResponse(ctx, store.NormalizeIdempotencyResponseParams{
+			ResponseBody: response.Body, ResponseHeaders: json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("normalize record-boundary response: %v", err)
+		}
+		setIdempotencyUsage(ctx, t, pool, userID, 49_999, 0)
+
+		var calls atomic.Int32
+		key := uuid.New()
+		result, err := idem.Execute(ctx, userID, "POST record-boundary", key,
+			sha256.Sum256([]byte("record boundary")),
+			func(*store.Queries) (resume.StoredResponse, error) {
+				calls.Add(1)
+				return response, nil
+			})
+		if err != nil || result.Outcome != resume.CommitCommitted || result.Replayed || calls.Load() != 1 {
+			t.Fatalf("Execute(record boundary) = (%+v, %v), calls=%d; want fresh commit and 1 call",
+				result, err, calls.Load())
+		}
+		var records, storedBytes int64
+		if err := pool.QueryRow(ctx, `
+			SELECT retained_records, stored_bytes
+			FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&records, &storedBytes); err != nil {
+			t.Fatalf("read usage at record boundary: %v", err)
+		}
+		if records != 50_000 || storedBytes != int64(normalized.StoredBytes) {
+			t.Errorf("usage at record boundary = (%d records, %d bytes), want (50,000 records, %d bytes)",
+				records, storedBytes, normalized.StoredBytes)
+		}
+		if _, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+			UserID: userID, Route: "POST record-boundary", IdempotencyKey: key,
+		}); err != nil {
+			t.Errorf("committed record at exact record boundary: %v", err)
+		}
+	})
+
+	t.Run("stored bytes exactly at boundary commit", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		response := resume.StoredResponse{
+			Status: 200,
+			Body:   json.RawMessage(` { "z": 1, "a": 2 } `),
+		}
+		normalized, err := q.NormalizeIdempotencyResponse(ctx, store.NormalizeIdempotencyResponseParams{
+			ResponseBody: response.Body, ResponseHeaders: json.RawMessage(`{}`),
+		})
+		if err != nil {
+			t.Fatalf("normalize byte-boundary response: %v", err)
+		}
+		initialBytes := int64(1<<30) - int64(normalized.StoredBytes)
+		setIdempotencyUsage(ctx, t, pool, userID, 0, initialBytes)
+
+		var calls atomic.Int32
+		key := uuid.New()
+		result, err := idem.Execute(ctx, userID, "POST byte-boundary", key,
+			sha256.Sum256([]byte("byte boundary")),
+			func(*store.Queries) (resume.StoredResponse, error) {
+				calls.Add(1)
+				return response, nil
+			})
+		if err != nil || result.Outcome != resume.CommitCommitted || result.Replayed || calls.Load() != 1 {
+			t.Fatalf("Execute(byte boundary) = (%+v, %v), calls=%d; want fresh commit and 1 call",
+				result, err, calls.Load())
+		}
+		var records, storedBytes int64
+		if err := pool.QueryRow(ctx, `
+			SELECT retained_records, stored_bytes
+			FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&records, &storedBytes); err != nil {
+			t.Fatalf("read usage at byte boundary: %v", err)
+		}
+		if records != 1 || storedBytes != 1<<30 {
+			t.Errorf("usage at byte boundary = (%d records, %d bytes), want (1 record, %d bytes)",
+				records, storedBytes, int64(1<<30))
+		}
+		row, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+			UserID: userID, Route: "POST byte-boundary", IdempotencyKey: key,
+		})
+		if err != nil {
+			t.Fatalf("read committed record at exact byte boundary: %v", err)
+		}
+		if !bytes.Equal(row.ResponseBody, normalized.ResponseBody) || int64(row.ResponseStatus) != int64(response.Status) {
+			t.Errorf("stored byte-boundary response = (status %d, body %s), want (status %d, normalized body %s)",
+				row.ResponseStatus, row.ResponseBody, response.Status, normalized.ResponseBody)
+		}
+	})
+
+	t.Run("existing key replays at record cap", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		key := uuid.New()
+		hash := sha256.Sum256([]byte("existing at cap"))
+		inserted, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
+			UserID: userID, Route: "POST replay-at-cap", IdempotencyKey: key,
+			RequestHash: hash[:], ResponseStatus: 200,
+			ResponseBody: json.RawMessage(`{"stored":true}`), ResponseHeaders: json.RawMessage(`{}`),
+			ExpiresAt: clock.Now().Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("seed replay-at-cap record: %v", err)
+		}
+		setIdempotencyUsage(ctx, t, pool, userID, 50_000, int64(inserted.StoredBytes))
+		var calls atomic.Int32
+		result, err := idem.Execute(ctx, userID, "POST replay-at-cap", key, hash,
+			func(*store.Queries) (resume.StoredResponse, error) {
+				calls.Add(1)
+				return resume.StoredResponse{}, errors.New("replay callback ran")
+			})
+		if err != nil || !result.Replayed || result.Outcome != resume.CommitCommitted || calls.Load() != 0 {
+			t.Errorf("Execute(replay at cap) = (%+v, %v), calls=%d; want replayed committed", result, err, calls.Load())
+		}
+		if !bytes.Equal(result.Response.Body, inserted.ResponseBody) {
+			t.Errorf("replay body = %s, want stored %s", result.Response.Body, inserted.ResponseBody)
+		}
+	})
+
+	t.Run("byte cap rolls mutation back", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		setIdempotencyUsage(ctx, t, pool, userID, 0, 1<<30)
+		key := uuid.New()
+		var createdID uuid.UUID
+		result, err := idem.Execute(ctx, userID, "POST byte-cap", key, sha256.Sum256([]byte("byte cap")),
+			func(qtx *store.Queries) (resume.StoredResponse, error) {
+				created, createErr := rs.CreateTx(ctx, qtx, userID, "must roll back", nil, validDocForTest(t))
+				createdID = created.ID
+				return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"tooLarge":true}`)}, createErr
+			})
+		assertCapacityError(t, err, 1)
+		if result.Outcome != resume.CommitDefinitelyRolledBack || createdID == uuid.Nil {
+			t.Errorf("byte-cap result=%+v createdID=%v, want definite rollback after callback", result, createdID)
+		}
+		if _, getErr := rs.Get(ctx, userID, createdID); !errors.Is(getErr, resume.ErrNotFound) {
+			t.Errorf("Get(byte-cap mutation) = %v, want ErrNotFound", getErr)
+		}
+		assertIdempotencyRecordAbsent(ctx, t, q, userID, "POST byte-cap", key)
+		var records, storedBytes int64
+		if err := pool.QueryRow(ctx, `SELECT retained_records, stored_bytes FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&records, &storedBytes); err != nil {
+			t.Fatalf("read usage after byte-cap rollback: %v", err)
+		}
+		if records != 0 || storedBytes != 1<<30 {
+			t.Errorf("usage after byte-cap rollback = (%d, %d), want (0, %d)", records, storedBytes, int64(1<<30))
+		}
+	})
+
+	t.Run("earliest live expiry rounds up", func(t *testing.T) {
+		userID := createTestUser(t, q)
+		key := uuid.New()
+		hash := sha256.Sum256([]byte("retry rounding seed"))
+		inserted, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
+			UserID: userID, Route: "POST retry-rounding-seed", IdempotencyKey: key,
+			RequestHash: hash[:], ResponseStatus: 200,
+			ResponseBody: json.RawMessage(`{"seed":true}`), ResponseHeaders: json.RawMessage(`{}`),
+			ExpiresAt: clock.Now().Add(1500 * time.Millisecond),
+		})
+		if err != nil {
+			t.Fatalf("seed retry-rounding record: %v", err)
+		}
+		setIdempotencyUsage(ctx, t, pool, userID, 50_000, int64(inserted.StoredBytes))
+		result, err := idem.Execute(ctx, userID, "POST retry-rounding-new", uuid.New(), sha256.Sum256([]byte("retry rounding new")),
+			func(*store.Queries) (resume.StoredResponse, error) {
+				return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"no":true}`)}, nil
+			})
+		assertCapacityError(t, err, 2)
+		if result.Outcome != resume.CommitDefinitelyRolledBack {
+			t.Errorf("retry-rounding outcome = %v, want definite rollback", result.Outcome)
+		}
+	})
+}
+
+func TestIdempotencyStore_Execute_ExpiredBacklogRemainsCountedAtCap(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
+	})
+
+	// One bulk insert makes the physical retained-row count itself the cap
+	// authority. Cleanup removes only 200, leaving 50,001 expired rows still
+	// counted, so this request cannot admit a replacement record.
+	seedIdempotencyRows(ctx, t, pool, userID, "capacity-expired-", 50_201, clock.Now().Add(-2*time.Hour))
+	refreshIdempotencyUsage(ctx, t, pool, userID)
+	var calls atomic.Int32
+	result, err := idem.Execute(ctx, userID, "POST capacity-expired-new", uuid.New(), sha256.Sum256([]byte("capacity expired new")),
+		func(*store.Queries) (resume.StoredResponse, error) {
+			calls.Add(1)
+			return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"no":true}`)}, nil
+		})
+	assertCapacityError(t, err, 1)
+	if result.Outcome != resume.CommitDefinitelyRolledBack || calls.Load() != 0 {
+		t.Errorf("expired-backlog result=%+v calls=%d, want definite rollback before callback", result, calls.Load())
+	}
+	var remaining int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1`, userID).Scan(&remaining); err != nil {
+		t.Fatalf("count expired backlog remainder: %v", err)
+	}
+	if remaining != 50_001 {
+		t.Errorf("retained rows after one bounded cleanup = %d, want 50,001", remaining)
+	}
+	assertIdempotencyUsageMatchesRows(ctx, t, pool, userID)
+}
+
+func TestIdempotencyStore_Execute_ExpiredExactKeyRollbackForcesOneSecondRetry(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+
+	seedIdempotencyRows(ctx, t, pool, userID, "capacity-older-expired-", 200, clock.Now().Add(-2*time.Hour))
+	targetRoute := "POST capacity-expired-exact"
+	targetKey := uuid.New()
+	targetHash := sha256.Sum256([]byte("capacity expired exact"))
+	if _, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
+		UserID: userID, Route: targetRoute, IdempotencyKey: targetKey,
+		RequestHash: targetHash[:], ResponseStatus: 200,
+		ResponseBody: json.RawMessage(`{"target":true}`), ResponseHeaders: json.RawMessage(`{}`),
+		ExpiresAt: clock.Now().Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("seed expired exact-key record: %v", err)
+	}
+	liveHash := sha256.Sum256([]byte("capacity later live"))
+	if _, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
+		UserID: userID, Route: "POST capacity-later-live", IdempotencyKey: uuid.New(),
+		RequestHash: liveHash[:], ResponseStatus: 200,
+		ResponseBody: json.RawMessage(`{"live":true}`), ResponseHeaders: json.RawMessage(`{}`),
+		ExpiresAt: clock.Now().Add(1500 * time.Millisecond),
+	}); err != nil {
+		t.Fatalf("seed later live record: %v", err)
+	}
+
+	var physicalBytes int64
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(sum(octet_length(response_body::text) +
+		                    octet_length(response_headers::text)), 0)::bigint
+		FROM idempotency_records WHERE user_id = $1`, userID).Scan(&physicalBytes); err != nil {
+		t.Fatalf("read seeded response bytes: %v", err)
+	}
+	// Synthetic retained-record pressure keeps this regression small. Its
+	// expected counter transition is still exact: cleanup commits -200,
+	// while the exact-key deletion and -1 release must both roll back.
+	setIdempotencyUsage(ctx, t, pool, userID, 50_201, physicalBytes)
+
+	var calls atomic.Int32
+	result, err := idem.Execute(ctx, userID, targetRoute, targetKey, targetHash,
+		func(*store.Queries) (resume.StoredResponse, error) {
+			calls.Add(1)
+			return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"no":true}`)}, nil
+		})
+	assertCapacityError(t, err, 1)
+	if result.Outcome != resume.CommitDefinitelyRolledBack || result.Replayed || calls.Load() != 0 {
+		t.Errorf("result=%+v calls=%d, want definite rollback, no replay, no callback", result, calls.Load())
+	}
+
+	var olderRows int64
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM idempotency_records
+		WHERE user_id = $1 AND route LIKE 'capacity-older-expired-%'`, userID).Scan(&olderRows); err != nil {
+		t.Fatalf("count older expired rows: %v", err)
+	}
+	if olderRows != 0 {
+		t.Errorf("older expired rows after committed cleanup = %d, want 0", olderRows)
+	}
+	if _, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+		UserID: userID, Route: targetRoute, IdempotencyKey: targetKey,
+	}); err != nil {
+		t.Errorf("expired exact-key record after capacity rollback: %v", err)
+	}
+
+	var retainedRecords, storedBytes, remainingBytes int64
+	if err := pool.QueryRow(ctx, `
+		SELECT retained_records, stored_bytes
+		FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&retainedRecords, &storedBytes); err != nil {
+		t.Fatalf("read usage after exact-key rollback: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(sum(octet_length(response_body::text) +
+		                    octet_length(response_headers::text)), 0)::bigint
+		FROM idempotency_records WHERE user_id = $1`, userID).Scan(&remainingBytes); err != nil {
+		t.Fatalf("recompute retained response bytes: %v", err)
+	}
+	if retainedRecords != 50_001 || storedBytes != remainingBytes {
+		t.Errorf("usage after cleanup and rollback = (%d records, %d bytes), want (50,001 records, %d bytes)",
+			retainedRecords, storedBytes, remainingBytes)
+	}
+}
+
+func TestIdempotencyStore_Execute_CapacityRetryQueryFailureIsSurfaced(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	setIdempotencyUsage(ctx, t, pool, userID, 50_000, 0)
+
+	injected := errors.New("capacity retry query failed")
+	var begins atomic.Int32
+	idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
+		func(ctx context.Context) (pgx.Tx, error) {
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if begins.Add(1) == 2 {
+				return &queryRowFailureTx{
+					Tx: tx, queryFragment: "AS expired_backlog", err: injected,
+				}, nil
+			}
+			return tx, nil
+		}, nil)
+
+	var calls atomic.Int32
+	result, err := idem.Execute(ctx, userID, "POST capacity-query-failure", uuid.New(),
+		sha256.Sum256([]byte("capacity query failure")),
+		func(*store.Queries) (resume.StoredResponse, error) {
+			calls.Add(1)
+			return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"no":true}`)}, nil
+		})
+	if !errors.Is(err, injected) {
+		t.Fatalf("Execute() error = %v, want wrapped injected query error", err)
+	}
+	if errors.Is(err, resume.ErrIdempotencyCapacity) {
+		t.Errorf("Execute() error = %v, must not fabricate ErrIdempotencyCapacity", err)
+	}
+	if result.Outcome != resume.CommitDefinitelyRolledBack || result.Replayed || calls.Load() != 0 {
+		t.Errorf("result=%+v calls=%d, want definite rollback, no replay, no callback", result, calls.Load())
+	}
+}
+
+func TestTryReserveIdempotencyUsage_ConcurrentContendersCannotOvershoot(t *testing.T) {
+	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	userID := createTestUser(t, q)
+	setIdempotencyUsage(ctx, t, pool, userID, 49_999, 0)
+
+	type result struct{ err error }
+	results := make(chan result, 2)
+	start := make(chan struct{})
+	for range 2 {
+		go func() {
+			<-start
+			_, err := q.TryReserveIdempotencyUsage(ctx, store.TryReserveIdempotencyUsageParams{
+				UserID: userID, RecordBytes: 1, MaxRecords: 50_000, MaxBytes: 1 << 30,
+			})
+			results <- result{err: err}
+		}()
+	}
+	close(start)
+	successes, rejected := 0, 0
+	for range 2 {
+		got := <-results
+		switch {
+		case got.err == nil:
+			successes++
+		case errors.Is(got.err, pgx.ErrNoRows):
+			rejected++
+		default:
+			t.Fatalf("TryReserveIdempotencyUsage() error: %v", got.err)
+		}
+	}
+	if successes != 1 || rejected != 1 {
+		t.Errorf("concurrent reservations = %d successes/%d rejected, want 1/1", successes, rejected)
+	}
+	var records int64
+	if err := pool.QueryRow(ctx, `SELECT retained_records FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&records); err != nil {
+		t.Fatalf("read retained count after concurrent reserve: %v", err)
+	}
+	if records != 50_000 {
+		t.Errorf("retained count after concurrent reserve = %d, want 50,000", records)
+	}
+}
+
+func TestTryReserveIdempotencyUsage_ConcurrentByteContendersCannotOvershoot(t *testing.T) {
+	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	userID := createTestUser(t, q)
+	setIdempotencyUsage(ctx, t, pool, userID, 0, (1<<30)-1)
+
+	type result struct{ err error }
+	results := make(chan result, 2)
+	start := make(chan struct{})
+	for range 2 {
+		go func() {
+			<-start
+			_, err := q.TryReserveIdempotencyUsage(ctx, store.TryReserveIdempotencyUsageParams{
+				UserID: userID, RecordBytes: 1, MaxRecords: 50_000, MaxBytes: 1 << 30,
+			})
+			results <- result{err: err}
+		}()
+	}
+	close(start)
+	successes, rejected := 0, 0
+	for range 2 {
+		got := <-results
+		switch {
+		case got.err == nil:
+			successes++
+		case errors.Is(got.err, pgx.ErrNoRows):
+			rejected++
+		default:
+			t.Fatalf("TryReserveIdempotencyUsage() error: %v", got.err)
+		}
+	}
+	if successes != 1 || rejected != 1 {
+		t.Errorf("concurrent byte reservations = %d successes/%d rejected, want 1/1", successes, rejected)
+	}
+	var records, storedBytes int64
+	if err := pool.QueryRow(ctx, `
+		SELECT retained_records, stored_bytes
+		FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&records, &storedBytes); err != nil {
+		t.Fatalf("read usage after concurrent byte reserve: %v", err)
+	}
+	if records != 1 || storedBytes != 1<<30 {
+		t.Errorf("usage after concurrent byte reserve = (%d records, %d bytes), want (1 record, %d bytes)",
+			records, storedBytes, int64(1<<30))
+	}
+}
+
+func TestIdempotencyStore_Execute_CallbackRollbackLeavesUsageUnchanged(t *testing.T) {
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	userID := createTestUser(t, q)
+	injected := errors.New("callback failed")
+	result, err := idem.Execute(ctx, userID, "POST callback-rollback", uuid.New(), sha256.Sum256([]byte("callback rollback")),
+		func(*store.Queries) (resume.StoredResponse, error) { return resume.StoredResponse{}, injected })
+	if !errors.Is(err, injected) || result.Outcome != resume.CommitDefinitelyRolledBack {
+		t.Fatalf("Execute(callback failure) = (%+v, %v), want definite rollback and injected error", result, err)
+	}
+	var usageRows int64
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&usageRows); err != nil {
+		t.Fatalf("count usage after callback rollback: %v", err)
+	}
+	if usageRows != 0 {
+		t.Errorf("usage rows after callback rollback = %d, want 0", usageRows)
+	}
+}
+
+// --- P2B normalized replay identity and stored-header policy ---
+
+func TestIdempotencyStore_Execute_FirstAndReplayAreByteIdentical(t *testing.T) {
+	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	userID := createTestUser(t, q)
+	key := uuid.New()
+	hash := sha256.Sum256([]byte("identity"))
+	input := resume.StoredResponse{
+		Status: 201,
+		Body:   json.RawMessage(`{"longer":1,"a":2}`),
+		Headers: map[string]string{
+			"Location":                "/api/v1/resumes/example",
+			"ETag":                    `"1"`,
+			"X-Resume-Schema-Version": "1",
+		},
+	}
+	first, err := idem.Execute(ctx, userID, "POST identity", key, hash,
+		func(*store.Queries) (resume.StoredResponse, error) { return input, nil })
+	if err != nil {
+		t.Fatalf("first Execute(): %v", err)
+	}
+	replay, err := idem.Execute(ctx, userID, "POST identity", key, hash,
+		func(*store.Queries) (resume.StoredResponse, error) {
+			return resume.StoredResponse{}, errors.New("replay callback ran")
+		})
+	if err != nil {
+		t.Fatalf("replay Execute(): %v", err)
+	}
+	if first.Replayed || !replay.Replayed || first.Outcome != resume.CommitCommitted || replay.Outcome != resume.CommitCommitted {
+		t.Errorf("first/replay flags = (%+v, %+v), want fresh committed then replayed committed", first, replay)
+	}
+	if first.Response.Status != replay.Response.Status || !bytes.Equal(first.Response.Body, replay.Response.Body) ||
+		!reflect.DeepEqual(first.Response.Headers, replay.Response.Headers) {
+		t.Errorf("first/replay differ:\nfirst=%+v\nreplay=%+v", first.Response, replay.Response)
+	}
+	if bytes.Equal(first.Response.Body, input.Body) {
+		t.Errorf("first body unexpectedly kept pre-storage bytes %s; test input must exercise jsonb normalization", input.Body)
+	}
+	row, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+		UserID: userID, Route: "POST identity", IdempotencyKey: key,
+	})
+	if err != nil {
+		t.Fatalf("read identity row: %v", err)
+	}
+	if !bytes.Equal(first.Response.Body, row.ResponseBody) {
+		t.Errorf("first body = %s, stored body = %s", first.Response.Body, row.ResponseBody)
+	}
+}
+
+func TestIdempotencyStore_Execute_BodylessSentinelNeverReachesCaller(t *testing.T) {
+	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	userID := createTestUser(t, q)
+	cases := []struct {
+		operation string
+		headers   map[string]string
+	}{
+		{operation: "DELETE resume", headers: nil},
+		{operation: "DELETE entry", headers: map[string]string{
+			"ETag": `"2"`, "X-Resume-Schema-Version": "1",
+		}},
+		{operation: "DELETE photo", headers: map[string]string{
+			"ETag": `"2"`, "X-Resume-Schema-Version": "1",
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.operation, func(t *testing.T) {
+			key := uuid.New()
+			hash := sha256.Sum256([]byte(tc.operation))
+			input := resume.StoredResponse{Status: 204, Headers: tc.headers}
+			first, err := idem.Execute(ctx, userID, tc.operation, key, hash,
+				func(*store.Queries) (resume.StoredResponse, error) { return input, nil })
+			if err != nil {
+				t.Fatalf("first Execute(): %v", err)
+			}
+			replay, err := idem.Execute(ctx, userID, tc.operation, key, hash,
+				func(*store.Queries) (resume.StoredResponse, error) {
+					return resume.StoredResponse{}, errors.New("replay callback ran")
+				})
+			if err != nil {
+				t.Fatalf("replay Execute(): %v", err)
+			}
+			if len(first.Response.Body) != 0 || len(replay.Response.Body) != 0 {
+				t.Errorf("bodyless first/replay lengths = %d/%d, want 0/0", len(first.Response.Body), len(replay.Response.Body))
+			}
+			if !reflect.DeepEqual(first.Response.Headers, tc.headers) || !reflect.DeepEqual(replay.Response.Headers, tc.headers) {
+				t.Errorf("bodyless first/replay headers = %#v / %#v, want exact %#v", first.Response.Headers, replay.Response.Headers, tc.headers)
+			}
+			row, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+				UserID: userID, Route: tc.operation, IdempotencyKey: key,
+			})
+			if err != nil {
+				t.Fatalf("read bodyless row: %v", err)
+			}
+			if !bytes.Equal(bytes.TrimSpace(row.ResponseBody), []byte("null")) {
+				t.Errorf("stored bodyless sentinel = %s, want null", row.ResponseBody)
+			}
+		})
+	}
+}
+
+func TestIdempotencyStore_Execute_RejectsUnapprovedStoredHeader(t *testing.T) {
+	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
+	userID := createTestUser(t, q)
+	key := uuid.New()
+	result, err := idem.Execute(ctx, userID, "POST bad-header", key, sha256.Sum256([]byte("bad header")),
+		func(*store.Queries) (resume.StoredResponse, error) {
+			return resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"ok":true}`), Headers: map[string]string{"Date": "never persist"}}, nil
+		})
+	if err == nil || result.Outcome != resume.CommitDefinitelyRolledBack {
+		t.Fatalf("Execute(unapproved header) = (%+v, %v), want definite rollback error", result, err)
+	}
+	assertIdempotencyRecordAbsent(ctx, t, q, userID, "POST bad-header", key)
+}
+
+func TestIdempotencyStore_Inspect_FailsClosedOnCorruptStoredHeader(t *testing.T) {
+	clock := testutil.NewClockAtEpoch()
+	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
+	userID := createTestUser(t, q)
+	key := uuid.New()
+	hash := sha256.Sum256([]byte("corrupt header"))
+	inserted, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
+		UserID: userID, Route: "POST corrupt-header", IdempotencyKey: key,
+		RequestHash: hash[:], ResponseStatus: 200,
+		ResponseBody: json.RawMessage(`{"ok":true}`), ResponseHeaders: json.RawMessage(`{"Date":"stale"}`),
+		ExpiresAt: clock.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("seed corrupt stored header: %v", err)
+	}
+	setIdempotencyUsage(ctx, t, pool, userID, 1, int64(inserted.StoredBytes))
+	if got, replayed, err := idem.Inspect(ctx, userID, "POST corrupt-header", key, hash); err == nil || replayed || got.Status != 0 {
+		t.Errorf("Inspect(corrupt stored header) = (%+v, %t, %v), want zero, false, error", got, replayed, err)
 	}
 }
