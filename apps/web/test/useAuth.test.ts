@@ -5,7 +5,7 @@ import {
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { setResponseStatus } from 'h3';
+import { readRawBody, setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
 
 // logout() navigates away via `navigateTo` on success — stub it so tests
@@ -47,8 +47,8 @@ registerEndpoint('/api/v1/me', () => ({ data: meData }));
 
 const Probe = defineComponent({
   setup() {
-    const { user, csrfToken, identities, logout, refresh } = useAuth();
-    return { user, csrfToken, identities, logout, refresh };
+    const { user, csrfToken, identities, logout, mutate, refresh } = useAuth();
+    return { user, csrfToken, identities, logout, mutate, refresh };
   },
   render() {
     return h('div', [
@@ -78,6 +78,19 @@ const Probe = defineComponent({
         { 'data-testid': 'refresh-button', 'onClick': () => this.refresh() },
         'refresh',
       ),
+      h(
+        'button',
+        {
+          'data-testid': 'json-mutation-button',
+          'onClick': () => {
+            this.mutate('/api/v1/test-json-mutation', {
+              method: 'POST',
+              body: { enabled: true },
+            }).catch(() => {});
+          },
+        },
+        'mutate JSON',
+      ),
     ]);
   },
 });
@@ -87,32 +100,58 @@ describe('useAuth', () => {
     vi.mocked(navigateTo).mockClear();
   });
 
-  it('logout() posts to /api/v1/auth/logout with the CSRF header and '
-    + 'a JSON content type', async () => {
-    let receivedMethod: string | undefined;
-    let receivedHeader: string | undefined;
-    let receivedContentType: string | undefined;
-    registerEndpoint('/api/v1/auth/logout', {
-      method: 'POST',
-      handler: (event) => {
-        receivedMethod = event.method;
-        receivedHeader = requestHeader(event, 'x-csrf-token');
-        receivedContentType = requestHeader(event, 'content-type');
-        setResponseStatus(event, 204);
-        return null;
-      },
+  it('logout() posts to /api/v1/auth/logout as a bodiless mutation',
+    async () => {
+      let receivedMethod: string | undefined;
+      let receivedHeader: string | undefined;
+      let receivedContentType: string | undefined;
+      registerEndpoint('/api/v1/auth/logout', {
+        method: 'POST',
+        handler: (event) => {
+          receivedMethod = event.method;
+          receivedHeader = requestHeader(event, 'x-csrf-token');
+          receivedContentType = requestHeader(event, 'content-type');
+          setResponseStatus(event, 204);
+          return null;
+        },
+      });
+
+      const wrapper = await mountSuspended(Probe);
+      await flushPromises();
+
+      await wrapper.get('[data-testid="logout-button"]').trigger('click');
+      await flushPromises();
+
+      expect(receivedMethod).toBe('POST');
+      expect(receivedHeader).toBe('test-csrf-token');
+      expect(receivedContentType).toBeUndefined();
     });
 
-    const wrapper = await mountSuspended(Probe);
-    await flushPromises();
+  it('keeps application/json on mutations that have a JSON body',
+    async () => {
+      let receivedContentType: string | undefined;
+      let receivedBody: string | undefined;
+      registerEndpoint('/api/v1/test-json-mutation', {
+        method: 'POST',
+        handler: async (event) => {
+          receivedContentType = requestHeader(event, 'content-type');
+          receivedBody = await readRawBody(event);
+          setResponseStatus(event, 204);
+          return null;
+        },
+      });
 
-    await wrapper.get('[data-testid="logout-button"]').trigger('click');
-    await flushPromises();
+      const wrapper = await mountSuspended(Probe);
+      await flushPromises();
 
-    expect(receivedMethod).toBe('POST');
-    expect(receivedHeader).toBe('test-csrf-token');
-    expect(receivedContentType).toBe('application/json');
-  });
+      await wrapper
+        .get('[data-testid="json-mutation-button"]')
+        .trigger('click');
+      await flushPromises();
+
+      expect(receivedContentType).toBe('application/json');
+      expect(receivedBody).toBe('{"enabled":true}');
+    });
 
   it('logout() navigates to /login once the session is destroyed',
     async () => {

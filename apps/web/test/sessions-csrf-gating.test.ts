@@ -13,7 +13,12 @@ import SessionsPage from '../app/pages/app/settings/sessions.vue';
 // `useAuth.test.ts`'s probe component does — but each Vitest test *file*
 // gets its own fresh Nuxt app instance, so isolating this case in its own
 // file sidesteps the whole problem instead of fighting it.
-registerEndpoint('/api/v1/me', { method: 'GET', handler: () => ({}) });
+let meResponse: unknown = {};
+
+registerEndpoint('/api/v1/me', {
+  method: 'GET',
+  handler: () => meResponse,
+});
 registerEndpoint('/api/v1/sessions', () => ({
   data: [
     {
@@ -36,6 +41,39 @@ registerEndpoint('/api/v1/sessions', () => ({
 }));
 
 describe('sessions.vue CSRF gating', () => {
+  it('uses the first returned identity as the reauthentication provider',
+    async () => {
+      meResponse = {
+        data: {
+          user: {
+            id: 'user-1',
+            email: 'demo@example.com',
+            name: 'Demo User',
+            avatarKey: null,
+          },
+          csrfToken: 'test-csrf-token',
+          identities: [
+            { provider: 'linkedin' },
+            { provider: 'google' },
+          ],
+        },
+      };
+
+      const wrapper = await mountSuspended(SessionsPage, {
+        route: '/app/settings/sessions?error=reauth_required',
+      });
+      await flushPromises();
+
+      const prompt = wrapper.get('[data-testid="reauth-prompt"]');
+      expect(prompt.get('button').text()).toBe(
+        'Sign in again with linkedin',
+      );
+
+      meResponse = {};
+      await refreshNuxtData();
+      await flushPromises();
+    });
+
   it('disables mutating controls until csrfToken is available', async () => {
     // Contract drift / a proxy error page — /me resolves with no usable
     // csrfToken, so nothing that would send X-CSRF-Token is clickable.

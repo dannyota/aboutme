@@ -11,10 +11,11 @@ import type { ComputedRef } from 'vue';
  *
  * `csrfToken` comes from the response body only — never a cookie, URL, or
  * log (spec: CSRF §"Sessions"). Every mutating call in this app (logout,
- * per-session revoke, revoke-all) must send it back as `X-CSRF-Token`
- * alongside `Content-Type: application/json` — use `mutate()` below rather
- * than calling `$fetch` directly, so the CSRF×rotation self-heal (see
- * `mutate`'s own doc comment) applies uniformly.
+ * per-session revoke, revoke-all) must send it back as `X-CSRF-Token`.
+ * Mutations with JSON bodies also send `Content-Type: application/json`;
+ * bodiless mutations omit it. Use `mutate()` below rather than calling
+ * `$fetch` directly, so the CSRF×rotation self-heal (see `mutate`'s own doc
+ * comment) applies uniformly.
  */
 
 export type AuthProvider = 'google' | 'github' | 'linkedin';
@@ -41,6 +42,7 @@ interface MeEnvelope {
 export interface MutateOptions {
   method: 'POST' | 'DELETE';
   body?: Record<string, unknown>;
+  query?: Record<string, string>;
 }
 
 export interface UseAuthReturn {
@@ -52,12 +54,16 @@ export interface UseAuthReturn {
   mutate: <T = void>(url: string, options: MutateOptions) => Promise<T>;
 }
 
-/** Headers every mutating, CSRF-protected call must send. */
-export function csrfHeaders(csrfToken: string | null): HeadersInit {
-  return {
+/** Headers for a CSRF-protected call, including JSON only with a body. */
+export function csrfHeaders(
+  csrfToken: string | null,
+  hasJSONBody = false,
+): HeadersInit {
+  const headers: Record<string, string> = {
     'X-CSRF-Token': csrfToken ?? '',
-    'Content-Type': 'application/json',
   };
+  if (hasJSONBody) headers['Content-Type'] = 'application/json';
+  return headers;
 }
 
 /** True for a caught fetch error whose body is `{error:{code:"..."}}`. */
@@ -96,7 +102,7 @@ export function useAuth(): UseAuthReturn {
       $fetch<T>(url, {
         ...options,
         credentials: 'include',
-        headers: csrfHeaders(csrfToken.value),
+        headers: csrfHeaders(csrfToken.value, options.body !== undefined),
       });
 
     try {

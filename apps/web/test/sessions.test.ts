@@ -5,7 +5,7 @@ import {
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { createError, setResponseStatus } from 'h3';
+import { createError, readRawBody, setResponseStatus } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 
 // revoke-all (on success) and the current-session "Log out" button both
@@ -206,42 +206,70 @@ describe('sessions.vue', () => {
     },
   );
 
-  it('offers to link providers the user has not connected yet', async () => {
-    let meCalls = 0;
-    registerEndpoint('/api/v1/me', {
-      handler: () => {
-        meCalls += 1;
-        return { data: meData };
-      },
+  it('starts linking with a bodiless CSRF POST and follows the provider URL',
+    async () => {
+      let meCalls = 0;
+      registerEndpoint('/api/v1/me', {
+        handler: () => {
+          meCalls += 1;
+          return { data: meData };
+        },
+      });
+      let receivedMethod: string | undefined;
+      let receivedHeader: string | undefined;
+      let receivedContentType: string | undefined;
+      let receivedBody: string | undefined;
+      registerEndpoint('/api/v1/auth/github/start', {
+        method: 'POST',
+        handler: async (event) => {
+          receivedMethod = event.method;
+          receivedHeader = requestHeader(event, 'x-csrf-token');
+          receivedContentType = requestHeader(event, 'content-type');
+          receivedBody = await readRawBody(event);
+          return {
+            data: {
+              authorizeUrl:
+              'https://github.com/login/oauth/authorize?state=test-state',
+            },
+          };
+        },
+      });
+
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+
+      const addButton = wrapper.get('[data-testid="add-provider-button"]');
+      const callsBeforeClick = meCalls;
+      await addButton.trigger('click');
+      await flushPromises();
+
+      // Refreshes identities/csrfToken before offering link targets, so it
+      // doesn't act on stale state.
+      expect(meCalls).toBeGreaterThan(callsBeforeClick);
+
+      // meData only has a `google` identity linked, so github/linkedin are
+      // offered — and google (already linked) is not.
+      const linkButtons = wrapper
+        .findAll('button')
+        .filter((button) => button.text().startsWith('Link '));
+      expect(linkButtons.map((button) => button.text())).toEqual([
+        'Link github',
+        'Link linkedin',
+      ]);
+
+      await linkButtons[0]!.trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      expect(receivedMethod).toBe('POST');
+      expect(receivedHeader).toBe('test-csrf-token');
+      expect(receivedContentType).toBeUndefined();
+      expect(receivedBody ?? '').toBe('');
+      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+        'https://github.com/login/oauth/authorize?state=test-state',
+        { external: true },
+      );
     });
-
-    const wrapper = await mountSuspended(SessionsPage);
-    await flushPromises();
-
-    const addButton = wrapper.get('[data-testid="add-provider-button"]');
-    const callsBeforeClick = meCalls;
-    await addButton.trigger('click');
-    await flushPromises();
-
-    // Refreshes identities/csrfToken before offering link targets, so it
-    // doesn't act on stale state.
-    expect(meCalls).toBeGreaterThan(callsBeforeClick);
-
-    // meData only has a `google` identity linked, so github/linkedin are
-    // offered — and google (already linked) is not.
-    const github = wrapper.get(
-      'a[href="/api/v1/auth/github/start?purpose=link"]',
-    );
-    const linkedin = wrapper.get(
-      'a[href="/api/v1/auth/linkedin/start?purpose=link"]',
-    );
-    expect(github.element.tagName).toBe('A');
-    expect(linkedin.element.tagName).toBe('A');
-    expect(
-      wrapper.find('a[href="/api/v1/auth/google/start?purpose=link"]')
-        .exists(),
-    ).toBe(false);
-  });
 
   it('shows nothing extra when there is no reauth error', async () => {
     const wrapper = await mountSuspended(SessionsPage);
@@ -269,10 +297,8 @@ describe('sessions.vue', () => {
 
       // meData's only linked identity is `google` — reauth targets that
       // existing provider, never the not-yet-linked one being added.
-      const reauthLink = prompt.get(
-        'a[href="/api/v1/auth/google/start?purpose=reauth"]',
-      );
-      expect(reauthLink.element.tagName).toBe('A');
+      const reauthButton = prompt.get('button');
+      expect(reauthButton.text()).toBe('Sign in again with google');
     },
   );
 

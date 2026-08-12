@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import type { AuthProvider } from '../../../composables/useAuth';
 
-// TODO(P1.1): Replace the privileged OAuth GET anchors below with the
-// CSRF-protected POST flow in docs/adr/0014-oauth-start-methods.md.
-
 interface SessionInfo {
   id: string;
   createdAt: string;
@@ -16,6 +13,12 @@ interface SessionInfo {
 
 interface SessionsEnvelope {
   data: SessionInfo[];
+}
+
+interface AuthStartEnvelope {
+  data: {
+    authorizeUrl: string;
+  };
 }
 
 const allProviders: AuthProvider[] = ['google', 'github', 'linkedin'];
@@ -134,12 +137,79 @@ const unlinkedProviders = computed(() =>
 );
 
 const showAddProvider = ref(false);
+const startPending = ref(false);
+const startError = ref<string | null>(null);
 
 async function openAddProvider(): Promise<void> {
   // Refresh identities/csrfToken before offering link targets, so we don't
   // act on stale state.
   await refreshMe();
   showAddProvider.value = true;
+}
+
+const providerAuthorizeEndpoints: Record<AuthProvider, string> = {
+  google: 'https://accounts.google.com/o/oauth2/v2/auth',
+  github: 'https://github.com/login/oauth/authorize',
+  linkedin: 'https://www.linkedin.com/oauth/v2/authorization',
+};
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '[::1]';
+}
+
+function authorizeURL(
+  provider: AuthProvider,
+  value: unknown,
+): string | null {
+  if (typeof value !== 'string') return null;
+
+  let candidate: URL;
+  try {
+    candidate = new URL(value);
+  } catch {
+    return null;
+  }
+
+  if (candidate.username || candidate.password || candidate.hash) return null;
+
+  if (candidate.protocol === 'https:') {
+    const expected = new URL(providerAuthorizeEndpoints[provider]);
+    return candidate.origin === expected.origin
+      && candidate.pathname === expected.pathname
+      ? candidate.href
+      : null;
+  }
+
+  const current = new URL(window.location.href);
+  const localUAT = candidate.protocol === 'http:'
+    && current.protocol === 'http:'
+    && isLoopbackHostname(current.hostname)
+    && candidate.origin === current.origin
+    && candidate.pathname.startsWith('/__uat/oauth/');
+  return localUAT ? candidate.href : null;
+}
+
+async function startOAuth(
+  provider: AuthProvider,
+  purpose: 'link' | 'reauth',
+): Promise<void> {
+  startError.value = null;
+  startPending.value = true;
+  try {
+    const response = await mutate<AuthStartEnvelope>(
+      `/api/v1/auth/${provider}/start`,
+      { method: 'POST', query: { purpose } },
+    );
+    const url = authorizeURL(provider, response?.data?.authorizeUrl);
+    if (!url) throw new Error('invalid OAuth authorize URL');
+    await navigateTo(url, { external: true });
+  } catch {
+    startError.value = 'Something went wrong. Please try again.';
+  } finally {
+    startPending.value = false;
+  }
 }
 
 // OAuthCallbackErrorCode in OpenAPI is the closed callback vocabulary.
@@ -157,6 +227,7 @@ const linkErrorCode = computed(() => {
 });
 
 const linkErrorMessage = computed(() => {
+  if (startError.value) return startError.value;
   if (!linkErrorCode.value) return null;
   if (Object.hasOwn(linkErrorMessages, linkErrorCode.value)) {
     return linkErrorMessages[linkErrorCode.value];
@@ -191,13 +262,13 @@ const linkErrorMessage = computed(() => {
       role="alert"
     >
       {{ reauthMessage }}
-      <a
-        :href="
-          `/api/v1/auth/${reauthProvider}/start?purpose=reauth`
-        "
+      <button
+        type="button"
+        :disabled="!csrfToken || startPending"
+        @click="startOAuth(reauthProvider, 'reauth')"
       >
         Sign in again with {{ reauthProvider }}
-      </a>
+      </button>
     </p>
 
     <ul>
@@ -258,9 +329,13 @@ const linkErrorMessage = computed(() => {
           v-for="provider in unlinkedProviders"
           :key="provider"
         >
-          <a :href="`/api/v1/auth/${provider}/start?purpose=link`">
+          <button
+            type="button"
+            :disabled="!csrfToken || startPending"
+            @click="startOAuth(provider, 'link')"
+          >
             Link {{ provider }}
-          </a>
+          </button>
         </li>
       </ul>
     </section>
