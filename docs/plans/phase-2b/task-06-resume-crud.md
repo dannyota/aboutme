@@ -85,7 +85,10 @@ reference-gated. A replay performs no callback and creates no duplicate job.
 - [ ] **Step 9: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and media-cleanup state matrix to the integration owner. Do not
       stage or commit.
-- [ ] **Step 10: independent defect review.**
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks
+authorization, cap concurrency, CAS, idempotency, and exact-key media cleanup
+for this route group. The same reviewer confirms fixes.
 
 ## Acceptance mapping
 

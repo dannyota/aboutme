@@ -12,8 +12,8 @@ dispatchable in dependency order. The 20 preset JSON files and the
 `header.iconStyle` enum (`none | outline`) already exist; reverify both at the
 execution base.
 
-The only remaining input gate is the per-asset font license check in Task 5.
-Shared-file ownership follows the exclusive windows below.
+Task 5 and its per-asset font license checks have landed. Shared-file ownership
+follows the exclusive windows below.
 
 ## Scope boundaries
 
@@ -35,7 +35,7 @@ Shared-file ownership follows the exclusive windows below.
 | 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Implemented |
 | 2    | Go sanitizer package                                        | High   | Implemented |
 | 3    | Client DOMPurify wrapper and agreement tests                | High   | Implemented |
-| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Pending     |
+| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Landed      |
 | 5B   | Immutable document v2 font catalog and converters           | High   | Pending     |
 | 6    | Pure renderer in continuous mode                            | High   | Pending     |
 | 7    | Pure pagination engine and editor paged wrapper             | High   | Pending     |
@@ -85,9 +85,9 @@ graph TD
     T11 --> G
 ```
 
-T1, T2, and T3 have landed. T6 and T8 can start as soon as T5B releases schema
-v2; T7 follows T6 because pagination consumes the renderer's measured blocks.
-Each author writes that task's adversarial cases from
+T1, T2, T3, and T5 have landed. T6 and T8 can start as soon as T5B releases
+schema v2; T7 follows T6 because pagination consumes the renderer's measured
+blocks. Each author writes that task's adversarial cases from
 [adversarial coverage](adversarial-coverage.md) as part of the task.
 
 ## Exclusive shared-file windows

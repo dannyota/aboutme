@@ -180,17 +180,19 @@ defines the target and port contract.
       dependency graph delta, pinned image and module versions, exact checks,
       and shared-target recipes to the integration owner. Do not stage or
       commit.
-- [ ] **Step 8: independent defect review**, with the reviewer asked
-      specifically about credential handling, key-escape rejection, and whether
-      the two backends can diverge without the conformance suite noticing.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks credential
+handling, key-escape rejection, create-only outcome classification, and whether
+the two backends can diverge without the conformance suite noticing. The same
+reviewer confirms fixes.
 
 ## Acceptance mapping
 
-| Row          | What this task contributes                                                 |
-| ------------ | -------------------------------------------------------------------------- |
-| AC-MEDIA-004 | The backend-contract and fail-closed S3 slice; T11/T12 close the row       |
-| AC-MEDIA-002 | The key-escape and traversal rejection both backends enforce               |
-| AC-MEDIA-003 | Exact-key deletion and bounded listing support safe lifecycle cleanup      |
-| AC-MEDIA-006 | Explicit `PutUnknown` prevents unsafe cleanup after a lost remote response |
-| AC-MEDIA-007 | Stable pages and object age make the orphan sweep bounded and race-safe    |
-| AC-MEDIA-009 | Context cancellation and exact-size writes support bounded intake          |
+| Row          | What this task contributes                                                            |
+| ------------ | ------------------------------------------------------------------------------------- |
+| AC-MEDIA-004 | The backend-contract and fail-closed S3 slice; T11 and the phase review close the row |
+| AC-MEDIA-002 | The key-escape and traversal rejection both backends enforce                          |
+| AC-MEDIA-003 | Exact-key deletion and bounded listing support safe lifecycle cleanup                 |
+| AC-MEDIA-006 | Explicit `PutUnknown` prevents unsafe cleanup after a lost remote response            |
+| AC-MEDIA-007 | Stable pages and object age make the orphan sweep bounded and race-safe               |
+| AC-MEDIA-009 | Context cancellation and exact-size writes support bounded intake                     |

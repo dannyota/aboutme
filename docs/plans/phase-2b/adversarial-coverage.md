@@ -15,8 +15,10 @@ a failure.
 
 ## Suite D — auth, CSRF, and cross-user authorization
 
-Owner: Task 4 (write-safety kernel and policies), extended by the route tasks.
-File: `apps/server/internal/resumeapi/authz_adversarial_test.go`.
+Owners: Task 4 for the shared write-safety policies and Tasks 6–11 for their
+route behavior. Each author places the cases in that task's owned test files
+listed in [file structure](file-structure.md). The W4 reviewer confirms the
+integrated matrix; there is no separate suite author.
 
 ### Cases (add, never subtract)
 
@@ -42,12 +44,15 @@ File: `apps/server/internal/resumeapi/authz_adversarial_test.go`.
 | AC-SEC-002   | Extends P1's CSRF evidence across the whole resume surface   |
 | AC-DOC-001   | Cross-user probes cannot observe another user's resume count |
 | AC-MEDIA-001 | Owner-only enforcement on all four media operations          |
-| AC-MEDIA-004 | Independent evidence that storage credentials do not leak    |
+| AC-MEDIA-004 | Task-owned evidence that storage credentials do not leak     |
 
 ## Suite E — HTTP write safety and wire version
 
-Owner: Task 2 (transaction seam) and Task 9 (wire version). File:
-`apps/server/internal/resumeapi/writesafety_adversarial_test.go`.
+Owners: Task 4 for the shared HTTP write envelope, Tasks 6–11 for their route
+behavior, and Task 9 for wire version. Task 2 supplies the transaction and
+retention seam through its own live-database tests but owns no HTTP proof. Each
+author places the cases in that task's owned test files. The W4 reviewer
+confirms the integrated matrix; there is no separate suite author.
 
 ### Cases (add, never subtract)
 
@@ -74,18 +79,19 @@ Owner: Task 2 (transaction seam) and Task 9 (wire version). File:
 
 ### Acceptance mapping
 
-| Row         | What this task contributes                              |
-| ----------- | ------------------------------------------------------- |
-| AC-SAVE-001 | The independent half of the stale-precondition contract |
-| AC-SAVE-002 | The independent half of the idempotency contract        |
-| AC-SAVE-004 | The independent half of the old-client write/emit proof |
-| AC-DOC-010  | HTTP-level evidence that reads never write              |
+| Row         | What this task contributes                 |
+| ----------- | ------------------------------------------ |
+| AC-SAVE-001 | Task-owned stale-precondition coverage     |
+| AC-SAVE-002 | Task-owned idempotency coverage            |
+| AC-SAVE-004 | Task-owned old-client write/emit coverage  |
+| AC-DOC-010  | HTTP-level evidence that reads never write |
 
 ## Suite F — bounds, hostile payloads, and media
 
-Owner: Task 11 (photo endpoints) for the media cases and Task 5 (sanitizer
-boundary) for the hostile-input cases. File:
-`apps/server/internal/resumeapi/bounds_adversarial_test.go`. Its gate also needs
+Owners: Task 4 for shared HTTP limits, Task 5 for hostile-input sanitizing,
+Tasks 6–10 for their route bounds, and Task 11 for media. Each author places the
+cases in that task's owned test files. The W4 reviewer confirms the integrated
+matrix; there is no separate suite author. The media gate also needs
 `make test-s3-up`, `make server-test-p2b`, and `make server-test-p2b-s3`.
 
 ### Cases (add, never subtract)
@@ -112,16 +118,16 @@ boundary) for the hostile-input cases. File:
 
 ### Acceptance mapping
 
-| Row          | What this task contributes                                         |
-| ------------ | ------------------------------------------------------------------ |
-| AC-DOC-004   | Independently derived limit+1 matrix through the real HTTP surface |
-| AC-DOC-007   | Byte-measured rich-text bound proven at the HTTP boundary          |
-| AC-DOC-011   | 512 KB document bound proven at the HTTP boundary                  |
-| AC-SEC-003   | Independent neutralization evidence for the wired sanitizer        |
-| AC-MEDIA-001 | Independent evidence for upload bounds and type rejection          |
-| AC-MEDIA-002 | Independent evidence that the key cannot be influenced             |
-| AC-MEDIA-003 | Independent crop, replacement, and transactional enqueue evidence  |
-| AC-MEDIA-006 | Independent failure-injection, rollback, and compensation evidence |
-| AC-MEDIA-007 | Independent evidence for queue and paginated-backend handoffs      |
-| AC-MEDIA-008 | Independent canonicalization and metadata-removal evidence         |
-| AC-MEDIA-009 | Independent decoded-resource and admission-bound evidence          |
+| Row          | What this task contributes                                        |
+| ------------ | ----------------------------------------------------------------- |
+| AC-DOC-004   | Spec-derived limit+1 matrix through the real HTTP surface         |
+| AC-DOC-007   | Byte-measured rich-text bound proven at the HTTP boundary         |
+| AC-DOC-011   | 512 KB document bound proven at the HTTP boundary                 |
+| AC-SEC-003   | Task-owned neutralization evidence for the wired sanitizer        |
+| AC-MEDIA-001 | Task-owned evidence for upload bounds and type rejection          |
+| AC-MEDIA-002 | Task-owned evidence that the key cannot be influenced             |
+| AC-MEDIA-003 | Task-owned crop, replacement, and transactional enqueue evidence  |
+| AC-MEDIA-006 | Task-owned failure-injection, rollback, and compensation evidence |
+| AC-MEDIA-007 | Task-owned evidence for queue and paginated-backend handoffs      |
+| AC-MEDIA-008 | Task-owned canonicalization and metadata-removal evidence         |
+| AC-MEDIA-009 | Task-owned decoded-resource and admission-bound evidence          |

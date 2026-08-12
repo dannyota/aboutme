@@ -8,9 +8,9 @@ point, not one call per handler.
 
 **Tier:** High risk (rich-text sanitization).
 
-**Hard prerequisite:** P3 passed both phase gates with v2 current.
-`apps/server/internal/sanitize` from P3 Task 2 is this task's direct code
-dependency and must be landed, independently reviewed, and green.
+**Hard prerequisite:** `apps/server/internal/sanitize` from P3 Task 2 is this
+task's direct code dependency and must be landed and green. P3's remaining work
+and phase gate do not block this task.
 
 **Files:** create
 `apps/server/internal/resumeapi/{sanitize_doc.go,sanitize_doc_test.go}`. Task 4
@@ -75,8 +75,10 @@ func sanitizeDocument(doc schema.Resume) schema.Resume
 - [ ] **Step 7: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and rich-text completeness set to the integration owner. Do not
       stage or commit.
-- [ ] **Step 8: independent defect review** by a worker that authored neither
-      this task nor Task 4.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks that every
+schema-declared rich-text field reaches the sanitizer exactly once before
+validation and storage. The same reviewer confirms fixes.
 
 ## Acceptance mapping
 

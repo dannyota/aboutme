@@ -139,6 +139,13 @@ candidate on a replay, key conflict, `CommitNotAttempted`, or
 the photo key between preflight and the transaction and prove only the
 transaction-read validated key can be enqueued.
 
+`Execute` emits `Replayed=true` only with `CommitCommitted`. `Finalize`
+validates that invariant before choosing compensation. An injected impossible
+`Replayed`/outcome pair is an internal invariant failure: it retains the
+candidate, records the failure without the key, and never risks deleting a
+possibly referenced object. Task 2 proves the production `Execute` result
+matrix; Task 4 proves this consumer fails closed.
+
 An idempotency retained-capacity rejection maps to the existing
 `429 rate_limited` response. `Retry-After` is one second while expired backlog
 remains and otherwise rounds up the earliest retained expiry. The rejection
@@ -264,7 +271,9 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
       cleanup; no transposition may pass. A deletion-job failure rolls back the
       database mutation. Candidate-compensation failure after a concurrent
       replay is logged and measured but cannot change the stored success status,
-      headers, or body. Race tests prove a stale preflight key is never
+      headers, or body. Inject every impossible `Replayed`/outcome pair and
+      prove `Finalize` retains the candidate and reports the invariant without
+      exposing its key. Race tests prove a stale preflight key is never
       enqueued, replay never runs the callback, and only the key read by the
       winning transaction enters the queue. `Cache-Control: no-store` stays on
       every response (the outer chain already guarantees it; assert it rather
@@ -289,9 +298,11 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
 - [ ] **Step 10: handoff.** Report the owned paths, failing-test evidence, exact
       checks, route inventory, and remaining construction stubs to the
       integration owner. Do not stage or commit.
-- [ ] **Step 11: independent defect review.** Ask specifically whether any order
-      in Step 7 can be transposed without a test failing, and whether any path
-      reaches a write without passing every check.
+
+**Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
+order in Step 7 can be transposed without a test failing, whether any path
+reaches a write without every check, and whether candidate compensation fails
+closed. The same reviewer confirms fixes.
 
 ## Acceptance mapping
 
