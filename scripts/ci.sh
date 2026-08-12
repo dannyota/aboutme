@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Local CI gate. Runs the same checks as .github/workflows/ci.yml on this
-# laptop, so a handoff does not have to wait on GitHub Actions.
+# Local non-security CI gate. Runs the hosted build, test, lint, and drift
+# checks on this laptop; connected security scanning remains `make scan`.
 #
 #   scripts/ci.sh          full gate (this is `make ci`)
 #   scripts/ci.sh --fast   everything that needs no database and no web build
 #                          (this is `make check`)
 #
-# The database-backed groups start a throwaway Postgres and always stop it
-# again, including on failure or Ctrl-C -- a leaked container would make the
-# next run's `test-db-up` fail on a port clash.
+# The database-backed groups start or reuse the shared Postgres and always leave
+# it running. Teardown is an integration-owner action in a declared idle window;
+# CI cannot infer container ownership atomically from a separate preflight.
 set -Eeuo pipefail
 
 cd "$(dirname "$0")/.."
@@ -17,16 +17,10 @@ ROOT="$PWD"
 FAST=0
 [ "${1:-}" = "--fast" ] && FAST=1
 
-STARTED_DB=0
 FAILED=""
 
-cleanup() {
-  if [ "$STARTED_DB" = "1" ]; then
-    echo "--- stopping test database"
-    make test-db-down >/dev/null 2>&1 || true
-  fi
-}
-trap cleanup EXIT INT TERM
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 group() {
   local name="$1"
@@ -52,7 +46,17 @@ group() {
 run() { group "$@" || true; }
 
 docs() { make docs-lint; }
-schema() { make schema-check; }
+tool_versions() { make tools-check ARGS=ci; }
+operational_contracts() { make operational-test; }
+schema() {
+  make schema-check || return
+  (
+    cd "$ROOT/packages/schema/gen/go" || exit
+    go build ./... &&
+      go vet ./... &&
+    go test ./... -count=1
+  )
+}
 api() { make api-check; }
 
 go_build() { make server-build server-vet server-test; }
@@ -63,11 +67,19 @@ go_build() { make server-build server-vet server-test; }
 go_lint() { cd "$ROOT/apps/server" && GOGC=50 golangci-lint run; }
 
 go_tidy() {
-  cd "$ROOT/apps/server"
+  cd "$ROOT/apps/server" || return
   local tmp
-  tmp="$(mktemp -d)"
-  cp go.mod go.sum "$tmp/"
-  go mod tidy
+  tmp="$(mktemp -d)" || return
+  if ! cp go.mod go.sum "$tmp/"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  if ! go mod tidy; then
+    cp "$tmp/go.mod" "$tmp/go.sum" . || true
+    rm -rf "$tmp"
+    echo "go mod tidy failed; restored go.mod/go.sum" >&2
+    return 1
+  fi
   if ! diff -q "$tmp/go.mod" go.mod >/dev/null || ! diff -q "$tmp/go.sum" go.sum >/dev/null; then
     cp "$tmp/go.mod" "$tmp/go.sum" .
     rm -rf "$tmp"
@@ -86,15 +98,29 @@ web() { make web-lint web-typecheck web-test web-build; }
 migrations_append_only() {
   # CI compares against the PR base; locally the useful comparison is the
   # upstream branch. Skip cleanly when there is no upstream to compare to.
-  local base
-  base="$(git rev-parse --verify --quiet origin/main || true)"
-  if [ -z "$base" ]; then
+  local base status
+  if base=$(git rev-parse --verify --quiet origin/main); then
+    :
+  else
+    status=$?
+    if [ "$status" -ne 1 ]; then
+      echo "could not resolve origin/main" >&2
+      return 1
+    fi
     echo "no origin/main to compare against; skipped"
     return 0
   fi
-  local changed
-  changed="$(git diff --name-status "$base"...HEAD -- apps/server/migrations |
-    grep -E '^(M|D|R)' | grep -E '\.sql$' || true)"
+  local index_diff worktree_diff changed
+  if ! index_diff=$(git diff --cached --name-status "$base" -- apps/server/migrations); then
+    echo "could not compare the migration index with origin/main" >&2
+    return 1
+  fi
+  if ! worktree_diff=$(git diff --name-status "$base" -- apps/server/migrations); then
+    echo "could not compare the migration worktree with origin/main" >&2
+    return 1
+  fi
+  changed=$(printf '%s\n%s\n' "$index_diff" "$worktree_diff" |
+    awk -F '\t' '$1 ~ /^(M|D|R|T)/ && $0 ~ /\.sql$/ { print }')
   if [ -n "$changed" ]; then
     echo "Applied migrations are immutable; only new files may be added:" >&2
     echo "$changed" >&2
@@ -177,14 +203,16 @@ released_schema_append_only() {
 }
 
 db_suites() {
-  cd "$ROOT"
-  make server-test-integration
-  make server-test-db
+  cd "$ROOT" || return
+  make server-test-integration &&
+    make server-test-db &&
   make server-migration-test
 }
 
 route_table() { make route-table-test; }
 
+run "tool versions" tool_versions
+run "operational contracts" operational_contracts
 run "docs-lint" docs
 run "schema-check" schema
 run "api-check" api
@@ -203,15 +231,14 @@ else
   run "web" web
   echo
   echo "=== starting test database"
-  # The container is shared with concurrently running workers. Only tear it
-  # down at exit if THIS run started it -- `make test-db-up` is idempotent and
-  # succeeds on an already-running container, so track prior existence
-  # explicitly rather than inferring it from the target's exit code.
-  if podman ps --format '{{.Names}}' | grep -qx aboutme-test-db; then
-    STARTED_DB=0
+  # The target is idempotent. This preflight is informational only: container
+  # ownership cannot be inferred across a separate check/start boundary, so CI
+  # leaves the shared database running in every case.
+  running_containers=$(podman ps --format '{{.Names}}')
+  if grep -qx aboutme-test-db <<<"$running_containers"; then
     echo "aboutme-test-db already running (shared); this run will not stop it."
   else
-    STARTED_DB=1
+    echo "aboutme-test-db is not running; starting the shared database and leaving it running."
   fi
   make test-db-up
   run "database suites" db_suites

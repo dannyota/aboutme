@@ -244,6 +244,7 @@ require_tools() {
   for t in podman go npm caddy curl ss setsid; do
     command -v "$t" >/dev/null 2>&1 || die "$t is not on PATH"
   done
+  make -C "$ROOT" --no-print-directory tools-check ARGS=dev
 }
 
 ensure_database() {
@@ -386,13 +387,18 @@ cmd_status() {
     printf '%-8s %-8s %-10s %-6s %s\n' "$name" "$pid" "$state" "$port" "$listening"
   done
 
-  local db=stopped
+  local db=stopped db_listening=no
   if db_container_running; then
     db=running
   else
     failed=1
   fi
-  printf '%-8s %-8s %-10s %-6s %s\n' db container "$db" 20432 "$([ "$db" = running ] && echo yes || echo no)"
+  if port_listening 20432; then
+    db_listening=yes
+  else
+    failed=1
+  fi
+  printf '%-8s %-8s %-10s %-6s %s\n' db container "$db" 20432 "$db_listening"
 
   if [ "$failed" -ne 0 ]; then
     info ""

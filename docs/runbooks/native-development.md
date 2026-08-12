@@ -19,10 +19,12 @@ generated Caddyfile stay under the ignored `.dev/` directory.
 
 ## Prerequisites
 
-Install the pinned Go and Node versions, Podman, Caddy, `curl`, `ss`, and
-`setsid`. Install web dependencies once:
+Install the versions in [`.tool-versions`](../../.tool-versions), plus Podman,
+`curl`, `ss`, and `setsid`. Verify the native stack's tools and install web
+dependencies once:
 
 ```sh
+make tools-check ARGS=dev
 (cd apps/web && npm ci)
 ```
 
