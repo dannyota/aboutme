@@ -27,6 +27,15 @@ count=$(grep -Fc 'if ! diff=$(git diff --name-status' "$WORKFLOW" || true)
   fail "want one inline fail-closed hosted diff capture, found $count"
 grep -Fq 'Could not compare released schemas with base.' "$WORKFLOW" ||
   fail "released-schema job lacks an explicit diff-failure result"
+grep -Fq 'git diff --name-status "$base" "$head"' "$WORKFLOW" ||
+  fail "released-schema job does not compare event trees directly"
+grep -Fq 'git rev-parse --verify --quiet "$BASE_SHA^{commit}"' "$WORKFLOW" ||
+  fail "released-schema job does not validate the base commit"
+grep -Fq 'git rev-parse --verify --quiet "HEAD^{commit}"' "$WORKFLOW" ||
+  fail "released-schema job does not validate the head commit"
+if grep -Fq 'git diff --name-status "$base"...HEAD' "$WORKFLOW"; then
+  fail "released-schema job still uses a merge-base diff"
+fi
 
 grep -Fq 'semgrep ci --code --supply-chain --secrets --no-suppress-errors' "$WORKFLOW" ||
   fail "hosted Semgrep does not explicitly select every product and fail closed"

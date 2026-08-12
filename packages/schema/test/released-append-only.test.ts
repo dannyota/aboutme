@@ -22,10 +22,16 @@ const APPROVED_NEW_V1_SHA256 =
   "879858284bc3cb4092d1d671466a9c620e27abf134aecedce070b6f21e4e5866";
 
 const appendOnlyScript = (oldHash: string, newHash: string) =>
-  `base="$BASE_SHA"
+  `if ! base=$(git rev-parse --verify --quiet "$BASE_SHA^{commit}") ||
+  ! head=$(git rev-parse --verify --quiet "HEAD^{commit}"); then
+  echo "Could not resolve released-schema comparison commits." >&2
+  exit 1
+fi
 approved_old_v1_sha256="APPROVED_OLD_HASH"
 approved_new_v1_sha256="APPROVED_NEW_HASH"
-if ! diff=$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json'); then
+# Compare the event base and candidate trees directly. A merge-base
+# diff can hide a released-schema reversion after rewritten history.
+if ! diff=$(git diff --name-status "$base" "$head" -- 'packages/schema/resume.v*.schema.json'); then
   echo "Could not compare released schemas with base." >&2
   exit 1
 fi
@@ -33,7 +39,7 @@ changed=$(printf '%s\\n' "$diff" | grep -E '^(M|D|R|T)' || true)
 approved_v1_change=$(printf 'M\\tpackages/schema/resume.v1.schema.json')
 if [ "$changed" = "$approved_v1_change" ]; then
   base_v1_sha256=$(git show "$base:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
-  head_v1_sha256=$(git show "HEAD:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
+  head_v1_sha256=$(git show "$head:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
   if [ "$base_v1_sha256" = "$approved_old_v1_sha256" ] && [ "$head_v1_sha256" = "$approved_new_v1_sha256" ]; then
     changed=""
   fi
@@ -58,6 +64,8 @@ const APPROVED_SCHEMA_BYTES =
   '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "current"}\n';
 const UNAPPROVED_OLD_SCHEMA_BYTES =
   '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "unknown"}\n';
+const DIVERGED_BASE_SCHEMA_BYTES =
+  '{"$id": "https://aboutme.vn/schema/resume/v1", "docs": "diverged-base"}\n';
 const sha256 = (bytes: string) =>
   createHash("sha256").update(bytes).digest("hex");
 const TEST_OLD_V1_SHA256 = sha256(OLD_SCHEMA_BYTES);
@@ -145,6 +153,105 @@ function runGate(
     cwd: repo,
     encoding: "utf8",
     env: { ...process.env, BASE_SHA: base },
+  });
+  return {
+    status: result.status ?? -1,
+    output: `${result.stdout}${result.stderr}`,
+  };
+}
+
+function runDivergedHostedGate(
+  script: string,
+  mutateBase: (repo: string) => void,
+): {
+  status: number;
+  output: string;
+  tripleDotDiff: string;
+  directDiff: string;
+} {
+  const { repo } = baseRepo();
+  const mergeBase = git(repo, ["rev-parse", "HEAD"]).trim();
+
+  git(repo, ["switch", "-qc", "remote-base"]);
+  mutateBase(repo);
+  git(repo, ["add", "-A"]);
+  git(repo, ["commit", "-qm", "remote base advances"]);
+  const base = git(repo, ["rev-parse", "HEAD"]).trim();
+
+  git(repo, ["switch", "-qc", "force-pushed-head", mergeBase]);
+  writeFileSync(join(repo, "candidate.txt"), "force-pushed history\n");
+  git(repo, ["add", "-A"]);
+  git(repo, ["commit", "-qm", "replacement head"]);
+
+  const pathspec = "packages/schema/resume.v*.schema.json";
+  const tripleDotDiff = git(repo, [
+    "diff",
+    "--name-status",
+    `${base}...HEAD`,
+    "--",
+    pathspec,
+  ]);
+  const directDiff = git(repo, [
+    "diff",
+    "--name-status",
+    base,
+    "HEAD",
+    "--",
+    pathspec,
+  ]);
+
+  const scriptPath = join(repo, "gate.sh");
+  writeFileSync(scriptPath, script);
+  const result = spawnSync("bash", [scriptPath], {
+    cwd: repo,
+    encoding: "utf8",
+    env: { ...process.env, BASE_SHA: base },
+  });
+  return {
+    status: result.status ?? -1,
+    output: `${result.stdout}${result.stderr}`,
+    tripleDotDiff,
+    directDiff,
+  };
+}
+
+function runHostedGateWithInvalidRef(
+  script: string,
+  invalidRef: "base" | "head",
+): { status: number; output: string } {
+  const { repo, base } = baseRepo();
+  if (invalidRef === "head") {
+    git(repo, ["update-ref", "-d", "refs/heads/main"]);
+  }
+
+  const scriptPath = join(repo, "gate.sh");
+  writeFileSync(scriptPath, script);
+  const result = spawnSync("bash", [scriptPath], {
+    cwd: repo,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      BASE_SHA: invalidRef === "base" ? "refs/heads/missing-base" : base,
+    },
+  });
+  return {
+    status: result.status ?? -1,
+    output: `${result.stdout}${result.stderr}`,
+  };
+}
+
+function runHostedGateWithNonCommitBase(script: string): {
+  status: number;
+  output: string;
+} {
+  const { repo } = baseRepo();
+  const tree = git(repo, ["rev-parse", "HEAD^{tree}"]).trim();
+  const scriptPath = join(repo, "gate.sh");
+  writeFileSync(scriptPath, script);
+  const result = spawnSync("bash", [scriptPath], {
+    cwd: repo,
+    encoding: "utf8",
+    env: { ...process.env, BASE_SHA: tree },
   });
   return {
     status: result.status ?? -1,
@@ -315,6 +422,64 @@ describe.each(gateScripts)("$name", ({ script }) => {
       );
     });
     expect(status).toBe(0);
+  });
+});
+
+describe("hosted guard across rewritten history", () => {
+  it("rejects a released schema reverted by a non-ancestor head", () => {
+    const result = runDivergedHostedGate(TEST_APPEND_ONLY_SCRIPT, (repo) => {
+      writeFileSync(
+        join(repo, "packages/schema/resume.v1.schema.json"),
+        DIVERGED_BASE_SCHEMA_BYTES,
+      );
+    });
+
+    expect(result.tripleDotDiff).toBe("");
+    expect(result.directDiff).toMatch(
+      /^M\s+packages\/schema\/resume\.v1\.schema\.json$/m,
+    );
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Released schemas are immutable");
+  });
+
+  it("rejects a released schema deleted by a non-ancestor head", () => {
+    const result = runDivergedHostedGate(TEST_APPEND_ONLY_SCRIPT, (repo) => {
+      writeFileSync(
+        join(repo, "packages/schema/resume.v2.schema.json"),
+        '{"released": 2}\n',
+      );
+    });
+
+    expect(result.tripleDotDiff).toBe("");
+    expect(result.directDiff).toMatch(
+      /^D\s+packages\/schema\/resume\.v2\.schema\.json$/m,
+    );
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Released schemas are immutable");
+  });
+
+  it.each(["base", "head"] as const)(
+    "fails closed when the %s endpoint is invalid",
+    (invalidRef) => {
+      const { status, output } = runHostedGateWithInvalidRef(
+        TEST_APPEND_ONLY_SCRIPT,
+        invalidRef,
+      );
+      expect(status).toBe(1);
+      expect(output).toContain(
+        "Could not resolve released-schema comparison commits.",
+      );
+    },
+  );
+
+  it("fails closed when the base resolves to a non-commit object", () => {
+    const { status, output } = runHostedGateWithNonCommitBase(
+      TEST_APPEND_ONLY_SCRIPT,
+    );
+    expect(status).toBe(1);
+    expect(output).toContain(
+      "Could not resolve released-schema comparison commits.",
+    );
   });
 });
 
