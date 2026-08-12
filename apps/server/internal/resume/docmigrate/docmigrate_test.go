@@ -1177,3 +1177,65 @@ func TestWire_LossyEmissionFailsClosed(t *testing.T) {
 		t.Errorf("EmitWire error = %v, want ErrLossyConversion for a schema-valid optional-photo loss", err)
 	}
 }
+
+// TestWire_LosslessEmissionComparesNumbersByExactValue proves the lossless
+// check treats JSON number spellings as representations of a value, without
+// rounding distinct values through float64.
+func TestWire_LosslessEmissionComparesNumbersByExactValue(t *testing.T) {
+	t.Parallel()
+
+	doc := func(version int32, value string) json.RawMessage {
+		return json.RawMessage(fmt.Sprintf(`{"schemaVersion":%d,"value":%s}`, version, value))
+	}
+	validator := func(version int32) docmigrate.ValidateFunc {
+		return func(raw json.RawMessage) error {
+			decoded, err := decodeDoc(raw)
+			if err != nil {
+				return err
+			}
+			gotVersion, ok := decoded["schemaVersion"].(json.Number)
+			if !ok || gotVersion.String() != fmt.Sprint(version) {
+				return fmt.Errorf("schemaVersion = %v, want %d", decoded["schemaVersion"], version)
+			}
+			if _, ok := decoded["value"].(json.Number); !ok {
+				return errors.New("value is not a number")
+			}
+			return nil
+		}
+	}
+	projector := func(t *testing.T, emittedValue, restoredValue string) *docmigrate.Projector {
+		t.Helper()
+		p, err := docmigrate.NewProjector(
+			map[int32]docmigrate.AdjacentConverters{
+				1: {
+					Up: func(json.RawMessage) (json.RawMessage, error) {
+						return doc(2, restoredValue), nil
+					},
+					Down: func(json.RawMessage) (json.RawMessage, error) {
+						return doc(1, emittedValue), nil
+					},
+				},
+			},
+			map[int32]docmigrate.ValidateFunc{1: validator(1), 2: validator(2)},
+			[]int32{1, 2}, []int32{1, 2}, 2,
+		)
+		if err != nil {
+			t.Fatalf("NewProjector: %v", err)
+		}
+		return p
+	}
+
+	t.Run("equivalent spellings", func(t *testing.T) {
+		p := projector(t, "1e0", "1")
+		if _, err := p.EmitWire(doc(2, "1.0"), 1); err != nil {
+			t.Fatalf("EmitWire rejected mathematically equal 1.0, 1e0, and 1: %v", err)
+		}
+	})
+
+	t.Run("distinct values above float64 precision", func(t *testing.T) {
+		p := projector(t, "9007199254740992", "9007199254740992")
+		if _, err := p.EmitWire(doc(2, "9007199254740993"), 1); !errors.Is(err, docmigrate.ErrLossyConversion) {
+			t.Fatalf("EmitWire error = %v, want ErrLossyConversion for distinct exact integer values", err)
+		}
+	})
+}
