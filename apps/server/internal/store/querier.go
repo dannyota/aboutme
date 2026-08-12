@@ -100,7 +100,7 @@ type Querier interface {
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
-	// Ordered by creation time, oldest first.
+	// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
 	// Lists sessions that internal/auth also considers live:
 	//
