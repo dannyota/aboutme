@@ -1,7 +1,8 @@
 # Semgrep configuration for aboutme.
 #
-# aboutme handles personal data (resumes) and OAuth sessions; semgrep is a
-# required PR gate (docs/specs/aboutme-design.md §0). This file holds the
+# aboutme handles personal data (resumes) and OAuth sessions. The connected
+# `make scan` command is required at phase gates; offline Semgrep is a narrower
+# local check (docs/adr/0011-risk-tiered-delivery-gates.md). This file holds the
 # project-specific custom rules only — the Go rule YAML schema has no
 # `extends`/include directive for pulling registry packs into a single
 # file, so published packs are combined with this file at the CLI/CI
@@ -31,13 +32,13 @@
 # .output, lockfiles) are excluded via .semgrepignore, so they apply to
 # both the packs above and the rules below.
 #
-# Each custom rule below enforces an invariant this codebase's design
-# depends on (docs/specs/aboutme-design.md) rather than a generic bad
-# pattern already covered by the packs above.
+# Each custom rule below enforces a project invariant rather than a generic bad
+# pattern already covered by the packs above. Its metadata cites the exact
+# design page or accepted ADR that owns the invariant.
 
 rules:
   # ---------------------------------------------------------------------
-  # Sanitizer contract (spec §5): ONE versioned allowlist; bluemonday
+  # Sanitizer contract: ONE versioned allowlist; bluemonday
   # sanitizes on write (Go), DOMPurify re-sanitizes on client-render (Vue/TS).
   # Stored rich text must never reach the DOM or an HTTP response as raw
   # HTML outside that path.
@@ -49,7 +50,7 @@ rules:
     message: >
       Raw HTML is being injected into the DOM (via v-html, .innerHTML, or
       insertAdjacentHTML) without an obvious call to the project's
-      sanitizer helper. The sanitizer contract (spec §5) requires stored/
+      sanitizer helper. The sanitizer contract requires stored/
       user-supplied HTML to pass through the DOMPurify client-render path before
       it reaches the DOM — rendering it any other way reopens the XSS hole
       that contract exists to close. If this value is already
@@ -85,7 +86,7 @@ rules:
     message: >
       Raw HTML is being assigned via .innerHTML/insertAdjacentHTML without
       an obvious call to the project's sanitizer helper. Per the sanitizer
-      contract (spec §5), rendering stored/user-supplied HTML must go
+      contract, rendering stored/user-supplied HTML must go
       through the DOMPurify client-render path. If this value is already
       pre-sanitized through a helper this rule doesn't recognize, name the
       helper so it contains "sanitiz"/"purify", or add a
@@ -120,7 +121,7 @@ rules:
       Converting a string to template.HTML marks it as pre-trusted markup
       and disables html/template's contextual auto-escaping for it — a
       classic Go XSS gadget when the underlying string is stored/user rich
-      text. Per the sanitizer contract (spec §5), stored rich text must be
+      text. Per the sanitizer contract, stored rich text must be
       passed through the bluemonday sanitizer before it is ever marked
       safe this way. If this value is already sanitized through a helper
       this rule doesn't recognize, name the helper so it contains
@@ -149,7 +150,7 @@ rules:
 
   # ---------------------------------------------------------------------
   # http.ResponseWriter wrappers must stay transparent to
-  # http.ResponseController (spec §2/§8: SSE hub, /api/v1/events,
+  # http.ResponseController (system and realtime design: SSE hub, /api/v1/events,
   # /api/v1/live/*). A wrapper that embeds http.ResponseWriter but omits
   # Unwrap() silently hides Flusher/Hijacker/etc. from anything using
   # http.ResponseController-style capability checks instead of a naked
@@ -204,10 +205,11 @@ rules:
       confidence: HIGH
       technology: [go]
       references:
-        - "docs/specs/aboutme-design.md §2 (route table: /api/v1/events, /api/v1/live/* are SSE) and §8 (realtime transport: SSE hub)"
+        - "docs/design/system.md, Route ownership (/api/v1/events and /api/v1/live/* are SSE)"
+        - "docs/design/realtime.md, Delivery semantics (each Go task has a local SSE hub)"
 
   # ---------------------------------------------------------------------
-  # Store-layer invariant (spec §3): all writes go through pgx with
+  # Database-query invariant: Go owns database access, and pgx queries use
   # parameterized queries. Building query text with fmt.Sprintf/string
   # concatenation is a SQL injection risk regardless of whether today's
   # call site happens to interpolate a "safe" value.
@@ -221,7 +223,7 @@ rules:
       passed to a pgx Query/QueryRow/Exec call. Use pgx's parameter
       placeholders ($1, $2, ...) with the values passed as call arguments
       instead of interpolating them into the query string — the store
-      layer (spec §3) is the only writer to Postgres and must not
+      layer is the application's Postgres boundary and must not
       reintroduce SQL injection via ad hoc query building.
     patterns:
       - pattern-either:
@@ -256,10 +258,10 @@ rules:
           "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')",
         ]
       references:
-        - "docs/specs/aboutme-design.md §3 (store layer: all writes pass through pgx; DB reachable only from Go)"
+        - "docs/design/repository.md, Repository boundaries (PostgreSQL is reachable only through Go; apps/server/sql/queries.sql is the sqlc query source)"
 
   # ---------------------------------------------------------------------
-  # Session/CSRF cookie hardening (spec §3 Sessions, OWASP-aligned):
+  # Session and OAuth-transaction cookie hardening (OWASP-aligned):
   # __Host-session and __Host-oauth-tx both require Secure, HttpOnly, and
   # an explicit SameSite.
   # ---------------------------------------------------------------------
@@ -270,11 +272,11 @@ rules:
     message: >
       http.Cookie literal missing one or more of Secure, HttpOnly, or an
       explicit SameSite. Session and OAuth-transaction cookies
-      (__Host-session, __Host-oauth-tx) must set all three per spec §3:
+      (__Host-session, __Host-oauth-tx) must set all three per the security design:
       Secure (never sent over plain HTTP), HttpOnly (unreachable from JS,
       so an XSS gadget can't exfiltrate it), and an explicit SameSite
-      (Lax, per the spec's rationale that visitors arrive via external
-      links). Relying on Go's zero-value defaults instead of setting these
+      (Lax, as required by both cookie contracts). Relying on Go's zero-value
+      defaults instead of setting these
       explicitly is exactly how this class of bug ships silently.
     patterns:
       - pattern: http.Cookie{...}
@@ -283,22 +285,11 @@ rules:
       include:
         - "**/apps/server/**/*.go"
       exclude:
-        # _test.go files in this codebase construct http.Cookie{...}
-        # literals for exactly one purpose: an outbound REQUEST cookie
-        # attached to a test's own *http.Request (via req.AddCookie, or
-        # doGet/doJSON's own cookies... parameters), never a real
-        # response Set-Cookie -- production Set-Cookie construction lives
-        # exclusively in cookie.go/session_cookie.go (non-test files,
-        # still covered by this rule), which is where a genuine
-        # Secure/HttpOnly/SameSite regression would actually matter.
-        # Secure/HttpOnly/SameSite are response-cookie attributes with no
-        # wire representation on a request's Cookie header (RFC 6265
-        # §5.4), so this rule has nothing meaningful to check on the
-        # request side at all -- narrowed here (fix round 1, Task 10)
-        # rather than papering over 8 false-positive sites with per-site
-        # suppressions. handlers_test.go's requestCookie is the one place
-        # left carrying nosemgrep for the two upstream registry rules
-        # that still fire there (p/gosec/p/golang, not ours to narrow).
+        # Tests construct outbound request cookies. Secure, HttpOnly, and
+        # SameSite are response-cookie attributes with no wire representation
+        # in a request Cookie header (RFC 6265 §5.4), so test request literals
+        # are outside this rule. Non-test response-cookie construction remains
+        # covered.
         - "**/apps/server/**/*_test.go"
     metadata:
       category: security
@@ -311,4 +302,5 @@ rules:
           "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute",
         ]
       references:
-        - "docs/specs/aboutme-design.md §3 (Sessions: __Host-session Secure; HttpOnly; SameSite=Lax; Path=/, and __Host-oauth-tx with the same flags)"
+        - "docs/design/security.md, OAuth transaction (__Host-oauth-tx cookie contract)"
+        - "docs/design/security.md, Sessions (__Host-session cookie contract)"

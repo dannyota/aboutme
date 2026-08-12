@@ -114,6 +114,12 @@ advisory lock, run embedded goose migrations exactly once, start the new tasks,
 wait for readiness, then reopen traffic. Rollback uses a forward corrective
 migration; released migration files never change.
 
+The embedded runner uses goose's Provider with a PostgreSQL session advisory
+locker. The Provider acquires the lock before it checks which migrations remain
+pending, applies that set, and releases the lock. This prevents concurrent
+runners from acting on a stale pre-lock pending list and keeps lock handling in
+goose instead of duplicating it in application code.
+
 Every release migration remains compatible with both the candidate server and
 the immediately prior server digest for the full rollback window. A breaking
 schema change uses expand, backfill, and contract across releases; the contract

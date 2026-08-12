@@ -7,7 +7,8 @@
 schema with generated Go/TS/Dart types, the OpenAPI envelope, numeric budgets,
 and the traceability matrix.
 
-**Base:** commit `c8ce9f3`. **Spec:** `../specs/aboutme-design.md` §3, §4, §7.
+**Base:** commit `c8ce9f3`. **Design:** [data](../design/data.md),
+[API](../design/api.md), and [repository boundaries](../design/repository.md).
 **Master plan:** `implementation-plan.md` (P0A = tasks 0.1, 0.1b, 0.8, 0.11).
 
 **Why first:** the master plan's integration discipline says P0 freezes
@@ -94,37 +95,37 @@ statement currently known. Header + first rows exactly:
 ```markdown
 # Spec traceability matrix
 
-**Completion target:** one row per normative statement in
-`../specs/aboutme-design.md`. Every phase plan must resolve its rows (owning
-task + test reference) before independent approval. Acceptance IDs are stable
-and referenced by the UAT report.
+**Completion target:** one row per normative statement in the linked design
+clause below. Every phase plan must resolve its rows (owning task + test
+reference) before independent approval. Acceptance IDs are stable and referenced
+by the UAT report.
 
-| ID          | Spec clause | Statement                                                                         | Phase/task | Test / UAT reference |
-| ----------- | ----------- | --------------------------------------------------------------------------------- | ---------- | -------------------- |
-| AC-DOC-001  | §1          | Max 3 resumes per user, DB-enforced                                               | P2A        | (pending)            |
-| AC-DOC-002  | §3          | Entry ids unique across the whole resume                                          | P2A        | (pending)            |
-| AC-DOC-003  | §3          | Date range: start ≤ end; present ⇒ end null                                       | P2A        | (pending)            |
-| AC-DOC-004  | §3          | Size bounds rejected at limit+1                                                   | P2A        | (pending)            |
-| AC-AUTH-001 | §3          | No automatic email merge across providers                                         | P1         | (pending)            |
-| AC-AUTH-002 | §3          | LinkedIn registration without verified email rejected                             | P1         | (pending)            |
-| AC-AUTH-003 | §3          | GitHub receives no OIDC nonce/iss checks                                          | P1         | (pending)            |
-| AC-AUTH-004 | §3          | Session rotation >24h is atomic with grace interval                               | P1         | (pending)            |
-| AC-AUTH-005 | §3          | Device list, per-session revoke, logout-everywhere, Clear-Site-Data               | P1         | (pending)            |
-| AC-SAVE-001 | §4          | Stale If-Match returns 412 with current revision                                  | P2B        | (pending)            |
-| AC-SAVE-002 | §4          | Idempotent replay returns stored response; different body rejected                | P2B        | (pending)            |
-| AC-PUB-001  | §3          | Unpublish keeps the slug; only rename/delete release it                           | P5A        | (pending)            |
-| AC-PUB-002  | §3          | Released slugs tombstoned 180 days                                                | P5A        | (pending)            |
-| AC-PUB-003  | §4          | Publish-state matrix: live=false ⇒ all surfaces 404/410                           | P5A        | (pending)            |
-| AC-PUB-004  | §4          | seo_geo off ⇒ X-Robots-Tag noindex, .md 404, excluded from sitemap                | P5A        | (pending)            |
-| AC-PUB-005  | §4          | download_enabled gates the public PDF endpoint                                    | P7B        | (pending)            |
-| AC-SEC-001  | §5          | Hostile corpus neutralized by both sanitizers + browser                           | P3         | (pending)            |
-| AC-SEC-002  | §3          | CSRF: token + exact Origin, fail closed                                           | P1         | (pending)            |
-| AC-RT-001   | §8          | SSE reconnect always refetches (NOTIFY not durable)                               | P6A        | (pending)            |
-| AC-RT-002   | §8          | Public stream closes immediately on unpublish                                     | P6B        | (pending)            |
-| AC-PDF-001  | §2          | Renders bounded: 1 concurrent, timeout kill, readiness on saturation, no outbound | P7A        | (pending)            |
-| AC-PRIV-001 | §9          | DELETE /me purges account, resumes, media, sessions; creates tombstones           | P8-priv    | (pending)            |
-| AC-OPS-001  | §6          | Two-runner migration is advisory-locked                                           | P9A        | (pending)            |
-| AC-OPS-002  | §6          | Origin rejects requests lacking the CloudFront secret                             | P9A        | (pending)            |
+| ID          | Design clause                                                                                                                                  | Statement                                                                         | Phase/task | Test / UAT reference |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------- | -------------------- |
+| AC-DOC-001  | [Data: relational model](../design/data.md#relational-model)                                                                                   | Max 3 resumes per user, DB-enforced                                               | P2A        | (pending)            |
+| AC-DOC-002  | [Data: resume aggregate](../design/data.md#resume-aggregate)                                                                                   | Entry ids unique across the whole resume                                          | P2A        | (pending)            |
+| AC-DOC-003  | [Data: resume aggregate](../design/data.md#resume-aggregate)                                                                                   | Date range: start ≤ end; present ⇒ end null                                       | P2A        | (pending)            |
+| AC-DOC-004  | [Data: bounds and invariants](../design/data.md#bounds-and-invariants)                                                                         | Size bounds rejected at limit+1                                                   | P2A        | (pending)            |
+| AC-AUTH-001 | [Security: provider identity](../design/security.md#provider-identity)                                                                         | No automatic email merge across providers                                         | P1         | (pending)            |
+| AC-AUTH-002 | [Security: provider identity](../design/security.md#provider-identity)                                                                         | LinkedIn registration without verified email rejected                             | P1         | (pending)            |
+| AC-AUTH-003 | [Security: OAuth transaction](../design/security.md#oauth-transaction)                                                                         | GitHub receives no OIDC nonce/iss checks                                          | P1         | (pending)            |
+| AC-AUTH-004 | [Security: sessions](../design/security.md#sessions)                                                                                           | Session rotation >24h is atomic with grace interval                               | P1         | (pending)            |
+| AC-AUTH-005 | [Security: sessions](../design/security.md#sessions)                                                                                           | Device list, per-session revoke, logout-everywhere, Clear-Site-Data               | P1         | (pending)            |
+| AC-SAVE-001 | [API: resume write safety](../design/api.md#resume-write-safety)                                                                               | Stale If-Match returns 412 with current revision                                  | P2B        | (pending)            |
+| AC-SAVE-002 | [API: resume write safety](../design/api.md#resume-write-safety)                                                                               | Idempotent replay returns stored response; different body rejected                | P2B        | (pending)            |
+| AC-PUB-001  | [Product: public namespace](../design/product.md#public-namespace)                                                                             | Unpublish keeps the slug; only rename/delete release it                           | P5A        | (pending)            |
+| AC-PUB-002  | [Product: public namespace](../design/product.md#public-namespace)                                                                             | Released slugs tombstoned 180 days                                                | P5A        | (pending)            |
+| AC-PUB-003  | [Product: publish controls](../design/product.md#publish-controls)                                                                             | Publish-state matrix: live=false ⇒ all surfaces 404/410                           | P5A        | (pending)            |
+| AC-PUB-004  | [Product: publish controls](../design/product.md#publish-controls)                                                                             | seo_geo off ⇒ X-Robots-Tag noindex, .md 404, excluded from sitemap                | P5A        | (pending)            |
+| AC-PUB-005  | [Product: publish controls](../design/product.md#publish-controls)                                                                             | download_enabled gates the public PDF endpoint                                    | P7B        | (pending)            |
+| AC-SEC-001  | [Security: document content](../design/security.md#untrusted-document-content)                                                                 | Hostile corpus neutralized by both sanitizers + browser                           | P3         | (pending)            |
+| AC-SEC-002  | [Security: CSRF and origin](../design/security.md#csrf-and-canonical-origin)                                                                   | CSRF: token + exact Origin, fail closed                                           | P1         | (pending)            |
+| AC-RT-001   | [Realtime: delivery semantics](../design/realtime.md#delivery-semantics)                                                                       | SSE reconnect always refetches (NOTIFY not durable)                               | P6A        | (pending)            |
+| AC-RT-002   | [Realtime: delivery semantics](../design/realtime.md#delivery-semantics)                                                                       | Public stream closes immediately on unpublish                                     | P6B        | (pending)            |
+| AC-PDF-001  | [Web: pure renderer](../design/web.md#pure-renderer); [operations: resource budgets](../design/operations.md#resource-and-performance-budgets) | Renders bounded: 1 concurrent, timeout kill, readiness on saturation, no outbound | P7A        | (pending)            |
+| AC-PRIV-001 | [Operations: privacy lifecycle](../design/operations.md#privacy-lifecycle)                                                                     | DELETE /me purges account, resumes, media, sessions; creates tombstones           | P8-priv    | (pending)            |
+| AC-OPS-001  | [Deployment: database and releases](../design/deployment.md#database-and-releases)                                                             | Two-runner migration is advisory-locked                                           | P9A        | (pending)            |
+| AC-OPS-002  | [Deployment: production topology](../design/deployment.md#production-topology)                                                                 | Origin rejects requests lacking the CloudFront secret                             | P9A        | (pending)            |
 ```
 
 - [ ] **Step 3: Verify formatting**
@@ -259,7 +260,8 @@ not exist (ENOENT).
 - [ ] **Step 4: Write `resume.schema.json`**
 
 JSON Schema 2020-12. Required shape (implement exactly; expand entry types per
-spec §3): `$id`, `$schema`, `type: object`, `additionalProperties: false`,
+the [resume aggregate](../design/data.md#resume-aggregate)): `$id`, `$schema`,
+`type: object`, `additionalProperties: false`,
 `required: ["schemaVersion","personalDetails","content","customization"]`.
 
 `$defs` must include: `sanitizerAllowlistVersion` (`const: 1`), `uuid`
@@ -268,15 +270,18 @@ spec §3): `$id`, `$schema`, `type: object`, `additionalProperties: false`,
 `{y: integer 1900..2100, m?: integer 1..12}`, `end` same or `null`,
 `present: boolean`; enforce `present ⇒ end === null` with `if/then`),
 `entryBase` (`{id: uuid, isHidden: boolean}`), and one `$def` per `sectionType`
-extending `entryBase` with the fields listed in spec §3's entry table.
+extending `entryBase` with the fields listed in the
+[resume aggregate's entry table](../design/data.md#resume-aggregate).
 
 `content` is an object with `propertyNames` matching `^[a-z]+$|^[0-9a-f-]{36}$`
 (built-in keys or custom uuid keys), each value
 `{sectionType, displayName, iconKey, entries[]}` with `maxItems: 64`, and
 `oneOf` dispatch on `sectionType` selecting the matching entry `$def`.
 
-`customization` mirrors spec §3 (font, colors, spacing, heading, layout with
-`sections` order arrays, per-type display configs, `pageFormat`, date formats).
+`customization` mirrors the
+[resume aggregate](../design/data.md#resume-aggregate) (font, colors, spacing,
+heading, layout with `sections` order arrays, per-type display configs,
+`pageFormat`, date formats).
 
 - [ ] **Step 5: Write the fixtures**
 
@@ -421,7 +426,7 @@ OpenAPI 3.1. `servers: [{url: https://aboutme.vn/api/v1}]`. Components:
 `IdempotencyKey`. Paths for this phase: `GET /healthz` (200 plain),
 `GET /readyz` (200 / 503 with `Error`). Document in `description` that all
 mutating endpoints require `If-Match` and return `412` on staleness, `409` only
-for domain conflicts (spec §4).
+for domain conflicts ([API conventions](../design/api.md#conventions)).
 
 - [ ] **Step 2: Write the failing validation test**
 
