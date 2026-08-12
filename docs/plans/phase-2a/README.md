@@ -1,6 +1,7 @@
 # Phase 2A — Resume domain and store
 
-Status: **Task 12 and phase gates remain** (verified at `c67e47d`, 2026-08-12).
+Status: **Task 12 landed; phase gates remain** (Task 12 landed at `6925548`,
+2026-08-12).
 
 This phase owns the resume relational schema, validated aggregate store,
 revision compare-and-swap (CAS), transactional idempotency, immutable document
@@ -29,11 +30,14 @@ hand-written goose migrations as the only relational schema source.
 | 9    | Independent write-safety suite                    | Landed                       |
 | 10   | Independent document-migration suite              | Landed                       |
 | 11   | Bounds matrix and completeness guard              | Landed                       |
-| 12   | Traceability, docs, and handoffs                  | Pending                      |
-| Gate | Phase defect review and phase acceptance          | Pending                      |
+| 12   | Traceability, docs, and handoffs                  | Landed                       |
+| Gate | Phase defect review                               | Pending                      |
+| Gate | Exact-candidate phase acceptance                  | Pending                      |
 
-`Landed` does not claim that the phase gates passed. P2B and P3 remain blocked
-on this phase until Task 12 and both gates close at the exact candidate commit.
+Task 12's traceability, architecture documentation, and named downstream
+handoffs are landed. `Landed` does not claim that either phase gate passed. P2B
+and P3 remain blocked on this phase until both gates close at the exact
+candidate commit.
 
 The production document registry currently contains only v1. P2A supplies pure
 projection, adjacent-converter machinery tested with synthetic later versions,
@@ -50,15 +54,15 @@ P8 privacy work.
 
 ## Remaining order
 
-1. Update every P2A-owned traceability row with an explicit state and concrete
-   test evidence. Verify every owner-only shared-file need and assign every
-   forward handoff to a named owner and downstream gate.
-2. Run the affected local checks and `make ci` once at the candidate commit.
-3. Have a fresh reviewer inspect the complete phase diff for defects, design
+1. Have a fresh reviewer inspect the complete phase diff for defects, design
    fit, interface stability, assumptions, and traceability.
-4. Fix blocking findings and obtain independent re-review.
-5. Freeze [acceptance catalog revision 2](acceptance-catalog-r2.md). A fresh
-   acceptance worker runs it without editing code, tests, fixtures, or criteria.
+2. Fix blocking findings and obtain independent re-review.
+3. Pin the unchanged candidate and freeze
+   [acceptance catalog revision 2](acceptance-catalog-r2.md).
+4. Run `make ci` and connected `make scan` once at that candidate, without
+   concurrent heavy workers.
+5. Have a fresh acceptance worker run the frozen catalog without editing code,
+   tests, fixtures, or criteria.
 
 ## Authorities
 
