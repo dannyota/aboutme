@@ -15,12 +15,16 @@ if grep -Fq 'changed=$(git diff --name-status' "$WORKFLOW"; then
   fail "a hosted append-only job still filters git diff before checking its status"
 fi
 
-count=$(grep -Fc 'if ! diff=$(git diff --name-status' "$WORKFLOW" || true)
-[ "$count" -eq 2 ] ||
-  fail "want two fail-closed hosted diff captures, found $count"
+grep -Fq 'bash scripts/check-migrations-append-only.sh --commits "$BASE_SHA" HEAD' "$WORKFLOW" ||
+  fail "migration job does not use the tested commit-to-commit guard"
+grep -Fq 'base is not a commit' "$ROOT/scripts/check-migrations-append-only.sh" ||
+  fail "migration guard does not reject an invalid base"
+grep -Fq 'git diff --quiet "$base" "$head"' "$ROOT/scripts/check-migrations-append-only.sh" ||
+  fail "migration guard does not compare push trees directly"
 
-grep -Fq 'could not compare migrations with the base commit' "$WORKFLOW" ||
-  fail "migration job lacks an explicit diff-failure result"
+count=$(grep -Fc 'if ! diff=$(git diff --name-status' "$WORKFLOW" || true)
+[ "$count" -eq 1 ] ||
+  fail "want one inline fail-closed hosted diff capture, found $count"
 grep -Fq 'Could not compare released schemas with base.' "$WORKFLOW" ||
   fail "released-schema job lacks an explicit diff-failure result"
 

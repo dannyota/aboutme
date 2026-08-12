@@ -130,8 +130,10 @@ records this boundary.
   conformance tests keep JSON Schema, TypeScript, and Go aligned
   ([ADR 0006](../adr/0006-schema-derived-codegen.md)).
 - `apps/server/migrations/*.sql` is the sole relational schema source. Migration
-  DDL is hand-written, append-only, applied by the embedded goose command, and
-  read by sqlc ([ADR 0010](../adr/0010-goose-only-migrations.md)).
+  DDL is hand-written, applied by the embedded goose command, read by sqlc, and
+  becomes append-only at the first UAT baseline
+  ([ADR 0010](../adr/0010-goose-only-migrations.md),
+  [ADR 0020](../adr/0020-uat-migration-baseline.md)).
 - Generated artifacts are committed and changed only through their source and
   generator.
 
@@ -139,7 +141,10 @@ There is no separate declarative relational schema file. Reading migrations and
 sqlc queries together gives the applied schema and typed access layer without a
 second schema source that can drift.
 
-The integration gate enforces released migration immutability by comparing the
-migration directory for append-only changes. Goose tracks applied versions, not
-file checksums, at runtime. A correction is a new forward migration rather than
-an edit or a down migration.
+Before the first local UAT baseline, migration history is development-only. The
+integration owner may correct it and recreate the shared development database
+after every live-database worker is idle. The first UAT candidate adds
+`apps/server/migrations/.uat-baseline`. After that marker lands, the integration
+gate rejects changing the marker or any existing migration; only new forward
+migrations may be added. Goose tracks applied versions, not file checksums, at
+runtime.

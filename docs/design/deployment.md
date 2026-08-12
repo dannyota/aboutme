@@ -112,7 +112,8 @@ data verification before launch.
 Production migration order is: stop writes, verify backup, take the migration
 advisory lock, run embedded goose migrations exactly once, start the new tasks,
 wait for readiness, then reopen traffic. Rollback uses a forward corrective
-migration; released migration files never change.
+migration; migrations fixed by the first UAT baseline never change
+([ADR 0020](../adr/0020-uat-migration-baseline.md)).
 
 The embedded runner uses goose's Provider with a PostgreSQL session advisory
 locker. The Provider acquires the lock before it checks which migrations remain

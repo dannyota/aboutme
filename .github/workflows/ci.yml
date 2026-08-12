@@ -149,17 +149,7 @@ jobs:
           # when — as here — they are commit SHAs.
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          base="$BASE_SHA"
-          if ! diff=$(git diff --name-status "$base"...HEAD -- apps/server/migrations); then
-            echo "could not compare migrations with the base commit" >&2
-            exit 1
-          fi
-          changed=$(printf '%s\n' "$diff" | grep -E '^(M|D|R|T)' | grep -E '\.sql$' || true)
-          if [ -n "$changed" ]; then
-            echo "Applied migrations are immutable; only new files may be added:"
-            echo "$changed"
-            exit 1
-          fi
+          bash scripts/check-migrations-append-only.sh --commits "$BASE_SHA" HEAD
 
   # Released resume schemas are immutable (docs/design/data.md, "Document
   # versions"): a released resume.v<N>.schema.json is the contract stored

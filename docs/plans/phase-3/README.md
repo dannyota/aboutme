@@ -1,6 +1,7 @@
 # Phase 3 — Renderer, sanitizer, templates, and fonts
 
-Status: **Draft revision 4; waiting on P2A and design approval** (2026-08-12).
+Status: **Draft revision 4; waiting on P2A correction and design approval**
+(2026-08-12).
 
 This phase builds the pure Vue resume renderer, both display pagination modes,
 the shared sanitizer implementations, self-hosted font catalog, template

@@ -16,7 +16,7 @@ The status below is verified against the phase-closure candidate on `main`.
 | P0F TypeScript API client     | Complete                    | None                                                                    |
 | P1 authentication             | Complete                    | None; historical gates remain unchanged                                 |
 | P1.1 authentication hardening | Complete                    | None                                                                    |
-| P2A resume domain and store   | Complete                    | None                                                                    |
+| P2A resume domain and store   | Corrective verification     | Re-run review and recorded acceptance after the cap-trigger correction  |
 | P3 design and preset data     | Draft design and 20 presets | Approve contract; add licensed font catalog through schema v2           |
 | P2B resume HTTP and media     | Draft plan only             | Close the dispatch blockers listed below                                |
 | PI infrastructure             | Adopted plan, not executed  | Refresh after runtime phases; no cloud mutation before P9 authorization |
@@ -30,10 +30,10 @@ contract, tests, browser proof, and independent gates agree.
 
 1. Approve Draft v4 design and the template contract after independent design
    and plan reviews close every blocking finding.
-2. Refresh P3 against the approved design and follow its dependency graph. Run
-   the sanitizer and font-license lanes in parallel; vendor the final font
-   catalog before releasing document v2 from its stable IDs, then run the
-   renderer and template consumers.
+2. Close P2A corrective verification, then refresh P3 against the approved
+   design and follow its dependency graph. Run the sanitizer and font-license
+   lanes in parallel; vendor the final font catalog before releasing document v2
+   from its stable IDs, then run the renderer and template consumers.
 3. Adopt and execute P2B only after all P3 tasks and both P3 phase gates are
    closed.
 4. Implement and review the isolated HTTPS UAT Compose overlay before P9. This
@@ -115,7 +115,7 @@ read that feeds internal print SSR.
 | Step | Phase or wave                | State                        | Exit                                               |
 | ---- | ---------------------------- | ---------------------------- | -------------------------------------------------- |
 | 01   | P0 + P1                      | Complete                     | Historical phase evidence remains pinned           |
-| 02   | P2A                          | Complete                     | Task 12 and both phase gates passed                |
+| 02   | P2A                          | Corrective verification      | Updated phase review and acceptance pass           |
 | 03   | P0F + P1.1 corrections       | Complete                     | Contract, UI, review, and acceptance agree         |
 | 04   | P3                           | Waiting on design            | Renderer, sanitizer, fonts, and preset gates pass  |
 | 05   | P2B                          | Blocked from dispatch        | HTTP and media phase gates pass                    |

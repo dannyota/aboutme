@@ -13,6 +13,7 @@ CALLS=$WORK/calls
 mkdir -p "$REPO/scripts" "$REPO/apps/server" \
   "$REPO/packages/schema/gen/go" "$BIN"
 cp "$ROOT/scripts/ci.sh" "$REPO/scripts/ci.sh"
+cp "$ROOT/scripts/check-migrations-append-only.sh" "$REPO/scripts/"
 : >"$REPO/apps/server/go.mod"
 : >"$REPO/apps/server/go.sum"
 : >"$CALLS"

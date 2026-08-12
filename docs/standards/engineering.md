@@ -36,8 +36,10 @@ Do not leave these in live source:
 - claims about deleted files or retired tools;
 - line-by-line descriptions that repeat the code.
 
-Generated files and released migrations are exceptions. Change their source or
-leave immutable history intact; do not hand-edit them to improve prose.
+Generated files and UAT-baselined migrations are exceptions. Change generated
+sources or leave immutable migration history intact; do not hand-edit either to
+improve prose. Before the first UAT baseline, the migration correction rule in
+the data design applies.
 
 ## Plans and records
 

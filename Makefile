@@ -21,7 +21,7 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 	bash scripts/check-tool-versions.sh $(ARGS)
 
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
-	bash -n scripts/check-tool-versions.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
 	scripts/test/ci-failure-propagation-test.sh
 	scripts/test/ci-lifecycle-test.sh
 	scripts/test/ci-scan-adversarial-test.sh

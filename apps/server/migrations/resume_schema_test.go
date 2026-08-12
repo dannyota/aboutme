@@ -630,6 +630,51 @@ func updateResumeUserID(ctx context.Context, db sqlExecer, resumeID, newUserID u
 	return err
 }
 
+// TestResumeCapTrigger_AllowsNoOpUpdateOfUserIDAtCap proves that the update
+// arm counts only resumes newly assigned to an owner. Reassigning one of an
+// owner's existing rows to that same owner does not add a resume and must
+// remain valid when the owner already has three.
+func TestResumeCapTrigger_AllowsNoOpUpdateOfUserIDAtCap(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	userID := createTestUser(ctx, t, tx)
+
+	var resumeID uuid.UUID
+	for i := range 3 {
+		id, err := insertResumeReturningID(ctx, tx, defaultResumeRow(userID, fmt.Sprintf("update-noop-%02d", i)))
+		if err != nil {
+			t.Fatalf("insert %d/3 for user: %v", i+1, err)
+		}
+		if i == 0 {
+			resumeID = id
+		}
+	}
+
+	if err := updateResumeUserID(ctx, tx, resumeID, userID); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			t.Fatalf("no-op user_id update at cap: SQLSTATE %s, message %q; want success", pgErr.Code, pgErr.Message)
+		}
+		t.Fatalf("no-op user_id update at cap: %v; want success", err)
+	}
+
+	var ownerID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT user_id FROM resumes WHERE id = $1`, resumeID).Scan(&ownerID); err != nil {
+		t.Fatalf("query updated resume owner: %v", err)
+	}
+	if ownerID != userID {
+		t.Errorf("updated resume owner = %s, want %s", ownerID, userID)
+	}
+
+	var ownedCount int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM resumes WHERE user_id = $1`, userID).Scan(&ownedCount); err != nil {
+		t.Fatalf("count resumes after no-op user_id update: %v", err)
+	}
+	if ownedCount != 3 {
+		t.Errorf("resume count after no-op user_id update = %d, want 3", ownedCount)
+	}
+}
+
 // TestResumeCapTrigger_EnforcesCapOnUpdateOfUserID proves the trigger's
 // second arm, not just its first: nothing else in this file ever issues an
 // UPDATE that touches user_id, so changing the trigger definition from

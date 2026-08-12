@@ -26,21 +26,21 @@ challenge in review — never a TODO.
 >    violating AC-DOC-001 through exactly the bypassing-writer path D7 claims to
 >    close. The trigger comment now says so; no
 >    `SET TRANSACTION ISOLATION LEVEL` may appear in any P2A store path.
-> 2. **No update statement may list `user_id` in its `SET` clause.** The trigger
->    fires on `UPDATE OF user_id` and counts rows including the one being
->    updated, so a self-referential `SET user_id = user_id` on an owner already
->    at 3 falsely raises `resumes_user_cap_exceeded`. Task 4's
->    `UpdateResumeDocumentCAS`/`UpdateResumeTitleCAS` already exclude it; this
->    records that as a requirement rather than an accident.
+> 2. **A no-op owner assignment must not consume a cap slot.** The cap trigger
+>    returns before the count when `NEW.user_id` equals `OLD.user_id`. Inserts
+>    and real owner moves still lock the target owner and reject a fourth
+>    resume. Store document/title updates continue to omit `user_id` because
+>    they do not change ownership.
 
 ## D7 — Trigger mechanics and race safety
 
-Use a `BEFORE INSERT OR UPDATE OF user_id` trigger. Its function first locks the
-owner row (`PERFORM 1 FROM users WHERE id = NEW.user_id FOR UPDATE`) and then
-counts, so it remains race-safe for writers bypassing the store. Store creates
-take the same lock in the same order. A cap violation raises SQLSTATE `23514`
-with message `resumes_user_cap_exceeded`; the store maps only that exact pair to
-`ErrCapExceeded`.
+Use a `BEFORE INSERT OR UPDATE OF user_id` trigger. For inserts and real owner
+moves, its function first locks the target owner row
+(`PERFORM 1 FROM users WHERE id = NEW.user_id FOR UPDATE`) and then counts, so
+it remains race-safe for writers bypassing the store. A no-op owner assignment
+returns before the lock. Store creates take the same lock in the same order. A
+cap violation raises SQLSTATE `23514` with message `resumes_user_cap_exceeded`;
+the store maps only that exact pair to `ErrCapExceeded`.
 
 ## D8 — Migration authorship
 

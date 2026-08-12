@@ -12,6 +12,7 @@ make_fixture() {
   mkdir -p "$repo/scripts" "$repo/apps/server" \
     "$repo/packages/schema/gen/go" "$bin"
   cp "$ROOT/scripts/ci.sh" "$repo/scripts/ci.sh"
+  cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
   : >"$repo/apps/server/go.mod"
   : >"$repo/apps/server/go.sum"
   : >"$calls"
