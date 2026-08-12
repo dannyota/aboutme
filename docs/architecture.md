@@ -1,6 +1,6 @@
 # Current-state architecture
 
-This document describes the repository at `main` commit `8ccf0d2`, verified on
+This document describes the phase-closure candidate on `main`, verified on
 2026-08-12. The [design](design/README.md) owns intended behavior. The
 [roadmap](plans/implementation-plan.md) owns delivery state and gates.
 
@@ -53,8 +53,7 @@ Resume HTTP routes are not implemented.
 
 ## Implemented resume data layer
 
-Phase 2A Tasks 1–12 are present, but both phase gates remain. The landed slice
-provides:
+Phase 2A Tasks 1–12 and both phase gates are complete. The phase provides:
 
 - immutable resume schema v1, retained v1 Go and TypeScript types, and released,
   accepted, and emitted version registries that currently contain only version
@@ -85,11 +84,6 @@ draft, and the renderer, sanitizer, and licensed font assets have not landed.
 
 ## Known delivery gaps
 
-- P1.1's settings-page POST flow, provider-bound navigation, CSRF retry, and
-  deterministic identity order are implemented. The bounded browser proof and
-  both phase gates remain before P1.1 closes.
-- P2A Task 12 traceability and downstream handoffs are landed. Its phase defect
-  review and exact-candidate acceptance remain before P2A closes.
 - The current Compose route serves HTTP. P9 requires the complete image-based
   deployment at an HTTPS origin on port 443. The UAT harness must close this gap
   before acceptance can run.

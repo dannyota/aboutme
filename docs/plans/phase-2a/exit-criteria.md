@@ -3,9 +3,8 @@
 The phase closes only when the candidate commit satisfies every item. A later
 product-code change invalidates evidence for each affected path.
 
-Task 12 documentation and handoffs are landed. Checked items below record landed
-repository evidence, not a phase-gate result. Candidate commands and both
-independent gates remain open.
+Task 12 documentation and handoffs are landed. The candidate commands and both
+independent gates passed on the unchanged phase candidate.
 
 ## Product and contract
 
@@ -29,17 +28,17 @@ independent gates remain open.
       and adjacent-converter machinery pass append-only and fail-closed tests.
       Synthetic versions prove both converter directions; real HTTP persistence
       remains P2B-owned AC-SAVE-004.
-- [ ] No production package outside `internal/resume` calls a generated resume
+- [x] No production package outside `internal/resume` calls a generated resume
       write method. The phase review records this as a review rule, not a custom
       static-analysis guarantee.
 
 ## Evidence and checks
 
-- [ ] `make ci` passes once, without concurrent heavy workers, at the candidate
+- [x] `make ci` passes once, without concurrent heavy workers, at the candidate
       commit.
-- [ ] `make schema-check`, `make sqlc-check`, `make server-migration-test`, and
+- [x] `make schema-check`, `make sqlc-check`, `make server-migration-test`, and
       `make server-test-db` pass with live suites required and `-count=1`.
-- [ ] `make scan` passes. If the connected scan cannot run, the phase is
+- [x] `make scan` passes. If the connected scan cannot run, the phase is
       blocked; offline Semgrep alone is not phase-exit evidence.
 - [x] P2A-owned traceability rows have explicit `PROVEN` state and exact test or
       command evidence. Handoffs have a named owner and downstream gate.
@@ -54,10 +53,10 @@ independent gates remain open.
 
 ## Independent gates
 
-- [ ] A fresh phase reviewer that authored none of the phase reports no blocking
+- [x] A fresh phase reviewer that authored none of the phase reports no blocking
       defect in behavior, design fit, interface stability, assumptions, or
       traceability. Fixes receive independent re-review.
-- [ ] A fresh acceptance worker runs
+- [x] A fresh acceptance worker runs
       [catalog revision 2](acceptance-catalog-r2.md) at the exact commit without
       editing product code, tests, fixtures, or criteria. Every row is `PASS`.
       `FAIL`, `BLOCKED`, missing evidence, or an undisclosed retry fails.

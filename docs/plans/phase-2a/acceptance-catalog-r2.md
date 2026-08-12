@@ -1,6 +1,7 @@
 # Phase 2A automated acceptance catalog — revision 2
 
-Status: **Draft until the candidate commit is pinned.** Freeze before the run.
+Status: **Frozen** (2026-08-12). Corrections require revision 3; this file does
+not change during a run.
 
 This revision replaces the legacy [`../uat-phase-2a.md`](../uat-phase-2a.md) for
 future runs. The old catalog remains immutable. Revision 2 removes retired Atlas
