@@ -1,6 +1,5 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-
   modules: ['@nuxt/eslint'],
 
   // Server-side rendering is required: public resume pages and SEO/GEO
@@ -8,6 +7,8 @@ export default defineNuxtConfig({
   ssr: true,
 
   devtools: { enabled: true },
+
+  css: ['~/assets/css/fonts.css'],
 
   runtimeConfig: {
     public: {

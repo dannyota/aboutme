@@ -1,0 +1,4 @@
+# Vendored font licenses are retained byte-for-byte from their pinned sources.
+# Some contain upstream CRLF or trailing spaces, so Git must not normalize or
+# whitespace-check them as project-authored text.
+apps/web/public/font-licenses/** binary
