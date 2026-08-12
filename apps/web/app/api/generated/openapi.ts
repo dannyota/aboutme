@@ -372,6 +372,242 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/resumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the caller's own resumes
+         * @description Returns the caller's own resumes as summaries: identity, title, language, revision, publish state, and timestamps. The resume document is deliberately absent — a list view never pays for up to three 512 KB documents. Fetch one document with `GET /resumes/{id}`.
+         *
+         *     Ordering is `(created_at, id)`, oldest first, so a client has a stable list across equal timestamps. A caller with no resumes gets an empty array, never `404`.
+         */
+        get: operations["listResumes"];
+        put?: never;
+        /**
+         * Create a resume
+         * @description Creates one resume owned by the caller and returns it with its starting document. The body carries only `title` and optional `lng`; the document, revision, slug, and publish state are server-owned.
+         *
+         *     A create has no prior revision, so it takes `Idempotency-Key` and rejects `If-Match` with `400 precondition_not_supported` rather than ignoring it (ADR 0016, plan D6). The per-account resume cap is a domain conflict: the fourth create returns `409 resume_cap_exceeded`, never `412`.
+         */
+        post: operations["createResume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resumes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one of the caller's own resumes
+         * @description Returns one owned resume and its whole document, projected to the requested wire version. A read never writes: a stored document below the current version is projected in memory and the row keeps its revision and `updated_at` (ADR 0017).
+         *
+         *     Another account's resume id is indistinguishable from a missing one: both are `404 resume_not_found`, so the API is not an existence oracle.
+         */
+        get: operations["getResume"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a resume
+         * @description Deletes one owned resume and enqueues exact-key deletion of its photo object in the same transaction (ADR 0019). The response is `204` with zero bytes and no `ETag`: the parent no longer exists, so there is no successor revision to report.
+         *
+         *     The request has no body. Its idempotency fingerprint hashes a zero-length payload, so a retry with the same key replays the original `204`.
+         */
+        delete: operations["deleteResume"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a resume's title or language
+         * @description Updates owner-visible resume metadata. Both fields are optional and at least one must be present. `lng` is canonicalized before the compare-and-swap; a canonical form over 35 characters is rejected (plan D17). Null or empty clears it to undetermined.
+         *
+         *     Like every mutation of an existing resume this requires `If-Match` and `Idempotency-Key`.
+         */
+        patch: operations["updateResumeMetadata"];
+        trace?: never;
+    };
+    "/resumes/{id}/entries/{sectionKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Create or replace one entry in a section
+         * @description Upserts exactly one entry. Identity is `entry.id` in the body, not the path: an existing id replaces that entry in place and keeps its position, and a new id appends to the section's `entryOrder`.
+         *
+         *     The whole resume is revalidated and persisted through the aggregate write boundary, so this cannot produce a document that whole-resume validation would reject.
+         */
+        patch: operations["upsertResumeEntry"];
+        trace?: never;
+    };
+    "/resumes/{id}/entries/{sectionKey}/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one entry from a section
+         * @description Removes one entry and its `entryOrder` position. The response is `204` with zero bytes, and carries the new parent `ETag` and emitted schema version so the client can continue writing without a reread.
+         *
+         *     The request has no body. Its idempotency fingerprint hashes a zero-length payload.
+         */
+        delete: operations["deleteResumeEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/resumes/{id}/sections/{sectionKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change one section's own metadata
+         * @description Updates a section's display name, icon, or entry order. This route never moves a section between columns and never changes section order: `layout.sections` is the sole placement authority (ADR 0009) and only `PATCH /resumes/{id}/structure` writes it.
+         *
+         *     `entryOrder` must be a permutation of that section's existing entry ids — it reorders, it does not add or remove.
+         */
+        patch: operations["updateResumeSection"];
+        trace?: never;
+    };
+    "/resumes/{id}/structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Create, delete, move, or reorder sections
+         * @description The only endpoint that writes `layout.sections`. It applies an ordered list of at most 100 commands atomically: either every command applies and one new revision is written, or nothing changes.
+         *
+         *     Commands are evaluated in list order against the result of the previous command, so a later command addresses the layout the earlier ones produced.
+         */
+        patch: operations["updateResumeStructure"];
+        trace?: never;
+    };
+    "/resumes/{id}/personal-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Replace the personal-details object
+         * @description Replaces the whole client-owned personal-details object at the declared wire version. Sending it whole keeps the write idempotent and lets a field be cleared by omission.
+         *
+         *     `photo` is server-owned and rejected here: it is written only by the photo routes, from a server-derived object key. Crop is changed through `PATCH /resumes/{id}/photo`.
+         */
+        patch: operations["updateResumePersonalDetails"];
+        trace?: never;
+    };
+    "/resumes/{id}/customization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Apply ordered customization deltas
+         * @description Applies at most 100 ordered `set`/`unset` deltas to the resume's customization, atomically. Paths are checked against a fixed allowlist: anything outside it is `422 customization_path_denied`, so a delta cannot reach content, layout placement, or a server-owned field.
+         *
+         *     Deltas apply in list order, so a later delta overwrites an earlier one on the same path.
+         */
+        patch: operations["updateResumeCustomization"];
+        trace?: never;
+    };
+    "/resumes/{id}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the resume photo's normalized bytes
+         * @description Streams the stored normalized JPEG or PNG to the owner. Objects are private: existence never grants access, and every read passes the ownership check first (ADR 0019).
+         *
+         *     The strong `ETag` is derived from the immutable object key, so it changes only when the photo is replaced. `If-None-Match` accepts one well-formed strong tag: an exact match is `304` with no body, a different tag is `200`. This binary read is outside the wire-version contract and emits no schema-version header.
+         */
+        get: operations["getResumePhoto"];
+        put?: never;
+        /**
+         * Upload or replace the resume photo
+         * @description Accepts `multipart/form-data` with exactly one raw part named `file`. The request is capped at 2,162,688 bytes and the file part at 2,097,152 bytes; either overflow is `413 media_too_large`, never `body_too_large`.
+         *
+         *     Intake fully decodes static JPEG, PNG, or WebP within the dimension, pixel, time, and memory budgets, applies Exif orientation, rejects animation and invalid structure, strips every metadata block, and stores only normalized JPEG or PNG pixels under a server-derived immutable key. The original container never reaches storage. An unsupported container is `415 media_type_unsupported`; a recognized but unsafe or unnormalizable image is `422 media_invalid`.
+         *
+         *     Concurrency is bounded by one task-wide media permit: a second intake that cannot acquire it within one second is `503 media_busy` with `Retry-After: 1`, before any body read. Replacement clears any crop attached to the old pixels and enqueues exact-key deletion of the old object in the same transaction (ADR 0019).
+         */
+        post: operations["uploadResumePhoto"];
+        /**
+         * Delete the resume photo
+         * @description Removes the photo reference and its crop, and enqueues exact-key deletion of the object in the same transaction. Access is revoked at commit; the bytes are removed by the deletion worker within the 24-hour target (ADR 0019).
+         *
+         *     The request has no body. Its idempotency fingerprint hashes a zero-length payload. The response is `204` with the new parent `ETag`.
+         */
+        delete: operations["deleteResumePhoto"];
+        options?: never;
+        head?: never;
+        /**
+         * Change or clear the photo crop
+         * @description Changes only the normalized crop rectangle. The body is exactly `{crop: <crop>|null}`: null removes the crop property. It accepts no object key and no other photo field.
+         *
+         *     The photo key is read inside the compare-and-swap transaction and preserved, and the route performs no object-store I/O at all. Ordinary JSON write admission applies; the upload-only limits, `415`, and `media_busy` are unreachable here.
+         */
+        patch: operations["updateResumePhotoCrop"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -404,6 +640,24 @@ export interface components {
                  * @example The resume was modified since you last loaded it.
                  */
                 message: string;
+                /**
+                 * @description Optional, code-specific structured context. Both `code` and `message` stay required and unchanged; this is additive.
+                 *
+                 *     `412 revision_mismatch` carries `revision` (the winning revision) and `document` (the winning document), so a client can rebase without a second round trip. A document, bounds, or customization rejection carries `issues[]`, each with `path`, `code`, and `message`. `400 unsupported_schema_version` carries `acceptedVersions`, the versions the server accepts.
+                 */
+                details?: {
+                    revision?: components["schemas"]["Revision"];
+                    document?: components["schemas"]["ResumeDocument"];
+                    /** @description Wire versions this server accepts. */
+                    acceptedVersions?: number[];
+                    /** @description One entry per rejected value. */
+                    issues?: {
+                        /** @description Dotted path to the offending value. */
+                        path: string;
+                        code: string;
+                        message: string;
+                    }[];
+                };
             };
         };
         /**
@@ -519,6 +773,155 @@ export interface components {
          * @enum {string}
          */
         OAuthCallbackErrorCode: "auth_failed" | "email_not_verified" | "cancelled" | "email_already_registered" | "identity_already_linked" | "reauth_required";
+        /**
+         * @description One owned resume without its document: enough to list, name, and route to it. Publish state is included because the owner's list shows it; the public slug is null until the resume is published.
+         * @example {
+         *       "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+         *       "title": "Backend engineer",
+         *       "lng": "en",
+         *       "revision": "42",
+         *       "live": true,
+         *       "slug": "ada-lovelace",
+         *       "schemaVersion": 2,
+         *       "createdAt": "2026-08-01T09:00:00Z",
+         *       "updatedAt": "2026-08-11T18:20:00Z"
+         *     }
+         */
+        ResumeSummary: {
+            /**
+             * Format: uuid
+             * @description Server-assigned resume id (`uuidv7`).
+             */
+            id: string;
+            /** @description Owner-visible title. Not public and not the slug. */
+            title: string;
+            /** @description Canonical BCP 47 language tag for the resume's content, or null when undetermined. */
+            lng: string | null;
+            revision: components["schemas"]["Revision"];
+            /** @description Whether the resume is currently published. */
+            live: boolean;
+            /** @description Globally unique public slug, or null when the resume has never been published. Resumes are the public entity; users are not. */
+            slug: string | null;
+            /** @description Document version this response was emitted at. Equal to the `X-Resume-Schema-Version` response header. */
+            schemaVersion: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description A resume summary plus its whole document. */
+        Resume: components["schemas"]["ResumeSummary"] & {
+            document: components["schemas"]["ResumeDocument"];
+        };
+        /**
+         * @description The resume document. Its shape is **not** restated here: it is governed by `packages/schema/resume.schema.json` at the version named by the `X-Resume-Schema-Version` header, and the generated client types come from `packages/schema/gen/ts`. Restating a 24-section, byte-bounded schema in this file would create a second source of truth for one contract and drift silently. This document owns the envelope, headers, statuses, and error shapes.
+         * @example {
+         *       "schemaVersion": 2
+         *     }
+         */
+        ResumeDocument: Record<string, never>;
+        /**
+         * @description One entry to create or replace. Identity is `entry.id`: an existing id replaces that entry in place and keeps its position, a new id appends. The entry's own shape is governed by `packages/schema/resume.schema.json` at the declared version.
+         * @example {
+         *       "entry": {
+         *         "id": "018f5b6a-9a3e-7c21-8b1e-0000000000a1",
+         *         "title": "Staff engineer"
+         *       }
+         *     }
+         */
+        EntryUpsert: {
+            /** @description The whole entry object, including its `id`. */
+            entry: Record<string, never>;
+        };
+        /**
+         * @description A section's own metadata. Placement is never here: moving a section between columns or changing section order goes through `PATCH /resumes/{id}/structure` (ADR 0009).
+         * @example {
+         *       "displayName": "Experience",
+         *       "iconKey": "briefcase"
+         *     }
+         */
+        SectionPatch: {
+            /** @description Owner-chosen heading, or null to fall back to the section type's default label. */
+            displayName?: string | null;
+            /** @description Key from the renderer's closed icon map, or null for no icon. An unknown key is rejected. */
+            iconKey?: string | null;
+            /** @description A permutation of this section's existing entry ids. It reorders only; it cannot add or remove an entry. */
+            entryOrder?: string[];
+        };
+        /**
+         * @description One section-structure command. Commands are evaluated **in list order** against the result of the previous command, so a later command addresses the layout the earlier ones produced.
+         *
+         *     Every `index` is a **zero-based** insertion position with a minimum of 0. A create into a target column of length `N` accepts `0..N`, where `N` appends. A move **removes the source key first** and then measures the target column, so a same-column move is bounded by the resulting length; `N` again appends. An index outside that bound is `422 document_invalid`; a non-integer index is `400 request_invalid`.
+         * @example {
+         *       "op": "moveSection",
+         *       "sectionKey": "skills",
+         *       "column": "sidebar",
+         *       "index": 1
+         *     }
+         */
+        StructureCommand: {
+            /** @enum {string} */
+            op: "createSection" | "deleteSection" | "moveSection" | "reorderSections";
+            /** @description Section type for `createSection`, from the schema's `sectionType` enum. */
+            sectionType?: string;
+            /** @description Target section key for `deleteSection` and `moveSection`. */
+            sectionKey?: string;
+            /**
+             * @description Destination column for `createSection` and `moveSection`.
+             * @enum {string}
+             */
+            column?: "main" | "sidebar";
+            /** @description Zero-based insertion position in the destination column, measured after the source key is removed for a move. The column's current length appends. */
+            index?: number;
+            /** @description For `reorderSections`, the full permutation of that column's section keys. */
+            order?: string[];
+        };
+        /**
+         * @description One customization change. `set` writes a value at an allowlisted path; `unset` removes it. Deltas apply in list order, so a later delta overwrites an earlier one on the same path. A path outside the fixed allowlist is `422 customization_path_denied`.
+         * @example {
+         *       "op": "set",
+         *       "path": "font.family",
+         *       "value": "inter"
+         *     }
+         */
+        CustomizationDelta: {
+            /** @enum {string} */
+            op: "set" | "unset";
+            /** @description Dotted path inside `customization`, from the fixed allowlist. */
+            path: string;
+            /** @description Required for `set`, absent for `unset`. Its shape is governed by the resume schema at that path. */
+            value?: unknown;
+        };
+        /**
+         * @description The whole client-owned personal-details object at the declared wire version, governed by `packages/schema/resume.schema.json`. Sending it whole keeps the write idempotent and lets a field be cleared by omission.
+         *
+         *     `photo` is server-owned: this schema rejects a request that contains it, without restating the remaining fields. The photo routes write that field from a server-derived key.
+         * @example {
+         *       "fullName": "Ada Lovelace",
+         *       "headline": "Backend engineer"
+         *     }
+         */
+        PersonalDetailsPatch: Record<string, never>;
+        /**
+         * @description The crop-only photo command. It accepts no object key and no other photo field, preserves the key read inside the write transaction, and performs no object-store I/O.
+         * @example {
+         *       "crop": {
+         *         "x": 0.1,
+         *         "y": 0.05,
+         *         "width": 0.8,
+         *         "height": 0.8
+         *       }
+         *     }
+         */
+        PhotoCropPatch: {
+            /** @description The normalized crop rectangle, or `null` to clear it. Its bounds are governed by `resume.schema.json#/$defs/photoCrop`: `x` and `y` in `[0, 1]`, `width` and `height` in `(0, 1]`, all four required. */
+            crop: {
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+            } | null;
+        };
     };
     responses: {
         /** @description The start routes' own rate limit is exhausted. Anonymous sign-in `GET` starts are keyed by client IP. Authenticated link and reauthentication `POST` starts are keyed by `(account, client IP)`. Both are tighter than the whole-server default because each accepted start writes a database row. Carries `Retry-After` in whole seconds. */
@@ -534,6 +937,592 @@ export interface components {
                  *       "error": {
                  *         "code": "rate_limited",
                  *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description One owned resume, projected to the requested wire version. */
+        ResumeRead: {
+            headers: {
+                ETag: components["headers"]["ParentETag"];
+                "X-Resume-Schema-Version": components["headers"]["EmittedSchemaVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "data": {
+                 *         "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                 *         "title": "Backend engineer",
+                 *         "lng": "en",
+                 *         "revision": "42",
+                 *         "live": true,
+                 *         "slug": "ada-lovelace",
+                 *         "schemaVersion": 2,
+                 *         "createdAt": "2026-08-01T09:00:00Z",
+                 *         "updatedAt": "2026-08-11T18:20:00Z",
+                 *         "document": {
+                 *           "schemaVersion": 2
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Envelope"] & {
+                    data?: components["schemas"]["Resume"];
+                };
+            };
+        };
+        /** @description The whole resume after the write, at its new revision. */
+        ResumeWritten: {
+            headers: {
+                ETag: components["headers"]["ParentETag"];
+                "X-Resume-Schema-Version": components["headers"]["EmittedSchemaVersion"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "data": {
+                 *         "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                 *         "title": "Backend engineer",
+                 *         "lng": "en",
+                 *         "revision": "43",
+                 *         "live": true,
+                 *         "slug": "ada-lovelace",
+                 *         "schemaVersion": 2,
+                 *         "createdAt": "2026-08-01T09:00:00Z",
+                 *         "updatedAt": "2026-08-12T09:05:00Z",
+                 *         "document": {
+                 *           "schemaVersion": 2
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Envelope"] & {
+                    data?: components["schemas"]["Resume"];
+                };
+            };
+        };
+        /** @description `invalid_client_ip` when the trusted-proxy boundary cannot derive one canonical client address, or `unsupported_schema_version` when `X-Resume-Schema-Version` is outside the accepted set. The latter carries `details.acceptedVersions`. */
+        ResumeListBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "unsupported_schema_version",
+                 *         "message": "requested resume schema version is not accepted",
+                 *         "details": {
+                 *           "acceptedVersions": [
+                 *             1,
+                 *             2
+                 *           ]
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `invalid_client_ip`, `request_invalid` for a malformed path parameter, or `unsupported_schema_version` for a wire version outside the accepted set. */
+        ResumeReadBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "resume id is not a UUID"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A malformed request, before any state change: `invalid_client_ip`, `idempotency_key_required`, `idempotency_key_invalid`, `precondition_malformed` when `If-Match` is not `"r<digits>"`, `request_invalid` for malformed JSON, an unknown field, a repeated or comma-folded singleton header, or a malformed path parameter, or `unsupported_schema_version`. */
+        ResumeWriteBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "idempotency_key_required",
+                 *         "message": "every mutation requires an Idempotency-Key header"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description As the write case, except that a create has no prior revision: supplying `If-Match` is `precondition_not_supported` rather than `precondition_malformed`. Also `invalid_client_ip`, `idempotency_key_required`, `idempotency_key_invalid`, `request_invalid`, and `unsupported_schema_version`. */
+        ResumeCreateBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "precondition_not_supported",
+                 *         "message": "resume creation has no prior revision to match"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `invalid_client_ip`, or `request_invalid` for a malformed resume id or an `If-None-Match` that is repeated, comma-folded, weak, or otherwise malformed. */
+        PhotoReadBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "If-None-Match must be one well-formed strong tag"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Missing or invalid `__Host-session` cookie (`session_required`). */
+        ResumeUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "session_required",
+                 *         "message": "a valid session is required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `csrf_rejected`. The `X-CSRF-Token` header is missing or wrong, or the `Origin`/`Referer` check failed. Rejection precedes body decode, idempotency inspection, and any state change. */
+        ResumeCsrfRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "csrf_rejected",
+                 *         "message": "CSRF validation failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `resume_not_found`. Also the answer for a resume owned by another account: the API is not an existence oracle, so a foreign id and a random one are indistinguishable. */
+        ResumeNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "resume_not_found",
+                 *         "message": "resume not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `resume_not_found` when the resume is missing or owned by another account, or `media_not_found` when the owned resume carries no photo. */
+        ResumeOrPhotoNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "media_not_found",
+                 *         "message": "this resume has no photo"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A domain conflict, never staleness: `resume_cap_exceeded` for a create beyond the per-account cap, or `idempotency_key_reuse` when the same key arrives with a different request fingerprint. */
+        ResumeCreateConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "resume_cap_exceeded",
+                 *         "message": "this account already has the maximum number of resumes"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `idempotency_key_reuse`: the same key under the same user and operation identity arrived with a different request fingerprint. Nothing is written and no stored response is replayed. */
+        ResumeIdempotencyConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "idempotency_key_reuse",
+                 *         "message": "this idempotency key was used with a different request"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `revision_mismatch`: the `If-Match` revision is stale. `details` carries the winning `revision` and `document` so a client can rebase without a second round trip. Staleness is always `412`, never `409`. */
+        ResumeRevisionMismatch: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "revision_mismatch",
+                 *         "message": "the resume was modified since you last loaded it",
+                 *         "details": {
+                 *           "revision": "44",
+                 *           "document": {
+                 *             "schemaVersion": 2
+                 *           }
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `precondition_required`: this mutation needs an `If-Match` header and none was sent. */
+        ResumePreconditionRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "precondition_required",
+                 *         "message": "this mutation requires an If-Match header"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `body_too_large`: the JSON request body exceeded the bounded read limit. Rejection precedes decode and any state change. */
+        ResumeBodyTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "body_too_large",
+                 *         "message": "request body exceeds the maximum size"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `document_invalid`: the request parsed, but the resulting document fails schema, aggregate, or bounds validation. `details.issues[]` lists each offending path with its own code and message. */
+        ResumeDocumentInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "document_invalid",
+                 *         "message": "the resulting document is invalid",
+                 *         "details": {
+                 *           "issues": [
+                 *             {
+                 *               "path": "content.experience.entries[0].title",
+                 *               "code": "too_long",
+                 *               "message": "value exceeds the field's maximum length"
+                 *             }
+                 *           ]
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `customization_path_denied` when a delta path is outside the fixed allowlist, or `document_invalid` when the applied result fails validation. Nothing is written in either case. */
+        CustomizationRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "customization_path_denied",
+                 *         "message": "that customization path cannot be written",
+                 *         "details": {
+                 *           "issues": [
+                 *             {
+                 *               "path": "content",
+                 *               "code": "customization_path_denied",
+                 *               "message": "only customization paths may be written here"
+                 *             }
+                 *           ]
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `media_too_large`: the request or its `file` part exceeded the media ceilings. The streaming upload path maps its own overflow here and never emits `body_too_large`. */
+        PhotoTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "media_too_large",
+                 *         "message": "the uploaded image exceeds the maximum size"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `media_type_unsupported`: the decoder-sniffed container is outside the closed set of static JPEG, PNG, and WebP. No object is written. */
+        PhotoTypeUnsupported: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "media_type_unsupported",
+                 *         "message": "only JPEG, PNG, or WebP images are accepted"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `media_invalid` when a recognized image is animated, structurally invalid, out of bounds, or cannot be normalized, or `document_invalid` when the resulting document fails validation. Parser text never reaches the client. */
+        PhotoInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "media_invalid",
+                 *         "message": "the image could not be decoded and normalized"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `media_busy`: the task-wide media permit was not acquired within one second, so the request is shed before any body read. Carries `Retry-After: 1`. */
+        PhotoBusy: {
+            headers: {
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 1
+                 */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "media_busy",
+                 *         "message": "media processing is busy; retry shortly"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: a route-specific budget is exhausted. Reads, writes, and photo uploads have separate `(account, client IP)` policies, so one account cannot consume another's allowance. */
+        ResumeRateLimited: {
+            headers: {
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 30
+                 */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `internal_error`: an unexpected server failure. The body carries no SQL fragment, stack frame, object key, bucket name, internal host, or other account's identifier. */
+        ResumeInternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "internal_error",
+                 *         "message": "internal server error"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed` on the resume collection. */
+        MethodNotAllowedResumes: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example GET, POST
+                 */
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed` on one resume. */
+        MethodNotAllowedResumeItem: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example DELETE, GET, PATCH
+                 */
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed` on a patch-only resume child. */
+        MethodNotAllowedPatchOnly: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example PATCH
+                 */
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed` on a delete-only resume child. */
+        MethodNotAllowedDeleteOnly: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example DELETE
+                 */
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed` on the resume photo. */
+        MethodNotAllowedPhoto: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example DELETE, GET, PATCH, POST
+                 */
+                Allow?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
                  *       }
                  *     }
                  */
@@ -583,11 +1572,15 @@ export interface components {
         AuthLinkPurpose: "link" | "reauth";
         /**
          * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+         *
+         *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
          * @example "r42"
          */
         IfMatch: string;
         /**
          * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+         *
+         *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
          * @example 018f0f3e-9e3a-7000-8000-000000000001
          */
         IdempotencyKey: string;
@@ -596,9 +1589,56 @@ export interface components {
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000002
          */
         SessionID: string;
+        /**
+         * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+         * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+         */
+        ResumeID: string;
+        /**
+         * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+         * @example experience
+         */
+        SectionKey: string;
+        /**
+         * @description An entry's id inside the addressed section.
+         * @example 018f5b6a-9a3e-7c21-8b1e-0000000000a1
+         */
+        EntryID: string;
+        /**
+         * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+         *
+         *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+         *
+         *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+         * @example 2
+         */
+        SchemaVersionHeader: string;
+        /**
+         * @description Conditional photo read. Accepts exactly one well-formed strong entity tag: an exact match returns `304` with no body, a different tag returns `200` and the bytes.
+         *
+         *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+         * @example "p-3f2a91c8"
+         */
+        IfNoneMatch: string;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description The owning resume's revision as a strong entity tag, `"r<revision>"`. Send it back as `If-Match` on the next mutation.
+         * @example "r43"
+         */
+        ParentETag: string;
+        /**
+         * @description Strong entity tag derived from the photo's immutable object key. It changes only when the photo is replaced.
+         * @example "p-3f2a91c8"
+         */
+        ObjectETag: string;
+        /**
+         * @description The resume document version this response was emitted at. Absent from whole-resume deletion and from binary photo reads.
+         * @example 2
+         */
+        EmittedSchemaVersion: number;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -1506,6 +2546,983 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listResumes: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's own resume summaries, oldest first. */
+            200: {
+                headers: {
+                    "X-Resume-Schema-Version": components["headers"]["EmittedSchemaVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": [
+                     *         {
+                     *           "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                     *           "title": "Backend engineer",
+                     *           "lng": "en",
+                     *           "revision": "42",
+                     *           "live": true,
+                     *           "slug": "ada-lovelace",
+                     *           "schemaVersion": 2,
+                     *           "createdAt": "2026-08-01T09:00:00Z",
+                     *           "updatedAt": "2026-08-11T18:20:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data?: components["schemas"]["ResumeSummary"][];
+                    };
+                };
+            };
+            400: components["responses"]["ResumeListBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            405: components["responses"]["MethodNotAllowedResumes"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    createResume: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "title": "Backend engineer",
+                 *       "lng": "en"
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Owner-visible resume title, bounded in code points by the numeric budgets. */
+                    title: string;
+                    /** @description BCP 47 language tag for the resume's content. Absent, null, or empty means undetermined (`und`). */
+                    lng?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The created resume, at its first revision. */
+            201: {
+                headers: {
+                    /**
+                     * @description Canonical relative URL of the created resume.
+                     * @example /api/v1/resumes/018f5b6a-9a3e-7c21-8b1e-000000000010
+                     */
+                    Location?: string;
+                    ETag: components["headers"]["ParentETag"];
+                    "X-Resume-Schema-Version": components["headers"]["EmittedSchemaVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                     *         "title": "Backend engineer",
+                     *         "lng": "en",
+                     *         "revision": "1",
+                     *         "live": false,
+                     *         "slug": null,
+                     *         "schemaVersion": 2,
+                     *         "createdAt": "2026-08-12T09:00:00Z",
+                     *         "updatedAt": "2026-08-12T09:00:00Z",
+                     *         "document": {
+                     *           "schemaVersion": 2
+                     *         }
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data?: components["schemas"]["Resume"];
+                    };
+                };
+            };
+            400: components["responses"]["ResumeCreateBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            405: components["responses"]["MethodNotAllowedResumes"];
+            409: components["responses"]["ResumeCreateConflict"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    getResume: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ResumeRead"];
+            400: components["responses"]["ResumeReadBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedResumeItem"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    deleteResume: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. Zero bytes, no `Content-Type`, no `ETag`. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedResumeItem"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    updateResumeMetadata: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "title": "Staff backend engineer"
+                 *     }
+                 */
+                "application/json": {
+                    title?: string;
+                    lng?: string | null;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedResumeItem"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    upsertResumeEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+                /**
+                 * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+                 * @example experience
+                 */
+                sectionKey: components["parameters"]["SectionKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "entry": {
+                 *         "id": "018f5b6a-9a3e-7c21-8b1e-0000000000a1",
+                 *         "title": "Staff engineer"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["EntryUpsert"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPatchOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    deleteResumeEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+                /**
+                 * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+                 * @example experience
+                 */
+                sectionKey: components["parameters"]["SectionKey"];
+                /**
+                 * @description An entry's id inside the addressed section.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-0000000000a1
+                 */
+                entryId: components["parameters"]["EntryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. Zero bytes and no `Content-Type`, with the new parent revision in `ETag`. */
+            204: {
+                headers: {
+                    ETag: components["headers"]["ParentETag"];
+                    "X-Resume-Schema-Version": components["headers"]["EmittedSchemaVersion"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedDeleteOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    updateResumeSection: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+                /**
+                 * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+                 * @example experience
+                 */
+                sectionKey: components["parameters"]["SectionKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "displayName": "Experience",
+                 *       "iconKey": "briefcase"
+                 *     }
+                 */
+                "application/json": components["schemas"]["SectionPatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPatchOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    updateResumeStructure: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "commands": [
+                 *         {
+                 *           "op": "createSection",
+                 *           "sectionType": "experience",
+                 *           "column": "main",
+                 *           "index": 0
+                 *         },
+                 *         {
+                 *           "op": "moveSection",
+                 *           "sectionKey": "skills",
+                 *           "column": "sidebar",
+                 *           "index": 1
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Ordered commands, applied in list order. The bound is the numeric budget for one structure request. */
+                    commands: components["schemas"]["StructureCommand"][];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPatchOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    updateResumePersonalDetails: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "fullName": "Ada Lovelace",
+                 *       "headline": "Backend engineer"
+                 *     }
+                 */
+                "application/json": components["schemas"]["PersonalDetailsPatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPatchOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    updateResumeCustomization: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "deltas": [
+                 *         {
+                 *           "op": "set",
+                 *           "path": "font.family",
+                 *           "value": "inter"
+                 *         },
+                 *         {
+                 *           "op": "unset",
+                 *           "path": "accentColor"
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": {
+                    /** @description Ordered deltas, applied in list order. The bound is the numeric budget for one customization request. */
+                    deltas: components["schemas"]["CustomizationDelta"][];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPatchOnly"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["CustomizationRejected"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    getResumePhoto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional photo read. Accepts exactly one well-formed strong entity tag: an exact match returns `304` with no body, a different tag returns `200` and the bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The normalized photo bytes. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ObjectETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            /** @description The caller's `If-None-Match` matches the current object. Zero bytes and no `Content-Type`. */
+            304: {
+                headers: {
+                    ETag: components["headers"]["ObjectETag"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PhotoReadBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ResumeOrPhotoNotFound"];
+            405: components["responses"]["MethodNotAllowedPhoto"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    uploadResumePhoto: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description The raw image bytes. Multipart framing, boundary text, part headers, and filename are transport metadata and are not part of the idempotency fingerprint.
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPhoto"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["PhotoTooLarge"];
+            415: components["responses"]["PhotoTypeUnsupported"];
+            422: components["responses"]["PhotoInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["PhotoBusy"];
+        };
+    };
+    deleteResumePhoto: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. Zero bytes and no `Content-Type`, with the new parent revision in `ETag`. */
+            204: {
+                headers: {
+                    ETag: components["headers"]["ParentETag"];
+                    "X-Resume-Schema-Version": components["headers"]["EmittedSchemaVersion"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeOrPhotoNotFound"];
+            405: components["responses"]["MethodNotAllowedPhoto"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    updateResumePhotoCrop: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "crop": {
+                 *         "x": 0.1,
+                 *         "y": 0.05,
+                 *         "width": 0.8,
+                 *         "height": 0.8
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["PhotoCropPatch"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumeCsrfRejected"];
+            404: components["responses"]["ResumeOrPhotoNotFound"];
+            405: components["responses"]["MethodNotAllowedPhoto"];
+            409: components["responses"]["ResumeIdempotencyConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumeDocumentInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
         };
     };
 }

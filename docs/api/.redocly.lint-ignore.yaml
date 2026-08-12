@@ -19,3 +19,10 @@ openapi.yaml:
     - "#/paths/~1auth~1github~1callback/get/responses"
     - "#/paths/~1auth~1linkedin~1start/get/responses"
     - "#/paths/~1auth~1linkedin~1callback/get/responses"
+  # PersonalDetailsPatch guards the server-owned `photo` field out of a
+  # client-owned whole-object patch with `not: {required: [photo]}`. That is
+  # exactly a required-property name with no sibling definition, which is what
+  # this rule flags -- restating the personal-details shape here to satisfy it
+  # would create the second source of truth D16 exists to prevent.
+  no-required-schema-properties-undefined:
+    - "#/components/schemas/PersonalDetailsPatch/not/required/0"
