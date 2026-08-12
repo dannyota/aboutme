@@ -4,8 +4,8 @@ The phase closes only when the candidate commit satisfies every item. A later
 product-code change invalidates evidence for each affected path.
 
 Task 12 documentation and handoffs are landed. A later pre-UAT cap-trigger
-correction invalidated the migration-path evidence, so revision 3 acceptance is
-pending at a new exact candidate.
+correction invalidated the migration-path evidence. Catalog revision 4 is frozen
+for a new exact candidate and its later documentation-only closure.
 
 ## Product and contract
 
@@ -42,8 +42,11 @@ pending at a new exact candidate.
       `make server-test-db` pass with live suites required and `-count=1`.
 - [ ] `make scan` passes. If the connected scan cannot run, the phase is
       blocked; offline Semgrep alone is not phase-exit evidence.
-- [ ] P2A-owned traceability rows have explicit `PROVEN` state and exact test or
-      command evidence. Handoffs have a named owner and downstream gate.
+- [ ] After revision 4 acceptance passes, P2A-owned traceability rows have
+      explicit `PROVEN` state and exact test or command evidence. AC-DOC-001 may
+      remain `PENDING` at the tested candidate and changes only in the
+      documentation-only closure commit. Handoffs have a named owner and
+      downstream gate.
 - [x] The owner verifies that `server-test-db` still includes the resume live-DB
       suite and that local and hosted CI retain the released-schema guard plus
       generated-type drift coverage. Any missing shared-file edit blocks the
@@ -58,7 +61,9 @@ pending at a new exact candidate.
 - [ ] A fresh phase reviewer that authored none of the phase reports no blocking
       defect in behavior, design fit, interface stability, assumptions, or
       traceability. Fixes receive independent re-review.
-- [ ] A fresh acceptance worker runs catalog revision 3 at the exact commit
+- [ ] A fresh acceptance worker runs catalog revision 4 at the exact candidate
       without editing product code, tests, fixtures, or criteria. Every row is
-      `PASS`. `FAIL`, `BLOCKED`, missing evidence, or an undisclosed retry
-      fails.
+      `PASS`. `FAIL`, `BLOCKED`, missing evidence, a candidate mismatch, or any
+      retry fails. The owner then persists the report and active status changes
+      in a documentation-only closure commit that cites, but does not replace,
+      the tested candidate.
