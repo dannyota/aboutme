@@ -7,15 +7,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/sanitize"
 	schemagen "github.com/dannyota/aboutme/packages/schema/gen/go"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+
+	"github.com/dannyota/aboutme/apps/server/internal/sanitize"
 )
 
 const (
 	blindPropertySeed  int64 = 0x5033474f5a17
-	blindPropertyCases       = 2048
+	blindPropertyCases int   = 2048
 )
 
 type blindPolicy struct {

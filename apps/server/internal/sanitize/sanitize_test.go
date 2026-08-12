@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dannyota/aboutme/apps/server/internal/sanitize/sanitizetest"
 	schemagen "github.com/dannyota/aboutme/packages/schema/gen/go"
+
+	"github.com/dannyota/aboutme/apps/server/internal/sanitize/sanitizetest"
 )
 
 func TestRichTextPreservesAllowedContent(t *testing.T) {
@@ -92,11 +93,11 @@ func TestCorpusOutputGolden(t *testing.T) {
 
 	path := filepath.Join("testdata", "corpus-output.golden.json")
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("create golden directory: %v", err)
+		if mkdirErr := os.MkdirAll(filepath.Dir(path), 0o755); mkdirErr != nil {
+			t.Fatalf("create golden directory: %v", mkdirErr)
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			t.Fatalf("write golden: %v", err)
+		if writeErr := os.WriteFile(path, data, 0o644); writeErr != nil {
+			t.Fatalf("write golden: %v", writeErr)
 		}
 	}
 	want, err := os.ReadFile(path)
