@@ -271,6 +271,42 @@ describe('sessions.vue', () => {
       );
     });
 
+  it(
+    'prompts with an existing provider when a link start requires reauth',
+    async () => {
+      let linkAttempts = 0;
+      registerEndpoint('/api/v1/auth/github/start', {
+        method: 'POST',
+        handler: (event) => {
+          linkAttempts += 1;
+          setResponseStatus(event, 403);
+          return { error: { code: 'reauth_required', message: 'x' } };
+        },
+      });
+
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+
+      await wrapper.get('[data-testid="add-provider-button"]').trigger('click');
+      await flushPromises();
+      const githubButton = wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Link github');
+      expect(githubButton).toBeDefined();
+
+      await githubButton!.trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      expect(linkAttempts).toBe(1);
+      const prompt = wrapper.get('[data-testid="reauth-prompt"]');
+      expect(prompt.text()).toContain('link a new provider');
+      expect(prompt.get('button').text()).toBe('Sign in again with google');
+      expect(wrapper.find('[data-testid="link-error"]').exists()).toBe(false);
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    },
+  );
+
   it('shows nothing extra when there is no reauth error', async () => {
     const wrapper = await mountSuspended(SessionsPage);
     await flushPromises();

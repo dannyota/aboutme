@@ -205,7 +205,11 @@ async function startOAuth(
     const url = authorizeURL(provider, response?.data?.authorizeUrl);
     if (!url) throw new Error('invalid OAuth authorize URL');
     await navigateTo(url, { external: true });
-  } catch {
+  } catch (error) {
+    if (purpose === 'link' && hasErrorCode(error, 'reauth_required')) {
+      triggerReauthPrompt('link');
+      return;
+    }
     startError.value = 'Something went wrong. Please try again.';
   } finally {
     startPending.value = false;
