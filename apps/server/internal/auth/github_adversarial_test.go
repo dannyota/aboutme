@@ -7,10 +7,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -134,9 +136,72 @@ func TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider(t *testing.T
 	// so there is no provider-scoped identity row to query here.
 }
 
-// TestGitHubCallback_NoOIDCImportInPackage parses import declarations to prove
-// github.go contains no OIDC or JWT dependency. Parsing imports avoids false
-// positives from comments or string literals.
+type productionAuthFunc struct {
+	file    string
+	decl    *ast.FuncDecl
+	imports map[string]string
+}
+
+// productionAuthFuncs parses production files in this package. The callback
+// reachability walk below excludes Google and LinkedIn OIDC code by behavior,
+// not by trusting filenames: provider-only declarations remain unreachable.
+func productionAuthFuncs(t *testing.T, dir string) map[string][]productionAuthFunc {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read auth package directory %s: %v", dir, err)
+	}
+
+	funcs := make(map[string][]productionAuthFunc)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		path := filepath.Join(dir, entry.Name())
+		parsed, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatalf("parse %s: %v", path, parseErr)
+		}
+
+		imports := make(map[string]string)
+		for _, imp := range parsed.Imports {
+			importPath, unquoteErr := strconv.Unquote(imp.Path.Value)
+			if unquoteErr != nil {
+				t.Fatalf("unquote import path %q in %s: %v", imp.Path.Value, path, unquoteErr)
+			}
+			name := filepath.Base(importPath)
+			if imp.Name != nil {
+				name = imp.Name.Name
+			}
+			imports[name] = importPath
+		}
+
+		for _, decl := range parsed.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			funcs[fn.Name.Name] = append(funcs[fn.Name.Name], productionAuthFunc{
+				file:    path,
+				decl:    fn,
+				imports: imports,
+			})
+		}
+	}
+	return funcs
+}
+
+func isOIDCOrJWTImport(importPath string) bool {
+	lower := strings.ToLower(importPath)
+	return strings.Contains(lower, "oidc") || strings.Contains(lower, "jwt") || strings.Contains(lower, "go-jose")
+}
+
+// TestGitHubCallback_NoOIDCImportInPackage walks every package function the
+// GitHub callback can call. It fails if that shared path starts using an OIDC
+// or JWT package, asks for an id_token, or decodes claims. Provider-specific
+// Google and LinkedIn declarations are outside the reachable graph.
 func TestGitHubCallback_NoOIDCImportInPackage(t *testing.T) {
 	t.Parallel()
 
@@ -144,25 +209,80 @@ func TestGitHubCallback_NoOIDCImportInPackage(t *testing.T) {
 	if !ok {
 		t.Fatal("runtime.Caller(0) failed to resolve this test file's own path")
 	}
-	githubGoPath := filepath.Join(filepath.Dir(thisFile), "github.go")
-
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, githubGoPath, nil, parser.ImportsOnly)
-	if err != nil {
-		t.Fatalf("parse %s: %v (AC-AUTH-003's static check requires github.go to exist alongside this test file and parse as valid Go)", githubGoPath, err)
+	funcs := productionAuthFuncs(t, filepath.Dir(thisFile))
+	roots := funcs["handleGitHubCallback"]
+	if len(roots) == 0 {
+		t.Fatal("handleGitHubCallback not found; the static no-OIDC guard did not inspect its root")
+	}
+	for _, root := range roots {
+		for _, importPath := range root.imports {
+			if isOIDCOrJWTImport(importPath) {
+				t.Errorf("%s imports %q, want the GitHub implementation file to have no OIDC/JWT dependency (AC-AUTH-003)", filepath.Base(root.file), importPath)
+			}
+		}
 	}
 
-	for _, imp := range f.Imports {
-		path, unquoteErr := strconv.Unquote(imp.Path.Value)
-		if unquoteErr != nil {
-			t.Fatalf("unquote import path %q: %v", imp.Path.Value, unquoteErr)
+	queue := []string{"handleGitHubCallback"}
+	visited := make(map[*ast.FuncDecl]bool)
+	visitedNames := make(map[string]bool)
+
+	for len(queue) > 0 {
+		name := queue[0]
+		queue = queue[1:]
+		for _, fn := range funcs[name] {
+			if visited[fn.decl] {
+				continue
+			}
+			visited[fn.decl] = true
+			visitedNames[name] = true
+
+			ast.Inspect(fn.decl.Body, func(node ast.Node) bool {
+				switch value := node.(type) {
+				case *ast.CallExpr:
+					switch called := value.Fun.(type) {
+					case *ast.Ident:
+						if len(funcs[called.Name]) > 0 {
+							queue = append(queue, called.Name)
+						}
+					case *ast.SelectorExpr:
+						if len(funcs[called.Sel.Name]) > 0 {
+							queue = append(queue, called.Sel.Name)
+						}
+						if called.Sel.Name == "Claims" || called.Sel.Name == "Verifier" {
+							t.Errorf("%s: GitHub-reachable function %s calls %s, want no ID-token claim verification (AC-AUTH-003)", filepath.Base(fn.file), name, called.Sel.Name)
+						}
+					}
+				case *ast.SelectorExpr:
+					qualifier, ok := value.X.(*ast.Ident)
+					if !ok {
+						break
+					}
+					importPath := fn.imports[qualifier.Name]
+					if isOIDCOrJWTImport(importPath) {
+						t.Errorf("%s: GitHub-reachable function %s uses %q, want plain OAuth2 without OIDC/JWT dependencies (AC-AUTH-003)", filepath.Base(fn.file), name, fn.imports[qualifier.Name])
+					}
+				case *ast.Ident:
+					lower := strings.ToLower(value.Name)
+					if strings.Contains(lower, "idtoken") || strings.Contains(lower, "jwt") {
+						t.Errorf("%s: GitHub-reachable function %s references %q, want no ID-token or JWT dependency (AC-AUTH-003)", filepath.Base(fn.file), name, value.Name)
+					}
+				case *ast.BasicLit:
+					if value.Kind != token.STRING {
+						break
+					}
+					literal, unquoteErr := strconv.Unquote(value.Value)
+					if unquoteErr == nil && strings.EqualFold(literal, "id_token") {
+						t.Errorf("%s: GitHub-reachable function %s reads %q, want no OIDC token dependency (AC-AUTH-003)", filepath.Base(fn.file), name, literal)
+					}
+				}
+				return true
+			})
 		}
-		lower := strings.ToLower(path)
-		if strings.Contains(lower, "go-oidc") {
-			t.Errorf("github.go imports %q, want no coreos/go-oidc import anywhere in this file (AC-AUTH-003 / design spec §3: \"GitHub gets no OIDC checks\")", path)
-		}
-		if strings.Contains(lower, "jwt") {
-			t.Errorf("github.go imports %q, want no jwt package import anywhere in this file (AC-AUTH-003: GitHub has no id_token to verify)", path)
+	}
+
+	for _, name := range []string{"resolveLinkOrReauth", "resolveLoginIdentity", "redirectAuthFailed"} {
+		if !visitedNames[name] {
+			t.Errorf("GitHub callback guard did not reach shared helper %s; the static path check is incomplete", name)
 		}
 	}
 }
