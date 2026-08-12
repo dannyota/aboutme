@@ -23,6 +23,19 @@ const csrfRejectedMessage = "CSRF validation failed"
 // evidence and the synchronizer token; bodiless requests alone skip the JSON
 // content-type check. See docs/design/security.md.
 func RequireCSRF(allowedOrigin string) api.Middleware {
+	return requireCSRF(allowedOrigin, jsonContentTypeAllowed, rejectJSONMediaType, false)
+}
+
+// RequireCSRFMultipart applies the same origin, session, and synchronizer
+// token checks as RequireCSRF, but accepts only one multipart/form-data media
+// type with a non-empty boundary. The resume photo POST is its sole caller.
+func RequireCSRFMultipart(allowedOrigin string) api.Middleware {
+	return requireCSRF(allowedOrigin, multipartContentTypeAllowed, rejectMultipartMediaType, true)
+}
+
+func requireCSRF(allowedOrigin string, mediaTypeAllowed func(http.Header) bool,
+	rejectMediaType func(http.ResponseWriter), requireMediaType bool,
+) api.Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !isMutatingMethod(r.Method) {
@@ -32,11 +45,6 @@ func RequireCSRF(allowedOrigin string) api.Middleware {
 
 			// Reject cheap boundary failures before session and token work.
 			if !originAllowed(r, allowedOrigin) {
-				rejectCSRF(w)
-				return
-			}
-
-			if hasBody(r) && !contentTypeAllowed(r.Header.Get("Content-Type")) {
 				rejectCSRF(w)
 				return
 			}
@@ -52,9 +60,22 @@ func RequireCSRF(allowedOrigin string) api.Middleware {
 				return
 			}
 
+			if (requireMediaType || hasBody(r)) && !mediaTypeAllowed(r.Header) {
+				rejectMediaType(w)
+				return
+			}
+
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func rejectMultipartMediaType(w http.ResponseWriter) {
+	api.WriteError(w, http.StatusUnsupportedMediaType, "media_type_unsupported", "multipart/form-data is required")
+}
+
+func rejectJSONMediaType(w http.ResponseWriter) {
+	api.WriteError(w, http.StatusBadRequest, "request_invalid", "Content-Type must be one application/json value")
 }
 
 // rejectCSRF preserves one response across all failure classes.
@@ -97,8 +118,12 @@ func hasBody(r *http.Request) bool {
 	return r.ContentLength != 0 || len(r.TransferEncoding) > 0
 }
 
-// contentTypeAllowed accepts application/json with only an optional charset.
-func contentTypeAllowed(ct string) bool {
+func jsonContentTypeAllowed(header http.Header) bool {
+	values := header.Values("Content-Type")
+	if len(values) != 1 {
+		return false
+	}
+	ct := values[0]
 	if ct == "" {
 		return false
 	}
@@ -108,6 +133,18 @@ func contentTypeAllowed(ct string) bool {
 	}
 	delete(params, "charset")
 	return len(params) == 0
+}
+
+func multipartContentTypeAllowed(header http.Header) bool {
+	values := header.Values("Content-Type")
+	if len(values) != 1 {
+		return false
+	}
+	mediaType, params, err := mime.ParseMediaType(values[0])
+	if err != nil || mediaType != "multipart/form-data" || len(params) != 1 {
+		return false
+	}
+	return params["boundary"] != ""
 }
 
 // validCSRFToken decodes base64url before constant-time comparison of the raw

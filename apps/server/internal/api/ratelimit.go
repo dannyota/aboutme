@@ -257,6 +257,11 @@ func retryAfterSeconds(d time.Duration) int {
 // constant amortized overhead regardless of request rate.
 const evictionSweepCooldown = time.Second
 
+// rateLimiterIdleExpiry is the hard bound on a tracked key that has made no
+// request. It applies even when an unusually slow bucket has not fully
+// refilled. Allowed and rejected requests both refresh the activity time.
+const rateLimiterIdleExpiry = 24 * time.Hour
+
 // rateLimiter holds the per-key token-bucket state behind RateLimit, built
 // on golang.org/x/time/rate rather than a hand-rolled bucket: its
 // AllowN/TokensAt family already takes an explicit time.Time instead of
@@ -297,9 +302,14 @@ type rateLimiter struct {
 
 	mu          sync.Mutex
 	clock       monotonicClamp // guarded by mu; prevents a rollback from skipping a due sweep
-	entries     map[string]*clampedLimiter
+	entries     map[string]*rateLimiterEntry
 	overflow    *clampedLimiter
 	nextSweepAt time.Time // zero value: the first saturated request always sweeps
+}
+
+type rateLimiterEntry struct {
+	limiter     *clampedLimiter
+	lastRequest time.Time
 }
 
 func newRateLimiter(cfg RateLimiterConfig) *rateLimiter {
@@ -308,7 +318,7 @@ func newRateLimiter(cfg RateLimiterConfig) *rateLimiter {
 		cfg:      cfg,
 		limit:    limit,
 		burst:    cfg.Requests,
-		entries:  make(map[string]*clampedLimiter),
+		entries:  make(map[string]*rateLimiterEntry),
 		overflow: newClampedLimiter(limit, cfg.Requests),
 	}
 }
@@ -328,15 +338,18 @@ func (l *rateLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 	// the store-level sweep clock non-decreasing too.
 	now = l.clock.clamp(now)
 
-	lim, ok := l.entries[key]
+	entry, ok := l.entries[key]
 	if !ok {
 		if len(l.entries) >= l.cfg.MaxKeys && !now.Before(l.nextSweepAt) {
 			l.evictExpiredLocked(now)
 			l.nextSweepAt = now.Add(evictionSweepCooldown)
 		}
 		if len(l.entries) < l.cfg.MaxKeys {
-			lim = newClampedLimiter(l.limit, l.burst)
-			l.entries[key] = lim
+			entry = &rateLimiterEntry{
+				limiter:     newClampedLimiter(l.limit, l.burst),
+				lastRequest: now,
+			}
+			l.entries[key] = entry
 		} else {
 			// The store is full of entries that are not expired (see
 			// evictExpiredLocked): key shares the overflow limiter rather
@@ -344,11 +357,14 @@ func (l *rateLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 			// admitNow below runs on this same shared limiter while l.mu
 			// is still held, exactly like a per-key entry's own first
 			// admission — no separate code path, no separate gap.
-			lim = l.overflow
+			return admitNow(l.overflow, now)
 		}
 	}
 
-	return admitNow(lim, now)
+	// Activity, not admission, owns idle expiry. A rejected request proves the
+	// key is still active and must not let it age into a fresh private bucket.
+	entry.lastRequest = now
+	return admitNow(entry.limiter, now)
 }
 
 // evictExpiredLocked drops every entry whose bucket is fully refilled at
@@ -357,8 +373,9 @@ func (l *rateLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 // mid-window for a real, currently-active client. l.mu must be held by the
 // caller.
 func (l *rateLimiter) evictExpiredLocked(now time.Time) {
-	for k, lim := range l.entries {
-		if lim.TokensAt(now) >= float64(l.burst) {
+	for k, entry := range l.entries {
+		if entry.limiter.TokensAt(now) >= float64(l.burst) ||
+			now.Sub(entry.lastRequest) >= rateLimiterIdleExpiry {
 			delete(l.entries, k)
 		}
 	}

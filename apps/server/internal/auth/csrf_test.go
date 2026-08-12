@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
@@ -106,8 +107,8 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 		{"missing both origin and referer", "POST", "", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"cross-origin", "POST", "https://evil.example", "", "application/json", validToken, "{}", http.StatusForbidden},
 		{"referer wrong origin", "POST", "", "https://evil.example/x", "application/json", validToken, "{}", http.StatusForbidden},
-		{"missing content-type, body present", "POST", "http://localhost", "", "", validToken, "{}", http.StatusForbidden},
-		{"wrong content-type", "POST", "http://localhost", "", "text/plain", validToken, "{}", http.StatusForbidden},
+		{"missing content-type, body present", "POST", "http://localhost", "", "", validToken, "{}", http.StatusBadRequest},
+		{"wrong content-type", "POST", "http://localhost", "", "text/plain", validToken, "{}", http.StatusBadRequest},
 		{"missing token", "POST", "http://localhost", "", "application/json", "", "{}", http.StatusForbidden},
 		{"wrong token", "POST", "http://localhost", "", "application/json", "not-the-real-token", "{}", http.StatusForbidden},
 		{"another session's valid-shaped token", "POST", "http://localhost", "", "application/json", csrfTokenFor(otherSess), "{}", http.StatusForbidden},
@@ -117,7 +118,7 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 		{"no-space uppercase charset content-type allowed", "POST", "http://localhost", "", "application/json;charset=UTF-8", validToken, "{}", http.StatusOK},
 		{"bodiless DELETE skips content-type check", "DELETE", "http://localhost", "", "", validToken, "", http.StatusOK},
 		{"bodiless POST (logout-shaped) skips content-type check", "POST", "http://localhost", "", "", validToken, "", http.StatusOK},
-		{"body present without content-type still rejected (form-style body)", "POST", "http://localhost", "", "", validToken, "foo=bar", http.StatusForbidden},
+		{"body present without content-type still rejected (form-style body)", "POST", "http://localhost", "", "", validToken, "foo=bar", http.StatusBadRequest},
 		{"same session's secret, wrong base64 encoding (standard alphabet/padding)", "POST", "http://localhost", "", "application/json", base64.StdEncoding.EncodeToString(sess.CSRFSecret), "{}", http.StatusForbidden},
 		// These rows require an exact origin match.
 		{"Origin: null (opaque origin -- sandboxed iframe, file://, etc.)", "POST", "null", "", "application/json", validToken, "{}", http.StatusForbidden},
@@ -207,4 +208,114 @@ func TestRequireCSRF_MutatingWithoutSessionInContextRejects(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body=%s)", rec.Code, http.StatusForbidden, rec.Body.String())
 	}
 	assertCSRFRejected(t, rec)
+}
+
+// TestRequireCSRFMultipart_MediaTypeIsolation proves the photo upload entry
+// point accepts only multipart/form-data while the existing entry point stays
+// JSON-only. A shared permissive media-type check would let one route weaken
+// every cookie-authenticated mutation.
+func TestRequireCSRFMultipart_MediaTypeIsolation(t *testing.T) {
+	t.Parallel()
+
+	sess := csrfTestSession(0xEF)
+	token := csrfTokenFor(sess)
+
+	for _, tc := range []struct {
+		name       string
+		middleware func(string) api.Middleware
+		mediaType  string
+		wantStatus int
+	}{
+		{"multipart accepts multipart", auth.RequireCSRFMultipart, "multipart/form-data; boundary=test", http.StatusOK},
+		{"multipart rejects JSON", auth.RequireCSRFMultipart, "application/json", http.StatusUnsupportedMediaType},
+		{"JSON accepts JSON", auth.RequireCSRF, "application/json", http.StatusOK},
+		{"JSON rejects multipart", auth.RequireCSRF, "multipart/form-data; boundary=test", http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/resume/photo", strings.NewReader("body"))
+			req.Header.Set("Origin", allowedTestOrigin)
+			req.Header.Set("Content-Type", tc.mediaType)
+			req.Header.Set(auth.CSRFHeaderName, token)
+			req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+
+			rec := httptest.NewRecorder()
+			tc.middleware(allowedTestOrigin)(passThroughHandler()).ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d (body=%s)", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestRequireCSRFMultipart_TokenAndOriginPrecedeMediaType(t *testing.T) {
+	t.Parallel()
+
+	sess := csrfTestSession(0xAC)
+	for _, tc := range []struct {
+		name   string
+		origin string
+		token  string
+	}{
+		{"foreign origin", "https://foreign.example", csrfTokenFor(sess)},
+		{"missing token", allowedTestOrigin, ""},
+		{"wrong token", allowedTestOrigin, "wrong"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/resume/photo", strings.NewReader("body"))
+			req.Header.Set("Origin", tc.origin)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(auth.CSRFHeaderName, tc.token)
+			req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+			rec := httptest.NewRecorder()
+			auth.RequireCSRFMultipart(allowedTestOrigin)(passThroughHandler()).ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
+			}
+			assertCSRFRejected(t, rec)
+		})
+	}
+}
+
+func TestRequireCSRFMultipart_ZeroBodyRequiresSingletonMediaType(t *testing.T) {
+	t.Parallel()
+
+	sess := csrfTestSession(0xBD)
+	for _, test := range []struct {
+		name        string
+		contentType []string
+	}{
+		{name: "missing"},
+		{name: "duplicate", contentType: []string{"multipart/form-data; boundary=test", "multipart/form-data; boundary=test"}},
+		{name: "folded", contentType: []string{"multipart/form-data; boundary=test, multipart/form-data; boundary=test"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/resume/photo", nil)
+			req.Header.Set("Origin", allowedTestOrigin)
+			req.Header.Set(auth.CSRFHeaderName, csrfTokenFor(sess))
+			for _, value := range test.contentType {
+				req.Header.Add("Content-Type", value)
+			}
+			req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+
+			rec := httptest.NewRecorder()
+			auth.RequireCSRFMultipart(allowedTestOrigin)(passThroughHandler()).ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnsupportedMediaType {
+				t.Fatalf("status = %d, want 415 (body=%s)", rec.Code, rec.Body.String())
+			}
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if body.Error.Code != "media_type_unsupported" {
+				t.Fatalf("code = %q, want media_type_unsupported", body.Error.Code)
+			}
+		})
+	}
 }

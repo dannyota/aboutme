@@ -37,7 +37,7 @@ func sanitizeDocument(doc schema.Resume) schema.Resume
 
 ## Steps
 
-- [ ] **Step 1: failing completeness test first.** Walk `packages/schema`'s
+- [x] **Step 1: failing completeness test first.** Walk `packages/schema`'s
       embedded raw schema for every property whose subschema is the `richText`
       definition, and assert `richTextPaths` contains exactly that set — no
       more, no fewer. Adding a rich-text field to the schema must fail this test
@@ -46,7 +46,7 @@ func sanitizeDocument(doc schema.Resume) schema.Resume
       `profile.text`, `work.description`, `education.description`,
       `skill.infoHtml`, `certificate.description`, `project.description`, and
       `custom.description` — derived, not transcribed.
-- [ ] **Step 2: failing behavior tests.** A hostile payload from P3's shared
+- [x] **Step 2: failing behavior tests.** A hostile payload from P3's shared
       corpus in an entry's rich text is neutralized in the persisted document; a
       benign fragment is unchanged; sanitization is **idempotent**
       (`sanitizeDocument(sanitizeDocument(d)) == sanitizeDocument(d)`); a
@@ -54,27 +54,42 @@ func sanitizeDocument(doc schema.Resume) schema.Resume
       [resume aggregate](../../design/data.md#resume-aggregate) gives those
       states different storage meaning, so sanitization must not fabricate or
       drop either); a hidden entry is sanitized like any other.
-- [ ] **Step 3: failing order test.** Sanitization runs **before** validation
+- [x] **Step 3: failing order test.** Sanitization runs **before** validation
       and the size bounds: construct rich text that is under the 16 KB byte
       bound only after sanitization strips a hostile wrapper, and assert it is
       accepted; construct one that is over the bound after sanitization and
       assert `422 document_invalid`. Measuring bounds on unsanitized input would
       let a payload pass a check it does not satisfy in storage.
-- [ ] **Step 4: failing discriminating test.** Removing the `sanitizeDocument`
+- [x] **Step 4: failing discriminating test.** Removing the `sanitizeDocument`
       call from the kernel's persist helper must make a test fail. Assert this
       at the HTTP boundary — write hostile rich text through a real request and
       read it back through a real `GET` — so the guard covers the wiring, not
       just the function. Without this the invariant is structural but unguarded,
       the blind spot P2A's Task 8 Step 3c documents.
-- [ ] **Step 5: implement; green.**
-- [ ] **Step 6: gate.** Run `make test-db-up`,
+- [x] **Step 5: implement; green.**
+- [x] **Step 6: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1)`,
       and the focused sanitizer package tests. Connected `make scan` runs once
       at the unchanged phase candidate.
-- [ ] **Step 7: handoff.** Report the owned paths, failing-test evidence, exact
+- [x] **Step 7: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and rich-text completeness set to the integration owner. Do not
       stage or commit.
+
+## Implementation record
+
+The schema walk finds exactly seven rich-text fields: `profile.text`,
+`work.description`, `education.description`, `skill.infoHtml`,
+`certificate.description`, `project.description`, and `custom.description`. The
+aggregate is sanitized exactly once before current-schema validation and
+storage. Nil, empty, hidden, benign, hostile, byte-boundary, and idempotence
+cases are covered. A live HTTP write/read test proves hostile content is
+neutralized before persistence, and a store spy proves the validated value
+cannot be changed through the pre-save test hook.
+
+The focused sanitizer tests, the live `resumeapi` race gate, and the server
+build, vet, and test gates passed. Connected `make scan` remains deferred to the
+unchanged W4 phase candidate, as required by ADR 0024.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks that every
 schema-declared rich-text field reaches the sanitizer exactly once before
