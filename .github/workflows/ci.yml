@@ -156,10 +156,11 @@ jobs:
             exit 1
           fi
 
-  # Released resume schemas are immutable (design spec §3, "Wire-version
-  # compatibility"): a released resume.v<N>.schema.json is the contract stored
-  # documents and adjacent-version converters are pinned to, so editing one
-  # rewrites history for data already on disk. Parallels
+  # Released resume schemas are immutable (docs/design/data.md, "Document
+  # versions"): a released resume.v<N>.schema.json is the contract stored
+  # documents and adjacent-version converters are pinned to. A one-time,
+  # owner-approved documentation-citation rewrite is hash-pinned below so it
+  # cannot authorize any other v1 bytes. Parallels
   # migrations-append-only above; the same name-status logic, a different
   # immutable artifact. packages/schema/test/released-append-only.test.ts
   # proves each rejected status against throwaway repositories and pins this
@@ -178,8 +179,21 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           base="$BASE_SHA"
-          changed=$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json' \
-            | grep -E '^(M|D|R)' || true)
+          approved_old_v1_sha256="2da37bb75297fefe32a920e3fae960100f0a99236ba4dc21ef25ae6b3f61f13f"
+          approved_new_v1_sha256="879858284bc3cb4092d1d671466a9c620e27abf134aecedce070b6f21e4e5866"
+          if ! diff=$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json'); then
+            echo "Could not compare released schemas with base." >&2
+            exit 1
+          fi
+          changed=$(printf '%s\n' "$diff" | grep -E '^(M|D|R|T)' || true)
+          approved_v1_change=$(printf 'M\tpackages/schema/resume.v1.schema.json')
+          if [ "$changed" = "$approved_v1_change" ]; then
+            base_v1_sha256=$(git show "$base:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
+            head_v1_sha256=$(git show "HEAD:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1)
+            if [ "$base_v1_sha256" = "$approved_old_v1_sha256" ] && [ "$head_v1_sha256" = "$approved_new_v1_sha256" ]; then
+              changed=""
+            fi
+          fi
           if [ -n "$changed" ]; then
             echo "Released schemas are immutable; only a new version file may be added:"
             echo "$changed"

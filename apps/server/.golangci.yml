@@ -2,8 +2,7 @@
 # pgx/v5 API service). linters.default is "none" so every enabled check is
 # listed explicitly below — nothing is inherited silently from
 # golangci-lint's "standard" preset. Style baseline: Google Go style guide
-# (google.github.io/styleguide/go), per CLAUDE.md and
-# docs/specs/aboutme-design.md §0.
+# (google.github.io/styleguide/go), per CONTRIBUTING.md.
 version: "2"
 
 run:
@@ -28,7 +27,7 @@ linters:
 
     # HTTP/Postgres resource hygiene. internal/store holds a pgx/v5 pool and
     # the server issues internal HTTP calls (OAuth token exchange, the
-    # internal /print call to Nuxt — docs/specs/aboutme-design.md §2), so
+    # internal /print call to Nuxt — docs/design/system.md, Route ownership), so
     # leaked response bodies, rows, and non-inherited contexts are real
     # production risks here, not theoretical.
     - bodyclose

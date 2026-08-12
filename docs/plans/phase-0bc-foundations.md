@@ -5,8 +5,10 @@
 > root `package.json`) are owned by the integration owner (Fable) — implementers
 > report the lines they need and never edit those files themselves.
 
-**Base:** branch `phase-0a-contracts`. **Spec:** `../specs/aboutme-design.md` §2
-(route table), §3 (schema management, budgets), §6 (dev stack). **Budgets:**
+**Base:** branch `phase-0a-contracts`. **Design:**
+[route ownership](../design/system.md#route-ownership),
+[schema and migrations](../design/data.md#schema-and-migrations), and the
+[environment model](../design/deployment.md#environment-model). **Budgets:**
 `budgets.md` — pgx pool ≤ 20, request body ≤ 256 KB.
 
 ## Global constraints (inherited)
@@ -33,10 +35,12 @@
   `{"error":{"code":"...","message":"..."}}` and success `{"data":...}`;
   request-ID middleware; `slog` structured logging (JSON in non-dev); body-size
   limit middleware at **256 KB**.
-- Health endpoints per spec §6: `GET /healthz` — liveness, always 200 while the
-  process runs, **never touches the database**. `GET /readyz` — readiness,
-  checks DB with a short timeout, 200 when ready / 503 with the error envelope
-  when not. A DB outage must not make liveness fail (no restart loop).
+- Health endpoints per the
+  [route-ownership design](../design/system.md#route-ownership): `GET /healthz`
+  — liveness, always 200 while the process runs, **never touches the database**.
+  `GET /readyz` — readiness, checks DB with a short timeout, 200 when ready /
+  503 with the error envelope when not. A DB outage must not make liveness fail
+  (no restart loop).
 - `cmd/server/main.go`: wiring only — config → store → router → HTTP server with
   graceful shutdown on SIGINT/SIGTERM.
 - Tests: table-driven config tests; `httptest` tests for both health endpoints
@@ -75,7 +79,8 @@ steps you need (do not edit those files).
 
 - `deploy/compose.yml` for **podman compose**: services `postgres` (latest
   stable, healthcheck, named volume), `server`, `web`, `caddy`.
-- `deploy/caddy/Caddyfile` implementing the spec §2 route table on ONE origin
+- `deploy/caddy/Caddyfile` implementing the
+  [route-ownership design](../design/system.md#route-ownership) on ONE origin
   (`localhost`): `/api/v1/*` → server:8080; everything else → web:3000.
   Same-origin so cookies/CORS match production.
 - `deploy/server.Dockerfile` (multi-stage; Chromium is added in a later phase —
@@ -93,7 +98,9 @@ steps you need (do not edit those files).
 ## Phase exit criteria
 
 - [ ] `apps/server` builds, vets, and tests clean; `/healthz` and `/readyz`
-      behave per spec (liveness independent of the DB).
+      behave per the
+      [route-ownership design](../design/system.md#route-ownership) (liveness
+      independent of the DB).
 - [ ] `apps/web` lints, typechecks, tests, and server-renders `/`.
 - [ ] `podman compose up` serves both apps through Caddy on one origin.
 - [ ] Integration owner has merged the reported Makefile/CI additions.

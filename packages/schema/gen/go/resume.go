@@ -50,20 +50,21 @@ type Colors struct {
 	// Fill colour for the ONE tinted region customization.layout.surfaceTarget selects — a
 	// header band or a sidebar panel, instead of ink on white. NOT the page background: that is
 	// colors.background, which the renderer exposes as the --color-surface role
-	// (docs/specs/templates/tokens.md §4). This value feeds --color-surface-header /
+	// (docs/design/templates/colors.md §4). This value feeds --color-surface-header /
 	// --color-surface-sidebar, whichever the effective target resolves to; when the effective
 	// target is "none" (see surfaceTarget) it feeds nothing and the region keeps
 	// colors.background. Optional — the second optional colour after accent — and like accent
 	// it has no cleared form, because hexColor's pattern forbids "": absence is the only unset
-	// state (contract.md §6), and the fallback is colors.background, never a hard-coded tint.
-	// ACCESSIBILITY: a second surface creates a second text-on-surface pair, and tokens.md §5's
-	// OKLCH lightness clamp is evaluated PER SURFACE, so every text role painted on the tinted
-	// region is clamped against THIS colour — 4.5:1 for body/heading/meta/link, 3:1 for
-	// --fs-name and for non-text marks that carry meaning — exactly as the same roles are
-	// clamped against colors.background elsewhere. The clamp is hue-preserving, deterministic,
-	// and non-destructive (it never writes back here), so an arbitrary user-chosen surface,
-	// including a very dark or very light one, cannot produce unreadable text; it only moves
-	// the derived role's lightness far enough to pass. See tokens.md §4 for the derived roles.
+	// state (docs/design/templates/contract.md §6), and the fallback is colors.background,
+	// never a hard-coded tint. ACCESSIBILITY: a second surface creates a second text-on-surface
+	// pair, and docs/design/templates/colors.md §5's OKLCH lightness clamp is evaluated PER
+	// SURFACE, so every text role painted on the tinted region is clamped against THIS colour —
+	// 4.5:1 for body/heading/meta/link, 3:1 for --fs-name and for non-text marks that carry
+	// meaning — exactly as the same roles are clamped against colors.background elsewhere. The
+	// clamp is hue-preserving, deterministic, and non-destructive (it never writes back here),
+	// so an arbitrary user-chosen surface, including a very dark or very light one, cannot
+	// produce unreadable text; it only moves the derived role's lightness far enough to pass.
+	// See docs/design/templates/colors.md §4 for the derived roles.
 	Surface *string `json:"surface,omitempty"`
 	Text    string  `json:"text"`
 }

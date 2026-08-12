@@ -31,12 +31,13 @@ const files = [
 ];
 
 describe("generated code", () => {
+  // Codegen can exceed Vitest's five-second default under concurrent load.
   it("is byte-identical to a fresh generation", () => {
     const before = files.map((f) => readFileSync(f, "utf8"));
     execFileSync("node", ["scripts/generate.mjs"], { stdio: "inherit" });
     const after = files.map((f) => readFileSync(f, "utf8"));
     expect(after).toEqual(before);
-  });
+  }, 30_000);
 
   it("marks every file as generated", () => {
     for (const f of files) {

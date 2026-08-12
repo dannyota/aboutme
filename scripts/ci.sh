@@ -104,19 +104,74 @@ migrations_append_only() {
 
 released_schema_append_only() {
   # Mirrors ci.yml's released-schema-append-only job: released resume schemas
-  # are immutable; only a new version file may be added.
-  local base
-  base="$(git rev-parse --verify --quiet origin/main || true)"
-  if [ -z "$base" ]; then
+  # are immutable; only a new version file may be added. The two hashes permit
+  # one owner-approved documentation-citation rewrite and no other v1 bytes.
+  local base status
+  if base=$(git rev-parse --verify --quiet origin/main); then
+    :
+  else
+    status=$?
+    if [ "$status" -ne 1 ]; then
+      echo "could not resolve origin/main" >&2
+      return 1
+    fi
     echo "no origin/main to compare against; skipped"
     return 0
   fi
-  local changed
-  changed="$(git diff --name-status "$base"...HEAD -- 'packages/schema/resume.v*.schema.json' |
-    grep -E '^(M|D|R|T)' || true)"
-  if [ -n "$changed" ]; then
+  local approved_old_v1_sha256="2da37bb75297fefe32a920e3fae960100f0a99236ba4dc21ef25ae6b3f61f13f"
+  local approved_new_v1_sha256="879858284bc3cb4092d1d671466a9c620e27abf134aecedce070b6f21e4e5866"
+  local index_diff worktree_diff index_changed worktree_changed
+  if ! index_diff=$(git diff --cached --name-status "$base" -- 'packages/schema/resume.v*.schema.json'); then
+    echo "could not compare the released-schema index with origin/main" >&2
+    return 1
+  fi
+  if ! worktree_diff=$(git diff --name-status "$base" -- 'packages/schema/resume.v*.schema.json'); then
+    echo "could not compare the released-schema worktree with origin/main" >&2
+    return 1
+  fi
+  index_changed="$(grep -E '^(M|D|R|T)' <<<"$index_diff" || true)"
+  worktree_changed="$(grep -E '^(M|D|R|T)' <<<"$worktree_diff" || true)"
+  local approved_v1_change
+  approved_v1_change=$(printf 'M\tpackages/schema/resume.v1.schema.json')
+  if [ "$index_changed" = "$approved_v1_change" ] || [ "$worktree_changed" = "$approved_v1_change" ]; then
+    local base_v1_sha256
+    if ! base_v1_sha256=$(git show "$base:packages/schema/resume.v1.schema.json" | sha256sum | cut -d ' ' -f 1); then
+      echo "could not hash origin/main's released v1 schema" >&2
+      return 1
+    fi
+    if [ "$base_v1_sha256" = "$approved_old_v1_sha256" ]; then
+      if [ "$index_changed" = "$approved_v1_change" ]; then
+        local index_v1_sha256
+        if ! index_v1_sha256=$(git show :packages/schema/resume.v1.schema.json | sha256sum | cut -d ' ' -f 1); then
+          echo "could not hash the released v1 schema in the index" >&2
+          return 1
+        fi
+        if [ "$index_v1_sha256" = "$approved_new_v1_sha256" ]; then
+          index_changed=""
+        fi
+      fi
+      if [ "$worktree_changed" = "$approved_v1_change" ]; then
+        local worktree_v1_sha256
+        if ! worktree_v1_sha256=$(sha256sum packages/schema/resume.v1.schema.json | cut -d ' ' -f 1); then
+          echo "could not hash the released v1 schema in the worktree" >&2
+          return 1
+        fi
+        if [ "$worktree_v1_sha256" = "$approved_new_v1_sha256" ]; then
+          worktree_changed=""
+        fi
+      fi
+    fi
+  fi
+  if [ -n "$index_changed" ] || [ -n "$worktree_changed" ]; then
     echo "Released schemas are immutable; only a new version file may be added:" >&2
-    echo "$changed" >&2
+    if [ -n "$index_changed" ]; then
+      echo "index:" >&2
+      echo "$index_changed" >&2
+    fi
+    if [ -n "$worktree_changed" ]; then
+      echo "worktree:" >&2
+      echo "$worktree_changed" >&2
+    fi
     return 1
   fi
 }

@@ -134,3 +134,12 @@ records this boundary.
   read by sqlc ([ADR 0010](../adr/0010-goose-only-migrations.md)).
 - Generated artifacts are committed and changed only through their source and
   generator.
+
+There is no separate declarative relational schema file. Reading migrations and
+sqlc queries together gives the applied schema and typed access layer without a
+second schema source that can drift.
+
+The integration gate enforces released migration immutability by comparing the
+migration directory for append-only changes. Goose tracks applied versions, not
+file checksums, at runtime. A correction is a new forward migration rather than
+an edit or a down migration.

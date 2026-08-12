@@ -5,15 +5,16 @@ Status: Accepted (2026-08-11)
 ## Context
 
 The spec names two sanitizers and one allowlist, but never says where each one
-executes. Design spec §5 lists `RichText` "w/ DOMPurify re-sanitize" as a
-renderer primitive with no client/server carve-out, and its sanitizer contract
-pairs "bluemonday (write) and DOMPurify (render)" against a shared hostile
-corpus. Public resume pages are server-rendered, so a plain reading of "render"
-puts DOMPurify inside the SSR path.
+executes. The former monolithic design's §5, now the
+[web rich-text design](../design/web.md#rich-text), listed `RichText` "w/
+DOMPurify re-sanitize" as a renderer primitive with no client/server carve-out,
+and its sanitizer contract pairs "bluemonday (write) and DOMPurify (render)"
+against a shared hostile corpus. Public resume pages are server-rendered, so a
+plain reading of "render" puts DOMPurify inside the SSR path.
 
 Three further documents restate that reading rather than resolve it:
-`docs/specs/templates/contract.md` §5.5 ("The renderer re-sanitizes with
-DOMPurify against the same versioned allowlist"),
+[template contract §5.5](../design/templates/contract.md#55-rich-text) ("The
+renderer re-sanitizes with DOMPurify against the same versioned allowlist"),
 `docs/plans/implementation-plan.md` (the security-testing row names the corpus
 surfaces as "bluemonday+DOMPurify+SSR+real browser"), and the `packages/schema`
 validation artifacts, which describe DOMPurify as the "render path" without
@@ -63,13 +64,15 @@ DOMPurify is client-only.**
 
 Each of the following disagreed with this decision and is corrected by this ADR:
 
-- `docs/specs/aboutme-design.md` §5 — the renderer-tree line ("`RichText` w/
+- The former monolithic design's §5 — the renderer-tree line ("`RichText` w/
   DOMPurify re-sanitize") and the sanitizer-contract line ("bluemonday (write)
   and DOMPurify (render)"). Both are edited in the same change; the design spec
   is `DRAFT v3` and this is the design owner's ruling, so the correction lands
-  in the text rather than only here.
-- `docs/specs/templates/contract.md` §5.5 — "the renderer re-sanitizes with
-  DOMPurify" is scoped to the client render path. Edited in the same change.
+  in the text rather than only here. The result now lives in the
+  [web rich-text design](../design/web.md#rich-text).
+- [Template contract §5.5](../design/templates/contract.md#55-rich-text) — "the
+  renderer re-sanitizes with DOMPurify" is scoped to the client render path.
+  Edited in the same change.
 - `docs/plans/implementation-plan.md` — the security-testing row and the hostile
   corpus paragraph list "bluemonday+DOMPurify+SSR+real browser". The four
   surfaces stand; "SSR" is not to be read as DOMPurify executing under Node.

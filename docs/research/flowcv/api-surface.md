@@ -272,9 +272,10 @@ protocol.
 
 ## Relevant to aboutme
 
-Mapping against `docs/specs/aboutme-design.md` §3 "Entry fields per
-`sectionType`". "Richer" means FlowCV carries more than aboutme's contract;
-"absent" means FlowCV has no equivalent.
+Mapping against the
+[resume aggregate's entry-field table](../../design/data.md#resume-aggregate).
+"Richer" means FlowCV carries more than aboutme's contract; "absent" means
+FlowCV has no equivalent.
 
 | aboutme sectionType | FlowCV (OBSERVED unless noted)                                                | Verdict                                                        |
 | ------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- |

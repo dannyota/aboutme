@@ -34,7 +34,6 @@ defect, not permission to choose one silently.
 | [`guides/`](guides/README.md)            | Setup and usage guidance                                    | Living with supported workflows                          |
 | [`runbooks/`](runbooks/README.md)        | Exact operating, verification, and recovery procedures      | Added only when the operation exists                     |
 | [`standards/`](standards/README.md)      | Documentation and code-comment rules                        | Living repository policy                                 |
-| [`specs/`](specs/aboutme-design.md)      | Compatibility links for the retired layout                  | No new documents                                         |
 
 Root [`README.md`](../README.md), [`CONTRIBUTING.md`](../CONTRIBUTING.md),
 [`SECURITY.md`](../SECURITY.md), and [`LICENSE`](../LICENSE) cover repository

@@ -1,31 +1,9 @@
-// Package migrations embeds aboutme's goose SQL migrations and applies
-// them through a session-locked goose Provider, so two runners can never
-// double-apply — see docs/specs/aboutme-design.md §3 "Schema management"
-// and its "Prod migration sequence" row.
+// Package migrations embeds and applies aboutme's append-only goose SQL
+// migrations.
 //
-// The *.sql files in this directory are the single source of truth for
-// aboutme's schema. goose applies them; sqlc also reads this directory
-// directly as its `schema:` input (see ../sqlc.yaml) to generate
-// internal/store. There is no separate declarative schema file that could
-// drift from what is actually applied.
-//
-// Migrations here are immutable and append-only: an already-released file
-// is never edited, and a correction is always a new forward migration.
-// That rule is enforced once, in CI, as an append-only check on this
-// directory — not on every server boot. goose tracks applied versions in
-// the database itself, so there is no runtime checksum verification of
-// this directory at all.
-//
-// Simplified from an earlier hand-rolled migration pattern that hand-rolls
-// advisory locking with a raw pg_advisory_lock/unlock pair around goose's
-// legacy global API. aboutme uses goose's own
-// [github.com/pressly/goose/v3.Provider] with
-// [github.com/pressly/goose/v3.WithSessionLocker] instead: the Provider
-// acquires the session-level Postgres advisory lock, re-checks which
-// migrations are actually still pending against the database (not the
-// stale pending-list computed before the lock was acquired), applies
-// them, and releases the lock — all inside goose's own well-tested code,
-// not reimplemented here.
+// The schema-source and immutability rules are in
+// docs/design/data.md#schema-and-migrations. Production sequencing and lock
+// rationale are in docs/design/deployment.md#database-and-releases.
 package migrations
 
 import (
