@@ -31,14 +31,15 @@ hand-written goose migrations as the only relational schema source.
 | 11   | Bounds matrix and completeness guard              | Landed                       |
 | 12   | Traceability, docs, and handoffs                  | Landed                       |
 | Gate | Phase defect review                               | Reopened                     |
-| Gate | Exact-candidate phase acceptance                  | Pending revision 3           |
+| Gate | Exact-candidate phase acceptance                  | Pending revision 4           |
 
 Task 12's traceability, architecture documentation, and named downstream
 handoffs are landed. A post-closure review found that the cap trigger rejects a
 no-op owner assignment at the cap and that revision 2 acceptance lacks its
-required persisted per-row report. The pre-UAT migration correction, independent
-review, catalog revision 3, and a recorded exact-candidate run must close before
-P2A returns to complete.
+required persisted per-row report. The pre-UAT migration correction is landed
+and re-reviewed. The current candidate still needs a fresh phase review, the
+owner gates, catalog revision 4 acceptance, and a documentation-only closure
+commit before P2A returns to complete.
 
 The production document registry currently contains only v1. P2A supplies pure
 projection, adjacent-converter machinery tested with synthetic later versions,
@@ -61,8 +62,22 @@ P8 privacy work.
 3. The integration owner pinned one unchanged candidate and froze
    [acceptance catalog revision 2](acceptance-catalog-r2.md).
 4. `make ci` and connected `make scan` passed without concurrent heavy workers.
-5. The required per-row acceptance report was not persisted. The corrective
-   candidate therefore uses catalog revision 3 and records the full result.
+5. The required per-row acceptance report was not persisted. Revisions 3 and 4
+   preserve the correction history; revision 4 is the active catalog because it
+   fixes revision 3's provenance, scanner-input, and evidence-capture blockers.
+
+## Corrective closure sequence
+
+1. Commit a clean candidate containing catalog revision 4 and the Suite A/B/C
+   provenance record. AC-DOC-001 remains `PENDING` until acceptance passes.
+2. Record a fresh exact-candidate phase-defect review. Run `make ci` and
+   connected `make scan` once at that unchanged candidate.
+3. A fresh read-only worker runs catalog revision 4 and returns its external
+   report. Any failed, blocked, missing, changed-candidate, or retry result
+   fails closure.
+4. If every row passes, persist the report and change traceability and active
+   status pages in a second documentation-only closure commit. That commit cites
+   the tested candidate and does not claim it was itself gated.
 
 ## Authorities
 
