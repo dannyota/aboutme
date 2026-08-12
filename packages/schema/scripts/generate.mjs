@@ -303,9 +303,17 @@ function generateGo(
     );
   }
 
+  const packagePrefix = `package ${packageName}\n\n`;
+  if (!raw.startsWith(packagePrefix)) {
+    throw new Error(
+      `generate.mjs: quicktype output did not start with ${JSON.stringify(packagePrefix)}.`,
+    );
+  }
+  raw = raw.slice(packagePrefix.length);
+
   const body =
     `${generatedHeader(sourceName)}\n\npackage ${packageName}\n\n${preamble}` +
-    raw.replace(new RegExp(`^package ${packageName}\\n\\n`), "");
+    raw;
   writeFileSync(outFile, body);
 
   // quicktype's Go column-alignment pass misaligns struct fields when an

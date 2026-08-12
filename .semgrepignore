@@ -5,7 +5,8 @@
 # findings there would flag the generator's output rather than hand-written
 # logic. Faithfulness of the generator itself is covered by the schema
 # package's own conformance tests, not semgrep.
-packages/schema/gen/**
+packages/schema/gen/**/*.go
+packages/schema/gen/**/*.ts
 
 # Vendored / build output. These are already git-ignored (see .gitignore)
 # so default `semgrep` runs (git-tracked files only) never see them, but
@@ -15,6 +16,5 @@ packages/schema/gen/**
 **/.nuxt/**
 **/.output/**
 
-# Lockfiles — machine-generated, not hand-maintained.
-**/package-lock.json
-**/go.sum
+# Dependency manifests and lockfiles stay visible to connected Supply Chain
+# analysis even when their packages contain otherwise ignored generated code.

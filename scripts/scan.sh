@@ -42,7 +42,11 @@ if [ "$TOOLS_OK" -ne 1 ]; then
   echo "Semgrep skipped because the pinned scanner toolchain is unavailable." >&2
 elif [ -n "${SEMGREP_APP_TOKEN:-}" ]; then
   if SEMGREP_TMP_ROOT=$(mktemp -d "$PWD/.semgrep-tmp.XXXXXX"); then
-    TMPDIR="$SEMGREP_TMP_ROOT" semgrep ci --no-suppress-errors || STATUS=1
+    TMPDIR="$SEMGREP_TMP_ROOT" semgrep ci \
+      --code \
+      --supply-chain \
+      --secrets \
+      --no-suppress-errors || STATUS=1
     cleanup_semgrep_tmp
     SEMGREP_TMP_ROOT=
   else

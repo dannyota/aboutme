@@ -28,7 +28,9 @@ count=$(grep -Fc 'if ! diff=$(git diff --name-status' "$WORKFLOW" || true)
 grep -Fq 'Could not compare released schemas with base.' "$WORKFLOW" ||
   fail "released-schema job lacks an explicit diff-failure result"
 
-grep -Fq 'semgrep ci --no-suppress-errors' "$WORKFLOW" ||
-  fail "hosted Semgrep can suppress engine errors"
+grep -Fq 'semgrep ci --code --supply-chain --secrets --no-suppress-errors' "$WORKFLOW" ||
+  fail "hosted Semgrep does not explicitly select every product and fail closed"
+grep -Fq -- '- run: scripts/test/semgrep-sca-inputs-test.sh' "$WORKFLOW" ||
+  fail "hosted Semgrep does not verify its dependency inputs"
 
 printf 'hosted workflow safety tests passed\n'
