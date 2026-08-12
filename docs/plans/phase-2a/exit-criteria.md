@@ -3,13 +3,16 @@
 The phase closes only when the candidate commit satisfies every item. A later
 product-code change invalidates evidence for each affected path.
 
-Task 12 documentation and handoffs are landed. A later pre-UAT cap-trigger
-correction invalidated the migration-path evidence. Catalog revision 5 is frozen
-for a new exact candidate and its later documentation-only closure.
+Task 12 documentation and handoffs are landed. Candidate
+`2ce66d36b7aab2f9814c4e894b937c5e80bcb520` passed the pre-UAT cap-trigger
+correction checks, both owner gates, the fresh phase review, and every catalog
+revision 5 row with zero retries. The later documentation-only closure commit
+persists the report and status changes without claiming that its own commit was
+product-gated.
 
 ## Product and contract
 
-- [ ] Corrected pre-UAT migration `00005` permits a no-op owner assignment at
+- [x] Corrected pre-UAT migration `00005` permits a no-op owner assignment at
       the cap while inserts and real owner moves remain capped. Empty-to-head,
       previous-to-head, concurrent-lock, and partial-failure migration tests
       pass. The first UAT baseline will freeze the migration history.
@@ -36,13 +39,13 @@ for a new exact candidate and its later documentation-only closure.
 
 ## Evidence and checks
 
-- [ ] `make ci` passes once, without concurrent heavy workers, at the candidate
+- [x] `make ci` passes once, without concurrent heavy workers, at the candidate
       commit.
-- [ ] `make schema-check`, `make sqlc-check`, `make server-migration-test`, and
+- [x] `make schema-check`, `make sqlc-check`, `make server-migration-test`, and
       `make server-test-db` pass with live suites required and `-count=1`.
-- [ ] `make scan` passes. If the connected scan cannot run, the phase is
+- [x] `make scan` passes. If the connected scan cannot run, the phase is
       blocked; offline Semgrep alone is not phase-exit evidence.
-- [ ] After revision 5 acceptance passes, P2A-owned traceability rows have
+- [x] After revision 5 acceptance passes, P2A-owned traceability rows have
       explicit `PROVEN` state and exact test or command evidence. AC-DOC-001 may
       remain `PENDING` at the tested candidate and changes only in the
       documentation-only closure commit. Handoffs have a named owner and
@@ -58,10 +61,10 @@ for a new exact candidate and its later documentation-only closure.
 
 ## Independent gates
 
-- [ ] A fresh phase reviewer that authored none of the phase reports no blocking
+- [x] A fresh phase reviewer that authored none of the phase reports no blocking
       defect in behavior, design fit, interface stability, assumptions, or
       traceability. Fixes receive independent re-review.
-- [ ] A fresh acceptance worker runs catalog revision 5 at the exact candidate
+- [x] A fresh acceptance worker runs catalog revision 5 at the exact candidate
       without editing product code, tests, fixtures, or criteria. Every row is
       `PASS`. `FAIL`, `BLOCKED`, missing evidence, a candidate mismatch, or any
       retry fails. The owner then persists the report and active status changes

@@ -53,8 +53,11 @@ Resume HTTP routes are not implemented.
 
 ## Implemented resume data layer
 
-Phase 2A Tasks 1–12 are landed. A pre-UAT cap-trigger correction is under
-verification, so its phase review and exact-candidate acceptance are reopened.
+Phase 2A Tasks 1–12 and the pre-UAT cap-trigger correction are complete.
+Candidate `2ce66d36b7aab2f9814c4e894b937c5e80bcb520` passed its fresh phase
+review, owner gates, and every revision 5 acceptance row with zero retries. The
+[persisted report](plans/phase-2a/acceptance-report-r5.md) records that tested
+candidate; the later documentation-only closure commit was not product-gated.
 The phase provides:
 
 - immutable resume schema v1, retained v1 Go and TypeScript types, and released,
