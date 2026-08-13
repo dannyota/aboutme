@@ -95,10 +95,10 @@ deterministic arbitrary input. Phase 2B calls the Go sanitizer before every
 resume write. Public-read and internal-print re-sanitizing remain owned by P5A
 and P7A.
 
-The web package contains the licensed font catalog, a pure continuous Vue
-renderer, and a generated registry for all 20 validated template presets.
-Pagination, deterministic HTML goldens, renderer-boundary lint, and the pinned
-browser screenshot harness remain Phase 3 work.
+The web package contains the licensed font catalog, a pure Vue renderer with
+continuous and deterministic paged modes, and a generated registry for all 20
+validated template presets. Deterministic HTML goldens, renderer-boundary lint,
+and the pinned browser screenshot harness remain Phase 3 work.
 
 ## Implemented private media boundary
 
@@ -125,6 +125,6 @@ orphan reconciliation.
 
 ## Not implemented
 
-Renderer pagination and browser goldens, the editor, public publishing,
-Server-Sent Events, PDF and image rendering, privacy workers, production
-infrastructure, staging, production deployment, and Flutter remain planned.
+Renderer goldens, the editor, public publishing, Server-Sent Events, PDF and
+image rendering, privacy workers, production infrastructure, staging, production
+deployment, and Flutter remain planned.

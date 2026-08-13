@@ -6,7 +6,12 @@ measurement).
 **Files:** create
 `apps/web/app/components/resume/{paginate.ts,measure.ts, PagedResume.vue}`,
 `apps/web/test/renderer/paginate.test.ts`; modify `ResumeDocument.vue`
-(`mode: 'paged'` delegates to `PagedResume`).
+(`mode: 'paged'` delegates to `PagedResume`), `SectionRenderer.vue`, and the
+eight `sections/*.vue` renderers. The section dispatch adds a defaulted
+`all | heading | entry` part seam so paged mode renders atomic blocks without
+duplicating templates or leaving non-selected content hidden in the DOM. Modify
+`pageMetrics.ts` only to expose and validate the page-content height calculation
+required below.
 
 This author writes `paginate.adversarial.test.ts` from the Task 7 section of
 [adversarial coverage](adversarial-coverage.md), test-first, before the
@@ -125,16 +130,18 @@ paginate those sections.
 
 `ResumeDocument` keeps its public `{document, context}` props. `PagedResume`
 builds `PaginationRequest` from those props and the normalized block order. If
-`PaginationMeasureKey` is provided, its async setup awaits that DOM-free
-provider and renders the resulting pages on the first SSR pass. Vue's
-`renderToString` therefore needs no element or mounted hook. Tests create a Vue
-app and call `app.provide(PaginationMeasureKey, syntheticMeasure)` before
-rendering. With no provider, the browser branch first renders the hidden
-measurement tree, then calls the browser adapter with its root after mount.
-Product code never imports a test measurer. SSR paged mode without a provider
-throws `PaginationError` with `pagination_measurement_required` instead of
-emitting an unpaged or empty document. Non-finite or non-positive block heights,
-or non-finite or negative gaps and header measurements, throw
+`PaginationMeasureKey` is provided, setup conditionally returns a Promise that
+awaits that DOM-free provider and renders the resulting pages on the first SSR
+pass. Vue's `renderToString` therefore needs no element or mounted hook. Tests
+create a Vue app and call `app.provide(PaginationMeasureKey, syntheticMeasure)`
+before rendering. With no provider, setup synchronously throws `PaginationError`
+with `pagination_measurement_required` during SSR; it must not reject from an
+async setup path, which Vue may replace with an empty comment. In a browser, the
+same no-provider setup stays synchronous, first renders the hidden measurement
+tree, then calls the browser adapter with its root after mount. Product code
+never imports a test measurer. SSR paged mode without a provider fails instead
+of emitting an unpaged or empty document. Non-finite or non-positive block
+heights, or non-finite or negative gaps and header measurements, throw
 `invalid_measurement`. Non-finite or non-positive page dimensions, and
 non-finite or negative margins, throw `invalid_page_geometry`. A one-column
 request carrying a sidebar flow throws `non_normalized_one_column_flow`. No
@@ -155,7 +162,7 @@ performs one deterministic remeasure. The component sets
 `data-pagination-settled="true"` only after that pass completes; browser tests
 and screenshots wait for that marker.
 
-- [ ] **Step 1: Failing engine tests.** Table-driven `paginate` cases: empty
+- [x] **Step 1: Failing engine tests.** Table-driven `paginate` cases: empty
       input → one empty page with its header; header height reduces both first-
       page columns; oversized header expands page 1 and starts body on page 2;
       blocks plus semantic gaps exactly filling a page → break after; a page
@@ -170,7 +177,7 @@ and screenshots wait for that marker.
       deep-equal output). Table-driven `pageMetrics` cases too: A4 and Letter ×
       absent `spacing.pageMargin` (15 mm) × an explicit margin × the `0` mm
       bound → expected `pageContentHeightPx`. Run → FAIL; implement; PASS.
-- [ ] **Step 2: `PagedResume` with synthetic measurer.** Component test: render
+- [x] **Step 2: `PagedResume` with synthetic measurer.** Component test: render
       paged mode with the committed synthetic measurer
       (`test/renderer/synthetic-measure.ts`: height = fixed base per kind +
       deterministic function of text length — committed, versioned, referenced
@@ -180,15 +187,15 @@ and screenshots wait for that marker.
       hold font readiness pending and prove no measurement occurs, then resolve
       it and prove one settled measurement; a simulated font/layout change
       causes exactly one remeasure.
-- [ ] **Step 2a: format-derived paper.** Render the same document in A4 and
+- [x] **Step 2a: format-derived paper.** Render the same document in A4 and
       Letter. Assert page boxes are exactly 794 × 1123 and 816 × 1056 before
       scaling, page capacity uses the matching height and resolved margins, and
       the paged editor HTML contains no `@page` rule. Assert every invalid input
       above yields the exact `PaginationError.code`.
-- [ ] **Step 3: Boundary rule evidence.** Assert no entry is ever split across
+- [x] **Step 3: Boundary rule evidence.** Assert no entry is ever split across
       pages (block granularity is the invariant; the master plan's "editor
       approximate" honesty note goes in the component doc comment).
-- [ ] **Step 4: gate.** Run `make web-lint web-typecheck web-test web-build`.
+- [x] **Step 4: gate.** Run `make web-lint web-typecheck web-test web-build`.
 
 ## Acceptance mapping
 

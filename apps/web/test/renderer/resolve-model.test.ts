@@ -63,23 +63,19 @@ describe('resolved render boundary', () => {
         photoUrl: 'data:image/png;base64,AA==',
       } as const,
     ],
-    [
-      'render_mode_unavailable',
-      (_document: Resume) => fixture('minimal'),
-      { lng: 'en', mode: 'paged' } as const,
-    ],
   ])('throws %s', (code, makeDocument, context) => {
     expect(() => resolveRenderModel(makeDocument(fixture('full')), context))
       .toThrowError(expect.objectContaining({ code }));
   });
 
-  it('uses the typed error class', () => {
-    expect(
-      () =>
-        resolveRenderModel(fixture('minimal'), {
-          lng: 'en',
-          mode: 'paged',
-        }),
-    ).toThrow(ResumeRenderError);
+  it('preserves paged mode without weakening typed boundary errors', () => {
+    expect(resolveRenderModel(fixture('minimal'), {
+      lng: 'en',
+      mode: 'paged',
+    }).mode).toBe('paged');
+    expect(() => resolveRenderModel(
+      { ...fixture('minimal'), schemaVersion: 99 } as Resume,
+      { lng: 'en', mode: 'paged' },
+    )).toThrow(ResumeRenderError);
   });
 });

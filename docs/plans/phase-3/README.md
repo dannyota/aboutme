@@ -38,7 +38,7 @@ follows the exclusive windows below.
 | 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Landed      |
 | 5B   | Immutable document v2 font catalog and converters           | High   | Landed      |
 | 6    | Pure renderer in continuous mode                            | High   | Implemented |
-| 7    | Pure pagination engine and editor paged wrapper             | High   | Pending     |
+| 7    | Pure pagination engine and editor paged wrapper             | High   | Implemented |
 | 8    | Preset registry, validation, and apply semantics            | Normal | Implemented |
 | 9    | Deterministic HTML golden harness                           | Normal | Pending     |
 | 10   | Renderer import and nondeterminism lint rules               | Normal | Pending     |
@@ -85,10 +85,10 @@ graph TD
     T11 --> G
 ```
 
-T1, T2, T3, T5, and T5B have landed. T6 and T8 are implemented. T7 follows T6
-because pagination consumes the renderer's measured blocks. T9 can now consume
-the renderer and preset registry. Each author writes that task's adversarial
-cases from [adversarial coverage](adversarial-coverage.md) as part of the task.
+T1, T2, T3, T5, and T5B have landed. T6, T7, and T8 are implemented. T9 can now
+consume the renderer, deterministic pagination seam, and preset registry. Each
+author writes that task's adversarial cases from
+[adversarial coverage](adversarial-coverage.md) as part of the task.
 
 ## Exclusive shared-file windows
 

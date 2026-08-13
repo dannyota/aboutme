@@ -19,8 +19,7 @@ export interface RenderContext {
 export type ResumeRenderErrorCode
   = | 'unsupported_schema_version'
     | 'photo_url_required'
-    | 'unexpected_photo_url'
-    | 'render_mode_unavailable';
+    | 'unexpected_photo_url';
 
 export class ResumeRenderError extends Error {
   readonly code: ResumeRenderErrorCode;
@@ -62,7 +61,7 @@ export interface ResolvedRenderModel {
   readonly dateFormat: Customization['dateFormat'];
   readonly pageFormat: Customization['pageFormat'];
   readonly lng: string;
-  readonly mode: 'continuous';
+  readonly mode: RenderContext['mode'];
   readonly styles: ResumeStyles;
 }
 
@@ -85,13 +84,6 @@ export function resolveRenderModel(
       `Renderer supports schema version ${CURRENT_VERSION}.`,
     );
   }
-  if (context.mode === 'paged') {
-    throw new ResumeRenderError(
-      'render_mode_unavailable',
-      'Paged rendering is not available yet.',
-    );
-  }
-
   const photoMetadata = document.personalDetails.photo;
   if (photoMetadata !== undefined && context.photoUrl === undefined) {
     throw new ResumeRenderError(
@@ -126,7 +118,7 @@ export function resolveRenderModel(
             url: context.photoUrl!,
             ...(photoMetadata.crop === undefined
               ? {}
-              : { crop: structuredClone(photoMetadata.crop) }),
+              : { crop: { ...photoMetadata.crop } }),
           },
         }),
     main: resolveSections(customization.layout.sections.main, document.content),
@@ -140,12 +132,15 @@ export function resolveRenderModel(
       detailsLayout: customization.header?.detailsLayout ?? 'inline',
       iconStyle: customization.header?.iconStyle ?? 'outline',
     },
-    heading: structuredClone(customization.heading),
-    sectionDisplay: structuredClone(customization.sectionDisplay),
+    heading: { ...customization.heading },
+    sectionDisplay: {
+      skill: { ...customization.sectionDisplay.skill },
+      language: { ...customization.sectionDisplay.language },
+    },
     dateFormat: customization.dateFormat,
     pageFormat: customization.pageFormat,
     lng: context.lng,
-    mode: 'continuous',
+    mode: context.mode,
     styles: useResumeStyles(customization),
   };
 }
