@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+readonly IMAGE_CONTRACT=1
+readonly IMAGE_BASE='mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac'
+readonly IMAGE_PLAYWRIGHT=1.62.1
+readonly IMAGE_NSS='2:3.98-1ubuntu0.2'
+readonly IMAGE_ENTRYPOINT='["/opt/aboutme-auth/run.sh","--inside"]'
+
 fail() {
   printf 'dev-https-browser: %s\n' "$*" >&2
   exit 1
@@ -69,10 +75,12 @@ inside_container() {
   export XDG_CONFIG_HOME=$HOME/.config
   install -d -m 0700 "$HOME" "$HOME/.pki" "$HOME/.pki/nssdb" \
     "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
-  certutil -N --empty-password -d "sql:$HOME/.pki/nssdb" >/dev/null
+  certutil -N --empty-password -d "sql:$HOME/.pki/nssdb" >/dev/null ||
+    fail 'cannot initialize the isolated NSS database'
   certutil -A -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root \
-    -t 'C,,' -i /uat-input/caddy-root.crt
-  certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null
+    -t 'C,,' -i /uat-input/caddy-root.crt || fail 'cannot import the Caddy root'
+  certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null ||
+    fail 'cannot verify the imported Caddy root'
 
   local log_file=/tmp/playwright-auth.log status=0
   cd /opt/aboutme-auth
@@ -94,7 +102,7 @@ inside_container() {
   [ "$(stat -c %s /evidence/auth-proof.json)" -le 4096 ] ||
     fail 'browser evidence exceeds its bound'
 
-  node --input-type=module - /evidence/auth-proof.json <<'VERIFY_EVIDENCE'
+  if ! node --input-type=module - /evidence/auth-proof.json <<'VERIFY_EVIDENCE'
 import { readFile } from 'node:fs/promises';
 
 const path = process.argv[2];
@@ -110,15 +118,20 @@ const expected = {
 };
 if (JSON.stringify(actual) !== JSON.stringify(expected)) process.exit(1);
 VERIFY_EVIDENCE
+  then
+    fail 'browser evidence has invalid schema'
+  fi
 
   printf '%s\n' 'dev-https-browser authentication proof: PASS'
 }
 
 host_run() {
   [ "$#" -eq 3 ] ||
-    fail 'usage: run.sh <image> <CA-input-directory> <empty-evidence-directory>'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory>'
   local image=$1 input=$2 evidence=$3 uid gid input_entries evidence_entries
-  [[ $image =~ ^[A-Za-z0-9][A-Za-z0-9._/@:-]*$ ]] || fail 'invalid image identity'
+  local inspect inspected_id image_user entrypoint contract base playwright nss extra
+  [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] ||
+    fail 'image must be an immutable sha256 ID'
   for path in "$input" "$evidence"; do
     [[ $path = /* ]] || fail 'mount paths must be absolute'
     [[ $path != *$'\n'* && $path != *$'\r'* && $path != *$'\t'* ]] ||
@@ -150,8 +163,23 @@ host_run() {
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
   command -v podman >/dev/null || fail 'podman is required'
 
+  inspect=$(podman image inspect --format \
+    '{{.Id}}|{{.Config.User}}|{{json .Config.Entrypoint}}|{{index .Config.Labels "io.aboutme.dev-https-browser.contract"}}|{{index .Config.Labels "io.aboutme.dev-https-browser.base"}}|{{index .Config.Labels "io.aboutme.dev-https-browser.playwright"}}|{{index .Config.Labels "io.aboutme.dev-https-browser.libnss3-tools"}}' \
+    "$image") || fail 'cannot inspect the local browser image'
+  [[ $inspect != *$'\n'* && $inspect != *$'\r'* ]] ||
+    fail 'browser image inspection returned multiple records'
+  IFS='|' read -r inspected_id image_user entrypoint contract base playwright nss extra \
+    <<<"$inspect"
+  [ "$inspected_id" = "$image" ] || fail 'inspected browser image ID does not match'
+  [ -z "$extra" ] && [ "$image_user" = pwuser ] &&
+    [ "$entrypoint" = "$IMAGE_ENTRYPOINT" ] &&
+    [ "$contract" = "$IMAGE_CONTRACT" ] && [ "$base" = "$IMAGE_BASE" ] &&
+    [ "$playwright" = "$IMAGE_PLAYWRIGHT" ] && [ "$nss" = "$IMAGE_NSS" ] ||
+    fail 'browser image contract mismatch'
+
   exec podman run \
     --rm \
+    --pull=never \
     --network=host \
     --read-only \
     --userns=keep-id \
