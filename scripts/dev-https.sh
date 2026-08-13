@@ -35,7 +35,8 @@ readonly NORMAL_NATIVE_PORTS=(20030 20080 20081)
 readonly STOP_TERM_ATTEMPTS=${DEV_HTTPS_STOP_TERM_ATTEMPTS:-100}
 readonly STOP_KILL_ATTEMPTS=${DEV_HTTPS_STOP_KILL_ATTEMPTS:-50}
 readonly BASH_BIN=$(readlink -f "$(command -v bash)")
-readonly SUPERVISOR_CODE='umask 077
+readonly SUPERVISOR_CODE='set -Eeuo pipefail
+umask 077
 printf "%s\n" "$$" >"$1"
 cd "$2" || exit 127
 set -a
@@ -59,6 +60,7 @@ die() {
 pidfile() { printf '%s/%s.pid' "$RUN_DIR" "$1"; }
 logfile() { printf '%s/%s.log' "$LOG_DIR" "$1"; }
 identity_file() { printf '%s/%s.identity' "$RUN_DIR" "$1"; }
+launch_file() { printf '%s/%s.launch' "$RUN_DIR" "$1"; }
 service_env_file() { printf '%s/%s.env' "$RUN_DIR" "$1"; }
 
 port_of() {
@@ -174,9 +176,8 @@ validate_group_member() {
   return 1
 }
 
-validate_identity_record() {
-  local name=$1 file mode version service pid pidfile_pid starttime sid pgid expected_executable expected_cmdline token
-  file=$(identity_file "$name")
+validate_process_record() {
+  local name=$1 file=$2 mode version service pid pidfile_pid starttime sid pgid expected_executable expected_cmdline token
   [ -f "$file" ] || return 1
   mode=$(stat -c '%a' "$file" 2>/dev/null || true)
   [ "$mode" = 600 ] || return 1
@@ -195,16 +196,19 @@ validate_identity_record() {
   [ "$pid" = "$pidfile_pid" ] || return 1
   [[ $pid =~ ^[0-9]+$ && $starttime =~ ^[0-9]+$ && $sid =~ ^[0-9]+$ && $pgid =~ ^[0-9]+$ ]] || return 1
   [ "$pid" = "$sid" ] && [ "$pid" = "$pgid" ] || return 1
-  [ "$expected_executable" = "$BASH_BIN" ] || return 1
-  [ "$expected_cmdline" = "$(expected_service_cmdline_hash "$name")" ] || return 1
+  [[ $expected_executable == /* ]] || return 1
+  [[ $expected_cmdline =~ ^[0-9a-f]{64}$ ]] || return 1
   local token_suffix=${token#"$name-"}
   [ "$token_suffix" != "$token" ] && [[ $token_suffix =~ ^[0-9a-f]{64}$ ]] || return 1
 }
 
-validate_service_identity() {
-  local name=$1 require_leader=${2:-1} file pid starttime sid pgid expected_executable expected_cmdline token actual_sid actual_pgid members member
-  validate_identity_record "$name" || return 1
-  file=$(identity_file "$name")
+validate_identity_record() {
+  validate_process_record "$1" "$(identity_file "$1")"
+}
+
+validate_service_identity_from() {
+  local name=$1 require_leader=$2 file=$3 pid starttime sid pgid expected_executable expected_cmdline token actual_sid actual_pgid members member
+  validate_process_record "$name" "$file" || return 1
   pid=$(identity_field "$file" pid)
   starttime=$(identity_field "$file" starttime)
   sid=$(identity_field "$file" sid)
@@ -234,10 +238,49 @@ validate_service_identity() {
   done <<<"$members"
 }
 
+validate_service_identity() {
+  validate_service_identity_from "$1" "${2:-1}" "$(identity_file "$1")"
+}
+
 port_listening() {
-  local listeners
-  listeners=$(ss -H -tln "sport = :$1" 2>/dev/null || true)
-  [ -n "$listeners" ]
+  local port=$1 listeners status
+  if listeners=$(ss -H -tln "sport = :$port" 2>/dev/null); then
+    :
+  else
+    status=$?
+    warn "listener probe for port $port failed because ss exited $status"
+    return 2
+  fi
+  [ -n "$listeners" ] || return 1
+  if ! awk -v port="$port" '
+    NF < 5 || $1 != "LISTEN" || $4 !~ (":" port "$") { bad=1 }
+    END { exit bad }
+  ' <<<"$listeners"; then
+    warn "listener probe for port $port returned malformed ss output"
+    return 2
+  fi
+  return 0
+}
+
+require_port_absent() {
+  local port=$1 message=$2 status
+  if port_listening "$port"; then
+    die "$message"
+  else
+    status=$?
+    [ "$status" -eq 1 ] || die "listener probe for port $port failed; refusing to mutate HTTPS harness state"
+  fi
+}
+
+require_port_listening() {
+  local port=$1 message=$2 status
+  if port_listening "$port"; then
+    return 0
+  else
+    status=$?
+    [ "$status" -eq 1 ] || die "listener probe for port $port failed; refusing to treat the port as absent"
+    die "$message"
+  fi
 }
 
 count_occurrences() {
@@ -277,7 +320,7 @@ generate_caddyfile() {
 
 require_tools() {
   local tool
-  for tool in podman go npm caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail; do
+  for tool in podman go npm caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
   done
 }
@@ -316,7 +359,7 @@ assert_owned_complete_state() {
     pid=$(read_pid "$name") || die "$name has an invalid PID file; recovery requires manual inspection because ownership is unproved"
     validate_service_identity "$name" 1 || die "$name pid $pid does not match its exact owned process identity; no process was signalled and ownership evidence was preserved"
     port=$(port_of "$name")
-    port_listening "$port" || die "$name pid $pid is owned but port $port is not listening; run 'scripts/dev-https.sh down'"
+    require_port_listening "$port" "$name pid $pid is owned but port $port is not listening; run 'scripts/dev-https.sh down'"
   done
   generated=$(generate_caddyfile) || die "could not regenerate the HTTPS route table; run 'scripts/dev-https.sh down' before applying config changes"
   [ -f "$CADDYFILE_GEN" ] && [ "$generated" = "$(<"$CADDYFILE_GEN")" ] || \
@@ -332,7 +375,7 @@ reject_http_stack() {
   normal_native_active && die "the normal native HTTP stack is active; stop it with 'scripts/dev-native.sh down'"
   compose_http_active && die "the Compose HTTP stack is active; stop it with 'make dev-down'"
   for port in "${NORMAL_NATIVE_PORTS[@]}"; do
-    port_listening "$port" && die "normal native HTTP port $port is listening; stop the HTTP stack before starting HTTPS"
+    require_port_absent "$port" "normal native HTTP port $port is listening; stop the HTTP stack before starting HTTPS"
   done
   return 0
 }
@@ -343,25 +386,14 @@ preflight_new_stack() {
   generate_caddyfile >/dev/null || die "the deployed Caddy route table no longer matches the exact HTTPS substitutions"
   for name in "${SERVICES[@]}"; do
     port=$(port_of "$name")
-    port_listening "$port" && die "port $port is already in use by a process this script did not start"
+    require_port_absent "$port" "port $port is already in use by a process this script did not start"
   done
   return 0
 }
 
-write_identity() {
-  local name=$1 token=$2 file pid starttime sid pgid actual_executable actual_cmdline expected_cmdline
-  file=$(identity_file "$name")
-  pid=$(read_pid "$name") || return 1
-  kill -0 "$pid" 2>/dev/null || return 1
-  starttime=$(proc_starttime "$pid") || return 1
-  sid=$(ps -o sid= -p "$pid" | tr -d ' ') || return 1
-  pgid=$(ps -o pgid= -p "$pid" | tr -d ' ') || return 1
-  [ "$pid" = "$sid" ] && [ "$pid" = "$pgid" ] || return 1
-  actual_executable=$(readlink -f "/proc/$pid/exe") || return 1
-  [ "$actual_executable" = "$BASH_BIN" ] || return 1
-  actual_cmdline=$(proc_cmdline_hash "$pid") || return 1
-  expected_cmdline=$(expected_service_cmdline_hash "$name") || return 1
-  [ "$actual_cmdline" = "$expected_cmdline" ] || return 1
+write_process_record() {
+  local file=$1 name=$2 pid=$3 starttime=$4 sid=$5 pgid=$6 expected_executable=$7 expected_cmdline=$8 token=$9 temporary
+  temporary="$file.tmp.$BASHPID"
   umask 077
   {
     printf 'version=1\n'
@@ -370,11 +402,77 @@ write_identity() {
     printf 'starttime=%s\n' "$starttime"
     printf 'sid=%s\n' "$sid"
     printf 'pgid=%s\n' "$pgid"
+    printf 'expected_executable=%s\n' "$expected_executable"
+    printf 'expected_cmdline_sha256=%s\n' "$expected_cmdline"
+    printf 'identity_token=%s\n' "$token"
+  } >"$temporary" || return 1
+  chmod 0600 "$temporary" || { rm -f -- "$temporary"; return 1; }
+  mv -f -- "$temporary" "$file" || { rm -f -- "$temporary"; return 1; }
+  chmod 0600 "$file"
+}
+
+write_launch_intent() {
+  local name=$1 token=$2 file expected_cmdline
+  file=$(launch_file "$name")
+  expected_cmdline=$(expected_service_cmdline_hash "$name") || return 1
+  umask 077
+  {
+    printf 'version=1\n'
+    printf 'launch_state=prepared\n'
+    printf 'service=%s\n' "$name"
     printf 'expected_executable=%s\n' "$BASH_BIN"
     printf 'expected_cmdline_sha256=%s\n' "$expected_cmdline"
     printf 'identity_token=%s\n' "$token"
-  } >"$file"
+  } >"$file" || return 1
   chmod 0600 "$file"
+}
+
+complete_launch_record() {
+  local name=$1 token=$2 file mode version state service expected_executable expected_cmdline recorded_token
+  local pid starttime sid pgid actual_executable actual_cmdline
+  file=$(launch_file "$name")
+  mode=$(stat -c '%a' "$file" 2>/dev/null || true)
+  [ "$mode" = 600 ] || return 1
+  version=$(identity_field "$file" version) || return 1
+  state=$(identity_field "$file" launch_state) || return 1
+  service=$(identity_field "$file" service) || return 1
+  expected_executable=$(identity_field "$file" expected_executable) || return 1
+  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
+  recorded_token=$(identity_field "$file" identity_token) || return 1
+  [ "$version" = 1 ] && [ "$state" = prepared ] && [ "$service" = "$name" ] || return 1
+  [ "$expected_executable" = "$BASH_BIN" ] || return 1
+  [ "$expected_cmdline" = "$(expected_service_cmdline_hash "$name")" ] || return 1
+  [ "$recorded_token" = "$token" ] || return 1
+  pid=$(read_pid "$name") || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  starttime=$(proc_starttime "$pid") || return 1
+  sid=$(ps -o sid= -p "$pid" | tr -d ' ') || return 1
+  pgid=$(ps -o pgid= -p "$pid" | tr -d ' ') || return 1
+  [ "$pid" = "$sid" ] && [ "$pid" = "$pgid" ] || return 1
+  actual_executable=$(readlink -f "/proc/$pid/exe") || return 1
+  [ "$actual_executable" = "$expected_executable" ] || return 1
+  actual_cmdline=$(proc_cmdline_hash "$pid") || return 1
+  [ "$actual_cmdline" = "$expected_cmdline" ] || return 1
+  write_process_record "$file" "$name" "$pid" "$starttime" "$sid" "$pgid" \
+    "$expected_executable" "$expected_cmdline" "$token" || return 1
+  validate_service_identity_from "$name" 1 "$file"
+}
+
+write_identity() {
+  local name=$1 token=$2 launch identity pid starttime sid pgid expected_executable expected_cmdline recorded_token
+  launch=$(launch_file "$name")
+  identity=$(identity_file "$name")
+  validate_service_identity_from "$name" 1 "$launch" || return 1
+  pid=$(identity_field "$launch" pid) || return 1
+  starttime=$(identity_field "$launch" starttime) || return 1
+  sid=$(identity_field "$launch" sid) || return 1
+  pgid=$(identity_field "$launch" pgid) || return 1
+  expected_executable=$(identity_field "$launch" expected_executable) || return 1
+  expected_cmdline=$(identity_field "$launch" expected_cmdline_sha256) || return 1
+  recorded_token=$(identity_field "$launch" identity_token) || return 1
+  [ "$recorded_token" = "$token" ] || return 1
+  write_process_record "$identity" "$name" "$pid" "$starttime" "$sid" "$pgid" \
+    "$expected_executable" "$expected_cmdline" "$token" || return 1
   validate_service_identity "$name" 1
 }
 
@@ -411,14 +509,16 @@ start_service() {
   write_service_env "$name" || return 1
   printf '\n===== %s started %s =====\n' "$name" "$(date -Is)" >>"$log"
   token="$name-$(printf '%s' "$name:$BASHPID:$(date +%s%N)" | sha256sum | awk '{print $1}')"
+  write_launch_intent "$name" "$token" || return 1
+  STARTED_SERVICES+=("$name")
   ABOUTME_DEV_HTTPS_IDENTITY="$token" setsid --fork "$BASH_BIN" -c "$SUPERVISOR_CODE" \
     "dev-https-$name" "$file" "$workdir" "$environment" "$@" >>"$log" 2>&1 </dev/null
-  STARTED_SERVICES+=("$name")
   local attempt
   for attempt in $(seq 1 50); do
     if [ -s "$file" ]; then
       pid=$(<"$file")
-      if [[ $pid =~ ^[0-9]+$ ]] && write_identity "$name" "$token"; then
+      if [[ $pid =~ ^[0-9]+$ ]] && complete_launch_record "$name" "$token"; then
+        write_identity "$name" "$token" || return 1
         return 0
       fi
     fi
@@ -464,50 +564,53 @@ wait_for_caddy_root() {
 }
 
 stop_owned_service() {
-  local name=$1 rollback=${2:-0} file identity environment pid sid pgid attempt members
+  local name=$1 rollback=${2:-0} file identity launch environment evidence pid sid pgid attempt members
   file=$(pidfile "$name")
   identity=$(identity_file "$name")
+  launch=$(launch_file "$name")
   environment=$(service_env_file "$name")
-  [ -e "$file" ] || return 0
+  if [ ! -e "$file" ]; then
+    [ "$rollback" = 1 ] && rm -f -- "$identity" "$launch" "$environment"
+    return 0
+  fi
   if ! pid=$(read_pid "$name"); then
     return 1
   fi
-  if [ ! -f "$identity" ]; then
-    if [ "$rollback" = 1 ]; then
-      members=$(ps -eo pid=,pgid= | awk -v pgid="$pid" '$2 == pgid { print $1 }')
-      [ -z "$members" ] && { rm -f -- "$file" "$environment"; return 0; }
-    fi
+  if validate_service_identity_from "$name" 1 "$identity"; then
+    evidence=$identity
+  elif [ "$rollback" = 1 ] && validate_service_identity_from "$name" 1 "$launch"; then
+    evidence=$launch
+  else
     return 1
   fi
-  validate_service_identity "$name" 1 || return 1
-  sid=$(identity_field "$identity" sid)
-  pgid=$(identity_field "$identity" pgid)
+  sid=$(identity_field "$evidence" sid)
+  pgid=$(identity_field "$evidence" pgid)
   # The complete exact identity and every current group member are rechecked
   # immediately before the first destructive signal.
-  validate_service_identity "$name" 1 || return 1
-  kill -TERM -- "-$pid" 2>/dev/null || return 1
+  validate_service_identity_from "$name" 1 "$evidence" || return 1
+  kill -TERM -- "-$pgid" 2>/dev/null || return 1
   for attempt in $(seq 1 "$STOP_TERM_ATTEMPTS"); do
-    members=$(group_members "$pgid" "$sid")
+    members=$(group_members "$pgid" "$sid") || return 1
     [ -z "$members" ] && break
     sleep 0.1
   done
-  members=$(group_members "$pgid" "$sid")
+  members=$(group_members "$pgid" "$sid") || return 1
   if [ -n "$members" ]; then
-    validate_service_identity "$name" 0 || return 1
-    members=$(group_members "$pgid" "$sid")
+    validate_service_identity_from "$name" 0 "$evidence" || return 1
+    members=$(group_members "$pgid" "$sid") || return 1
     if [ -n "$members" ]; then
       warn "$name process group $pgid did not drain after SIGTERM; sending SIGKILL after re-proving every remaining member"
       kill -KILL -- "-$pgid" 2>/dev/null || return 1
     fi
     for attempt in $(seq 1 "$STOP_KILL_ATTEMPTS"); do
-      members=$(group_members "$pgid" "$sid")
+      members=$(group_members "$pgid" "$sid") || return 1
       [ -z "$members" ] && break
       sleep 0.1
     done
   fi
-  members=$(group_members "$pgid" "$sid")
+  members=$(group_members "$pgid" "$sid") || return 1
   [ -z "$members" ] || return 1
-  rm -f -- "$file" "$identity" "$environment"
+  rm -f -- "$file" "$identity" "$launch" "$environment"
   info "stopped $name (pid $pid)"
 }
 
@@ -581,7 +684,7 @@ web_source_hash() {
 }
 
 render_effective_config() {
-  local generated_route name file environment environment_mode caddy_bin npm_bin
+  local generated_route name file environment environment_mode caddy_bin npm_bin persisted_executable persisted_cmdline
   generated_route=$(generate_caddyfile) || return 1
   caddy_bin=$(command -v caddy) || return 1
   npm_bin=$(command -v npm) || return 1
@@ -609,13 +712,17 @@ render_effective_config() {
     environment_mode=$(stat -c '%a' "$environment" 2>/dev/null || true)
     [ "$environment_mode" = 600 ] || return 1
     validate_identity_record "$name" || return 1
+    persisted_executable=$(identity_field "$file" expected_executable) || return 1
+    persisted_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
+    [ "$persisted_executable" = "$BASH_BIN" ] || return 1
+    [ "$persisted_cmdline" = "$(expected_service_cmdline_hash "$name")" ] || return 1
     printf '%s_environment_sha256=%s\n' "$name" "$(sha256_file "$environment")"
     printf '%s_pid=%s\n' "$name" "$(identity_field "$file" pid)"
     printf '%s_starttime=%s\n' "$name" "$(identity_field "$file" starttime)"
     printf '%s_sid=%s\n' "$name" "$(identity_field "$file" sid)"
     printf '%s_pgid=%s\n' "$name" "$(identity_field "$file" pgid)"
-    printf '%s_expected_executable=%s\n' "$name" "$(identity_field "$file" expected_executable)"
-    printf '%s_expected_cmdline_sha256=%s\n' "$name" "$(identity_field "$file" expected_cmdline_sha256)"
+    printf '%s_expected_executable=%s\n' "$name" "$persisted_executable"
+    printf '%s_expected_cmdline_sha256=%s\n' "$name" "$persisted_cmdline"
     printf '%s_identity_token=%s\n' "$name" "$(identity_field "$file" identity_token)"
   done
 }
@@ -693,7 +800,7 @@ probe_https() {
 }
 
 cmd_status() {
-  local name pid port state listening failed=0 mode generated
+  local name pid port state listening probe_status failed=0 mode generated
   printf '%-12s %-8s %-10s %-6s %s\n' SERVICE PID STATE PORT LISTENING
   for name in "${SERVICES[@]}"; do
     port=$(port_of "$name")
@@ -710,8 +817,14 @@ cmd_status() {
     if port_listening "$port"; then
       listening=yes
     else
-      listening=no
-      [ "$state" = running ] && failed=1
+      probe_status=$?
+      if [ "$probe_status" -eq 1 ]; then
+        listening=no
+        [ "$state" = running ] && failed=1
+      else
+        listening=ERROR
+        failed=1
+      fi
     fi
     printf '%-12s %-8s %-10s %-6s %s\n' "$name" "$pid" "$state" "$port" "$listening"
   done
@@ -743,6 +856,11 @@ cmd_status() {
 redact_logs() {
   sed -E \
     -e 's/(GOOGLE_CLIENT_SECRET[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/g' \
+    -e 's/(__Host-(session|oauth-tx)=)[^;[:space:]]+/\1[REDACTED]/g' \
+    -e 's/(X-CSRF-Token:[[:space:]]*)[^[:space:]]+/\1[REDACTED]/gI' \
+    -e 's/(Authorization:[[:space:]]*Bearer[[:space:]]+)[^[:space:]]+/\1[REDACTED]/gI' \
+    -e 's/([?&](code|state)=)[^&#[:space:]]+/\1[REDACTED]/g' \
+    -e 's/("(access_token|id_token|refresh_token)"[[:space:]]*:[[:space:]]*")[^"]*(")/\1[REDACTED]\3/gI' \
     -e 's/(authorization_code|access_token|refresh_token|csrf_token|session_cookie)[=:][^[:space:]]+/\1=[REDACTED]/gi' \
     -e "s/${GOOGLE_CLIENT_SECRET//\//\\\/}/[REDACTED]/g"
 }

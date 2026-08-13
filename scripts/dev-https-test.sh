@@ -158,6 +158,16 @@ EOF
   cat >"$fakebin/ss" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+case ${FAKE_SS_MODE-} in
+nonzero)
+  printf '%s\n' 'injected ss failure' >&2
+  exit 9
+  ;;
+malformed)
+  printf '%s\n' 'this is not an ss listener record'
+  exit 0
+  ;;
+esac
 port=${*##*:}
 port=${port//[^0-9]/}
 if grep -Fqx -- "$port" "$FAKE_FOREIGN_PORTS" 2>/dev/null; then
@@ -178,6 +188,17 @@ if [ -s "$pidfile" ]; then
     printf 'LISTEN 0 1 127.0.0.1:%s 0.0.0.0:*\n' "$port"
   fi
 fi
+EOF
+
+  cat >"$fakebin/chmod" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+target=${!#}
+if [ "${FAKE_FAIL_IDENTITY_WRITE-}" = server ] && [[ $target == */server.identity ]]; then
+  printf '%s\n' 'injected-invalid-identity' >"$target"
+  exit 77
+fi
+exec /usr/bin/chmod "$@"
 EOF
 
   cat >"$fakebin/podman" <<'EOF'
@@ -291,6 +312,8 @@ run_happy_path_and_lifecycle_checks() (
   for service in mock-oauth server web caddy; do
     mode=$(stat -c '%a' ".dev/native-https/run/$service.identity")
     [ "$mode" = 600 ] || fail "$service identity mode is $mode, want 600"
+    mode=$(stat -c '%a' ".dev/native-https/run/$service.launch")
+    [ "$mode" = 600 ] || fail "$service launch evidence mode is $mode, want 600"
     mode=$(stat -c '%a' ".dev/native-https/run/$service.env")
     [ "$mode" = 600 ] || fail "$service environment mode is $mode, want 600"
   done
@@ -332,13 +355,35 @@ run_happy_path_and_lifecycle_checks() (
 
   for i in $(seq 1 260); do printf 'safe-log-line-%03d\n' "$i"; done >>.dev/native-https/log/server.log
   printf '%s\n' 'GOOGLE_CLIENT_SECRET=not-a-secret-local-google' \
-    'access_token=token-sentinel-that-must-not-escape' >>.dev/native-https/log/server.log
+    'access_token=token-sentinel-that-must-not-escape' \
+    'Cookie: harmless=ok; __Host-session=cookie-session-sentinel; __Host-oauth-tx=cookie-oauth-sentinel' \
+    'Set-Cookie: __Host-session=set-cookie-session-sentinel; Path=/; Secure; HttpOnly' \
+    'Set-Cookie: __Host-oauth-tx=set-cookie-oauth-sentinel; Path=/; Secure; HttpOnly' \
+    'X-CSRF-Token: csrf-header-sentinel' \
+    'GET /api/v1/auth/google/callback?code=query-code-sentinel&state=query-state-sentinel&next=safe HTTP/1.1' \
+    'Authorization: Bearer bearer-sentinel' \
+    '{"access_token":"json-access-sentinel","id_token":"json-id-sentinel","refresh_token":"json-refresh-sentinel","status":"ok"}' \
+    >>.dev/native-https/log/server.log
   output=$(bash scripts/dev-https.sh logs server 2>&1) || fail "bounded logs failed: $output"
   lines=$(wc -l <<<"$output")
   [ "$lines" -le 200 ] || fail "logs returned $lines lines, want at most 200"
   assert_not_contains "$output" 'not-a-secret-local-google'
   assert_not_contains "$output" 'token-sentinel-that-must-not-escape'
+  assert_not_contains "$output" 'cookie-session-sentinel'
+  assert_not_contains "$output" 'cookie-oauth-sentinel'
+  assert_not_contains "$output" 'set-cookie-session-sentinel'
+  assert_not_contains "$output" 'set-cookie-oauth-sentinel'
+  assert_not_contains "$output" 'csrf-header-sentinel'
+  assert_not_contains "$output" 'query-code-sentinel'
+  assert_not_contains "$output" 'query-state-sentinel'
+  assert_not_contains "$output" 'bearer-sentinel'
+  assert_not_contains "$output" 'json-access-sentinel'
+  assert_not_contains "$output" 'json-id-sentinel'
+  assert_not_contains "$output" 'json-refresh-sentinel'
   assert_contains "$output" '[REDACTED]'
+  assert_contains "$output" 'harmless=ok'
+  assert_contains "$output" 'next=safe'
+  assert_contains "$output" '"status":"ok"'
 
   output=$(bash scripts/dev-https.sh down 2>&1) || fail "down failed: $output"
   mapfile -t stops <"$FAKE_STOP_LOG"
@@ -362,6 +407,25 @@ run_foreign_listener_check() (
   fi
   assert_contains "$output" '20441'
   [ ! -s "$FAKE_MUTATIONS" ] || fail "foreign-listener rejection performed a mutation"
+)
+
+run_listener_probe_failure_checks() (
+  local fixture output mode
+  for mode in nonzero malformed; do
+    fixture=$(new_fixture)
+    trap 'cleanup_fixture "$fixture"' EXIT
+    fixture_env "$fixture"
+    export FAKE_SS_MODE=$mode
+    cd "$fixture/repo"
+    if output=$(bash scripts/dev-https.sh up 2>&1); then
+      fail "up accepted $mode ss output"
+    fi
+    assert_contains "$output" 'listener probe'
+    [ ! -s "$FAKE_MUTATIONS" ] || fail "$mode ss rejection performed a mutation"
+    [ ! -e .dev/native-https ] || fail "$mode ss rejection created HTTPS harness state"
+    cleanup_fixture "$fixture"
+    trap - EXIT
+  done
 )
 
 run_normal_native_listener_without_pid_check() (
@@ -518,6 +582,22 @@ run_binary_drift_check() (
   bash scripts/dev-https.sh down >/dev/null 2>&1 || fail "binary drift prevented safe down"
 )
 
+run_lifecycle_command_drift_down_check() (
+  local fixture output
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "lifecycle-drift setup failed: $output"
+  sed -i 's/child=\$!/child=\$! # desired-source-drift/' scripts/dev-https.sh
+  if output=$(bash scripts/dev-https.sh status 2>&1); then
+    fail 'status accepted desired lifecycle command drift'
+  fi
+  assert_contains "$output" 'effective config'
+  output=$(bash scripts/dev-https.sh down 2>&1) || \
+    fail "desired lifecycle command drift prevented safe down: $output"
+)
+
 run_partial_startup_rollback_check() (
   local fixture output pidfile pid
   fixture=$(new_fixture)
@@ -529,12 +609,42 @@ run_partial_startup_rollback_check() (
     fail "up accepted partial startup"
   fi
   assert_contains "$output" 'startup failed'
+  assert_log_line "$FAKE_MUTATIONS" 'start:server'
   for pidfile in .dev/native-https/run/*.pid; do
     [ -e "$pidfile" ] || continue
     pid=$(<"$pidfile")
     ! kill -0 "$pid" 2>/dev/null || fail "rollback left pid $pid alive"
   done
   [ ! -s "$FAKE_FORBIDDEN" ] || fail "rollback invoked a forbidden command"
+)
+
+run_identity_write_rollback_check() (
+  local fixture output foreign_pid service member
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_FAIL_IDENTITY_WRITE=server
+  cd "$fixture/repo"
+  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
+  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
+  foreign_pid=$(<"$fixture/foreign-pid")
+  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted injected identity persistence failure'
+  fi
+  assert_contains "$output" 'startup failed'
+  kill -0 "$foreign_pid" 2>/dev/null || fail 'rollback signalled an unrelated process group'
+  while IFS= read -r member; do
+    [ -n "$member" ] || continue
+    [ "$member" = "$foreign_pid" ] && continue
+    ! kill -0 "$member" 2>/dev/null || fail "identity-write rollback left owned process alive: $member"
+  done <"$fixture/all-pids"
+  for service in mock-oauth server web caddy; do
+    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "rollback retained $service PID"
+    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "rollback retained $service identity"
+    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "rollback retained $service launch evidence"
+    [ ! -e ".dev/native-https/run/$service.env" ] || fail "rollback retained $service environment"
+  done
 )
 
 run_missing_tool_check() (
@@ -556,18 +666,22 @@ main() {
   [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
   case ${DEV_HTTPS_TEST_CASE-} in
   manifest) run_happy_path_and_lifecycle_checks; return ;;
+  listener-probe) run_listener_probe_failure_checks; return ;;
   native-ports) run_normal_native_listener_without_pid_check; return ;;
   database) run_database_override_check; return ;;
   identity) run_foreign_ownership_down_check; return ;;
   identity-tamper) run_identity_field_tamper_check; return ;;
   group-drain) run_process_group_drain_check; return ;;
   binary-drift) run_binary_drift_check; return ;;
+  lifecycle-drift) run_lifecycle_command_drift_down_check; return ;;
   rollback) run_partial_startup_rollback_check; return ;;
+  identity-write-rollback) run_identity_write_rollback_check; return ;;
   '') ;;
   *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
   esac
   run_happy_path_and_lifecycle_checks
   run_foreign_listener_check
+  run_listener_probe_failure_checks
   run_normal_native_listener_without_pid_check
   run_database_override_check
   run_active_http_stack_checks
@@ -576,7 +690,9 @@ main() {
   run_identity_field_tamper_check
   run_process_group_drain_check
   run_binary_drift_check
+  run_lifecycle_command_drift_down_check
   run_partial_startup_rollback_check
+  run_identity_write_rollback_check
   run_missing_tool_check
   printf '%s\n' 'dev-https static tests: PASS'
 }
