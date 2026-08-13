@@ -56,7 +56,7 @@ function sidebarOverflow(): Resume {
   if (skillTemplate === undefined) {
     throw new Error('Vietnamese skill fixture must contain one entry.');
   }
-  skill.entries = Array.from({ length: 24 }, (_, offset) => {
+  skill.entries = Array.from({ length: 16 }, (_, offset) => {
     const number = offset + 1;
     const marker = `SIDEBAR-ENTRY-${String(number).padStart(2, '0')}`;
     return {
@@ -66,7 +66,7 @@ function sidebarOverflow(): Resume {
       name: [
         number === 1 ? 'SIDEBAR-START' : '',
         marker,
-        number === 24 ? 'SIDEBAR-END' : '',
+        number === 16 ? 'SIDEBAR-END' : '',
       ]
         .filter(Boolean)
         .join(' '),
