@@ -317,6 +317,9 @@ func TestNormalizeUsesFixedAlphaDownscaleLadder(t *testing.T) {
 }
 
 func TestNormalizationBudget(t *testing.T) {
+	if os.Getenv("ABOUTME_RUN_NORMALIZATION_BENCHMARK") != "1" {
+		t.Skip("set ABOUTME_RUN_NORMALIZATION_BENCHMARK=1 to run the controlled-cgroup normalization benchmark")
+	}
 	if helperMode := os.Getenv("ABOUTME_NORMALIZATION_BUDGET_HELPER"); helperMode != "" {
 		if helperMode == "baseline" {
 			return
@@ -430,6 +433,81 @@ func TestNormalizationBudget(t *testing.T) {
 		t.Fatalf("write resource evidence: %v", err)
 	}
 	t.Logf("wrote %d samples to %s", len(evidence.Samples), evidencePath)
+}
+
+func TestNormalizationBudgetRequiresExplicitOptIn(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("test executable: %v", err)
+	}
+	before, existedBefore := normalizationBudgetEvidenceSnapshot(t)
+
+	command := exec.CommandContext(t.Context(), executable, "-test.run=^TestNormalizationBudget$", "-test.count=1", "-test.v")
+	command.Env = normalizationBudgetSubprocessEnv(false)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ordinary normalization test invocation: %v\n%s", err, output)
+	}
+	if !bytes.Contains(output, []byte("--- SKIP: TestNormalizationBudget")) {
+		t.Fatalf("ordinary normalization test invocation did not skip:\n%s", output)
+	}
+	after, existsAfter := normalizationBudgetEvidenceSnapshot(t)
+	if existedBefore != existsAfter || !bytes.Equal(before, after) {
+		t.Fatal("ordinary normalization test invocation changed the authoritative evidence artifact")
+	}
+
+	command = exec.CommandContext(t.Context(), executable, "-test.run=^TestNormalizationBudget$", "-test.count=1", "-test.v")
+	command.Env = normalizationBudgetSubprocessEnv(true)
+	output, err = command.CombinedOutput()
+	if err == nil || !bytes.Contains(output, []byte(`unknown normalization helper mode "opt-in-probe"`)) {
+		t.Fatalf("opted-in invocation did not reach normalization benchmark behavior: err=%v\n%s", err, output)
+	}
+}
+
+func normalizationBudgetSubprocessEnv(optIn bool) []string {
+	const (
+		optInKey  = "ABOUTME_RUN_NORMALIZATION_BENCHMARK"
+		helperKey = "ABOUTME_NORMALIZATION_BUDGET_HELPER"
+	)
+	environment := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, optInKey+"=") || strings.HasPrefix(entry, helperKey+"=") {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	if optIn {
+		environment = append(environment, optInKey+"=1")
+	}
+	return append(environment, helperKey+"=opt-in-probe")
+}
+
+func normalizationBudgetEvidenceSnapshot(t *testing.T) ([]byte, bool) {
+	t.Helper()
+	manifestBytes, err := os.ReadFile(filepath.Join("testdata", "normalization-benchmark-manifest.json"))
+	if err != nil {
+		t.Fatalf("read normalization benchmark manifest: %v", err)
+	}
+	var manifest struct {
+		Protocol struct {
+			RawEvidencePath string `json:"rawEvidencePath"`
+		} `json:"protocol"`
+	}
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		t.Fatalf("decode normalization benchmark manifest: %v", err)
+	}
+	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("repository root: %v", err)
+	}
+	evidence, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(manifest.Protocol.RawEvidencePath)))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false
+	}
+	if err != nil {
+		t.Fatalf("read normalization benchmark evidence: %v", err)
+	}
+	return evidence, true
 }
 
 type normalizationMeasurement struct {

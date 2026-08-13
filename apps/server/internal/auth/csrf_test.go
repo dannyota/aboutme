@@ -49,6 +49,15 @@ func requestBody(body string) io.Reader {
 	return strings.NewReader(body)
 }
 
+type trackingCSRFBody struct {
+	reads int
+}
+
+func (body *trackingCSRFBody) Read([]byte) (int, error) {
+	body.reads++
+	return 0, io.EOF
+}
+
 // passThroughHandler is the downstream handler RequireCSRF wraps in these
 // tests: it just proves next.ServeHTTP ran.
 func passThroughHandler() http.Handler {
@@ -156,6 +165,79 @@ func TestRequireCSRF_Matrix(t *testing.T) {
 				assertCSRFRejected(t, rec)
 			}
 		})
+	}
+}
+
+// TestRequireCSRF_RejectsAmbiguousSecurityHeaders catches first-value wins
+// handling of repeated fields and Referer parsing that tolerates a folded
+// second value. Origin fallback is allowed only when Origin is absent, not when
+// it is present but empty.
+func TestRequireCSRF_RejectsAmbiguousSecurityHeaders(t *testing.T) {
+	t.Parallel()
+
+	sess := csrfTestSession(0xAE)
+	token := csrfTokenFor(sess)
+	validReferer := allowedTestOrigin + "/resume"
+
+	tests := []struct {
+		name        string
+		header      string
+		values      []string
+		useReferer  bool
+		extraHeader string
+	}{
+		{name: "repeated token", header: auth.CSRFHeaderName, values: []string{token, token}},
+		{name: "folded token", header: auth.CSRFHeaderName, values: []string{token + ", " + token}},
+		{name: "empty token", header: auth.CSRFHeaderName, values: []string{""}},
+		{name: "repeated origin", header: "Origin", values: []string{allowedTestOrigin, allowedTestOrigin}},
+		{name: "folded origin", header: "Origin", values: []string{allowedTestOrigin + ", " + allowedTestOrigin}},
+		{name: "empty origin does not fall back", header: "Origin", values: []string{""}, extraHeader: validReferer},
+		{name: "repeated referer", header: "Referer", values: []string{validReferer, validReferer}, useReferer: true},
+		{name: "folded referer", header: "Referer", values: []string{validReferer + ", " + validReferer}, useReferer: true},
+		{name: "empty referer", header: "Referer", values: []string{""}, useReferer: true},
+	}
+	middlewares := []struct {
+		name        string
+		middleware  func(string) api.Middleware
+		contentType string
+	}{
+		{name: "JSON", middleware: auth.RequireCSRF, contentType: "application/json"},
+		{name: "multipart", middleware: auth.RequireCSRFMultipart, contentType: "multipart/form-data; boundary=test"},
+	}
+
+	for _, middleware := range middlewares {
+		for _, test := range tests {
+			t.Run(middleware.name+"/"+test.name, func(t *testing.T) {
+				t.Parallel()
+
+				body := &trackingCSRFBody{}
+				req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/resume/photo", body)
+				req.Header.Set("Origin", allowedTestOrigin)
+				req.Header.Set(auth.CSRFHeaderName, token)
+				req.Header.Set("Content-Type", middleware.contentType)
+				if test.useReferer {
+					req.Header.Del("Origin")
+				}
+				req.Header.Del(test.header)
+				for _, value := range test.values {
+					req.Header.Add(test.header, value)
+				}
+				if test.extraHeader != "" {
+					req.Header.Set("Referer", test.extraHeader)
+				}
+				req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+
+				rec := httptest.NewRecorder()
+				middleware.middleware(allowedTestOrigin)(passThroughHandler()).ServeHTTP(rec, req)
+				if rec.Code != http.StatusForbidden {
+					t.Fatalf("status = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
+				}
+				assertCSRFRejected(t, rec)
+				if body.reads != 0 {
+					t.Fatalf("body reads = %d, want 0", body.reads)
+				}
+			})
+		}
 	}
 }
 
