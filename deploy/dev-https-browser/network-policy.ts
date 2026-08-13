@@ -20,3 +20,23 @@ export function isAllowedWebSocketURL(value: string): boolean {
     && url.hostname === 'localhost'
     && url.port === '20443';
 }
+
+export function isExpectedNegativeHTTPConsole(
+  message: string,
+  value: string,
+): boolean {
+  const url = parsedURL(value);
+  if (url?.origin !== ALLOWED_ORIGIN) return false;
+  if (
+    message === 'Failed to load resource: the server responded with a status of 403 ()'
+  ) {
+    return url.pathname === '/api/v1/auth/google/start'
+      && url.search === '?purpose=reauth';
+  }
+  if (
+    message === 'Failed to load resource: the server responded with a status of 401 ()'
+  ) {
+    return url.pathname === '/api/v1/me' && url.search === '';
+  }
+  return false;
+}

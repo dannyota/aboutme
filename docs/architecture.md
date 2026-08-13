@@ -1,7 +1,7 @@
 # Current-state architecture
 
 This document describes the current integration candidate, verified on
-2026-08-13. The [design](design/README.md) owns intended behavior. The
+2026-08-14. The [design](design/README.md) owns intended behavior. The
 [roadmap](plans/implementation-plan.md) owns delivery state and gates.
 
 ## Running system
@@ -28,6 +28,13 @@ Daily development runs Go, Nuxt, and Caddy as native processes at
 `http://localhost:20080`. They use the `aboutme_dev` database in the one shared
 `aboutme-test-db` container. See the
 [native development runbook](runbooks/native-development.md).
+
+Authenticated development uses a separate native stack on ports 20440–20443. It
+serves only `https://localhost:20443`, runs a deterministic local Google OpenID
+Connect mock on 20442, and still uses the shared `aboutme_dev` database. Its
+disposable pinned Playwright image imports the invocation's Caddy root into an
+isolated NSS database and writes only bounded local verdicts. It does not change
+the host trust store or use a certificate bypass.
 
 The Compose deployment has four long-lived containers plus a one-shot migration
 container. PostgreSQL is not published to the host. Caddy is the only published
@@ -126,8 +133,9 @@ orphan reconciliation.
 ## Known delivery gaps
 
 - The current Compose route serves HTTP. P9 requires the complete image-based
-  deployment at an HTTPS origin on port 443. The UAT harness must close this gap
-  before acceptance can run.
+  deployment at an HTTPS origin on port 443 with isolated data and services. The
+  native 20443 authentication harness supports development but does not close
+  this UAT gap.
 
 ## Not implemented
 
