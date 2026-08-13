@@ -70,7 +70,7 @@ function sidebarOverflow(): Resume {
       ]
         .filter(Boolean)
         .join(' '),
-      infoHtml: `<p>${marker} nội dung kiểm tra phân trang.</p>`,
+      infoHtml: `<p>Nội dung kiểm tra phân trang ${number}.</p>`,
     };
   });
   document.content = { profile, skill };
@@ -106,7 +106,7 @@ function mainOverflow(): Resume {
       ]
         .filter(Boolean)
         .join(' '),
-      description: `<p>${marker} nội dung kiểm tra phân trang bản in.</p>`,
+      description: `<p>Nội dung kiểm tra phân trang bản in ${number}.</p>`,
     };
   });
   const skillTemplate = skill.entries[0];
