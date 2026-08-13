@@ -108,12 +108,33 @@ func mustGet(t *testing.T, b media.Backend, key string) ([]byte, string) {
 	if err != nil {
 		t.Fatalf("Get(%q): %v", key, err)
 	}
-	defer body.Close()
+	defer closeExternalTestBody(t, body)
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		t.Fatalf("Get(%q) read body: %v", key, err)
 	}
 	return raw, contentType
+}
+
+func closeExternalTestBody(t *testing.T, body io.Closer) {
+	t.Helper()
+	if err := body.Close(); err != nil {
+		t.Errorf("close test body: %v", err)
+	}
+}
+
+func copyExternalTestBody(t *testing.T, destination io.Writer, source io.Reader) {
+	t.Helper()
+	if _, err := io.Copy(destination, source); err != nil {
+		t.Errorf("copy test body: %v", err)
+	}
+}
+
+func writeExternalTestBody(t *testing.T, destination io.Writer, body string) {
+	t.Helper()
+	if _, err := io.WriteString(destination, body); err != nil {
+		t.Errorf("write test body: %v", err)
+	}
 }
 
 func TestConformance_PutGetRoundTrip(t *testing.T) {
@@ -164,7 +185,7 @@ func TestConformance_GetAbsentIsNotFound(t *testing.T) {
 			t.Parallel()
 			b := bc.new(t)
 			_, _, err := b.Get(context.Background(), namespace(t)+"/absent.jpg")
-			if err != media.ErrNotFound {
+			if !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Get(absent) err = %v, want exactly ErrNotFound", err)
 			}
 		})
@@ -177,7 +198,7 @@ func TestConformance_DeleteAbsentIsNotFound(t *testing.T) {
 		t.Run(bc.name, func(t *testing.T) {
 			t.Parallel()
 			b := bc.new(t)
-			if err := b.Delete(context.Background(), namespace(t)+"/absent.jpg"); err != media.ErrNotFound {
+			if err := b.Delete(context.Background(), namespace(t)+"/absent.jpg"); !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Delete(absent) err = %v, want exactly ErrNotFound", err)
 			}
 		})
@@ -195,10 +216,10 @@ func TestConformance_DeleteThenGet(t *testing.T) {
 			if err := b.Delete(context.Background(), key); err != nil {
 				t.Fatalf("Delete: %v", err)
 			}
-			if _, _, err := b.Get(context.Background(), key); err != media.ErrNotFound {
+			if _, _, err := b.Get(context.Background(), key); !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Get after Delete err = %v, want exactly ErrNotFound", err)
 			}
-			if err := b.Delete(context.Background(), key); err != media.ErrNotFound {
+			if err := b.Delete(context.Background(), key); !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("second Delete err = %v, want exactly ErrNotFound", err)
 			}
 		})
@@ -393,7 +414,7 @@ func TestConformance_ExactSize(t *testing.T) {
 				if outcome != media.PutNotCreated || err == nil {
 					t.Errorf("%s: Put outcome = %d, err = %v, want PutNotCreated + error", tc.name, outcome, err)
 				}
-				if _, _, err := b.Get(context.Background(), key); err != media.ErrNotFound {
+				if _, _, err := b.Get(context.Background(), key); !errors.Is(err, media.ErrNotFound) {
 					t.Errorf("%s: Get after failed Put err = %v, want exactly ErrNotFound (no partial object)", tc.name, err)
 				}
 			}
@@ -425,7 +446,7 @@ func TestConformance_CancelBeforeDispatchIsNotCreated(t *testing.T) {
 			if outcome != media.PutNotCreated || !errors.Is(err, context.Canceled) {
 				t.Fatalf("Put outcome = %d, err = %v, want PutNotCreated + context.Canceled", outcome, err)
 			}
-			if _, _, err := b.Get(context.Background(), key); err != media.ErrNotFound {
+			if _, _, err := b.Get(context.Background(), key); !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Get after pre-dispatch cancel err = %v, want exactly ErrNotFound", err)
 			}
 		})
@@ -464,7 +485,7 @@ func TestConformance_CancelAfterBodyBeforeIOIsNotCreated(t *testing.T) {
 			if outcome != media.PutNotCreated || !errors.Is(err, context.Canceled) {
 				t.Fatalf("Put outcome = %d, err = %v, want PutNotCreated + context.Canceled", outcome, err)
 			}
-			if _, _, err := b.Get(context.Background(), key); err != media.ErrNotFound {
+			if _, _, err := b.Get(context.Background(), key); !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Get after pre-I/O cancel err = %v, want exactly ErrNotFound", err)
 			}
 		})
@@ -473,7 +494,7 @@ func TestConformance_CancelAfterBodyBeforeIOIsNotCreated(t *testing.T) {
 
 // TestConformance_ListPage covers stable prefix-scoped pages at the exact
 // limit, cursor advance without duplicates, update-time exposure for the
-// age gate, and neighbour isolation.
+// age gate, and neighbor isolation.
 func TestConformance_ListPage(t *testing.T) {
 	t.Parallel()
 	for _, bc := range backendCases() {
@@ -489,9 +510,9 @@ func TestConformance_ListPage(t *testing.T) {
 				want = append(want, key)
 				mustPut(t, b, key, "image/jpeg", []byte{byte(i)})
 			}
-			// A neighbour under a sibling prefix must never appear.
-			neighbour := ns + "/q/other.jpg"
-			mustPut(t, b, neighbour, "image/jpeg", []byte("n"))
+			// A neighbor under a sibling prefix must never appear.
+			neighbor := ns + "/q/other.jpg"
+			mustPut(t, b, neighbor, "image/jpeg", []byte("n"))
 
 			after := time.Now().Add(time.Hour)
 
@@ -526,7 +547,7 @@ func TestConformance_ListPage(t *testing.T) {
 					t.Errorf("prefix %q: page count = %d, want 3 (2+2+1)", prefix, pages)
 				}
 				if fmt.Sprint(got) != fmt.Sprint(want) {
-					t.Errorf("prefix %q: keys = %v, want stable ordered %v (no duplicates, no neighbours)", prefix, got, want)
+					t.Errorf("prefix %q: keys = %v, want stable ordered %v (no duplicates, no neighbors)", prefix, got, want)
 				}
 			}
 
@@ -588,10 +609,10 @@ func TestConformance_FileSegmentShadowing(t *testing.T) {
 			b := bc.new(t)
 			ns := namespace(t)
 			mustPut(t, b, ns+"/leaf", "image/jpeg", []byte("x"))
-			if _, _, err := b.Get(context.Background(), ns+"/leaf/child.jpg"); err != media.ErrNotFound {
+			if _, _, err := b.Get(context.Background(), ns+"/leaf/child.jpg"); !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Get(shadowed child) err = %v, want exactly ErrNotFound", err)
 			}
-			if err := b.Delete(context.Background(), ns+"/leaf/child.jpg"); err != media.ErrNotFound {
+			if err := b.Delete(context.Background(), ns+"/leaf/child.jpg"); !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Delete(shadowed child) err = %v, want exactly ErrNotFound", err)
 			}
 		})

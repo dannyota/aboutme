@@ -128,10 +128,10 @@ func TestS3_PutOutcomeClassification(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, _ = io.Copy(io.Discard, r.Body)
+				copyExternalTestBody(t, io.Discard, r.Body)
 				w.Header().Set("Content-Type", "application/xml")
 				w.WriteHeader(tc.status)
-				_, _ = io.WriteString(w, tc.body)
+				writeExternalTestBody(t, w, tc.body)
 			}))
 			outcome, err := b.Put(context.Background(), "resumes/x/put.jpg", "image/jpeg", bytes.NewReader([]byte("x")), 1)
 			checkPutPair(t, outcome, err)
@@ -154,12 +154,16 @@ func TestS3_PutLostResponseIsUnknown(t *testing.T) {
 	b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Read the complete body — the write may have been applied — then
 		// drop the connection without any response.
-		_, _ = io.Copy(io.Discard, r.Body)
-		conn, _, err := w.(http.Hijacker).Hijack()
+		copyExternalTestBody(t, io.Discard, r.Body)
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			panic("test response writer does not support hijacking")
+		}
+		conn, _, err := hijacker.Hijack()
 		if err != nil {
 			panic(err)
 		}
-		_ = conn.Close()
+		closeExternalTestBody(t, conn)
 	}))
 	outcome, err := b.Put(context.Background(), "resumes/x/lost.jpg", "image/jpeg", bytes.NewReader([]byte("x")), 1)
 	checkPutPair(t, outcome, err)
@@ -192,16 +196,22 @@ func TestS3_PutLostCollisionResponsePreservesWinner(t *testing.T) {
 
 			// The winner already owns the key. Model a collision without
 			// changing its bytes, then lose the 412 before it reaches the client.
-			conn, _, err := w.(http.Hijacker).Hijack()
+			hijacker, ok := w.(http.Hijacker)
+			if !ok {
+				panic("test response writer does not support hijacking")
+			}
+			conn, _, err := hijacker.Hijack()
 			if err != nil {
 				panic(err)
 			}
-			_ = conn.Close()
+			closeExternalTestBody(t, conn)
 		case http.MethodGet:
 			w.Header().Set("Content-Type", winnerContentType)
 			w.Header().Set("Content-Length", fmt.Sprint(len(winner)))
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(winner)
+			if _, writeErr := w.Write(winner); writeErr != nil {
+				t.Errorf("write winner response: %v", writeErr)
+			}
 		case http.MethodDelete:
 			deletes.Add(1)
 			w.WriteHeader(http.StatusNoContent)
@@ -308,7 +318,7 @@ func TestS3_GetClassification(t *testing.T) {
 			b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/xml")
 				w.WriteHeader(tc.status)
-				_, _ = io.WriteString(w, tc.body)
+				writeExternalTestBody(t, w, tc.body)
 			}))
 			_, _, err := b.Get(context.Background(), "resumes/x/get.jpg")
 			if err == nil {
@@ -338,7 +348,7 @@ func TestS3_DeleteClassification(t *testing.T) {
 			b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/xml")
 				w.WriteHeader(tc.status)
-				_, _ = io.WriteString(w, tc.body)
+				writeExternalTestBody(t, w, tc.body)
 			}))
 			err := b.Delete(context.Background(), "resumes/x/del.jpg")
 			if tc.wantErr == nil && err != nil {
@@ -347,7 +357,7 @@ func TestS3_DeleteClassification(t *testing.T) {
 			if tc.wantErr != nil && err == nil {
 				t.Errorf("Delete err = nil, want non-nil")
 			}
-			if errors.Is(tc.wantErr, media.ErrNotFound) && err != media.ErrNotFound {
+			if errors.Is(tc.wantErr, media.ErrNotFound) && !errors.Is(err, media.ErrNotFound) {
 				t.Errorf("Delete err = %v, want exactly ErrNotFound", err)
 			}
 		})
@@ -363,7 +373,7 @@ func TestS3_ListPagePropagatesWindow(t *testing.T) {
 	b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query.Store(r.URL.Query().Encode())
 		w.Header().Set("Content-Type", "application/xml")
-		_, _ = io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?>
+		writeExternalTestBody(t, w, `<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult><Name>stub-bucket</Name><IsTruncated>true</IsTruncated>
 <Contents><Key>resumes/a/k1.jpg</Key><LastModified>2026-08-01T00:00:00.000Z</LastModified></Contents>
 <Contents><Key>resumes/a/k2.jpg</Key><LastModified>2026-08-02T00:00:00.000Z</LastModified></Contents>
@@ -373,7 +383,10 @@ func TestS3_ListPagePropagatesWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPage: %v", err)
 	}
-	got := query.Load().(string)
+	got, ok := query.Load().(string)
+	if !ok {
+		t.Fatal("request query was not recorded")
+	}
 	for _, fragment := range []string{"list-type=2", "prefix=resumes%2Fa%2F", "start-after=resumes%2Fa%2Fk0.jpg", "max-keys=2"} {
 		if !strings.Contains(got, fragment) {
 			t.Errorf("request query %q missing %q", got, fragment)
@@ -408,7 +421,7 @@ func TestS3_ListPageRejectsContractViolations(t *testing.T) {
 		truncated bool
 		contents  string
 	}{
-		{"neighbour key", "resumes/a/", "", 2, false, object("resumes/b/photo.jpg", timestamp)},
+		{"neighbor key", "resumes/a/", "", 2, false, object("resumes/b/photo.jpg", timestamp)},
 		{"noncanonical key", "resumes/a/", "", 2, false, object("resumes/a//photo.jpg", timestamp)},
 		{"key does not advance cursor", "resumes/a/", "resumes/a/m.jpg", 2, false, object("resumes/a/a.jpg", timestamp)},
 		{"keys out of order", "resumes/a/", "", 2, false, object("resumes/a/z.jpg", timestamp) + object("resumes/a/a.jpg", timestamp)},
@@ -423,8 +436,10 @@ func TestS3_ListPageRejectsContractViolations(t *testing.T) {
 			t.Parallel()
 			b, _ := newStubBackend(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/xml")
-				_, _ = fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
-<ListBucketResult><Name>stub-bucket</Name><IsTruncated>%t</IsTruncated>%s</ListBucketResult>`, tt.truncated, tt.contents)
+				if _, writeErr := fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult><Name>stub-bucket</Name><IsTruncated>%t</IsTruncated>%s</ListBucketResult>`, tt.truncated, tt.contents); writeErr != nil {
+					t.Errorf("write list response: %v", writeErr)
+				}
 			}))
 			objects, next, err := b.ListPage(context.Background(), tt.prefix, tt.cursor, tt.limit)
 			if err == nil {
@@ -450,12 +465,12 @@ func TestS3_SecretsNeverLeak(t *testing.T) {
 	defer log.SetOutput(prev)
 
 	hostile := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
+		copyExternalTestBody(t, io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(500)
 		// Echo the credentials the request was signed with, plus the raw
 		// sentinels, into every field a lazy error path might surface.
-		_, _ = io.WriteString(w, xmlError(
+		writeExternalTestBody(t, w, xmlError(
 			"Denied-"+sentinelAccessKeyID,
 			"auth="+r.Header.Get("Authorization")+" secret="+sentinelSecret,
 		))
@@ -474,12 +489,13 @@ func TestS3_SecretsNeverLeak(t *testing.T) {
 
 	// Transport-level failure (connection refused): grab a port that is
 	// closed by the time the backend dials it.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	deadEndpoint := "http://" + listener.Addr().String()
-	_ = listener.Close()
+	closeExternalTestBody(t, listener)
 	deadBackend, err := media.NewS3(context.Background(), stubConfig(deadEndpoint))
 	if err != nil {
 		t.Fatalf("NewS3(dead endpoint): %v", err)
