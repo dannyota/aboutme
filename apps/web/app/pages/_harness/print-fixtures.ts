@@ -92,7 +92,7 @@ function mainOverflow(): Resume {
   if (workTemplate === undefined) {
     throw new Error('Vietnamese work fixture must contain one entry.');
   }
-  work.entries = Array.from({ length: 18 }, (_, offset) => {
+  work.entries = Array.from({ length: 17 }, (_, offset) => {
     const number = offset + 1;
     const marker = `MAIN-ENTRY-${String(number).padStart(2, '0')}`;
     return {
@@ -102,7 +102,7 @@ function mainOverflow(): Resume {
       jobTitle: [
         number === 1 ? 'MAIN-START' : '',
         marker,
-        number === 18 ? 'MAIN-END' : '',
+        number === 17 ? 'MAIN-END' : '',
       ]
         .filter(Boolean)
         .join(' '),
