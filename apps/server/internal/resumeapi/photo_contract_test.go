@@ -2,6 +2,7 @@ package resumeapi
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -163,6 +164,40 @@ func (b *photoDeadlineObservedBody) Read([]byte) (int, error) {
 }
 
 func (*photoDeadlineObservedBody) Close() error { return nil }
+
+type orphanSweepDelete struct {
+	key string
+	err error
+}
+
+type orphanSweepBackend struct {
+	media.Backend
+	created chan string
+	mu      sync.Mutex
+	deletes []orphanSweepDelete
+}
+
+func (b *orphanSweepBackend) Put(ctx context.Context, key, contentType string, body io.Reader, size int64) (media.PutOutcome, error) {
+	outcome, err := b.Backend.Put(ctx, key, contentType, body, size)
+	if outcome == media.PutCreated && err == nil {
+		b.created <- key
+	}
+	return outcome, err
+}
+
+func (b *orphanSweepBackend) Delete(ctx context.Context, key string) error {
+	err := b.Backend.Delete(ctx, key)
+	b.mu.Lock()
+	b.deletes = append(b.deletes, orphanSweepDelete{key: key, err: err})
+	b.mu.Unlock()
+	return err
+}
+
+func (b *orphanSweepBackend) deleteSnapshot() []orphanSweepDelete {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]orphanSweepDelete(nil), b.deletes...)
+}
 
 func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 	h := newResumeAPITestHarness(t)
@@ -584,6 +619,146 @@ func TestPhotoExpiredCandidateNeverExecutesAndIsCompensated(t *testing.T) {
 	}
 	if records != 0 {
 		t.Fatalf("idempotency records after expiry = %d", records)
+	}
+}
+
+func TestMediaOrphans(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	createdAt := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
+	commitCutoff := createdAt.Add(5 * time.Minute)
+	orphanCutoff := createdAt.Add(48 * time.Hour)
+	sweepAt := orphanCutoff.Add(time.Second)
+	if !sweepAt.After(commitCutoff) {
+		t.Fatal("test setup must cross the candidate commit cutoff before the orphan cutoff")
+	}
+
+	backend := &orphanSweepBackend{
+		Backend: h.service.blobs,
+		created: make(chan string, 1),
+	}
+	h.service.blobs = backend
+	h.service.photoRandom = bytes.NewReader(bytes.Repeat([]byte{0x07}, 16))
+	pausedBeforeExecute := make(chan struct{})
+	resumeExecution := make(chan struct{})
+	var resumeOnce sync.Once
+	defer resumeOnce.Do(func() { close(resumeExecution) })
+	clockNow := createdAt
+	var clockCalls atomic.Int32
+	h.service.clock = func() time.Time {
+		switch clockCalls.Add(1) {
+		case 1:
+			return createdAt
+		case 2:
+			close(pausedBeforeExecute)
+			<-resumeExecution
+			return clockNow
+		default:
+			return clockNow
+		}
+	}
+
+	body, contentType := photoMultipartBody(t, func(writer *multipart.Writer) {
+		part, err := writer.CreateFormFile("file", "photo.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(makePhotoPNG(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+	req, err := http.NewRequestWithContext(h.ctx, http.MethodPost,
+		h.server.URL+fmt.Sprintf("/api/v1/resumes/%s/photo", created.ID), bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(h.cookie)
+	req.Header.Set("Origin", resumeAPITestOrigin)
+	req.Header.Set(auth.CSRFHeaderName, h.csrfToken)
+	req.Header.Set("Idempotency-Key", uuid.NewString())
+	req.Header.Set("If-Match", `"r1"`)
+	req.Header.Set("Content-Type", contentType)
+	type requestResult struct {
+		response *http.Response
+		err      error
+	}
+	responseCh := make(chan requestResult, 1)
+	go func() {
+		response, requestErr := h.client.Do(req)
+		responseCh <- requestResult{response: response, err: requestErr}
+	}()
+
+	select {
+	case <-pausedBeforeExecute:
+	case result := <-responseCh:
+		if result.response != nil {
+			_ = result.response.Body.Close()
+		}
+		t.Fatalf("upload returned before candidate pause: %v", result.err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("upload did not pause before candidate execution")
+	}
+
+	var candidateKey string
+	select {
+	case candidateKey = <-backend.created:
+	case <-time.After(time.Second):
+		t.Fatal("proved-created candidate key was not recorded")
+	}
+	objects, _, err := backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
+	if err != nil || len(objects) != 1 || objects[0].Key != candidateKey {
+		t.Fatalf("candidate before sweep = %#v err=%v, want only %q", objects, err, candidateKey)
+	}
+
+	clockNow = sweepAt
+	if err := backend.Delete(h.ctx, candidateKey); err != nil {
+		t.Fatalf("simulate orphan sweep delete: %v", err)
+	}
+	objects, _, err = backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
+	if err != nil || len(objects) != 0 {
+		t.Fatalf("objects after sweep = %#v err=%v, want none", objects, err)
+	}
+	resumeOnce.Do(func() { close(resumeExecution) })
+
+	var result requestResult
+	select {
+	case result = <-responseCh:
+	case <-time.After(10 * time.Second):
+		t.Fatal("upload did not return after resuming past the sweep cutoff")
+	}
+	if result.err != nil {
+		t.Fatalf("upload request: %v", result.err)
+	}
+	response := snapshotHTTPResponse(t, result.response)
+	if response.status != http.StatusInternalServerError {
+		t.Fatalf("expired swept candidate response = %d body=%s", response.status, response.body)
+	}
+
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Revision != created.Revision || stored.Doc.PersonalDetails.Photo != nil {
+		t.Fatalf("stored after sweep revision=%d photo=%#v", stored.Revision, stored.Doc.PersonalDetails.Photo)
+	}
+	var records, jobs int
+	if err := h.pool.QueryRow(h.ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1`, h.userID).Scan(&records); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.pool.QueryRow(h.ctx, `SELECT count(*) FROM media_deletion_jobs WHERE resume_id = $1`, created.ID).Scan(&jobs); err != nil {
+		t.Fatal(err)
+	}
+	if records != 0 || jobs != 0 {
+		t.Fatalf("database state after sweep records=%d deletion_jobs=%d, want zero", records, jobs)
+	}
+	objects, _, err = backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
+	if err != nil || len(objects) != 0 {
+		t.Fatalf("objects after resumed request = %#v err=%v, want none", objects, err)
+	}
+	deletes := backend.deleteSnapshot()
+	if len(deletes) != 2 || deletes[0].key != candidateKey || deletes[0].err != nil ||
+		deletes[1].key != candidateKey || !errors.Is(deletes[1].err, media.ErrNotFound) {
+		t.Fatalf("candidate deletions = %#v, want sweep success then compensation not-found", deletes)
 	}
 }
 

@@ -59,6 +59,51 @@ func TestEveryMutation_CSRFMatrix(t *testing.T) {
 	assertSecurityMatrixStateUnchanged(t, h, beforeResumes, beforeRecords, beforeObjects)
 }
 
+func TestIdempotency_CSRFRetryReusesKey(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	key := uuid.NewString()
+	body := `{"title":"CSRF retry"}`
+
+	request := func(token string) testHTTPResponse {
+		t.Helper()
+		req, err := http.NewRequestWithContext(h.ctx, http.MethodPost, h.server.URL+apiResumePath, strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("build create request: %v", err)
+		}
+		req.AddCookie(h.cookie)
+		req.Header.Set("Origin", resumeAPITestOrigin)
+		req.Header.Set(auth.CSRFHeaderName, token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Idempotency-Key", key)
+		req.Header.Set(wireVersionHeader, "2")
+		response, err := h.client.Do(req)
+		if err != nil {
+			t.Fatalf("perform create request: %v", err)
+		}
+		return snapshotHTTPResponse(t, response)
+	}
+
+	rejected := request("wrong")
+	assertRouteError(t, rejected, http.StatusForbidden, "csrf_rejected")
+	if resumes := countResumeTestRows(t, h, "resumes"); resumes != 0 {
+		t.Fatalf("rejected request created %d resumes, want 0", resumes)
+	}
+	if records := countResumeTestRows(t, h, "idempotency_records"); records != 0 {
+		t.Fatalf("rejected request created %d idempotency records, want 0", records)
+	}
+
+	accepted := request(h.csrfToken)
+	if accepted.status != http.StatusCreated {
+		t.Fatalf("valid retry status = %d, want 201 (body=%s)", accepted.status, accepted.body)
+	}
+	if resumes := countResumeTestRows(t, h, "resumes"); resumes != 1 {
+		t.Fatalf("valid retry left %d resumes, want exactly 1", resumes)
+	}
+	if records := countResumeTestRows(t, h, "idempotency_records"); records != 1 {
+		t.Fatalf("valid retry left %d idempotency records, want exactly 1", records)
+	}
+}
+
 func TestEveryMutation_MediaTypeMatrix(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	beforeResumes := h.snapshotUserTable(t, "resumes")

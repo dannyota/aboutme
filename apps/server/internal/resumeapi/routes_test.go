@@ -188,7 +188,7 @@ func TestRouteInventoryEqualsOpenAPI(t *testing.T) {
 	}
 }
 
-func TestRouteInventory_RealRouterSecurityAndNoConstructionSentinels(t *testing.T) {
+func TestNoRouteAnswers501(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 
 	for _, route := range registeredRoutes() {

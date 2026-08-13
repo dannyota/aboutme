@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 )
@@ -55,7 +56,8 @@ func requireCSRF(allowedOrigin string, mediaTypeAllowed func(http.Header) bool,
 				return
 			}
 
-			if !validCSRFToken(r.Header.Get(CSRFHeaderName), sess.CSRFSecret) {
+			token, tokenOK := singletonSecurityHeader(r.Header, CSRFHeaderName)
+			if !tokenOK || !validCSRFToken(token, sess.CSRFSecret) {
 				rejectCSRF(w)
 				return
 			}
@@ -97,12 +99,16 @@ func isMutatingMethod(method string) bool {
 // originAllowed requires exact Origin, with exact Referer origin fallback. A
 // missing or malformed value fails closed. See docs/design/security.md.
 func originAllowed(r *http.Request, allowedOrigin string) bool {
-	if origin := r.Header.Get("Origin"); origin != "" {
+	origin, originPresent, originOK := optionalSingletonSecurityHeader(r.Header, "Origin")
+	if originPresent {
+		if !originOK {
+			return false
+		}
 		return origin == allowedOrigin
 	}
 
-	referer := r.Header.Get("Referer")
-	if referer == "" {
+	referer, refererOK := singletonSecurityHeader(r.Header, "Referer")
+	if !refererOK {
 		return false
 	}
 	u, err := url.Parse(referer)
@@ -110,6 +116,22 @@ func originAllowed(r *http.Request, allowedOrigin string) bool {
 		return false
 	}
 	return u.Scheme+"://"+u.Host == allowedOrigin
+}
+
+func singletonSecurityHeader(header http.Header, name string) (string, bool) {
+	value, present, ok := optionalSingletonSecurityHeader(header, name)
+	return value, present && ok
+}
+
+func optionalSingletonSecurityHeader(header http.Header, name string) (string, bool, bool) {
+	values := header.Values(name)
+	if len(values) == 0 {
+		return "", false, true
+	}
+	if len(values) != 1 || values[0] == "" || strings.Contains(values[0], ",") {
+		return "", true, false
+	}
+	return values[0], true, true
 }
 
 // hasBody treats an unknown Content-Length and any transfer encoding as a body.
