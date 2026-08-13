@@ -1,6 +1,12 @@
 // @vitest-environment node
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -47,6 +53,7 @@ describe('build-only renderer harness', () => {
     'is present only in the isolated harness build',
     { timeout: 300_000 },
     () => {
+      rmSync(resolve(webRoot, '.nuxt'), { force: true, recursive: true });
       build(true);
 
       const harnessServer = resolve(outputRoot, 'harness/server');
