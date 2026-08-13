@@ -53,7 +53,11 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
   const response = await page.goto('/login');
   expect(response?.headers()['content-security-policy']).toBe(HTML_CSP);
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-  await expect(page.locator('#__nuxt')).toHaveAttribute('data-v-app', '');
+  await expect.poll(() => page.evaluate(() =>
+    Boolean((document.getElementById('__nuxt') as HTMLElement & {
+      __vue_app__?: unknown;
+    } | null)?.__vue_app__),
+  )).toBe(true);
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
