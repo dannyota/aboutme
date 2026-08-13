@@ -6,10 +6,11 @@ import EntryHeader from '../primitives/EntryHeader.vue';
 import RichText from '../primitives/RichText.vue';
 import SectionHeading from '../primitives/SectionHeading.vue';
 
-defineProps<{
+withDefaults(defineProps<{
   section: Extract<Section, { sectionType: 'project' }>;
   dateFormat: Customization['dateFormat'];
-}>();
+  renderPart?: 'all' | 'heading' | 'entry';
+}>(), { renderPart: 'all' });
 </script>
 
 <template>
@@ -18,23 +19,26 @@ defineProps<{
     class="resume-section"
   >
     <SectionHeading
+      v-if="renderPart !== 'entry'"
       :display-name="section.displayName"
       :icon-key="section.iconKey"
     />
-    <article
-      v-for="entry in section.entries.filter(candidate => !candidate.isHidden)"
-      :key="entry.id"
-      class="entry"
-    >
-      <EntryHeader
-        :title="entry.title"
-        :title-link="entry.link || undefined"
-        :meta="entry.dates ? [formatDateRange(entry.dates, dateFormat)] : []"
-      />
-      <RichText
-        v-if="entry.description"
-        :html="entry.description"
-      />
-    </article>
+    <template v-if="renderPart !== 'heading'">
+      <article
+        v-for="entry in section.entries.filter(item => !item.isHidden)"
+        :key="entry.id"
+        class="entry"
+      >
+        <EntryHeader
+          :title="entry.title"
+          :title-link="entry.link || undefined"
+          :meta="entry.dates ? [formatDateRange(entry.dates, dateFormat)] : []"
+        />
+        <RichText
+          v-if="entry.description"
+          :html="entry.description"
+        />
+      </article>
+    </template>
   </section>
 </template>

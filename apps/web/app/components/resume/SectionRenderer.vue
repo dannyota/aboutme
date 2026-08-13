@@ -11,11 +11,12 @@ import ProjectSection from './sections/ProjectSection.vue';
 import SkillSection from './sections/SkillSection.vue';
 import WorkSection from './sections/WorkSection.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   section: Section;
   dateFormat: Customization['dateFormat'];
   sectionDisplay: Customization['sectionDisplay'];
-}>();
+  renderPart?: 'all' | 'heading' | 'entry';
+}>(), { renderPart: 'all' });
 
 const assertNever = (section: never): never => {
   const sectionType = (section as { sectionType?: unknown }).sectionType;
@@ -29,43 +30,52 @@ type SectionView = {
 
 const view = computed<SectionView>(() => {
   const section = props.section;
+  const renderPart = props.renderPart;
   switch (section.sectionType) {
     case 'profile':
-      return { component: ProfileSection, props: { section } };
+      return { component: ProfileSection, props: { section, renderPart } };
     case 'work':
       return {
         component: WorkSection,
-        props: { section, dateFormat: props.dateFormat },
+        props: { section, dateFormat: props.dateFormat, renderPart },
       };
     case 'education':
       return {
         component: EducationSection,
-        props: { section, dateFormat: props.dateFormat },
+        props: { section, dateFormat: props.dateFormat, renderPart },
       };
     case 'skill':
       return {
         component: SkillSection,
-        props: { section, displayStyle: props.sectionDisplay.skill.style },
+        props: {
+          section,
+          displayStyle: props.sectionDisplay.skill.style,
+          renderPart,
+        },
       };
     case 'language':
       return {
         component: LanguageSection,
-        props: { section, displayStyle: props.sectionDisplay.language.style },
+        props: {
+          section,
+          displayStyle: props.sectionDisplay.language.style,
+          renderPart,
+        },
       };
     case 'certificate':
       return {
         component: CertificateSection,
-        props: { section, dateFormat: props.dateFormat },
+        props: { section, dateFormat: props.dateFormat, renderPart },
       };
     case 'project':
       return {
         component: ProjectSection,
-        props: { section, dateFormat: props.dateFormat },
+        props: { section, dateFormat: props.dateFormat, renderPart },
       };
     case 'custom':
       return {
         component: CustomSection,
-        props: { section, dateFormat: props.dateFormat },
+        props: { section, dateFormat: props.dateFormat, renderPart },
       };
     default:
       return assertNever(section);

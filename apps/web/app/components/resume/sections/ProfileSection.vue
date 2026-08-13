@@ -4,7 +4,10 @@ import type { Section } from '@aboutme/schema';
 import RichText from '../primitives/RichText.vue';
 import SectionHeading from '../primitives/SectionHeading.vue';
 
-defineProps<{ section: Extract<Section, { sectionType: 'profile' }> }>();
+withDefaults(defineProps<{
+  section: Extract<Section, { sectionType: 'profile' }>;
+  renderPart?: 'all' | 'heading' | 'entry';
+}>(), { renderPart: 'all' });
 </script>
 
 <template>
@@ -13,18 +16,21 @@ defineProps<{ section: Extract<Section, { sectionType: 'profile' }> }>();
     class="resume-section"
   >
     <SectionHeading
+      v-if="renderPart !== 'entry'"
       :display-name="section.displayName"
       :icon-key="section.iconKey"
     />
-    <article
-      v-for="entry in section.entries.filter(candidate => !candidate.isHidden)"
-      :key="entry.id"
-      class="entry"
-    >
-      <RichText
-        v-if="entry.text"
-        :html="entry.text"
-      />
-    </article>
+    <template v-if="renderPart !== 'heading'">
+      <article
+        v-for="entry in section.entries.filter(item => !item.isHidden)"
+        :key="entry.id"
+        class="entry"
+      >
+        <RichText
+          v-if="entry.text"
+          :html="entry.text"
+        />
+      </article>
+    </template>
   </section>
 </template>

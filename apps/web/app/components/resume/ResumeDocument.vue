@@ -3,6 +3,7 @@ import type { Resume } from '@aboutme/schema';
 import { computed, type CSSProperties } from 'vue';
 
 import LayoutColumns from './LayoutColumns.vue';
+import PagedResume from './PagedResume.vue';
 import {
   type RenderContext,
   resolveRenderModel,
@@ -24,7 +25,13 @@ const rootStyle = computed<CSSProperties>(() => ({
 </script>
 
 <template>
+  <PagedResume
+    v-if="context.mode === 'paged'"
+    :document="document"
+    :context="context"
+  />
   <article
+    v-else
     class="resume-document"
     :lang="model.lng"
     :style="rootStyle"
@@ -40,7 +47,7 @@ const rootStyle = computed<CSSProperties>(() => ({
   </article>
 </template>
 
-<style scoped>
+<style>
 .resume-document {
   box-sizing: border-box;
   min-height: 100%;
@@ -52,83 +59,83 @@ const rootStyle = computed<CSSProperties>(() => ({
   line-height: var(--lh-body);
 }
 
-.resume-document :deep(*) {
+.resume-document * {
   box-sizing: border-box;
 }
 
-.resume-document :deep(a) {
+.resume-document a {
   color: var(--color-link);
   text-decoration: underline;
 }
 
-.resume-document :deep(.resume-header) {
+.resume-document .resume-header {
   margin-block-end: var(--gap-section);
   break-inside: avoid;
 }
 
-.resume-document :deep(.resume-photo) {
+.resume-document .resume-photo {
   width: var(--photo-size);
   height: var(--photo-size);
   border-radius: var(--photo-radius);
 }
 
-.resume-document :deep(.resume-name) {
+.resume-document .resume-name {
   margin: 0;
   color: var(--color-heading);
   font-size: var(--fs-name);
   line-height: var(--lh-heading);
 }
 
-.resume-document :deep(.resume-headline) {
+.resume-document .resume-headline {
   margin: 0;
   color: var(--color-body);
   font-size: var(--fs-headline);
 }
 
-.resume-document :deep(.resume-details) {
+.resume-document .resume-details {
   display: flex;
   gap: var(--gap-inline);
 }
 
-.resume-document :deep(.details-inline) {
+.resume-document .details-inline {
   flex-flow: row wrap;
   justify-content: inherit;
 }
 
-.resume-document :deep(.details-stacked) {
+.resume-document .details-stacked {
   flex-direction: column;
   gap: var(--gap-block);
 }
 
-.resume-document :deep(.contact-chip) {
+.resume-document .contact-chip {
   display: inline-flex;
   gap: 0.25em;
   align-items: center;
 }
 
-.resume-document :deep(.resume-icon) {
+.resume-document .resume-icon {
   width: var(--icon-size);
   height: var(--icon-size);
   flex: none;
 }
 
-.layout-two-columns {
+.resume-document .layout-two-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--sidebar-ratio);
   gap: var(--column-gutter);
 }
 
-.resume-sidebar {
+.resume-document .resume-sidebar {
   min-width: 0;
   background: var(--color-surface);
 }
 
-.resume-document :deep(.resume-section) {
+.resume-document .resume-section {
   margin-block-end: var(--gap-section);
   break-inside: auto;
 }
 
-.resume-document :deep(.section-heading) {
+.resume-document .section-heading {
   display: flex;
   gap: 0.35em;
   align-items: center;
@@ -139,7 +146,7 @@ const rootStyle = computed<CSSProperties>(() => ({
   break-after: avoid;
 }
 
-.resume-document :deep(.section-heading h2) {
+.resume-document .section-heading h2 {
   margin: 0;
   font-size: var(--fs-heading);
   line-height: var(--lh-heading);
@@ -147,43 +154,43 @@ const rootStyle = computed<CSSProperties>(() => ({
   text-transform: var(--heading-transform);
 }
 
-.resume-document :deep(.entry) {
+.resume-document .entry {
   margin-block-end: var(--gap-entry);
   break-inside: auto;
 }
 
-.resume-document :deep(.entry-header) {
+.resume-document .entry-header {
   break-inside: avoid;
   break-after: avoid;
 }
 
-.resume-document :deep(.entry-title) {
+.resume-document .entry-title {
   color: var(--color-heading);
   font-size: var(--fs-title);
   font-weight: 700;
 }
 
-.resume-document :deep(.entry-subtitle) {
+.resume-document .entry-subtitle {
   font-size: var(--fs-subtitle);
 }
 
-.resume-document :deep(.entry-meta) {
+.resume-document .entry-meta {
   color: var(--color-meta);
   font-size: var(--fs-meta);
 }
 
-.resume-document :deep(.entry-body p),
-.resume-document :deep(.entry-body li) {
+.resume-document .entry-body p,
+.resume-document .entry-body li {
   orphans: 2;
   widows: 2;
 }
 
-.resume-document :deep(.entry-body li),
-.resume-document :deep(.level-widget) {
+.resume-document .entry-body li,
+.resume-document .level-widget {
   break-inside: avoid;
 }
 
-.resume-document :deep(.level-tag) {
+.resume-document .level-tag {
   display: inline-block;
   padding: var(--tag-padding);
   color: var(--color-on-accent);
@@ -191,7 +198,7 @@ const rootStyle = computed<CSSProperties>(() => ({
   border-radius: var(--tag-radius);
 }
 
-.resume-document :deep(.level-track) {
+.resume-document .level-track {
   display: block;
   width: 100%;
   height: var(--bar-height);
@@ -200,25 +207,25 @@ const rootStyle = computed<CSSProperties>(() => ({
   border-radius: var(--bar-radius);
 }
 
-.resume-document :deep(.level-fill) {
+.resume-document .level-fill {
   display: block;
   height: 100%;
   background: var(--color-accent-solid);
 }
 
-.resume-document :deep(.level-dots) {
+.resume-document .level-dots {
   display: inline-flex;
   gap: var(--dot-gap);
 }
 
-.resume-document :deep(.level-dot) {
+.resume-document .level-dot {
   width: var(--dot-size);
   height: var(--dot-size);
   background: var(--color-track);
   border-radius: 50%;
 }
 
-.resume-document :deep(.level-dot.filled) {
+.resume-document .level-dot.filled {
   background: var(--color-accent-solid);
 }
 </style>
