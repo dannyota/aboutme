@@ -371,6 +371,24 @@ describe('pure resume renderer', () => {
       ).toBe('@page {\n  size: 8.5in 11in;\n  margin: 12mm 18mm;\n}');
     });
 
+  it('removes screen padding only on an explicit print surface', () => {
+    const source = readFileSync(
+      'app/components/resume/ResumeDocument.vue',
+      'utf8',
+    );
+    const printReset = new RegExp([
+      '@media\\s+print\\s*\\{[\\s\\S]*body\\.resume-print\\s*\\{',
+      '[^}]*margin:\\s*0;[^}]*padding:\\s*0;[^}]*\\}[\\s\\S]*',
+      'body\\.resume-print\\s+\\.resume-document\\s*\\{',
+      '[^}]*padding:\\s*0;[^}]*\\}',
+    ].join(''));
+    expect(source).toMatch(printReset);
+    expect(source).toMatch(new RegExp([
+      '\\.resume-document\\s*\\{[^}]*padding:\\s*',
+      'var\\(--page-margin-y\\)\\s+var\\(--page-margin-x\\);',
+    ].join(''), 's'));
+  });
+
   it(
     'dispatches every supported section type and rejects an unknown one',
     async () => {

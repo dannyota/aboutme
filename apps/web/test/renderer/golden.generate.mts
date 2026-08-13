@@ -105,6 +105,13 @@ export function verifyFixedPhoto() {
   if (pngSignature !== '89504e470d0a1a0a') {
     throw new Error('Fixed photo data does not decode to a PNG.');
   }
+  if (
+    bytes.subarray(12, 16).toString('ascii') !== 'IHDR'
+    || bytes.readUInt32BE(16) < 192
+    || bytes.readUInt32BE(20) < 192
+  ) {
+    throw new Error('Fixed photo must be at least 192 by 192 pixels.');
+  }
   const hash = createHash('sha256').update(bytes).digest('hex');
   if (hash !== FIXED_PHOTO_SHA256) {
     throw new Error(
