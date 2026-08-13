@@ -1,7 +1,7 @@
 # Phase 3 — Renderer, sanitizer, templates, and fonts
 
-Status: **Revision 6, candidate** (2026-08-13). Implementation is complete;
-fresh review and phase gates remain.
+Status: **Revision 7, complete** (2026-08-13). Implementation, fresh review, and
+phase gates have passed.
 
 This phase builds the pure Vue resume renderer, both display pagination modes,
 the shared sanitizer implementations, self-hosted font catalog, template
@@ -30,21 +30,21 @@ ownership follows the exclusive windows below.
 
 ## Task index
 
-| Task | Deliverable                                                 | Tier   | State   |
-| ---- | ----------------------------------------------------------- | ------ | ------- |
-| 0    | Batch pinned web dependencies                               | Normal | Landed  |
-| 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Landed  |
-| 2    | Go sanitizer package                                        | High   | Landed  |
-| 3    | Client DOMPurify wrapper and agreement tests                | High   | Landed  |
-| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Landed  |
-| 5B   | Immutable document v2 font catalog and converters           | High   | Landed  |
-| 6    | Pure renderer in continuous mode                            | High   | Landed  |
-| 7    | Pure pagination engine and editor paged wrapper             | High   | Landed  |
-| 8    | Preset registry, validation, and apply semantics            | Normal | Landed  |
-| 9    | Deterministic HTML golden harness                           | Normal | Landed  |
-| 10   | Renderer import and nondeterminism lint rules               | Normal | Landed  |
-| 11   | Pinned-browser screenshot, offline-font, sanitizer, CSP run | High   | Landed  |
-| Gate | Phase review and exit checklist                             | —      | Pending |
+| Task | Deliverable                                                 | Tier   | State  |
+| ---- | ----------------------------------------------------------- | ------ | ------ |
+| 0    | Batch pinned web dependencies                               | Normal | Landed |
+| 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Landed |
+| 2    | Go sanitizer package                                        | High   | Landed |
+| 3    | Client DOMPurify wrapper and agreement tests                | High   | Landed |
+| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Landed |
+| 5B   | Immutable document v2 font catalog and converters           | High   | Landed |
+| 6    | Pure renderer in continuous mode                            | High   | Landed |
+| 7    | Pure pagination engine and editor paged wrapper             | High   | Landed |
+| 8    | Preset registry, validation, and apply semantics            | Normal | Landed |
+| 9    | Deterministic HTML golden harness                           | Normal | Landed |
+| 10   | Renderer import and nondeterminism lint rules               | Normal | Landed |
+| 11   | Pinned-browser screenshot, offline-font, sanitizer, CSP run | High   | Landed |
+| Gate | Phase review and exit checklist                             | —      | Passed |
 
 Task 4's independent suites are folded into their owning tasks; the required
 cases live in [adversarial coverage](adversarial-coverage.md).
@@ -86,8 +86,8 @@ graph TD
     T11 --> G
 ```
 
-T0 through T11 have landed. The remaining work is the fresh integrated review
-and the unchanged-candidate phase gate.
+T0 through T11 and the phase gate have landed. Downstream production read and
+print integrations remain with P5A and P7A.
 
 ## Exclusive shared-file windows
 
