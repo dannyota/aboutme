@@ -389,5 +389,18 @@ describe('settings privileged OAuth starts (adversarial)', () => {
       expect(page.get('[data-testid="link-error"]').text(), authorizeUrl)
         .not.toBe('');
     }
+
+    window.happyDOM.setURL(
+      'https://accounts.google.com/app/settings/sessions',
+    );
+    respondToStart = () => ({
+      data: {
+        authorizeUrl: 'https://accounts.google.com/__uat/oauth/google/authorize',
+      },
+    });
+    vi.mocked(navigateTo).mockClear();
+    await settleClick(page, 'Sign in again with google');
+    expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    expect(page.get('[data-testid="link-error"]').text()).not.toBe('');
   });
 });
