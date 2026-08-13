@@ -221,7 +221,7 @@ onMounted(async () => {
   >
     <div
       class="harness-paper"
-      :style="paperStyle"
+      :style="printFixture ? undefined : paperStyle"
     >
       <ClientOnly v-if="mode === 'paged'">
         <ResumeDocument
@@ -257,5 +257,12 @@ body {
 .harness-corpus {
   min-height: 100vh;
   background: #fff;
+}
+
+@media print {
+  html,
+  body.resume-print {
+    background: #fff;
+  }
 }
 </style>

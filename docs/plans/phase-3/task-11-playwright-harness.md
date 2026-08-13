@@ -42,7 +42,7 @@ web-e2e: ## Renderer visual regression + browser corpus (pinned container, AMD64
 		podman run --rm --platform linux/amd64 --network=host \
 	   --security-opt label=disable -v $(PWD)/$(WEB_E2E_SOURCE_TAR):/candidate.tar:ro \
 	   -v $(PWD)/$(WEB_E2E_RESULT_ROOT)/compare:/results:rw \
-	   -e TZ=UTC -e LANG=en_US.UTF-8 -e LC_ALL=en_US.UTF-8 \
+	   -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
 	   -e PLAYWRIGHT_RESULTS_DIR=/results \
    -w /tmp/aboutme/apps/web \
    mcr.microsoft.com/playwright:<pinned-version>@sha256:<digest> \
@@ -76,10 +76,12 @@ production ARM64 image as a separate launch gate.
       version, resolve and verify its AMD64 image digest and Chrome executable,
       then replace every placeholder above. Record `uname -m` on the host and
       inside the container and require `x86_64` in both; a platform flag without
-      a native architecture is a failure. Inside the image, require
-      `en_US.UTF-8` in `locale -a` and prove `TZ`, `LANG`, and `LC_ALL` have the
-      exact values passed by the recipe; an unavailable locale is a blocking
-      image finding, not permission to fall back. Expand `web-e2e-update` into a
+      a native architecture is a failure. Inside the image, require `C.utf8` in
+      `locale -a`, require `locale charmap` to report `UTF-8`, and prove `TZ`,
+      `LANG`, and `LC_ALL` have the exact values passed by the recipe. The
+      pinned Noble image has no `en_US.UTF-8` locale data, so the recipe uses
+      its installed UTF-8 locale as `C.UTF-8` while Playwright keeps the browser
+      context fixed to `locale: 'en-US'`. Expand `web-e2e-update` into a
       complete recipe identical to `web-e2e` except for the explicit
       `--update-snapshots` flag and its distinct `<commit>/<run-id>/update`
       mount. Hand the integration owner both complete recipes; no placeholder or
@@ -164,8 +166,8 @@ builds with the flag absent into a different output directory and serves on
 `127.0.0.1:20092`; port 20091 is reserved by P2B's retained test-S3 service.
 `nuxt.config.ts` owns the exact distinct build and Nitro output paths. Neither
 server may reuse another build's output. The container environment fixes
-`TZ=UTC`, `LANG=en_US.UTF-8`, and `LC_ALL=en_US.UTF-8` for installation, build,
-both servers, Playwright, PDF generation, and rasterization. The config fixes
+`TZ=UTC`, `LANG=C.UTF-8`, and `LC_ALL=C.UTF-8` for installation, build, both
+servers, Playwright, PDF generation, and rasterization. The config fixes
 `retries: 0`, `workers: 1`, `fullyParallel: false`, and
 `webServer.reuseExistingServer: false`. It also defines a fixed `use:` context
 (`timezoneId: 'UTC'` — the same value `print.md` §7 pins as `TZ=UTC` for the
@@ -225,13 +227,12 @@ still owns the production `/print` route and worker.
 The PDF call is fixed to `preferCSSPageSize: true`, `printBackground: true`,
 `displayHeaderFooter: false`, `scale: 1`, and zero top/right/bottom/left job
 margins so CSS `@page` wins. Each case runs alone with a 20-second hard timeout,
-`TZ=UTC`, `LANG=en_US.UTF-8`, `LC_ALL=en_US.UTF-8`, device scale 1, reduced
-motion, and the full print launch-argument set. Before printing, it awaits the
-selected face, fallback, `document.fonts.ready`, and successful decode of every
-image. Timeout kills the browser process group and fails without writing a
-baseline. Raster generation is deterministic and remains inside the disposable
-container; only the update target's ignored output mount can receive candidate
-pages.
+`TZ=UTC`, `LANG=C.UTF-8`, `LC_ALL=C.UTF-8`, device scale 1, reduced motion, and
+the full print launch-argument set. Before printing, it awaits the selected
+face, fallback, `document.fonts.ready`, and successful decode of every image.
+Timeout kills the browser process group and fails without writing a baseline.
+Raster generation is deterministic and remains inside the disposable container;
+only the update target's ignored output mount can receive candidate pages.
 
 Harness page contract:
 `/_harness/render?fixture=<id>&template=<id>&mode=<m>&font=<catalog-id>` renders

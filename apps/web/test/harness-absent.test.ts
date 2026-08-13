@@ -42,17 +42,6 @@ function readTextTree(root: string): string {
   return contents.join('\n');
 }
 
-function readApplicationBundles(root: string): string {
-  return [
-    resolve(root, 'public/_nuxt'),
-    resolve(root, 'server/chunks/build'),
-    resolve(root, 'server/chunks/virtual'),
-  ]
-    .filter(existsSync)
-    .map(readTextTree)
-    .join('\n');
-}
-
 describe('build-only renderer harness', () => {
   it(
     'is present only in the isolated harness build',
@@ -63,7 +52,7 @@ describe('build-only renderer harness', () => {
       const harnessServer = resolve(outputRoot, 'harness/server');
       expect(existsSync(join(harnessServer, 'index.mjs'))).toBe(true);
       const harnessOutput = resolve(outputRoot, 'harness');
-      const harnessBytes = readApplicationBundles(harnessOutput);
+      const harnessBytes = readTextTree(harnessOutput);
       const harnessRoutes = readFileSync(
         resolve(harnessServer, 'chunks/virtual/entry.mjs'),
         'utf8',
@@ -82,7 +71,7 @@ describe('build-only renderer harness', () => {
       build(false);
 
       expect(existsSync(resolve(outputRoot, 'harness'))).toBe(false);
-      const normalBytes = readApplicationBundles(outputRoot);
+      const normalBytes = readTextTree(outputRoot);
       expect(normalBytes).toContain('/login');
       expect(normalBytes).not.toContain('/_harness');
       expect(normalBytes).not.toContain(
@@ -93,4 +82,18 @@ describe('build-only renderer harness', () => {
       expect(normalBytes).not.toContain('js-scheme-bare');
     },
   );
+
+  it('removes screen paper geometry and backdrop from print output', () => {
+    const source = readFileSync(
+      resolve(webRoot, 'app/pages/_harness/render.vue'),
+      'utf8',
+    );
+    expect(source).toContain(
+      ':style="printFixture ? undefined : paperStyle"',
+    );
+    expect(source).toMatch(new RegExp([
+      '@media\\s+print\\s*\\{[\\s\\S]*html',
+      '[\\s\\S]*body\\.resume-print\\s*\\{[^}]*background:\\s*#fff;',
+    ].join('')));
+  });
 });
