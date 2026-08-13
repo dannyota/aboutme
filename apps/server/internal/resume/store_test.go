@@ -65,8 +65,12 @@ func newIntegrationStore(t *testing.T) (*resume.Store, *store.Queries, *store.Po
 // transaction_test.go convention) only needs to be globally unique, never
 // reproducible -- nothing asserts against its value.
 func createTestUser(t *testing.T, q *store.Queries) uuid.UUID {
+	return createTestUserWithContext(context.Background(), t, q)
+}
+
+func createTestUserWithContext(ctx context.Context, t *testing.T, q *store.Queries) uuid.UUID {
 	t.Helper()
-	u, err := q.CreateUser(context.Background(), store.CreateUserParams{
+	u, err := q.CreateUser(ctx, store.CreateUserParams{
 		Email: uuid.NewString() + "@example.com",
 		Name:  "Test User",
 	})

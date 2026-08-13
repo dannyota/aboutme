@@ -53,8 +53,9 @@ re-implemented here.
       [draft policy](../../design/data.md#draft-and-publish-validation));
       deleting an unknown entry id → `404` with **no** revision bump and no
       idempotency record; a replayed delete returns the stored response.
-- [ ] **Step 3: failing section-metadata tests.** `displayName` and `iconKey`
-      set, cleared to `""`, and left absent preserve the
+- [ ] **Step 3: failing section-metadata tests.** `displayName` sets or clears
+      to `""`; `iconKey` sets or clears with `null`; leaving either absent
+      preserves the
       [aggregate's absence rule](../../design/data.md#resume-aggregate);
       `entryOrder` reorders entries and rejects a permutation that adds, drops,
       or duplicates an id with `422`; the customization document is

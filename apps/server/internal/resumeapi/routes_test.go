@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"reflect"
 	"sort"
@@ -17,10 +17,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
-	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 )
 
-func TestRouteInventoryIsCompleteAndConstructionOnly(t *testing.T) {
+func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 	t.Parallel()
 
 	routes := registeredRoutes()
@@ -28,22 +27,15 @@ func TestRouteInventoryIsCompleteAndConstructionOnly(t *testing.T) {
 		t.Fatalf("registered route count = %d, want 15", len(routes))
 	}
 	mutations := 0
-	stubs := 0
 	var got []string
 	for _, route := range routes {
 		got = append(got, route.Method+" "+route.Pattern)
 		if route.Mutation {
 			mutations++
 		}
-		if route.Stub {
-			stubs++
-		}
 	}
 	if mutations != 12 {
 		t.Fatalf("mutation route count = %d, want 12", mutations)
-	}
-	if stubs != 15 {
-		t.Fatalf("construction stub count = %d, want 15", stubs)
 	}
 	sort.Strings(got)
 	want := []string{
@@ -66,6 +58,24 @@ func TestRouteInventoryIsCompleteAndConstructionOnly(t *testing.T) {
 	sort.Strings(want)
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("routes = %v, want %v", got, want)
+	}
+}
+
+func TestRecordPhotoKeyInvariantEmitsOnlySignalAndRequestID(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	calls := 0
+	service := &Service{
+		logger:            slog.New(slog.NewTextHandler(&logs, nil)),
+		photoKeyInvariant: func() { calls++ },
+	}
+	service.recordPhotoKeyInvariant(context.Background())
+	if calls != 1 {
+		t.Fatalf("metric calls = %d, want 1", calls)
+	}
+	if strings.Contains(logs.String(), "resumes/") || strings.Contains(logs.String(), "photo-") {
+		t.Fatalf("invariant log contains an object key: %s", logs.String())
 	}
 }
 
@@ -101,8 +111,14 @@ func TestEveryMutationRegistersExactlyOneConcreteOperation(t *testing.T) {
 		if route.OperationKind != kind {
 			t.Errorf("%s operation kind = %v, want %v", route.Operation, route.OperationKind, kind)
 		}
-		if route.OperationKind.build(&Service{}) == nil {
+		built := route.OperationKind.build(&Service{})
+		if built == nil {
 			t.Errorf("%s operation factory returned nil", route.Operation)
+		}
+		if route.Operation == "updateResumeMetadata" {
+			if _, ok := built.(resumeMetadataMutation); !ok {
+				t.Errorf("%s operation factory = %T, want resumeMetadataMutation", route.Operation, built)
+			}
 		}
 	}
 }
@@ -118,30 +134,6 @@ func TestRouteWireVersionPolicyIsComplete(t *testing.T) {
 		wantEmits := route.Operation != "getResumePhoto" && route.Operation != "deleteResume"
 		if route.EmitsWireVersion != wantEmits {
 			t.Errorf("%s EmitsWireVersion = %v, want %v", route.Operation, route.EmitsWireVersion, wantEmits)
-		}
-	}
-}
-
-func TestConstructionReadsResolveWireVersionExceptBinaryPhoto(t *testing.T) {
-	t.Parallel()
-
-	service := &Service{acceptedVersions: []int32{1, 2}}
-	for _, route := range registeredRoutes() {
-		if route.Mutation {
-			continue
-		}
-		req := httptest.NewRequestWithContext(context.Background(), route.Method, concreteRoutePath(route.Pattern), nil)
-		req.Header.Set(wireVersionHeader, "999")
-		rec := httptest.NewRecorder()
-		service.constructionStub(route, rec, req)
-		if route.Operation == "getResumePhoto" {
-			if rec.Code != http.StatusNotImplemented || rec.Header().Get(wireVersionHeader) != "" {
-				t.Errorf("binary photo GET = status %d schema header %q, want 501 and absent", rec.Code, rec.Header().Get(wireVersionHeader))
-			}
-			continue
-		}
-		if rec.Code != http.StatusBadRequest {
-			t.Errorf("%s status = %d, want 400", route.Operation, rec.Code)
 		}
 	}
 }
@@ -196,7 +188,7 @@ func TestRouteInventoryEqualsOpenAPI(t *testing.T) {
 	}
 }
 
-func TestRouteInventory_RealRouterSecurityAndConstructionSentinels(t *testing.T) {
+func TestRouteInventory_RealRouterSecurityAndNoConstructionSentinels(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 
 	for _, route := range registeredRoutes() {
@@ -223,8 +215,10 @@ func TestRouteInventory_RealRouterSecurityAndConstructionSentinels(t *testing.T)
 			} else if route.Mutation && route.Method != http.MethodDelete {
 				body = strings.NewReader(`{}`)
 			}
-			stub := buildHarnessRequest(t, h, route, path, body, true, route.Mutation)
-			assertRouteError(t, stub, http.StatusNotImplemented, "not_implemented")
+			response := buildHarnessRequest(t, h, route, path, body, true, route.Mutation)
+			if response.status == http.StatusNotImplemented || bytes.Contains(response.body, []byte("not_implemented")) {
+				t.Fatalf("implemented route returned a construction sentinel: %d %s", response.status, response.body)
+			}
 		})
 	}
 
@@ -445,20 +439,4 @@ func mutationHeaderAndContentTypeRequest(t *testing.T, h *resumeAPITestHarness, 
 		t.Fatalf("perform request: %v", err)
 	}
 	return snapshotHTTPResponse(t, resp)
-}
-
-func TestConstructionDeleteRejectsUnknownLengthNonemptyBody(t *testing.T) {
-	t.Parallel()
-
-	service := &Service{acceptedVersions: []int32{docmigrate.CurrentVersion}}
-	route := routeSpec{Method: http.MethodDelete, Operation: "deleteResume", Mutation: true}
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/", bytes.NewBufferString(" "))
-	req.ContentLength = -1
-	req.Header.Set("Idempotency-Key", uuid.NewString())
-	req.Header.Set("If-Match", `"r1"`)
-	rec := httptest.NewRecorder()
-	service.constructionStub(route, rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d (body=%s)", rec.Code, http.StatusBadRequest, rec.Body.String())
-	}
 }

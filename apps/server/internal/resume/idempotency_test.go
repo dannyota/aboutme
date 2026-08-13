@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -150,6 +151,33 @@ type queryRowFailure struct {
 
 func (row queryRowFailure) Scan(...any) error { return row.err }
 
+type deadlineRecordingTx struct {
+	pgx.Tx
+	settings []string
+}
+
+func (tx *deadlineRecordingTx) Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error) {
+	if strings.Contains(query, "idle_in_transaction_session_timeout") {
+		for _, arg := range args {
+			tx.settings = append(tx.settings, fmt.Sprint(arg))
+		}
+	}
+	return tx.Tx.Exec(ctx, query, args...)
+}
+
+type deadlineBlockingTx struct {
+	pgx.Tx
+	blocked atomic.Bool
+}
+
+func (tx *deadlineBlockingTx) QueryRow(ctx context.Context, query string, args ...any) pgx.Row {
+	if strings.Contains(query, "-- name: UpdateResumeDocumentCAS") {
+		tx.blocked.Store(true)
+		return tx.Tx.QueryRow(ctx, "SELECT pg_sleep(10)")
+	}
+	return tx.Tx.QueryRow(ctx, query, args...)
+}
+
 // userRowLockedForResumeWrite reports whether another transaction already
 // holds the users-row lock that serializes resume/idempotency writes. NOWAIT
 // makes the observation deterministic: the probe either acquires and
@@ -174,6 +202,100 @@ func userRowLockedForResumeWrite(ctx context.Context, pool *store.Pool, userID u
 }
 
 // --- Sequential semantics ---
+
+func TestIdempotencyStore_Execute_BindsPostgresTimeoutsToContextDeadline(t *testing.T) {
+	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, time.Now)
+	userID := createTestUser(t, q)
+	var begins int
+	var mutationTx *deadlineRecordingTx
+	idem := resume.NewIdempotencyStoreWithHooksForTest(pool, time.Now,
+		func(ctx context.Context) (pgx.Tx, error) {
+			begins++
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if begins == 2 {
+				mutationTx = &deadlineRecordingTx{Tx: tx}
+				return mutationTx, nil
+			}
+			return tx, nil
+		}, nil)
+	deadlineContext, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	result, err := idem.Execute(deadlineContext, userID, idempotencyTestRoute, uuid.New(),
+		sha256.Sum256([]byte("deadline-bound transaction")),
+		func(*store.Queries) (resume.StoredResponse, error) {
+			return resume.StoredResponse{Status: http.StatusNoContent}, nil
+		})
+	if err != nil || result.Outcome != resume.CommitCommitted {
+		t.Fatalf("Execute() = (%+v, %v), want committed", result, err)
+	}
+	if mutationTx == nil || len(mutationTx.settings) != 2 || mutationTx.settings[0] != mutationTx.settings[1] {
+		t.Fatalf("transaction deadline settings = %#v, want equal statement and idle timeouts", mutationTx)
+	}
+	setting, parseErr := time.ParseDuration(mutationTx.settings[0])
+	if parseErr != nil || setting <= 0 || setting > 10*time.Second {
+		t.Fatalf("transaction timeout = %q (%v), want duration in (0,10s]", mutationTx.settings[0], parseErr)
+	}
+}
+
+func TestIdempotencyStore_Execute_InFlightDeadlineRollsBackAndCannotCommitLate(t *testing.T) {
+	_, rs, q, pool, ctx := newIntegrationIdempotencyStore(t, time.Now)
+	userID := createTestUser(t, q)
+	key := uuid.New()
+	doc := validDocForTest(t)
+	var begins int
+	var mutationTx *deadlineBlockingTx
+	idem := resume.NewIdempotencyStoreWithHooksForTest(pool, time.Now,
+		func(ctx context.Context) (pgx.Tx, error) {
+			begins++
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if begins == 2 {
+				mutationTx = &deadlineBlockingTx{Tx: tx}
+				return mutationTx, nil
+			}
+			return tx, nil
+		}, nil)
+
+	deadlineContext, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
+	defer cancel()
+	var writtenID uuid.UUID
+	result, err := idem.Execute(deadlineContext, userID, "POST candidate deadline", key,
+		sha256.Sum256([]byte("candidate whose transaction crosses its deadline")),
+		func(qtx *store.Queries) (resume.StoredResponse, error) {
+			created, createErr := rs.CreateTxForTest(deadlineContext, qtx, userID, "must roll back", doc)
+			if createErr != nil {
+				return resume.StoredResponse{}, createErr
+			}
+			writtenID = created.ID
+			changed := created.Doc
+			changed.Customization.Font.BaseSizePx++
+			_, saveErr := rs.SaveDocumentTxForTest(
+				deadlineContext, qtx, userID, created.ID, changed, created.Revision,
+			)
+			return resume.StoredResponse{}, saveErr
+		})
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Execute() error = %v, want deadline failure", err)
+	}
+	if mutationTx == nil || !mutationTx.blocked.Load() {
+		t.Fatal("mutation did not reach the in-flight PostgreSQL statement")
+	}
+	if result.Outcome != resume.CommitDefinitelyRolledBack || result.Replayed {
+		t.Fatalf("Execute() result = %+v, want definite rollback without replay", result)
+	}
+	if writtenID == uuid.Nil {
+		t.Fatal("mutation did not write before crossing the deadline")
+	}
+	if _, getErr := rs.Get(ctx, userID, writtenID); !errors.Is(getErr, resume.ErrNotFound) {
+		t.Fatalf("Get(writtenID) after deadline = %v, want no late committed reference", getErr)
+	}
+	assertIdempotencyRecordAbsent(ctx, t, q, userID, "POST candidate deadline", key)
+}
 
 func TestIdempotencyStore_Execute_FirstRun_RunsMutateAndStores(t *testing.T) {
 	t.Parallel()
@@ -528,7 +650,7 @@ func TestIdempotencyStore_Execute_ConcurrentSaveDocumentConverges(t *testing.T) 
 			t.Parallel()
 			clock := testutil.NewClockAtEpoch()
 			winnerStore, rs, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
-			userID := createTestUser(t, q)
+			userID := createTestUserWithContext(ctx, t, q)
 			created, err := rs.Create(ctx, userID, "CAS idempotency contention", validDocForTest(t))
 			if err != nil {
 				t.Fatalf("Create() error = %v", err)
@@ -907,7 +1029,7 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 	}
 
 	t.Run("cleanup begin failure is not attempted", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		injected := errors.New("begin cleanup failed")
 		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
 			func(context.Context) (pgx.Tx, error) { return nil, injected }, nil)
@@ -921,7 +1043,7 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 	})
 
 	t.Run("cleanup query failure after begin is not attempted", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		key := uuid.New()
 		hash := sha256.Sum256([]byte("cleanup query failure seed"))
 		createIdempotencyRecord(ctx, t, q, userID, "POST cleanup-query-failure-seed", key, hash,
@@ -953,10 +1075,10 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 				result, err, calls.Load(), begins.Load())
 		}
 		assertPair(t, result)
-		if _, err := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+		if _, getErr := q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 			UserID: userID, Route: "POST cleanup-query-failure-seed", IdempotencyKey: key,
-		}); err != nil {
-			t.Errorf("expired record after failed cleanup query: %v", err)
+		}); getErr != nil {
+			t.Errorf("expired record after failed cleanup query: %v", getErr)
 		}
 		assertIdempotencyUsageMatchesRows(ctx, t, pool, userID)
 		locked, err := userRowLockedForResumeWrite(ctx, pool, userID)
@@ -969,7 +1091,7 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 	})
 
 	t.Run("mutation begin failure is not attempted", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		injected := errors.New("begin mutation failed")
 		begins := 0
 		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
@@ -1001,7 +1123,7 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 		{name: "connection loss at commit is unknown", commitErr: errors.New("connection lost during commit"), wantOutcome: resume.CommitUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			userID := createTestUser(t, q)
+			userID := createTestUserWithContext(ctx, t, q)
 			idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now, nil,
 				func(context.Context, pgx.Tx) error { return tc.commitErr })
 			key := uuid.New()
@@ -1026,7 +1148,7 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 	}
 
 	t.Run("lost commit response after commit stays unknown and may persist", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		injected := errors.New("connection lost after commit")
 		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now, nil,
 			func(ctx context.Context, tx pgx.Tx) error {
@@ -1059,7 +1181,7 @@ func TestIdempotencyStore_Execute_CommitOutcomeMatrix(t *testing.T) {
 	})
 
 	t.Run("success and replay are committed", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		idem := resume.NewIdempotencyStoreForTest(pool, clock.Now)
 		key := uuid.New()
 		hash := sha256.Sum256([]byte("success and replay"))
@@ -1158,11 +1280,11 @@ func TestIdempotencyStore_Execute_BoundedOldestFirstCleanup(t *testing.T) {
 		t.Fatalf("begin EXPLAIN transaction: %v", err)
 	}
 	defer tx.Rollback(context.Background()) //nolint:errcheck // cleanup after read-only plan evidence
-	if _, err := tx.Exec(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
-		t.Fatalf("disable seqscan for plan evidence: %v", err)
+	if _, seqscanErr := tx.Exec(ctx, `SET LOCAL enable_seqscan = off`); seqscanErr != nil {
+		t.Fatalf("disable seqscan for plan evidence: %v", seqscanErr)
 	}
-	if _, err := tx.Exec(ctx, `SET LOCAL enable_bitmapscan = off`); err != nil {
-		t.Fatalf("disable bitmap scan for ordered-index plan evidence: %v", err)
+	if _, bitmapErr := tx.Exec(ctx, `SET LOCAL enable_bitmapscan = off`); bitmapErr != nil {
+		t.Fatalf("disable bitmap scan for ordered-index plan evidence: %v", bitmapErr)
 	}
 	rows, err := tx.Query(ctx, `
 		EXPLAIN (COSTS OFF)
@@ -1318,7 +1440,7 @@ func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
 	idem, rs, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
 
 	t.Run("record cap rejects before callback", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		setIdempotencyUsage(ctx, t, pool, userID, 50_000, 0)
 		var calls atomic.Int32
 		result, err := idem.Execute(ctx, userID, "POST record-cap", uuid.New(), sha256.Sum256([]byte("record cap")),
@@ -1333,7 +1455,7 @@ func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
 	})
 
 	t.Run("record count exactly at boundary commits", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		response := resume.StoredResponse{
 			Status: 200,
 			Body:   json.RawMessage(`{"recordBoundary":true}`),
@@ -1376,7 +1498,7 @@ func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
 	})
 
 	t.Run("stored bytes exactly at boundary commit", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		response := resume.StoredResponse{
 			Status: 200,
 			Body:   json.RawMessage(` { "z": 1, "a": 2 } `),
@@ -1403,10 +1525,10 @@ func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
 				result, err, calls.Load())
 		}
 		var records, storedBytes int64
-		if err := pool.QueryRow(ctx, `
+		if queryErr := pool.QueryRow(ctx, `
 			SELECT retained_records, stored_bytes
-			FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&records, &storedBytes); err != nil {
-			t.Fatalf("read usage at byte boundary: %v", err)
+			FROM idempotency_usage WHERE user_id = $1`, userID).Scan(&records, &storedBytes); queryErr != nil {
+			t.Fatalf("read usage at byte boundary: %v", queryErr)
 		}
 		if records != 1 || storedBytes != 1<<30 {
 			t.Errorf("usage at byte boundary = (%d records, %d bytes), want (1 record, %d bytes)",
@@ -1425,7 +1547,7 @@ func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
 	})
 
 	t.Run("existing key replays at record cap", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		key := uuid.New()
 		hash := sha256.Sum256([]byte("existing at cap"))
 		inserted, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
@@ -1453,7 +1575,7 @@ func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
 	})
 
 	t.Run("byte cap rolls mutation back", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		setIdempotencyUsage(ctx, t, pool, userID, 0, 1<<30)
 		key := uuid.New()
 		var createdID uuid.UUID
@@ -1481,7 +1603,7 @@ func TestIdempotencyStore_Execute_RetainedCapacityAndReplayAtCap(t *testing.T) {
 	})
 
 	t.Run("earliest live expiry rounds up", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		key := uuid.New()
 		hash := sha256.Sum256([]byte("retry rounding seed"))
 		inserted, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
@@ -1510,7 +1632,9 @@ func TestIdempotencyStore_Execute_ExpiredBacklogRemainsCountedAtCap(t *testing.T
 	idem, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
 	userID := createTestUser(t, q)
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID)
+		if _, cleanupErr := pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID); cleanupErr != nil {
+			t.Errorf("clean up capacity test user: %v", cleanupErr)
+		}
 	})
 
 	// One bulk insert makes the physical retained-row count itself the cap

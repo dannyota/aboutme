@@ -1,25 +1,520 @@
 package resumeapi
 
-import "net/http"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"golang.org/x/text/language"
+
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
+)
 
 func resumeRoutes() []routeSpec {
 	return []routeSpec{
-		{Method: http.MethodGet, Pattern: apiResumePath, Operation: "listResumes", Stub: true, AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleListResumes},
-		{Method: http.MethodPost, Pattern: apiResumePath, Operation: "createResume", Mutation: true, Stub: true, OperationKind: operationCreate, AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleCreateResume},
-		{Method: http.MethodGet, Pattern: apiResumePath + "/{id}", Operation: "getResume", Stub: true, AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleGetResume},
-		{Method: http.MethodPatch, Pattern: apiResumePath + "/{id}", Operation: "updateResumeMetadata", Mutation: true, Stub: true, OperationKind: operationMetadata, AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleUpdateResumeMetadata},
-		{Method: http.MethodDelete, Pattern: apiResumePath + "/{id}", Operation: "deleteResume", Mutation: true, Stub: true, OperationKind: operationDelete, AcceptsWireVersion: true, Handler: (*Service).handleDeleteResume},
+		{Method: http.MethodGet, Pattern: apiResumePath, Operation: "listResumes", AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleListResumes},
+		{Method: http.MethodPost, Pattern: apiResumePath, Operation: "createResume", Mutation: true, OperationKind: operationCreate, AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleCreateResume},
+		{Method: http.MethodGet, Pattern: apiResumePath + "/{id}", Operation: "getResume", AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleGetResume},
+		{Method: http.MethodPatch, Pattern: apiResumePath + "/{id}", Operation: "updateResumeMetadata", Mutation: true, OperationKind: operationMetadata, AcceptsWireVersion: true, EmitsWireVersion: true, Handler: (*Service).handleUpdateResumeMetadata},
+		{Method: http.MethodDelete, Pattern: apiResumePath + "/{id}", Operation: "deleteResume", Mutation: true, OperationKind: operationDelete, AcceptsWireVersion: true, Handler: (*Service).handleDeleteResume},
 	}
 }
 
-func (s *Service) handleListResumes(w http.ResponseWriter, _ *http.Request) { writeConstructionStub(w) }
-func (s *Service) handleCreateResume(w http.ResponseWriter, _ *http.Request) {
-	writeConstructionStub(w)
+type resumePoolReader interface {
+	Get(context.Context, uuid.UUID, uuid.UUID) (resume.Resume, error)
+	List(context.Context, uuid.UUID) ([]resume.Resume, error)
 }
-func (s *Service) handleGetResume(w http.ResponseWriter, _ *http.Request) { writeConstructionStub(w) }
-func (s *Service) handleUpdateResumeMetadata(w http.ResponseWriter, _ *http.Request) {
-	writeConstructionStub(w)
+
+type resumeMediaDeletionQueue interface {
+	EnqueueMediaDeletionTx(context.Context, *store.Queries, uuid.UUID, string) error
 }
-func (s *Service) handleDeleteResume(w http.ResponseWriter, _ *http.Request) {
-	writeConstructionStub(w)
+
+type resumeSummaryJSON struct {
+	ID            uuid.UUID `json:"id"`
+	Title         string    `json:"title"`
+	Lng           string    `json:"lng"`
+	Revision      string    `json:"revision"`
+	Live          bool      `json:"live"`
+	Slug          *string   `json:"slug"`
+	SchemaVersion int32     `json:"schemaVersion"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
+type resumeJSON struct {
+	resumeSummaryJSON
+	Document json.RawMessage `json:"document"`
+}
+
+type resumeCreateRequest struct {
+	Title    json.RawMessage `json:"title"`
+	Lng      json.RawMessage `json:"lng"`
+	Document json.RawMessage `json:"document"`
+}
+
+type resumeMetadataRequest struct {
+	Title json.RawMessage `json:"title"`
+	Lng   json.RawMessage `json:"lng"`
+}
+
+type resumeTargetInput struct {
+	ResumeID uuid.UUID
+	Request  resumeMetadataRequest
+}
+
+type resumeDeleteInput struct {
+	ResumeID uuid.UUID
+}
+
+type resumeMetadataPrepared struct {
+	ResumeID        uuid.UUID
+	TitlePresent    bool
+	Title           string
+	LanguagePresent bool
+	Language        *string
+	Response        mutationResponseBuilder
+}
+
+type resumeMetadataMutation struct{ service *Service }
+
+// Run implements mutationOperation for metadata replacement.
+func (op resumeMetadataMutation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
+	prepared preparedInput,
+) (mutationRunResult, error) {
+	input, ok := prepared.Value.(resumeMetadataPrepared)
+	if !ok || input.Response == nil || mutation.ExpectedRevision == nil {
+		return mutationRunResult{}, fmt.Errorf("resumeapi: metadata mutation received the wrong prepared input")
+	}
+	current, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
+	if err != nil {
+		return mutationRunResult{}, err
+	}
+	title := current.Title
+	if input.TitlePresent {
+		title = input.Title
+	}
+	lng := current.Lng
+	if input.LanguagePresent {
+		lng = input.Language
+	}
+	doc, err := op.service.prepareDocumentForPersistence(current.Doc)
+	if err != nil {
+		return mutationRunResult{}, err
+	}
+	if _, saveErr := op.service.resumes.SaveMetadataAndDocumentTx(
+		ctx, qtx, mutation.UserID, input.ResumeID, title, lng, doc, *mutation.ExpectedRevision,
+	); saveErr != nil {
+		return mutationRunResult{}, saveErr
+	}
+	updated, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
+	if err != nil {
+		return mutationRunResult{}, err
+	}
+	response, err := input.Response(updated, updated.Doc, mutation.WireVersion)
+	return mutationRunResult{Response: response}, err
+}
+
+func (s *Service) handleListResumes(w http.ResponseWriter, r *http.Request) {
+	version, versionErr := resolveWireVersion(r.Header, s.acceptedVersions)
+	if versionErr != nil {
+		writeResumeError(w, versionErr)
+		return
+	}
+	session, ok := auth.SessionFromContext(r.Context())
+	if !ok {
+		writeResumeError(w, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"})
+		return
+	}
+	reader, ok := s.resumes.(resumePoolReader)
+	if !ok {
+		writeResumeError(w, internalClientError())
+		return
+	}
+	rows, err := reader.List(r.Context(), session.UserID)
+	if err != nil {
+		writeResumeError(w, mapMutationError(err))
+		return
+	}
+	data := make([]resumeSummaryJSON, len(rows))
+	for i := range rows {
+		data[i] = makeResumeSummary(rows[i], version)
+	}
+	body, err := json.Marshal(struct {
+		Data []resumeSummaryJSON `json:"data"`
+	}{Data: data})
+	if err != nil {
+		writeResumeError(w, internalClientError())
+		return
+	}
+	writeStoredResponse(w, resume.StoredResponse{
+		Status: http.StatusOK, Body: body,
+		Headers: map[string]string{wireVersionHeader: wireVersionString(version)},
+	})
+}
+
+func (s *Service) handleCreateResume(w http.ResponseWriter, r *http.Request) {
+	spec := mutationSpec{
+		RegisteredOperation: "createResume",
+		Decode: func(r *http.Request) (boundedInput, error) {
+			var request resumeCreateRequest
+			return decodeJSONBody(r, &request)
+		},
+		CanonicalTargets: func(boundedInput) ([]string, error) { return nil, nil },
+		Prepare: func(_ context.Context, input boundedInput, inspection idempotencyInspection) (preparedInput, error) {
+			request, ok := input.Value.(*resumeCreateRequest)
+			if !ok {
+				return preparedInput{}, internalClientError()
+			}
+			title, err := decodeResumeTitle(request.Title, true)
+			if err != nil {
+				return preparedInput{}, err
+			}
+			lng, err := decodeResumeLanguage(request.Lng)
+			if err != nil {
+				return preparedInput{}, err
+			}
+			doc := defaultResumeDocument()
+			if len(request.Document) != 0 {
+				if bytes.Equal(bytes.TrimSpace(request.Document), []byte("null")) {
+					return preparedInput{}, documentInvalid("document", "document must be an object")
+				}
+				if seedCarriesPhoto(request.Document) {
+					return preparedInput{}, documentInvalid("personalDetails.photo", "photo is server-owned")
+				}
+				if s.projector == nil {
+					return preparedInput{}, internalClientError()
+				}
+				accepted, _, acceptErr := s.projector.AcceptWire(request.Document, inspectionWireVersion(inspection, r, s.acceptedVersions))
+				if acceptErr != nil {
+					return preparedInput{}, documentInvalid("document", "document does not match the declared schema version")
+				}
+				doc, acceptErr = strictDecodeCurrentDocument(accepted)
+				if acceptErr != nil {
+					return preparedInput{}, documentInvalid("document", "document does not match the current schema")
+				}
+			}
+			return preparedInput{Input: input, Value: createPreparedInput{
+				Document: doc, Title: title, Language: lng,
+				Response: s.resumeResponseBuilder(http.StatusCreated, true),
+			}}, nil
+		},
+		Run: createOperation{service: s},
+	}
+	s.executeMutation(w, r, spec)
+}
+
+// inspectionWireVersion returns the version already bound into the request
+// fingerprint. Prepare does not otherwise receive mutation headers.
+func inspectionWireVersion(_ idempotencyInspection, r *http.Request, accepted []int32) int32 {
+	version, err := resolveWireVersion(r.Header, accepted)
+	if err != nil {
+		return docmigrate.CurrentVersion
+	}
+	return version
+}
+
+func (s *Service) handleGetResume(w http.ResponseWriter, r *http.Request) {
+	version, versionErr := resolveWireVersion(r.Header, s.acceptedVersions)
+	if versionErr != nil {
+		writeResumeError(w, versionErr)
+		return
+	}
+	id, err := parseResumePathID(r)
+	if err != nil {
+		writeResumeError(w, err)
+		return
+	}
+	session, ok := auth.SessionFromContext(r.Context())
+	if !ok {
+		writeResumeError(w, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"})
+		return
+	}
+	reader, ok := s.resumes.(resumePoolReader)
+	if !ok {
+		writeResumeError(w, internalClientError())
+		return
+	}
+	row, getErr := reader.Get(r.Context(), session.UserID, id)
+	if getErr != nil {
+		writeResumeError(w, mapMutationError(getErr))
+		return
+	}
+	response, responseErr := s.makeResumeResponse(row, row.Doc, version, http.StatusOK, false)
+	if responseErr != nil {
+		writeResumeError(w, internalClientError())
+		return
+	}
+	writeStoredResponse(w, response)
+}
+
+func (s *Service) handleUpdateResumeMetadata(w http.ResponseWriter, r *http.Request) {
+	spec := mutationSpec{
+		RegisteredOperation: "updateResumeMetadata", RequireMatch: true,
+		Decode: func(r *http.Request) (boundedInput, error) {
+			id, err := parseResumePathID(r)
+			if err != nil {
+				return boundedInput{}, err
+			}
+			var request resumeMetadataRequest
+			decoded, decodeErr := decodeJSONBody(r, &request)
+			if decodeErr != nil {
+				return boundedInput{}, decodeErr
+			}
+			decoded.Value = resumeTargetInput{ResumeID: id, Request: request}
+			return decoded, nil
+		},
+		CanonicalTargets: resumeTarget,
+		Prepare: func(_ context.Context, input boundedInput, _ idempotencyInspection) (preparedInput, error) {
+			decoded, ok := input.Value.(resumeTargetInput)
+			if !ok {
+				return preparedInput{}, internalClientError()
+			}
+			if len(decoded.Request.Title) == 0 && len(decoded.Request.Lng) == 0 {
+				return preparedInput{}, documentInvalid("", "at least one metadata field is required")
+			}
+			prepared := resumeMetadataPrepared{
+				ResumeID: decoded.ResumeID, TitlePresent: len(decoded.Request.Title) != 0,
+				LanguagePresent: len(decoded.Request.Lng) != 0,
+				Response:        s.resumeResponseBuilder(http.StatusOK, false),
+			}
+			var err error
+			if prepared.TitlePresent {
+				prepared.Title, err = decodeResumeTitle(decoded.Request.Title, true)
+				if err != nil {
+					return preparedInput{}, err
+				}
+			}
+			if prepared.LanguagePresent {
+				prepared.Language, err = decodeResumeLanguage(decoded.Request.Lng)
+				if err != nil {
+					return preparedInput{}, err
+				}
+			}
+			return preparedInput{Input: input, Value: prepared}, nil
+		},
+		Run: operationMetadata.build(s),
+	}
+	s.executeMutation(w, r, spec)
+}
+
+func (s *Service) handleDeleteResume(w http.ResponseWriter, r *http.Request) {
+	spec := mutationSpec{
+		RegisteredOperation: "deleteResume", RequireMatch: true,
+		Decode: func(r *http.Request) (boundedInput, error) {
+			id, err := parseResumePathID(r)
+			if err != nil {
+				return boundedInput{}, err
+			}
+			decoded, decodeErr := decodeDeleteBody(r)
+			if decodeErr != nil {
+				return boundedInput{}, decodeErr
+			}
+			decoded.Value = resumeDeleteInput{ResumeID: id}
+			return decoded, nil
+		},
+		CanonicalTargets: func(input boundedInput) ([]string, error) {
+			decoded, ok := input.Value.(resumeDeleteInput)
+			if !ok {
+				return nil, internalClientError()
+			}
+			return []string{"resume_id", decoded.ResumeID.String()}, nil
+		},
+		Prepare: func(_ context.Context, input boundedInput, _ idempotencyInspection) (preparedInput, error) {
+			decoded, ok := input.Value.(resumeDeleteInput)
+			if !ok {
+				return preparedInput{}, internalClientError()
+			}
+			queue, ok := s.resumes.(resumeMediaDeletionQueue)
+			if !ok {
+				return preparedInput{}, internalClientError()
+			}
+			return preparedInput{Input: input, Value: deletePreparedInput{
+				ResumeID: decoded.ResumeID,
+				BeforeDelete: func(ctx context.Context, qtx *store.Queries, deleted resume.Resume) error {
+					photo := deleted.Doc.PersonalDetails.Photo
+					if photo == nil {
+						return nil
+					}
+					if _, err := media.ParsePhotoKey(deleted.ID, photo.Key); err != nil {
+						s.recordPhotoKeyInvariant(ctx)
+						return fmt.Errorf("resumeapi: validate deleted photo key: %w", err)
+					}
+					return queue.EnqueueMediaDeletionTx(ctx, qtx, deleted.ID, photo.Key)
+				},
+				Response: func(resume.Resume, schema.Resume, int32) (resume.StoredResponse, error) {
+					return resume.StoredResponse{Status: http.StatusNoContent}, nil
+				},
+			}}, nil
+		},
+		Run: deleteOperation{service: s},
+	}
+	s.executeMutation(w, r, spec)
+}
+
+func resumeTarget(input boundedInput) ([]string, error) {
+	decoded, ok := input.Value.(resumeTargetInput)
+	if !ok {
+		return nil, internalClientError()
+	}
+	return []string{"resume_id", decoded.ResumeID.String()}, nil
+}
+
+func parseResumePathID(r *http.Request) (uuid.UUID, *clientError) {
+	raw := r.PathValue("id")
+	id, err := uuid.Parse(raw)
+	if err != nil || id == uuid.Nil || id.String() != raw {
+		return uuid.Nil, &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: "resume id must be one canonical UUID"}
+	}
+	return id, nil
+}
+
+func decodeResumeTitle(raw json.RawMessage, required bool) (string, error) {
+	if len(raw) == 0 {
+		if required {
+			return "", documentInvalid("title", "title is required")
+		}
+		return "", nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", documentInvalid("title", "title must be a string")
+	}
+	var title string
+	if err := json.Unmarshal(raw, &title); err != nil {
+		return "", documentInvalid("title", "title must be a string")
+	}
+	if utf8.RuneCountInString(title) > resume.MaxTitleCharacters {
+		return "", documentInvalid("title", "title exceeds 160 code points")
+	}
+	return title, nil
+}
+
+func decodeResumeLanguage(raw json.RawMessage) (*string, error) {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, nil
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, documentInvalid("lng", "language must be a string or null")
+	}
+	if value == "" {
+		return nil, nil
+	}
+	tag, err := language.Parse(value)
+	if err != nil {
+		return nil, documentInvalid("lng", "language must be a valid BCP 47 tag")
+	}
+	canonical := tag.String()
+	if utf8.RuneCountInString(canonical) > resume.MaxLngCharacters {
+		return nil, documentInvalid("lng", "canonical language tag exceeds 35 code points")
+	}
+	return &canonical, nil
+}
+
+func projectResumeLanguage(value *string) string {
+	if value == nil || *value == "" {
+		return language.Und.String()
+	}
+	tag, err := language.Parse(*value)
+	if err != nil {
+		return language.Und.String()
+	}
+	canonical := tag.String()
+	if utf8.RuneCountInString(canonical) > resume.MaxLngCharacters {
+		return language.Und.String()
+	}
+	return canonical
+}
+
+func documentInvalid(path, message string) *clientError {
+	return &clientError{
+		Status: http.StatusUnprocessableEntity, Code: "document_invalid", Message: "resume document is invalid",
+		Details: map[string]any{"issues": []map[string]string{{"path": path, "code": "invalid", "message": message}}},
+	}
+}
+
+func seedCarriesPhoto(raw json.RawMessage) bool {
+	var root map[string]json.RawMessage
+	if json.Unmarshal(raw, &root) != nil {
+		return false
+	}
+	var personal map[string]json.RawMessage
+	if json.Unmarshal(root["personalDetails"], &personal) != nil {
+		return false
+	}
+	_, present := personal["photo"]
+	return present
+}
+
+func defaultResumeDocument() schema.Resume {
+	return schema.Resume{
+		SchemaVersion:   int64(docmigrate.CurrentVersion),
+		PersonalDetails: schema.PersonalDetails{Details: []schema.PersonalDetail{}},
+		Content:         map[string]schema.Section{},
+		Customization: schema.Customization{
+			Font:    schema.Font{Family: schema.Inter, BaseSizePx: 14},
+			Colors:  schema.Colors{Primary: "#1a1a1a", Text: "#1a1a1a", Background: "#ffffff"},
+			Spacing: schema.Spacing{SectionGap: 16, EntryGap: 8, LineHeight: 1.4},
+			Heading: schema.Heading{Style: schema.Normal, ShowRule: false},
+			Layout:  schema.Layout{Columns: 1, Sections: schema.Sections{Main: []string{}, Sidebar: []string{}}},
+			SectionDisplay: schema.SectionDisplay{
+				Skill: schema.SkillClass{Style: schema.Text}, Language: schema.LanguageClass{Style: schema.Text},
+			},
+			PageFormat: schema.A4, DateFormat: schema.MmYyyy,
+		},
+	}
+}
+
+func makeResumeSummary(row resume.Resume, version int32) resumeSummaryJSON {
+	return resumeSummaryJSON{
+		ID: row.ID, Title: row.Title, Lng: projectResumeLanguage(row.Lng),
+		Revision: strconv.FormatInt(row.Revision, 10), Live: row.Live, Slug: row.Slug,
+		SchemaVersion: version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+	}
+}
+
+func (s *Service) resumeResponseBuilder(status int, location bool) mutationResponseBuilder {
+	return func(row resume.Resume, doc schema.Resume, version int32) (resume.StoredResponse, error) {
+		return s.makeResumeResponse(row, doc, version, status, location)
+	}
+}
+
+func (s *Service) makeResumeResponse(row resume.Resume, doc schema.Resume, version int32, status int,
+	location bool,
+) (resume.StoredResponse, error) {
+	if s.projector == nil {
+		return resume.StoredResponse{}, fmt.Errorf("resumeapi: no document projector")
+	}
+	canonical, err := resume.AssembleCanonical(doc)
+	if err != nil {
+		return resume.StoredResponse{}, err
+	}
+	wire, err := s.projector.EmitWire(canonical, version)
+	if err != nil {
+		return resume.StoredResponse{}, err
+	}
+	body, err := json.Marshal(struct {
+		Data resumeJSON `json:"data"`
+	}{Data: resumeJSON{resumeSummaryJSON: makeResumeSummary(row, version), Document: wire}})
+	if err != nil {
+		return resume.StoredResponse{}, err
+	}
+	headers := map[string]string{
+		"ETag": fmt.Sprintf(`"r%d"`, row.Revision), wireVersionHeader: wireVersionString(version),
+	}
+	if location {
+		headers["Location"] = apiResumePath + "/" + row.ID.String()
+	}
+	return resume.StoredResponse{Status: status, Body: body, Headers: headers}, nil
 }

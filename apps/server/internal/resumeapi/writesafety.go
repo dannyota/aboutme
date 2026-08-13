@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -48,8 +49,9 @@ type idempotencyInspection struct {
 }
 
 type preparedInput struct {
-	Input boundedInput
-	Value any
+	Input         boundedInput
+	Value         any
+	ExecuteBefore time.Time
 }
 
 type mutationContext struct {
@@ -176,9 +178,28 @@ func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec m
 		UserID: sess.UserID, ExpectedRevision: headers.ExpectedRevision,
 		WireVersion: headers.WireVersion, Operation: operation, RequestHash: fingerprint,
 	}
-	callback := boundMutation{ctx: r.Context(), operation: spec.Run, mutation: mutation, prepared: prepared}
+	executeContext := r.Context()
+	cancelExecute := func() {}
+	if !prepared.ExecuteBefore.IsZero() {
+		now := time.Now()
+		if s.clock != nil {
+			now = s.clock()
+		}
+		remaining := prepared.ExecuteBefore.Sub(now)
+		if remaining <= 0 {
+			deadlineErr := context.DeadlineExceeded
+			if spec.Finalize != nil {
+				spec.Finalize(r.Context(), prepared, resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, deadlineErr)
+			}
+			writeResumeError(w, s.mapMutationErrorAtWire(deadlineErr, headers.WireVersion))
+			return
+		}
+		executeContext, cancelExecute = context.WithTimeout(r.Context(), remaining)
+	}
+	defer cancelExecute()
+	callback := boundMutation{ctx: executeContext, operation: spec.Run, mutation: mutation, prepared: prepared}
 	result, executeErr := s.idempotency.Execute(
-		r.Context(), sess.UserID, operation, headers.Key, fingerprint, callback.run,
+		executeContext, sess.UserID, operation, headers.Key, fingerprint, callback.run,
 	)
 	if spec.Finalize != nil {
 		spec.Finalize(r.Context(), prepared, result, executeErr)

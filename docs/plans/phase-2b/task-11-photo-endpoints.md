@@ -8,10 +8,12 @@ is separate and has no upload route in v1.
 authorization, non-transactional object writes).
 
 **Files:** create
-`apps/server/internal/media/{admission.go,admission_test.go,normalize.go,normalize_test.go,photo_key.go,photo_key_test.go}`;
+`apps/server/internal/media/{admission.go,admission_test.go,normalize.go,normalize_test.go}`;
 modify `apps/server/internal/resumeapi/photo.go` to replace Task 4's stub;
 create `photo_test.go` and `photo_contract_test.go`. Task 3 has already pinned
-the image dependency. This task does not edit `go.mod` or `go.sum`.
+the image dependency and landed the sole photo-key constructor/parser in
+`media.go` with its tests in `media_test.go`. This task does not edit `go.mod`
+or `go.sum`.
 
 ## HTTP behavior
 
@@ -31,16 +33,10 @@ malformed or cross-resume key never reaches a backend. The normalizer supplies
 the extension; no request field, filename, input type, or metadata influences
 the key or extension.
 
-```go
-// entropy is exactly 16 injected random bytes, rendered as 32 lowercase hex.
-func NewResumePhotoKey(resumeID uuid.UUID, ext string,
-    entropy [16]byte) (string, error)
-
-// ParseResumePhotoKey accepts only the constructor's byte-for-byte grammar and
-// requires the embedded UUID to equal expectedResumeID.
-func ParseResumePhotoKey(key string,
-    expectedResumeID uuid.UUID) (extension string, err error)
-```
+`media.NewPhotoKey(randSource, resumeID, ext)` reads exactly 16 injected random
+bytes and renders them as 32 lowercase hex characters.
+`media.ParsePhotoKey(expectedResumeID, key)` accepts only the constructor's
+byte-for-byte grammar and requires the embedded UUID to equal the expected ID.
 
 The crop PATCH uses the ordinary bounded JSON chain and write-rate policy, not
 the upload permit or upload-rate policy. Its exact body is
@@ -242,7 +238,7 @@ internal invariant failure, not a client-writable key path.
       `CommitUnknown`, never a later resumed commit. Advance through the 48-hour
       reconciliation cutoff and prove a swept unreferenced key can never become
       referenced afterward.
-- [ ] **Step 7: freeze and run the resource gate.** Before task dispatch, freeze
+- [x] **Step 7: freeze and run the resource gate.** Before task dispatch, freeze
       `apps/server/internal/media/testdata/normalization-benchmark-manifest.json`
       with exact fixture hashes for every accepted boundary and decoder
       regression, pinned toolchain, local host identity, CPU quota, exact 512
@@ -267,7 +263,13 @@ internal invariant failure, not a client-writable key path.
       remain for reconciliation; this is stored residual state, not surviving
       request work. Do not implement a detached request-time decoder timeout.
       Preserve the manifest and corpus for P9A's required rerun on the selected
-      production ARM64 Graviton class and task cgroup.
+      production ARM64 Graviton class and task cgroup. The provisional local
+      gate passed against source commit
+      `0513351fb8690affbc729f118f1489955e2c4558`: all 160 measured samples
+      across eight fixtures stayed within budget. The worst duration was
+      3.025443354 seconds and the worst RSS delta was 193,585,152 bytes. The
+      ignored raw evidence is at the manifest's commit-keyed path.
+
 - [ ] **Step 8: backend and contract parity.** Run the complete lifecycle suite
       on filesystem and fail-closed S3 backends. Assert every status, error,
       header, and media type against `docs/api/openapi.yaml`.

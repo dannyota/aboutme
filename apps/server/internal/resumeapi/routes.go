@@ -2,11 +2,13 @@ package resumeapi
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/rand"
+	"io"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
@@ -23,31 +25,40 @@ import (
 
 const apiResumePath = "/api/v1/resumes"
 
+var defaultPhotoKeyInvariantFailures atomic.Uint64
+var defaultPhotoNormalizationNanoseconds atomic.Uint64
+
 // Options configures the resume API route service.
 type Options struct {
-	Logger           *slog.Logger
-	SessionManager   *auth.SessionManager
-	PublicOrigin     string
-	TrustedProxies   api.TrustedProxies
-	Clock            func() time.Time
-	AcceptedVersions []int32
+	Logger                     *slog.Logger
+	SessionManager             *auth.SessionManager
+	PublicOrigin               string
+	TrustedProxies             api.TrustedProxies
+	Clock                      func() time.Time
+	AcceptedVersions           []int32
+	PhotoKeyInvariant          func()
+	PhotoRandom                io.Reader
+	PhotoNormalizationDuration func(time.Duration)
 }
 
 // Service owns the authenticated resume HTTP surface and its write-safety
 // dependencies.
 type Service struct {
-	resumes          resumeBoundary
-	idempotency      idempotencyBoundary
-	projector        *docmigrate.Projector
-	blobs            media.Backend
-	logger           *slog.Logger
-	sessions         *auth.SessionManager
-	publicOrigin     string
-	trustedProxies   api.TrustedProxies
-	clock            func() time.Time
-	acceptedVersions []int32
-	writeResponse    func(http.ResponseWriter, resume.StoredResponse)
-	sanitizeDocument func(schema.Resume) schema.Resume
+	resumes                    resumeBoundary
+	idempotency                idempotencyBoundary
+	projector                  *docmigrate.Projector
+	blobs                      media.Backend
+	logger                     *slog.Logger
+	sessions                   *auth.SessionManager
+	publicOrigin               string
+	trustedProxies             api.TrustedProxies
+	clock                      func() time.Time
+	acceptedVersions           []int32
+	writeResponse              func(http.ResponseWriter, resume.StoredResponse)
+	sanitizeDocument           func(schema.Resume) schema.Resume
+	photoKeyInvariant          func()
+	photoRandom                io.Reader
+	photoNormalizationDuration func(time.Duration)
 }
 
 type resumeBoundary interface {
@@ -77,12 +88,42 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 	if opts.AcceptedVersions == nil {
 		opts.AcceptedVersions = docmigrate.AcceptedVersions()
 	}
+	if opts.PhotoRandom == nil {
+		opts.PhotoRandom = rand.Reader
+	}
+	if opts.PhotoKeyInvariant == nil {
+		opts.PhotoKeyInvariant = func() { defaultPhotoKeyInvariantFailures.Add(1) }
+	}
+	if opts.PhotoNormalizationDuration == nil {
+		opts.PhotoNormalizationDuration = func(elapsed time.Duration) {
+			defaultPhotoNormalizationNanoseconds.Add(uint64(max(elapsed.Nanoseconds(), 0)))
+		}
+	}
 	return &Service{
 		resumes: store, idempotency: idem, projector: proj, blobs: blobs,
 		logger: opts.Logger, sessions: opts.SessionManager,
 		publicOrigin: opts.PublicOrigin, trustedProxies: opts.TrustedProxies,
 		clock: opts.Clock, acceptedVersions: append([]int32(nil), opts.AcceptedVersions...),
 		writeResponse: writeStoredResponse, sanitizeDocument: sanitizeDocument,
+		photoKeyInvariant:          opts.PhotoKeyInvariant,
+		photoRandom:                opts.PhotoRandom,
+		photoNormalizationDuration: opts.PhotoNormalizationDuration,
+	}
+}
+
+func (s *Service) recordPhotoNormalizationDuration(elapsed time.Duration) {
+	if s.photoNormalizationDuration != nil {
+		s.photoNormalizationDuration(elapsed)
+	}
+}
+
+func (s *Service) recordPhotoKeyInvariant(ctx context.Context) {
+	if s.photoKeyInvariant != nil {
+		s.photoKeyInvariant()
+	}
+	if s.logger != nil {
+		s.logger.ErrorContext(ctx, "resume photo key invariant failed",
+			"request_id", api.RequestIDFromContext(ctx))
 	}
 }
 
@@ -92,7 +133,6 @@ type routeSpec struct {
 	Operation          string
 	Mutation           bool
 	Upload             bool
-	Stub               bool
 	OperationKind      operationKind
 	AcceptsWireVersion bool
 	EmitsWireVersion   bool
@@ -111,8 +151,7 @@ func registeredRoutes() []routeSpec {
 	return routes
 }
 
-// RegisterRoutes attaches the whole P2B route inventory in one construction
-// step. W3 replaces the sentinel handlers without changing this table.
+// RegisterRoutes attaches the whole P2B route inventory in one step.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	chains := s.newRouteChains()
 	byPattern := make(map[string][]routeSpec)
@@ -136,10 +175,6 @@ func (s *Service) dispatch(routes []routeSpec, chains routeChains) http.Handler 
 	for _, route := range routes {
 		route := route
 		base := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if route.Stub {
-				s.constructionStub(route, w, r)
-				return
-			}
 			route.Handler(s, w, r)
 		})
 		handlers[route.Method] = chains.wrap(route, base)
@@ -158,39 +193,4 @@ func (s *Service) dispatch(routes []routeSpec, chains routeChains) http.Handler 
 		w.Header().Set("Allow", strings.Join(allowed, ", "))
 		api.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed on this route")
 	})
-}
-
-func writeConstructionStub(w http.ResponseWriter) {
-	api.WriteError(w, http.StatusNotImplemented, "not_implemented", "route is under construction")
-}
-
-func (s *Service) constructionStub(route routeSpec, w http.ResponseWriter, r *http.Request) {
-	if route.Mutation {
-		requireMatch := route.Operation != "createResume"
-		if _, err := parseMutationHeaders(r, requireMatch, s.acceptedVersions); err != nil {
-			writeResumeError(w, err)
-			return
-		}
-		if route.Upload {
-			// Multipart syntax and streaming bounds belong to Task 11. The
-			// multipart CSRF entry point already validated the media type here.
-		} else if route.Method == http.MethodDelete {
-			if _, err := decodeDeleteBody(r); err != nil {
-				writeResumeError(w, mapMutationError(err))
-				return
-			}
-		} else {
-			var body map[string]json.RawMessage
-			if _, err := decodeJSONBody(r, &body); err != nil {
-				writeResumeError(w, mapMutationError(err))
-				return
-			}
-		}
-	} else if route.AcceptsWireVersion {
-		if _, err := resolveWireVersion(r.Header, s.acceptedVersions); err != nil {
-			writeResumeError(w, err)
-			return
-		}
-	}
-	writeConstructionStub(w)
 }

@@ -389,7 +389,7 @@ export interface paths {
         put?: never;
         /**
          * Create a resume
-         * @description Creates one resume owned by the caller and returns it with its starting document. The body carries only `title` and optional `lng`; the document, revision, slug, and publish state are server-owned.
+         * @description Creates one resume owned by the caller and returns it with its starting document. The body carries `title`, optional `lng`, and an optional seed `document` at the declared wire version. The revision, slug, publish state, and any photo metadata are server-owned.
          *
          *     A create has no prior revision, so it takes `Idempotency-Key` and rejects `If-Match` with `400 precondition_not_supported` rather than ignoring it (ADR 0016, plan D6). The per-account resume cap is a domain conflict: the fourth create returns `409 resume_cap_exceeded`, never `412`.
          */
@@ -657,6 +657,11 @@ export interface components {
                         code: string;
                         message: string;
                     }[];
+                    /**
+                     * @description Stable reason for a `media_invalid` response.
+                     * @enum {string}
+                     */
+                    reason?: "malformed" | "animated" | "dimensions" | "orientation" | "trailing_data" | "normalization_failed";
                 };
             };
         };
@@ -795,8 +800,8 @@ export interface components {
             id: string;
             /** @description Owner-visible title. Not public and not the slug. */
             title: string;
-            /** @description Canonical BCP 47 language tag for the resume's content, or null when undetermined. */
-            lng: string | null;
+            /** @description Canonical BCP 47 language tag for the resume's content. Reads use `und` when stored metadata is absent, empty, invalid, or overlong. */
+            lng: string;
             revision: components["schemas"]["Revision"];
             /** @description Whether the resume is currently published. */
             live: boolean;
@@ -841,9 +846,9 @@ export interface components {
          *     }
          */
         SectionPatch: {
-            /** @description Owner-chosen heading, or null to fall back to the section type's default label. */
-            displayName?: string | null;
-            /** @description Key from the renderer's closed icon map, or null for no icon. An unknown key is rejected. */
+            /** @description Owner-chosen heading. An empty string is an explicit draft value; absence leaves the field unchanged. */
+            displayName?: string;
+            /** @description Key from the renderer's closed icon map, or null to remove the optional stored field. An empty or unknown key is rejected; absence leaves the field unchanged. */
             iconKey?: string | null;
             /** @description A permutation of this section's existing entry ids. It reorders only; it cannot add or remove an entry. */
             entryOrder?: string[];
@@ -854,27 +859,39 @@ export interface components {
          *     Every `index` is a **zero-based** insertion position with a minimum of 0. A create into a target column of length `N` accepts `0..N`, where `N` appends. A move **removes the source key first** and then measures the target column, so a same-column move is bounded by the resulting length; `N` again appends. An index outside that bound is `422 document_invalid`; a non-integer index is `400 request_invalid`.
          * @example {
          *       "op": "moveSection",
-         *       "sectionKey": "skills",
+         *       "key": "skills",
          *       "column": "sidebar",
          *       "index": 1
          *     }
          */
         StructureCommand: {
+            /** @constant */
+            op: "createSection";
+            key: string;
             /** @enum {string} */
-            op: "createSection" | "deleteSection" | "moveSection" | "reorderSections";
-            /** @description Section type for `createSection`, from the schema's `sectionType` enum. */
-            sectionType?: string;
-            /** @description Target section key for `deleteSection` and `moveSection`. */
-            sectionKey?: string;
-            /**
-             * @description Destination column for `createSection` and `moveSection`.
-             * @enum {string}
-             */
-            column?: "main" | "sidebar";
-            /** @description Zero-based insertion position in the destination column, measured after the source key is removed for a move. The column's current length appends. */
-            index?: number;
-            /** @description For `reorderSections`, the full permutation of that column's section keys. */
-            order?: string[];
+            sectionType: "profile" | "work" | "education" | "skill" | "language" | "certificate" | "project" | "custom";
+            displayName?: string;
+            iconKey?: string;
+            /** @enum {string} */
+            column: "main" | "sidebar";
+            index: number;
+        } | {
+            /** @constant */
+            op: "deleteSection";
+            key: string;
+        } | {
+            /** @constant */
+            op: "moveSection";
+            key: string;
+            /** @enum {string} */
+            column: "main" | "sidebar";
+            index: number;
+        } | {
+            /** @constant */
+            op: "reorderColumn";
+            /** @enum {string} */
+            column: "main" | "sidebar";
+            keys: string[];
         };
         /**
          * @description One customization change. `set` writes a value at an allowlisted path; `unset` removes it. Deltas apply in list order, so a later delta overwrites an earlier one on the same path. A path outside the fixed allowlist is `422 customization_path_denied`.
@@ -885,23 +902,35 @@ export interface components {
          *     }
          */
         CustomizationDelta: {
-            /** @enum {string} */
-            op: "set" | "unset";
-            /** @description Dotted path inside `customization`, from the fixed allowlist. */
+            /** @constant */
+            op: "set";
+            /** @description Dotted allowlisted path inside `customization`, limited to 256 UTF-8 bytes by the server. */
             path: string;
-            /** @description Required for `set`, absent for `unset`. Its shape is governed by the resume schema at that path. */
-            value?: unknown;
+            /** @description Non-null value governed by the resume schema at the selected path. */
+            value: unknown;
+        } | {
+            /** @constant */
+            op: "unset";
+            /** @description Dotted allowlisted path inside `customization`, limited to 256 UTF-8 bytes by the server. */
+            path: string;
         };
         /**
          * @description The whole client-owned personal-details object at the declared wire version, governed by `packages/schema/resume.schema.json`. Sending it whole keeps the write idempotent and lets a field be cleared by omission.
          *
-         *     `photo` is server-owned: this schema rejects a request that contains it, without restating the remaining fields. The photo routes write that field from a server-derived key.
+         *     Only the client-writable top-level property names are repeated here; contract tests derive that list from every accepted schema version. Their value shapes remain schema-owned. `photo` is server-owned and rejected; the photo routes write it from a server-derived key.
          * @example {
          *       "fullName": "Ada Lovelace",
          *       "headline": "Backend engineer"
          *     }
          */
-        PersonalDetailsPatch: Record<string, never>;
+        PersonalDetailsPatch: {
+            /** @description Value governed by the declared resume schema version. */
+            fullName?: unknown;
+            /** @description Value governed by the declared resume schema version. */
+            headline?: unknown;
+            /** @description Value governed by the declared resume schema version. */
+            details?: unknown;
+        };
         /**
          * @description The crop-only photo command. It accepts no object key and no other photo field, preserves the key read inside the write transaction, and performs no object-store I/O.
          * @example {
@@ -1351,7 +1380,10 @@ export interface components {
                  * @example {
                  *       "error": {
                  *         "code": "media_invalid",
-                 *         "message": "the image could not be decoded and normalized"
+                 *         "message": "the image could not be decoded and normalized",
+                 *         "details": {
+                 *           "reason": "malformed"
+                 *         }
                  *       }
                  *     }
                  */
@@ -1595,7 +1627,7 @@ export interface components {
          */
         ResumeID: string;
         /**
-         * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+         * @description A section's key inside the resume document's `content` map. Its path shape matches the released resume schema; malformed keys are `400 request_invalid`, while a well-formed unknown key is a `404 resume_not_found`-shaped domain failure.
          * @example experience
          */
         SectionKey: string;
@@ -1609,7 +1641,7 @@ export interface components {
          *
          *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
          *
-         *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+         *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
          * @example 2
          */
         SchemaVersionHeader: string;
@@ -2557,7 +2589,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -2619,7 +2651,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -2640,6 +2672,12 @@ export interface operations {
                     title: string;
                     /** @description BCP 47 language tag for the resume's content. Absent, null, or empty means undetermined (`und`). */
                     lng?: string | null;
+                    /** @description Optional seed document at the declared wire version. `personalDetails.photo` is rejected because only the server-owned photo routes may create photo metadata. */
+                    document?: components["schemas"]["ResumeDocument"] & {
+                        personalDetails?: {
+                            photo?: unknown;
+                        };
+                    };
                 };
             };
         };
@@ -2700,7 +2738,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -2748,7 +2786,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -2807,7 +2845,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -2873,7 +2911,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -2885,7 +2923,7 @@ export interface operations {
                  */
                 id: components["parameters"]["ResumeID"];
                 /**
-                 * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+                 * @description A section's key inside the resume document's `content` map. Its path shape matches the released resume schema; malformed keys are `400 request_invalid`, while a well-formed unknown key is a `404 resume_not_found`-shaped domain failure.
                  * @example experience
                  */
                 sectionKey: components["parameters"]["SectionKey"];
@@ -2944,7 +2982,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -2956,7 +2994,7 @@ export interface operations {
                  */
                 id: components["parameters"]["ResumeID"];
                 /**
-                 * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+                 * @description A section's key inside the resume document's `content` map. Its path shape matches the released resume schema; malformed keys are `400 request_invalid`, while a well-formed unknown key is a `404 resume_not_found`-shaped domain failure.
                  * @example experience
                  */
                 sectionKey: components["parameters"]["SectionKey"];
@@ -3015,7 +3053,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -3027,7 +3065,7 @@ export interface operations {
                  */
                 id: components["parameters"]["ResumeID"];
                 /**
-                 * @description A section's key inside the resume document's `content` map. Unknown keys are `404 resume_not_found`-shaped domain failures at the document level, not path errors.
+                 * @description A section's key inside the resume document's `content` map. Its path shape matches the released resume schema; malformed keys are `400 request_invalid`, while a well-formed unknown key is a `404 resume_not_found`-shaped domain failure.
                  * @example experience
                  */
                 sectionKey: components["parameters"]["SectionKey"];
@@ -3084,7 +3122,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -3105,15 +3143,16 @@ export interface operations {
                  *       "commands": [
                  *         {
                  *           "op": "createSection",
-                 *           "sectionType": "experience",
+                 *           "key": "projects",
+                 *           "sectionType": "project",
                  *           "column": "main",
                  *           "index": 0
                  *         },
                  *         {
                  *           "op": "moveSection",
-                 *           "sectionKey": "skills",
+                 *           "key": "projects",
                  *           "column": "sidebar",
-                 *           "index": 1
+                 *           "index": 0
                  *         }
                  *       ]
                  *     }
@@ -3163,7 +3202,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -3227,7 +3266,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -3253,7 +3292,7 @@ export interface operations {
                  *         },
                  *         {
                  *           "op": "unset",
-                 *           "path": "accentColor"
+                 *           "path": "colors.accent"
                  *         }
                  *       ]
                  *     }
@@ -3353,7 +3392,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -3419,7 +3458,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
@@ -3480,7 +3519,7 @@ export interface operations {
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
-                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 request_invalid`, never silently first-wins.
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
                  * @example 2
                  */
                 "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];

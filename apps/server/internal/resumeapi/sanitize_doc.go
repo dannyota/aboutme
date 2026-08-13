@@ -28,44 +28,53 @@ func sanitizeDocument(doc schema.Resume) schema.Resume {
 	for key, section := range doc.Content {
 		switch section.SectionType {
 		case schema.Profile:
-			section.ProfileEntries = append([]schema.ProfileEntry(nil), section.ProfileEntries...)
+			section.ProfileEntries = cloneEntries(section.ProfileEntries)
 			for i := range section.ProfileEntries {
 				section.ProfileEntries[i].Text = sanitizeOptional(section.ProfileEntries[i].Text)
 			}
 		case schema.Work:
-			section.WorkEntries = append([]schema.WorkEntry(nil), section.WorkEntries...)
+			section.WorkEntries = cloneEntries(section.WorkEntries)
 			for i := range section.WorkEntries {
 				section.WorkEntries[i].Description = sanitizeOptional(section.WorkEntries[i].Description)
 			}
 		case schema.Education:
-			section.EducationEntries = append([]schema.EducationEntry(nil), section.EducationEntries...)
+			section.EducationEntries = cloneEntries(section.EducationEntries)
 			for i := range section.EducationEntries {
 				section.EducationEntries[i].Description = sanitizeOptional(section.EducationEntries[i].Description)
 			}
 		case schema.Skill:
-			section.SkillEntries = append([]schema.SkillEntry(nil), section.SkillEntries...)
+			section.SkillEntries = cloneEntries(section.SkillEntries)
 			for i := range section.SkillEntries {
 				section.SkillEntries[i].InfoHTML = sanitizeOptional(section.SkillEntries[i].InfoHTML)
 			}
 		case schema.Certificate:
-			section.CertificateEntries = append([]schema.CertificateEntry(nil), section.CertificateEntries...)
+			section.CertificateEntries = cloneEntries(section.CertificateEntries)
 			for i := range section.CertificateEntries {
 				section.CertificateEntries[i].Description = sanitizeOptional(section.CertificateEntries[i].Description)
 			}
 		case schema.Project:
-			section.ProjectEntries = append([]schema.ProjectEntry(nil), section.ProjectEntries...)
+			section.ProjectEntries = cloneEntries(section.ProjectEntries)
 			for i := range section.ProjectEntries {
 				section.ProjectEntries[i].Description = sanitizeOptional(section.ProjectEntries[i].Description)
 			}
 		case schema.SectionTypeCustom:
-			section.CustomEntries = append([]schema.CustomEntry(nil), section.CustomEntries...)
+			section.CustomEntries = cloneEntries(section.CustomEntries)
 			for i := range section.CustomEntries {
 				section.CustomEntries[i].Description = sanitizeOptional(section.CustomEntries[i].Description)
 			}
+		case schema.Language:
+			section.LanguageEntries = cloneEntries(section.LanguageEntries)
 		}
 		out.Content[key] = section
 	}
 	return out
+}
+
+func cloneEntries[T any](entries []T) []T {
+	if entries == nil {
+		return nil
+	}
+	return append(make([]T, 0, len(entries)), entries...)
 }
 
 func sanitizeOptional(value *string) *string {

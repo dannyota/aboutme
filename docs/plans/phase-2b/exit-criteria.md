@@ -61,12 +61,17 @@ Every item must pass at one unchanged candidate commit.
       current document never points at an object selected by cleanup.
 - [ ] Failure injection covers proved-created, proved-not-created, and unknown
       object writes; definite and ambiguous database commits; lost create and
-      collision responses; deletion-job insert failure; and worker deletion
-      failure.
+      collision responses; deletion-job insert failure; candidate compensation
+      failure; and the create-to-commit deadline. P8-priv owns worker deletion
+      failure and reconciliation failure injection.
 - [ ] The frozen normalization benchmark passes provisionally on its pinned
       local controlled-cgroup profile. Five seconds is measured; request-time
       decoding is synchronous and no work remains after return. P9A owns the
-      launch-gate rerun on the selected production ARM64 Graviton task.
+      launch-gate rerun on the selected production ARM64 Graviton task. Local
+      evidence for source `0513351fb8690affbc729f118f1489955e2c4558` is the
+      frozen manifest and its ignored commit-keyed `results.json`: 160/160
+      samples passed, with a 3.025443354-second worst duration and 193,585,152
+      byte worst RSS delta.
 - [ ] The media backend exposes stable bounded pages and update time for
       AC-MEDIA-007. P2B supplies the durable exact-key queue. P8-priv implements
       its 24-hour deletion target plus the adopted 48-hour orphan-reconciliation

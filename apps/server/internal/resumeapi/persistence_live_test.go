@@ -201,7 +201,10 @@ func TestLiveHTTPWriteReadSanitizesBeforePersistedBounds(t *testing.T) {
 		return document
 	}
 
-	removable := "<!--" + strings.Repeat("x", schema.MaxRichTextBytes+1) + "--><script>alert(1)</script><p>safe</p>"
+	// The declared schema counts code points while the persisted bound counts
+	// UTF-8 bytes. This stays within the former and exceeds the latter until the
+	// sanitizer removes the comment and script.
+	removable := "<!--" + strings.Repeat("é", 9_000) + "--><script>alert(1)</script><p>safe</p>"
 	accepted := created.Doc
 	accepted.Content = map[string]schema.Section{
 		"profile": schema.NewProfileSection(nil, nil, []schema.ProfileEntry{{

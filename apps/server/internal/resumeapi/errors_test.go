@@ -3,6 +3,7 @@ package resumeapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
@@ -64,8 +67,8 @@ func TestWriteStoredResponse_204HasNoRepresentation(t *testing.T) {
 func TestErrorVocabularyCoversEveryResumeAPICallSite(t *testing.T) {
 	t.Parallel()
 
-	allowed := make(map[string]struct{}, len(productionErrorVocabulary)+len(genericErrorVocabulary)+len(constructionErrorVocabulary))
-	for _, vocabulary := range []map[string]struct{}{productionErrorVocabulary, genericErrorVocabulary, constructionErrorVocabulary} {
+	allowed := make(map[string]struct{}, len(productionErrorVocabulary)+len(genericErrorVocabulary))
+	for _, vocabulary := range []map[string]struct{}{productionErrorVocabulary, genericErrorVocabulary} {
 		for code := range vocabulary {
 			allowed[code] = struct{}{}
 		}
@@ -161,6 +164,7 @@ func TestDetailsVocabularyIsExactlyD7(t *testing.T) {
 
 	want := map[string]struct{}{
 		"document_invalid": {}, "revision_mismatch": {}, "unsupported_schema_version": {},
+		"media_invalid": {},
 	}
 	if !reflect.DeepEqual(detailsErrorVocabulary, want) {
 		t.Fatalf("details vocabulary = %#v, want %#v", detailsErrorVocabulary, want)
@@ -168,6 +172,43 @@ func TestDetailsVocabularyIsExactlyD7(t *testing.T) {
 	for code := range detailsErrorVocabulary {
 		if _, ok := productionErrorVocabulary[code]; !ok {
 			t.Errorf("details code %q is not in the production vocabulary", code)
+		}
+	}
+}
+
+func TestWriteResumeError_MediaInvalidReasonIsClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, reason := range []string{
+		"malformed", "animated", "dimensions", "orientation", "trailing_data", "normalization_failed",
+	} {
+		rec := httptest.NewRecorder()
+		writeResumeError(rec, mediaInvalidError(reason))
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("reason %q status = %d, want 422", reason, rec.Code)
+		}
+	}
+	rec := httptest.NewRecorder()
+	writeResumeError(rec, &clientError{
+		Status: http.StatusUnprocessableEntity, Code: "media_invalid",
+		Message: "image is invalid", Details: map[string]any{"reason": "malformed"},
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("generic-map details status = %d, want 422", rec.Code)
+	}
+
+	for _, details := range []any{
+		map[string]string{"reason": "decoder internals"},
+		map[string]string{"reason": "malformed", "extra": "detail"},
+		map[string]any{"reason": 1},
+	} {
+		rec := httptest.NewRecorder()
+		writeResumeError(rec, &clientError{
+			Status: http.StatusUnprocessableEntity, Code: "media_invalid",
+			Message: "image is invalid", Details: details,
+		})
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("details %#v status = %d, want 500", details, rec.Code)
 		}
 	}
 }
@@ -207,6 +248,43 @@ func TestMapMutationError_RevisionMismatchEmitsRequestedWireDocument(t *testing.
 			gotDocument, ok := details["document"].(json.RawMessage)
 			if !ok || !bytes.Equal(gotDocument, wantDocument) {
 				t.Fatalf("winner document = %s, fresh emitted winner = %s", gotDocument, wantDocument)
+			}
+		})
+	}
+}
+
+func TestMapMutationError_DocumentIssuesAlwaysCarryPathCodeAndMessage(t *testing.T) {
+	t.Parallel()
+
+	doc := loadMinimalDocument(t)
+	tooLong := strings.Repeat("x", 161)
+	doc.Content = map[string]schema.Section{
+		"work": schema.NewWorkSection(nil, nil, []schema.WorkEntry{{
+			ID: "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60", JobTitle: &tooLong,
+		}}),
+	}
+	doc.Customization.Layout.Sections.Main = []string{"work"}
+	doc.Customization.Layout.Sections.Sidebar = []string{}
+	validationErr := resume.ValidateForStore(doc)
+
+	for name, source := range map[string]error{
+		"store":     validationErr,
+		"projector": fmt.Errorf("%w: %w", docmigrate.ErrInvalidDocument, validationErr),
+	} {
+		t.Run(name, func(t *testing.T) {
+			mapped := mapMutationError(source)
+			details, ok := mapped.Details.(map[string]any)
+			if !ok {
+				t.Fatalf("details = %#v", mapped.Details)
+			}
+			issues, ok := details["issues"].([]map[string]string)
+			if !ok || len(issues) == 0 {
+				t.Fatalf("issues = %#v", details["issues"])
+			}
+			for _, issue := range issues {
+				if issue["path"] == "" || issue["code"] == "" || issue["message"] == "" {
+					t.Fatalf("incomplete issue = %#v", issue)
+				}
 			}
 		})
 	}

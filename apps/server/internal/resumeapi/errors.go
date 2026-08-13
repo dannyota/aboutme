@@ -28,12 +28,14 @@ var genericErrorVocabulary = map[string]struct{}{
 	"rate_limited": {},
 }
 
-var constructionErrorVocabulary = map[string]struct{}{
-	"not_implemented": {},
-}
-
 var detailsErrorVocabulary = map[string]struct{}{
 	"document_invalid": {}, "revision_mismatch": {}, "unsupported_schema_version": {},
+	"media_invalid": {},
+}
+
+var mediaInvalidReasons = map[string]struct{}{
+	"malformed": {}, "animated": {}, "dimensions": {}, "orientation": {},
+	"trailing_data": {}, "normalization_failed": {},
 }
 
 type clientError struct {
@@ -69,6 +71,8 @@ func writeResumeError(w http.ResponseWriter, err *clientError) {
 	if err.Details != nil {
 		if _, allowed := detailsErrorVocabulary[err.Code]; !allowed {
 			err = internalClientError()
+		} else if err.Code == "media_invalid" && !validMediaInvalidDetails(err.Details) {
+			err = internalClientError()
 		}
 	}
 	for name, value := range err.Headers {
@@ -81,6 +85,37 @@ func writeResumeError(w http.ResponseWriter, err *clientError) {
 	}}); encodeErr != nil {
 		return
 	}
+}
+
+func mediaInvalidError(reason string) *clientError {
+	return &clientError{
+		Status: http.StatusUnprocessableEntity, Code: "media_invalid",
+		Message: "image is invalid", Details: map[string]string{"reason": reason},
+	}
+}
+
+func validMediaInvalidDetails(details any) bool {
+	var reason string
+	switch values := details.(type) {
+	case map[string]string:
+		if len(values) != 1 {
+			return false
+		}
+		reason = values["reason"]
+	case map[string]any:
+		if len(values) != 1 {
+			return false
+		}
+		var ok bool
+		reason, ok = values["reason"].(string)
+		if !ok {
+			return false
+		}
+	default:
+		return false
+	}
+	_, ok := mediaInvalidReasons[reason]
+	return ok
 }
 
 func writeStoredResponse(w http.ResponseWriter, response resume.StoredResponse) {
@@ -119,7 +154,7 @@ func mapMutationError(err error) *clientError {
 	if errors.Is(err, docmigrate.ErrInvalidDocument) {
 		return &clientError{
 			Status: http.StatusUnprocessableEntity, Code: "document_invalid",
-			Message: "resume document is invalid",
+			Message: "resume document is invalid", Details: validationDetails(resume.DescribeValidationError(err)),
 		}
 	}
 	var capacity *resume.IdempotencyCapacityError
@@ -132,16 +167,20 @@ func mapMutationError(err error) *clientError {
 	}
 	var validation *resume.ValidationError
 	if errors.As(err, &validation) {
-		issues := make([]map[string]string, len(validation.Issues))
-		for i, issue := range validation.Issues {
-			issues[i] = map[string]string{"path": "", "code": "invalid", "message": issue}
-		}
 		return &clientError{
 			Status: http.StatusUnprocessableEntity, Code: "document_invalid",
-			Message: "resume document is invalid", Details: map[string]any{"issues": issues},
+			Message: "resume document is invalid", Details: validationDetails(resume.DescribeValidationError(validation)),
 		}
 	}
 	return internalClientError()
+}
+
+func validationDetails(source []resume.ValidationIssue) map[string]any {
+	issues := make([]map[string]string, len(source))
+	for index, issue := range source {
+		issues[index] = map[string]string{"path": issue.Path, "code": issue.Code, "message": issue.Message}
+	}
+	return map[string]any{"issues": issues}
 }
 
 func (s *Service) mapMutationErrorAtWire(err error, wireVersion int32) *clientError {

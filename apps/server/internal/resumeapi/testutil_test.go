@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/media/mediatest"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -58,7 +60,7 @@ func snapshotHTTPResponse(t *testing.T, response *http.Response) testHTTPRespons
 	return testHTTPResponse{status: response.StatusCode, header: response.Header.Clone(), body: raw}
 }
 
-// newResumeAPITestHarness is the shared live-database, filesystem-media, real
+// newResumeAPITestHarness is the shared live-database, selected-media, real
 // router fixture for this package and the endpoint tasks that follow it.
 func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 	t.Helper()
@@ -69,15 +71,12 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
+	t.Cleanup(func() { pool.Close(context.Background()) })
 	queries := store.New(pool)
 	projector := docmigrate.NewIdentityProjector()
 	resumeStore := resume.NewStore(pool, projector)
 	idempotency := resume.NewIdempotencyStore(pool)
-	blobs, err := media.NewFS(t.TempDir())
-	if err != nil {
-		pool.Close(context.Background())
-		t.Fatalf("create filesystem media backend: %v", err)
-	}
+	blobs := newResumeAPITestMediaBackend(ctx, t)
 	manager := auth.NewSessionManager(queries)
 
 	var suffix [12]byte
@@ -115,9 +114,29 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 	}
 	t.Cleanup(func() {
 		server.Close()
-		pool.Close(context.Background())
 	})
 	return h
+}
+
+func newResumeAPITestMediaBackend(ctx context.Context, t *testing.T) media.Backend {
+	t.Helper()
+	switch os.Getenv("TEST_MEDIA_BACKEND") {
+	case "", "fs":
+		backend, err := media.NewFS(t.TempDir())
+		if err != nil {
+			t.Fatalf("create filesystem media backend: %v", err)
+		}
+		return backend
+	case "s3":
+		backend, err := media.NewS3(ctx, mediatest.RequireTestS3(t))
+		if err != nil {
+			t.Fatalf("create S3 media backend: %v", err)
+		}
+		return backend
+	default:
+		t.Fatalf("TEST_MEDIA_BACKEND must be fs or s3")
+		return nil
+	}
 }
 
 func (h *resumeAPITestHarness) request(t *testing.T, method, path string, body io.Reader, authenticated, csrf bool) testHTTPResponse {

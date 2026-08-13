@@ -1177,8 +1177,9 @@ paths:
       summary: Create a resume
       description: >-
         Creates one resume owned by the caller and returns it with its
-        starting document. The body carries only `title` and optional `lng`;
-        the document, revision, slug, and publish state are server-owned.
+        starting document. The body carries `title`, optional `lng`, and an
+        optional seed `document` at the declared wire version. The revision,
+        slug, publish state, and any photo metadata are server-owned.
 
 
         A create has no prior revision, so it takes `Idempotency-Key` and
@@ -1200,7 +1201,6 @@ paths:
               properties:
                 title:
                   type: string
-                  minLength: 1
                   maxLength: 160
                   description: Owner-visible resume title, bounded in code
                     points by the numeric budgets.
@@ -1209,6 +1209,23 @@ paths:
                   maxLength: 35
                   description: BCP 47 language tag for the resume's content.
                     Absent, null, or empty means undetermined (`und`).
+                document:
+                  allOf:
+                    - $ref: "#/components/schemas/ResumeDocument"
+                    - type: object
+                      properties:
+                        personalDetails:
+                          type: object
+                          properties:
+                            photo: {}
+                          not:
+                            properties:
+                              photo: {}
+                            required: [photo]
+                  description: >-
+                    Optional seed document at the declared wire version.
+                    `personalDetails.photo` is rejected because only the
+                    server-owned photo routes may create photo metadata.
             example:
               title: Backend engineer
               lng: en
@@ -1332,7 +1349,6 @@ paths:
               properties:
                 title:
                   type: string
-                  minLength: 1
                   maxLength: 160
                 lng:
                   type: [string, "null"]
@@ -1628,13 +1644,14 @@ paths:
             example:
               commands:
                 - op: createSection
-                  sectionType: experience
+                  key: projects
+                  sectionType: project
                   column: main
                   index: 0
                 - op: moveSection
-                  sectionKey: skills
+                  key: projects
                   column: sidebar
-                  index: 1
+                  index: 0
       responses:
         "200":
           $ref: "#/components/responses/ResumeWritten"
@@ -1767,7 +1784,7 @@ paths:
                   path: font.family
                   value: inter
                 - op: unset
-                  path: accentColor
+                  path: colors.accent
       responses:
         "200":
           $ref: "#/components/responses/ResumeWritten"
@@ -2388,6 +2405,8 @@ components:
             error:
               code: media_invalid
               message: the image could not be decoded and normalized
+              details:
+                reason: malformed
     PhotoBusy:
       description: >-
         `media_busy`: the task-wide media permit was not acquired within one
@@ -2636,6 +2655,16 @@ components:
                         type: string
                       message:
                         type: string
+                reason:
+                  type: string
+                  description: Stable reason for a `media_invalid` response.
+                  enum:
+                    - malformed
+                    - animated
+                    - dimensions
+                    - orientation
+                    - trailing_data
+                    - normalization_failed
     Revision:
       type: string
       pattern: "^[0-9]+$"
@@ -2824,10 +2853,11 @@ components:
           maxLength: 160
           description: Owner-visible title. Not public and not the slug.
         lng:
-          type: [string, "null"]
+          type: string
           maxLength: 35
           description: Canonical BCP 47 language tag for the resume's
-            content, or null when undetermined.
+            content. Reads use `und` when stored metadata is absent, empty,
+            invalid, or overlong.
         revision:
           $ref: "#/components/schemas/Revision"
         live:
@@ -2907,13 +2937,17 @@ components:
       minProperties: 1
       properties:
         displayName:
-          type: [string, "null"]
-          description: Owner-chosen heading, or null to fall back to the
-            section type's default label.
+          type: string
+          maxLength: 80
+          description: Owner-chosen heading. An empty string is an explicit
+            draft value; absence leaves the field unchanged.
         iconKey:
           type: [string, "null"]
-          description: Key from the renderer's closed icon map, or null for
-            no icon. An unknown key is rejected.
+          maxLength: 64
+          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+          description: Key from the renderer's closed icon map, or null to
+            remove the optional stored field. An empty or unknown key is
+            rejected; absence leaves the field unchanged.
         entryOrder:
           type: array
           description: A permutation of this section's existing entry ids.
@@ -2925,7 +2959,6 @@ components:
         displayName: Experience
         iconKey: briefcase
     StructureCommand:
-      type: object
       description: >-
         One section-structure command. Commands are evaluated **in list
         order** against the result of the previous command, so a later
@@ -2939,67 +2972,124 @@ components:
         resulting length; `N` again appends. An index outside that bound is
         `422 document_invalid`; a non-integer index is `400
         request_invalid`.
-      required: [op]
-      properties:
-        op:
-          type: string
-          enum: [createSection, deleteSection, moveSection, reorderSections]
-        sectionType:
-          type: string
-          description: Section type for `createSection`, from the schema's
-            `sectionType` enum.
-        sectionKey:
-          type: string
-          description: Target section key for `deleteSection` and
-            `moveSection`.
-        column:
-          type: string
-          enum: [main, sidebar]
-          description: Destination column for `createSection` and
-            `moveSection`.
-        index:
-          type: integer
-          minimum: 0
-          description: Zero-based insertion position in the destination
-            column, measured after the source key is removed for a move.
-            The column's current length appends.
-        order:
-          type: array
-          description: For `reorderSections`, the full permutation of that
-            column's section keys.
-          items:
-            type: string
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [op, key, sectionType, column, index]
+          properties:
+            op:
+              const: createSection
+            key:
+              type: string
+              maxLength: 36
+            sectionType:
+              type: string
+              enum:
+                - profile
+                - work
+                - education
+                - skill
+                - language
+                - certificate
+                - project
+                - custom
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            column:
+              type: string
+              enum: [main, sidebar]
+            index:
+              type: integer
+              minimum: 0
+        - type: object
+          additionalProperties: false
+          required: [op, key]
+          properties:
+            op:
+              const: deleteSection
+            key:
+              type: string
+              maxLength: 36
+        - type: object
+          additionalProperties: false
+          required: [op, key, column, index]
+          properties:
+            op:
+              const: moveSection
+            key:
+              type: string
+              maxLength: 36
+            column:
+              type: string
+              enum: [main, sidebar]
+            index:
+              type: integer
+              minimum: 0
+        - type: object
+          additionalProperties: false
+          required: [op, column, keys]
+          properties:
+            op:
+              const: reorderColumn
+            column:
+              type: string
+              enum: [main, sidebar]
+            keys:
+              type: array
+              uniqueItems: true
+              maxItems: 24
+              items:
+                type: string
+                maxLength: 36
       example:
         op: moveSection
-        sectionKey: skills
+        key: skills
         column: sidebar
         index: 1
     CustomizationDelta:
-      type: object
       description: >-
         One customization change. `set` writes a value at an allowlisted
         path; `unset` removes it. Deltas apply in list order, so a later
         delta overwrites an earlier one on the same path. A path outside the
         fixed allowlist is `422 customization_path_denied`.
-      required: [op, path]
-      additionalProperties: false
-      properties:
-        op:
-          type: string
-          enum: [set, unset]
-        path:
-          type: string
-          description: Dotted path inside `customization`, from the fixed
-            allowlist.
-        value:
-          description: Required for `set`, absent for `unset`. Its shape is
-            governed by the resume schema at that path.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [op, path, value]
+          properties:
+            op:
+              const: set
+            path:
+              type: string
+              description: Dotted allowlisted path inside `customization`,
+                limited to 256 UTF-8 bytes by the server.
+            value:
+              not:
+                type: "null"
+              description: Non-null value governed by the resume schema at
+                the selected path.
+        - type: object
+          additionalProperties: false
+          required: [op, path]
+          properties:
+            op:
+              const: unset
+            path:
+              type: string
+              description: Dotted allowlisted path inside `customization`,
+                limited to 256 UTF-8 bytes by the server.
       example:
         op: set
         path: font.family
         value: inter
     PersonalDetailsPatch:
       type: object
+      additionalProperties: false
       description: >-
         The whole client-owned personal-details object at the declared wire
         version, governed by `packages/schema/resume.schema.json`. Sending it
@@ -3007,11 +3097,17 @@ components:
         omission.
 
 
-        `photo` is server-owned: this schema rejects a request that contains
-        it, without restating the remaining fields. The photo routes write
-        that field from a server-derived key.
-      not:
-        required: [photo]
+        Only the client-writable top-level property names are repeated here;
+        contract tests derive that list from every accepted schema version.
+        Their value shapes remain schema-owned. `photo` is server-owned and
+        rejected; the photo routes write it from a server-derived key.
+      properties:
+        fullName:
+          description: Value governed by the declared resume schema version.
+        headline:
+          description: Value governed by the declared resume schema version.
+        details:
+          description: Value governed by the declared resume schema version.
       example:
         fullName: Ada Lovelace
         headline: Backend engineer
@@ -3183,12 +3279,14 @@ components:
       in: path
       required: true
       description: A section's key inside the resume document's `content`
-        map. Unknown keys are `404 resume_not_found`-shaped domain failures
-        at the document level, not path errors.
+        map. Its path shape matches the released resume schema; malformed keys
+        are `400 request_invalid`, while a well-formed unknown key is a `404
+        resume_not_found`-shaped domain failure.
       schema:
         type: string
         minLength: 1
-        maxLength: 64
+        maxLength: 36
+        pattern: "^[a-z]+$|^[0-9a-f-]{36}$"
       example: experience
     EntryID:
       name: entryId
@@ -3216,7 +3314,8 @@ components:
 
 
         Singleton header: exactly one field line with one value. A repeated
-        field line or a comma-folded value is `400 request_invalid`, never
+        field line or a comma-folded value is `400
+        unsupported_schema_version`, never
         silently first-wins.
       schema:
         type: string

@@ -1,6 +1,6 @@
 # Phase 2B — Resume HTTP API and media
 
-Status: **Revision 3, adopted and dispatchable** (2026-08-12).
+Status: **Revision 4, implementation complete; exit gate active** (2026-08-13).
 
 This phase adds the authenticated resume HTTP surface, granular autosave
 commands, full write-safety enforcement, document-version negotiation, and
@@ -83,20 +83,20 @@ the root Makefile, workflows, manifests, and shared scripts.
 
 ## Task index
 
-| Task | Deliverable                                        | Tier   | State   |
-| ---- | -------------------------------------------------- | ------ | ------- |
-| 1    | Complete OpenAPI contract and client regeneration  | Normal | Landed  |
-| 2    | Transaction seam and metadata CAS query            | High   | Landed  |
-| 3    | Media backends and local S3-compatible service     | High   | Landed  |
-| 4    | Write-safety kernel, routes, and policies          | High   | Landed  |
-| 5    | Sanitizer walk at the aggregate write boundary     | High   | Landed  |
-| 6    | Resume list, create, read, metadata update, delete | High   | Pending |
-| 7    | Entry and section metadata commands                | High   | Pending |
-| 8    | Atomic section structure command                   | High   | Pending |
-| 9    | Personal details and wire-version proof            | High   | Pending |
-| 10   | Fixed-allowlist customization deltas               | High   | Pending |
-| 11   | Photo upload, read, crop, replace, and delete      | High   | Pending |
-| Gate | Phase review and exit checklist                    | —      | Pending |
+| Task | Deliverable                                        | Tier   | State       |
+| ---- | -------------------------------------------------- | ------ | ----------- |
+| 1    | Complete OpenAPI contract and client regeneration  | Normal | Landed      |
+| 2    | Transaction seam and metadata CAS query            | High   | Landed      |
+| 3    | Media backends and local S3-compatible service     | High   | Landed      |
+| 4    | Write-safety kernel, routes, and policies          | High   | Landed      |
+| 5    | Sanitizer walk at the aggregate write boundary     | High   | Landed      |
+| 6    | Resume list, create, read, metadata update, delete | High   | Implemented |
+| 7    | Entry and section metadata commands                | High   | Implemented |
+| 8    | Atomic section structure command                   | High   | Implemented |
+| 9    | Personal details and wire-version proof            | High   | Implemented |
+| 10   | Fixed-allowlist customization deltas               | High   | Implemented |
+| 11   | Photo upload, read, crop, replace, and delete      | High   | Implemented |
+| Gate | Phase review and exit checklist                    | —      | Active      |
 
 The adversarial suites are folded into the tasks that own the behavior; their
 cases live in [adversarial coverage](adversarial-coverage.md).
@@ -123,8 +123,9 @@ Task details:
 | W3   | T6–T11 disjoint route files       | Route tests pass; every construction-only 501 is gone |
 | W4   | Phase review and exit checklist   | Candidate is unchanged and every criterion passes     |
 
-W2 has landed. Its shared router harness exposes all 15 construction stubs for
-W3, with the write-safety and sanitizer choke points already enforced.
+W3 is implemented. All 15 routes use concrete handlers, and no construction stub
+remains. The write-safety, sanitizer, database, filesystem-media, and S3-media
+suites are integrated for W4 review and exit checks.
 
 W3 file authoring runs in parallel, but its build, race, database, and S3
 verification commands queue in at most two batches of three workers. The

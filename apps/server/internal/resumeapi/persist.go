@@ -64,7 +64,7 @@ func (kind operationKind) build(service *Service) mutationOperation {
 	case operationCreate:
 		return createOperation{service: service}
 	case operationMetadata:
-		return metadataOperation{service: service}
+		return resumeMetadataMutation{service: service}
 	case operationDelete:
 		return deleteOperation{service: service}
 	case operationAggregate:
@@ -86,16 +86,11 @@ type createPreparedInput struct {
 }
 
 type aggregatePreparedInput struct {
-	ResumeID   uuid.UUID
-	Apply      func(json.RawMessage) (json.RawMessage, error)
-	Response   mutationResponseBuilder
-	BeforeSave func(context.Context, *store.Queries, resume.Resume, schema.Resume) error
-}
-
-type metadataPreparedInput struct {
-	aggregatePreparedInput
-	Title    string
-	Language *string
+	ResumeID    uuid.UUID
+	Apply       func(json.RawMessage) (json.RawMessage, error)
+	Response    mutationResponseBuilder
+	TargetsFont bool
+	BeforeSave  func(context.Context, *store.Queries, resume.Resume, schema.Resume) error
 }
 
 type deletePreparedInput struct {
@@ -140,7 +135,7 @@ func (op aggregateOperation) Run(ctx context.Context, qtx *store.Queries, mutati
 	if err != nil {
 		return mutationRunResult{}, err
 	}
-	doc, err := op.service.applyAtWireVersion(current.Doc, mutation.WireVersion, input.Apply)
+	doc, err := op.service.applyAtWireVersion(current.Doc, mutation.WireVersion, input.Apply, input.TargetsFont)
 	if err != nil {
 		return mutationRunResult{}, err
 	}
@@ -157,50 +152,14 @@ func (op aggregateOperation) Run(ctx context.Context, qtx *store.Queries, mutati
 	if err != nil {
 		return mutationRunResult{}, err
 	}
-	current.Revision = revision
-	current.Doc = doc
-	response, err := input.Response(current, doc, mutation.WireVersion)
-	return mutationRunResult{Response: response}, err
-}
-
-type metadataOperation struct{ service *Service }
-
-// Run persists metadata and the complete current document in one CAS.
-func (op metadataOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext,
-	prepared preparedInput,
-) (mutationRunResult, error) {
-	input, ok := prepared.Value.(metadataPreparedInput)
-	if !ok || input.Apply == nil || input.Response == nil || mutation.ExpectedRevision == nil {
-		return mutationRunResult{}, fmt.Errorf("resumeapi: metadata operation received the wrong prepared input")
-	}
-	current, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
+	updated, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
 	if err != nil {
 		return mutationRunResult{}, err
 	}
-	doc, err := op.service.applyAtWireVersion(current.Doc, mutation.WireVersion, input.Apply)
-	if err != nil {
-		return mutationRunResult{}, err
+	if updated.Revision != revision {
+		return mutationRunResult{}, errors.New("resumeapi: saved resume revision changed inside transaction")
 	}
-	if input.BeforeSave != nil {
-		hookDocument, cloneErr := cloneDocumentForHook(doc)
-		if cloneErr != nil {
-			return mutationRunResult{}, cloneErr
-		}
-		if beforeSaveErr := input.BeforeSave(ctx, qtx, current, hookDocument); beforeSaveErr != nil {
-			return mutationRunResult{}, beforeSaveErr
-		}
-	}
-	revision, err := op.service.resumes.SaveMetadataAndDocumentTx(
-		ctx, qtx, mutation.UserID, input.ResumeID, input.Title, input.Language, doc, *mutation.ExpectedRevision,
-	)
-	if err != nil {
-		return mutationRunResult{}, err
-	}
-	current.Title = input.Title
-	current.Lng = input.Language
-	current.Revision = revision
-	current.Doc = doc
-	response, err := input.Response(current, doc, mutation.WireVersion)
+	response, err := input.Response(updated, updated.Doc, mutation.WireVersion)
 	return mutationRunResult{Response: response}, err
 }
 
@@ -293,7 +252,7 @@ func cloneDocumentForHook(doc schema.Resume) (schema.Resume, error) {
 // applyAtWireVersion preserves the fixed down-emit, apply, up-accept order.
 // apply receives and returns a complete document at the caller's version.
 func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
-	apply func(json.RawMessage) (json.RawMessage, error),
+	apply func(json.RawMessage) (json.RawMessage, error), fontTargeted ...bool,
 ) (schema.Resume, error) {
 	canonical, err := resume.AssembleCanonical(current)
 	if err != nil {
@@ -307,15 +266,7 @@ func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
 	if err != nil {
 		return schema.Resume{}, err
 	}
-	wireDocument, err := strictDecodeCurrentDocument(changed)
-	if err != nil {
-		return schema.Resume{}, err
-	}
-	sanitizedWire, err := json.Marshal(s.sanitizeForPersistence(wireDocument))
-	if err != nil {
-		return schema.Resume{}, fmt.Errorf("resumeapi: encode sanitized wire document: %w", err)
-	}
-	accepted, _, err := s.projector.AcceptWire(sanitizedWire, version)
+	accepted, _, err := s.projector.AcceptWire(changed, version)
 	if err != nil {
 		return schema.Resume{}, fmt.Errorf("resumeapi: accept wire document: %w", err)
 	}
@@ -323,5 +274,8 @@ func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
 	if err != nil {
 		return schema.Resume{}, err
 	}
-	return validateDocumentForPersistence(doc)
+	if len(fontTargeted) == 0 || !fontTargeted[0] {
+		doc.Customization.Font.Family = current.Customization.Font.Family
+	}
+	return s.prepareDocumentForPersistence(doc)
 }
