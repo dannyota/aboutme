@@ -15,7 +15,10 @@ const PAYLOAD_PATTERN
 const encoded = (value: string): string =>
   Buffer.from(value, 'utf8').toString('base64');
 
-export function externalizeNuxtBootstrap(html: string): string {
+export function externalizeNuxtBootstrap(
+  html: string,
+  clientConfig?: unknown,
+): string {
   const configs = [...html.matchAll(CONFIG_PATTERN)];
   const payloads = [...html.matchAll(PAYLOAD_PATTERN)];
   if (configs.length === 0 && payloads.length === 0) return html;
@@ -42,7 +45,10 @@ export function externalizeNuxtBootstrap(html: string): string {
   return html
     .replace(
       configs[0]![0],
-      `<meta id="__NUXT_CSP_CONFIG__" content="${encoded(config)}">`,
+      '<meta id="__NUXT_CSP_CONFIG__" content="'
+      + `${encoded(clientConfig === undefined
+        ? config
+        : JSON.stringify(clientConfig))}">`,
     )
     .replace(
       payloads[0]![0],
