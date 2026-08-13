@@ -113,6 +113,23 @@ jobs:
       - run: make web-test
       - run: make web-build
 
+  web-e2e:
+    needs: web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Ignore local E2E result roots
+        run: |
+          grep -qxF '/.dev/' .git/info/exclude ||
+            printf '%s\n' '/.dev/' >> .git/info/exclude
+      - name: Compare pinned browser baselines
+        env:
+          WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          test -z "${UPDATE_GOLDEN+x}"
+          test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
+          make web-e2e
+
   server-integration:
     runs-on: ubuntu-latest
     services:

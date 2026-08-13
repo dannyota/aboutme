@@ -10,6 +10,16 @@ fail() {
   exit 1
 }
 
+index_flags_are_visible() {
+  local record tag
+  while IFS= read -r -d '' record; do
+    tag=${record%% *}
+    case $tag in
+      S | [a-z]) return 1 ;;
+    esac
+  done < <(git ls-files -v -z)
+}
+
 [ "$#" -eq 3 ] || fail \
   'usage: scripts/web-e2e-source.sh <commit> <manifest> <new-.dev-output.tar>'
 
@@ -34,6 +44,8 @@ head_commit=$(git rev-parse --verify --quiet 'HEAD^{commit}') ||
 
 clean_before=$(git status --porcelain=v1 --untracked-files=all)
 [ -z "$clean_before" ] || fail 'worktree and index must be clean'
+index_flags_are_visible ||
+  fail 'assume-unchanged and skip-worktree are forbidden'
 
 manifest=$(realpath "$manifest_arg" 2>/dev/null) || fail 'manifest does not exist'
 [ "$manifest" = "$root/scripts/web-e2e-source.manifest" ] ||
@@ -186,15 +198,20 @@ tar --create --file "$tar_tmp" --directory "$stage" \
   fail 'HEAD changed during archive creation'
 [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] ||
   fail 'worktree or index changed during archive creation'
+index_flags_are_visible ||
+  fail 'assume-unchanged and skip-worktree are forbidden'
 git cat-file blob \
   "$resolved_commit:scripts/web-e2e-source.manifest" | cmp -s - "$manifest" ||
   fail 'manifest changed during archive creation'
 
 ln -- "$tar_tmp" "$output" || fail 'output appeared during archive creation'
-[ "$(git rev-parse --verify 'HEAD^{commit}')" = "$resolved_commit" ] &&
-  [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] || {
-    rm -f -- "$output"
-    fail 'repository changed before archive publication'
-  }
+if [ "$(git rev-parse --verify 'HEAD^{commit}')" = "$resolved_commit" ] &&
+  [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] &&
+  index_flags_are_visible; then
+  :
+else
+  rm -f -- "$output"
+  fail 'repository changed before archive publication'
+fi
 
 printf '%s\n' "$output"

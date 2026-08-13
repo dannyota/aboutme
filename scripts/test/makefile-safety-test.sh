@@ -49,6 +49,40 @@ assert_guarded() {
 assert_guarded dev
 assert_guarded test-db-up
 
+assert_web_e2e_rejected() {
+  local name=$1 target=$2 diagnostic=$3
+  shift 3
+  : >"$CALLS"
+  if (
+    cd "$REPO"
+    env PATH="$BIN:/usr/bin:/bin" CALL_LOG="$CALLS" "$@" \
+      /usr/bin/make --no-print-directory "$target"
+  ) >"$WORK/$name.out" 2>&1; then
+    printf 'makefile-safety-test: make %s accepted %s\n' "$target" "$name" >&2
+    exit 1
+  fi
+  grep -Fq "$diagnostic" "$WORK/$name.out" || {
+    printf 'makefile-safety-test: make %s lacked %s diagnostic\n' \
+      "$target" "$name" >&2
+    exit 1
+  }
+  if grep -Eq '^podman([[:space:]]|$)' "$CALLS"; then
+    printf 'makefile-safety-test: make %s called Podman for %s\n' \
+      "$target" "$name" >&2
+    exit 1
+  fi
+}
+
+assert_web_e2e_rejected invalid-run-id web-e2e \
+  'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' WEB_E2E_RUN_ID='../bad'
+assert_web_e2e_rejected invalid-update-run-id web-e2e-update \
+  'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' WEB_E2E_RUN_ID='bad/value'
+assert_web_e2e_rejected update-golden-present web-e2e \
+  'UPDATE_GOLDEN must be absent' WEB_E2E_RUN_ID=valid UPDATE_GOLDEN=
+assert_web_e2e_rejected playwright-update-present web-e2e \
+  'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' \
+  WEB_E2E_RUN_ID=valid PLAYWRIGHT_UPDATE_SNAPSHOTS=
+
 : >"$CALLS"
 if (
   cd "$REPO"

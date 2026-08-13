@@ -3,7 +3,11 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs
+
+WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
+WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
+WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-16s %s\n", $$1, $$2}'
@@ -22,7 +26,7 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 	bash scripts/check-tool-versions.sh $(ARGS)
 
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
-	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test-s3.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test-s3.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
 	scripts/test/ci-failure-propagation-test.sh
 	scripts/test/ci-lifecycle-test.sh
 	scripts/test/ci-scan-adversarial-test.sh
@@ -33,6 +37,7 @@ operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-s
 	scripts/test/scan-products-contract-test.sh
 	scripts/test/toolchain-contract-test.sh
 	scripts/test/workflow-safety-test.sh
+	scripts/web-e2e-source.test.sh
 
 hooks-install: ## Point git at .githooks so pre-commit runs gitleaks on staged content
 	git config core.hooksPath .githooks
@@ -98,6 +103,70 @@ web-typecheck: ## Typecheck the Nuxt web app
 
 web-test: ## Test the Nuxt web app
 	cd apps/web && npm run test
+
+web-e2e: ## Compare renderer baselines in the pinned AMD64 browser
+	@set -Eeuo pipefail; \
+	if [[ -n "$${UPDATE_GOLDEN+x}" ]]; then echo 'UPDATE_GOLDEN must be absent' >&2; exit 64; fi; \
+	if [[ -n "$${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}" ]]; then echo 'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' >&2; exit 64; fi; \
+	run_id=$${WEB_E2E_RUN_ID-}; \
+	if [[ ! $$run_id =~ ^[A-Za-z0-9_-]+$$ ]]; then echo 'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' >&2; exit 64; fi; \
+	test "$$(uname -m)" = x86_64 || { echo 'web-e2e requires a native x86_64 host' >&2; exit 1; }; \
+	commit='$(WEB_E2E_COMMIT)'; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)" || { echo 'web-e2e requires a clean worktree and index' >&2; exit 1; }; \
+	result_root=".dev/web-e2e-results/$$commit/$$run_id"; \
+	mode_dir="$$result_root/compare"; \
+	source_tar=".dev/web-e2e-source/$$commit/$$run_id.tar"; \
+	if [[ -e $$mode_dir || -L $$mode_dir || -e $$source_tar || -L $$source_tar ]]; then echo 'web-e2e result or source tar already exists' >&2; exit 1; fi; \
+	install -d -m 0700 "$$result_root" "$$(dirname "$$source_tar")"; \
+	mkdir -m 0700 "$$mode_dir"; \
+	manifest_sha=$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1); \
+	scripts/web-e2e-source.sh "$$commit" '$(WEB_E2E_MANIFEST)' "$$source_tar" >/dev/null; \
+	test "$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1)" = "$$manifest_sha"; \
+	tar_sha=$$(sha256sum "$$source_tar" | cut -d ' ' -f 1); \
+	umask 077; printf 'commit=%s\nmanifest_sha256=%s\ntar_sha256=%s\n' "$$commit" "$$manifest_sha" "$$tar_sha" >"$$mode_dir/source-metadata.txt"; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)"; \
+	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \
+	  -v "$$PWD/$$source_tar:/candidate.tar:ro" \
+	  -v "$$PWD/$$mode_dir:/results:rw" \
+	  -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
+	  -e PLAYWRIGHT_RESULTS_DIR=/results -w /tmp '$(WEB_E2E_IMAGE)' \
+	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$TZ" = UTC; test "$$LANG" = C.UTF-8; test "$$LC_ALL" = C.UTF-8; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; chrome_version="$$(/ms-playwright/chromium-1234/chrome-linux64/chrome --version)"; chrome_version="$$(printf "%s" "$$chrome_version" | sed "s/[[:space:]]*$$//")"; test "$$chrome_version" = "Google Chrome for Testing 151.0.7922.34"; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme/apps/web; npm ci --ignore-scripts; status=0; PLAYWRIGHT_SURFACE=harness npx --no-install playwright test --config e2e/playwright.config.ts screenshot.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts || status=$$?; if [ "$$status" -eq 0 ]; then PLAYWRIGHT_SURFACE=normal npx --no-install playwright test --config e2e/playwright.config.ts normal-csp.spec.ts || status=$$?; fi; post=0; for path in playwright-report test-results blob-report; do if [ -e "/tmp/aboutme/apps/web/$$path" ]; then echo "unexpected default Playwright output: $$path" >&2; post=1; fi; done; if [ -e /results/candidate-baselines ]; then echo "compare run wrote candidate baselines" >&2; post=1; fi; test "$$post" -eq 0 || exit 1; exit "$$status"'; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)"
+
+web-e2e-update: ## Generate review-only renderer baseline candidates in the pinned AMD64 browser
+	@set -Eeuo pipefail; \
+	if [[ -n "$${UPDATE_GOLDEN+x}" ]]; then echo 'UPDATE_GOLDEN must be absent' >&2; exit 64; fi; \
+	if [[ -n "$${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}" ]]; then echo 'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' >&2; exit 64; fi; \
+	run_id=$${WEB_E2E_RUN_ID-}; \
+	if [[ ! $$run_id =~ ^[A-Za-z0-9_-]+$$ ]]; then echo 'WEB_E2E_RUN_ID must match [A-Za-z0-9_-]+' >&2; exit 64; fi; \
+	test "$$(uname -m)" = x86_64 || { echo 'web-e2e-update requires a native x86_64 host' >&2; exit 1; }; \
+	commit='$(WEB_E2E_COMMIT)'; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)" || { echo 'web-e2e-update requires a clean worktree and index' >&2; exit 1; }; \
+	result_root=".dev/web-e2e-results/$$commit/$$run_id"; \
+	mode_dir="$$result_root/update"; \
+	source_tar=".dev/web-e2e-source/$$commit/$$run_id.tar"; \
+	if [[ -e $$mode_dir || -L $$mode_dir || -e $$source_tar || -L $$source_tar ]]; then echo 'web-e2e-update result or source tar already exists' >&2; exit 1; fi; \
+	install -d -m 0700 "$$result_root" "$$(dirname "$$source_tar")"; \
+	mkdir -m 0700 "$$mode_dir"; \
+	manifest_sha=$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1); \
+	scripts/web-e2e-source.sh "$$commit" '$(WEB_E2E_MANIFEST)' "$$source_tar" >/dev/null; \
+	test "$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1)" = "$$manifest_sha"; \
+	tar_sha=$$(sha256sum "$$source_tar" | cut -d ' ' -f 1); \
+	umask 077; printf 'commit=%s\nmanifest_sha256=%s\ntar_sha256=%s\n' "$$commit" "$$manifest_sha" "$$tar_sha" >"$$mode_dir/source-metadata.txt"; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)"; \
+	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \
+	  -v "$$PWD/$$source_tar:/candidate.tar:ro" \
+	  -v "$$PWD/$$mode_dir:/results:rw" \
+	  -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
+	  -e PLAYWRIGHT_RESULTS_DIR=/results -w /tmp '$(WEB_E2E_IMAGE)' \
+	  sh -eu -c 'test "$$(uname -m)" = x86_64; test "$$TZ" = UTC; test "$$LANG" = C.UTF-8; test "$$LC_ALL" = C.UTF-8; locale -a | grep -qx C.utf8; test "$$(locale charmap)" = UTF-8; chrome_version="$$(/ms-playwright/chromium-1234/chrome-linux64/chrome --version)"; chrome_version="$$(printf "%s" "$$chrome_version" | sed "s/[[:space:]]*$$//")"; test "$$chrome_version" = "Google Chrome for Testing 151.0.7922.34"; mkdir /tmp/aboutme; tar -xf /candidate.tar -C /tmp/aboutme; test ! -e /tmp/aboutme/.git; test ! -e /tmp/aboutme/.env; test ! -e /tmp/aboutme/.dev; test ! -e /tmp/aboutme/.superpowers; cd /tmp/aboutme/apps/web; npm ci --ignore-scripts; status=0; PLAYWRIGHT_SURFACE=harness npx --no-install playwright test --config e2e/playwright.config.ts screenshot.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts --update-snapshots || status=$$?; if [ "$$status" -eq 0 ]; then PLAYWRIGHT_SURFACE=normal npx --no-install playwright test --config e2e/playwright.config.ts normal-csp.spec.ts --update-snapshots || status=$$?; fi; post=0; for path in playwright-report test-results blob-report; do if [ -e "/tmp/aboutme/apps/web/$$path" ]; then echo "unexpected default Playwright output: $$path" >&2; post=1; fi; done; if [ "$$status" -eq 0 ]; then expected=/tmp/expected-baselines; actual=/tmp/actual-baselines; printf "%s\n" baselines/classic-serif--vn-full--paged.png baselines/engineer-compact--vn-full--paged.png baselines/modern-sidebar--vn-full--paged.png baselines/executive-band--vn-full--paged.png baselines/consulting-formal--vn-full--paged.png baselines/academic-dense--vn-full--paged.png baselines/modern-sidebar--full--continuous.png print-baselines/print-main-overflow-p1.png print-baselines/print-main-overflow-p2.png print-baselines/print-sidebar-overflow-p1.png print-baselines/print-sidebar-overflow-p2.png | LC_ALL=C sort >"$$expected"; test -d /results/candidate-baselines || { echo "candidate baseline directory is missing" >&2; post=1; }; if find /results/candidate-baselines -type l -print -quit | grep -q .; then echo "candidate baseline contains a symlink" >&2; post=1; fi; if find /results/candidate-baselines ! -type d ! -type f -print -quit | grep -q .; then echo "candidate baseline contains a special file" >&2; post=1; fi; find /results/candidate-baselines -type f -printf "%P\n" | LC_ALL=C sort >"$$actual"; diff -u "$$expected" "$$actual" || post=1; if [ "$$post" -eq 0 ]; then (cd /results/candidate-baselines && sha256sum $$(cat "$$expected")) > /results/candidate-baselines/SHA256SUMS; fi; fi; test "$$post" -eq 0 || exit 1; exit "$$status"'; \
+	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
+	test -z "$$(git status --porcelain=v1 --untracked-files=all)"
 
 dev: ## HTTP image/network smoke and self-hosting stack; not for daily development
 	@if ! running_containers="$$(podman ps --format '{{.Names}}')"; then \
