@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { HTML_CSP } from './app/utils/csp';
 
 const harnessEnabled = process.env.NUXT_HARNESS === '1';
@@ -63,6 +66,22 @@ export default defineNuxtConfig({
         ) {
           throw new Error('Harness build must expose only /_harness/render.');
         }
+      }
+    },
+    'ready': (nuxt) => {
+      if (!harnessEnabled) return;
+      const typeRoot = resolve(nuxt.options.rootDir, '.nuxt');
+      mkdirSync(typeRoot, { recursive: true });
+      for (const name of ['app', 'node', 'server', 'shared']) {
+        const typeConfig = resolve(typeRoot, `tsconfig.${name}.json`);
+        if (existsSync(typeConfig)) continue;
+        writeFileSync(
+          typeConfig,
+          `${JSON.stringify({
+            extends: `./harness/tsconfig.${name}.json`,
+          }, null, 2)}\n`,
+          { flag: 'wx' },
+        );
       }
     },
   },
