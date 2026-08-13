@@ -28,12 +28,21 @@ assert_log_line() {
 }
 
 cleanup_fixture() {
-  local fixture=$1 pid
+  local fixture=$1 file pid pgid
+  for file in "$fixture"/repo/.dev/native-https/run/*.pid; do
+    [ -s "$file" ] || continue
+    pid=$(<"$file")
+    [[ $pid =~ ^[0-9]+$ ]] || continue
+    kill -TERM -- "-$pid" 2>/dev/null || true
+    kill -KILL -- "-$pid" 2>/dev/null || true
+  done
   if [ -f "$fixture/all-pids" ]; then
     while IFS= read -r pid; do
       [[ $pid =~ ^[0-9]+$ ]] || continue
-      kill -TERM -- "-$pid" 2>/dev/null || true
+      pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ' || true)
+      [[ $pgid =~ ^[0-9]+$ ]] && kill -KILL -- "-$pgid" 2>/dev/null || true
       kill -TERM "$pid" 2>/dev/null || true
+      kill -KILL "$pid" 2>/dev/null || true
     done <"$fixture/all-pids"
   fi
   rm -rf -- "$fixture"
@@ -47,15 +56,16 @@ write_fake_tools() {
 #!/usr/bin/env bash
 set -Eeuo pipefail
 name=$1
+printf '%s\n' "$$" >>"$DEV_HTTPS_PID_AUDIT_FILE"
 printf 'start:%s\n' "$name" >>"$FAKE_MUTATIONS"
 case $name in
 mock-oauth)
-  printf 'service:%s host=%s port=%s origin=%s client=%s\n' \
-    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" >>"$FAKE_EFFECTS"
+  printf 'service:%s host=%s port=%s origin=%s client=%s db=%s\n' \
+    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "${DATABASE_URL-}" >>"$FAKE_EFFECTS"
   ;;
 server)
-  printf 'service:%s host=%s port=%s origin=%s issuer=%s\n' \
-    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_OIDC_ISSUER_URL" >>"$FAKE_EFFECTS"
+  printf 'service:%s host=%s port=%s origin=%s issuer=%s db=%s\n' \
+    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_OIDC_ISSUER_URL" "$DATABASE_URL" >>"$FAKE_EFFECTS"
   ;;
 web) printf 'service:web\n' >>"$FAKE_EFFECTS" ;;
 caddy)
@@ -68,6 +78,10 @@ if [ "${FAKE_EXIT_SERVICE-}" = "$name" ]; then
   exit 7
 fi
 trap 'printf "stop:%s\n" "$name" >>"$FAKE_STOP_LOG"; exit 0' TERM INT
+if [ "${FAKE_LEADER_EXITS_CHILD_IGNORES-}" = "$name" ]; then
+  bash -c 'trap "" TERM; while :; do sleep 1; done' &
+  printf '%s\n' "$!" >>"$DEV_HTTPS_PID_AUDIT_FILE"
+fi
 while :; do sleep 1; done
 EOF
 
@@ -90,7 +104,10 @@ cat >"$out" <<'INNER'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 name=${0##*/}
-[ "$name" = migrate ] && exit 0
+if [ "$name" = migrate ]; then
+  printf 'migrate:db=%s\n' "$DATABASE_URL" >>"$FAKE_EFFECTS"
+  exit 0
+fi
 exec fake-service "$name"
 INNER
 chmod 0700 "$out"
@@ -231,10 +248,12 @@ fixture_env() {
   export FAKE_FOREIGN_PORTS=$fixture/foreign-ports
   export FAKE_PODMAN_PS=$fixture/podman-ps
   export DEV_HTTPS_PID_AUDIT_FILE=$fixture/all-pids
+  export DEV_HTTPS_STOP_TERM_ATTEMPTS=5
+  export DEV_HTTPS_STOP_KILL_ATTEMPTS=20
 }
 
 run_happy_path_and_lifecycle_checks() (
-  local fixture output before after mode lines
+  local fixture output before after mode lines manifest service
   fixture=$(new_fixture)
   trap 'cleanup_fixture "$fixture"' EXIT
   fixture_env "$fixture"
@@ -248,14 +267,33 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_MUTATIONS" 'go-build:migrate:./cmd/migrate'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:mock-oauth:./cmd/mock-oauth'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:server:./cmd/server'
-  assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google'
-  assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 issuer=http://127.0.0.1:20442/google'
+  assert_log_line "$FAKE_EFFECTS" 'migrate:db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
+  assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google db='
+  assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 issuer=http://127.0.0.1:20442/google db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   assert_log_line "$FAKE_EFFECTS" 'npm:run dev -- --port 20440 --host 127.0.0.1'
   assert_log_line "$FAKE_EFFECTS" 'caddy-config-validated'
 
   [ -f .dev/native-https/input/caddy-root.crt ] || fail "exported Caddy root is missing"
   mode=$(stat -c '%a' .dev/native-https/input/caddy-root.crt)
   [ "$mode" = 600 ] || fail "Caddy root mode is $mode, want 600"
+  [ -f .dev/native-https/effective-config ] || fail "effective config manifest is missing"
+  mode=$(stat -c '%a' .dev/native-https/effective-config)
+  [ "$mode" = 600 ] || fail "effective config manifest mode is $mode, want 600"
+  manifest=$(<.dev/native-https/effective-config)
+  assert_contains "$manifest" 'database_target=127.0.0.1:20432/aboutme_dev?sslmode=disable'
+  assert_contains "$manifest" 'log_level=info'
+  assert_contains "$manifest" 'google_client_id=aboutme-local-google'
+  assert_contains "$manifest" 'google_issuer_url=http://127.0.0.1:20442/google'
+  assert_contains "$manifest" 'generated_route_sha256='
+  assert_contains "$manifest" 'server_expected_executable='
+  assert_contains "$manifest" 'server_expected_cmdline_sha256='
+  assert_not_contains "$manifest" 'not-a-secret-local-google'
+  for service in mock-oauth server web caddy; do
+    mode=$(stat -c '%a' ".dev/native-https/run/$service.identity")
+    [ "$mode" = 600 ] || fail "$service identity mode is $mode, want 600"
+    mode=$(stat -c '%a' ".dev/native-https/run/$service.env")
+    [ "$mode" = 600 ] || fail "$service environment mode is $mode, want 600"
+  done
 
   output=$(bash scripts/dev-https.sh status 2>&1) || fail "status failed: $output"
   assert_contains "$output" 'mock-oauth'
@@ -267,6 +305,21 @@ run_happy_path_and_lifecycle_checks() (
   output=$(bash scripts/dev-https.sh up 2>&1) || fail "owned idempotent up failed: $output"
   after=$(wc -l <"$FAKE_MUTATIONS")
   [ "$before" = "$after" ] || fail "idempotent up performed build/start/database mutation"
+
+  printf '20080\n' >"$FAKE_FOREIGN_PORTS"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail "idempotent up accepted a normal native listener without a PID file"
+  fi
+  assert_contains "$output" '20080'
+  : >"$FAKE_FOREIGN_PORTS"
+
+  before=$(wc -l <"$FAKE_MUTATIONS")
+  if output=$(ABOUTME_DEV_LOG_LEVEL=debug bash scripts/dev-https.sh up 2>&1); then
+    fail "up accepted effective-config drift"
+  fi
+  assert_contains "$output" 'effective config'
+  after=$(wc -l <"$FAKE_MUTATIONS")
+  [ "$before" = "$after" ] || fail "effective-config rejection mutated the stack"
 
   printf '\n# drift\n' >>deploy/caddy/Caddyfile
   before=$(wc -l <"$FAKE_MUTATIONS")
@@ -309,6 +362,38 @@ run_foreign_listener_check() (
   fi
   assert_contains "$output" '20441'
   [ ! -s "$FAKE_MUTATIONS" ] || fail "foreign-listener rejection performed a mutation"
+)
+
+run_normal_native_listener_without_pid_check() (
+  local fixture output port
+  for port in 20030 20080 20081; do
+    fixture=$(new_fixture)
+    trap 'cleanup_fixture "$fixture"' EXIT
+    fixture_env "$fixture"
+    cd "$fixture/repo"
+    printf '%s\n' "$port" >"$FAKE_FOREIGN_PORTS"
+    if output=$(bash scripts/dev-https.sh up 2>&1); then
+      fail "up accepted normal native listener on $port without a PID file"
+    fi
+    assert_contains "$output" "$port"
+    [ ! -s "$FAKE_MUTATIONS" ] || fail "normal-native listener rejection mutated the stack"
+    cleanup_fixture "$fixture"
+    trap - EXIT
+  done
+)
+
+run_database_override_check() (
+  local fixture output
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  if output=$(ABOUTME_DEV_DATABASE_URL='postgres://foreign:foreign@192.0.2.1:5432/other' \
+    bash scripts/dev-https.sh up 2>&1); then
+    fail "up accepted ABOUTME_DEV_DATABASE_URL"
+  fi
+  assert_contains "$output" 'ABOUTME_DEV_DATABASE_URL'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail "database-override rejection performed a mutation"
 )
 
 run_active_http_stack_checks() (
@@ -359,16 +444,78 @@ run_foreign_ownership_down_check() (
   fixture_env "$fixture"
   cd "$fixture/repo"
   mkdir -p .dev/native-https/run
-  sleep 300 &
-  foreign_pid=$!
-  printf '%s\n' "$foreign_pid" >.dev/native-https/run/server.pid
+  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign .dev/native-https/run/server.pid
+  for _ in $(seq 1 50); do [ -s .dev/native-https/run/server.pid ] && break; sleep 0.02; done
+  foreign_pid=$(<.dev/native-https/run/server.pid)
   printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
+  printf '%s\n' 'foreign-identity-evidence' >.dev/native-https/run/server.identity
   if output=$(bash scripts/dev-https.sh down 2>&1); then
     fail "down accepted a PID it could not prove it owned"
   fi
-  assert_contains "$output" 'not an owned session leader'
+  assert_contains "$output" 'does not match its exact owned process identity'
   kill -0 "$foreign_pid" 2>/dev/null || fail "down killed a foreign process"
   [ -f .dev/native-https/run/server.pid ] || fail "down removed foreign ownership evidence"
+  assert_log_line .dev/native-https/run/server.identity 'foreign-identity-evidence'
+)
+
+run_process_group_drain_check() (
+  local fixture output pid member
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_LEADER_EXITS_CHILD_IGNORES=server
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "group-drain setup failed: $output"
+  pid=$(<.dev/native-https/run/server.pid)
+  output=$(bash scripts/dev-https.sh down 2>&1) || fail "group-drain down failed: $output"
+  while IFS= read -r member; do
+    [ -n "$member" ] || continue
+    fail "down left process $member in owned process group $pid"
+  done < <(ps -eo pid=,pgid= | awk -v pgid="$pid" '$2 == pgid { print $1 }')
+  [ ! -e .dev/native-https/run/server.pid ] || fail "down retained server PID after group drained"
+  [ ! -e .dev/native-https/run/server.identity ] || fail "down retained server identity after group drained"
+)
+
+run_identity_field_tamper_check() (
+  local fixture output identity original pid mutation
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "identity-tamper setup failed: $output"
+  identity=.dev/native-https/run/server.identity
+  original=$(<"$identity")
+  pid=$(<.dev/native-https/run/server.pid)
+  for mutation in \
+    's/^starttime=.*/starttime=1/' \
+    's#^expected_executable=.*#expected_executable=/bin/false#' \
+    's/^expected_cmdline_sha256=.*/expected_cmdline_sha256=0000000000000000000000000000000000000000000000000000000000000000/'; do
+    sed -i "$mutation" "$identity"
+    if output=$(bash scripts/dev-https.sh down 2>&1); then
+      fail "down accepted tampered service identity"
+    fi
+    assert_contains "$output" 'does not match its exact owned process identity'
+    kill -0 "$pid" 2>/dev/null || fail "identity rejection signalled the owned server"
+    [ ! -s "$FAKE_STOP_LOG" ] || fail "identity rejection signalled a prevalidated service"
+    printf '%s\n' "$original" >"$identity"
+  done
+  bash scripts/dev-https.sh down >/dev/null 2>&1 || fail "restored identity did not permit safe down"
+)
+
+run_binary_drift_check() (
+  local fixture output binary
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "binary-drift setup failed: $output"
+  binary=.dev/native-https/bin/server
+  printf '\n# drift\n' >>"$binary"
+  if output=$(bash scripts/dev-https.sh status 2>&1); then
+    fail "status accepted built-binary drift"
+  fi
+  assert_contains "$output" 'effective config'
+  bash scripts/dev-https.sh down >/dev/null 2>&1 || fail "binary drift prevented safe down"
 )
 
 run_partial_startup_rollback_check() (
@@ -407,11 +554,28 @@ run_missing_tool_check() (
 main() {
   [ "${1-}" = --static ] && [ "$#" -eq 1 ] || fail 'usage: scripts/dev-https-test.sh --static'
   [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
+  case ${DEV_HTTPS_TEST_CASE-} in
+  manifest) run_happy_path_and_lifecycle_checks; return ;;
+  native-ports) run_normal_native_listener_without_pid_check; return ;;
+  database) run_database_override_check; return ;;
+  identity) run_foreign_ownership_down_check; return ;;
+  identity-tamper) run_identity_field_tamper_check; return ;;
+  group-drain) run_process_group_drain_check; return ;;
+  binary-drift) run_binary_drift_check; return ;;
+  rollback) run_partial_startup_rollback_check; return ;;
+  '') ;;
+  *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
+  esac
   run_happy_path_and_lifecycle_checks
   run_foreign_listener_check
+  run_normal_native_listener_without_pid_check
+  run_database_override_check
   run_active_http_stack_checks
   run_route_drift_check
   run_foreign_ownership_down_check
+  run_identity_field_tamper_check
+  run_process_group_drain_check
+  run_binary_drift_check
   run_partial_startup_rollback_check
   run_missing_tool_check
   printf '%s\n' 'dev-https static tests: PASS'
