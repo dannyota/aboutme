@@ -1,5 +1,3 @@
-apps/web/app/api/client.ts
-apps/web/app/api/generated/openapi.ts
 apps/web/app/app.vue
 apps/web/app/assets/css/fonts.css
 apps/web/app/assets/fonts/alegreya-400.woff2
@@ -128,16 +126,10 @@ apps/web/server/plugins/csp-externalize.ts
 apps/web/server/utils/cspExternalize.ts
 apps/web/test/sanitizer/neutralization.ts
 apps/web/tsconfig.json
-package-lock.json
-package.json
-packages/schema/README.md
 packages/schema/fixtures/full.json
 packages/schema/fixtures/vn-full.json
 packages/schema/gen/ts/released.ts
 packages/schema/gen/ts/resume.ts
 packages/schema/gen/ts/sanitizer.ts
 packages/schema/gen/ts/templates.ts
-packages/schema/gen/ts/v1/resume.ts
-packages/schema/gen/ts/v2/resume.ts
-packages/schema/package-lock.json
 packages/schema/package.json

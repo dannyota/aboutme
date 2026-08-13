@@ -227,12 +227,12 @@ Photo per D14; icons per D13.
 
 ## Steps
 
-- [ ] **Step 0: approval and registry gate.** Record the dated Draft v4 and
+- [x] **Step 0: approval and registry gate.** Record the dated Draft v4 and
       template-contract owner approval. Verify Task 5B's generated
       `@aboutme/schema/released` export resolves `CURRENT_VERSION` and that the
       two Task 4 renderer files predate this implementation diff. Stop on any
       mismatch.
-- [ ] **Step 1: Failing purity + smoke test.** `sections.test.ts` opens with a
+- [x] **Step 1: Failing purity + smoke test.** `sections.test.ts` opens with a
       file-level `// @vitest-environment node` pragma (B7 — the global
       `environment: 'nuxt'` happy-dom would otherwise let a stray `document.*`
       call in the renderer tree silently succeed, defeating this test's
@@ -240,7 +240,7 @@ Photo per D14; icons per D13.
       **plain** `renderToString(createSSRApp(...))` — no Nuxt, no
       `mountSuspended`. Assert non-empty HTML containing the fixture's
       `fullName`. Run → FAIL.
-- [ ] **Step 2: Build bottom-up with TDD per module** (each module: failing unit
+- [x] **Step 2: Build bottom-up with TDD per module** (each module: failing unit
       test → implement → pass): `clampAgainst` and `deriveLevelColors` (table:
       color × required surfaces × target → expected result; input that already
       passes remains unchanged; black and white are scored by their actual
@@ -268,7 +268,7 @@ Photo per D14; icons per D13.
       `columns: 1`), then `ResumeHeader`, then `ResumeDocument` (continuous mode
       only; `paged` throws
       `new ResumeRenderError("render_mode_unavailable", ...)` until Task 7).
-- [ ] **Step 2a: Contrast regressions.** Include the old direction heuristic's
+- [x] **Step 2a: Contrast regressions.** Include the old direction heuristic's
       `clampAgainst("#b7b7b7", ["#b7b7b7"], 4.5)` mid-surface counterexample:
       the algorithm must select the actually passing black direction, not a
       `relativeLuminance >= 0.5` branch. Include accent `#959595` on white,
@@ -278,14 +278,14 @@ Photo per D14; icons per D13.
       failure branch and prove it replaces the derived track with the surface
       before the single-surface clamp. For every preset surface, assert each
       filled bar and dot passes 3:1 against both the surface and actual track.
-- [ ] **Step 3: Draft-permissiveness rendering tests** (contract §6, superseding
+- [x] **Step 3: Draft-permissiveness rendering tests** (contract §6, superseding
       D18): render `fixtures/draft-cleared-name-empty-section.json` and
       `draft-partial.json` — no placeholder text, no crash, **empty section
       omitted entirely including its heading, rule, and gap**, section with an
       absent/`""` `displayName` renders no heading text and no substitute,
       hidden entries and hidden details absent from the output, separators
       emitted only between two present values.
-- [ ] **Step 4: Class-contract and print-property assertions.** Assert the
+- [x] **Step 4: Class-contract and print-property assertions.** Assert the
       rendered HTML carries the six `print.md` §3 class names, that heading and
       first entry are non-overlapping siblings with both avoid rules, that the
       resume root carries `lang` from `context.lng` and
@@ -293,7 +293,7 @@ Photo per D14; icons per D13.
       output, including explicit and default margins, and prove continuous HTML
       does not insert it. Task 7 repeats the absence check for editor-paged
       HTML. These are P7A's inputs; a rename here is a silent P7A regression.
-- [ ] **Step 5: Renderer-only gate.** Before the pagination adversarial file
+- [x] **Step 5: Renderer-only gate.** Before the pagination adversarial file
       exists, run
       `(cd apps/web && npx vitest run test/renderer/bounds.adversarial.test.ts test/renderer/plain-fields.adversarial.test.ts)`,
       then `make web-lint web-typecheck web-test web-build`. Record the

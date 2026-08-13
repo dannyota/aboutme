@@ -2,6 +2,7 @@ package resume
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -12,9 +13,22 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
-// resumeSchemaID is resume.schema.json's own $id -- the resource key the
-// embedded schema is registered and compiled under.
-const resumeSchemaID = "https://aboutme.vn/schema/resume/v1"
+// resumeSchemaID is derived from the current embedded schema, so releasing a
+// new current version cannot leave the compiler registered under a stale key.
+var resumeSchemaID = currentResumeSchemaID()
+
+func currentResumeSchemaID() string {
+	var raw struct {
+		ID string `json:"$id"`
+	}
+	if err := json.Unmarshal(schema.RawSchema, &raw); err != nil {
+		panic("resume: reading embedded schema $id: " + err.Error())
+	}
+	if raw.ID == "" {
+		panic("resume: embedded schema has no $id")
+	}
+	return raw.ID
+}
 
 // compileCount counts how many times mustCompileSchema has run. It exists
 // only so export_test.go can prove compiledSchema below was compiled

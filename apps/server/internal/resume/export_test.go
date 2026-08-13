@@ -36,6 +36,11 @@ func CompiledSchemaPointerForTest() *jsonschema.Schema {
 	return compiledSchema
 }
 
+// ResumeSchemaIDForTest exposes the exact current embedded schema resource key.
+func ResumeSchemaIDForTest() string {
+	return resumeSchemaID
+}
+
 // NewSchemaCompilerForTest exposes the exact compiler construction
 // (AssertFormat + no URL loader) ValidateForStore's package-init compile
 // uses, so a test can prove the no-URL-loader condition

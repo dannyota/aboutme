@@ -78,11 +78,11 @@ export function applyTemplate(
 // DIFFERENT operation (preserve semantics), not an applyTemplate call.
 ```
 
-- [ ] **Step 0: ADR gate.** Confirm ADRs 0008 and 0021 both exist on the base
+- [x] **Step 0: ADR gate.** Confirm ADRs 0008 and 0021 both exist on the base
       commit, are accepted, and match the semantics above; record both status
       lines in the task report. Divergence → stop, report to the integration
       owner.
-- [ ] **Step 1: Failing registry test** (`templates.test.ts`): `TEMPLATES`'s id
+- [x] **Step 1: Failing registry test** (`templates.test.ts`): `TEMPLATES`'s id
       set equals the `packages/schema/templates/` directory listing (so the test
       cannot drift from the data again — do not hard-code the id count or list);
       validate the preset rule shape separately; then remove the rule-only
@@ -91,11 +91,11 @@ export function applyTemplate(
       `resume.schema.json`'s customization `$def` via ajv; every preset's font
       family ∈ the schema enum; every `byType` list ⊆ the schema's `sectionType`
       enum with no duplicates; ids unique.
-- [ ] **Step 2: Generator validation/emission for the 20 committed presets**;
+- [x] **Step 2: Generator validation/emission for the 20 committed presets**;
       regenerate; pass. Negative generator tests: an out-of-enum font, an
       out-of-enum `sidebarSectionTypes` entry, a duplicate selector, `custom`,
       and a selector present on `keep` each fail generation loudly.
-- [ ] **Step 2a: Contrast conformance.** Assert all 20 committed presets' page
+- [x] **Step 2a: Contrast conformance.** Assert all 20 committed presets' page
       palettes pass `colors.md` §5's contrast targets before clamping, under its
       normative mix space (gamma-encoded sRGB, `color-mix(in srgb, …)` — not
       linear light or OKLab). For a tinted region, assert the per-surface
@@ -105,7 +105,7 @@ export function applyTemplate(
       every filled mark passes 3:1 against both its surface and the actual
       returned track. The track itself has no contrast floor and may equal the
       surface after fallback.
-- [ ] **Step 3: `applyTemplate` tests**: `keep` preserves `layout.sections`
+- [x] **Step 3: `applyTemplate` tests**: `keep` preserves `layout.sections`
       byte-for-byte after exact-once validation; `byType` — property test over
       generated content-key sets (seeded, deterministic): current visual order
       is main then sidebar, sidebar holds matched keys by selector rank then
@@ -114,7 +114,7 @@ export function applyTemplate(
       current-placement keys and invalid selector lists throw the exact typed
       error. Everything else is replaced from the preset; inputs never mutate;
       output with real content validates against the schema.
-- [ ] **Step 4: Gates.** Run `make schema-check` and
+- [x] **Step 4: Gates.** Run `make schema-check` and
       `(cd apps/web && npx vitest run test/renderer/apply-template.adversarial.test.ts)`,
       then `make web-lint web-typecheck web-test web-build`. Report the
       owned-path diff and exact output to the integration owner.

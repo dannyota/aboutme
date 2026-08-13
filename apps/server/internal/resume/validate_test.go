@@ -31,6 +31,18 @@ func validDocForTest(t *testing.T) schema.Resume {
 
 // --- Schema compiler conditions ---
 
+func TestResumeSchemaIDMatchesCurrentEmbeddedSchema(t *testing.T) {
+	var raw struct {
+		ID string `json:"$id"`
+	}
+	if err := json.Unmarshal(schema.RawSchema, &raw); err != nil {
+		t.Fatalf("unmarshal current embedded schema: %v", err)
+	}
+	if got := resume.ResumeSchemaIDForTest(); got != raw.ID {
+		t.Fatalf("registered schema ID = %q, embedded $id = %q", got, raw.ID)
+	}
+}
+
 // TestD1a_FormatAssertion_MatchesAjvPosture proves format assertion is
 // enabled and pinned to match packages/schema's ajv configuration
 // (addFormats(new Ajv2020({allErrors:true, strict:true})), which ASSERTS

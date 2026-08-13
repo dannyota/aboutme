@@ -1,14 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import {
-  ALLOWED_ATTRIBUTES,
-  ALLOWED_TAGS,
-  ALLOWED_URL_SCHEMES,
-  EXTERNAL_REL,
-  FORBIDDEN_ATTRIBUTE_PREFIXES,
-  HOSTILE_CORPUS,
-} from '@aboutme/schema/sanitizer';
+import { HOSTILE_CORPUS } from '@aboutme/schema/sanitizer';
 
 import { HTML_CSP } from '../app/utils/csp';
+import { NEUTRALIZATION_POLICY } from '../test/sanitizer/neutralization';
 
 interface BrowserSignals {
   readonly consoleErrors: string[];
@@ -135,13 +129,7 @@ test.describe('hostile corpus in Chromium', () => {
           }
           return failures;
         },
-        {
-          attributes: ALLOWED_ATTRIBUTES,
-          externalRel: EXTERNAL_REL,
-          prefixes: FORBIDDEN_ATTRIBUTE_PREFIXES,
-          schemes: ALLOWED_URL_SCHEMES,
-          tags: ALLOWED_TAGS,
-        },
+        NEUTRALIZATION_POLICY,
       );
       expect(violations).toEqual([]);
       expect(await cspViolations(page)).toEqual([]);

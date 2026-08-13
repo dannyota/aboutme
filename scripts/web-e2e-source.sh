@@ -11,13 +11,27 @@ fail() {
 }
 
 index_flags_are_visible() {
-  local record tag
+  local record tag flags_file result=0
+  flags_file=$(mktemp "${TMPDIR:-/tmp}/aboutme-web-e2e-index-flags.XXXXXX") ||
+    return 1
+  if ! git ls-files -v -z >"$flags_file"; then
+    rm -f -- "$flags_file"
+    return 1
+  fi
   while IFS= read -r -d '' record; do
     tag=${record%% *}
     case $tag in
-      S | [a-z]) return 1 ;;
+      S | [a-z]) result=1; break ;;
     esac
-  done < <(git ls-files -v -z)
+  done <"$flags_file"
+  rm -f -- "$flags_file"
+  return "$result"
+}
+
+repository_is_clean() {
+  local status
+  status=$(git status --porcelain=v1 --untracked-files=all) || return 1
+  [ -z "$status" ] && index_flags_are_visible
 }
 
 [ "$#" -eq 3 ] || fail \
@@ -42,10 +56,8 @@ head_commit=$(git rev-parse --verify --quiet 'HEAD^{commit}') ||
 [ "$resolved_commit" = "$head_commit" ] ||
   fail 'requested commit must equal HEAD'
 
-clean_before=$(git status --porcelain=v1 --untracked-files=all)
-[ -z "$clean_before" ] || fail 'worktree and index must be clean'
-index_flags_are_visible ||
-  fail 'assume-unchanged and skip-worktree are forbidden'
+repository_is_clean ||
+  fail 'worktree and index must be clean with visible index flags'
 
 manifest=$(realpath "$manifest_arg" 2>/dev/null) || fail 'manifest does not exist'
 [ "$manifest" = "$root/scripts/web-e2e-source.manifest" ] ||
@@ -196,18 +208,15 @@ tar --create --file "$tar_tmp" --directory "$stage" \
 
 [ "$(git rev-parse --verify 'HEAD^{commit}')" = "$resolved_commit" ] ||
   fail 'HEAD changed during archive creation'
-[ -z "$(git status --porcelain=v1 --untracked-files=all)" ] ||
-  fail 'worktree or index changed during archive creation'
-index_flags_are_visible ||
-  fail 'assume-unchanged and skip-worktree are forbidden'
+repository_is_clean ||
+  fail 'repository state could not be verified after archive creation'
 git cat-file blob \
   "$resolved_commit:scripts/web-e2e-source.manifest" | cmp -s - "$manifest" ||
   fail 'manifest changed during archive creation'
 
 ln -- "$tar_tmp" "$output" || fail 'output appeared during archive creation'
 if [ "$(git rev-parse --verify 'HEAD^{commit}')" = "$resolved_commit" ] &&
-  [ -z "$(git status --porcelain=v1 --untracked-files=all)" ] &&
-  index_flags_are_visible; then
+  repository_is_clean; then
   :
 else
   rm -f -- "$output"

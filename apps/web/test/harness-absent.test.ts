@@ -14,9 +14,14 @@ import { describe, expect, it } from 'vitest';
 const webRoot = resolve(import.meta.dirname, '..');
 const nuxtBin = resolve(webRoot, 'node_modules/nuxt/bin/nuxt.mjs');
 const outputRoot = resolve(webRoot, '.output');
+const normalNuxtRoot = resolve(webRoot, '.nuxt');
+const harnessNuxtRoot = resolve(webRoot, '.nuxt', 'harness');
+const normalTestNuxtRoot = resolve(webRoot, '.nuxt', 'normal-test');
+const normalTestOutputRoot = resolve(outputRoot, 'normal-test');
 
 function build(harness: boolean): void {
   const env = { ...process.env };
+  env.NUXT_BUILD_TEST = '1';
   if (harness) env.NUXT_HARNESS = '1';
   else delete env.NUXT_HARNESS;
 
@@ -53,8 +58,13 @@ describe('build-only renderer harness', () => {
     'is present only in the isolated harness build',
     { timeout: 300_000 },
     () => {
-      rmSync(resolve(webRoot, '.nuxt'), { force: true, recursive: true });
+      rmSync(harnessNuxtRoot, { force: true, recursive: true });
+      rmSync(normalTestNuxtRoot, { force: true, recursive: true });
+      rmSync(resolve(outputRoot, 'harness'), { force: true, recursive: true });
+      rmSync(normalTestOutputRoot, { force: true, recursive: true });
       build(true);
+
+      expect(existsSync(join(harnessNuxtRoot, 'tsconfig.app.json'))).toBe(true);
 
       const harnessServer = resolve(outputRoot, 'harness/server');
       expect(existsSync(join(harnessServer, 'index.mjs'))).toBe(true);
@@ -77,8 +87,11 @@ describe('build-only renderer harness', () => {
 
       build(false);
 
-      expect(existsSync(resolve(outputRoot, 'harness'))).toBe(false);
-      const normalBytes = readTextTree(outputRoot);
+      expect(existsSync(join(normalNuxtRoot, 'tsconfig.app.json'))).toBe(true);
+      expect(existsSync(join(normalTestNuxtRoot, 'tsconfig.app.json'))).toBe(
+        true,
+      );
+      const normalBytes = readTextTree(normalTestOutputRoot);
       expect(normalBytes).toContain('/login');
       expect(normalBytes).not.toContain('/_harness');
       expect(normalBytes).not.toContain(
