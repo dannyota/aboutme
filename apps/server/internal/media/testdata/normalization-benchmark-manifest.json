@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "frozenAt": "2026-08-13T07:55:00+07:00",
+  "sourceCommit": "0b7b43f40218c8bf828d1c5cd3309dbf75186da3",
+  "toolchain": {
+    "go": "go1.26.5 linux/amd64",
+    "xImage": "v0.45.0"
+  },
+  "localHost": {
+    "os": "Fedora Linux 44 (Workstation Edition)",
+    "kernel": "7.1.6-201.fc44.x86_64",
+    "architecture": "x86_64",
+    "cpu": "Intel(R) Core(TM) Ultra 7 268V",
+    "logicalCpuCount": 8
+  },
+  "controlledCgroup": {
+    "cpuQuota": "50%",
+    "memoryMaxBytes": 536870912,
+    "memorySwapMaxBytes": 0
+  },
+  "productionTarget": {
+    "architecture": "arm64",
+    "instanceClass": "t4g.medium",
+    "ecsTaskCpuUnits": 512,
+    "ecsTaskMemoryMiB": 512
+  },
+  "protocol": {
+    "warmupsPerFixture": 3,
+    "measuredSamplesPerFixture": 20,
+    "freshHelperProcessPerSample": true,
+    "durationSource": "monotonic elapsed time",
+    "rssSource": "/usr/bin/time -v maximum resident set size minus a no-decode helper baseline",
+    "maxDurationMilliseconds": 5000,
+    "maxRssDeltaBytes": 201326592,
+    "rawEvidencePath": ".superpowers/p2b/media-normalization/0b7b43f40218c8bf828d1c5cd3309dbf75186da3/results.json",
+    "command": "systemd-run --user --scope --collect -p MemoryMax=512M -p MemorySwapMax=0 -p CPUQuota=50% -- bash -lc 'cd apps/server && go test ./internal/media -run ^TestNormalizationBudget$ -count=1 -v'"
+  },
+  "fixtures": [
+    {
+      "path": "opaque-max-pixels.jpg",
+      "sha256": "b595ce0da5b904408099fcb807b4c5dbfaaad0f4d41a2ba5f37c36f15b946849",
+      "bytes": 274602,
+      "purpose": "opaque 4096x4096 maximum-pixel boundary"
+    },
+    {
+      "path": "alpha-max-pixels.png",
+      "sha256": "2240961286e9e98e0b075bf5bb1efc0e196f1752d4c3b7a8501605b6cb0d6784",
+      "bytes": 339415,
+      "purpose": "alpha 4096x4096 maximum-pixel boundary"
+    },
+    {
+      "path": "alpha-max-pixels-oriented.png",
+      "sha256": "386afc9f896b4a19c311a12f29973f0c2292189565b1434b2c44e8e4294fd813",
+      "bytes": 339453,
+      "purpose": "alpha 4096x4096 maximum-pixel boundary with Exif orientation 6"
+    },
+    {
+      "path": "rgba16-max-pixels-oriented.png",
+      "sha256": "ead1cb8a740c87a49e4aa1b6cf89636a8198bbed0961a48a1688993bdc1f340c",
+      "bytes": 140244,
+      "purpose": "16-bit RGBA 4096x4096 maximum-pixel boundary with Exif orientation 6"
+    },
+    {
+      "path": "gray16-boundary.png",
+      "sha256": "6af7d39853923971d1bea51e21d9c441cbe1e549f2e81d3509dfb8c47d448c42",
+      "bytes": 93005,
+      "purpose": "16-bit PNG sample conversion"
+    },
+    {
+      "path": "max-edge.jpg",
+      "sha256": "80f62a5fcd8d3ae8200c061bbd86673e981316351591a493e95279ca4a705c78",
+      "bytes": 6511,
+      "purpose": "8192-pixel source-edge boundary"
+    },
+    {
+      "path": "blue-purple-pink-large.lossless.webp",
+      "sha256": "aab70084a99bb14afdf5c0eb9c414cbb530e0ab6fc7530550bd84e104726d8f6",
+      "bytes": 175232,
+      "purpose": "pinned lossless WebP decoder regression"
+    },
+    {
+      "path": "blue-purple-pink-large.no-filter.lossy.webp",
+      "sha256": "30a55c266868822693c9b1af5c555fb5f4499899ecaeea165e5a01c4d8012f1e",
+      "bytes": 22678,
+      "purpose": "pinned lossy WebP decoder regression"
+    }
+  ]
+}

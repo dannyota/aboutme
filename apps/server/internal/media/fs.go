@@ -2,7 +2,6 @@ package media
 
 import (
 	"bufio"
-	"container/heap"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -12,7 +11,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -35,6 +36,13 @@ import (
 type fsBackend struct {
 	root string
 	dir  *os.Root
+
+	indexMu sync.RWMutex
+	index   []Object
+
+	// visitIndexedObjectForTest observes the records considered by one page.
+	// Production leaves it nil; it exists to prove page work is limit-bounded.
+	visitIndexedObjectForTest func()
 }
 
 // NewFS returns the filesystem backend rooted at dir: native development
@@ -47,8 +55,8 @@ func NewFS(dir string) (Backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("media: resolving filesystem root: %w", err)
 	}
-	if err := os.MkdirAll(abs, 0o700); err != nil {
-		return nil, fmt.Errorf("media: creating filesystem root: %w", err)
+	if mkdirErr := os.MkdirAll(abs, 0o700); mkdirErr != nil {
+		return nil, fmt.Errorf("media: creating filesystem root: %w", mkdirErr)
 	}
 	info, err := os.Stat(abs)
 	if err != nil {
@@ -61,7 +69,14 @@ func NewFS(dir string) (Backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("media: opening filesystem root: %w", err)
 	}
-	return &fsBackend{root: abs, dir: rootHandle}, nil
+	b := &fsBackend{root: abs, dir: rootHandle}
+	if err := b.loadIndex(); err != nil {
+		if closeErr := rootHandle.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+		return nil, fmt.Errorf("media: indexing filesystem root: %w", err)
+	}
+	return b, nil
 }
 
 // tmpPattern names in-flight Put staging files at the root. ListPage skips
@@ -82,6 +97,7 @@ func (b *fsBackend) objectPath(key string) (string, error) {
 	return p, nil
 }
 
+// Put implements Backend with an atomic create-only filesystem link.
 func (b *fsBackend) Put(ctx context.Context, key, contentType string, body io.Reader, size int64) (PutOutcome, error) {
 	if err := validatePut(ctx, key, contentType, size); err != nil {
 		return PutNotCreated, err
@@ -97,34 +113,44 @@ func (b *fsBackend) Put(ctx context.Context, key, contentType string, body io.Re
 	if err != nil {
 		return PutNotCreated, err
 	}
-	if err := ctx.Err(); err != nil {
-		return PutNotCreated, err
+	if contextErr := ctx.Err(); contextErr != nil {
+		return PutNotCreated, contextErr
 	}
 
 	tmp, tmpName, err := b.createTemp()
 	if err != nil {
 		return PutNotCreated, fmt.Errorf("media: staging object: %w", err)
 	}
-	defer b.dir.Remove(tmpName) // Always our own file; on success it is the spare link name.
-	if _, err := tmp.WriteString(contentType + "\n"); err != nil {
-		tmp.Close()
+	defer func() {
+		if cleanupErr := b.dir.Remove(tmpName); cleanupErr != nil && !errors.Is(cleanupErr, fs.ErrNotExist) {
+			return
+		}
+	}() // Always our own file; on success it is the spare link name.
+	if _, writeErr := tmp.WriteString(contentType + "\n"); writeErr != nil {
+		err = writeErr
+		if closeErr := tmp.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
 		return PutNotCreated, fmt.Errorf("media: staging object: %w", err)
 	}
-	if _, err := tmp.Write(buf); err != nil {
-		tmp.Close()
+	if _, writeErr := tmp.Write(buf); writeErr != nil {
+		err = writeErr
+		if closeErr := tmp.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
 		return PutNotCreated, fmt.Errorf("media: staging object: %w", err)
 	}
-	if err := tmp.Close(); err != nil {
-		return PutNotCreated, fmt.Errorf("media: staging object: %w", err)
+	if closeErr := tmp.Close(); closeErr != nil {
+		return PutNotCreated, fmt.Errorf("media: staging object: %w", closeErr)
 	}
 
-	if err := b.dir.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-		return PutNotCreated, fmt.Errorf("media: creating object directory: %w", err)
+	if mkdirErr := b.dir.MkdirAll(filepath.Dir(target), 0o700); mkdirErr != nil {
+		return PutNotCreated, fmt.Errorf("media: creating object directory: %w", mkdirErr)
 	}
 	// os.Link is atomic create-only: it can never replace an existing
 	// object, and a reader can only ever observe the complete file.
-	if err := b.dir.Link(tmpName, target); err != nil {
-		if errors.Is(err, fs.ErrExist) {
+	if linkErr := b.dir.Link(tmpName, target); linkErr != nil {
+		if errors.Is(linkErr, fs.ErrExist) {
 			if info, statErr := b.dir.Stat(target); statErr == nil && info.IsDir() {
 				// The name is a directory for deeper keys, not an object:
 				// the mirror image of the documented "k"/"k/child"
@@ -133,8 +159,16 @@ func (b *fsBackend) Put(ctx context.Context, key, contentType string, body io.Re
 			}
 			return PutNotCreated, fmt.Errorf("media: fs put %q: %w", key, ErrAlreadyExists)
 		}
-		return PutNotCreated, fmt.Errorf("media: publishing object: %w", err)
+		return PutNotCreated, fmt.Errorf("media: publishing object: %w", linkErr)
 	}
+	info, err := b.dir.Stat(target)
+	if err != nil {
+		// The link succeeded, so creation is no longer safely reversible. Keep
+		// the index conservative and report the ambiguous post-create outcome.
+		b.insertIndex(Object{Key: key})
+		return PutUnknown, fmt.Errorf("media: inspecting published object: %w", err)
+	}
+	b.insertIndex(Object{Key: key, UpdatedAt: info.ModTime()})
 	return PutCreated, nil
 }
 
@@ -159,6 +193,7 @@ func (b *fsBackend) createTemp() (*os.File, string, error) {
 	return nil, "", errors.New("could not allocate a unique staging name")
 }
 
+// Get implements Backend for one private filesystem object.
 func (b *fsBackend) Get(ctx context.Context, key string) (io.ReadCloser, string, error) {
 	if err := validateKey(key); err != nil {
 		return nil, "", err
@@ -179,17 +214,23 @@ func (b *fsBackend) Get(ctx context.Context, key string) (io.ReadCloser, string,
 	}
 	info, err := f.Stat()
 	if err != nil {
-		f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
 		return nil, "", fmt.Errorf("media: fs get %q: %w", key, err)
 	}
 	if info.IsDir() {
-		f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			return nil, "", fmt.Errorf("media: fs get %q: close directory: %w", key, closeErr)
+		}
 		return nil, "", ErrNotFound
 	}
 	reader := bufio.NewReader(f)
 	contentType, err := reader.ReadString('\n')
 	if err != nil || len(contentType) > maxContentTypeBytes+1 {
-		f.Close()
+		if closeErr := f.Close(); closeErr != nil {
+			return nil, "", fmt.Errorf("media: fs get %q: close corrupt object: %w", key, closeErr)
+		}
 		return nil, "", fmt.Errorf("media: fs get %q: stored object header is corrupt", key)
 	}
 	return readCloser{Reader: reader, Closer: f}, strings.TrimSuffix(contentType, "\n"), nil
@@ -202,6 +243,7 @@ type readCloser struct {
 	io.Closer
 }
 
+// Delete implements Backend for one exact filesystem object key.
 func (b *fsBackend) Delete(ctx context.Context, key string) error {
 	if err := validateKey(key); err != nil {
 		return err
@@ -230,6 +272,7 @@ func (b *fsBackend) Delete(ctx context.Context, key string) error {
 		}
 		return fmt.Errorf("media: fs delete %q: %w", key, err)
 	}
+	b.deleteIndex(key)
 	// Empty parent directories are retained: they are invisible to
 	// ListPage and pruning them races concurrent Puts for nothing.
 	return nil
@@ -243,121 +286,103 @@ func isAbsent(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
 }
 
-// fsListQueue orders a directory by its key prefix (including the slash) and
-// an object by its complete key. Expanding the smallest directory prefix first
-// produces the same full-key byte order as S3 without retaining every object.
-type fsListQueue []fsListCandidate
-
-type fsListCandidate struct {
-	sortKey string
-	path    string
-	entry   fs.DirEntry
-	isDir   bool
+// loadIndex scans durable objects once when the backend opens. Page requests
+// then use binary search over this ordered index instead of reading every
+// sibling in a filesystem directory. Put and Delete maintain the index after
+// their filesystem mutation succeeds.
+func (b *fsBackend) loadIndex() error {
+	objects := make([]Object, 0)
+	err := fs.WalkDir(b.dir.FS(), ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == "." || entry.IsDir() {
+			return nil
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
+		matched, err := filepath.Match(tmpPattern, path)
+		if err != nil {
+			return err
+		}
+		if matched {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		objects = append(objects, Object{Key: filepath.ToSlash(path), UpdatedAt: info.ModTime()})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	sort.Slice(objects, func(i, j int) bool { return objects[i].Key < objects[j].Key })
+	b.index = objects
+	return nil
 }
 
-func (q fsListQueue) Len() int           { return len(q) }
-func (q fsListQueue) Less(i, j int) bool { return q[i].sortKey < q[j].sortKey }
-func (q fsListQueue) Swap(i, j int)      { q[i], q[j] = q[j], q[i] }
-
-func (q *fsListQueue) Push(value any) {
-	*q = append(*q, value.(fsListCandidate))
+func (b *fsBackend) insertIndex(object Object) {
+	b.indexMu.Lock()
+	defer b.indexMu.Unlock()
+	position := sort.Search(len(b.index), func(i int) bool { return b.index[i].Key >= object.Key })
+	if position < len(b.index) && b.index[position].Key == object.Key {
+		b.index[position] = object
+		return
+	}
+	b.index = append(b.index, Object{})
+	copy(b.index[position+1:], b.index[position:])
+	b.index[position] = object
 }
 
-func (q *fsListQueue) Pop() any {
-	old := *q
-	last := len(old) - 1
-	value := old[last]
-	old[last] = fsListCandidate{}
-	*q = old[:last]
-	return value
+func (b *fsBackend) deleteIndex(key string) {
+	b.indexMu.Lock()
+	defer b.indexMu.Unlock()
+	position := sort.Search(len(b.index), func(i int) bool { return b.index[i].Key >= key })
+	if position == len(b.index) || b.index[position].Key != key {
+		return
+	}
+	copy(b.index[position:], b.index[position+1:])
+	b.index[len(b.index)-1] = Object{}
+	b.index = b.index[:len(b.index)-1]
 }
 
+// ListPage implements Backend with stable key-ordered filesystem pages.
 func (b *fsBackend) ListPage(ctx context.Context, prefix, cursor string, limit int) ([]Object, string, error) {
 	if err := validateListPage(ctx, prefix, cursor, limit); err != nil {
 		return nil, "", err
 	}
-	type entry struct {
-		key  string
-		info fs.FileInfo
+	startKey := prefix
+	exclusive := false
+	if cursor != "" && cursor >= startKey {
+		startKey = cursor
+		exclusive = true
 	}
-	entries := make([]entry, 0, limit+1)
-	queue := make(fsListQueue, 0, limit+1)
-	enqueueDirectory := func(dir string) error {
-		dirEntries, err := fs.ReadDir(b.dir.FS(), dir)
-		if err != nil {
-			// A directory or file removed mid-walk is not an error for a
-			// point-in-time listing.
-			if errors.Is(err, fs.ErrNotExist) {
-				return nil
-			}
-			return err
-		}
-		for _, dirEntry := range dirEntries {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			// The backend never creates symlinks. Ignoring any pre-existing one
-			// prevents local filesystem aliases from becoming object aliases.
-			if dirEntry.Type()&fs.ModeSymlink != 0 {
-				continue
-			}
-			key := dirEntry.Name()
-			if dir != "." {
-				key = dir + "/" + key
-			}
-			// Skip in-flight/crashed root staging files; they are not objects.
-			if dir == "." {
-				if matched, _ := filepath.Match(tmpPattern, key); matched {
-					continue
-				}
-			}
-			candidate := fsListCandidate{sortKey: key, path: key, entry: dirEntry}
-			if dirEntry.IsDir() {
-				candidate.sortKey += "/"
-				candidate.isDir = true
-			}
-			heap.Push(&queue, candidate)
-		}
-		return nil
+
+	b.indexMu.RLock()
+	defer b.indexMu.RUnlock()
+	start := sort.Search(len(b.index), func(i int) bool { return b.index[i].Key >= startKey })
+	if exclusive && start < len(b.index) && b.index[start].Key == cursor {
+		start++
 	}
-	if err := enqueueDirectory("."); err != nil {
-		return nil, "", fmt.Errorf("media: fs list %q: %w", prefix, err)
-	}
-	for queue.Len() > 0 && len(entries) < limit+1 {
+	window := make([]Object, 0, limit+1)
+	for i := start; i < len(b.index) && len(window) < limit+1; i++ {
 		if err := ctx.Err(); err != nil {
 			return nil, "", fmt.Errorf("media: fs list %q: %w", prefix, err)
 		}
-		candidate := heap.Pop(&queue).(fsListCandidate)
-		if candidate.isDir {
-			dirPrefix := candidate.sortKey
-			prefixIntersects := strings.HasPrefix(prefix, dirPrefix) || strings.HasPrefix(dirPrefix, prefix)
-			cursorInside := strings.HasPrefix(cursor, dirPrefix)
-			if prefixIntersects && (cursor == "" || cursor < dirPrefix || cursorInside) {
-				if err := enqueueDirectory(candidate.path); err != nil {
-					return nil, "", fmt.Errorf("media: fs list %q: %w", prefix, err)
-				}
-			}
-			continue
+		if !strings.HasPrefix(b.index[i].Key, prefix) {
+			break
 		}
-		key := candidate.path
-		if !strings.HasPrefix(key, prefix) || (cursor != "" && key <= cursor) {
-			continue
+		if b.visitIndexedObjectForTest != nil {
+			b.visitIndexedObjectForTest()
 		}
-		info, err := candidate.entry.Info()
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return nil, "", fmt.Errorf("media: fs list %q: %w", prefix, err)
-		}
-		entries = append(entries, entry{key: key, info: info})
+		window = append(window, b.index[i])
 	}
-	objects := make([]Object, 0, min(limit, len(entries)))
-	for _, e := range entries[:min(limit, len(entries))] {
-		objects = append(objects, Object{Key: e.key, UpdatedAt: e.info.ModTime()})
-	}
+	objects := append([]Object(nil), window[:min(limit, len(window))]...)
 	nextCursor := ""
-	if len(entries) > limit {
+	if len(window) > limit {
 		nextCursor = objects[len(objects)-1].Key
 	}
 	return objects, nextCursor, nil

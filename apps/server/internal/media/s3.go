@@ -98,6 +98,7 @@ func NewS3(ctx context.Context, cfg S3Config) (Backend, error) {
 	return &s3Backend{client: client, bucket: cfg.Bucket}, nil
 }
 
+// Put implements Backend with S3 create-only conditional writes.
 func (b *s3Backend) Put(ctx context.Context, key, contentType string, body io.Reader, size int64) (PutOutcome, error) {
 	if err := validatePut(ctx, key, contentType, size); err != nil {
 		return PutNotCreated, err
@@ -109,9 +110,9 @@ func (b *s3Backend) Put(ctx context.Context, key, contentType string, body io.Re
 	if err != nil {
 		return PutNotCreated, err
 	}
-	if err := ctx.Err(); err != nil {
+	if contextErr := ctx.Err(); contextErr != nil {
 		// Canceled after body read but still before dispatch.
-		return PutNotCreated, err
+		return PutNotCreated, contextErr
 	}
 
 	_, err = b.client.PutObject(ctx, &s3.PutObjectInput{
@@ -161,6 +162,7 @@ func (b *s3Backend) Put(ctx context.Context, key, contentType string, body io.Re
 	return PutUnknown, fmt.Errorf("media: s3 put %q: outcome unknown, no service response", key)
 }
 
+// Get implements Backend for one private S3 object.
 func (b *s3Backend) Get(ctx context.Context, key string) (io.ReadCloser, string, error) {
 	if err := validateKey(key); err != nil {
 		return nil, "", err
@@ -181,6 +183,7 @@ func (b *s3Backend) Get(ctx context.Context, key string) (io.ReadCloser, string,
 	return out.Body, aws.ToString(out.ContentType), nil
 }
 
+// Delete implements Backend for one exact S3 object key.
 func (b *s3Backend) Delete(ctx context.Context, key string) error {
 	if err := validateKey(key); err != nil {
 		return err
@@ -216,6 +219,7 @@ func (b *s3Backend) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// ListPage implements Backend with stable key-ordered S3 pages.
 func (b *s3Backend) ListPage(ctx context.Context, prefix, cursor string, limit int) ([]Object, string, error) {
 	if err := validateListPage(ctx, prefix, cursor, limit); err != nil {
 		return nil, "", err
@@ -223,7 +227,7 @@ func (b *s3Backend) ListPage(ctx context.Context, prefix, cursor string, limit i
 	input := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(b.bucket),
 		Prefix:  aws.String(prefix),
-		MaxKeys: aws.Int32(int32(limit)),
+		MaxKeys: aws.Int32(int32(limit)), //nolint:gosec // validateListPage bounds limit to a small positive page size.
 	}
 	if cursor != "" {
 		// StartAfter rather than an opaque continuation token: the cursor

@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 )
 
@@ -22,7 +23,18 @@ func newFSBackend(t *testing.T) (*fsBackend, string) {
 	if err != nil {
 		t.Fatalf("NewFS: %v", err)
 	}
-	return b.(*fsBackend), root
+	backend, ok := b.(*fsBackend)
+	if !ok {
+		t.Fatalf("NewFS returned %T, want *fsBackend", b)
+	}
+	return backend, root
+}
+
+func closeInternalTestBody(t *testing.T, body io.Closer) {
+	t.Helper()
+	if err := body.Close(); err != nil {
+		t.Errorf("close test body: %v", err)
+	}
 }
 
 func TestNewFS_CreatesMissingRoot(t *testing.T) {
@@ -82,20 +94,20 @@ func TestFS_SymlinkCannotEscapeRoot(t *testing.T) {
 	if outcome != PutNotCreated || err == nil {
 		t.Fatalf("Put through escaping symlink = %d, %v; want PutNotCreated + error", outcome, err)
 	}
-	if _, err := os.Stat(filepath.Join(outside, "new.jpg")); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("Put reached outside root: Stat err = %v", err)
+	if _, statErr := os.Stat(filepath.Join(outside, "new.jpg")); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("Put reached outside root: Stat err = %v", statErr)
 	}
 
 	outsideObject := filepath.Join(outside, "existing.jpg")
-	if err := os.WriteFile(outsideObject, []byte("outside"), 0o600); err != nil {
-		t.Fatal(err)
+	if writeErr := os.WriteFile(outsideObject, []byte("outside"), 0o600); writeErr != nil {
+		t.Fatal(writeErr)
 	}
 	body, _, err := b.Get(context.Background(), "escape/existing.jpg")
 	if err == nil {
-		body.Close()
+		closeInternalTestBody(t, body)
 		t.Fatal("Get through escaping symlink succeeded")
 	}
-	if err := b.Delete(context.Background(), "escape/existing.jpg"); err == nil {
+	if deleteErr := b.Delete(context.Background(), "escape/existing.jpg"); deleteErr == nil {
 		t.Fatal("Delete through escaping symlink succeeded")
 	}
 	got, err := os.ReadFile(outsideObject)
@@ -168,7 +180,11 @@ func TestFS_ListPageStopsAtBound(t *testing.T) {
 	if err := os.Chmod(blocked, 0); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(blocked, 0o700) })
+	t.Cleanup(func() {
+		if chmodErr := os.Chmod(blocked, 0o700); chmodErr != nil {
+			t.Errorf("restore blocked directory permissions: %v", chmodErr)
+		}
+	})
 
 	objects, next, err := b.ListPage(context.Background(), "", "", 1)
 	if err != nil {
@@ -176,6 +192,31 @@ func TestFS_ListPageStopsAtBound(t *testing.T) {
 	}
 	if len(objects) != 1 || objects[0].Key != "a/one.jpg" || next != "a/one.jpg" {
 		t.Errorf("ListPage = %v, %q; want first object and continuation cursor", objects, next)
+	}
+}
+
+// TestFS_ListPageWideDirectoryUsesBoundedIndexWork proves a page does not
+// enumerate a wide directory. The backend may build its ordered index once at
+// startup and maintain it on writes, but one page visits at most limit+1 index
+// records even when the cursor starts in the middle of 10,000 siblings.
+func TestFS_ListPageWideDirectoryUsesBoundedIndexWork(t *testing.T) {
+	t.Parallel()
+	b, _ := newFSBackend(t)
+	for i := range 10_000 {
+		b.mustPutForTest(t, fmt.Sprintf("wide/%05d.jpg", i))
+	}
+
+	var visits atomic.Int64
+	b.visitIndexedObjectForTest = func() { visits.Add(1) }
+	objects, next, err := b.ListPage(context.Background(), "wide/", "wide/04999.jpg", 1)
+	if err != nil {
+		t.Fatalf("ListPage: %v", err)
+	}
+	if len(objects) != 1 || objects[0].Key != "wide/05000.jpg" || next != "wide/05000.jpg" {
+		t.Fatalf("ListPage = %v, %q; want wide/05000.jpg and continuation", objects, next)
+	}
+	if got := visits.Load(); got > 2 {
+		t.Fatalf("ListPage visited %d index records, want at most limit+1", got)
 	}
 }
 
@@ -241,7 +282,7 @@ func TestFS_ContentTypeSurvivesReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	defer body.Close()
+	defer closeInternalTestBody(t, body)
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		t.Fatal(err)
