@@ -1,3 +1,7 @@
+import { HTML_CSP } from './app/utils/csp';
+
+const harnessEnabled = process.env.NUXT_HARNESS === '1';
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint'],
@@ -18,10 +22,50 @@ export default defineNuxtConfig({
     },
   },
 
+  buildDir: harnessEnabled ? '.nuxt/harness' : '.nuxt',
+
+  routeRules: harnessEnabled
+    ? {
+        '/_harness/**': {
+          headers: { 'Content-Security-Policy': HTML_CSP },
+        },
+      }
+    : {},
+
   devServer: {
     port: 3000,
   },
   compatibilityDate: '2026-08-01',
+
+  nitro: {
+    output: {
+      dir: harnessEnabled ? '.output/harness' : '.output',
+    },
+  },
+
+  hooks: {
+    'pages:extend': (pages) => {
+      const retained = pages.filter((page) => {
+        const file = page.file?.replaceAll('\\', '/');
+        if (file === undefined || !file.includes('/app/pages/_harness/')) {
+          return true;
+        }
+        return harnessEnabled && file.endsWith('/_harness/render.vue');
+      });
+      pages.splice(0, pages.length, ...retained);
+      if (harnessEnabled) {
+        const harnessRoutes = pages.filter((page) =>
+          page.file?.replaceAll('\\', '/').includes('/app/pages/_harness/'),
+        );
+        if (
+          harnessRoutes.length !== 1
+          || harnessRoutes[0]?.path !== '/_harness/render'
+        ) {
+          throw new Error('Harness build must expose only /_harness/render.');
+        }
+      }
+    },
+  },
 
   eslint: {
     config: {

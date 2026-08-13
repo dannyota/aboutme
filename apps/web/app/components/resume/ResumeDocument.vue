@@ -228,4 +228,15 @@ const rootStyle = computed<CSSProperties>(() => ({
 .resume-document .level-dot.filled {
   background: var(--color-accent-solid);
 }
+
+@media print {
+  body.resume-print {
+    margin: 0;
+    padding: 0;
+  }
+
+  body.resume-print .resume-document {
+    padding: 0;
+  }
+}
 </style>
