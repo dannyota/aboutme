@@ -4,8 +4,8 @@
   "description": "Repo-level tooling (docs lint/format). Apps carry their own manifests.",
   "license": "AGPL-3.0-only",
   "scripts": {
-    "docs:lint": "prettier --check \"**/*.md\" \"**/*.{yml,yaml}\" && markdownlint-cli2 \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\" \"#apps/web/public/font-licenses\" \"#apps/web/.output\"",
-    "docs:fmt": "prettier --write \"**/*.md\" \"**/*.{yml,yaml}\" && markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\" \"#apps/web/public/font-licenses\" \"#apps/web/.output\""
+    "docs:lint": "prettier --check \"**/*.md\" \"**/*.{yml,yaml}\" \"!.worktrees/**\" && markdownlint-cli2 \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\" \"#.worktrees\" \"#apps/web/public/font-licenses\" \"#apps/web/.output\"",
+    "docs:fmt": "prettier --write \"**/*.md\" \"**/*.{yml,yaml}\" \"!.worktrees/**\" && markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\" \"#.worktrees\" \"#apps/web/public/font-licenses\" \"#apps/web/.output\""
   },
   "devDependencies": {
     "@playwright/mcp": "0.0.78",
