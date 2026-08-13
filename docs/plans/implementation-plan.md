@@ -12,17 +12,17 @@ keep everything runnable on the laptop until the whole product works there.
 
 ## Current baseline
 
-| Slice                         | State                                                | Remaining work                                  |
-| ----------------------------- | ---------------------------------------------------- | ----------------------------------------------- |
-| P0 foundations                | Complete                                             | None                                            |
-| P0F TypeScript API client     | Complete                                             | None                                            |
-| P1 authentication             | Complete                                             | None                                            |
-| P1.1 authentication hardening | Complete                                             | None                                            |
-| P2A resume domain and store   | Complete                                             | None                                            |
-| P3 renderer lane              | Schema v2, renderer, pagination, presets implemented | Goldens, lint boundary, browser run             |
-| P2B server lane               | Complete                                             | None                                            |
-| P9 HTTPS overlay              | Needed before authenticated browser checks           | Small overlay lane, pulled in when P4 starts    |
-| PI infrastructure             | Adopted, not executed                                | Refresh after runtime phases; no cloud mutation |
+| Slice                         | State                                             | Remaining work                                  |
+| ----------------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| P0 foundations                | Complete                                          | None                                            |
+| P0F TypeScript API client     | Complete                                          | None                                            |
+| P1 authentication             | Complete                                          | None                                            |
+| P1.1 authentication hardening | Complete                                          | None                                            |
+| P2A resume domain and store   | Complete                                          | None                                            |
+| P3 renderer lane              | Schema v2, renderer, pagination, presets, goldens | Lint boundary and pinned browser run            |
+| P2B server lane               | Complete                                          | None                                            |
+| P9 HTTPS overlay              | Needed before authenticated browser checks        | Small overlay lane, pulled in when P4 starts    |
+| PI infrastructure             | Adopted, not executed                             | Refresh after runtime phases; no cloud mutation |
 
 The settings page uses authenticated CSRF-protected POST for provider linking
 and reauthentication. P1.1's contract, tests, browser proof, and gates agree.

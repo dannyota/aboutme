@@ -33,3 +33,15 @@ but it remains in history, so the allowlist stays for full-history sweeps.
 """
 targetRules = ["generic-api-key"]
 paths = ['''apps/server/migrations/atlas\.sum$''']
+
+[[allowlists]]
+description = """
+False positive: renderer paged HTML goldens expose the schema's custom-section
+UUID in a data-section-key attribute so page placement is reviewable. The UUID
+identifies an in-memory fixture section and grants no access. This allowlist is
+limited to that exact attribute shape in the reserved generated golden path.
+"""
+targetRules = ["generic-api-key"]
+paths = ['''apps/web/test/renderer/golden/[^/]+\.html$''']
+regexTarget = "match"
+regexes = ['''data-section-key="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"''']

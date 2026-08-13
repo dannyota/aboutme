@@ -40,7 +40,7 @@ follows the exclusive windows below.
 | 6    | Pure renderer in continuous mode                            | High   | Implemented |
 | 7    | Pure pagination engine and editor paged wrapper             | High   | Implemented |
 | 8    | Preset registry, validation, and apply semantics            | Normal | Implemented |
-| 9    | Deterministic HTML golden harness                           | Normal | Pending     |
+| 9    | Deterministic HTML golden harness                           | Normal | Implemented |
 | 10   | Renderer import and nondeterminism lint rules               | Normal | Pending     |
 | 11   | Pinned-browser screenshot, offline-font, sanitizer, CSP run | High   | Pending     |
 | Gate | Phase review and exit checklist                             | —      | Pending     |
