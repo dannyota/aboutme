@@ -527,11 +527,11 @@ func photoNotFoundError() *clientError {
 func decodePhotoCrop(raw []byte) (*schema.PhotoCrop, error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &root); err != nil || len(root) != 1 {
-		return nil, documentInvalid("crop", "crop command must contain only crop")
+		return nil, requestInvalid("request body must contain only crop")
 	}
 	cropRaw, ok := root["crop"]
 	if !ok {
-		return nil, documentInvalid("crop", "crop is required")
+		return nil, requestInvalid("request body must contain crop")
 	}
 	if bytes.Equal(bytes.TrimSpace(cropRaw), []byte("null")) {
 		return nil, nil

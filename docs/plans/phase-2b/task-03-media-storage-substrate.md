@@ -103,7 +103,7 @@ defines the target and port contract.
 
 ## Steps
 
-- [ ] **Step 1: failing conformance suite first.** One table-driven suite in
+- [x] **Step 1: failing conformance suite first.** One table-driven suite in
       `conformance_test.go` parameterized over backends, run for `fs` always and
       for `s3` when `TEST_S3_ENDPOINT` is set. It must cover: round-trip put/get
       including the content type; `Get` and `Delete` of an absent key →
@@ -123,7 +123,7 @@ defines the target and port contract.
       and a failing SDK response. Assert neither sentinel appears in returned
       errors or captured logs. Startup errors may name a missing variable but
       never its value.
-- [ ] Both implementations enforce create-only atomically: filesystem uses
+- [x] Both implementations enforce create-only atomically: filesystem uses
       exclusive create in the target directory followed by safe cleanup of only
       its own partial file; S3 uses conditional `If-None-Match: *` and maps only
       a proved collision response to `PutNotCreated, ErrAlreadyExists`. A
@@ -133,30 +133,31 @@ defines the target and port contract.
       collision, and a definite service rejection. Unknown outcomes never
       trigger request-path deletion because the key could belong to a collision
       winner. The conformance suite rejects every invalid outcome/error pair.
-- [ ] **Step 2: skip-or-fail-closed harness.** Add `RequireTestS3(t)` in the
+- [x] **Step 2: skip-or-fail-closed harness.** Add `RequireTestS3(t)` in the
       same shape as `testutil.RequireMigratedTestDatabaseURL`: skip when
       `TEST_S3_ENDPOINT` is unset, **fail** when `REQUIRE_TEST_S3=1` is set and
       it is missing, so a gate run cannot pass vacuously. Prove the fail-closed
       arm with its own test.
-- [ ] **Step 3: implement both backends; green.** `fs` cleans and re-roots every
+- [x] **Step 3: implement both backends; green.** `fs` cleans and re-roots every
       key and refuses escapes; `s3` uses AWS SDK for Go v2 pinned at latest
       stable, with a custom endpoint resolver and path-style addressing when
       `MEDIA_ENDPOINT` is set, and maps `NoSuchKey`/404 to `ErrNotFound`. Record
       S3 returns `PutUnknown` for every non-collision result after dispatch
-      whose object-creation outcome is not proved. Filesystem outcomes are
-      always `PutCreated` or `PutNotCreated`. Record the transitive dependency
-      delta from `go mod graph` in the task report, as P2A's D1 requires for a
-      new module. Report the exact `go mod edit`/`go get` commands and resulting
-      `go.mod`/`go.sum` diff; the integration owner runs and applies them in the
-      exclusive dependency window. Pin the latest stable `golang.org/x/image`
-      for Task 11's WebP decoder and Catmull–Rom scaler. It must not be older
-      than `v0.43.0`, which fixes
+      whose object-creation outcome is not proved. Filesystem failures before
+      its atomic publish are `PutNotCreated`; a failure after publish that
+      prevents proving the final object is `PutUnknown`. Record the transitive
+      dependency delta from `go mod graph` in the task report, as P2A's D1
+      requires for a new module. Report the exact `go mod edit`/`go get`
+      commands and resulting `go.mod`/`go.sum` diff; the integration owner runs
+      and applies them in the exclusive dependency window. Pin the latest stable
+      `golang.org/x/image` for Task 11's WebP decoder and Catmull–Rom scaler. It
+      must not be older than `v0.43.0`, which fixes
       [GO-2026-5061](https://pkg.go.dev/vuln/GO-2026-5061). At this plan's
       2026-08-12 review, the latest stable release is `v0.45.0`; recheck at
       scaffold time under the repository's dependency rule. Recheck and promote
       the already-transitive `golang.org/x/text/language` dependency to a direct
       exact pin for Task 6's BCP 47 parse/canonicalize path.
-- [ ] **Step 4: the local service.** Prepare the exact integration-owner diff
+- [x] **Step 4: the local service.** Prepare the exact integration-owner diff
       adding a pinned, fully qualified `docker.io/minio/minio:<exact tag>`
       service to `deploy/compose.yml` on a **new `media` network shared only
       with `server`** — never `edge`, never `frontend`, so a compromise of Caddy
@@ -166,7 +167,7 @@ defines the target and port contract.
       Credentials come from `.env` with **no baked-in default**, exactly as
       `POSTGRES_PASSWORD` does, because `compose.yml` is also the self-hosting
       artifact. Document both in `deploy/README.md` and `.env.example`.
-- [ ] **Step 5: report the owner changes.** Supply exact compose/module/lockfile
+- [x] **Step 5: report the owner changes.** Supply exact compose/module/lockfile
       diffs and Makefile recipes for `test-s3-up`, `test-s3-down`,
       `server-test-s3`, and `server-test-p2b-s3` that implement D10's container,
       credential-file, environment, fail-closed, and package-command contract.
@@ -180,6 +181,25 @@ defines the target and port contract.
       dependency graph delta, pinned image and module versions, exact checks,
       and shared-target recipes to the integration owner. Do not stage or
       commit.
+
+## Implementation record
+
+Commit `0fc5d66` landed the shared backend contract, rooted filesystem and S3
+implementations, conformance and fault-injection tests, fail-closed S3 harness,
+startup configuration, pinned MinIO deployment, test scripts, CI wiring, and
+dependency pins. Current tests cover canonical-key rejection, exact-size and
+create-only writes, collision preservation, bounded stable pages, cancellation
+and ambiguous S3 outcomes, secret-free errors, and fail-closed harness setup.
+The focused filesystem command is `go test ./internal/media/... -race -count=1`;
+the S3 proof is `make test-s3-up && make server-test-s3`.
+
+The filesystem outcome text now reflects the backend contract: a failure before
+the atomic link proves non-creation, while a failed post-link inspection cannot
+safely prove whether the published object remains and therefore returns
+`PutUnknown`. The historical dependency graph delta and RED/handoff transcript
+are not retained, so Step 7 remains open. Step 6 was not rerun during this
+record repair. Connected `make scan` and the fresh
+credential/key/outcome-conformance review remain phase-exit dependencies.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks credential
 handling, key-escape rejection, create-only outcome classification, and whether

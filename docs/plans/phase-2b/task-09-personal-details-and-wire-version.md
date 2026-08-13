@@ -62,7 +62,7 @@ or contact edit from clearing the reference and leaking an orphan.
       absence of the header and explicit `X-Resume-Schema-Version: 2` produce
       byte-identical stored documents and responses. The explicit v1 case must
       traverse the real converters and is covered in Step 2.
-- [ ] **Step 4: own the granular old-client proof.** This case is specified in
+- [x] **Step 4: own the granular old-client proof.** This case is specified in
       [adversarial coverage](adversarial-coverage.md) before implementation and
       is authored in this task's `wireversion_e2e_test.go`. After all W3 route
       files land, the W4 integration run executes
@@ -73,12 +73,12 @@ or contact edit from clearing the reference and leaking an orphan.
       This task reports its fixture and projector setup for that later run; its
       own gate does not depend on a sibling route. It never weakens the shared
       coverage checklist or edits Task 7's route/tests.
-- [ ] **Step 5: failing contract test.** Handler statuses, codes, and the
+- [x] **Step 5: failing contract test.** Handler statuses, codes, and the
       request/response shapes agree with `docs/api/openapi.yaml`, including the
       `X-Resume-Schema-Version` header on both sides. Validate a request
       carrying `photo` against OpenAPI and prove `PersonalDetailsPatch` rejects
       it; prove the separate `PhotoCropPatch` is not accepted on this route.
-- [ ] **Step 6: implement; green.**
+- [x] **Step 6: implement; green.**
 - [ ] **Step 7: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
@@ -86,6 +86,29 @@ or contact edit from clearing the reference and leaking an orphan.
 - [ ] **Step 8: handoff.** Report the owned paths, failing-test evidence, exact
       checks, released-version fixtures, and stored-row assertions to the
       integration owner. Do not stage or commit.
+
+## Implementation record
+
+The personal-details handler and production v1↔v2 wire path are implemented.
+`TestPersonalDetails_WholeObjectReplacementAndDraftRoundTrip`,
+`TestPersonalDetails_RejectsBoundsSchemesPhotoAndUnknownFieldsWithoutWriting`,
+`TestPersonalDetails_PreservesTransactionReadPhotoAndCrop`, and
+`TestPersonalDetails_RacingPhotoReplacementCannotRestoreOldKey` cover the
+whole-object, validation, ownership, and CAS behavior.
+`TestWireVersion_AcceptProjectPersistEmit` supplies the required granular v1
+entry-route proof, while `TestPersonalDetails_OpenAPIContract` checks the closed
+personal-details request schema and route contract. No historical RED transcript
+is retained.
+
+`TestWireVersion_PersonalDetailsAcceptProjectPersistEmit` proves released-v1
+acceptance, current-v2 complete storage, v1 emission, and preservation of a
+v2-only font. It does not byte-compare the complete v1 write response with a
+subsequent v1 read. The current-version identity test does not directly compare
+absent-header and explicit-v2 responses and stored documents byte for byte. The
+photo-preservation test seeds the server-owned photo reference directly instead
+of going through the upload route. Steps 1–3 therefore remain open, as do the
+gate/handoff Steps 7–8 because the exact Step 7 gate is not recorded. The
+connected scan, unchanged-candidate CI, and fresh review remain phase-owned.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
 accepted-version path can persist a non-current document and whether an emitted

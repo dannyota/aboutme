@@ -49,7 +49,7 @@ is classified.
 
 ## Steps
 
-- [ ] **Step 1: failing parity test first.** Walk the schema and assert the
+- [x] **Step 1: failing parity test first.** Walk the schema and assert the
       exact settable and unsettable path sets above. Assert it fails when a
       required pair is missing, an undeclared pair appears, a required property
       becomes unsettable, or an optional object root cannot be unset. Do not
@@ -63,7 +63,7 @@ is classified.
       leading dot, or an array index; a path over 256 bytes; a Unicode
       look-alike of an allowed segment. **A batch containing one denied path is
       rejected whole** — no partial application.
-- [ ] **Step 3: failing value tests.** A value of the wrong type for its leaf (a
+- [x] **Step 3: failing value tests.** A value of the wrong type for its leaf (a
       string where the schema says number, a hex color that is not a hex color,
       `spacing.pageMargin.x` above its 0–40 mm range, `layout.columns: 3`) →
       `422 document_invalid` with a `details.issues` entry naming the path;
@@ -82,12 +82,12 @@ is classified.
       optional object by setting all its required leaves in one ordered batch;
       validation runs only after the full batch, so no invalid half-object is
       persisted.
-- [ ] **Step 5: failing envelope tests.** Stale `If-Match` → `412` with the
+- [x] **Step 5: failing envelope tests.** Stale `If-Match` → `412` with the
       winning document; replay returns the stored response; a different body
       under the same key → `409`.
 - [ ] **Step 6: failing contract test.** Handler statuses, codes, and the delta
       schema agree with `docs/api/openapi.yaml`.
-- [ ] **Step 7: implement; green.**
+- [x] **Step 7: implement; green.**
 - [ ] **Step 8: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
@@ -96,6 +96,28 @@ is classified.
 - [ ] **Step 9: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and allowed/denied parity sets to the integration owner. Do not
       stage or commit.
+
+## Implementation record
+
+The customization handler and fixed allowlists are implemented in
+`customization.go` and `customization_allowlist.go`.
+`TestCustomizationAllowlistMatchesEmbeddedSchema` covers schema parity,
+optional-leaf overlap, optional object roots, undeclared pairs, and required
+properties. `TestCustomizationHTTPAtomicDenialValidationReplayAndCAS` and
+`TestCustomizationDeltaCountAndUnionBoundaries` cover value kinds and ranges,
+union rules, 100/101 bounds, no-write rejection, replay, key reuse, and stale
+CAS. No historical RED transcript is retained.
+
+`TestCustomizationDeniedPathsRejectWholeBatch` covers the full hostile-path
+matrix at the apply layer, while the live HTTP test proves no-write behavior for
+a representative denied batch; the full matrix is not driven through HTTP.
+`TestCustomizationDeltasApplyInOrderAndPreserveUnrelatedSubtrees` covers ordered
+application, absence, reconstruction, and unrelated-subtree isolation, but not
+reconstruction through the live route from each absent optional root. The
+contract test checks the union and status surface but not every OpenAPI error
+branch. Steps 2, 4, and 6 remain open, as do the gate/handoff Steps 8–9 because
+the exact Step 8 gate is not recorded. Connected `make scan`,
+unchanged-candidate CI, and fresh review remain phase-owned.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
 accepted path can reach a document location outside `customization`. The same

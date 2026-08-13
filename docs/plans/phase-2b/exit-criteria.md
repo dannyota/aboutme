@@ -68,9 +68,9 @@ Every item must pass at one unchanged candidate commit.
       local controlled-cgroup profile. Five seconds is measured; request-time
       decoding is synchronous and no work remains after return. P9A owns the
       launch-gate rerun on the selected production ARM64 Graviton task. Local
-      evidence for source `0513351fb8690affbc729f118f1489955e2c4558` is the
+      evidence for source `7c4eb4e5bfbc602a0a1493254fd4a084b4808dd4` is the
       frozen manifest and its ignored commit-keyed `results.json`: 160/160
-      samples passed, with a 3.025443354-second worst duration and 193,585,152
+      samples passed, with a 1.416436078-second worst duration and 193,290,240
       byte worst RSS delta.
 - [ ] The media backend exposes stable bounded pages and update time for
       AC-MEDIA-007. P2B supplies the durable exact-key queue. P8-priv implements

@@ -186,7 +186,7 @@ func TestNormalizeRejectsUnsupportedBytes(t *testing.T) {
 }
 
 func TestNormalizeStripsMetadataAndSourceChunks(t *testing.T) {
-	const privateMarker = "ABOUTME_PRIVATE_GPS_XMP_IPTC_COMMENT_THUMBNAIL_ICC"
+	const privateMarker = `<script data-private="true">GPS XMP IPTC COMMENT THUMBNAIL ICC</script>`
 	t.Run("PNG text profile and Exif forms", func(t *testing.T) {
 		base := encodePNG(t, image.NewNRGBA(image.Rect(0, 0, 8, 8)))
 		withMetadata := insertPNGChunk(t, base, "iCCP", []byte("profile\x00\x00"+privateMarker), "IDAT")

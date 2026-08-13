@@ -27,7 +27,7 @@ reference-gated. A replay performs no callback and creates no duplicate job.
 
 ## Steps
 
-- [ ] **Step 1: failing authorization tests first.** Every operation with no
+- [x] **Step 1: failing authorization tests first.** Every operation with no
       session → `401 session_required`; every mutation with a session but no
       CSRF token → `403 csrf_rejected`; every per-resume operation against a
       **real id owned by another user** matches the same operation against a
@@ -36,19 +36,19 @@ reference-gated. A replay performs no callback and creates no duplicate job.
       `X-Request-Id`, and separately assert both responses carry valid distinct
       request IDs. `GET /resumes` for a user with no resumes is an empty list,
       never `404`.
-- [ ] **Step 2: failing cap tests.** Creating a 4th → `409 resume_cap_exceeded`,
+- [x] **Step 2: failing cap tests.** Creating a 4th → `409 resume_cap_exceeded`,
       with three rows still present and no idempotency record written for the
       rejected mutation. Twenty concurrent creates over HTTP for one user →
       exactly 3 succeed and 17 are `409`, deterministic under `-race -count=20`;
       the database row count is 3 (AC-DOC-001's HTTP evidence — the trigger
       remains the enforcement).
-- [ ] **Step 3: failing write-envelope tests.** A stale `If-Match` on `PATCH` →
+- [x] **Step 3: failing write-envelope tests.** A stale `If-Match` on `PATCH` →
       `412` carrying the current revision and document; the same
       `Idempotency-Key` and body replays the stored `201`/`200` without creating
       a second resume; a different body under the same key → `409`. Deleting an
       already-deleted resume is `404`, and a replayed delete returns the stored
       `204`.
-- [ ] **Step 4: failing draft-permissive tests.** Creating with no seed document
+- [x] **Step 4: failing draft-permissive tests.** Creating with no seed document
       yields a document that is valid at the draft level and reloads unchanged;
       a seed carrying `personalDetails.photo` in any accepted wire version is
       `422 document_invalid` with no resume row, idempotency record, or object;
@@ -76,7 +76,7 @@ reference-gated. A replay performs no callback and creates no duplicate job.
       no key value, and causes zero backend calls. Race a prior read against a
       transaction-time photo-key change and prove only the key returned by
       `DeleteTx` is enqueued; a replay creates no duplicate job.
-- [ ] **Step 7: implement; green.**
+- [x] **Step 7: implement; green.**
 - [ ] **Step 8: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
@@ -85,6 +85,29 @@ reference-gated. A replay performs no callback and creates no duplicate job.
 - [ ] **Step 9: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and media-cleanup state matrix to the integration owner. Do not
       stage or commit.
+
+## Implementation record
+
+The five CRUD handlers are implemented in `resumes.go`. Current regression
+evidence covers authorization and no-oracle behavior
+(`TestResumeAuthorization_SessionAndCSRFRequired` and
+`TestResumeAuthorization_NoExistenceOracle`), the 20-request cap race
+(`TestResumeCreate_CapAndConcurrentHTTPEnforcement`), the CRUD/CAS/replay
+envelope (`TestResumeCRUD_LifecycleAndWriteEnvelope`), and seed, language,
+legacy-upgrade, sanitizing, and bound behavior
+(`TestResumeCreate_SeedVersionsPhotoRejectionAndBounds` and
+`TestResumeMetadata_LanguageProjectionAndCompleteLegacyUpgrade`). No historical
+RED transcript is retained, so this record does not claim one.
+
+`TestResumeCRUD_OpenAPIContract` supplies document-level contract checks, but it
+does not exhaustively compare every live handler error and media response with
+OpenAPI. The exact-key cleanup tests prove transactional enqueue, rollback,
+transaction-time key selection, and same-prefix isolation, but do not directly
+prove zero backend calls for invalid keys, neighbour-resume object isolation, or
+a photo-bearing delete replay producing no duplicate job. Steps 5 and 6 remain
+open for those clauses. The exact Step 8 gate and its `-race -count=20` repeat
+have no retained task record, so Steps 7–9 remain open. The connected scan,
+unchanged-candidate CI, and fresh review remain phase-owned.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks
 authorization, cap concurrency, CAS, idempotency, and exact-key media cleanup

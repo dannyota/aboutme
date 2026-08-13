@@ -1,0 +1,454 @@
+package resumeapi
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"reflect"
+	"sort"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
+)
+
+func TestPhotoCrop_WriteSafety(t *testing.T) {
+	assertPhotoCropChangedBodyReuse(t)
+}
+
+func TestPhotoCropContractAndIsolation(t *testing.T) {
+	assertPhotoCropReplacementRace(t)
+}
+
+func assertPhotoCropChangedBodyReuse(t *testing.T) {
+	t.Helper()
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	uploaded := h.uploadPhotoRequest(t, created.ID, created.Revision, uuid.NewString(), "photo.png", makePhotoPNG(t))
+	if uploaded.status != http.StatusOK {
+		t.Fatalf("seed upload = %d body=%s", uploaded.status, uploaded.body)
+	}
+	_, uploadedDocument := decodedWrittenDocument(t, uploaded)
+	if uploadedDocument.PersonalDetails.Photo == nil {
+		t.Fatal("seed upload returned no photo")
+	}
+
+	backend := &photoCropExitBackend{delegate: h.service.blobs}
+	h.service.blobs = backend
+	path := fmt.Sprintf("/api/v1/resumes/%s/photo", created.ID)
+	idempotencyKey := uuid.NewString()
+	body := `{"crop":{"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`
+	set := h.mutationRequest(t, http.MethodPatch, path, bytes.NewBufferString(body), 2, idempotencyKey)
+	if set.status != http.StatusOK || set.header.Get("ETag") != `"r3"` {
+		t.Fatalf("set crop = %d headers=%v body=%s", set.status, set.header, set.body)
+	}
+	_, setDocument := decodedWrittenDocument(t, set)
+	if setDocument.PersonalDetails.Photo == nil ||
+		setDocument.PersonalDetails.Photo.Key != uploadedDocument.PersonalDetails.Photo.Key ||
+		setDocument.PersonalDetails.Photo.Crop == nil {
+		t.Fatalf("set crop changed key or omitted crop: %#v", setDocument.PersonalDetails.Photo)
+	}
+	if calls := backend.snapshotCalls(); calls != (photoCropExitObjectCalls{}) {
+		t.Fatalf("crop set made object calls: %+v", calls)
+	}
+
+	before := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
+	beforeCalls := backend.snapshotCalls()
+	// The command is semantically identical but its raw JSON bytes differ.
+	reused := h.mutationRequest(t, http.MethodPatch, path,
+		bytes.NewBufferString(`{"crop": {"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`),
+		2, idempotencyKey)
+	if reused.status != http.StatusConflict ||
+		!bytes.Contains(reused.body, []byte(`"code":"idempotency_key_reuse"`)) {
+		t.Fatalf("changed-body reuse = %d body=%s", reused.status, reused.body)
+	}
+	if afterCalls := backend.snapshotCalls(); afterCalls != beforeCalls {
+		t.Fatalf("changed-body reuse made object calls: before=%+v after=%+v", beforeCalls, afterCalls)
+	}
+	after := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("changed-body reuse changed state:\n before=%+v\n after=%+v", before, after)
+	}
+}
+
+func assertPhotoCropReplacementRace(t *testing.T) {
+	t.Helper()
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	seedUpload := h.uploadPhotoRequest(t, created.ID, created.Revision, uuid.NewString(), "old.png", makePhotoPNG(t))
+	if seedUpload.status != http.StatusOK {
+		t.Fatalf("seed upload = %d body=%s", seedUpload.status, seedUpload.body)
+	}
+	_, seedDocument := decodedWrittenDocument(t, seedUpload)
+	if seedDocument.PersonalDetails.Photo == nil {
+		t.Fatal("seed upload returned no photo")
+	}
+	oldKey := seedDocument.PersonalDetails.Photo.Key
+	path := fmt.Sprintf("/api/v1/resumes/%s/photo", created.ID)
+	seedCrop := h.mutationRequest(t, http.MethodPatch, path,
+		bytes.NewBufferString(`{"crop":{"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`),
+		2, uuid.NewString())
+	if seedCrop.status != http.StatusOK || seedCrop.header.Get("ETag") != `"r3"` {
+		t.Fatalf("seed crop = %d headers=%v body=%s", seedCrop.status, seedCrop.header, seedCrop.body)
+	}
+
+	backend := &photoCropExitBackend{delegate: h.service.blobs}
+	h.service.blobs = backend
+	uploadKey := uuid.New()
+	cropKey := uuid.New()
+	ordered := newPhotoCropOrderedIdempotency(h.service.idempotency, uploadKey, cropKey)
+	h.service.idempotency = ordered
+
+	uploadBody, uploadContentType := photoMultipartBody(t, func(writer *multipart.Writer) {
+		part, err := writer.CreateFormFile("file", "replacement.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(makePhotoPNG(t)); err != nil {
+			t.Fatal(err)
+		}
+	})
+	uploadRequest := newPhotoCropExitRequest(t, h, http.MethodPost, path,
+		bytes.NewReader(uploadBody), uploadContentType, 3, uploadKey)
+	cropRequest := newPhotoCropExitRequest(t, h, http.MethodPatch, path,
+		bytes.NewBufferString(`{"crop":{"x":0,"y":0,"width":0.5,"height":0.5}}`),
+		"application/json", 3, cropKey)
+
+	type namedResult struct {
+		name     string
+		response testHTTPResponse
+		err      error
+	}
+	results := make(chan namedResult, 2)
+	start := make(chan struct{})
+	for _, request := range []struct {
+		name string
+		req  *http.Request
+	}{
+		{name: "replacement", req: uploadRequest},
+		{name: "crop", req: cropRequest},
+	} {
+		go func(name string, req *http.Request) {
+			<-start
+			response, err := performPhotoCropExitRequest(h.client, req)
+			results <- namedResult{name: name, response: response, err: err}
+		}(request.name, request.req)
+	}
+	close(start)
+
+	responses := make(map[string]testHTTPResponse, 2)
+	for range 2 {
+		select {
+		case result := <-results:
+			if result.err != nil {
+				t.Fatalf("%s request: %v", result.name, result.err)
+			}
+			responses[result.name] = result.response
+		case <-time.After(15 * time.Second):
+			t.Fatal("photo replacement/crop race did not finish")
+		}
+	}
+	replacement := responses["replacement"]
+	crop := responses["crop"]
+	if replacement.status != http.StatusOK || replacement.header.Get("ETag") != `"r4"` {
+		t.Fatalf("replacement winner = %d headers=%v body=%s", replacement.status, replacement.header, replacement.body)
+	}
+	if crop.status != http.StatusPreconditionFailed {
+		t.Fatalf("stale crop = %d body=%s, want 412", crop.status, crop.body)
+	}
+	if !ordered.inspectedFresh(uploadKey, cropKey) {
+		t.Fatal("race did not reach Execute from two fresh idempotency inspections")
+	}
+
+	winningRevision, winningDocument := decodedWrittenDocument(t, replacement)
+	losingRevision, losingDocument := decodedRevisionMismatch(t, crop)
+	if winningRevision != "4" || losingRevision != "4" || !reflect.DeepEqual(losingDocument, winningDocument) {
+		t.Fatalf("412 did not carry winner state: winning=%q losing=%q\nwinner=%#v\nloser=%#v",
+			winningRevision, losingRevision, winningDocument.PersonalDetails.Photo, losingDocument.PersonalDetails.Photo)
+	}
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatalf("read race winner: %v", err)
+	}
+	if stored.Revision != 4 || !reflect.DeepEqual(stored.Doc, winningDocument) {
+		t.Fatalf("stored race winner revision=%d photo=%#v, response revision=%s photo=%#v",
+			stored.Revision, stored.Doc.PersonalDetails.Photo, winningRevision, winningDocument.PersonalDetails.Photo)
+	}
+	if stored.Doc.PersonalDetails.Photo == nil ||
+		stored.Doc.PersonalDetails.Photo.Key == oldKey ||
+		stored.Doc.PersonalDetails.Photo.Crop != nil {
+		t.Fatalf("replacement/crop race stored mixed state: old=%q stored=%#v", oldKey, stored.Doc.PersonalDetails.Photo)
+	}
+	newKey := stored.Doc.PersonalDetails.Photo.Key
+
+	objects := photoCropExitObjectKeys(t, h.ctx, backend.delegate, created.ID)
+	wantObjects := []string{oldKey, newKey}
+	sort.Strings(wantObjects)
+	if !reflect.DeepEqual(objects, wantObjects) {
+		t.Fatalf("race objects = %v, want referenced winner and queued old object %v", objects, wantObjects)
+	}
+	queued := photoCropExitDeletionKeys(t, h, created.ID)
+	if !reflect.DeepEqual(queued, []string{oldKey}) {
+		t.Fatalf("race deletion jobs = %v, want old key %q", queued, oldKey)
+	}
+	if calls := backend.snapshotCalls(); calls != (photoCropExitObjectCalls{puts: 1}) {
+		t.Fatalf("race object calls = %+v, want one replacement Put", calls)
+	}
+	if count := photoCropExitIdempotencyCount(t, h, uploadKey); count != 1 {
+		t.Fatalf("replacement idempotency rows = %d, want 1", count)
+	}
+	if count := photoCropExitIdempotencyCount(t, h, cropKey); count != 0 {
+		t.Fatalf("stale crop idempotency rows = %d, want 0", count)
+	}
+}
+
+type photoCropExitObjectCalls struct {
+	puts    int
+	gets    int
+	deletes int
+	lists   int
+}
+
+type photoCropExitBackend struct {
+	delegate media.Backend
+	mu       sync.Mutex
+	calls    photoCropExitObjectCalls
+}
+
+func (b *photoCropExitBackend) Put(ctx context.Context, key, contentType string, body io.Reader,
+	size int64,
+) (media.PutOutcome, error) {
+	b.mu.Lock()
+	b.calls.puts++
+	b.mu.Unlock()
+	return b.delegate.Put(ctx, key, contentType, body, size)
+}
+
+func (b *photoCropExitBackend) Get(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	b.mu.Lock()
+	b.calls.gets++
+	b.mu.Unlock()
+	return b.delegate.Get(ctx, key)
+}
+
+func (b *photoCropExitBackend) Delete(ctx context.Context, key string) error {
+	b.mu.Lock()
+	b.calls.deletes++
+	b.mu.Unlock()
+	return b.delegate.Delete(ctx, key)
+}
+
+func (b *photoCropExitBackend) ListPage(ctx context.Context, prefix, cursor string,
+	limit int,
+) ([]media.Object, string, error) {
+	b.mu.Lock()
+	b.calls.lists++
+	b.mu.Unlock()
+	return b.delegate.ListPage(ctx, prefix, cursor, limit)
+}
+
+func (b *photoCropExitBackend) snapshotCalls() photoCropExitObjectCalls {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.calls
+}
+
+type photoCropExitState struct {
+	row     wireStoredRow
+	records string
+	jobs    []string
+	objects []string
+}
+
+func snapshotPhotoCropExitState(t *testing.T, h *resumeAPITestHarness, backend media.Backend,
+	resumeID uuid.UUID,
+) photoCropExitState {
+	t.Helper()
+	return photoCropExitState{
+		row:     snapshotStoredResumeRow(t, h, resumeID),
+		records: h.snapshotUserTable(t, "idempotency_records"),
+		jobs:    photoCropExitDeletionKeys(t, h, resumeID),
+		objects: photoCropExitObjectKeys(t, h.ctx, backend, resumeID),
+	}
+}
+
+func photoCropExitObjectKeys(t *testing.T, ctx context.Context, backend media.Backend,
+	resumeID uuid.UUID,
+) []string {
+	t.Helper()
+	objects, cursor, err := backend.ListPage(ctx, "resumes/"+resumeID.String()+"/", "", 10)
+	if err != nil {
+		t.Fatalf("list photo objects: %v", err)
+	}
+	if cursor != "" {
+		t.Fatalf("photo object list unexpectedly paginated at %q", cursor)
+	}
+	keys := make([]string, len(objects))
+	for index, object := range objects {
+		keys[index] = object.Key
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func photoCropExitDeletionKeys(t *testing.T, h *resumeAPITestHarness, resumeID uuid.UUID) []string {
+	t.Helper()
+	rows, err := h.pool.Query(h.ctx, `
+		SELECT object_key
+		FROM media_deletion_jobs
+		WHERE resume_id = $1
+		ORDER BY object_key`, resumeID)
+	if err != nil {
+		t.Fatalf("query photo deletion jobs: %v", err)
+	}
+	defer rows.Close()
+	var keys []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			t.Fatalf("scan photo deletion job: %v", err)
+		}
+		keys = append(keys, key)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate photo deletion jobs: %v", err)
+	}
+	return keys
+}
+
+func photoCropExitIdempotencyCount(t *testing.T, h *resumeAPITestHarness, key uuid.UUID) int {
+	t.Helper()
+	var count int
+	if err := h.pool.QueryRow(h.ctx, `
+		SELECT count(*)
+		FROM idempotency_records
+		WHERE user_id = $1 AND idempotency_key = $2`, h.userID, key).Scan(&count); err != nil {
+		t.Fatalf("count photo idempotency records: %v", err)
+	}
+	return count
+}
+
+type photoCropOrderedIdempotency struct {
+	delegate   idempotencyBoundary
+	uploadKey  uuid.UUID
+	cropKey    uuid.UUID
+	ready      chan struct{}
+	uploadDone chan struct{}
+
+	mu          sync.Mutex
+	arrived     int
+	inspections map[uuid.UUID]int
+	replays     map[uuid.UUID]bool
+	readyOnce   sync.Once
+	uploadOnce  sync.Once
+}
+
+func newPhotoCropOrderedIdempotency(delegate idempotencyBoundary, uploadKey,
+	cropKey uuid.UUID,
+) *photoCropOrderedIdempotency {
+	return &photoCropOrderedIdempotency{
+		delegate: delegate, uploadKey: uploadKey, cropKey: cropKey,
+		ready: make(chan struct{}), uploadDone: make(chan struct{}),
+		inspections: make(map[uuid.UUID]int), replays: make(map[uuid.UUID]bool),
+	}
+}
+
+func (i *photoCropOrderedIdempotency) Inspect(ctx context.Context, userID uuid.UUID,
+	operation string, key uuid.UUID, fingerprint [32]byte,
+) (resume.StoredResponse, bool, error) {
+	response, replayed, err := i.delegate.Inspect(ctx, userID, operation, key, fingerprint)
+	i.mu.Lock()
+	i.inspections[key]++
+	i.replays[key] = replayed
+	i.mu.Unlock()
+	return response, replayed, err
+}
+
+func (i *photoCropOrderedIdempotency) Execute(ctx context.Context, userID uuid.UUID,
+	operation string, key uuid.UUID, fingerprint [32]byte,
+	run func(*store.Queries) (resume.StoredResponse, error),
+) (resume.ExecuteResult, error) {
+	if key != i.uploadKey && key != i.cropKey {
+		return i.delegate.Execute(ctx, userID, operation, key, fingerprint, run)
+	}
+	i.mu.Lock()
+	i.arrived++
+	if i.arrived == 2 {
+		i.readyOnce.Do(func() { close(i.ready) })
+	}
+	i.mu.Unlock()
+	select {
+	case <-i.ready:
+	case <-ctx.Done():
+		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, ctx.Err()
+	case <-time.After(10 * time.Second):
+		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted},
+			fmt.Errorf("photo crop race: timed out waiting for both Execute calls")
+	}
+	if key == i.cropKey {
+		select {
+		case <-i.uploadDone:
+		case <-ctx.Done():
+			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, ctx.Err()
+		case <-time.After(10 * time.Second):
+			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted},
+				fmt.Errorf("photo crop race: timed out waiting for replacement commit")
+		}
+		return i.delegate.Execute(ctx, userID, operation, key, fingerprint, run)
+	}
+	defer i.uploadOnce.Do(func() { close(i.uploadDone) })
+	return i.delegate.Execute(ctx, userID, operation, key, fingerprint, run)
+}
+
+func (i *photoCropOrderedIdempotency) inspectedFresh(keys ...uuid.UUID) bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	for _, key := range keys {
+		if i.inspections[key] != 1 || i.replays[key] {
+			return false
+		}
+	}
+	return i.arrived == len(keys)
+}
+
+func newPhotoCropExitRequest(t *testing.T, h *resumeAPITestHarness, method, path string,
+	body io.Reader, contentType string, revision int64, key uuid.UUID,
+) *http.Request {
+	t.Helper()
+	request, err := http.NewRequestWithContext(h.ctx, method, h.server.URL+path, body)
+	if err != nil {
+		t.Fatalf("build photo crop race request: %v", err)
+	}
+	request.AddCookie(h.cookie)
+	request.Header.Set("Origin", resumeAPITestOrigin)
+	request.Header.Set(auth.CSRFHeaderName, h.csrfToken)
+	request.Header.Set("Idempotency-Key", key.String())
+	request.Header.Set("If-Match", fmt.Sprintf(`"r%d"`, revision))
+	request.Header.Set("Content-Type", contentType)
+	return request
+}
+
+func performPhotoCropExitRequest(client *http.Client, request *http.Request) (testHTTPResponse, error) {
+	response, err := client.Do(request)
+	if err != nil {
+		return testHTTPResponse{}, err
+	}
+	body, readErr := io.ReadAll(response.Body)
+	closeErr := response.Body.Close()
+	if readErr != nil {
+		return testHTTPResponse{}, readErr
+	}
+	if closeErr != nil {
+		return testHTTPResponse{}, closeErr
+	}
+	return testHTTPResponse{status: response.StatusCode, header: response.Header.Clone(), body: body}, nil
+}

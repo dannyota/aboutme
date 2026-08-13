@@ -250,7 +250,7 @@ internal invariant failure, not a client-writable key path.
       even though AWS execution waits for P9A authorization. The manifest also
       records the complete `systemd-run --user --scope` command that applies its
       CPU/memory properties and invokes
-      `(cd apps/server && go test ./internal/media -run '^TestNormalizationBudget$' -count=1 -v)`.
+      `(cd apps/server && ABOUTME_RUN_NORMALIZATION_BENCHMARK=1 go test ./internal/media -run '^TestNormalizationBudget$' -count=1 -v)`.
       Each sample runs in a fresh helper process; `/usr/bin/time -v` maximum RSS
       minus a no-decode helper baseline defines RSS delta, and monotonic elapsed
       time defines duration. Retain every raw result, not only aggregates. After
@@ -265,15 +265,20 @@ internal invariant failure, not a client-writable key path.
       Preserve the manifest and corpus for P9A's required rerun on the selected
       production ARM64 Graviton class and task cgroup. The provisional local
       gate passed against source commit
-      `0513351fb8690affbc729f118f1489955e2c4558`: all 160 measured samples
+      `7c4eb4e5bfbc602a0a1493254fd4a084b4808dd4`: all 160 measured samples
       across eight fixtures stayed within budget. The worst duration was
-      3.025443354 seconds and the worst RSS delta was 193,585,152 bytes. The
-      ignored raw evidence is at the manifest's commit-keyed path.
+      1.416436078 seconds and the worst RSS delta was 193,290,240 bytes. The
+      frozen manifest SHA-256 is
+      `dcfd8db3f431d6ea42ceb02254e3abc3aff1f3e0a8584c38556ba60b060cedee`. The
+      ignored raw evidence SHA-256 is
+      `9d2632d7891651f226ea8a5ee5a7d3e1430ba7c2dc6501e7a8aac30a169b553b` at the
+      manifest's commit-keyed path. Ordinary test runs skip this controlled
+      measurement and cannot overwrite its evidence.
 
 - [ ] **Step 8: backend and contract parity.** Run the complete lifecycle suite
       on filesystem and fail-closed S3 backends. Assert every status, error,
       header, and media type against `docs/api/openapi.yaml`.
-- [ ] **Step 9: implement; green.** Keep container parsing and normalization in
+- [x] **Step 9: implement; green.** Keep container parsing and normalization in
       `internal/media`; the HTTP handler owns only request policy and lifecycle.
 - [ ] **Step 10: gate.** Run `make test-db-up`, `make test-s3-up`,
       `make server-build server-vet server-test`, `make server-test-p2b`,
@@ -285,6 +290,55 @@ internal invariant failure, not a client-writable key path.
 - [ ] **Step 11: handoff.** Report the owned paths, failing-test evidence, exact
       checks, frozen benchmark manifest, raw resource evidence, and lifecycle
       fault matrix to the integration owner. Do not stage or commit.
+
+## Implementation record
+
+The four photo routes are implemented in `photo.go`: upload, owner read, crop,
+and delete. Container admission and normalization remain in `internal/media`.
+Current tests cover the implemented behavior, but no historical RED transcript
+is retained, so this record does not claim one and Steps 1–6a remain open.
+
+Current named regression evidence includes:
+
+- admission and transport:
+  `TestPhotoOuterSessionCSRFMediaTypeAndRateFailuresDoNotReadBody`,
+  `TestPhotoHeaderRejectionDoesNotReadBody`,
+  `TestPhotoBusyWaitsOneSecondAndDoesNotReadBody`,
+  `TestPhotoMultipartBoundaryRealHandler`,
+  `TestPhotoStreamingReadDeadlinePrecedesBodyRead`, and
+  `TestPhotoTransportExactByteBoundaries`;
+- normalization and resource bounds:
+  `TestNormalizeAcceptsFrozenCorpusDeterministically`,
+  `TestNormalizeAppliesEveryExifOrientation`,
+  `TestNormalizeRejectsUnsafeRecognizedContainers`,
+  `TestNormalizeRejectsBadOrientationMetadata`,
+  `TestNormalizeStripsMetadataAndSourceChunks`, and
+  `TestNormalizationBudgetRequiresExplicitOptIn`;
+- keys, HTTP lifecycle, and failure handling:
+  `TestPhotoUploadGetCropDeleteContractAndReplay`,
+  `TestPhotoIfNoneMatchIsSingletonStrongTag`,
+  `TestPhotoInvalidStoredKeyFailsClosedBeforeBackendIO`,
+  `TestPhotoReplacementClearsCropAndQueuesTransactionReadKey`,
+  `TestPhotoReplacementQueueFailureRollsBackAndCompensatesCandidate`, and
+  `TestPhotoUnknownPutStopsBeforeDatabaseAndNeverDeletes`;
+- deadline and concurrency safety:
+  `TestPhotoExpiredCandidateNeverExecutesAndIsCompensated`, `TestMediaOrphans`,
+  and `TestPhotoConcurrentUploadsLeaveOnlyCASWinnerObject`.
+
+The provisional controlled benchmark passed against source
+`7c4eb4e5bfbc602a0a1493254fd4a084b4808dd4`: all 160 samples passed, with a
+1.416436078-second worst duration and 193,290,240-byte worst RSS delta. The
+manifest SHA-256 is
+`dcfd8db3f431d6ea42ceb02254e3abc3aff1f3e0a8584c38556ba60b060cedee`; the ignored
+raw evidence SHA-256 is
+`9d2632d7891651f226ea8a5ee5a7d3e1430ba7c2dc6501e7a8aac30a169b553b`. Ordinary
+tests skip the benchmark unless `ABOUTME_RUN_NORMALIZATION_BENCHMARK=1` is set.
+
+Step 8 and Step 10 remain open until the integration owner supplies current
+fail-closed S3 parity and unchanged-candidate gate results. Step 11 remains open
+because its author handoff and exact historical checks are not recorded.
+Connected `make scan`, final `make ci`, the production ARM64 P9A rerun, and the
+fresh W4 review remain downstream.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks resource
 exhaustion, parser differentials, metadata removal, key influence, timeout

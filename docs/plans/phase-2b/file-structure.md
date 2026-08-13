@@ -36,10 +36,12 @@ Adversarial coverage D–F lives in the owning task test files above. Tasks 4–
 write the cases for their behavior, and the W4 reviewer confirms the integrated
 matrix. There are no separate suite or documentation tasks.
 
-**Not touched by this phase:** released migrations 00001–00005,
-`packages/schema/**`, `deploy/caddy/Caddyfile` (`/api/v1/*` already covers every
-new route — no route-table change, so `make route-table-test` needs no update),
-and `apps/web/**` beyond the regenerated client artifact.
+**Not owned by P2B:** released migrations 00001–00005, `packages/schema/**`,
+`deploy/caddy/Caddyfile` (`/api/v1/*` already covers every new route — no
+route-table change, so `make route-table-test` needs no update), and
+`apps/web/**` beyond the regenerated client artifact. During integration, the P3
+owner coordinated and applied the released-schema correction; P2B consumed its
+corrected generated contract without taking schema ownership.
 
 `apps/server/internal/api/middleware.go` is unchanged. Task 11 applies
 `http.MaxBytesReader` after route admission rather than weakening the ordinary

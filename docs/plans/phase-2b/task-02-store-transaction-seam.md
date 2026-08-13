@@ -223,7 +223,7 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
 
 ## Steps
 
-- [ ] **Step 1: failing seam tests.** Against a live database, drive each new
+- [x] **Step 1: failing seam tests.** Against a live database, drive each new
       method through a hand-rolled `pgx` transaction and assert: (a) it behaves
       identically to the pool-backed method it mirrors, including `ErrNotFound`,
       `ErrCapExceeded`, `ErrTitleTooLong`, and `*RevisionMismatchError` with the
@@ -231,7 +231,7 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       observable effect — row count, row bytes, `revision`, and `updated_at` all
       unchanged; (c) a wrong-owner id and a nonexistent id return byte-identical
       errors on every method.
-- [ ] **Step 2: failing metadata and delete CAS tests.**
+- [x] **Step 2: failing metadata and delete CAS tests.**
       `SaveMetadataAndDocumentTx` writes `title`, `lng`, and the caller-supplied
       already-projected, sanitized, validated current-version aggregate under
       one revision CAS; the store persists that document unchanged and does not
@@ -241,17 +241,17 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       it re-reads the scoped winner so the HTTP layer can produce `412`; wrong
       owner and missing remain indistinguishable. Cover `lng` clearing,
       canonical length, and title 160/161 before any statement runs.
-- [ ] **Step 3: failing composition test.** Two `IdempotencyStore.Execute` calls
+- [x] **Step 3: failing composition test.** Two `IdempotencyStore.Execute` calls
       with different keys, whose callbacks use `CreateTx` and `SaveDocumentTx`,
       both commit; a callback that returns an error after calling
       `SaveDocumentTx` leaves neither the mutation nor an idempotency record.
       This is the exact composition every route in wave 3 relies on.
-- [ ] **Step 3a: failing media inspection tests.** `Inspect` returns a live
+- [x] **Step 3a: failing media inspection tests.** `Inspect` returns a live
       same-hash response, returns `ErrIdempotencyKeyReuse` for a changed hash,
       treats an absent or expired record as fresh, and never claims to reserve a
       key. A deterministic race proves two fresh inspections can both miss and
       that the following `Execute` calls still select one database winner.
-- [ ] **Step 3aa: failing commit-outcome tests.** Inject failure before the
+- [x] **Step 3aa: failing commit-outcome tests.** Inject failure before the
       transaction begins, after mutation but before commit, a definite rollback
       at commit, connection loss during commit, success, and replay. Assert the
       exact
@@ -265,12 +265,12 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       `Replayed`/outcome pair. Task 4 owns fail-closed handling of injected
       invalid pairs because its `Finalize` consumer makes the candidate-cleanup
       decision.
-- [ ] **Step 3b: failing bounded-cleanup tests.** Seed 201 expired rows for one
+- [x] **Step 3b: failing bounded-cleanup tests.** Seed 201 expired rows for one
       user plus live and neighbour-user rows. One mutation removes exactly the
       oldest 200 in `(expires_at,id)` order; a later mutation removes the
       backlog; live and neighbour rows remain. Query-plan evidence uses the new
       composite index. Concurrent cleanup stays bounded and deadlock-free.
-- [ ] **Step 3c: failing retained-capacity tests.** Under the user lock, admit a
+- [x] **Step 3c: failing retained-capacity tests.** Under the user lock, admit a
       new key when its insert stays within 50,000 retained records and 1 GiB,
       and reject an insert that exceeds either bound without committing the
       mutation. Still replay an existing unexpired key at the bound. Leave more
@@ -278,20 +278,20 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       so concurrent contenders cannot overshoot either usage counter. A rollback
       changes neither counter. `Retry-After` is one while expired backlog
       remains and otherwise rounds up the earliest expiry.
-- [ ] **Step 3d: failing replay-identity test.** Make record insertion return
+- [x] **Step 3d: failing replay-identity test.** Make record insertion return
       PostgreSQL's stored body and approved-header `jsonb` values and use those
       normalized bytes for the first response. Assert first and replay status,
       approved headers, and body are byte-identical even when input object keys
       were not in PostgreSQL's canonical order. Task 4 proves fresh `Date` and
       `X-Request-ID` values through the HTTP writer; Task 2 ships no HTTP.
-- [ ] **Step 3e: failing media-deletion enqueue tests.** In one transaction,
+- [x] **Step 3e: failing media-deletion enqueue tests.** In one transaction,
       remove a photo reference or whole resume and enqueue its exact validated
       key. Commit persists both changes; rollback persists neither. Duplicate
       enqueue of the immutable key is idempotent. A malformed key, a key for a
       different resume, a missing owner, or a stale revision changes neither the
       aggregate nor the queue. Resume/account deletion does not cascade the
       pending job. The due-order index supports the P8-priv bounded claim.
-- [ ] **Step 4: add migration and queries; regenerate.** Add the composite
+- [x] **Step 4: add migration and queries; regenerate.** Add the composite
       cleanup index, usage table/backfill, the two CAS queries, bounded per-user
       and global cleanup, the approved-header column, response
       normalization/insert-returning, conditional usage reservation/decrement,
@@ -301,7 +301,7 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
       adversarial-suite work may edit that migration test. Run `make sqlc-gen`,
       include generated files, and prove released migrations are unchanged and
       the new migration applies from the prior head.
-- [ ] **Step 5: implement; green.** The pool-backed methods become thin wrappers
+- [x] **Step 5: implement; green.** The pool-backed methods become thin wrappers
       that open a transaction and delegate, so there is exactly one
       implementation of each behavior. Run P2A's existing behavior tests with
       only the required adapter edits for the new `Execute` signature; do not
@@ -314,6 +314,25 @@ anywhere: the trigger's lock-then-count is race-proof only at READ COMMITTED
 - [ ] **Step 7: handoff.** Record the exact owned diff, failing-test evidence,
       checks, generated-file list, and migration/query delta. Inspect and stage
       it through the integration owner's normal phase integration flow.
+
+## Implementation record
+
+Commit `1348ff8` landed the transaction-scoped resume methods, bounded
+idempotency execution, migration 00006, SQL queries and generated store code,
+and the prior-head migration proof. Current live-database tests in
+`internal/resume/service_test.go` cover commit and rollback parity, ownership
+scoping, metadata/document CAS, delete CAS, composition, and exact-key media
+deletion enqueue. `internal/resume/idempotency_test.go` covers inspection races,
+commit classification, bounded cleanup and retained capacity, canonical replay
+bytes, and concurrent admission. The focused proof command is the Step 6
+`go test ./internal/resume/... -race -count=1` invocation; migration and
+generated-query proof is `make sqlc-check server-migration-test`.
+
+No separate RED transcript or exact original handoff report is retained, so Step
+7 remains open rather than inventing it. Step 6 also remains open because this
+record repair did not rerun its live-database and repeated-race commands.
+Connected `make scan` and the fresh transaction/CAS/idempotency/media-cleanup
+review remain phase-exit dependencies.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks transaction
 boundaries, ownership scoping, CAS, idempotency capacity and cleanup, commit

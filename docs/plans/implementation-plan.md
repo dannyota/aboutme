@@ -20,7 +20,7 @@ keep everything runnable on the laptop until the whole product works there.
 | P1.1 authentication hardening | Complete                                   | None                                            |
 | P2A resume domain and store   | Complete                                   | None                                            |
 | P3 renderer lane              | Complete                                   | None                                            |
-| P2B server lane               | Complete                                   | None                                            |
+| P2B server lane               | Implemented; exit gate active              | Fresh review, unchanged-candidate CI and scan   |
 | P9 HTTPS overlay              | Needed before authenticated browser checks | Small overlay lane, pulled in when P4 starts    |
 | PI infrastructure             | Adopted, not executed                      | Refresh after runtime phases; no cloud mutation |
 

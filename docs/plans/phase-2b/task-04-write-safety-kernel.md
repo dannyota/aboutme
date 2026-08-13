@@ -302,13 +302,13 @@ func RequireCSRFMultipart(allowedOrigin string) api.Middleware
 ## Implementation record
 
 The live router registers all 15 OpenAPI routes: 12 mutations and three reads.
-Each mutation has one concrete operation kind while its W3 handler remains a
-construction-only `501`. The common kernel now owns singleton headers, strict
-body decoding, wire-version projection, canonical idempotency scope, transaction
-execution, response replay, rollback classification, and fail-closed candidate
-cleanup. The three exact limiter budgets and the 24-hour idle policy are
-enforced with an injected clock. The photo upload route alone bypasses the
-buffering JSON body limit.
+Each mutation has one concrete operation kind, and W3 replaced every
+construction handler with its route implementation. The common kernel now owns
+singleton headers, strict body decoding, wire-version projection, canonical
+idempotency scope, transaction execution, response replay, rollback
+classification, and fail-closed candidate cleanup. The three exact limiter
+budgets and the 24-hour idle policy are enforced with an injected clock. The
+photo upload route alone bypasses the buffering JSON body limit.
 
 The first focused tests failed on the missing multipart CSRF entry point, photo
 body-limit exception, limiter expiry, route operation registry, execution-order
@@ -325,15 +325,18 @@ Green checks before the final fast gate:
 - `make api-check`
 - `(cd apps/server && GOGC=50 golangci-lint run ./internal/resumeapi/... ./internal/api/... ./internal/auth/... ./cmd/server/...)`
 
-`make check` was run. Its schema, API, server, vulnerability, SQL drift,
-migration, and released-schema stages passed. It remains red on the existing
-repository-wide lint baseline: 12 Markdown findings in the two verbatim Source
-Sans 3 license copies and 82 Go findings outside this task's owned paths. The
-targeted owned-path linter reports zero issues. Step 9 remains open until that
-baseline is repaired without changing license text.
+The recorded `make check` run passed its schema, API, server, vulnerability, SQL
+drift, migration, and released-schema stages. At that time it remained red on 12
+Markdown findings in the two verbatim Source Sans 3 license copies and 82 Go
+findings outside this task's owned paths; the targeted owned-path linter
+reported zero issues. That historical run is not an unchanged-candidate phase
+gate, so it does not close Step 9 even if the old baseline has since changed.
 
-All 15 construction stubs remain for W3. The connected scan and fresh review
-remain at W4.
+All 15 routes now have concrete handlers. A source inventory finds no production
+`not_implemented` or `StatusNotImplemented` occurrence under
+`internal/resumeapi`. The unchanged-candidate phase gate has not yet supplied a
+final `make ci`, connected `make scan`, or fresh-review record, so Step 9 and W4
+remain open.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
 order in Step 7 can be transposed without a test failing, whether any path
