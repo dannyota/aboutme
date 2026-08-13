@@ -105,8 +105,11 @@ test.describe('renderer screenshot subset', () => {
         + `&mode=${cell.mode}`,
       );
       expect(response?.ok()).toBe(true);
-      await expect(page.locator('[data-render-mode]')).toHaveCount(1);
-      await expect(page.locator('[data-render-mode]')).toHaveAttribute(
+      const harnessRoot = page.locator(
+        '.harness-render[data-render-mode]',
+      );
+      await expect(harnessRoot).toHaveCount(1);
+      await expect(harnessRoot).toHaveAttribute(
         'data-render-mode',
         cell.mode,
       );
