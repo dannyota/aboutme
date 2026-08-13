@@ -206,6 +206,95 @@ validate_identity_record() {
   validate_process_record "$1" "$(identity_file "$1")"
 }
 
+validate_prepared_launch_record() {
+  local name=$1 file mode version state service expected_executable expected_cmdline token token_suffix
+  file=$(launch_file "$name")
+  [ -f "$file" ] || return 1
+  mode=$(stat -c '%a' "$file" 2>/dev/null || true)
+  [ "$mode" = 600 ] || return 1
+  version=$(identity_field "$file" version) || return 1
+  state=$(identity_field "$file" launch_state) || return 1
+  service=$(identity_field "$file" service) || return 1
+  expected_executable=$(identity_field "$file" expected_executable) || return 1
+  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
+  token=$(identity_field "$file" identity_token) || return 1
+  [ "$version" = 1 ] && [ "$state" = prepared ] && [ "$service" = "$name" ] || return 1
+  [[ $expected_executable == /* ]] || return 1
+  [[ $expected_cmdline =~ ^[0-9a-f]{64}$ ]] || return 1
+  token_suffix=${token#"$name-"}
+  [ "$token_suffix" != "$token" ] && [[ $token_suffix =~ ^[0-9a-f]{64}$ ]] || return 1
+}
+
+VALIDATED_PREPARED_PID=
+VALIDATED_PREPARED_STARTTIME=
+VALIDATED_PREPARED_RECORD_HASH=
+
+validate_prepared_launch_service() {
+  local name=$1 require_leader=$2 required_record_hash=${3:-} required_starttime=${4:-}
+  local file record_hash pid starttime= expected_executable expected_cmdline token actual_sid actual_pgid members member
+  file=$(launch_file "$name")
+  validate_prepared_launch_record "$name" || return 1
+  record_hash=$(sha256_file "$file") || return 1
+  [ -z "$required_record_hash" ] || [ "$record_hash" = "$required_record_hash" ] || return 1
+  pid=$(read_pid "$name") || return 1
+  expected_executable=$(identity_field "$file" expected_executable) || return 1
+  expected_cmdline=$(identity_field "$file" expected_cmdline_sha256) || return 1
+  token=$(identity_field "$file" identity_token) || return 1
+  if kill -0 "$pid" 2>/dev/null; then
+    starttime=$(proc_starttime "$pid") || return 1
+    [ -z "$required_starttime" ] || [ "$starttime" = "$required_starttime" ] || return 1
+    [ "$(readlink -f "/proc/$pid/exe")" = "$expected_executable" ] || return 1
+    [ "$(proc_cmdline_hash "$pid")" = "$expected_cmdline" ] || return 1
+    actual_sid=$(ps -o sid= -p "$pid" | tr -d ' ') || return 1
+    actual_pgid=$(ps -o pgid= -p "$pid" | tr -d ' ') || return 1
+    [ "$actual_sid" = "$pid" ] && [ "$actual_pgid" = "$pid" ] || return 1
+    member_has_token "$pid" "$token" || return 1
+  elif [ "$require_leader" = 1 ]; then
+    return 1
+  else
+    [ -n "$required_starttime" ] || return 1
+    starttime=$required_starttime
+  fi
+  members=$(group_members "$pid" "$pid") || return 1
+  if [ -z "$members" ]; then
+    [ "$require_leader" = 0 ] || return 1
+  else
+    while IFS= read -r member; do
+      [[ $member =~ ^[0-9]+$ ]] || return 1
+      validate_group_member "$member" "$pid" "$pid" "$token" || return 1
+    done <<<"$members"
+  fi
+  [ "$(sha256_file "$file")" = "$record_hash" ] || return 1
+  VALIDATED_PREPARED_PID=$pid
+  VALIDATED_PREPARED_STARTTIME=$starttime
+  VALIDATED_PREPARED_RECORD_HASH=$record_hash
+}
+
+remove_absent_prepared_launch() {
+  local name=$1 file identity launch environment record_hash pid attempt members
+  file=$(pidfile "$name")
+  identity=$(identity_file "$name")
+  launch=$(launch_file "$name")
+  environment=$(service_env_file "$name")
+  validate_prepared_launch_record "$name" || return 1
+  record_hash=$(sha256_file "$launch") || return 1
+  pid=$(read_pid "$name") || return 1
+  for attempt in $(seq 1 "$STOP_KILL_ATTEMPTS"); do
+    members=$(group_members "$pid" "$pid") || return 1
+    if ! kill -0 "$pid" 2>/dev/null && [ -z "$members" ]; then
+      break
+    fi
+    sleep 0.1
+  done
+  validate_prepared_launch_record "$name" || return 1
+  [ "$(sha256_file "$launch")" = "$record_hash" ] || return 1
+  [ "$(read_pid "$name")" = "$pid" ] || return 1
+  ! kill -0 "$pid" 2>/dev/null || return 1
+  members=$(group_members "$pid" "$pid") || return 1
+  [ -z "$members" ] || return 1
+  rm -f -- "$file" "$identity" "$launch" "$environment"
+}
+
 validate_service_identity_from() {
   local name=$1 require_leader=$2 file=$3 pid starttime sid pgid expected_executable expected_cmdline token actual_sid actual_pgid members member
   validate_process_record "$name" "$file" || return 1
@@ -564,13 +653,16 @@ wait_for_caddy_root() {
 }
 
 stop_owned_service() {
-  local name=$1 rollback=${2:-0} file identity launch environment evidence pid sid pgid attempt members
+  local name=$1 rollback=${2:-0} file identity launch environment evidence evidence_kind=full
+  local pid sid pgid starttime record_hash attempt members
   file=$(pidfile "$name")
   identity=$(identity_file "$name")
   launch=$(launch_file "$name")
   environment=$(service_env_file "$name")
   if [ ! -e "$file" ]; then
-    [ "$rollback" = 1 ] && rm -f -- "$identity" "$launch" "$environment"
+    if [ "$rollback" = 1 ] && validate_prepared_launch_record "$name"; then
+      rm -f -- "$identity" "$launch" "$environment"
+    fi
     return 0
   fi
   if ! pid=$(read_pid "$name"); then
@@ -580,14 +672,31 @@ stop_owned_service() {
     evidence=$identity
   elif [ "$rollback" = 1 ] && validate_service_identity_from "$name" 1 "$launch"; then
     evidence=$launch
+  elif [ "$rollback" = 1 ] && validate_prepared_launch_service "$name" 1; then
+    evidence=$launch
+    evidence_kind=prepared
+    pid=$VALIDATED_PREPARED_PID
+    sid=$pid
+    pgid=$pid
+    starttime=$VALIDATED_PREPARED_STARTTIME
+    record_hash=$VALIDATED_PREPARED_RECORD_HASH
+  elif [ "$rollback" = 1 ] && remove_absent_prepared_launch "$name"; then
+    return 0
   else
     return 1
   fi
-  sid=$(identity_field "$evidence" sid)
-  pgid=$(identity_field "$evidence" pgid)
+  if [ "$evidence_kind" = full ]; then
+    sid=$(identity_field "$evidence" sid)
+    pgid=$(identity_field "$evidence" pgid)
+  fi
   # The complete exact identity and every current group member are rechecked
   # immediately before the first destructive signal.
-  validate_service_identity_from "$name" 1 "$evidence" || return 1
+  if [ "$evidence_kind" = prepared ]; then
+    validate_prepared_launch_service "$name" 1 "$record_hash" "$starttime" || return 1
+    [ "$VALIDATED_PREPARED_PID" = "$pid" ] || return 1
+  else
+    validate_service_identity_from "$name" 1 "$evidence" || return 1
+  fi
   kill -TERM -- "-$pgid" 2>/dev/null || return 1
   for attempt in $(seq 1 "$STOP_TERM_ATTEMPTS"); do
     members=$(group_members "$pgid" "$sid") || return 1
@@ -596,7 +705,12 @@ stop_owned_service() {
   done
   members=$(group_members "$pgid" "$sid") || return 1
   if [ -n "$members" ]; then
-    validate_service_identity_from "$name" 0 "$evidence" || return 1
+    if [ "$evidence_kind" = prepared ]; then
+      validate_prepared_launch_service "$name" 0 "$record_hash" "$starttime" || return 1
+      [ "$VALIDATED_PREPARED_PID" = "$pid" ] || return 1
+    else
+      validate_service_identity_from "$name" 0 "$evidence" || return 1
+    fi
     members=$(group_members "$pgid" "$sid") || return 1
     if [ -n "$members" ]; then
       warn "$name process group $pgid did not drain after SIGTERM; sending SIGKILL after re-proving every remaining member"
@@ -856,12 +970,13 @@ cmd_status() {
 redact_logs() {
   sed -E \
     -e 's/(GOOGLE_CLIENT_SECRET[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/g' \
-    -e 's/(__Host-(session|oauth-tx)=)[^;[:space:]]+/\1[REDACTED]/g' \
-    -e 's/(X-CSRF-Token:[[:space:]]*)[^[:space:]]+/\1[REDACTED]/gI' \
-    -e 's/(Authorization:[[:space:]]*Bearer[[:space:]]+)[^[:space:]]+/\1[REDACTED]/gI' \
+    -e 's/(__Host-(session|oauth-tx)=)[^;[:space:]]+/\1[REDACTED]/gI' \
+    -e 's/("Authorization"[[:space:]]*:[[:space:]]*"Bearer[[:space:]]+)[^"]*(")/\1[REDACTED]\2/gI' \
+    -e 's/("(access_token|id_token|refresh_token|X-CSRF-Token|csrfToken|code|state)"[[:space:]]*:[[:space:]]*")[^"]*(")/\1[REDACTED]\3/gI' \
+    -e 's/(X-CSRF-Token[[:space:]]*[=:][[:space:]]*)[^,;&[:space:]]+/\1[REDACTED]/gI' \
+    -e 's/(Authorization[[:space:]]*[=:][[:space:]]*Bearer[[:space:]]+)[^,;&[:space:]]+/\1[REDACTED]/gI' \
     -e 's/([?&](code|state)=)[^&#[:space:]]+/\1[REDACTED]/g' \
-    -e 's/("(access_token|id_token|refresh_token)"[[:space:]]*:[[:space:]]*")[^"]*(")/\1[REDACTED]\3/gI' \
-    -e 's/(authorization_code|access_token|refresh_token|csrf_token|session_cookie)[=:][^[:space:]]+/\1=[REDACTED]/gi' \
+    -e 's/((authorization_code|access_token|id_token|refresh_token|csrf_token|csrfToken|session_cookie)[[:space:]]*[=:][[:space:]]*)[^,;&[:space:]]+/\1[REDACTED]/gI' \
     -e "s/${GOOGLE_CLIENT_SECRET//\//\\\/}/[REDACTED]/g"
 }
 

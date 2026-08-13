@@ -77,6 +77,10 @@ esac
 if [ "${FAKE_EXIT_SERVICE-}" = "$name" ]; then
   exit 7
 fi
+if [ "${FAKE_EXIT_BEFORE_COMPLETION-}" = "$name" ]; then
+  kill -TERM "$PPID" 2>/dev/null || true
+  exit 7
+fi
 trap 'printf "stop:%s\n" "$name" >>"$FAKE_STOP_LOG"; exit 0' TERM INT
 if [ "${FAKE_LEADER_EXITS_CHILD_IGNORES-}" = "$name" ]; then
   bash -c 'trap "" TERM; while :; do sleep 1; done' &
@@ -197,6 +201,9 @@ target=${!#}
 if [ "${FAKE_FAIL_IDENTITY_WRITE-}" = server ] && [[ $target == */server.identity ]]; then
   printf '%s\n' 'injected-invalid-identity' >"$target"
   exit 77
+fi
+if [ "${FAKE_FAIL_LAUNCH_COMPLETE-}" = server ] && [[ $target == */server.launch.tmp.* ]]; then
+  exit 78
 fi
 exec /usr/bin/chmod "$@"
 EOF
@@ -363,6 +370,13 @@ run_happy_path_and_lifecycle_checks() (
     'GET /api/v1/auth/google/callback?code=query-code-sentinel&state=query-state-sentinel&next=safe HTTP/1.1' \
     'Authorization: Bearer bearer-sentinel' \
     '{"access_token":"json-access-sentinel","id_token":"json-id-sentinel","refresh_token":"json-refresh-sentinel","status":"ok"}' \
+    'id_token=id-assignment-sentinel' \
+    'access_token: access-colon-space-sentinel' \
+    'X-CSRF-Token=csrf-equals-sentinel' \
+    'Authorization=Bearer authorization-equals-sentinel' \
+    'cookie: __Host-session=lower-cookie-session-sentinel; harmless-lower=ok' \
+    'COOKIE: __Host-oauth-tx=upper-cookie-oauth-sentinel; harmless-upper=ok' \
+    '{"Authorization":"Bearer json-authorization-credential","X-CSRF-Token":"json-csrf-sentinel","csrfToken":"json-csrf-token-sentinel","code":"json-code-sentinel","state":"json-state-sentinel","status":"ok2"}' \
     >>.dev/native-https/log/server.log
   output=$(bash scripts/dev-https.sh logs server 2>&1) || fail "bounded logs failed: $output"
   lines=$(wc -l <<<"$output")
@@ -380,10 +394,24 @@ run_happy_path_and_lifecycle_checks() (
   assert_not_contains "$output" 'json-access-sentinel'
   assert_not_contains "$output" 'json-id-sentinel'
   assert_not_contains "$output" 'json-refresh-sentinel'
+  assert_not_contains "$output" 'id-assignment-sentinel'
+  assert_not_contains "$output" 'access-colon-space-sentinel'
+  assert_not_contains "$output" 'csrf-equals-sentinel'
+  assert_not_contains "$output" 'authorization-equals-sentinel'
+  assert_not_contains "$output" 'lower-cookie-session-sentinel'
+  assert_not_contains "$output" 'upper-cookie-oauth-sentinel'
+  assert_not_contains "$output" 'json-authorization-credential'
+  assert_not_contains "$output" 'json-csrf-sentinel'
+  assert_not_contains "$output" 'json-csrf-token-sentinel'
+  assert_not_contains "$output" 'json-code-sentinel'
+  assert_not_contains "$output" 'json-state-sentinel'
   assert_contains "$output" '[REDACTED]'
   assert_contains "$output" 'harmless=ok'
   assert_contains "$output" 'next=safe'
   assert_contains "$output" '"status":"ok"'
+  assert_contains "$output" 'harmless-lower=ok'
+  assert_contains "$output" 'harmless-upper=ok'
+  assert_contains "$output" '"status":"ok2"'
 
   output=$(bash scripts/dev-https.sh down 2>&1) || fail "down failed: $output"
   mapfile -t stops <"$FAKE_STOP_LOG"
@@ -647,6 +675,66 @@ run_identity_write_rollback_check() (
   done
 )
 
+run_launch_completion_failure_rollback_check() (
+  local fixture output foreign_pid service member
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_FAIL_LAUNCH_COMPLETE=server
+  cd "$fixture/repo"
+  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
+  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
+  foreign_pid=$(<"$fixture/foreign-pid")
+  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted injected launch-record completion failure'
+  fi
+  assert_contains "$output" 'startup failed'
+  assert_log_line "$FAKE_MUTATIONS" 'start:server'
+  kill -0 "$foreign_pid" 2>/dev/null || fail 'prepared-launch rollback signalled an unrelated process group'
+  while IFS= read -r member; do
+    [ -n "$member" ] || continue
+    [ "$member" = "$foreign_pid" ] && continue
+    ! kill -0 "$member" 2>/dev/null || fail "prepared-launch rollback left owned process alive: $member"
+  done <"$fixture/all-pids"
+  for service in mock-oauth server web caddy; do
+    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "prepared-launch rollback retained $service PID"
+    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "prepared-launch rollback retained $service identity"
+    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "prepared-launch rollback retained $service launch evidence"
+    [ ! -e ".dev/native-https/run/$service.env" ] || fail "prepared-launch rollback retained $service environment"
+  done
+)
+
+run_immediate_precompletion_exit_rollback_check() (
+  local fixture output foreign_pid service member
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_EXIT_BEFORE_COMPLETION=mock-oauth
+  cd "$fixture/repo"
+  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
+  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
+  foreign_pid=$(<"$fixture/foreign-pid")
+  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a service that exited before launch identity completion'
+  fi
+  assert_contains "$output" 'startup failed'
+  assert_log_line "$FAKE_MUTATIONS" 'start:mock-oauth'
+  kill -0 "$foreign_pid" 2>/dev/null || fail 'immediate-exit rollback signalled an unrelated process group'
+  while IFS= read -r member; do
+    [ -n "$member" ] || continue
+    [ "$member" = "$foreign_pid" ] && continue
+    ! kill -0 "$member" 2>/dev/null || fail "immediate-exit rollback left owned process alive: $member"
+  done <"$fixture/all-pids"
+  for service in mock-oauth server web caddy; do
+    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "immediate-exit rollback retained $service PID"
+    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "immediate-exit rollback retained $service identity"
+    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "immediate-exit rollback retained $service launch evidence"
+    [ ! -e ".dev/native-https/run/$service.env" ] || fail "immediate-exit rollback retained $service environment"
+  done
+)
+
 run_missing_tool_check() (
   local fixture output
   fixture=$(new_fixture)
@@ -676,6 +764,8 @@ main() {
   lifecycle-drift) run_lifecycle_command_drift_down_check; return ;;
   rollback) run_partial_startup_rollback_check; return ;;
   identity-write-rollback) run_identity_write_rollback_check; return ;;
+  launch-completion-rollback) run_launch_completion_failure_rollback_check; return ;;
+  immediate-exit-rollback) run_immediate_precompletion_exit_rollback_check; return ;;
   '') ;;
   *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
   esac
@@ -693,6 +783,8 @@ main() {
   run_lifecycle_command_drift_down_check
   run_partial_startup_rollback_check
   run_identity_write_rollback_check
+  run_launch_completion_failure_rollback_check
+  run_immediate_precompletion_exit_rollback_check
   run_missing_tool_check
   printf '%s\n' 'dev-https static tests: PASS'
 }
