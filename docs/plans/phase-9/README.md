@@ -60,6 +60,11 @@ The run walks the complete user workflows in [execution](execution.md) and
 records browser, network, console, server, and database evidence as described in
 [evidence](evidence.md). A fresh reviewer verifies the run.
 
+Renderer browser UAT uses the same named six-preset visual subset as Phase 3:
+`classic-serif`, `engineer-compact`, `modern-sidebar`, `executive-band`,
+`consulting-formal`, and `academic-dense`. Changing that set requires the Phase
+3 screenshot table and this UAT set to change together.
+
 **Evidence stays local.** It is never committed and never published: this
 repository and its CI logs are public, and UAT evidence contains session
 cookies, tokens, and account data. Keep it under an ignored path listed in
