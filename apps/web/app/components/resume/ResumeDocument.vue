@@ -111,6 +111,7 @@ const rootStyle = computed<CSSProperties>(() => ({
   display: inline-flex;
   gap: 0.25em;
   align-items: center;
+  color: var(--color-body);
 }
 
 .resume-document .resume-icon {

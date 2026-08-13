@@ -215,6 +215,38 @@ test.describe('renderer screenshot subset', () => {
       expect(paper!.width).toBe(geometry.width);
       expect(paper!.height).toBeGreaterThanOrEqual(geometry.height);
       expect(external).toEqual([]);
+      if (cell.template === 'executive-band') {
+        const contactContrast = await page
+          .locator('.resume-header .contact-chip')
+          .first()
+          .evaluate((element) => {
+            const channels = (value: string): readonly number[] => {
+              const match = value.match(/^rgba?\((\d+), (\d+), (\d+)/);
+              if (match === null) throw new Error(`Unexpected color: ${value}`);
+              return match.slice(1).map(Number);
+            };
+            const luminance = (value: string): number => {
+              const linear = channels(value).map((channel) => {
+                const encoded = channel / 255;
+                return encoded <= 0.04045
+                  ? encoded / 12.92
+                  : ((encoded + 0.055) / 1.055) ** 2.4;
+              });
+              return 0.2126 * linear[0]!
+                + 0.7152 * linear[1]!
+                + 0.0722 * linear[2]!;
+            };
+            const foreground = luminance(getComputedStyle(element).color);
+            const header = element.closest('.resume-header');
+            if (header === null) throw new Error('Contact is outside header.');
+            const background = luminance(
+              getComputedStyle(header).backgroundColor,
+            );
+            return (Math.max(foreground, background) + 0.05)
+              / (Math.min(foreground, background) + 0.05);
+          });
+        expect(contactContrast).toBeGreaterThanOrEqual(4.5);
+      }
       await verifyScreenshot(page, cell.name, testInfo);
     });
   }
