@@ -40,6 +40,183 @@ func validBaseVars() map[string]string {
 	}
 }
 
+func validDevEnv() map[string]string {
+	return map[string]string{
+		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN": "https://localhost:20443",
+		"ENV":           "dev",
+	}
+}
+
+func TestLoad_DevGoogleOIDCIssuerLoopback(t *testing.T) {
+	t.Parallel()
+
+	vars := validDevEnv()
+	vars["GOOGLE_OIDC_ISSUER_URL"] = "http://127.0.0.1:20442/google"
+	got, err := config.Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GoogleOIDCIssuerURL != vars["GOOGLE_OIDC_ISSUER_URL"] {
+		t.Fatalf("issuer = %q", got.GoogleOIDCIssuerURL)
+	}
+}
+
+func TestLoad_ProviderEndpointsDevAccepted(t *testing.T) {
+	t.Parallel()
+
+	vars := validDevEnv()
+	vars["LINKEDIN_OIDC_ISSUER_URL"] = "http://localhost:20442/linkedin"
+	vars["GITHUB_OAUTH_AUTHORIZE_URL"] = "https://localhost:20443/__uat/oauth/github/authorize"
+	vars["GITHUB_OAUTH_TOKEN_URL"] = "http://127.0.0.1:20442/github/token"
+	vars["GITHUB_API_BASE_URL"] = "http://[::1]:20442/github"
+
+	got, err := config.Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LinkedInOIDCIssuerURL != vars["LINKEDIN_OIDC_ISSUER_URL"] {
+		t.Errorf("LinkedInOIDCIssuerURL = %q, want %q", got.LinkedInOIDCIssuerURL, vars["LINKEDIN_OIDC_ISSUER_URL"])
+	}
+	if got.GitHubOAuthAuthorizeURL != vars["GITHUB_OAUTH_AUTHORIZE_URL"] {
+		t.Errorf("GitHubOAuthAuthorizeURL = %q, want %q", got.GitHubOAuthAuthorizeURL, vars["GITHUB_OAUTH_AUTHORIZE_URL"])
+	}
+	if got.GitHubOAuthTokenURL != vars["GITHUB_OAUTH_TOKEN_URL"] {
+		t.Errorf("GitHubOAuthTokenURL = %q, want %q", got.GitHubOAuthTokenURL, vars["GITHUB_OAUTH_TOKEN_URL"])
+	}
+	if got.GitHubAPIBaseURL != vars["GITHUB_API_BASE_URL"] {
+		t.Errorf("GitHubAPIBaseURL = %q, want %q", got.GitHubAPIBaseURL, vars["GITHUB_API_BASE_URL"])
+	}
+}
+
+func TestLoad_ProviderEndpointOverridesRejectedOutsideDev(t *testing.T) {
+	t.Parallel()
+
+	for _, environment := range []string{"staging", "prod"} {
+		for _, override := range []struct {
+			name, value string
+		}{
+			{name: "GOOGLE_OIDC_ISSUER_URL", value: "http://127.0.0.1:20442/google"},
+			{name: "LINKEDIN_OIDC_ISSUER_URL", value: "http://127.0.0.1:20442/linkedin"},
+			{name: "GITHUB_OAUTH_AUTHORIZE_URL", value: "https://localhost:20443/__uat/oauth/github/authorize"},
+			{name: "GITHUB_OAUTH_TOKEN_URL", value: "http://127.0.0.1:20442/github/token"},
+			{name: "GITHUB_API_BASE_URL", value: "http://127.0.0.1:20442/github"},
+		} {
+			t.Run(environment+"/"+override.name, func(t *testing.T) {
+				t.Parallel()
+
+				vars := validDevEnv()
+				vars["ENV"] = environment
+				vars["LISTEN_HOST"] = "127.0.0.1"
+				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32"
+				vars[override.name] = override.value
+				_, err := config.Load(env(vars))
+				if err == nil {
+					t.Fatal("Load() error = nil, want provider endpoint override rejection")
+				}
+				if !strings.Contains(err.Error(), override.name) {
+					t.Fatalf("Load() error = %q, want %s", err, override.name)
+				}
+			})
+		}
+	}
+}
+
+func TestLoad_OIDCIssuerRejectsNonLoopback(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "google", key: "GOOGLE_OIDC_ISSUER_URL", value: "https://accounts.google.com:443/google"},
+		{name: "linkedin", key: "LINKEDIN_OIDC_ISSUER_URL", value: "https://www.linkedin.com:443/linkedin"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := validDevEnv()
+			vars[tt.key] = tt.value
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want non-loopback issuer rejection")
+			}
+			if !strings.Contains(err.Error(), tt.key) {
+				t.Fatalf("Load() error = %q, want %s", err, tt.key)
+			}
+		})
+	}
+}
+
+func TestLoad_ProviderEndpointClosedGrammar(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		vars map[string]string
+	}{
+		{name: "partial github authorize", vars: map[string]string{
+			"GITHUB_OAUTH_AUTHORIZE_URL": "https://localhost:20443/__uat/oauth/github/authorize",
+		}},
+		{name: "partial github token", vars: map[string]string{
+			"GITHUB_OAUTH_TOKEN_URL": "http://127.0.0.1:20442/github/token",
+		}},
+		{name: "partial github api", vars: map[string]string{
+			"GITHUB_API_BASE_URL": "http://127.0.0.1:20442/github",
+		}},
+		{name: "github external token", vars: map[string]string{
+			"GITHUB_OAUTH_AUTHORIZE_URL": "https://localhost:20443/__uat/oauth/github/authorize",
+			"GITHUB_OAUTH_TOKEN_URL":     "https://github.com:443/login/oauth/access_token",
+			"GITHUB_API_BASE_URL":        "http://127.0.0.1:20442/github",
+		}},
+		{name: "github external api", vars: map[string]string{
+			"GITHUB_OAUTH_AUTHORIZE_URL": "https://localhost:20443/__uat/oauth/github/authorize",
+			"GITHUB_OAUTH_TOKEN_URL":     "http://127.0.0.1:20442/github/token",
+			"GITHUB_API_BASE_URL":        "https://api.github.com:443/github",
+		}},
+		{name: "github authorize outside public origin", vars: map[string]string{
+			"GITHUB_OAUTH_AUTHORIZE_URL": "https://localhost:20444/__uat/oauth/github/authorize",
+			"GITHUB_OAUTH_TOKEN_URL":     "http://127.0.0.1:20442/github/token",
+			"GITHUB_API_BASE_URL":        "http://127.0.0.1:20442/github",
+		}},
+		{name: "issuer user info", vars: map[string]string{
+			"GOOGLE_OIDC_ISSUER_URL": "http://user@127.0.0.1:20442/google",
+		}},
+		{name: "issuer query", vars: map[string]string{
+			"GOOGLE_OIDC_ISSUER_URL": "http://127.0.0.1:20442/google?next=external",
+		}},
+		{name: "issuer fragment", vars: map[string]string{
+			"GOOGLE_OIDC_ISSUER_URL": "http://127.0.0.1:20442/google#external",
+		}},
+		{name: "issuer missing port", vars: map[string]string{
+			"GOOGLE_OIDC_ISSUER_URL": "http://127.0.0.1/google",
+		}},
+		{name: "issuer zero port", vars: map[string]string{
+			"GOOGLE_OIDC_ISSUER_URL": "http://127.0.0.1:0/google",
+		}},
+		{name: "issuer unexpected path", vars: map[string]string{
+			"GOOGLE_OIDC_ISSUER_URL": "http://127.0.0.1:20442/linkedin",
+		}},
+		{name: "issuer encoded path", vars: map[string]string{
+			"GOOGLE_OIDC_ISSUER_URL": "http://127.0.0.1:20442/%67oogle",
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vars := validDevEnv()
+			for key, value := range tt.vars {
+				vars[key] = value
+			}
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatal("Load() error = nil, want closed provider endpoint rejection")
+			}
+		})
+	}
+}
+
 func TestLoad_ValidConfig(t *testing.T) {
 	t.Parallel()
 

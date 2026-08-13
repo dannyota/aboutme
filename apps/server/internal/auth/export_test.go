@@ -2,16 +2,58 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"golang.org/x/oauth2"
 )
 
 // NewSessionManagerForTest builds a manager with an injected clock.
 func NewSessionManagerForTest(q *store.Queries, now func() time.Time) *SessionManager {
 	return &SessionManager{q: q, now: now}
+}
+
+// OIDCProviderEndpointForTest drives runtime provider discovery without
+// starting a transaction.
+func OIDCProviderEndpointForTest(ctx context.Context, svc *Service, provider Provider) (oauth2.Endpoint, error) {
+	var (
+		p   interface{ Endpoint() oauth2.Endpoint }
+		err error
+	)
+	switch provider {
+	case ProviderGoogle:
+		p, err = svc.googleProvider(ctx)
+	case ProviderLinkedIn:
+		p, err = svc.linkedinProvider(ctx)
+	default:
+		return oauth2.Endpoint{}, fmt.Errorf("unsupported OIDC provider %q", provider)
+	}
+	if err != nil {
+		return oauth2.Endpoint{}, err
+	}
+	return p.Endpoint(), nil
+}
+
+// GitHubProviderEndpointsForTest exposes the effective OAuth and API URLs.
+func GitHubProviderEndpointsForTest(svc *Service) (authorizeURL, tokenURL, apiBaseURL string) {
+	cfg := svc.githubOAuth2Config("https://localhost:20443/api/v1/auth/github/callback")
+	return cfg.Endpoint.AuthURL, cfg.Endpoint.TokenURL, svc.githubAPIBaseURLFor()
+}
+
+// LocalProviderHTTPClientForTest exposes the loopback-only transport boundary.
+func LocalProviderHTTPClientForTest() *http.Client {
+	return localProviderHTTPClient()
+}
+
+// GitHubProviderHTTPClientForTest exposes the effective runtime HTTP boundary.
+func GitHubProviderHTTPClientForTest(svc *Service) *http.Client {
+	ctx := svc.withGitHubProviderHTTPClient(context.Background())
+	client, _ := ctx.Value(oauth2.HTTPClient).(*http.Client)
+	return client
 }
 
 // SessionCookieName exposes the cookie name to black-box tests.
