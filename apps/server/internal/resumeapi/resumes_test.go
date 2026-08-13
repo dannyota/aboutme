@@ -528,6 +528,7 @@ func TestResumeCreate_SeedVersionsPhotoRejectionAndBounds(t *testing.T) {
 		}
 		beforeRows := countResumeTestRows(t, h, "resumes")
 		beforeRecords := countResumeTestRows(t, h, "idempotency_records")
+		beforeObjects := snapshotObjectKeys(t, h)
 		response := resumeRequest(t, h, http.MethodPost, apiResumePath, string(body), 0, uuid.New(), version)
 		assertResumeTestError(t, response, http.StatusUnprocessableEntity, "document_invalid")
 		if rows := countResumeTestRows(t, h, "resumes"); rows != beforeRows {
@@ -535,6 +536,9 @@ func TestResumeCreate_SeedVersionsPhotoRejectionAndBounds(t *testing.T) {
 		}
 		if records := countResumeTestRows(t, h, "idempotency_records"); records != beforeRecords {
 			t.Fatalf("version %s photo seed changed record count from %d to %d", version, beforeRecords, records)
+		}
+		if objects := snapshotObjectKeys(t, h); !reflect.DeepEqual(objects, beforeObjects) {
+			t.Fatalf("version %s photo seed changed objects from %v to %v", version, beforeObjects, objects)
 		}
 	}
 

@@ -154,7 +154,7 @@ from OpenAPI.
       schemas are integers with `minimum: 0`, and their descriptions and
       examples pin zero-based insertion, inclusive append, remove-before-
       measure same-column moves, and sequential command evaluation.
-- [ ] **Step 2: write the surface.** Add the paths, components, parameters, and
+- [x] **Step 2: write the surface.** Add the paths, components, parameters, and
       examples. Each operation's `description` cites the design clause it
       implements. Error responses enumerate the exact codes from
       [D8](decisions.md) in their descriptions, so the closed vocabulary is
@@ -172,7 +172,7 @@ from OpenAPI.
       Structure command descriptions define each index against the command-time
       layout. Examples cover create at `index == N`, a forward same-column move
       after removal, and a later command addressing an earlier command's result.
-- [ ] **Step 3: the document stays opaque (D16).** `ResumeDocument`,
+- [x] **Step 3: the document stays opaque (D16).** `ResumeDocument`,
       `PersonalDetails`, `Section`, and `Customization` are declared as objects
       whose **shape is governed by `packages/schema/resume.schema.json`** at the
       version named by `X-Resume-Schema-Version`, with a description saying so
@@ -187,16 +187,33 @@ from OpenAPI.
       parity-tested against each accepted schema, because the HTTP boundary must
       reject `photo`, crop-only commands, and unknown fields before the
       version-specific handler validation.
-- [ ] **Step 4: request regeneration.** Report the exact `make api-gen` command
+- [x] **Step 4: request regeneration.** Report the exact `make api-gen` command
       and expected generated path. The integration owner runs it, reviews the
       generated diff, then runs `make api-check` and `make web-typecheck`.
-- [ ] **Step 5: owner contract review.** The integration owner reads the diff
+- [x] **Step 5: owner contract review.** The integration owner reads the diff
       against the [API design](../../design/api.md) and signs off the D7
       amendment before wave 2 dispatches. Record the sign-off in the task
       report.
 - [ ] **Step 6: handoff.** Report the owned file list, failing-test evidence,
       exact checks, contract-review decision, and requested client-generation
       command to the integration owner. Do not stage or commit.
+
+## Implementation record
+
+Commit `af8122c` landed the 15-operation contract, the focused mechanical test,
+and the regenerated TypeScript client before the downstream store and media
+commits. The current contract test pins the route and operation inventory,
+security and singleton headers, success and error matrices, bodyless deletes,
+opaque document ownership, personal-details/photo separation, ordered-command
+bounds, and structure-index semantics. The current proof command is
+`npx vitest run docs/api/test/resumes.contract.test.ts`; the complete contract
+and generated-client drift gate is `make api-check`.
+
+The repository does not retain a separate RED run or handoff transcript, so
+Steps 1 and 6 remain open rather than reconstructing historical commands. This
+record repair did not rerun the API gate. The unchanged-candidate
+`make api-check`, connected `make scan`, and fresh phase review remain
+phase-exit dependencies.
 
 ## Acceptance mapping
 

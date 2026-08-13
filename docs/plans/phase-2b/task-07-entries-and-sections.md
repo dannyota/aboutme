@@ -38,7 +38,7 @@ re-implemented here.
 
 ## Steps
 
-- [ ] **Step 1: failing upsert tests first.** New id appends and returns the new
+- [x] **Step 1: failing upsert tests first.** New id appends and returns the new
       revision; an existing id replaces **in place** (index unchanged, and the
       other entries byte-identical); a half-typed entry with only `id` and the
       section's discriminator persists and reloads exactly as typed under the
@@ -47,7 +47,7 @@ re-implemented here.
       `422 document_invalid` naming AC-DOC-002's whole-resume uniqueness rule;
       an entry of the wrong shape for the section's `sectionType` → `422`; a
       65th entry in a section → `422` with the row unchanged.
-- [ ] **Step 2: failing delete tests.** Deleting an existing entry removes
+- [x] **Step 2: failing delete tests.** Deleting an existing entry removes
       exactly it and bumps the revision; deleting the last entry leaves an empty
       but present section (a freshly emptied section stays valid under the
       [draft policy](../../design/data.md#draft-and-publish-validation));
@@ -69,7 +69,7 @@ re-implemented here.
       `-race -count=20`.
 - [ ] **Step 5: failing contract test.** Handler statuses, codes, and shapes
       agree with `docs/api/openapi.yaml` for all three operations.
-- [ ] **Step 6: implement; green.**
+- [x] **Step 6: implement; green.**
 - [ ] **Step 7: gate.** Run `make test-db-up`,
       `make server-build server-vet server-test`,
       `(cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL="${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable}" go test ./internal/resumeapi/... -race -count=1 -v)`,
@@ -78,6 +78,30 @@ re-implemented here.
 - [ ] **Step 8: handoff.** Report the owned paths, failing-test evidence, exact
       checks, and concurrency results to the integration owner. Do not stage or
       commit.
+
+## Implementation record
+
+Entry upsert/delete and section metadata handlers are implemented in
+`entries.go` and `sections.go`. `TestEntryUpsertAppendsAndReplacesInPlace`,
+`TestEntryUpsertPreservesDraftAndRejectsWrongShapeCollisionAndLimit`, and
+`TestEntryHandlerRejectsWrongShapeCollisionAnd65thWithoutWrite` cover append,
+in-place replacement, draft entries, whole-resume identity, type, and count
+bounds. `TestEntryUpsertDeleteContractAndReplay`,
+`TestEntryDeleteLastPersistsPresentEmptySection`,
+`TestEntryUnknownDeleteWritesNothing`, and
+`TestEntryDeleteNoOracleResponseIsIdenticalForUnknownAndForeign` cover delete,
+replay, empty-section persistence, no-write rejection, and no-oracle behavior.
+No historical RED transcript is retained.
+
+`TestSectionPatchMetadataOrderAndPlacementIsolation` proves the metadata and
+entry-order rules on one combined mutation. It does not prove byte-identical
+customization for each separate live HTTP write, and the live section route does
+not prove a rejected permutation leaves the stored row unchanged. The contract
+tests exercise the live shapes and codes but do not mechanically compare every
+OpenAPI branch. The concurrent-entry test covers one-winner CAS and retry, but
+the required `-race -count=20` run has no retained task record. Steps 3–5 and
+the gate/handoff Steps 7–8 therefore remain open. The connected scan,
+unchanged-candidate CI, and fresh review remain phase-owned.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks whole-resume
 entry identity, section-placement isolation, CAS, and autosave concurrency for

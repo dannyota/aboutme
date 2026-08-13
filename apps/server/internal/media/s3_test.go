@@ -464,7 +464,15 @@ func TestS3_SecretsNeverLeak(t *testing.T) {
 	log.SetOutput(&logBuf)
 	defer log.SetOutput(prev)
 
+	var deleteRequests atomic.Int64
 	hostile := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			deleteRequests.Add(1)
+		}
 		copyExternalTestBody(t, io.Discard, r.Body)
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(500)
@@ -484,6 +492,9 @@ func TestS3_SecretsNeverLeak(t *testing.T) {
 	_, _, err = b.Get(context.Background(), "resumes/x/leak.jpg")
 	errs = append(errs, err)
 	errs = append(errs, b.Delete(context.Background(), "resumes/x/leak.jpg"))
+	if got := deleteRequests.Load(); got == 0 {
+		t.Error("DeleteObject was not reached")
+	}
 	_, _, err = b.ListPage(context.Background(), "resumes/x", "", 10)
 	errs = append(errs, err)
 

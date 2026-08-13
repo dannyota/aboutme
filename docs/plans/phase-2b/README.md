@@ -13,8 +13,11 @@ Revision 3 integrates the approved [v4 design](../../design/README.md), ADRs
 ## Preconditions
 
 P0F, P1.1, and P2A are complete, so this phase runs as the server lane beside
-P3's renderer lane. The two lanes own disjoint paths: P2B owns `apps/server/**`
-and `docs/api/openapi.yaml` and never edits `packages/schema/**`.
+P3's renderer lane. The lanes retain disjoint task ownership: P2B owns
+`apps/server/**` and `docs/api/openapi.yaml`; P3 owns `packages/schema/**`.
+During integration, the P3 owner coordinated and applied the released-schema
+correction that P2B needed, and P2B consumed the corrected generated contract.
+That integration did not transfer schema ownership to P2B.
 
 | Input                    | Required state                                                               |
 | ------------------------ | ---------------------------------------------------------------------------- |
@@ -83,20 +86,20 @@ the root Makefile, workflows, manifests, and shared scripts.
 
 ## Task index
 
-| Task | Deliverable                                        | Tier   | State       |
-| ---- | -------------------------------------------------- | ------ | ----------- |
-| 1    | Complete OpenAPI contract and client regeneration  | Normal | Landed      |
-| 2    | Transaction seam and metadata CAS query            | High   | Landed      |
-| 3    | Media backends and local S3-compatible service     | High   | Landed      |
-| 4    | Write-safety kernel, routes, and policies          | High   | Landed      |
-| 5    | Sanitizer walk at the aggregate write boundary     | High   | Landed      |
-| 6    | Resume list, create, read, metadata update, delete | High   | Implemented |
-| 7    | Entry and section metadata commands                | High   | Implemented |
-| 8    | Atomic section structure command                   | High   | Implemented |
-| 9    | Personal details and wire-version proof            | High   | Implemented |
-| 10   | Fixed-allowlist customization deltas               | High   | Implemented |
-| 11   | Photo upload, read, crop, replace, and delete      | High   | Implemented |
-| Gate | Phase review and exit checklist                    | —      | Active      |
+| Task | Deliverable                                        | Tier   | State  |
+| ---- | -------------------------------------------------- | ------ | ------ |
+| 1    | Complete OpenAPI contract and client regeneration  | Normal | Landed |
+| 2    | Transaction seam and metadata CAS query            | High   | Landed |
+| 3    | Media backends and local S3-compatible service     | High   | Landed |
+| 4    | Write-safety kernel, routes, and policies          | High   | Landed |
+| 5    | Sanitizer walk at the aggregate write boundary     | High   | Landed |
+| 6    | Resume list, create, read, metadata update, delete | High   | Landed |
+| 7    | Entry and section metadata commands                | High   | Landed |
+| 8    | Atomic section structure command                   | High   | Landed |
+| 9    | Personal details and wire-version proof            | High   | Landed |
+| 10   | Fixed-allowlist customization deltas               | High   | Landed |
+| 11   | Photo upload, read, crop, replace, and delete      | High   | Landed |
+| Gate | Phase review and exit checklist                    | —      | Active |
 
 The adversarial suites are folded into the tasks that own the behavior; their
 cases live in [adversarial coverage](adversarial-coverage.md).

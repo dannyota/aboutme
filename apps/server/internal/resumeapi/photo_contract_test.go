@@ -12,7 +12,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -202,12 +204,13 @@ func (b *orphanSweepBackend) deleteSnapshot() []orphanSweepDelete {
 func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)
+	pngPayload := makePhotoPNG(t)
 	valid, validType := photoMultipartBody(t, func(writer *multipart.Writer) {
 		part, err := writer.CreateFormFile("file", "photo.png")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := part.Write(makePhotoPNG(t)); err != nil {
+		if _, err := part.Write(pngPayload); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -222,9 +225,53 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := part.Write(makePhotoPNG(t)); err != nil {
+			if _, err := part.Write(pngPayload); err != nil {
 				t.Fatal(err)
 			}
+		}
+	})
+	wrongPart, wrongPartType := photoMultipartBody(t, func(writer *multipart.Writer) {
+		part, err := writer.CreateFormFile("avatar", "photo.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(pngPayload); err != nil {
+			t.Fatal(err)
+		}
+	})
+	extraPart, extraPartType := photoMultipartBody(t, func(writer *multipart.Writer) {
+		part, err := writer.CreateFormFile("file", "photo.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(pngPayload); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.WriteField("caption", "not allowed"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	transferEncoded, transferEncodedType := photoMultipartBody(t, func(writer *multipart.Writer) {
+		header := textproto.MIMEHeader{
+			"Content-Disposition":       {`form-data; name="file"; filename="photo.png"`},
+			"Content-Type":              {"image/png"},
+			"Content-Transfer-Encoding": {"base64"},
+		}
+		part, err := writer.CreatePart(header)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(pngPayload); err != nil {
+			t.Fatal(err)
+		}
+	})
+	filename256, filename256Type := photoMultipartBody(t, func(writer *multipart.Writer) {
+		part, err := writer.CreateFormFile("file", strings.Repeat("a", 252)+".png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(pngPayload); err != nil {
+			t.Fatal(err)
 		}
 	})
 	fileOverflow, fileOverflowType := photoMultipartBody(t, func(writer *multipart.Writer) {
@@ -238,6 +285,30 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 	})
 	requestOverflow := append(append([]byte(nil), valid...),
 		bytes.Repeat([]byte{'x'}, int(photoRequestBytes+1)-len(valid))...)
+	exactRequestBody := func(size int64) []byte {
+		const prefix = "--b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.bin\"\r\nX-Pad: "
+		const suffix = "\r\n\r\nx\r\n--b--\r\n"
+		padding := int(size) - len(prefix) - len(suffix)
+		if padding < 0 {
+			t.Fatalf("multipart request size %d is smaller than framing", size)
+		}
+		return []byte(prefix + strings.Repeat("a", padding) + suffix)
+	}
+	exactFileBody := func(size int) ([]byte, string) {
+		return photoMultipartBody(t, func(writer *multipart.Writer) {
+			part, err := writer.CreateFormFile("file", "exact.bin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := part.Write(bytes.Repeat([]byte{'x'}, size)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	exactFile, exactFileType := exactFileBody(photoFileBytes)
+	fileLimitPlusOne, fileLimitPlusOneType := exactFileBody(photoFileBytes + 1)
+	exactRequest := exactRequestBody(photoRequestBytes)
+	requestLimitPlusOne := exactRequestBody(photoRequestBytes + 1)
 
 	for _, test := range []struct {
 		name          string
@@ -245,13 +316,25 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 		contentType   string
 		contentLength int64
 		status        int
+		code          string
 	}{
-		{name: "empty body", contentType: "multipart/form-data; boundary=empty", status: http.StatusBadRequest},
-		{name: "missing file part", body: missing, contentType: missingType, contentLength: int64(len(missing)), status: http.StatusBadRequest},
-		{name: "duplicate file parts", body: duplicate, contentType: duplicateType, contentLength: int64(len(duplicate)), status: http.StatusBadRequest},
-		{name: "short body with larger declared length", body: valid[:len(valid)-8], contentType: validType, contentLength: int64(len(valid)), status: http.StatusBadRequest},
-		{name: "observed request overflow with understated length", body: requestOverflow, contentType: validType, contentLength: 1, status: http.StatusRequestEntityTooLarge},
-		{name: "file overflow", body: fileOverflow, contentType: fileOverflowType, contentLength: int64(len(fileOverflow)), status: http.StatusRequestEntityTooLarge},
+		{name: "empty body", contentType: "multipart/form-data; boundary=empty", status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "missing boundary", body: valid, contentType: "multipart/form-data", contentLength: int64(len(valid)), status: http.StatusUnsupportedMediaType, code: "media_type_unsupported"},
+		{name: "invalid boundary", body: valid, contentType: `multipart/form-data; boundary="`, contentLength: int64(len(valid)), status: http.StatusUnsupportedMediaType, code: "media_type_unsupported"},
+		{name: "missing file part", body: missing, contentType: missingType, contentLength: int64(len(missing)), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "wrong part", body: wrongPart, contentType: wrongPartType, contentLength: int64(len(wrongPart)), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "extra part", body: extraPart, contentType: extraPartType, contentLength: int64(len(extraPart)), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "duplicate file parts", body: duplicate, contentType: duplicateType, contentLength: int64(len(duplicate)), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "transfer encoding", body: transferEncoded, contentType: transferEncodedType, contentLength: int64(len(transferEncoded)), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "filename 256", body: filename256, contentType: filename256Type, contentLength: int64(len(filename256)), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "non-empty epilogue", body: append(append([]byte(nil), valid...), []byte("not-empty")...), contentType: validType, contentLength: int64(len(valid) + len("not-empty")), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "short body with larger declared length", body: valid[:len(valid)-8], contentType: validType, contentLength: int64(len(valid)), status: http.StatusBadRequest, code: "request_invalid"},
+		{name: "observed request overflow with understated length", body: requestOverflow, contentType: validType, contentLength: 1, status: http.StatusRequestEntityTooLarge, code: "media_too_large"},
+		{name: "file overflow", body: fileOverflow, contentType: fileOverflowType, contentLength: int64(len(fileOverflow)), status: http.StatusRequestEntityTooLarge, code: "media_too_large"},
+		{name: "exact file limit", body: exactFile, contentType: exactFileType, contentLength: int64(len(exactFile)), status: http.StatusUnsupportedMediaType, code: "media_type_unsupported"},
+		{name: "file limit + 1", body: fileLimitPlusOne, contentType: fileLimitPlusOneType, contentLength: int64(len(fileLimitPlusOne)), status: http.StatusRequestEntityTooLarge, code: "media_too_large"},
+		{name: "exact request limit", body: exactRequest, contentType: "multipart/form-data; boundary=b", contentLength: int64(len(exactRequest)), status: http.StatusUnsupportedMediaType, code: "media_type_unsupported"},
+		{name: "request limit + 1", body: requestLimitPlusOne, contentType: "multipart/form-data; boundary=b", contentLength: int64(len(requestLimitPlusOne)), status: http.StatusRequestEntityTooLarge, code: "media_too_large"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			before := snapshotPhotoUploadState(t, h, created.ID)
@@ -261,9 +344,32 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 			if response.status != test.status {
 				t.Fatalf("response = %d body=%s, want %d", response.status, response.body, test.status)
 			}
+			if !bytes.Contains(response.body, []byte(`"`+test.code+`"`)) {
+				t.Fatalf("response body=%s, want code %q", response.body, test.code)
+			}
 			assertPhotoUploadState(t, h, created.ID, before)
 		})
 	}
+
+	t.Run("filename 255", func(t *testing.T) {
+		admittedHarness := newResumeAPITestHarness(t)
+		resume := admittedHarness.createResume(t)
+		body, contentType := photoMultipartBody(t, func(writer *multipart.Writer) {
+			part, err := writer.CreateFormFile("file", strings.Repeat("a", 251)+".png")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := part.Write(pngPayload); err != nil {
+				t.Fatal(err)
+			}
+		})
+		response := admittedHarness.directPhotoUploadRequest(t, resume.ID, resume.Revision,
+			body, contentType, int64(len(body)), false,
+			&photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()})
+		if response.status != http.StatusOK {
+			t.Fatalf("response = %d body=%s, want 200", response.status, response.body)
+		}
+	})
 
 	for _, test := range []struct {
 		name          string
@@ -274,8 +380,9 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 		{name: "admitted understated content length", contentLength: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			resume := h.createResume(t)
-			response := h.directPhotoUploadRequest(t, resume.ID, resume.Revision,
+			admittedHarness := newResumeAPITestHarness(t)
+			resume := admittedHarness.createResume(t)
+			response := admittedHarness.directPhotoUploadRequest(t, resume.ID, resume.Revision,
 				valid, validType, test.contentLength, test.chunked,
 				&photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()})
 			if response.status != http.StatusOK {
@@ -841,6 +948,7 @@ func TestPhotoNormalizeErrorsUseClosedContract(t *testing.T) {
 		{"recognized malformed", []byte{0xff, 0xd8, 0xff}, http.StatusUnprocessableEntity, "media_invalid", "malformed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			before := snapshotPhotoUploadState(t, h, created.ID)
 			response := h.uploadPhotoRequest(t, created.ID, created.Revision, uuid.NewString(), "photo.bin", test.input)
 			if response.status != test.status || !bytes.Contains(response.body, []byte(`"`+test.code+`"`)) {
 				t.Fatalf("response = %d body=%s", response.status, response.body)
@@ -848,6 +956,7 @@ func TestPhotoNormalizeErrorsUseClosedContract(t *testing.T) {
 			if test.reason != "" && (!bytes.Contains(response.body, []byte(`"reason":"`+test.reason+`"`)) || bytes.Contains(response.body, []byte("EOF"))) {
 				t.Fatalf("invalid details leaked or missing: %s", response.body)
 			}
+			assertPhotoUploadState(t, h, created.ID, before)
 		})
 	}
 }

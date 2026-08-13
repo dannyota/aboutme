@@ -44,7 +44,7 @@ is the exact failure the spec's single-endpoint rule exists to prevent.
 
 ## Steps
 
-- [ ] **Step 1: failing invariant tests first.** After every command sequence,
+- [x] **Step 1: failing invariant tests first.** After every command sequence,
       every `content` key appears **exactly once** across
       `customization.layout.sections.main` and `.sidebar`, the arrays are
       deduplicated, and no array references a missing key. Assert this as a
@@ -60,11 +60,11 @@ is the exact failure the spec's single-endpoint rule exists to prevent.
       are rejected before application. In every case the stored row is
       **byte-identical** before and after, `revision` is unchanged, and no
       idempotency record exists.
-- [ ] **Step 3: failing all-or-nothing test.** A batch whose first command is
+- [x] **Step 3: failing all-or-nothing test.** A batch whose first command is
       valid and whose second is not leaves the document exactly as it was — the
       spec's "the whole command applies or none of it does". Assert on stored
       bytes, not on a re-read through the API.
-- [ ] **Step 4: failing index and sequencing tests.** For a target of length
+- [x] **Step 4: failing index and sequencing tests.** For a target of length
       `N`, create at `0` and `N` succeeds while `N + 1` fails. From
       `main: [a,b,c]`, moving `b` to `main` index `2` yields `[a,c,b]`; index
       `3` fails because removal leaves length `2`. Moving to another column at
@@ -72,7 +72,7 @@ is the exact failure the spec's single-endpoint rule exists to prevent.
       move or reorder that key because the later command sees the earlier
       result. Assert exact arrays, `422 document_invalid` for dynamic range
       failures, and rollback of the whole batch.
-- [ ] **Step 5: failing one-column test.** `columns: 1` with a populated
+- [x] **Step 5: failing one-column test.** `columns: 1` with a populated
       `sidebar` is valid under the
       [template contract](../../design/templates/contract.md), so a
       `moveSection` into `sidebar` while `columns == 1` is **accepted**, not
@@ -86,7 +86,7 @@ is the exact failure the spec's single-endpoint rule exists to prevent.
 - [ ] **Step 7: failing contract test.** Handler statuses, codes, index bounds,
       remove-before-measure behavior, and sequential command semantics agree
       with `docs/api/openapi.yaml`.
-- [ ] **Step 8: implement; green.** One `mutate` call; commands applied to the
+- [x] **Step 8: implement; green.** One `mutate` call; commands applied to the
       generic tree; a single validation of the assembled aggregate; one CAS
       write of the complete document.
 - [ ] **Step 9: gate.** Run `make test-db-up`,
@@ -97,6 +97,28 @@ is the exact failure the spec's single-endpoint rule exists to prevent.
 - [ ] **Step 10: handoff.** Report the owned paths, failing-test evidence, exact
       checks, property-test seed policy, and concurrency results to the
       integration owner. Do not stage or commit.
+
+## Implementation record
+
+The structure route is implemented as one aggregate mutation and one CAS save.
+`TestStructureGeneratedSequencesPreserveExactlyOncePlacement` runs 200
+deterministic sequences with seed `20260813` and checks exactly-once placement.
+`TestStructureContractSequentialAtomicAndBounds`,
+`TestStructureCreateIndexBoundAndSectionLimit`,
+`TestStructureCommandsApplyInOrderWithExactIndices`, and
+`TestStructureMoveRemovesBeforeMeasuringAndOneColumnKeepsSidebar` cover atomic
+rollback, command-time bounds, ordered visibility, remove-before-measure, and
+one-column sidebar preservation. No historical RED transcript is retained.
+
+The semantic rejection tests prove no-write behavior for their live HTTP cases,
+but the non-integer-index and 101-command cases do not each snapshot the row,
+revision, and idempotency state. The concurrency test covers structure versus
+entry upsert, not two simultaneous structure commands, and no retained
+`-race -count=20` result exists. The contract tests exercise the documented
+semantics but do not derive their assertions from OpenAPI. Steps 2, 6, and 7
+remain open, as do the gate/handoff Steps 9–10 because the exact task gate is
+not recorded. The connected scan, unchanged-candidate CI, and fresh review
+remain phase-owned.
 
 **Phase-review focus:** At W4, the one fresh phase reviewer checks whether any
 command sequence can commit a document that violates exactly-once placement. The
