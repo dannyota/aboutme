@@ -5,7 +5,7 @@ Satisfies **AC-REN-005**.
 **Files:** modify `apps/web/eslint.config.mjs` (D19 override block); create
 `apps/web/test/import-rule.test.ts`.
 
-- [ ] **Step 1: Failing rule test.** Using the `eslint` API (`ESLint` / `Linter`
+- [x] **Step 1: Failing rule test.** Using the `eslint` API (`ESLint` / `Linter`
       with the project flat config — already a devDep), lint **virtual** file
       contents at paths under `app/components/resume/` containing:
       `import { useAppStore } from '~/stores/app'`;
@@ -20,9 +20,9 @@ Satisfies **AC-REN-005**.
       `./primitives/…`) — assert zero errors. Also lint the same bad imports at
       a **non**-renderer path and assert they are _not_ flagged (the rule is
       scoped, not global). Run → FAIL.
-- [ ] **Step 2: Implement the override** in `eslint.config.mjs`; pass. Then run
+- [x] **Step 2: Implement the override** in `eslint.config.mjs`; pass. Then run
       `make web-lint` over the real tree — the renderer built in Tasks 6–7 must
       already satisfy the rule (if not, that's a Task 6/7 defect to fix, not a
       rule to weaken).
-- [ ] **Step 3: Gate.** Run `make web-lint web-typecheck web-test web-build`.
+- [x] **Step 3: Gate.** Run `make web-lint web-typecheck web-test web-build`.
       Report the owned-path diff and exact output to the integration owner.
