@@ -99,8 +99,6 @@ chmod 0755 "$REPO/apps/web/app.ts"
 git -C "$REPO" add -- apps/web/app.ts
 git -C "$REPO" commit -qm executable
 write_manifest apps/web/app.ts
-git -C "$REPO" update-index --assume-unchanged apps/web/app.ts
-printf 'hidden worktree replacement\n' >"$REPO/apps/web/app.ts"
 run_boundary
 mkdir -p "$WORK/committed-bytes-extracted"
 tar -xf "$OUTPUT" -C "$WORK/committed-bytes-extracted"
@@ -109,6 +107,18 @@ git -C "$REPO" cat-file blob "$COMMIT:apps/web/app.ts" |
   fail 'archive bytes came from the worktree instead of the commit'
 [ "$(stat -c %a "$WORK/committed-bytes-extracted/apps/web/app.ts")" = 755 ] ||
   fail 'archive did not preserve the committed executable mode'
+
+new_repo assume-unchanged
+write_manifest apps/web/app.ts
+git -C "$REPO" update-index --assume-unchanged apps/web/app.ts
+printf 'hidden assume-unchanged replacement\n' >"$REPO/apps/web/app.ts"
+assert_rejected assume-unchanged run_boundary
+
+new_repo skip-worktree
+write_manifest apps/web/app.ts
+git -C "$REPO" update-index --skip-worktree apps/web/app.ts
+printf 'hidden skip-worktree replacement\n' >"$REPO/apps/web/app.ts"
+assert_rejected skip-worktree run_boundary
 
 new_repo worktree-bytes
 write_manifest apps/web/app.ts

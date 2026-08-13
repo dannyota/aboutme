@@ -51,4 +51,23 @@ grep -Fq -- '- run: make server-test-s3' "$WORKFLOW" ||
 grep -Fq 'run: make test-s3-down' "$WORKFLOW" ||
   fail "hosted S3 conformance does not tear down its disposable service"
 
+grep -Fq '  web-e2e:' "$WORKFLOW" ||
+  fail "hosted workflow lacks the pinned browser job"
+grep -Fq '    needs: web' "$WORKFLOW" ||
+  fail "pinned browser job does not wait for the web job"
+grep -Fq '        WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}' \
+  "$WORKFLOW" || fail "pinned browser job lacks the closed immutable run ID"
+grep -Fq '        test -z "${UPDATE_GOLDEN+x}"' "$WORKFLOW" ||
+  fail "pinned browser job does not reject UPDATE_GOLDEN by presence"
+grep -Fq '        test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"' "$WORKFLOW" ||
+  fail "pinned browser job does not reject PLAYWRIGHT_UPDATE_SNAPSHOTS by presence"
+grep -Fq '        make web-e2e' "$WORKFLOW" ||
+  fail "pinned browser job does not run the comparison target"
+if grep -Fq 'make web-e2e-update' "$WORKFLOW"; then
+  fail "hosted workflow can update browser baselines"
+fi
+if grep -Fq -- '--update-snapshots' "$WORKFLOW"; then
+  fail "hosted workflow passes a browser baseline update flag"
+fi
+
 printf 'hosted workflow safety tests passed\n'
