@@ -462,6 +462,11 @@ describe("P2B resume surface", () => {
     expect(version.name).toBe("X-Resume-Schema-Version");
     expect(version.in).toBe("header");
     expect(version.required).toBe(false);
+    expect(version.description).toContain("unsupported_schema_version");
+
+    const sectionKey = params.SectionKey.schema;
+    expect(sectionKey.maxLength).toBe(36);
+    expect(sectionKey.pattern).toBe("^[a-z]+$|^[0-9a-f-]{36}$");
 
     const ifNoneMatch = params.IfNoneMatch;
     expect(ifNoneMatch.name).toBe("If-None-Match");
@@ -535,7 +540,27 @@ describe("P2B resume surface", () => {
 
   it("guards the server-owned photo field out of the personal-details patch", () => {
     const patch = doc.components.schemas.PersonalDetailsPatch;
-    expect(patch.not).toEqual({ required: ["photo"] });
+    const sourcePaths = [
+      "packages/schema/resume.v1.schema.json",
+      "packages/schema/resume.v2.schema.json",
+    ];
+    expect(patch.additionalProperties).toBe(false);
+    expect(Object.keys(patch.properties)).toEqual([
+      "fullName",
+      "headline",
+      "details",
+    ]);
+    for (const path of sourcePaths) {
+      const source = JSON.parse(readFileSync(path, "utf8"));
+      const personalDetails = source.$defs.personalDetails;
+      expect(personalDetails.additionalProperties, path).toBe(false);
+      expect(
+        Object.keys(personalDetails.properties).filter(
+          (name) => name !== "photo",
+        ),
+        path,
+      ).toEqual(Object.keys(patch.properties));
+    }
 
     const crop = doc.components.schemas.PhotoCropPatch;
     expect(Object.keys(crop.properties)).toEqual(["crop"]);
@@ -548,9 +573,17 @@ describe("P2B resume surface", () => {
     // The components are single commands; the 100-item bound belongs to the
     // request bodies that carry the ordered list.
     for (const name of ["StructureCommand", "CustomizationDelta"]) {
-      expect(doc.components.schemas[name].type, `${name} is one command`).toBe(
-        "object",
-      );
+      const variants = doc.components.schemas[name].oneOf;
+      expect(
+        variants.length,
+        `${name} is a closed command union`,
+      ).toBeGreaterThan(1);
+      expect(
+        variants.every(
+          (variant: { type: string; additionalProperties: boolean }) =>
+            variant.type === "object" && variant.additionalProperties === false,
+        ),
+      ).toBe(true);
     }
     const structure =
       doc.paths["/resumes/{id}/structure"].patch.requestBody.content[

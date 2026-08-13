@@ -310,7 +310,9 @@ function generateGo(
       "// (D13: converters are func(json.RawMessage) (json.RawMessage, error) over\n" +
       "// the whole document, never a typed decode).\n" +
       "type Section = json.RawMessage\n\n";
-  } else if (sectionMode !== "dispatch") {
+  } else if (sectionMode === "dispatch") {
+    preamble = 'import "encoding/json"\n\n';
+  } else {
     throw new Error(
       `generate.mjs: unknown sectionMode ${JSON.stringify(sectionMode)}.`,
     );
@@ -324,9 +326,25 @@ function generateGo(
   }
   raw = raw.slice(packagePrefix.length);
 
+  const presenceMarshal = `
+// MarshalJSON preserves the schema's absent-versus-explicit-empty distinction
+// for personalDetails.details. encoding/json's ordinary omitempty rule would
+// collapse a non-nil empty slice to absence.
+func (p PersonalDetails) MarshalJSON() ([]byte, error) {
+	type personalDetailsJSON PersonalDetails
+	if p.Details == nil {
+		return json.Marshal(personalDetailsJSON(p))
+	}
+	return json.Marshal(struct {
+		Details []PersonalDetail \`json:"details"\`
+		personalDetailsJSON
+	}{Details: p.Details, personalDetailsJSON: personalDetailsJSON(p)})
+}
+`;
   const body =
     `${generatedHeader(sourceName)}\n\npackage ${packageName}\n\n${preamble}` +
-    raw;
+    raw +
+    presenceMarshal;
   writeFileSync(outFile, body);
 
   // quicktype's Go column-alignment pass misaligns struct fields when an

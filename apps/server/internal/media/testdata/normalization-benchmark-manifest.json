@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "frozenAt": "2026-08-13T07:55:00+07:00",
-  "sourceCommit": "0b7b43f40218c8bf828d1c5cd3309dbf75186da3",
+  "frozenAt": "2026-08-13T12:44:57+07:00",
+  "sourceCommit": "0513351fb8690affbc729f118f1489955e2c4558",
   "toolchain": {
     "go": "go1.26.5 linux/amd64",
     "xImage": "v0.45.0"
@@ -32,7 +32,7 @@
     "rssSource": "/usr/bin/time -v maximum resident set size minus a no-decode helper baseline",
     "maxDurationMilliseconds": 5000,
     "maxRssDeltaBytes": 201326592,
-    "rawEvidencePath": ".superpowers/p2b/media-normalization/0b7b43f40218c8bf828d1c5cd3309dbf75186da3/results.json",
+    "rawEvidencePath": ".superpowers/p2b/media-normalization/0513351fb8690affbc729f118f1489955e2c4558/results.json",
     "command": "systemd-run --user --scope --collect -p MemoryMax=512M -p MemorySwapMax=0 -p CPUQuota=50% -- bash -lc 'cd apps/server && go test ./internal/media -run ^TestNormalizationBudget$ -count=1 -v'"
   },
   "fixtures": [

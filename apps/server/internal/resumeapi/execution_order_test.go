@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -25,6 +26,7 @@ type orderedIdempotency struct {
 	executeResult   resume.ExecuteResult
 	executeErr      error
 	runCallback     bool
+	executeDeadline time.Time
 }
 
 func (s *orderedIdempotency) Inspect(context.Context, uuid.UUID, string, uuid.UUID, [32]byte) (resume.StoredResponse, bool, error) {
@@ -32,10 +34,11 @@ func (s *orderedIdempotency) Inspect(context.Context, uuid.UUID, string, uuid.UU
 	return s.inspectResponse, s.inspectReplay, s.inspectErr
 }
 
-func (s *orderedIdempotency) Execute(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ [32]byte,
+func (s *orderedIdempotency) Execute(ctx context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ [32]byte,
 	mutate func(*store.Queries) (resume.StoredResponse, error),
 ) (resume.ExecuteResult, error) {
 	*s.events = append(*s.events, "execute")
+	s.executeDeadline, _ = ctx.Deadline()
 	if s.runCallback {
 		response, err := mutate(nil)
 		if err != nil {
@@ -44,6 +47,55 @@ func (s *orderedIdempotency) Execute(_ context.Context, _ uuid.UUID, _ string, _
 		s.executeResult.Response = response
 	}
 	return s.executeResult, s.executeErr
+}
+
+func TestExecuteMutation_CandidateDeadlineBoundsExecute(t *testing.T) {
+	t.Parallel()
+
+	var events []string
+	clock := time.Date(2026, 8, 13, 0, 0, 0, 0, time.UTC)
+	idempotency := &orderedIdempotency{
+		events: &events, runCallback: true,
+		executeResult: resume.ExecuteResult{Outcome: resume.CommitCommitted},
+	}
+	service := orderedService(&events, idempotency)
+	service.clock = func() time.Time { return clock }
+	spec := orderedMutationSpec(&events)
+	spec.Prepare = func(context.Context, boundedInput, idempotencyInspection) (preparedInput, error) {
+		events = append(events, "prepare")
+		return preparedInput{ExecuteBefore: clock.Add(5 * time.Minute)}, nil
+	}
+	rec := httptest.NewRecorder()
+	before := time.Now()
+	service.executeMutation(rec, orderedMutationRequest(t), spec)
+	remaining := time.Until(idempotency.executeDeadline)
+	if idempotency.executeDeadline.IsZero() || remaining > 5*time.Minute || remaining < 4*time.Minute+55*time.Second {
+		t.Fatalf("execute deadline = %v (started %v), want approximately five minutes", idempotency.executeDeadline, before)
+	}
+}
+
+func TestExecuteMutation_ExpiredCandidateNeverStartsAndFinalizes(t *testing.T) {
+	t.Parallel()
+
+	var events []string
+	clock := time.Date(2026, 8, 13, 0, 5, 0, 0, time.UTC)
+	idempotency := &orderedIdempotency{events: &events}
+	service := orderedService(&events, idempotency)
+	service.clock = func() time.Time { return clock }
+	spec := orderedMutationSpec(&events)
+	spec.Prepare = func(context.Context, boundedInput, idempotencyInspection) (preparedInput, error) {
+		events = append(events, "prepare")
+		return preparedInput{ExecuteBefore: clock}, nil
+	}
+	rec := httptest.NewRecorder()
+	service.executeMutation(rec, orderedMutationRequest(t), spec)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	want := []string{"decode", "targets", "semantic", "inspect", "prepare", "finalize"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("events = %v, want %v", events, want)
+	}
 }
 
 func orderedMutationRequest(t *testing.T) *http.Request {

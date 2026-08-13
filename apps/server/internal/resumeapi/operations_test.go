@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -60,6 +61,9 @@ func (s documentAwareOperationStore) SaveDocumentTx(_ context.Context, _ *store.
 	s.completeWrites++
 	s.savedDoc = doc
 	s.expectedCAS = expected
+	s.current.Revision = expected + 1
+	s.current.Doc = doc
+	s.current.UpdatedAt = time.Unix(2, 0).UTC()
 	return expected + 1, s.saveErr
 }
 
@@ -112,7 +116,7 @@ func operationResponse(resume.Resume, schema.Resume, int32) (resume.StoredRespon
 	return resume.StoredResponse{Status: http.StatusNoContent}, nil
 }
 
-func TestPersistenceOperationsUseTheCompleteDocumentChokePoint(t *testing.T) {
+func TestMutationOperationsPersistOnlyCompleteDocuments(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.New()
@@ -120,15 +124,13 @@ func TestPersistenceOperationsUseTheCompleteDocumentChokePoint(t *testing.T) {
 	expected := int64(9)
 	for _, test := range []struct {
 		name      string
-		operation mutationOperation
+		kind      operationKind
 		prepared  func(*operationStoreSpy) preparedInput
 		wantCalls []string
 	}{
 		{
 			name: "create sanitizes and validates before create",
-			operation: createOperation{service: &Service{
-				projector: docmigrate.NewIdentityProjector(),
-			}},
+			kind: operationCreate,
 			prepared: func(*operationStoreSpy) preparedInput {
 				return preparedInput{Value: createPreparedInput{Document: hostileProfileDocument(t), Title: "created", Response: operationResponse}}
 			},
@@ -136,9 +138,7 @@ func TestPersistenceOperationsUseTheCompleteDocumentChokePoint(t *testing.T) {
 		},
 		{
 			name: "aggregate projects applies sanitizes validates then saves",
-			operation: aggregateOperation{service: &Service{
-				projector: docmigrate.NewIdentityProjector(),
-			}},
+			kind: operationAggregate,
 			prepared: func(spy *operationStoreSpy) preparedInput {
 				spy.current = resume.Resume{ID: resumeID, UserID: userID, Revision: expected, Doc: loadMinimalDocument(t)}
 				return preparedInput{Value: aggregatePreparedInput{
@@ -151,46 +151,37 @@ func TestPersistenceOperationsUseTheCompleteDocumentChokePoint(t *testing.T) {
 					Response: operationResponse,
 				}}
 			},
-			wantCalls: []string{"get", "apply", "save-document"},
+			wantCalls: []string{"get", "apply", "save-document", "get"},
 		},
 		{
-			name: "metadata uses the same document choke point",
-			operation: metadataOperation{service: &Service{
-				projector: docmigrate.NewIdentityProjector(),
-			}},
+			name: "metadata sanitizes validates and rereads fresh metadata",
+			kind: operationMetadata,
 			prepared: func(spy *operationStoreSpy) preparedInput {
-				spy.current = resume.Resume{ID: resumeID, UserID: userID, Revision: expected, Doc: loadMinimalDocument(t)}
+				spy.current = resume.Resume{ID: resumeID, UserID: userID, Revision: expected, Doc: hostileProfileDocument(t)}
 				language := "en"
-				return preparedInput{Value: metadataPreparedInput{
-					aggregatePreparedInput: aggregatePreparedInput{
-						ResumeID: resumeID,
-						Apply: func(json.RawMessage) (json.RawMessage, error) {
-							spy.calls = append(spy.calls, "apply")
-							return json.Marshal(hostileProfileDocument(t))
-						},
-						Response: operationResponse,
-					},
-					Title: "updated", Language: &language,
+				return preparedInput{Value: resumeMetadataPrepared{
+					ResumeID:        resumeID,
+					TitlePresent:    true,
+					Title:           "updated",
+					LanguagePresent: true,
+					Language:        &language,
+					Response:        operationResponse,
 				}}
 			},
-			wantCalls: []string{"get", "apply", "save-metadata-document"},
+			wantCalls: []string{"get", "save-metadata-document", "get"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			spy := &operationStoreSpy{}
-			storeSpy := documentAwareOperationStore{operationStoreSpy: spy}
-			switch operation := test.operation.(type) {
-			case createOperation:
-				operation.service.resumes = storeSpy
-				test.operation = operation
-			case aggregateOperation:
-				operation.service.resumes = storeSpy
-				test.operation = operation
-			case metadataOperation:
-				operation.service.resumes = storeSpy
-				test.operation = operation
+			service := &Service{
+				projector: docmigrate.NewIdentityProjector(),
+				resumes:   documentAwareOperationStore{operationStoreSpy: spy},
 			}
-			result, err := test.operation.Run(context.Background(), nil, mutationContext{
+			operation := test.kind.build(service)
+			if operation == nil {
+				t.Fatalf("%s operation factory returned nil", test.name)
+			}
+			result, err := operation.Run(context.Background(), nil, mutationContext{
 				UserID: userID, ExpectedRevision: &expected, WireVersion: docmigrate.CurrentVersion,
 			}, test.prepared(spy))
 			if err != nil {
@@ -206,7 +197,7 @@ func TestPersistenceOperationsUseTheCompleteDocumentChokePoint(t *testing.T) {
 				t.Fatalf("complete document writes = %d, want 1", spy.completeWrites)
 			}
 			stored := spy.savedDoc
-			if test.name == "create sanitizes and validates before create" {
+			if test.kind == operationCreate {
 				stored = spy.createdDoc
 			}
 			assertStoredDocumentSanitizedAndValid(t, stored)

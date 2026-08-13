@@ -24,10 +24,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 // beginSeamTx opens a hand-rolled transaction for driving the tx-scoped
@@ -40,8 +41,16 @@ func beginSeamTx(ctx context.Context, t *testing.T, pool *store.Pool) (pgx.Tx, *
 	if err != nil {
 		t.Fatalf("begin seam tx: %v", err)
 	}
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	cleanupContext := context.WithoutCancel(ctx)
+	t.Cleanup(func() { rollbackSeamTx(cleanupContext, t, tx) })
 	return tx, store.New(pool).WithTx(tx)
+}
+
+func rollbackSeamTx(ctx context.Context, t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		t.Errorf("roll back seam transaction: %v", err)
+	}
 }
 
 // closedSeamTx returns a *store.Queries bound to an already rolled-back
@@ -54,8 +63,8 @@ func closedSeamTx(ctx context.Context, t *testing.T, pool *store.Pool) *store.Qu
 	if err != nil {
 		t.Fatalf("begin throwaway tx: %v", err)
 	}
-	if err := tx.Rollback(ctx); err != nil {
-		t.Fatalf("roll back throwaway tx: %v", err)
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		t.Fatalf("roll back throwaway tx: %v", rollbackErr)
 	}
 	return store.New(pool).WithTx(tx)
 }
@@ -105,8 +114,8 @@ func TestCreateTx_CommitPersistsAndMirrorsCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTx() error: %v", err)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("commit: %v", commitErr)
 	}
 
 	if created.Revision != 1 {
@@ -134,8 +143,8 @@ func TestCreateTx_RollbackLeavesZeroEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTx() error: %v", err)
 	}
-	if err := tx.Rollback(ctx); err != nil {
-		t.Fatalf("rollback: %v", err)
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		t.Fatalf("rollback: %v", rollbackErr)
 	}
 
 	if snap := seamRowSnapshot(ctx, t, pool, created.ID); snap != "<absent>" {
@@ -174,8 +183,8 @@ func TestCreateTx_MirrorsCapAndTitleErrors(t *testing.T) {
 	if _, err := s.CreateTx(ctx, qtx, userID, strings.Repeat("x", 160), strp(strings.Repeat("a", 35)), doc); err != nil {
 		t.Errorf("CreateTx(160-char title, 35-char lng) error = %v, want nil", err)
 	}
-	if err := tx.Rollback(ctx); err != nil {
-		t.Fatalf("rollback: %v", err)
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		t.Fatalf("rollback: %v", rollbackErr)
 	}
 
 	// The cap error mirrors the pool-backed Create exactly.
@@ -188,7 +197,7 @@ func TestCreateTx_MirrorsCapAndTitleErrors(t *testing.T) {
 	if _, err := s.CreateTx(ctx, qtx2, userID, "Fourth", nil, doc); !errors.Is(err, resume.ErrCapExceeded) {
 		t.Errorf("CreateTx() 4th resume error = %v, want ErrCapExceeded", err)
 	}
-	_ = tx2.Rollback(ctx)
+	rollbackSeamTx(ctx, t, tx2)
 }
 
 func TestGetTxListTx_MirrorPoolBackedAndHideOwnership(t *testing.T) {
@@ -204,7 +213,7 @@ func TestGetTxListTx_MirrorPoolBackedAndHideOwnership(t *testing.T) {
 	}
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer rollbackSeamTx(ctx, t, tx)
 
 	gotTx, err := s.GetTx(ctx, qtx, userID, created.ID)
 	if err != nil {
@@ -271,8 +280,8 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 	if newRev != created.Revision+1 {
 		t.Errorf("SaveDocumentTx() revision = %d, want %d", newRev, created.Revision+1)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("commit: %v", commitErr)
 	}
 
 	got, err := s.Get(ctx, userID, created.ID)
@@ -289,7 +298,7 @@ func TestSaveDocumentTx_MirrorsSaveDocument(t *testing.T) {
 	// Stale revision: *RevisionMismatchError carrying the WINNING document,
 	// exactly like the pool-backed SaveDocument.
 	tx2, qtx2 := beginSeamTx(ctx, t, pool)
-	defer func() { _ = tx2.Rollback(ctx) }()
+	defer rollbackSeamTx(ctx, t, tx2)
 	_, staleErr := s.SaveDocumentTx(ctx, qtx2, userID, created.ID, doc, created.Revision)
 	var mismatch *resume.RevisionMismatchError
 	if !errors.As(staleErr, &mismatch) {
@@ -320,8 +329,8 @@ func TestSaveDocumentTx_RollbackLeavesZeroEffect(t *testing.T) {
 	if _, err := s.SaveDocumentTx(ctx, qtx, userID, created.ID, updated, created.Revision); err != nil {
 		t.Fatalf("SaveDocumentTx() error: %v", err)
 	}
-	if err := tx.Rollback(ctx); err != nil {
-		t.Fatalf("rollback: %v", err)
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		t.Fatalf("rollback: %v", rollbackErr)
 	}
 
 	// Row count, row bytes, revision, and updated_at all unchanged.
@@ -344,7 +353,7 @@ func TestSaveDocumentTx_WrongOwnerVsMissing_ByteIdentical(t *testing.T) {
 	before := seamRowSnapshot(ctx, t, pool, created.ID)
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer rollbackSeamTx(ctx, t, tx)
 	_, wrongOwnerErr := s.SaveDocumentTx(ctx, qtx, otherID, created.ID, doc, created.Revision)
 	_, missingErr := s.SaveDocumentTx(ctx, qtx, otherID, uuid.New(), doc, created.Revision)
 	if !errors.Is(wrongOwnerErr, resume.ErrNotFound) || !errors.Is(missingErr, resume.ErrNotFound) {
@@ -382,8 +391,8 @@ func TestSaveMetadataAndDocumentTx_WritesAllUnderOneCAS(t *testing.T) {
 	if newRev != created.Revision+1 {
 		t.Errorf("new revision = %d, want %d", newRev, created.Revision+1)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("commit: %v", commitErr)
 	}
 
 	got, err := s.Get(ctx, userID, created.ID)
@@ -438,8 +447,8 @@ func TestSaveMetadataAndDocumentTx_RollbackLeavesZeroEffect(t *testing.T) {
 	if newRevision != created.Revision+1 {
 		t.Errorf("new revision = %d, want %d", newRevision, created.Revision+1)
 	}
-	if err := tx.Rollback(ctx); err != nil {
-		t.Fatalf("rollback: %v", err)
+	if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+		t.Fatalf("rollback: %v", rollbackErr)
 	}
 
 	if after := seamRowSnapshot(ctx, t, pool, created.ID); after != before {
@@ -458,16 +467,16 @@ func TestSaveMetadataAndDocumentTx_ClearsLng(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTx() error: %v", err)
 	}
-	if err := tx0.Commit(ctx); err != nil {
-		t.Fatalf("commit create: %v", err)
+	if commitErr := tx0.Commit(ctx); commitErr != nil {
+		t.Fatalf("commit create: %v", commitErr)
 	}
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	if _, err := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "Has lng", nil, doc, created.Revision); err != nil {
-		t.Fatalf("SaveMetadataAndDocumentTx(nil lng) error: %v", err)
+	if _, saveErr := s.SaveMetadataAndDocumentTx(ctx, qtx, userID, created.ID, "Has lng", nil, doc, created.Revision); saveErr != nil {
+		t.Fatalf("SaveMetadataAndDocumentTx(nil lng) error: %v", saveErr)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("commit: %v", commitErr)
 	}
 
 	got, err := s.Get(ctx, userID, created.ID)
@@ -546,7 +555,7 @@ func TestSaveMetadataAndDocumentTx_BoundsBeforeAnyStatement(t *testing.T) {
 		strings.Repeat("x", 160), strp(strings.Repeat("a", 35)), doc, created.Revision); err != nil {
 		t.Errorf("160-char title + 35-char lng error = %v, want nil", err)
 	}
-	_ = tx.Rollback(ctx)
+	rollbackSeamTx(ctx, t, tx)
 }
 
 func TestSaveMetadataAndDocumentTx_WrongOwnerVsMissing_ByteIdentical(t *testing.T) {
@@ -562,7 +571,7 @@ func TestSaveMetadataAndDocumentTx_WrongOwnerVsMissing_ByteIdentical(t *testing.
 	}
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer rollbackSeamTx(ctx, t, tx)
 	_, wrongOwnerErr := s.SaveMetadataAndDocumentTx(ctx, qtx, otherID, created.ID, "t", nil, doc, created.Revision)
 	_, missingErr := s.SaveMetadataAndDocumentTx(ctx, qtx, otherID, uuid.New(), "t", nil, doc, created.Revision)
 	if !errors.Is(wrongOwnerErr, resume.ErrNotFound) || !errors.Is(missingErr, resume.ErrNotFound) {
@@ -677,7 +686,7 @@ func TestDeleteTx_WrongOwnerVsMissing_ByteIdentical(t *testing.T) {
 	before := seamRowSnapshot(ctx, t, pool, created.ID)
 
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	defer func() { _ = tx.Rollback(ctx) }()
+	defer rollbackSeamTx(ctx, t, tx)
 	_, wrongOwnerErr := s.DeleteTx(ctx, qtx, otherID, created.ID, created.Revision)
 	_, missingErr := s.DeleteTx(ctx, qtx, otherID, uuid.New(), created.Revision)
 	if !errors.Is(wrongOwnerErr, resume.ErrNotFound) || !errors.Is(missingErr, resume.ErrNotFound) {
@@ -906,11 +915,11 @@ func TestEnqueueMediaDeletionTx_PhotoReferenceRemovalCommitsWithJob(t *testing.T
 	if err != nil {
 		t.Fatalf("SaveDocumentTx(remove photo) error: %v", err)
 	}
-	if err := s.EnqueueMediaDeletionTx(ctx, qtx, created.ID, key); err != nil {
-		t.Fatalf("EnqueueMediaDeletionTx() error: %v", err)
+	if enqueueErr := s.EnqueueMediaDeletionTx(ctx, qtx, created.ID, key); enqueueErr != nil {
+		t.Fatalf("EnqueueMediaDeletionTx() error: %v", enqueueErr)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("commit: %v", commitErr)
 	}
 
 	got, err := s.Get(ctx, userID, created.ID)
@@ -974,13 +983,13 @@ func TestEnqueueMediaDeletionTx_MalformedAndCrossResumeChangeNothing(t *testing.
 		}
 		// The enqueue failure aborts the transaction; neither the aggregate
 		// write nor any queue row survives.
-		_ = tx.Rollback(ctx)
+		rollbackSeamTx(ctx, t, tx)
 		if after := seamRowSnapshot(ctx, t, pool, resumeA.ID); after != beforeA {
 			t.Errorf("%s: aggregate changed\n before: %s\n  after: %s", bad.name, beforeA, after)
 		}
 	}
 	if after := seamRowSnapshot(ctx, t, pool, resumeB.ID); after != beforeB {
-		t.Errorf("neighbour resume changed: %s -> %s", beforeB, after)
+		t.Errorf("neighbor resume changed: %s -> %s", beforeB, after)
 	}
 	if n := seamJobCount(ctx, t, pool, resumeA.ID); n != 0 {
 		t.Errorf("deletion jobs for A = %d, want 0", n)
@@ -1015,7 +1024,7 @@ func TestEnqueueMediaDeletionTx_StaleRevisionEnqueuesNothing(t *testing.T) {
 	if !errors.As(staleErr, &mismatch) {
 		t.Fatalf("DeleteTx(stale) error = %v, want *RevisionMismatchError", staleErr)
 	}
-	_ = tx.Rollback(ctx)
+	rollbackSeamTx(ctx, t, tx)
 
 	if after := seamRowSnapshot(ctx, t, pool, created.ID); after != before {
 		t.Errorf("stale delete changed the row\n before: %s\n  after: %s", before, after)
@@ -1036,11 +1045,11 @@ func TestMediaDeletionJobs_DueOrderIndexSupportsBoundedClaim(t *testing.T) {
 		t.Fatalf("Create() error: %v", err)
 	}
 	tx, qtx := beginSeamTx(ctx, t, pool)
-	if err := s.EnqueueMediaDeletionTx(ctx, qtx, created.ID, seamPhotoKey(created.ID)); err != nil {
-		t.Fatalf("EnqueueMediaDeletionTx() error: %v", err)
+	if enqueueErr := s.EnqueueMediaDeletionTx(ctx, qtx, created.ID, seamPhotoKey(created.ID)); enqueueErr != nil {
+		t.Fatalf("EnqueueMediaDeletionTx() error: %v", enqueueErr)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit: %v", err)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("commit: %v", commitErr)
 	}
 
 	// Query-plan evidence: the bounded oldest-due claim shape P8-priv uses
@@ -1050,9 +1059,9 @@ func TestMediaDeletionJobs_DueOrderIndexSupportsBoundedClaim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin plan tx: %v", err)
 	}
-	defer func() { _ = planTx.Rollback(ctx) }()
-	if _, err := planTx.Exec(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
-		t.Fatalf("disable seqscan: %v", err)
+	defer rollbackSeamTx(ctx, t, planTx)
+	if _, execErr := planTx.Exec(ctx, `SET LOCAL enable_seqscan = off`); execErr != nil {
+		t.Fatalf("disable seqscan: %v", execErr)
 	}
 	rows, err := planTx.Query(ctx,
 		`EXPLAIN SELECT id FROM media_deletion_jobs

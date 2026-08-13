@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -37,6 +38,10 @@ func (b *failOnReadBody) Read([]byte) (int, error) {
 }
 
 func (*failOnReadBody) Close() error { return nil }
+
+type deadlineRecorder struct{ *httptest.ResponseRecorder }
+
+func (*deadlineRecorder) SetReadDeadline(time.Time) error { return nil }
 
 func TestPhotoHeaderRejectionDoesNotReadBody(t *testing.T) {
 	h := newResumeAPITestHarness(t)
@@ -161,17 +166,20 @@ func TestPhotoOuterSessionCSRFMediaTypeAndRateFailuresDoNotReadBody(t *testing.T
 		req.Header.Set("Content-Type", "multipart/form-data; boundary=test")
 		req.Header.Set("Idempotency-Key", uuid.NewString())
 		req.Header.Set("If-Match", `"r1"`)
-		recorder := httptest.NewRecorder()
+		recorder := &deadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
 		h.handler.ServeHTTP(recorder, req)
-		wantStatus := http.StatusNotImplemented
+		wantStatus := http.StatusBadRequest
 		if attempt == resumeUploadRequests+1 {
 			wantStatus = http.StatusTooManyRequests
 		}
 		if recorder.Code != wantStatus {
 			t.Fatalf("rate attempt %d status = %d, want %d (body=%s)", attempt, recorder.Code, wantStatus, recorder.Body.String())
 		}
-		if body.reads != 0 {
-			t.Fatalf("rate attempt %d body reads = %d, want zero", attempt, body.reads)
+		if attempt == resumeUploadRequests+1 && body.reads != 0 {
+			t.Fatalf("rate-limited attempt body reads = %d, want zero", body.reads)
+		}
+		if attempt <= resumeUploadRequests && body.reads == 0 {
+			t.Fatalf("admitted attempt %d did not reach the streaming body reader", attempt)
 		}
 	}
 }

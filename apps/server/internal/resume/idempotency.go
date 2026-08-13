@@ -80,17 +80,17 @@ type StoredResponse struct {
 type CommitOutcome uint8
 
 const (
-	// CommitNotAttempted: Execute failed before its mutation transaction
+	// CommitNotAttempted means Execute failed before its mutation transaction
 	// began (including a bounded-cleanup failure).
 	CommitNotAttempted CommitOutcome = iota
-	// CommitDefinitelyRolledBack: the mutation transaction began and
+	// CommitDefinitelyRolledBack means the mutation transaction began and
 	// definitely did not commit — callback failure, a rejected decision
 	// (key reuse, capacity), or a commit the server itself rejected.
 	CommitDefinitelyRolledBack
-	// CommitCommitted: the mutation transaction committed, or the result
+	// CommitCommitted means the mutation transaction committed, or the result
 	// is a replay of an already committed record.
 	CommitCommitted
-	// CommitUnknown: connection loss or another indeterminate commit
+	// CommitUnknown means connection loss or another indeterminate commit
 	// result; the transaction may or may not have committed.
 	CommitUnknown
 )
@@ -253,13 +253,18 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 			// WithoutCancel: the rollback must be attempted even when ctx
 			// was canceled mid-flight. After a failed or ambiguous commit
 			// this is a no-op on a closed transaction.
-			_ = tx.Rollback(context.WithoutCancel(ctx))
+			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				return
+			}
 		}
 	}()
 	qtx := s.q.WithTx(tx)
 
 	rolledBack := func(err error) (ExecuteResult, error) {
 		return ExecuteResult{Outcome: CommitDefinitelyRolledBack}, err
+	}
+	if timeoutErr := bindTransactionDeadline(ctx, tx); timeoutErr != nil {
+		return rolledBack(timeoutErr)
 	}
 
 	if _, lockErr := qtx.LockUserForResumeWrite(ctx, userID); lockErr != nil {
@@ -362,7 +367,9 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 			// this transaction back in full (including anything mutate wrote
 			// through qtx), then decide replay vs. reuse from the committed
 			// winner.
-			_ = tx.Rollback(context.WithoutCancel(ctx))
+			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				return rolledBack(fmt.Errorf("resume: idempotency: roll back insert conflict: %w", rollbackErr))
+			}
 			return s.afterInsertConflict(ctx, userID, operation, key, requestHash)
 		}
 		return rolledBack(fmt.Errorf("resume: idempotency: insert record: %w", insErr))
@@ -400,6 +407,28 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 	return ExecuteResult{Response: resp, Replayed: false, Outcome: CommitCommitted}, nil
 }
 
+func bindTransactionDeadline(ctx context.Context, tx pgx.Tx) error {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return nil
+	}
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return context.DeadlineExceeded
+	}
+	milliseconds := remaining.Milliseconds()
+	if milliseconds < 1 {
+		milliseconds = 1
+	}
+	timeout := fmt.Sprintf("%dms", milliseconds)
+	if _, err := tx.Exec(ctx, `SELECT
+		set_config('statement_timeout', $1, true),
+		set_config('idle_in_transaction_session_timeout', $2, true)`, timeout, timeout); err != nil {
+		return fmt.Errorf("resume: idempotency: bind transaction deadline: %w", err)
+	}
+	return nil
+}
+
 // cleanupExpired is Execute's first, separately committed transaction: the
 // bounded, deterministic oldest-first cleanup of the calling user's expired
 // records, with their exact counters released under the same user-first
@@ -412,7 +441,9 @@ func (s *IdempotencyStore) cleanupExpired(ctx context.Context, userID uuid.UUID,
 	committed := false
 	defer func() {
 		if !committed {
-			_ = tx.Rollback(context.WithoutCancel(ctx))
+			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				return
+			}
 		}
 	}()
 	qtx := s.q.WithTx(tx)

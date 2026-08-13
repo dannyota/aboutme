@@ -40,9 +40,11 @@ operations additionally in a new `media` tag).
   `schemaVersion`, timestamps — no document), `Resume` (summary + `document`),
   `ResumeDocument`, `CustomizationDelta`, `StructureCommand`, `EntryUpsert`,
   `SectionPatch`, `PersonalDetailsPatch`, and `PhotoCropPatch`.
-  `PersonalDetailsPatch` is the versioned whole client-owned object but has a
-  JSON Schema `not: {required: [photo]}` guard, so OpenAPI validation rejects
-  the server-owned field without restating the other personal-detail fields.
+  `PersonalDetailsPatch` is the versioned whole client-owned object. OpenAPI
+  closes its top-level names to `fullName`, `headline`, and `details`, with a
+  contract test deriving that list from every accepted resume schema. Value
+  shapes remain schema-owned. This rejects server-owned `photo`, crop-only
+  commands, and unknown fields without duplicating the document model.
   `PhotoCropPatch` is a separate command whose `crop` points to the schema-owned
   `$defs.photoCrop`; it does not restate or accept `PhotoRef`.
 - **Components (amended):** `Error` gains an optional `details` object (D7).
@@ -181,6 +183,10 @@ from OpenAPI.
       contract, and the drift between them would be silent — exactly the failure
       mode `resume.schema.json` exists to prevent. The wire contract this
       document owns is the **envelope, headers, statuses, and error shapes**.
+      `PersonalDetailsPatch` repeats only its three writable top-level names,
+      parity-tested against each accepted schema, because the HTTP boundary must
+      reject `photo`, crop-only commands, and unknown fields before the
+      version-specific handler validation.
 - [ ] **Step 4: request regeneration.** Report the exact `make api-gen` command
       and expected generated path. The integration owner runs it, reviews the
       generated diff, then runs `make api-check` and `make web-typecheck`.

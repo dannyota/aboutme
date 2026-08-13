@@ -166,6 +166,46 @@ func TestApplyAtWireVersion_ProductionV1AndV2RoundTrip(t *testing.T) {
 	}
 }
 
+func TestApplyAtWireVersionSanitizesAfterAcceptingCurrentShape(t *testing.T) {
+	t.Parallel()
+
+	setVersion := func(version int32) docmigrate.ConvertFunc {
+		return func(raw json.RawMessage) (json.RawMessage, error) {
+			var doc schema.Resume
+			if err := json.Unmarshal(raw, &doc); err != nil {
+				return nil, err
+			}
+			doc.SchemaVersion = int64(version)
+			return json.Marshal(doc)
+		}
+	}
+	upCalls := 0
+	up := func(raw json.RawMessage) (json.RawMessage, error) {
+		upCalls++
+		if upCalls == 1 {
+			return setVersion(2)(raw)
+		}
+		doc := hostileProfileDocument(t)
+		doc.SchemaVersion = 2
+		return json.Marshal(doc)
+	}
+	acceptAny := func(json.RawMessage) error { return nil }
+	projector, err := docmigrate.NewProjector(
+		map[int32]docmigrate.AdjacentConverters{1: {Up: up, Down: setVersion(1)}},
+		map[int32]docmigrate.ValidateFunc{1: acceptAny, 2: acceptAny}, []int32{1, 2}, []int32{1, 2}, 2,
+	)
+	if err != nil {
+		t.Fatalf("NewProjector: %v", err)
+	}
+	service := &Service{projector: projector, sanitizeDocument: sanitizeDocument}
+	got, err := service.applyAtWireVersion(loadMinimalDocument(t), 1,
+		func(raw json.RawMessage) (json.RawMessage, error) { return raw, nil })
+	if err != nil {
+		t.Fatalf("apply old-wire mutation: %v", err)
+	}
+	assertStoredDocumentSanitizedAndValid(t, got)
+}
+
 func TestApplyAtWireVersion_AcceptedButNotEmittedFailsClosed(t *testing.T) {
 	t.Parallel()
 

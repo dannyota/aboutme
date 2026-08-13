@@ -1,3 +1,5 @@
+// Package resume provides the aggregate store and write-safety kernel.
+//
 // service.go is the P2B transaction seam: the exported tx-scoped mirrors
 // of Store's pool-backed methods, plus the full-aggregate metadata CAS, the
 // revision-CAS delete, and the transactional media deletion-job enqueue.

@@ -71,7 +71,17 @@ func mustCompileSchema() *jsonschema.Schema {
 // across the whole pipeline, stable-sorted (path-first) so repeated runs
 // over the same document always report issues in the same order.
 type ValidationError struct {
-	Issues []string
+	Issues     []string
+	Structured []ValidationIssue
+}
+
+// ValidationIssue is one client-safe store validation issue. Path uses the
+// document's dotted/bracketed notation and Code is a stable schema keyword or
+// aggregate rule name.
+type ValidationIssue struct {
+	Path    string
+	Code    string
+	Message string
 }
 
 func (e *ValidationError) Error() string {
@@ -91,29 +101,31 @@ func (e *ValidationError) Error() string {
 func ValidateForStore(doc schema.Resume) error {
 	canonical, err := AssembleCanonical(doc)
 	if err != nil {
-		return &ValidationError{Issues: []string{
-			fmt.Sprintf("(document): could not assemble canonical document: %v", err),
-		}}
+		message := fmt.Sprintf("(document): could not assemble canonical document: %v", err)
+		return &ValidationError{
+			Issues:     []string{message},
+			Structured: []ValidationIssue{{Path: "(document)", Code: "invalid", Message: message}},
+		}
 	}
 
 	var entries []issueEntry
 
 	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(canonical))
 	if err != nil {
-		entries = append(entries, issueEntry{text: fmt.Sprintf("(document): could not parse canonical document: %v", err)})
+		entries = append(entries, issueEntry{path: "(document)", code: "invalid", text: fmt.Sprintf("(document): could not parse canonical document: %v", err)})
 	} else if err := compiledSchema.Validate(instance); err != nil {
 		entries = append(entries, schemaIssueEntries(err)...)
 	}
 
 	if len(canonical) > MaxDocumentBytes {
-		entries = append(entries, issueEntry{text: fmt.Sprintf(
+		entries = append(entries, issueEntry{path: "(document)", code: "max_bytes", text: fmt.Sprintf(
 			"(document): canonical document is %d bytes, exceeds the %d-byte limit",
 			len(canonical), MaxDocumentBytes,
 		)})
 	}
 
 	for _, issue := range schema.ValidateDocument(doc) {
-		entries = append(entries, issueEntry{path: issue.Path, text: issue.String()})
+		entries = append(entries, issueEntry{path: issue.Path, code: issue.Rule, text: issue.String()})
 	}
 
 	if len(entries) == 0 {
@@ -126,10 +138,46 @@ func ValidateForStore(doc schema.Resume) error {
 		return entries[i].text < entries[j].text
 	})
 	issues := make([]string, len(entries))
+	structured := make([]ValidationIssue, len(entries))
 	for i, e := range entries {
 		issues[i] = e.text
+		structured[i] = ValidationIssue{Path: nonEmptyValidationPath(e.path), Code: nonEmptyValidationCode(e.code), Message: e.text}
 	}
-	return &ValidationError{Issues: issues}
+	return &ValidationError{Issues: issues, Structured: structured}
+}
+
+// DescribeValidationError extracts client-safe issue details from store or
+// released-schema validation errors. It always returns at least one issue.
+func DescribeValidationError(err error) []ValidationIssue {
+	var validation *ValidationError
+	if errors.As(err, &validation) && len(validation.Structured) > 0 {
+		return append([]ValidationIssue(nil), validation.Structured...)
+	}
+	entries := schemaIssueEntries(err)
+	if len(entries) == 0 {
+		return []ValidationIssue{{Path: "(document)", Code: "invalid", Message: "document does not match its declared schema"}}
+	}
+	issues := make([]ValidationIssue, len(entries))
+	for index, entry := range entries {
+		issues[index] = ValidationIssue{
+			Path: nonEmptyValidationPath(entry.path), Code: nonEmptyValidationCode(entry.code), Message: entry.text,
+		}
+	}
+	return issues
+}
+
+func nonEmptyValidationPath(path string) string {
+	if path == "" {
+		return "(document)"
+	}
+	return path
+}
+
+func nonEmptyValidationCode(code string) string {
+	if code == "" {
+		return "invalid"
+	}
+	return code
 }
 
 // issueEntry pairs a rendered issue message (text) with the dotted/
@@ -142,6 +190,7 @@ func ValidateForStore(doc schema.Resume) error {
 // within their own layer.
 type issueEntry struct {
 	path string
+	code string
 	text string
 }
 
@@ -157,7 +206,7 @@ type issueEntry struct {
 func schemaIssueEntries(err error) []issueEntry {
 	var ve *jsonschema.ValidationError
 	if !errors.As(err, &ve) {
-		return []issueEntry{{text: err.Error()}}
+		return []issueEntry{{path: "(document)", code: "invalid", text: "document does not match its declared schema"}}
 	}
 	var out []issueEntry
 	collectSchemaIssueEntries(ve, &out)
@@ -166,7 +215,11 @@ func schemaIssueEntries(err error) []issueEntry {
 
 func collectSchemaIssueEntries(ve *jsonschema.ValidationError, out *[]issueEntry) {
 	if len(ve.Causes) == 0 {
-		*out = append(*out, issueEntry{path: instanceLocationPath(ve.InstanceLocation), text: ve.Error()})
+		code := "invalid"
+		if keywordPath := ve.ErrorKind.KeywordPath(); len(keywordPath) > 0 {
+			code = keywordPath[len(keywordPath)-1]
+		}
+		*out = append(*out, issueEntry{path: instanceLocationPath(ve.InstanceLocation), code: code, text: ve.Error()})
 		return
 	}
 	for _, cause := range ve.Causes {

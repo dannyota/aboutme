@@ -2,6 +2,8 @@
 
 package schema
 
+import "encoding/json"
+
 // Current resume document shape. See docs/design/data.md for the aggregate and versioning
 // contract.
 type Resume struct {
@@ -402,3 +404,17 @@ const (
 	Skill             SectionType = "skill"
 	Work              SectionType = "work"
 )
+
+// MarshalJSON preserves the schema's absent-versus-explicit-empty distinction
+// for personalDetails.details. encoding/json's ordinary omitempty rule would
+// collapse a non-nil empty slice to absence.
+func (p PersonalDetails) MarshalJSON() ([]byte, error) {
+	type personalDetailsJSON PersonalDetails
+	if p.Details == nil {
+		return json.Marshal(personalDetailsJSON(p))
+	}
+	return json.Marshal(struct {
+		Details []PersonalDetail `json:"details"`
+		personalDetailsJSON
+	}{Details: p.Details, personalDetailsJSON: personalDetailsJSON(p)})
+}

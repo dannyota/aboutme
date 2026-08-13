@@ -177,7 +177,20 @@ db_suites() {
   cd "$ROOT" || return
   make server-test-integration &&
     make server-test-db &&
-  make server-migration-test
+    make server-migration-test &&
+    make server-test-p2b
+}
+
+s3_suites() {
+  cd "$ROOT" || return
+  make test-s3-up || return
+  local status=0
+  make server-test-s3 || status=$?
+  if [ "$status" -eq 0 ]; then
+    make server-test-p2b-s3 || status=$?
+  fi
+  make test-s3-down || status=$?
+  return "$status"
 }
 
 route_table() { make route-table-test; }
@@ -213,6 +226,7 @@ else
   fi
   make test-db-up
   run "database suites" db_suites
+  run "S3 media and resume API suites" s3_suites
   run "route table" route_table
 fi
 
