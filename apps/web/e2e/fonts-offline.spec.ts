@@ -54,7 +54,7 @@ test.describe('offline font catalog', () => {
 
       const fallback = BY_ID.get(entry.fallback.id);
       expect(fallback, `unknown fallback ${entry.fallback.id}`).toBeDefined();
-      const families = [entry.cssFamily, fallback!.cssFamily];
+      const families = [...new Set([entry.cssFamily, fallback!.cssFamily])];
       const unloaded = await page.evaluate((expectedFamilies) => {
         const relevant = [...document.fonts].filter((face) =>
           expectedFamilies.includes(face.family.replaceAll('"', '')),
