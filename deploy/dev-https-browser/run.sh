@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+fail() {
+  printf 'dev-https-browser: %s\n' "$*" >&2
+  exit 1
+}
+
+mount_has_option() {
+  local options=$1 expected=$2
+  case ",$options," in
+  *",$expected,"*) return 0 ;;
+  *) return 1 ;;
+  esac
+}
+
+inside_container() {
+  [ "$#" -eq 0 ] || fail 'container entrypoint accepts no arguments'
+  [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
+
+  local root_target root_options input_target input_options
+  local evidence_target evidence_options uid input_entries evidence_entries
+  uid=$(id -u)
+  root_target=$(findmnt -n -o TARGET --target /) ||
+    fail 'cannot inspect the root filesystem'
+  root_options=$(findmnt -n -o OPTIONS --target /) ||
+    fail 'cannot inspect the root filesystem options'
+  [ "$root_target" = / ] || fail 'unexpected root filesystem target'
+  mount_has_option "$root_options" ro || fail 'root filesystem is not read-only'
+
+  input_target=$(findmnt -n -o TARGET --target /uat-input) ||
+    fail 'CA input is not mounted'
+  input_options=$(findmnt -n -o OPTIONS --target /uat-input) ||
+    fail 'cannot inspect CA input options'
+  [ "$input_target" = /uat-input ] || fail 'CA input is not a dedicated mount'
+  mount_has_option "$input_options" ro || fail 'CA input is not read-only'
+  mount_has_option "$input_options" rw && fail 'CA input is writable'
+
+  evidence_target=$(findmnt -n -o TARGET --target /evidence) ||
+    fail 'evidence output is not mounted'
+  evidence_options=$(findmnt -n -o OPTIONS --target /evidence) ||
+    fail 'cannot inspect evidence output options'
+  [ "$evidence_target" = /evidence ] ||
+    fail 'evidence output is not a dedicated mount'
+  mount_has_option "$evidence_options" rw || fail 'evidence output is not writable'
+  mount_has_option "$evidence_options" ro && fail 'evidence output is read-only'
+
+  [ -d /uat-input ] && [ ! -L /uat-input ] || fail 'invalid CA input directory'
+  [ -d /evidence ] && [ ! -L /evidence ] || fail 'invalid evidence directory'
+  [ "$(stat -c %u /uat-input)" = "$uid" ] || fail 'CA input owner mismatch'
+  [ "$(stat -c %a /uat-input)" = 700 ] || fail 'CA input mode must be 0700'
+  [ "$(stat -c %u /evidence)" = "$uid" ] || fail 'evidence owner mismatch'
+  [ "$(stat -c %a /evidence)" = 700 ] || fail 'evidence mode must be 0700'
+  [ -w /evidence ] || fail 'evidence output is not writable'
+
+  input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n')
+  [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
+  [ -f /uat-input/caddy-root.crt ] && [ ! -L /uat-input/caddy-root.crt ] ||
+    fail 'Caddy root is not a regular file'
+  [ "$(stat -c %u /uat-input/caddy-root.crt)" = "$uid" ] ||
+    fail 'Caddy root owner mismatch'
+  [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
+    fail 'Caddy root mode must be 0600'
+  evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -print -quit)
+  [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
+
+  export HOME=/tmp/home
+  export XDG_CACHE_HOME=$HOME/.cache
+  export XDG_CONFIG_HOME=$HOME/.config
+  install -d -m 0700 "$HOME" "$HOME/.pki" "$HOME/.pki/nssdb" \
+    "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
+  certutil -N --empty-password -d "sql:$HOME/.pki/nssdb" >/dev/null
+  certutil -A -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root \
+    -t 'C,,' -i /uat-input/caddy-root.crt
+  certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null
+
+  local log_file=/tmp/playwright-auth.log status=0
+  cd /opt/aboutme-auth
+  ./node_modules/.bin/playwright test --config playwright.config.ts auth.spec.ts \
+    >"$log_file" 2>&1 || status=$?
+  if [ "$status" -ne 0 ]; then
+    fail 'authentication proof failed; volatile browser output was withheld'
+  fi
+
+  evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n')
+  [ "$evidence_entries" = auth-proof.json ] ||
+    fail 'browser produced unexpected evidence'
+  [ -f /evidence/auth-proof.json ] && [ ! -L /evidence/auth-proof.json ] ||
+    fail 'browser evidence is not a regular file'
+  [ "$(stat -c %u /evidence/auth-proof.json)" = "$uid" ] ||
+    fail 'browser evidence owner mismatch'
+  [ "$(stat -c %a /evidence/auth-proof.json)" = 600 ] ||
+    fail 'browser evidence mode must be 0600'
+  [ "$(stat -c %s /evidence/auth-proof.json)" -le 4096 ] ||
+    fail 'browser evidence exceeds its bound'
+
+  node --input-type=module - /evidence/auth-proof.json <<'VERIFY_EVIDENCE'
+import { readFile } from 'node:fs/promises';
+
+const path = process.argv[2];
+const actual = JSON.parse(await readFile(path, 'utf8'));
+const expected = {
+  errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+  origin: 'https://localhost:20443',
+  scenario: 'google-authentication',
+  schemaVersion: 1,
+  steps: Object.fromEntries(
+    Array.from({ length: 10 }, (_, index) => [String(index + 1), true]),
+  ),
+};
+if (JSON.stringify(actual) !== JSON.stringify(expected)) process.exit(1);
+VERIFY_EVIDENCE
+
+  printf '%s\n' 'dev-https-browser authentication proof: PASS'
+}
+
+host_run() {
+  [ "$#" -eq 3 ] ||
+    fail 'usage: run.sh <image> <CA-input-directory> <empty-evidence-directory>'
+  local image=$1 input=$2 evidence=$3 uid gid input_entries evidence_entries
+  [[ $image =~ ^[A-Za-z0-9][A-Za-z0-9._/@:-]*$ ]] || fail 'invalid image identity'
+  for path in "$input" "$evidence"; do
+    [[ $path = /* ]] || fail 'mount paths must be absolute'
+    [[ $path != *$'\n'* && $path != *$'\r'* && $path != *$'\t'* ]] ||
+      fail 'mount paths contain control characters'
+    [ -d "$path" ] && [ ! -L "$path" ] || fail 'mount path is not a real directory'
+  done
+  input=$(realpath -e -- "$input") || fail 'cannot resolve CA input directory'
+  evidence=$(realpath -e -- "$evidence") || fail 'cannot resolve evidence directory'
+  [ "$input" != "$evidence" ] || fail 'input and evidence directories must differ'
+
+  uid=$(id -u)
+  gid=$(id -g)
+  [ "$uid" -ne 0 ] && [ "$gid" -ne 0 ] || fail 'host runner must be non-root'
+  [ "$(stat -c %u "$input")" = "$uid" ] || fail 'CA input owner mismatch'
+  [ "$(stat -c %a "$input")" = 700 ] || fail 'CA input mode must be 0700'
+  [ "$(stat -c %u "$evidence")" = "$uid" ] || fail 'evidence owner mismatch'
+  [ "$(stat -c %a "$evidence")" = 700 ] || fail 'evidence mode must be 0700'
+  [ -w "$evidence" ] || fail 'evidence output is not writable'
+
+  input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n')
+  [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
+  [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
+    fail 'Caddy root is not a regular file'
+  [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
+    fail 'Caddy root owner mismatch'
+  [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
+    fail 'Caddy root mode must be 0600'
+  evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
+  [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
+  command -v podman >/dev/null || fail 'podman is required'
+
+  exec podman run \
+    --rm \
+    --network=host \
+    --read-only \
+    --userns=keep-id \
+    --user="$uid:$gid" \
+    --security-opt=label=disable \
+    --security-opt=no-new-privileges \
+    --cap-drop=all \
+    --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
+    --mount="type=bind,src=$input,dst=/uat-input,ro=true" \
+    --mount="type=bind,src=$evidence,dst=/evidence,rw=true" \
+    "$image"
+}
+
+if [ "${1-}" = --inside ]; then
+  shift
+  inside_container "$@"
+else
+  host_run "$@"
+fi
