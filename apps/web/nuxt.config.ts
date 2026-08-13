@@ -38,6 +38,10 @@ export default defineNuxtConfig({
   devServer: {
     port: 3000,
   },
+
+  experimental: {
+    entryImportMap: false,
+  },
   compatibilityDate: '2026-08-01',
 
   nitro: {
