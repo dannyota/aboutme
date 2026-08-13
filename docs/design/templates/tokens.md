@@ -1,6 +1,6 @@
 # Template design tokens
 
-Status: **Draft v2** (2026-08-12). Not approved.
+Status: **Approved v2** (2026-08-12).
 
 The complete token set a template may control, who owns each token, and the
 accessibility floor every template satisfies regardless of what the user picks.

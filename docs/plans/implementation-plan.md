@@ -19,7 +19,7 @@ keep everything runnable on the laptop until the whole product works there.
 | P1 authentication             | Complete                                   | None                                            |
 | P1.1 authentication hardening | Complete                                   | None                                            |
 | P2A resume domain and store   | Complete                                   | None                                            |
-| P3 renderer lane              | Sanitizer and fonts landed; **active**     | Schema v2, renderer, pagination, presets        |
+| P3 renderer lane              | Schema v2, renderer, presets implemented   | Pagination, goldens, lint boundary, browser run |
 | P2B server lane               | T1–T11 implemented; **exit gate active**   | Fresh review, candidate CI and security scan    |
 | P9 HTTPS overlay              | Needed before authenticated browser checks | Small overlay lane, pulled in when P4 starts    |
 | PI infrastructure             | Adopted, not executed                      | Refresh after runtime phases; no cloud mutation |

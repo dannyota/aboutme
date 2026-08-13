@@ -20,7 +20,7 @@ graph LR
 | ---------- | --------------------------------------------------------------------------------------------- |
 | Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go         |
 | Go server  | Health, authentication, sessions, users, resume HTTP, private media, and request policy       |
-| Nuxt       | Landing/login/session UI, typed API transport, and licensed fonts                             |
+| Nuxt       | Landing/login/session UI, typed API transport, fonts, presets, and the pure resume renderer   |
 | PostgreSQL | Auth records, sessions, users, resume aggregates, idempotency records, and media cleanup jobs |
 | Media      | Private create-only filesystem or S3 objects behind validated server-owned keys               |
 
@@ -95,8 +95,10 @@ deterministic arbitrary input. Phase 2B calls the Go sanitizer before every
 resume write. Public-read and internal-print re-sanitizing remain owned by P5A
 and P7A.
 
-Twenty template preset JSON files and the licensed font catalog are committed.
-Their design contract remains draft, and the renderer has not landed.
+The web package contains the licensed font catalog, a pure continuous Vue
+renderer, and a generated registry for all 20 validated template presets.
+Pagination, deterministic HTML goldens, renderer-boundary lint, and the pinned
+browser screenshot harness remain Phase 3 work.
 
 ## Implemented private media boundary
 
@@ -123,6 +125,6 @@ orphan reconciliation.
 
 ## Not implemented
 
-Rendering, the editor, public publishing, Server-Sent Events, PDF and image
-rendering, privacy jobs, production infrastructure, staging, production
-deployment, and Flutter remain planned.
+Renderer pagination and browser goldens, the editor, public publishing,
+Server-Sent Events, PDF and image rendering, privacy workers, production
+infrastructure, staging, production deployment, and Flutter remain planned.

@@ -1,6 +1,6 @@
 # Geometry and preset boundaries
 
-Status: **Draft v2** (2026-08-12). Not approved.
+Status: **Approved v2** (2026-08-12).
 
 Defines spacing, fixed renderer geometry, link treatment, and the limits on what
 a preset may change.
