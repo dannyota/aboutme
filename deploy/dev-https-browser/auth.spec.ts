@@ -10,6 +10,7 @@ import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
+  isExpectedNegativeHTTPConsole,
 } from './network-policy';
 
 const ORIGIN = ALLOWED_ORIGIN;
@@ -64,7 +65,15 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
 
   const attachPageDiagnostics = (openedPage: Page): void => {
     openedPage.on('console', (message) => {
-      if (message.type() === 'error') consoleErrors += 1;
+      if (
+        message.type() === 'error'
+        && !isExpectedNegativeHTTPConsole(
+          message.text(),
+          message.location().url,
+        )
+      ) {
+        consoleErrors += 1;
+      }
     });
     openedPage.on('pageerror', () => {
       pageErrors += 1;

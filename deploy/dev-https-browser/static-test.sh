@@ -74,9 +74,9 @@ image)
   case ${FAKE_INSPECT_MODE:-good} in
   fail) exit 125 ;;
   mismatch-id)
-    image_id=sha256:2222222222222222222222222222222222222222222222222222222222222222
+    image_id=2222222222222222222222222222222222222222222222222222222222222222
     ;;
-  *) image_id=$FAKE_EXPECTED_IMAGE_ID ;;
+  *) image_id=${FAKE_EXPECTED_IMAGE_ID#sha256:} ;;
   esac
   contract=1
   base=$FAKE_EXPECTED_BASE
@@ -172,6 +172,10 @@ grep -Exq -- '--user=[1-9][0-9]*:[1-9][0-9]*' "$READABLE_LOG" ||
 grep -Fxq -- '--security-opt=no-new-privileges' "$READABLE_LOG" ||
   fail 'no-new-privileges is missing'
 grep -Fxq -- '--cap-drop=all' "$READABLE_LOG" || fail 'capability drop is missing'
+grep -Fxq -- '--cap-add=SYS_CHROOT' "$READABLE_LOG" ||
+  fail 'Chromium sandbox capability is missing'
+[ "$(grep -Ec '^--cap-add=' "$READABLE_LOG")" -eq 1 ] ||
+  fail 'runtime has an extra added capability'
 grep -Fxq -- "--mount=type=bind,src=$INPUT,dst=/uat-input,ro=true" "$READABLE_LOG" ||
   fail 'closed CA input mount is missing'
 grep -Fxq -- "--mount=type=bind,src=$EVIDENCE,dst=/evidence,rw=true" "$READABLE_LOG" ||
@@ -210,7 +214,12 @@ grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
 
 node --input-type=module - "$SOURCE/network-policy.ts" <<'NETWORK_POLICY_TEST'
 const policyPath = process.argv[2];
-const { ALLOWED_ORIGIN, isAllowedHTTPURL, isAllowedWebSocketURL } =
+const {
+  ALLOWED_ORIGIN,
+  isAllowedHTTPURL,
+  isAllowedWebSocketURL,
+  isExpectedNegativeHTTPConsole,
+} =
   await import(`file://${policyPath}`);
 const cases = [
   [ALLOWED_ORIGIN, 'https://localhost:20443'],
@@ -226,6 +235,26 @@ const cases = [
   [isAllowedWebSocketURL('wss://localhost:20444/socket'), false],
   [isAllowedWebSocketURL('wss://127.0.0.1:20443/socket'), false],
   [isAllowedWebSocketURL('wss://user:pass@localhost:20443/socket'), false],
+  [isExpectedNegativeHTTPConsole(
+    'Failed to load resource: the server responded with a status of 403 ()',
+    'https://localhost:20443/api/v1/auth/google/start?purpose=reauth',
+  ), true],
+  [isExpectedNegativeHTTPConsole(
+    'Failed to load resource: the server responded with a status of 401 ()',
+    'https://localhost:20443/api/v1/me',
+  ), true],
+  [isExpectedNegativeHTTPConsole(
+    'Failed to load resource: the server responded with a status of 500 ()',
+    'https://localhost:20443/api/v1/me',
+  ), false],
+  [isExpectedNegativeHTTPConsole(
+    'Failed to load resource: the server responded with a status of 401 ()',
+    'https://localhost:20443/api/v1/me?unexpected=1',
+  ), false],
+  [isExpectedNegativeHTTPConsole(
+    'Failed to load resource: the server responded with a status of 403 ()',
+    'https://example.invalid/api/v1/auth/google/start?purpose=reauth',
+  ), false],
 ];
 for (const [actual, expected] of cases) {
   if (actual !== expected) process.exit(1);

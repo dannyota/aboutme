@@ -4,12 +4,13 @@
 environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
-| Path                | Purpose                                               |
-| ------------------- | ----------------------------------------------------- |
-| `compose.yml`       | Podman Compose services and isolated networks         |
-| `server.Dockerfile` | Go server and embedded goose migration binaries       |
-| `web.Dockerfile`    | Nuxt production image                                 |
-| `caddy/Caddyfile`   | Current one-origin route table and client-IP boundary |
+| Path                 | Purpose                                               |
+| -------------------- | ----------------------------------------------------- |
+| `compose.yml`        | Podman Compose services and isolated networks         |
+| `server.Dockerfile`  | Go server and embedded goose migration binaries       |
+| `web.Dockerfile`     | Nuxt production image                                 |
+| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary |
+| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof  |
 
 AWS infrastructure has not landed.
 
@@ -19,11 +20,19 @@ Daily work uses `make dev-native` at `http://localhost:20080`. It starts native
 Go, Nuxt, and Caddy processes against the one shared PostgreSQL container. See
 the [native development runbook](../docs/runbooks/native-development.md).
 
+`make dev-https` runs the local authenticated-development stack at
+`https://localhost:20443`. It uses the shared `aboutme_dev` database, a
+deterministic local Google provider, and a project-local Caddy root. The
+`dev-https-browser/` image is pinned by digest and package versions. Its runner
+accepts only the verified local image ID, imports the root into a fresh NSS
+database, mounts only the root read-only and an empty evidence directory
+read-write, and runs with a read-only container root.
+
 `make dev` builds and starts the Compose deployment. Reserve it for local
 deployment smoke checks and self-hosting evaluation because it is heavier. The
-current Caddyfile is HTTP-only. It cannot produce authentication or P9 UAT
-evidence. The isolated HTTPS harness and its `uat-*` targets are planned but do
-not exist. See the [local UAT runbook](../docs/runbooks/local-uat.md).
+current Compose Caddyfile is HTTP-only. It cannot produce P9 UAT evidence. The
+isolated port-443 overlay and its `uat-*` targets are still planned. See the
+[local UAT runbook](../docs/runbooks/local-uat.md).
 
 ## Start the Compose deployment
 

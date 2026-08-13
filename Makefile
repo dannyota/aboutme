@@ -3,11 +3,22 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs dev-https-browser-image dev-https-auth-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
 WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
+DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser
+DEV_HTTPS_BROWSER_TAG := localhost/aboutme-dev-https-browser:local
+DEV_HTTPS_BROWSER_MANIFEST := .dev/native-https/browser-image.manifest
+DEV_HTTPS_BROWSER_SOURCES := \
+	deploy/dev-https-browser/Dockerfile \
+	deploy/dev-https-browser/package.json \
+	deploy/dev-https-browser/package-lock.json \
+	deploy/dev-https-browser/playwright.config.ts \
+	deploy/dev-https-browser/auth.spec.ts \
+	deploy/dev-https-browser/network-policy.ts \
+	deploy/dev-https-browser/run.sh
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "%-16s %s\n", $$1, $$2}'
@@ -26,7 +37,9 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 	bash scripts/check-tool-versions.sh $(ARGS)
 
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
-	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/test-s3.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash scripts/dev-https-test.sh --static
+	bash deploy/dev-https-browser/static-test.sh
 	scripts/test/ci-failure-propagation-test.sh
 	scripts/test/ci-lifecycle-test.sh
 	scripts/test/ci-scan-adversarial-test.sh
@@ -193,6 +206,104 @@ dev-native-status: ## Native dev stack liveness and ports; non-zero exit if anyt
 
 dev-native-logs: ## Tail native dev stack logs (make dev-native-logs ARGS="-f web")
 	bash scripts/dev-native.sh logs $(ARGS)
+
+dev-https: ## Native HTTPS auth harness at https://localhost:20443 against aboutme_dev
+	bash scripts/dev-https.sh up
+
+dev-https-down: ## Stop the native HTTPS harness and keep aboutme-test-db running
+	bash scripts/dev-https.sh down
+
+dev-https-status: ## Verify native HTTPS harness ownership, configuration, processes, and ports
+	bash scripts/dev-https.sh status
+
+dev-https-logs: ## Show redacted native HTTPS logs (make dev-https-logs ARGS="-f server")
+	bash scripts/dev-https.sh logs $(ARGS)
+
+dev-https-browser-image: dev-https-status ## Build and record the pinned trusted-browser image by immutable ID
+	@set -Eeuo pipefail; \
+	repo=$$(pwd -P); \
+	state="$$repo/.dev/native-https"; \
+	manifest="$$repo/$(DEV_HTTPS_BROWSER_MANIFEST)"; \
+	uid=$$(id -u); \
+	[ -d "$$state" ] && [ ! -L "$$state" ] || { echo 'dev-https-browser-image: invalid state directory' >&2; exit 1; }; \
+	[ "$$(realpath -e -- "$$state")" = "$$state" ] || { echo 'dev-https-browser-image: non-canonical state directory' >&2; exit 1; }; \
+	[ "$$(stat -c %u "$$state")" = "$$uid" ] && [ "$$(stat -c %a "$$state")" = 700 ] || { echo 'dev-https-browser-image: state directory ownership or mode mismatch' >&2; exit 1; }; \
+	if [[ -e "$$manifest" || -L "$$manifest" ]]; then \
+	  [ -f "$$manifest" ] && [ ! -L "$$manifest" ] && [ "$$(stat -c %u "$$manifest")" = "$$uid" ] && [ "$$(stat -c %a "$$manifest")" = 600 ] || { echo 'dev-https-browser-image: invalid existing image manifest' >&2; exit 1; }; \
+	  rm -- "$$manifest"; \
+	fi; \
+	source_hash() { \
+	  { for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
+	      [ -f "$$path" ] && [ ! -L "$$path" ] || return 1; \
+	      printf '%s\0' "$$path"; sha256sum -- "$$path"; \
+	    done; } | sha256sum | awk '{print $$1}'; \
+	}; \
+	source_before=$$(source_hash) || { echo 'dev-https-browser-image: cannot hash browser sources' >&2; exit 1; }; \
+	iid_file=$$(mktemp "$$state/.browser-image-iid.XXXXXX"); \
+	manifest_tmp=; \
+	trap 'rm -f -- "$$iid_file" "$${manifest_tmp:-}"' EXIT; \
+	podman build --tag '$(DEV_HTTPS_BROWSER_TAG)' --iidfile "$$iid_file" '$(DEV_HTTPS_BROWSER_CONTEXT)'; \
+	mapfile -t iid_lines <"$$iid_file"; \
+	[ "$${#iid_lines[@]}" -eq 1 ] || { echo 'dev-https-browser-image: image build returned an invalid IID record' >&2; exit 1; }; \
+	image_id=$${iid_lines[0]}; \
+	[[ $$image_id =~ ^sha256:[0-9a-f]{64}$$ ]] || { echo 'dev-https-browser-image: image build returned a mutable or malformed ID' >&2; exit 1; }; \
+	mapfile -t inspect_lines < <(podman image inspect --format '{{.Id}}' "$$image_id"); \
+	[ "$${#inspect_lines[@]}" -eq 1 ] || { echo 'dev-https-browser-image: local image identity mismatch' >&2; exit 1; }; \
+	inspected_id=$${inspect_lines[0]}; \
+	if [[ $$inspected_id =~ ^[0-9a-f]{64}$$ ]]; then inspected_id="sha256:$$inspected_id"; fi; \
+	[[ $$inspected_id =~ ^sha256:[0-9a-f]{64}$$ ]] && [ "$$inspected_id" = "$$image_id" ] || { echo 'dev-https-browser-image: local image identity mismatch' >&2; exit 1; }; \
+	source_after=$$(source_hash) || { echo 'dev-https-browser-image: cannot rehash browser sources' >&2; exit 1; }; \
+	[ "$$source_before" = "$$source_after" ] || { echo 'dev-https-browser-image: browser sources changed during build' >&2; exit 1; }; \
+	manifest_tmp=$$(mktemp "$$state/.browser-image-manifest.XXXXXX"); \
+	chmod 0600 "$$manifest_tmp"; \
+	printf 'image_id=%s\nsource_sha256=%s\n' "$$image_id" "$$source_after" >"$$manifest_tmp"; \
+	mv -- "$$manifest_tmp" "$$manifest"; \
+	manifest_tmp=; \
+	printf 'dev-https-browser-image: %s\n' "$$image_id"
+
+dev-https-auth-check: dev-https-status ## Run the trusted local Google auth proof and retain only bounded local evidence
+	@set -Eeuo pipefail; \
+	repo=$$(pwd -P); \
+	state="$$repo/.dev/native-https"; \
+	manifest="$$repo/$(DEV_HTTPS_BROWSER_MANIFEST)"; \
+	input="$$state/input"; \
+	evidence_root="$$state/evidence"; \
+	uid=$$(id -u); \
+	[ -d "$$state" ] && [ ! -L "$$state" ] && [ "$$(realpath -e -- "$$state")" = "$$state" ] || { echo 'dev-https-auth-check: invalid state directory' >&2; exit 1; }; \
+	[ "$$(stat -c %u "$$state")" = "$$uid" ] && [ "$$(stat -c %a "$$state")" = 700 ] || { echo 'dev-https-auth-check: state directory ownership or mode mismatch' >&2; exit 1; }; \
+	[ -f "$$manifest" ] && [ ! -L "$$manifest" ] && [ "$$(stat -c %u "$$manifest")" = "$$uid" ] && [ "$$(stat -c %a "$$manifest")" = 600 ] || { echo 'dev-https-auth-check: invalid browser image manifest' >&2; exit 1; }; \
+	mapfile -t manifest_lines <"$$manifest"; \
+	[ "$${#manifest_lines[@]}" -eq 2 ] || { echo 'dev-https-auth-check: malformed browser image manifest' >&2; exit 1; }; \
+	[[ $${manifest_lines[0]} =~ ^image_id=(sha256:[0-9a-f]{64})$$ ]] || { echo 'dev-https-auth-check: malformed browser image ID' >&2; exit 1; }; \
+	image_id=$${BASH_REMATCH[1]}; \
+	[[ $${manifest_lines[1]} =~ ^source_sha256=([0-9a-f]{64})$$ ]] || { echo 'dev-https-auth-check: malformed browser source hash' >&2; exit 1; }; \
+	recorded_source=$${BASH_REMATCH[1]}; \
+	current_source=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
+	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
+	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
+	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-auth-check: cannot hash browser sources' >&2; exit 1; }; \
+	[ "$$current_source" = "$$recorded_source" ] || { echo 'dev-https-auth-check: browser sources changed after image build' >&2; exit 1; }; \
+	[ -d "$$input" ] && [ ! -L "$$input" ] && [ "$$(realpath -e -- "$$input")" = "$$input" ] || { echo 'dev-https-auth-check: invalid CA input directory' >&2; exit 1; }; \
+	[ "$$(stat -c %u "$$input")" = "$$uid" ] && [ "$$(stat -c %a "$$input")" = 700 ] || { echo 'dev-https-auth-check: CA input ownership or mode mismatch' >&2; exit 1; }; \
+	mapfile -t input_entries < <(find "$$input" -mindepth 1 -maxdepth 1 -printf '%f\n'); \
+	[ "$${#input_entries[@]}" -eq 1 ] && [ "$${input_entries[0]}" = caddy-root.crt ] || { echo 'dev-https-auth-check: CA input must contain one root' >&2; exit 1; }; \
+	root="$$input/caddy-root.crt"; \
+	[ -f "$$root" ] && [ ! -L "$$root" ] && [ "$$(stat -c %u "$$root")" = "$$uid" ] && [ "$$(stat -c %a "$$root")" = 600 ] || { echo 'dev-https-auth-check: invalid Caddy root' >&2; exit 1; }; \
+	if [[ -e "$$evidence_root" || -L "$$evidence_root" ]]; then \
+	  [ -d "$$evidence_root" ] && [ ! -L "$$evidence_root" ] && [ "$$(realpath -e -- "$$evidence_root")" = "$$evidence_root" ] || { echo 'dev-https-auth-check: invalid evidence root' >&2; exit 1; }; \
+	  [ "$$(stat -c %u "$$evidence_root")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence_root")" = 700 ] || { echo 'dev-https-auth-check: evidence root ownership or mode mismatch' >&2; exit 1; }; \
+	else \
+	  install -d -m 0700 "$$evidence_root"; \
+	fi; \
+	evidence=$$(mktemp -d "$$evidence_root/google-auth.XXXXXX"); \
+	[ "$$(stat -c %u "$$evidence")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence")" = 700 ] || { echo 'dev-https-auth-check: evidence directory ownership or mode mismatch' >&2; exit 1; }; \
+	deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence"; \
+	current_source_after=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
+	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
+	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
+	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-auth-check: cannot rehash browser sources' >&2; exit 1; }; \
+	[ "$$current_source_after" = "$$recorded_source" ] || { echo 'dev-https-auth-check: browser sources changed during authentication check' >&2; exit 1; }; \
+	printf 'dev-https-auth-check evidence: %s\n' "$$evidence"
 
 test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the `aboutme` test DB and the `aboutme_dev` native-dev DB; 512 MB cap). One DB container total is the rule — never start a second
 	@if ! running_containers="$$(podman ps --format '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}')"; then \

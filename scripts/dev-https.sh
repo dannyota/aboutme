@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Native HTTPS authentication harness on https://localhost:20443.
 set -Eeuo pipefail
+umask 077
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 readonly ROOT=$PWD
@@ -16,6 +17,7 @@ readonly GOOGLE_ISSUER_URL="http://127.0.0.1:${MOCK_PORT}/google"
 readonly DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
 readonly LOG_LEVEL="${ABOUTME_DEV_LOG_LEVEL:-info}"
 
+readonly DEV_DIR=$ROOT/.dev
 readonly STATE_DIR=$ROOT/.dev/native-https
 readonly RUN_DIR=$STATE_DIR/run
 readonly LOG_DIR=$STATE_DIR/log
@@ -62,6 +64,96 @@ logfile() { printf '%s/%s.log' "$LOG_DIR" "$1"; }
 identity_file() { printf '%s/%s.identity' "$RUN_DIR" "$1"; }
 launch_file() { printf '%s/%s.launch' "$RUN_DIR" "$1"; }
 service_env_file() { printf '%s/%s.env' "$RUN_DIR" "$1"; }
+
+validate_existing_state_node() {
+  local path=$1 kind=$2 mode owner canonical
+  [ ! -L "$path" ] || die "state path is a symlink: $path"
+  [ -e "$path" ] || die "state path disappeared during validation: $path"
+  case $kind in
+  directory) [ -d "$path" ] || die "state path is not a directory: $path" ;;
+  regular) [ -f "$path" ] || die "state path is not a regular file: $path" ;;
+  any)
+    [ -d "$path" ] || [ -f "$path" ] || die "state path has an unsupported file type: $path"
+    ;;
+  *) die "invalid state path validation kind: $kind" ;;
+  esac
+  canonical=$(readlink -f -- "$path" 2>/dev/null) || die "state path cannot be resolved safely: $path"
+  [ "$canonical" = "$path" ] || die "state path is noncanonical: $path"
+  owner=$(stat -c '%u' -- "$path" 2>/dev/null) || die "state path ownership cannot be read: $path"
+  [ "$owner" = "$EUID" ] || die "state path is not owned by uid $EUID: $path"
+  mode=$(stat -c '%a' -- "$path" 2>/dev/null) || die "state path mode cannot be read: $path"
+  [[ $mode =~ ^[0-7]{3,4}$ ]] || die "state path has an invalid mode: $path"
+  (( (8#$mode & 8#022) == 0 )) || die "state path is group- or other-writable: $path"
+}
+
+validate_state_path_integrity() {
+  local path unsafe
+  if [ -e "$DEV_DIR" ] || [ -L "$DEV_DIR" ]; then
+    validate_existing_state_node "$DEV_DIR" directory
+  fi
+  if [ -e "$STATE_DIR" ] || [ -L "$STATE_DIR" ]; then
+    validate_existing_state_node "$STATE_DIR" directory
+    [ "$(stat -c '%a' -- "$STATE_DIR")" = 700 ] || die "state path must have mode 700: $STATE_DIR"
+  else
+    return 0
+  fi
+  unsafe=$(find -P "$STATE_DIR" -xdev -mindepth 1 \
+    \( -type l -o ! -uid "$EUID" -o -perm /022 \
+    -o \( ! -type d -a ! -type f \) \) -print -quit 2>/dev/null) || \
+    die "state path descendants cannot be inspected safely: $STATE_DIR"
+  [ -z "$unsafe" ] || die "state path descendant is unsafe: $unsafe"
+  unsafe=$(find -P "$STATE_DIR" -xdev -type f -links +1 -print -quit 2>/dev/null) || \
+    die "state path file links cannot be inspected safely: $STATE_DIR"
+  [ -z "$unsafe" ] || die "state path regular file has multiple hard links: $unsafe"
+  unsafe=$(find -P "$STATE_DIR" -xdev -type d ! -path "$CADDY_DIR" \
+    ! -perm 0700 -print -quit 2>/dev/null) || \
+    die "state path directory modes cannot be inspected safely: $STATE_DIR"
+  [ -z "$unsafe" ] || die "state path directory must have mode 700: $unsafe"
+  if [ -d "$BIN_DIR" ]; then
+    unsafe=$(find -P "$BIN_DIR" -xdev -type f ! -perm 0755 -print -quit 2>/dev/null) || \
+      die "state path binary modes cannot be inspected safely: $BIN_DIR"
+    [ -z "$unsafe" ] || die "state path binary must have mode 755: $unsafe"
+  fi
+  unsafe=$(find -P "$STATE_DIR" -xdev -path "$BIN_DIR" -prune -o \
+    -type f ! -perm 0600 -print -quit 2>/dev/null) || \
+    die "state path file modes cannot be inspected safely: $STATE_DIR"
+  [ -z "$unsafe" ] || die "state path sensitive file must have mode 600: $unsafe"
+  for path in "$RUN_DIR" "$LOG_DIR" "$BIN_DIR" "$MEDIA_DIR" "$INPUT_DIR" \
+    "$CADDY_DIR/config" "$CADDY_DIR/data"; do
+    if [ -e "$path" ] || [ -L "$path" ]; then
+      validate_existing_state_node "$path" directory
+      [ "$(stat -c '%a' -- "$path")" = 700 ] || die "state path must have mode 700: $path"
+    fi
+  done
+  if [ -e "$CADDY_DIR" ] || [ -L "$CADDY_DIR" ]; then
+    validate_existing_state_node "$CADDY_DIR" directory
+    case $(stat -c '%a' -- "$CADDY_DIR") in
+    700 | 755) ;;
+    *) die "state path must have mode 700 (or legacy safe mode 755): $CADDY_DIR" ;;
+    esac
+  fi
+}
+
+prepare_state_directories() {
+  local path
+  if [ ! -e "$DEV_DIR" ]; then
+    install -d -m 0755 -- "$DEV_DIR"
+  fi
+  validate_existing_state_node "$DEV_DIR" directory
+  if [ ! -e "$STATE_DIR" ]; then
+    install -d -m 0700 -- "$STATE_DIR"
+  fi
+  validate_existing_state_node "$STATE_DIR" directory
+  for path in "$RUN_DIR" "$LOG_DIR" "$BIN_DIR" "$MEDIA_DIR" "$CADDY_DIR" \
+    "$CADDY_DIR/config" "$CADDY_DIR/data" "$INPUT_DIR"; do
+    if [ ! -e "$path" ]; then
+      install -d -m 0700 -- "$path"
+    fi
+    validate_existing_state_node "$path" directory
+    chmod 0700 -- "$path"
+  done
+  validate_state_path_integrity
+}
 
 port_of() {
   case $1 in
@@ -295,6 +387,34 @@ remove_absent_prepared_launch() {
   rm -f -- "$file" "$identity" "$launch" "$environment"
 }
 
+validate_absent_process_record() {
+  local name=$1 record=$2 record_hash pid sid pgid members
+  validate_process_record "$name" "$record" || return 1
+  record_hash=$(sha256_file "$record") || return 1
+  pid=$(identity_field "$record" pid) || return 1
+  sid=$(identity_field "$record" sid) || return 1
+  pgid=$(identity_field "$record" pgid) || return 1
+  ! kill -0 "$pid" 2>/dev/null || return 1
+  members=$(group_members "$pgid" "$sid") || return 1
+  [ -z "$members" ] || return 1
+  validate_process_record "$name" "$record" || return 1
+  [ "$(sha256_file "$record")" = "$record_hash" ] || return 1
+  [ "$(read_pid "$name")" = "$pid" ] || return 1
+  ! kill -0 "$pid" 2>/dev/null || return 1
+  members=$(group_members "$pgid" "$sid") || return 1
+  [ -z "$members" ]
+}
+
+remove_absent_process_record() {
+  local name=$1 record=$2 file identity launch environment
+  file=$(pidfile "$name")
+  identity=$(identity_file "$name")
+  launch=$(launch_file "$name")
+  environment=$(service_env_file "$name")
+  validate_absent_process_record "$name" "$record" || return 1
+  rm -f -- "$file" "$identity" "$launch" "$environment"
+}
+
 validate_service_identity_from() {
   local name=$1 require_leader=$2 file=$3 pid starttime sid pgid expected_executable expected_cmdline token actual_sid actual_pgid members member
   validate_process_record "$name" "$file" || return 1
@@ -396,6 +516,8 @@ replace_once() {
 generate_caddyfile() {
   local content
   content=$(<"$CADDYFILE_SRC") || return 1
+  content=$(replace_once "$content" $'\tadmin off' \
+    $'\tadmin off\n\tskip_install_trust\n\tauto_https disable_redirects') || return 1
   content=$(replace_once "$content" ':80 {' \
     "https://localhost:${CADDY_PORT} {"$'\n\tbind 127.0.0.1\n\ttls internal') || return 1
   content=$(replace_once "$content" 'reverse_proxy server:8080 {' \
@@ -409,7 +531,7 @@ generate_caddyfile() {
 
 require_tools() {
   local tool
-  for tool in podman go npm caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv; do
+  for tool in podman go npm caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv find; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
   done
 }
@@ -672,6 +794,12 @@ stop_owned_service() {
     evidence=$identity
   elif [ "$rollback" = 1 ] && validate_service_identity_from "$name" 1 "$launch"; then
     evidence=$launch
+  elif validate_absent_process_record "$name" "$identity"; then
+    remove_absent_process_record "$name" "$identity"
+    return
+  elif validate_absent_process_record "$name" "$launch"; then
+    remove_absent_process_record "$name" "$launch"
+    return
   elif [ "$rollback" = 1 ] && validate_prepared_launch_service "$name" 1; then
     evidence=$launch
     evidence_kind=prepared
@@ -751,8 +879,11 @@ build_and_migrate() {
   (
     cd "$ROOT/apps/server"
     go build -o "$BIN_DIR/migrate" ./cmd/migrate
+    chmod 0755 -- "$BIN_DIR/migrate"
     go build -o "$BIN_DIR/mock-oauth" ./cmd/mock-oauth
+    chmod 0755 -- "$BIN_DIR/mock-oauth"
     go build -o "$BIN_DIR/server" ./cmd/server
+    chmod 0755 -- "$BIN_DIR/server"
     env DATABASE_URL="$DATABASE_URL" "$BIN_DIR/migrate"
   )
 }
@@ -871,6 +1002,7 @@ start_stack() {
 cmd_up() {
   [ -z "${ABOUTME_DEV_DATABASE_URL+x}" ] || die "ABOUTME_DEV_DATABASE_URL is not permitted; the HTTPS harness uses only 127.0.0.1:20432/aboutme_dev"
   require_tools
+  validate_state_path_integrity
   reject_http_stack
   if any_pidfile; then
     assert_owned_complete_state
@@ -879,8 +1011,7 @@ cmd_up() {
     return 0
   fi
   preflight_new_stack
-  install -d -m 0700 "$STATE_DIR" "$RUN_DIR" "$LOG_DIR" "$BIN_DIR" \
-    "$MEDIA_DIR" "$CADDY_DIR/config" "$CADDY_DIR/data" "$INPUT_DIR"
+  prepare_state_directories
   STARTUP_ARMED=1
   start_stack
   STARTUP_ARMED=0
@@ -889,18 +1020,26 @@ cmd_up() {
 }
 
 validate_down_targets() {
-  local name file pid
+  local name file identity launch pid
   for name in "${STOP_ORDER[@]}"; do
     file=$(pidfile "$name")
     [ -e "$file" ] || continue
     pid=$(read_pid "$name") || die "$name has an invalid PID file; no process was signalled"
-    validate_service_identity "$name" 1 || die "$name pid $pid does not match its exact owned process identity; no process was signalled and ownership evidence was preserved"
+    identity=$(identity_file "$name")
+    launch=$(launch_file "$name")
+    if validate_service_identity "$name" 1 \
+      || validate_absent_process_record "$name" "$identity" \
+      || validate_absent_process_record "$name" "$launch"; then
+      continue
+    fi
+    die "$name pid $pid does not match its exact owned process identity; no process was signalled and ownership evidence was preserved"
   done
   return 0
 }
 
 cmd_down() {
   local name
+  validate_state_path_integrity
   validate_down_targets
   for name in "${STOP_ORDER[@]}"; do
     stop_owned_service "$name"
@@ -915,6 +1054,7 @@ probe_https() {
 
 cmd_status() {
   local name pid port state listening probe_status failed=0 mode generated
+  validate_state_path_integrity
   printf '%-12s %-8s %-10s %-6s %s\n' SERVICE PID STATE PORT LISTENING
   for name in "${SERVICES[@]}"; do
     port=$(port_of "$name")
@@ -983,6 +1123,7 @@ redact_logs() {
 cmd_logs() {
   local follow=0 arg name
   local -a names=() files=()
+  validate_state_path_integrity
   for arg in "$@"; do
     case $arg in
     -f | --follow) follow=1 ;;

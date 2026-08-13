@@ -84,7 +84,7 @@ consumes Tasks 2-4. Task 6 is a serialized integration-owner window.
   must equal `PublicOrigin + /__uat/oauth/<provider>/authorize`, and token URLs
   must remain loopback.
 
-- [ ] **Step 1: Write configuration RED tests**
+- [x] **Step 1: Write configuration RED tests**
 
 Add literal table cases proving: dev accepts `http://127.0.0.1:20442/google`;
 staging/prod reject any override; Google and LinkedIn reject non-loopback
@@ -103,7 +103,7 @@ func TestLoad_DevGoogleOIDCIssuerLoopback(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -113,7 +113,7 @@ cd apps/server && go test ./internal/config -run 'ProviderEndpoint|OIDCIssuer' -
 
 Expected: compile failure because the five config fields do not exist.
 
-- [ ] **Step 3: Implement closed endpoint validation**
+- [x] **Step 3: Implement closed endpoint validation**
 
 Add one helper returning a value object. Parse with `url.Parse`, reject user
 info, query, fragment, missing port, non-loopback host, and unexpected path.
@@ -132,7 +132,7 @@ func loadProviderEndpoints(
 ) (providerEndpoints, error)
 ```
 
-- [ ] **Step 4: Write and verify auth wiring RED/GREEN**
+- [x] **Step 4: Write and verify auth wiring RED/GREEN**
 
 Add `uat_endpoints_test.go` cases that construct `auth.NewService`, drive Google
 discovery through a local server, and prove GitHub uses its three separate URLs.
@@ -163,7 +163,7 @@ cd apps/server && go test ./internal/config ./internal/auth -count=1
 
 Expected: both commands pass.
 
-- [ ] **Step 5: Format and hand off**
+- [x] **Step 5: Format and hand off**
 
 Run `gofmt` on owned Go files and report RED/GREEN output, changed paths, and
 the exact endpoint grammar. The integration owner inspects, stages only these
@@ -192,7 +192,7 @@ paths, runs staged gitleaks, and commits
 - Fixed account: subject `uat-google-001`, verified email
   `developer@example.invalid`, display name `Development User`.
 
-- [ ] **Step 1: Write protocol RED tests**
+- [x] **Step 1: Write protocol RED tests**
 
 Test the complete real handler: exact callback/client/response type, state,
 nonce, PKCE S256, one-use code, token redirect equality, issuer, audience,
@@ -210,7 +210,7 @@ func TestGoogleFlowConsumesCodeOnce(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -220,7 +220,7 @@ cd apps/server && go test ./internal/uatmock ./cmd/mock-oauth -count=1
 
 Expected: package-not-found failure.
 
-- [ ] **Step 3: Implement minimal Google flow**
+- [x] **Step 3: Implement minimal Google flow**
 
 Use an in-memory mutex-protected code map and an ephemeral RSA-2048 key. The
 authorization GET renders an accessible form; POST validates the request, stores
@@ -237,7 +237,7 @@ type Config struct {
 }
 ```
 
-- [ ] **Step 4: Add command boundary and GREEN**
+- [x] **Step 4: Add command boundary and GREEN**
 
 The command accepts only `LISTEN_HOST=127.0.0.1`, `PORT=20442`, the exact five
 mock values supplied by the lifecycle, and shuts down on SIGINT/SIGTERM.
@@ -251,7 +251,7 @@ cd apps/server && go test ./internal/uatmock ./cmd/mock-oauth -race -count=1
 
 Expected: pass without retries or external network.
 
-- [ ] **Step 5: Format and hand off**
+- [x] **Step 5: Format and hand off**
 
 Run `gofmt`, scan owned files for trailing whitespace and real credentials, and
 report RED/GREEN evidence. The owner commits
@@ -270,7 +270,7 @@ report RED/GREEN evidence. The owner commits
 - Add only loopback HTTPS current-page + exact same-origin
   `/__uat/oauth/<provider>/authorize` acceptance.
 
-- [ ] **Step 1: Write RED cases**
+- [x] **Step 1: Write RED cases**
 
 Mount the real component at `https://localhost:20443` and return the same-origin
 Google mock URL. Expect top-level navigation. Add literal denials for cross
@@ -289,7 +289,7 @@ it("accepts only the same-origin loopback HTTPS mock path", async () => {
 });
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -299,7 +299,7 @@ cd apps/web && npx vitest run test/sessions-privileged-start-adversarial.test.ts
 
 Expected: the same-origin HTTPS case rejects `invalid OAuth authorize URL`.
 
-- [ ] **Step 3: Implement and verify GREEN**
+- [x] **Step 3: Implement and verify GREEN**
 
 Accept the mock only when both candidate and current URLs use `https:`, the
 current hostname is loopback, origins are byte-equal, and pathname equals
@@ -315,7 +315,7 @@ cd apps/web && npx eslint app/pages/app/settings/sessions.vue test/sessions-priv
 
 Expected: pass.
 
-- [ ] **Step 4: Hand off**
+- [x] **Step 4: Hand off**
 
 Report the negative matrix and output. The owner commits
 `fix(web): allow trusted local HTTPS OAuth` after staged gitleaks.
@@ -334,7 +334,7 @@ Report the negative matrix and output. The owner commits
   `caddy`.
 - Exported CA: `.dev/native-https/input/caddy-root.crt`, mode `0600`.
 
-- [ ] **Step 1: Write lifecycle RED tests**
+- [x] **Step 1: Write lifecycle RED tests**
 
 Use a temporary repository plus fake `podman`, `go`, `npm`, `caddy`, `curl`,
 `ss`, and `setsid`. Execute the script, not source-text grep. Prove fixed ports,
@@ -342,7 +342,7 @@ foreign-listener rejection, active HTTP-stack rejection, exact stop order, no
 foreign kill/removal, no sudo/sysctl, no secret output, config-change rejection,
 CA mode, and idempotent owned-process handling.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 Run:
 
@@ -352,7 +352,7 @@ bash scripts/dev-https-test.sh --static
 
 Expected: missing-script failure before production implementation.
 
-- [ ] **Step 3: Implement lifecycle**
+- [x] **Step 3: Implement lifecycle**
 
 Reuse the established PID/session-leader checks from `dev-native.sh` without
 changing that script. Build `mock-oauth`, `server`, and `migrate`; start with
@@ -360,7 +360,7 @@ the fixed fake credentials and Google issuer; run Nuxt on 20440; generate a
 Caddyfile from the deployed route table with `tls internal` and the mock route.
 Verify each textual substitution occurs exactly once.
 
-- [ ] **Step 4: Verify GREEN and real static routing**
+- [x] **Step 4: Verify GREEN and real static routing**
 
 Run:
 
@@ -372,7 +372,7 @@ cd apps/server && go test ./internal/routetable -count=1
 
 Expected: pass. Do not start live services in this task.
 
-- [ ] **Step 5: Hand off**
+- [x] **Step 5: Hand off**
 
 Report exact destructive targets and recovery diagnostics. The owner commits
 `feat(dev): add native HTTPS lifecycle` after staged gitleaks.
@@ -397,14 +397,14 @@ Report exact destructive targets and recovery diagnostics. The owner commits
 - Runtime mounts: `/uat-input:ro` and `/evidence:rw`; base URL
   `https://localhost:20443`.
 
-- [ ] **Step 1: Create dependency lock and RED browser test**
+- [x] **Step 1: Create dependency lock and RED browser test**
 
 Create a minimal private Node package with only `@playwright/test: 1.62.1`.
 Generate its lockfile with `npm install --package-lock-only --ignore-scripts`.
 Write `auth.spec.ts` for the ten design steps and first run it against the
 untrusted origin to record certificate failure.
 
-- [ ] **Step 2: Write static boundary RED**
+- [x] **Step 2: Write static boundary RED**
 
 `static-test.sh` builds in a temporary context and inspects the resulting image
 and a fake-Podman call log. It proves the base digest, exact NSS package,
@@ -419,7 +419,7 @@ bash deploy/dev-https-browser/static-test.sh
 
 Expected: fail before Dockerfile and runner exist.
 
-- [ ] **Step 3: Implement trust and browser flow**
+- [x] **Step 3: Implement trust and browser flow**
 
 `run.sh` sets `HOME=/tmp/home`, creates an empty NSS database, imports
 `/uat-input/caddy-root.crt`, verifies it with `certutil -L`, then runs
@@ -427,7 +427,7 @@ Playwright. Block every browser request whose origin is not
 `https://localhost:20443`. Inspect cookie attributes without attaching values;
 disable trace/video and keep failures free of token bodies.
 
-- [ ] **Step 4: Verify static GREEN**
+- [x] **Step 4: Verify static GREEN**
 
 Run:
 
@@ -438,7 +438,7 @@ bash deploy/dev-https-browser/static-test.sh
 
 Expected: pass. The live authentication flow waits for Task 6 integration.
 
-- [ ] **Step 5: Hand off**
+- [x] **Step 5: Hand off**
 
 Report the image ID, package version, mount/network inspection, and test output.
 The owner commits `test(auth): add trusted HTTPS browser proof` after staged
@@ -461,7 +461,7 @@ gitleaks.
   `dev-https-logs`, `dev-https-browser-image`, and `dev-https-auth-check`.
 - `operational-test` runs only syntax/static checks; live HTTPS stays local.
 
-- [ ] **Step 1: Add Make safety RED cases**
+- [x] **Step 1: Add Make safety RED cases**
 
 Execute the copied Makefile with fake tools. Prove every target delegates to the
 exact harness command, a failed preflight causes no build/process/container
@@ -475,14 +475,14 @@ bash scripts/test/makefile-safety-test.sh
 
 Expected: fail because the targets do not exist.
 
-- [ ] **Step 2: Wire Make and documentation**
+- [x] **Step 2: Wire Make and documentation**
 
 Add the six phony targets and register syntax/static tests in
 `operational-test`. Document `https://localhost:20443`, the shared-DB
 precondition, exact start/status/check/down commands, ignored evidence, and the
 fact that port-443 P9 UAT remains pending.
 
-- [ ] **Step 3: Run integrated static gates**
+- [x] **Step 3: Run integrated static gates**
 
 Run:
 
@@ -495,7 +495,7 @@ make web-lint web-typecheck web-test web-build
 
 Expected: pass.
 
-- [ ] **Step 4: Run live HTTPS authentication proof**
+- [x] **Step 4: Run live HTTPS authentication proof**
 
 Confirm no heavy worker is running, then run:
 
@@ -511,7 +511,7 @@ make dev-https-down
 Expected: the browser proof passes once with no retry; teardown leaves ports
 20440-20443 free and leaves `aboutme-test-db` running.
 
-- [ ] **Step 5: Fresh review and owner commit**
+- [x] **Step 5: Fresh review and owner commit**
 
 Dispatch one fresh non-author reviewer. It must name TLS trust, provider
 endpoint isolation, OAuth state/nonce/PKCE/code consumption, session cookie

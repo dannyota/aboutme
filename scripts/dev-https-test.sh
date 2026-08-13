@@ -2,6 +2,7 @@
 # Hermetic lifecycle contract tests for scripts/dev-https.sh. The production
 # script runs only inside temporary repository fixtures with controlled tools.
 set -Eeuo pipefail
+umask 077
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 readonly SOURCE_ROOT=$PWD
@@ -70,7 +71,8 @@ server)
 web) printf 'service:web\n' >>"$FAKE_EFFECTS" ;;
 caddy)
   printf 'service:caddy\n' >>"$FAKE_EFFECTS"
-  install -d -m 0700 "$XDG_DATA_HOME/caddy/pki/authorities/local"
+  install -d -m 0700 "$XDG_DATA_HOME/caddy" "$XDG_DATA_HOME/caddy/pki" \
+    "$XDG_DATA_HOME/caddy/pki/authorities" "$XDG_DATA_HOME/caddy/pki/authorities/local"
   printf '%s\n' 'fake local root certificate' >"$XDG_DATA_HOME/caddy/pki/authorities/local/root.crt"
   ;;
 esac
@@ -103,6 +105,12 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 [ -n "$out" ] || exit 64
+name=${out##*/}
+if [ "${FAKE_GO_FAIL_ONCE-}" = "$name" ] && [ ! -e "$FAKE_GO_FAIL_MARKER" ]; then
+  : >"$FAKE_GO_FAIL_MARKER"
+  printf 'go-build-failed:%s:%s\n' "$name" "$package" >>"$FAKE_MUTATIONS"
+  exit 70
+fi
 mkdir -p "$(dirname "$out")"
 cat >"$out" <<'INNER'
 #!/usr/bin/env bash
@@ -114,7 +122,7 @@ if [ "$name" = migrate ]; then
 fi
 exec fake-service "$name"
 INNER
-chmod 0700 "$out"
+  chmod 0700 "$out"
 printf 'go-build:%s:%s\n' "${out##*/}" "$package" >>"$FAKE_MUTATIONS"
 EOF
 
@@ -140,6 +148,8 @@ count() { grep -Foc -- "$1" "$config"; }
 [ "$(count 'https://localhost:20443 {')" = 1 ]
 [ "$(count 'bind 127.0.0.1')" = 1 ]
 [ "$(count 'tls internal')" = 1 ]
+[ "$(count 'skip_install_trust')" = 1 ]
+[ "$(count 'auto_https disable_redirects')" = 1 ]
 [ "$(count 'reverse_proxy 127.0.0.1:20441 {')" = 1 ]
 [ "$(count 'reverse_proxy 127.0.0.1:20440')" = 1 ]
 [ "$(count '@uat_google_authorize path /__uat/oauth/google/authorize')" = 1 ]
@@ -276,6 +286,7 @@ fixture_env() {
   export FAKE_FOREIGN_PORTS=$fixture/foreign-ports
   export FAKE_PODMAN_PS=$fixture/podman-ps
   export DEV_HTTPS_PID_AUDIT_FILE=$fixture/all-pids
+  export FAKE_GO_FAIL_MARKER=$fixture/go-fail-marker
   export DEV_HTTPS_STOP_TERM_ATTEMPTS=5
   export DEV_HTTPS_STOP_KILL_ATTEMPTS=20
 }
@@ -535,7 +546,8 @@ run_foreign_ownership_down_check() (
   trap 'cleanup_fixture "$fixture"' EXIT
   fixture_env "$fixture"
   cd "$fixture/repo"
-  mkdir -p .dev/native-https/run
+  install -d -m 0755 .dev
+  install -d -m 0700 .dev/native-https .dev/native-https/run
   /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign .dev/native-https/run/server.pid
   for _ in $(seq 1 50); do [ -s .dev/native-https/run/server.pid ] && break; sleep 0.02; done
   foreign_pid=$(<.dev/native-https/run/server.pid)
@@ -735,6 +747,160 @@ run_immediate_precompletion_exit_rollback_check() (
   done
 )
 
+run_absent_completed_launch_cleanup_check() (
+  local fixture output pid service
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "setup up failed: $output"
+  pid=$(<.dev/native-https/run/caddy.pid)
+  kill -TERM -- "-$pid"
+  for _ in $(seq 1 100); do
+    ! kill -0 "$pid" 2>/dev/null && break
+    sleep 0.02
+  done
+  ! kill -0 "$pid" 2>/dev/null || fail 'completed-launch fixture did not exit'
+  rm -- .dev/native-https/run/caddy.identity
+  output=$(bash scripts/dev-https.sh down 2>&1) || \
+    fail "down could not clean an absent completed launch: $output"
+  for service in mock-oauth server web caddy; do
+    [ ! -e ".dev/native-https/run/$service.pid" ] || fail "absent launch cleanup retained $service PID"
+    [ ! -e ".dev/native-https/run/$service.identity" ] || fail "absent launch cleanup retained $service identity"
+    [ ! -e ".dev/native-https/run/$service.launch" ] || fail "absent launch cleanup retained $service launch evidence"
+    [ ! -e ".dev/native-https/run/$service.env" ] || fail "absent launch cleanup retained $service environment"
+  done
+)
+
+run_state_path_integrity_checks() (
+  local fixture output sentinel outside
+
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  outside=$fixture/outside-state
+  install -d -m 0700 "$outside"
+  printf '%s\n' untouched >"$outside/sentinel"
+  mkdir -p .dev
+  ln -s "$outside" .dev/native-https
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a redirected state root'
+  fi
+  assert_contains "$output" 'state path'
+  [ "$(<"$outside/sentinel")" = untouched ] || fail 'redirected state root changed outside data'
+  [ "$(find "$outside" -mindepth 1 -maxdepth 1 -printf '%f\n')" = sentinel ] || \
+    fail 'redirected state root wrote outside state'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'redirected state root performed a mutation'
+  cleanup_fixture "$fixture"
+  trap - EXIT
+  hash -r
+
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  install -d -m 0755 .dev
+  install -d -m 0700 .dev/native-https .dev/native-https/run
+  sentinel=$fixture/outside-env
+  printf '%s\n' untouched >"$sentinel"
+  chmod 0600 "$sentinel"
+  ln -s "$sentinel" .dev/native-https/run/server.env
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a redirected owned file'
+  fi
+  assert_contains "$output" 'state path'
+  [ "$(<"$sentinel")" = untouched ] || fail 'redirected owned file changed outside data'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'redirected owned file performed a mutation'
+  cleanup_fixture "$fixture"
+  trap - EXIT
+  hash -r
+
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  install -d -m 0755 .dev
+  install -d -m 0700 .dev/native-https
+  install -d -m 0770 .dev/native-https/run
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a group-writable owned directory'
+  fi
+  assert_contains "$output" 'state path'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'unsafe state mode performed a mutation'
+  cleanup_fixture "$fixture"
+  trap - EXIT
+  hash -r
+
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  install -d -m 0755 .dev
+  install -d -m 0700 .dev/native-https .dev/native-https/run
+  printf '%s\n' harmless >.dev/native-https/run/server.env
+  chmod 0644 .dev/native-https/run/server.env
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a world-readable sensitive state file'
+  fi
+  assert_contains "$output" 'state path'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'unsafe state file mode performed a mutation'
+  cleanup_fixture "$fixture"
+  trap - EXIT
+  hash -r
+
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  install -d -m 0755 .dev
+  install -d -m 0700 .dev/native-https .dev/native-https/run
+  sentinel=$fixture/outside-hardlink
+  printf '%s\n' untouched >"$sentinel"
+  chmod 0600 "$sentinel"
+  ln "$sentinel" .dev/native-https/run/server.env
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a hard-linked owned state file'
+  fi
+  assert_contains "$output" 'state path'
+  [ "$(<"$sentinel")" = untouched ] || fail 'hard-linked state file changed outside data'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'hard-linked state file performed a mutation'
+  cleanup_fixture "$fixture"
+  trap - EXIT
+  hash -r
+
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  install -d -m 0755 .dev
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "safe 0755 .dev prevented up: $output"
+  [ "$(stat -c '%a' .dev)" = 755 ] || fail 'up changed the shared .dev mode'
+  for outside in .dev/native-https .dev/native-https/run .dev/native-https/log \
+    .dev/native-https/bin .dev/native-https/media .dev/native-https/caddy \
+    .dev/native-https/caddy/config .dev/native-https/caddy/data .dev/native-https/input; do
+    [ "$(stat -c '%a' "$outside")" = 700 ] || fail "$outside was not created with mode 700"
+  done
+  output=$(bash scripts/dev-https.sh down 2>&1) || fail "safe state paths prevented down: $output"
+)
+
+run_failed_build_retry_check() (
+  local fixture output
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_GO_FAIL_ONCE=mock-oauth
+  cd "$fixture/repo"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted an injected mock-oauth build failure'
+  fi
+  assert_contains "$(<"$FAKE_MUTATIONS")" 'go-build-failed:mock-oauth:./cmd/mock-oauth'
+  [ "$(stat -c '%a' .dev/native-https/bin/migrate)" = 755 ] || \
+    fail 'successful migrate build was not normalized before later build failure'
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "retry after later build failure failed: $output"
+  output=$(bash scripts/dev-https.sh down 2>&1) || fail "down after build retry failed: $output"
+)
+
 run_missing_tool_check() (
   local fixture output
   fixture=$(new_fixture)
@@ -766,6 +932,9 @@ main() {
   identity-write-rollback) run_identity_write_rollback_check; return ;;
   launch-completion-rollback) run_launch_completion_failure_rollback_check; return ;;
   immediate-exit-rollback) run_immediate_precompletion_exit_rollback_check; return ;;
+  absent-completed-launch) run_absent_completed_launch_cleanup_check; return ;;
+  path-integrity) run_state_path_integrity_checks; return ;;
+  build-retry) run_failed_build_retry_check; return ;;
   '') ;;
   *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
   esac
@@ -785,6 +954,9 @@ main() {
   run_identity_write_rollback_check
   run_launch_completion_failure_rollback_check
   run_immediate_precompletion_exit_rollback_check
+  run_absent_completed_launch_cleanup_check
+  run_state_path_integrity_checks
+  run_failed_build_retry_check
   run_missing_tool_check
   printf '%s\n' 'dev-https static tests: PASS'
 }

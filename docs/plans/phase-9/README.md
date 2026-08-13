@@ -13,6 +13,22 @@ Status: **Revision 5** (2026-08-12). Two parts, run at different times.
 The current `make dev` stack stays HTTP-only and remains an image and network
 smoke check.
 
+## Available native HTTPS authentication harness
+
+The local development harness now serves `https://localhost:20443` without
+changing host trust. It runs native Go, Nuxt, Caddy, and a deterministic local
+Google OpenID Connect mock against the shared `aboutme_dev` database. A pinned
+disposable Playwright image imports only that invocation's exported Caddy root
+into an isolated browser profile.
+
+Use `make dev-https`, `make dev-https-status`, `make dev-https-browser-image`,
+`make dev-https-auth-check`, and `make dev-https-down`. The check retains only
+bounded, secret-free local evidence under ignored `.dev/native-https/evidence/`.
+
+This harness unlocks authenticated development checks. It is not the isolated
+port-443 Compose overlay below, does not satisfy U1–U5, and does not advance P9
+acceptance state.
+
 ## Part 1 — HTTPS overlay
 
 An isolated Podman Compose overlay serving `https://localhost` on port 443, with

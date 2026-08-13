@@ -68,7 +68,7 @@ under `.dev/native-https/caddy/`, so its CA is project-local and disposable. The
 lifecycle script exports the root certificate to
 `.dev/native-https/input/caddy-root.crt` with mode `0600`.
 
-The browser check uses `deploy/dev-https-browser.Dockerfile`, derived from the
+The browser check uses `deploy/dev-https-browser/Dockerfile`, derived from the
 existing digest-pinned Phase 3 Playwright image. The base image does not contain
 `certutil`, so the derived image installs an exact pinned `libnss3-tools`
 package and its identity is recorded by the build contract. A small browser
@@ -135,7 +135,7 @@ The script exposes:
 - `logs`: show or follow only harness-owned logs.
 
 Root Make targets are `dev-https`, `dev-https-down`, `dev-https-status`,
-`dev-https-logs`, and `dev-https-auth-check`.
+`dev-https-logs`, `dev-https-browser-image`, and `dev-https-auth-check`.
 
 `up` is idempotent only when all live processes still match their recorded
 process groups and configuration. A stale PID, changed generated config, foreign

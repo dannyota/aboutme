@@ -170,6 +170,11 @@ host_run() {
     fail 'browser image inspection returned multiple records'
   IFS='|' read -r inspected_id image_user entrypoint contract base playwright nss extra \
     <<<"$inspect"
+  if [[ $inspected_id =~ ^[0-9a-f]{64}$ ]]; then
+    inspected_id="sha256:$inspected_id"
+  elif [[ ! $inspected_id =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    fail 'browser image inspection returned a malformed ID'
+  fi
   [ "$inspected_id" = "$image" ] || fail 'inspected browser image ID does not match'
   [ -z "$extra" ] && [ "$image_user" = pwuser ] &&
     [ "$entrypoint" = "$IMAGE_ENTRYPOINT" ] &&
@@ -187,6 +192,7 @@ host_run() {
     --security-opt=label=disable \
     --security-opt=no-new-privileges \
     --cap-drop=all \
+    --cap-add=SYS_CHROOT \
     --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
     --mount="type=bind,src=$input,dst=/uat-input,ro=true" \
     --mount="type=bind,src=$evidence,dst=/evidence,rw=true" \

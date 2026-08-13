@@ -8,6 +8,35 @@ end-to-end UAT evidence.
 Do not mark a P9 criterion `PASS` against the current HTTP origin. Do not weaken
 Secure cookies or the HTTPS requirement to bypass the blocker.
 
+## Native HTTPS authentication check
+
+The available native harness proves the real Secure-cookie authentication flow
+at `https://localhost:20443`. It uses the one shared `aboutme-test-db` container
+and only its `aboutme_dev` database. It starts or reuses that container and
+leaves it running after teardown.
+
+Run the exact sequence from the repository root while no other native stack or
+heavy browser/build worker is active:
+
+```sh
+make dev-native-down
+make dev-https
+make dev-https-status
+make dev-https-browser-image
+make dev-https-auth-check
+make dev-https-down
+```
+
+The browser image imports only the root exported by this harness. It uses no TLS
+bypass and permits network traffic only to the fixed HTTPS origin. Each check
+writes a new bounded verdict under ignored `.dev/native-https/evidence/`; it
+never overwrites an earlier run. Use `make dev-https-logs` for redacted
+diagnostics.
+
+This check supports authenticated feature development. It does not replace the
+complete image-based port-443 deployment, isolated resources, frozen scenario
+set, or exit evidence required below.
+
 ## Current Compose smoke check
 
 The current deployment can still prove image construction, migration ordering,
@@ -61,10 +90,10 @@ P9 can start only when all of these are true:
 - no AWS, Cloudflare, certificate, DNS, registry, or staging mutation is
   required.
 
-These `uat-*` targets do not exist yet. The active
-[P9 plan](../plans/phase-9/README.md) owns their implementation order, frozen
-scenarios, and evidence schema. Update that plan and the deployment together
-when the HTTPS harness lands.
+The native HTTPS targets above exist, but these separate `uat-*` targets do not
+exist yet. The active [P9 plan](../plans/phase-9/README.md) owns their
+implementation order, frozen scenarios, and evidence schema. Update that plan
+and the deployment together when the port-443 overlay lands.
 
 ## Required execution shape
 
