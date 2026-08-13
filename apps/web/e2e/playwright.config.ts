@@ -25,10 +25,6 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   }
 }
 
-const updateRequested = process.argv.some((argument) =>
-  argument === '--update-snapshots'
-  || argument.startsWith('--update-snapshots='),
-);
 const surfaceResults = resolve(resultsRoot, surface);
 const port = surface === 'harness' ? 20090 : 20092;
 const baseURL = `http://127.0.0.1:${port}`;
@@ -65,9 +61,7 @@ export default defineConfig({
     ['json', { outputFile: resolve(surfaceResults, 'results.json') }],
   ],
   retries: 0,
-  snapshotPathTemplate: updateRequested
-    ? resolve(resultsRoot, 'candidate-baselines/baselines/{arg}{ext}')
-    : resolve(import.meta.dirname, 'baselines/{arg}{ext}'),
+  snapshotPathTemplate: resolve(import.meta.dirname, 'baselines/{arg}{ext}'),
   testDir: import.meta.dirname,
   testMatch: surface === 'harness'
     ? [
