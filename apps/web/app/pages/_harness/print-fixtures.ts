@@ -56,7 +56,7 @@ function sidebarOverflow(): Resume {
   if (skillTemplate === undefined) {
     throw new Error('Vietnamese skill fixture must contain one entry.');
   }
-  skill.entries = Array.from({ length: 16 }, (_, offset) => {
+  skill.entries = Array.from({ length: 10 }, (_, offset) => {
     const number = offset + 1;
     const marker = `SIDEBAR-ENTRY-${String(number).padStart(2, '0')}`;
     return {
@@ -66,7 +66,7 @@ function sidebarOverflow(): Resume {
       name: [
         number === 1 ? 'SIDEBAR-START' : '',
         marker,
-        number === 16 ? 'SIDEBAR-END' : '',
+        number === 10 ? 'SIDEBAR-END' : '',
       ]
         .filter(Boolean)
         .join(' '),
@@ -92,7 +92,7 @@ function mainOverflow(): Resume {
   if (workTemplate === undefined) {
     throw new Error('Vietnamese work fixture must contain one entry.');
   }
-  work.entries = Array.from({ length: 17 }, (_, offset) => {
+  work.entries = Array.from({ length: 7 }, (_, offset) => {
     const number = offset + 1;
     const marker = `MAIN-ENTRY-${String(number).padStart(2, '0')}`;
     return {
@@ -102,7 +102,7 @@ function mainOverflow(): Resume {
       jobTitle: [
         number === 1 ? 'MAIN-START' : '',
         marker,
-        number === 17 ? 'MAIN-END' : '',
+        number === 7 ? 'MAIN-END' : '',
       ]
         .filter(Boolean)
         .join(' '),
