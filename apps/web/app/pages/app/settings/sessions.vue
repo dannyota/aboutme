@@ -176,10 +176,18 @@ function authorizeURL(
 
   if (candidate.protocol === 'https:') {
     const expected = new URL(providerAuthorizeEndpoints[provider]);
-    return candidate.origin === expected.origin
+    if (candidate.origin === expected.origin
       && candidate.pathname === expected.pathname
-      ? candidate.href
-      : null;
+    ) {
+      return candidate.href;
+    }
+
+    const current = new URL(window.location.href);
+    const localUAT = current.protocol === 'https:'
+      && isLoopbackHostname(current.hostname)
+      && candidate.origin === current.origin
+      && candidate.pathname === `/__uat/oauth/${provider}/authorize`;
+    return localUAT ? candidate.href : null;
   }
 
   const current = new URL(window.location.href);

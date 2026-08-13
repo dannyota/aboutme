@@ -344,4 +344,50 @@ describe('settings privileged OAuth starts (adversarial)', () => {
       }
     },
   );
+
+  it('accepts only the same-origin loopback HTTPS mock path', async () => {
+    vi.mocked(navigateTo).mockReset();
+    vi.mocked(navigateTo).mockResolvedValue(undefined);
+    capturedStarts = [];
+    identityProviders = ['google'];
+    csrfToken = 'csrf-https-uat';
+    authorizeURLs.google
+      = 'https://localhost:20443/__uat/oauth/google/authorize';
+    respondToStart = (provider) => ({
+      data: { authorizeUrl: authorizeURLs[provider] },
+    });
+
+    const page = await mountSuspended(SessionsPage, {
+      route: '/app/settings/sessions?error=reauth_required',
+    });
+    await refreshNuxtData();
+    await flushPromises();
+    window.happyDOM.setURL(
+      'https://localhost:20443/app/settings/sessions',
+    );
+    await settleClick(page, 'Sign in again with google');
+    expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith(
+      'https://localhost:20443/__uat/oauth/google/authorize',
+      { external: true },
+    );
+
+    const invalidAuthorizeURLs = [
+      'https://localhost:20444/__uat/oauth/google/authorize',
+      'https://127.0.0.1:20443/__uat/oauth/google/authorize',
+      'http://localhost:20443/__uat/oauth/google/authorize',
+      'https://user:pass@localhost:20443/__uat/oauth/google/authorize',
+      'https://localhost:20443/__uat/oauth/google/authorize#fragment',
+      'https://localhost:20443/__uat/oauth/github/authorize',
+      'https://accounts.google.com/__uat/oauth/google/authorize',
+    ];
+
+    for (const authorizeUrl of invalidAuthorizeURLs) {
+      respondToStart = () => ({ data: { authorizeUrl } });
+      vi.mocked(navigateTo).mockClear();
+      await settleClick(page, 'Sign in again with google');
+      expect(vi.mocked(navigateTo), authorizeUrl).not.toHaveBeenCalled();
+      expect(page.get('[data-testid="link-error"]').text(), authorizeUrl)
+        .not.toBe('');
+    }
+  });
 });
