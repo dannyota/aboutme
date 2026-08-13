@@ -1,7 +1,18 @@
-import { expect, test, type BrowserContext, type Cookie } from '@playwright/test';
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Cookie,
+  type Page,
+} from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import {
+  ALLOWED_ORIGIN,
+  isAllowedHTTPURL,
+  isAllowedWebSocketURL,
+} from './network-policy';
 
-const ORIGIN = 'https://localhost:20443';
+const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/auth-proof.json';
 
 interface CookieAttributes {
@@ -51,28 +62,34 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
   let externalRequests = 0;
   let pageErrors = 0;
 
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors += 1;
-  });
-  page.on('pageerror', () => {
-    pageErrors += 1;
-  });
-  page.on('requestfailed', (request) => {
-    if (/CERT/i.test(request.failure()?.errorText ?? '')) certificateErrors += 1;
-  });
-  await page.route('**/*', async (route) => {
-    let allowed = false;
-    try {
-      allowed = new URL(route.request().url()).origin === ORIGIN;
-    } catch {
-      allowed = false;
-    }
-    if (!allowed) {
+  const attachPageDiagnostics = (openedPage: Page): void => {
+    openedPage.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors += 1;
+    });
+    openedPage.on('pageerror', () => {
+      pageErrors += 1;
+    });
+    openedPage.on('requestfailed', (request) => {
+      if (/CERT/i.test(request.failure()?.errorText ?? '')) certificateErrors += 1;
+    });
+  };
+  attachPageDiagnostics(page);
+  context.on('page', attachPageDiagnostics);
+  await context.route('**/*', async (route) => {
+    if (!isAllowedHTTPURL(route.request().url())) {
       externalRequests += 1;
       await route.abort('blockedbyclient');
       return;
     }
     await route.continue();
+  });
+  await context.routeWebSocket('**/*', async (webSocket) => {
+    if (!isAllowedWebSocketURL(webSocket.url())) {
+      externalRequests += 1;
+      await webSocket.close({ code: 1008, reason: 'blocked' });
+      return;
+    }
+    webSocket.connectToServer();
   });
 
   // 1. Begin with an anonymous browser at the public login page.
