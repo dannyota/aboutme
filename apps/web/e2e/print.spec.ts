@@ -218,7 +218,8 @@ for (const printCase of CASES) {
       expect(pageTexts[1]).toContain(printCase.end);
       expect(pageTexts[0]).toContain(printCase.opposite);
       expect(pageTexts[1]).not.toContain(printCase.opposite);
-      const allText = pageTexts.join(' ');
+      const allText = pageTexts.join(' ')
+        .replace(/-\s+(?=ENTRY-\d{2})/g, '-');
       let previous = -1;
       for (let number = 1; number <= printCase.total; number += 1) {
         const marker = `${printCase.prefix}${String(number).padStart(2, '0')}`;
