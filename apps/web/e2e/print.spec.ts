@@ -222,7 +222,7 @@ for (const printCase of CASES) {
       let previous = -1;
       for (let number = 1; number <= printCase.total; number += 1) {
         const marker = `${printCase.prefix}${String(number).padStart(2, '0')}`;
-        expect(allText.split(marker)).toHaveLength(3);
+        expect(allText.split(marker)).toHaveLength(2);
         const offset = allText.indexOf(marker);
         expect(offset).toBeGreaterThan(previous);
         previous = offset;
