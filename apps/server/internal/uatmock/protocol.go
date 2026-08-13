@@ -20,6 +20,8 @@ import (
 const (
 	signingKeyID               = "uat-google-key"
 	accessTokenLifetimeSeconds = 300
+	minPKCEVerifierBytes       = 43
+	maxPKCEVerifierBytes       = 128
 )
 
 type codeBinding struct {
@@ -219,9 +221,14 @@ func (s *Service) serveToken(w http.ResponseWriter, r *http.Request) {
 		s.writeTokenError(w, "invalid_grant")
 		return
 	}
+	verifier := r.PostForm.Get("code_verifier")
+	if !validPKCEVerifier(verifier) {
+		s.writeTokenError(w, "invalid_grant")
+		return
+	}
 	if subtle.ConstantTimeCompare([]byte(r.PostForm.Get("client_secret")), []byte(s.cfg.ClientSecret)) != 1 ||
 		r.PostForm.Get("client_id") != binding.clientID || r.PostForm.Get("redirect_uri") != binding.redirectURL ||
-		oauth2.S256ChallengeFromVerifier(r.PostForm.Get("code_verifier")) != binding.codeChallenge {
+		oauth2.S256ChallengeFromVerifier(verifier) != binding.codeChallenge {
 		s.writeTokenError(w, "invalid_grant")
 		return
 	}
@@ -237,6 +244,21 @@ func (s *Service) serveToken(w http.ResponseWriter, r *http.Request) {
 		TokenType:   "Bearer",
 		ExpiresIn:   accessTokenLifetimeSeconds,
 	})
+}
+
+func validPKCEVerifier(value string) bool {
+	if len(value) < minPKCEVerifierBytes || len(value) > maxPKCEVerifierBytes {
+		return false
+	}
+	for i := range len(value) {
+		char := value[i]
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '.' || char == '_' || char == '~' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *Service) signIDToken(nonce string) (string, error) {

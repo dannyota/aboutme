@@ -126,6 +126,43 @@ func TestTokenExchangeRequiresExactBindingAndBurnsCodeBeforePKCECheck(t *testing
 	}
 }
 
+func TestTokenExchangeRejectsInvalidPKCEVerifierSyntaxAfterConsumingCode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		verifier string
+	}{
+		{name: "short", verifier: "a"},
+		{name: "overlong", verifier: strings.Repeat("a", 129)},
+		{name: "illegal character", verifier: strings.Repeat("a", 42) + "!"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newTestService(t)
+			query := validAuthorizeQuery()
+			query.Set("code_challenge", oauth2.S256ChallengeFromVerifier(tt.verifier))
+			code := authorizeThroughHandler(t, svc.Handler(), query)
+
+			response := exchangeThroughHandler(t, svc.Handler(), code, tt.verifier)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("exchange = %d, want %d", response.Code, http.StatusBadRequest)
+			}
+			if got := response.Body.String(); got != "{\"error\":\"invalid_grant\"}\n" {
+				t.Fatalf("error body = %q, want generic invalid_grant", got)
+			}
+
+			svc.mu.Lock()
+			_, codeStillStored := svc.codes[code]
+			svc.mu.Unlock()
+			if codeStillStored {
+				t.Fatal("invalid verifier did not consume the authorization code")
+			}
+		})
+	}
+}
+
 func TestTokenRejectsOversizedBody(t *testing.T) {
 	t.Parallel()
 
