@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 2,
+  "personalDetails": {
+    "fullName": "Nguyễn Thị Minh Châu",
+    "headline": "Kỹ sư phần mềm và kiến trúc sư hệ thống",
+    "photo": {
+      "key": "resumes/ada/photo-original.jpg",
+      "crop": { "x": 0.1, "y": 0.05, "width": 0.8, "height": 0.8 }
+    },
+    "details": [
+      {
+        "id": "f0cf483d-585c-4340-9adc-773b3bea3db0",
+        "type": "email",
+        "label": "Thư điện tử",
+        "value": "minh.chau@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "2c25e47b-3eaa-4670-ac85-c23626079998",
+        "type": "phone",
+        "label": "Điện thoại",
+        "value": "+84 90 123 4567",
+        "isHidden": false
+      },
+      {
+        "id": "9d150558-23be-4bcd-b7ec-181932f94907",
+        "type": "location",
+        "label": "Nơi ở",
+        "value": "Hà Nội, Việt Nam",
+        "isHidden": false
+      },
+      {
+        "id": "09418968-1a86-49cb-8dd8-c746a2780249",
+        "type": "website",
+        "label": "Trang cá nhân",
+        "value": "https://minhchau.example.com",
+        "isHidden": false
+      },
+      {
+        "id": "062fe149-9545-4484-8df0-332c302cd3b8",
+        "type": "linkedin",
+        "label": "Hồ sơ LinkedIn",
+        "value": "https://linkedin.com/in/minhchau",
+        "isHidden": false
+      },
+      {
+        "id": "018f0000-0000-7000-8000-000000000101",
+        "type": "github",
+        "label": "Mã nguồn GitHub",
+        "value": "https://github.com/minhchau",
+        "isHidden": false
+      },
+      {
+        "id": "018f0000-0000-7000-8000-000000000102",
+        "type": "twitter",
+        "label": "Bài viết Twitter",
+        "value": "https://twitter.com/minhchau",
+        "isHidden": false
+      },
+      {
+        "id": "018f0000-0000-7000-8000-000000000103",
+        "type": "custom",
+        "label": "Cộng đồng",
+        "value": "Nhóm kỹ sư Việt Nam",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Giới thiệu",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "cb3fc772-efe2-4338-b299-def6d3bc18e4",
+          "isHidden": false,
+          "text": "<p>Kỹ sư giàu kinh nghiệm, tập trung vào hệ thống phân tán và sản phẩm dễ sử dụng.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "dd89bd8a-ba7d-4bec-9c43-f1b296c56fac",
+          "isHidden": false,
+          "jobTitle": "Kỹ sư trưởng",
+          "employer": "Công ty Công nghệ Ánh Dương",
+          "employerLink": "https://anhduong.example.com",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": { "y": 2022, "m": 3 },
+            "end": null,
+            "present": true
+          },
+          "description": "<p>Dẫn dắt thiết kế nền tảng dữ liệu và hướng dẫn đội ngũ kỹ sư.</p>"
+        },
+        {
+          "id": "fd62bb07-f757-45cc-bd5f-8425be767300",
+          "isHidden": true,
+          "jobTitle": "Lập trình viên",
+          "employer": "Xưởng Phần mềm Sông Hồng",
+          "employerLink": "https://songhong.example.com",
+          "city": "Đà Nẵng",
+          "country": "Việt Nam",
+          "dates": {
+            "start": { "y": 2018, "m": 6 },
+            "end": { "y": 2022, "m": 2 },
+            "present": false
+          },
+          "description": "<p>Xây dựng dịch vụ web; mục này được ẩn khỏi hồ sơ công khai.</p>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "528090d8-76ea-4a3c-8a72-15004434fdd1",
+          "isHidden": false,
+          "degree": "Kỹ sư Công nghệ thông tin",
+          "school": "Trường Đại học Bách khoa Hà Nội",
+          "schoolLink": "https://hust.example.edu",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": { "y": 2014, "m": 9 },
+            "end": { "y": 2018, "m": 6 },
+            "present": false
+          },
+          "description": "<p>Nghiên cứu hệ thống máy tính, thuật toán và xử lý ngôn ngữ tự nhiên.</p>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "5bd5dd21-108a-41e1-a2f7-34eeb93ee539",
+          "isHidden": false,
+          "name": "Thiết kế hệ thống",
+          "level": 5,
+          "infoHtml": "<p>Thiết kế dịch vụ tin cậy, dễ vận hành và có khả năng mở rộng.</p>"
+        },
+        {
+          "id": "4bfed595-5c57-4207-916d-7a4a8581ea1f",
+          "isHidden": false,
+          "name": "Lập trình TypeScript",
+          "level": 4,
+          "infoHtml": "<p>Phát triển giao diện có kiểu dữ liệu chặt chẽ và dễ bảo trì.</p>"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngôn ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "9bc9b0b0-aaa6-4a43-b9f7-d958a3819ba0",
+          "isHidden": false,
+          "name": "Tiếng Việt",
+          "level": 5
+        },
+        {
+          "id": "bf4ba44d-afa9-4995-a407-115fe8375712",
+          "isHidden": false,
+          "name": "Tiếng Anh",
+          "level": 4
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "6b8f414a-589f-44c4-9110-017486558074",
+          "isHidden": false,
+          "title": "Chứng chỉ Kiến trúc phần mềm",
+          "titleLink": "https://credentials.example.com/kien-truc-2021",
+          "issuer": "Viện Công nghệ Việt Nam",
+          "date": { "y": 2021, "m": 8 },
+          "description": "<p>Chuyên đề kiến trúc hướng sự kiện và độ tin cậy của hệ thống.</p>"
+        }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Dự án",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "12949dfe-d9dc-4292-a17b-faeda92081e4",
+          "isHidden": false,
+          "title": "Từ điển dữ liệu mở",
+          "link": "https://github.com/minhchau/tu-dien-mo",
+          "dates": {
+            "start": { "y": 2020, "m": 4 },
+            "end": { "y": 2021, "m": 11 },
+            "present": false
+          },
+          "description": "<p>Xây dựng bộ công cụ tra cứu thuật ngữ kỹ thuật bằng tiếng Việt.</p>"
+        }
+      ]
+    },
+    "a6a0a5fa-7fe4-4d52-be40-0da2db95de12": {
+      "sectionType": "custom",
+      "displayName": "Hoạt động cộng đồng",
+      "iconKey": "trophy",
+      "entries": [
+        {
+          "id": "6f2b6ec0-dc76-4c6e-a44f-6d9e2141b44e",
+          "isHidden": false,
+          "title": "Giải thưởng Sáng tạo trẻ",
+          "titleLink": "https://awards.example.org/sang-tao-tre",
+          "subtitle": "Hội Tin học Việt Nam",
+          "city": "Thành phố Hồ Chí Minh",
+          "dates": {
+            "start": { "y": 2019, "m": 11 },
+            "end": { "y": 2019, "m": 11 },
+            "present": false
+          },
+          "description": "<p>Được ghi nhận vì đóng góp cho phần mềm nguồn mở và giáo dục cộng đồng.</p>"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "be-vietnam-pro",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#0f172a",
+      "text": "#1a1a1a",
+      "background": "#ffffff",
+      "accent": "#2563eb",
+      "surface": "#f1f5f9"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5,
+      "pageMargin": { "x": 18, "y": 12 }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": ["profile", "work", "education"],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate",
+          "project",
+          "a6a0a5fa-7fe4-4d52-be40-0da2db95de12"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": { "style": "bar" },
+      "language": { "style": "dots" }
+    },
+    "pageFormat": "letter",
+    "dateFormat": "Mon YYYY"
+  }
+}

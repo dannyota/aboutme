@@ -52,6 +52,7 @@ func TestValidateDocument_CleanFixturesProduceNoIssues(t *testing.T) {
 	for _, name := range []string{
 		"minimal.json",
 		"full.json",
+		"vn-full.json",
 		"draft-partial.json",
 		"draft-cleared-name-empty-section.json",
 		"draft-cleared-contact-value.json",

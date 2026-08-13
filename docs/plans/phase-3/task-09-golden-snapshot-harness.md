@@ -52,7 +52,7 @@ Three consequences to implement literally:
 
 ## Steps
 
-- [ ] **Step 0: Fixture addition gate.** The P2A phase gate has already passed
+- [x] **Step 0: Fixture addition gate.** The P2A phase gate has already passed
       by precondition. Add `packages/schema/fixtures/vn-full.json` to the shared
       top-level fixtures directory that `packages/schema/test/schema.test.ts`
       enumerates via `readdirSync` (it will pick up and schema-validate the new
@@ -61,7 +61,7 @@ Three consequences to implement literally:
       explicit clean-fixture list when required. Run `make schema-check`,
       `(cd packages/schema/gen/go && go test ./... -count=1)`, and
       `(cd apps/server && go test ./...)`; confirm all remain green.
-- [ ] **Step 1: Failing harness.** `golden.test.ts` opens with a file-level
+- [x] **Step 1: Failing harness.** `golden.test.ts` opens with a file-level
       `// @vitest-environment node` pragma (B7 — this suite renders via plain
       `vue/server-renderer`, and the golden diff itself is the renderer-purity
       proof; happy-dom silently masking a stray DOM call would defeat that). For
@@ -85,13 +85,13 @@ Three consequences to implement literally:
       `(cd apps/web && npx --no-install tsx test/renderer/golden.generate.mts <ignored-output-dir>)`;
       the generator refuses a tracked output path. The owner reviews and applies
       the staged files to the reserved directory, then reruns the comparison.
-- [ ] **Step 2: Determinism proof.** The suite renders every cell **twice** in
+- [x] **Step 2: Determinism proof.** The suite renders every cell **twice** in
       one run and asserts identity, and CI compares against the committed bytes
       (double protection: intra-run and cross-environment). Any `TZ`/locale
       sensitivity is a bug. The baseline run pins `TZ=UTC LANG=en_US.UTF-8`;
       verify again with `TZ=Pacific/Kiritimati LANG=vi_VN.UTF-8` locally and
       recording the clean result in the phase evidence.
-- [ ] **Step 3: Hostile-document SSR surface.** Build in-memory documents from
+- [x] **Step 3: Hostile-document SSR surface.** Build in-memory documents from
       every entry in Go's committed `corpus-output.golden.json`, place those
       already-sanitized fragments in every rich-text field, and render them.
       Parse each `.rich-text` element's `innerHTML` with the author-side
@@ -102,13 +102,25 @@ Three consequences to implement literally:
       renderer sanitizes raw server input. P5A and P7A separately prove that
       their Go read boundaries produce these safe inputs. This is not a golden
       because a corpus update must not churn renderer snapshots.
-- [ ] **Step 4: Review ergonomics.** Goldens are committed reviewable HTML; note
+- [x] **Step 4: Review ergonomics.** Goldens are committed reviewable HTML; note
       in the test header that a golden diff **is** the review artifact (master
       plan: "CI diff = review"). If the golden dir needs a lint ignore, state
       the exact glob (`apps/web/test/renderer/golden/**`) in the handoff for
       Task 10 to land — this task does not edit `eslint.config.mjs` itself (B8).
-- [ ] **Step 5: gate.** Run
+- [x] **Step 5: gate.** Run
       `make schema-check web-lint web-typecheck web-test web-build`.
+
+## Completion evidence
+
+- The generated matrix contains 80 committed HTML files: 20 directory-enumerated
+  presets × two populated starting layouts × continuous and paged modes.
+- `full.json` remains the matrix subject. `minimal.json` optional-token cases
+  remain in Task 6, draft behavior remains in Task 6, and `vn-full.json` is the
+  Task 11 browser subject.
+- The full 117-test golden suite passed under both `TZ=UTC LANG=en_US.UTF-8` and
+  `TZ=Pacific/Kiritimati LANG=vi_VN.UTF-8`.
+- `make schema-check web-lint web-typecheck web-test web-build` passed on the
+  applied baselines. The web suite reported 446 passing tests and one skip.
 
 ## Acceptance mapping
 

@@ -97,8 +97,9 @@ and P7A.
 
 The web package contains the licensed font catalog, a pure Vue renderer with
 continuous and deterministic paged modes, and a generated registry for all 20
-validated template presets. Deterministic HTML goldens, renderer-boundary lint,
-and the pinned browser screenshot harness remain Phase 3 work.
+validated template presets. Byte-exact HTML goldens cover both starting layouts
+and display modes for every preset. Renderer-boundary lint and the pinned
+browser screenshot harness remain Phase 3 work.
 
 ## Implemented private media boundary
 
