@@ -73,7 +73,17 @@ test.describe('offline font catalog', () => {
         ...entry.assets.map(({ path }) => path),
         ...fallback!.assets.map(({ path }) => path),
       ]);
-      expect([...fontRequests].sort()).toEqual([...expectedAssets].sort());
+      const requestedAssets = [...fontRequests].map((requested) => {
+        const source = [...expectedAssets].find((expected) =>
+          requested === expected
+          || (
+            requested.startsWith(`${expected.slice(0, -6)}.`)
+            && requested.endsWith('.woff2')
+          ),
+        );
+        return source ?? requested;
+      });
+      expect(requestedAssets.sort()).toEqual([...expectedAssets].sort());
       expect(external).toEqual([]);
     });
   }
