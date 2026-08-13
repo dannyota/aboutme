@@ -11,8 +11,16 @@ export interface NeutralizationViolation {
   value: string;
 }
 
-const allowedTags = new Set(ALLOWED_TAGS);
-const allowedSchemes = new Set(ALLOWED_URL_SCHEMES);
+export const NEUTRALIZATION_POLICY = Object.freeze({
+  attributes: ALLOWED_ATTRIBUTES,
+  externalRel: EXTERNAL_REL,
+  prefixes: FORBIDDEN_ATTRIBUTE_PREFIXES,
+  schemes: ALLOWED_URL_SCHEMES,
+  tags: ALLOWED_TAGS,
+});
+
+const allowedTags = new Set(NEUTRALIZATION_POLICY.tags);
+const allowedSchemes = new Set(NEUTRALIZATION_POLICY.schemes);
 
 const explicitScheme = (value: string): string | null => {
   const browserValue = [...value]
@@ -36,14 +44,16 @@ export const neutralizationViolations = (
       violations.push({ kind: 'tag', value: tag });
     }
 
-    const allowedAttributes = new Set(ALLOWED_ATTRIBUTES[tag] ?? []);
+    const allowedAttributes = new Set(
+      NEUTRALIZATION_POLICY.attributes[tag] ?? [],
+    );
     for (const attribute of element.attributes) {
       const name = attribute.name.toLowerCase();
       if (!allowedAttributes.has(name)) {
         violations.push({ kind: 'attribute', value: `${tag}.${name}` });
       }
       if (
-        FORBIDDEN_ATTRIBUTE_PREFIXES.some((prefix) =>
+        NEUTRALIZATION_POLICY.prefixes.some((prefix) =>
           name.startsWith(prefix.toLowerCase()),
         )
       ) {
@@ -60,7 +70,7 @@ export const neutralizationViolations = (
         violations.push({ kind: 'href', value: href });
       }
     }
-    if (element.getAttribute('rel') !== EXTERNAL_REL) {
+    if (element.getAttribute('rel') !== NEUTRALIZATION_POLICY.externalRel) {
       violations.push({
         kind: 'rel',
         value: element.getAttribute('rel') ?? '<missing>',

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -73,6 +74,40 @@ describe("released-version manifest", () => {
 });
 
 describe("immutable released schema", () => {
+  it("keeps retained generated types byte-identical after release", () => {
+    const sha256 = (path: string) =>
+      createHash("sha256").update(readFileSync(path)).digest("hex");
+    const releasedHashes = new Map([
+      [
+        "gen/go/v1/resume.go",
+        "e5221be71b5560cfb812f66c57516cc417c32d0529e8e0f1d915eb62d4b44703",
+      ],
+      [
+        "gen/go/v1/rawschema.go",
+        "8e29326a32081559c9989c43969094a1a8a507da6b7a4eaebb3088ba83501708",
+      ],
+      [
+        "gen/ts/v1/resume.ts",
+        "62851f1baad5d77bb138cd45da72e8f317c28875b6c01a999b62487e8f1213cb",
+      ],
+      [
+        "gen/go/v2/resume.go",
+        "402cd45ccf3fce44fd7fb2f1f841bbf0d11f1b35abbe7c2822d0f5585f05c313",
+      ],
+      [
+        "gen/go/v2/rawschema.go",
+        "b73319c9f11c41f22874fc3af474ade3198ef96bb6f456d30a1c6f77f7a703b5",
+      ],
+      [
+        "gen/ts/v2/resume.ts",
+        "d9978ca487c97c0e9945cc6120c53fbc234fadd7dcfe81ec8615007d10422a21",
+      ],
+    ]);
+    for (const [path, expected] of releasedHashes) {
+      expect(sha256(path), path).toBe(expected);
+    }
+  });
+
   // A version bump adds a new snapshot and changes CURRENT_VERSION together.
   it("keeps resume.v2.schema.json byte-identical to resume.schema.json while CURRENT_VERSION is 2", () => {
     expect(CURRENT_VERSION).toBe(2);

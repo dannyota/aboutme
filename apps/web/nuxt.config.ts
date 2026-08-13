@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { HTML_CSP } from './app/utils/csp';
 
 const harnessEnabled = process.env.NUXT_HARNESS === '1';
+const isolatedBuildTest = process.env.NUXT_BUILD_TEST === '1';
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -25,7 +26,11 @@ export default defineNuxtConfig({
     },
   },
 
-  buildDir: harnessEnabled ? '.nuxt/harness' : '.nuxt',
+  buildDir: harnessEnabled
+    ? '.nuxt/harness'
+    : isolatedBuildTest
+      ? '.nuxt/normal-test'
+      : '.nuxt',
 
   routeRules: harnessEnabled
     ? {
@@ -46,7 +51,11 @@ export default defineNuxtConfig({
 
   nitro: {
     output: {
-      dir: harnessEnabled ? '.output/harness' : '.output',
+      dir: harnessEnabled
+        ? '.output/harness'
+        : isolatedBuildTest
+          ? '.output/normal-test'
+          : '.output',
     },
   },
 

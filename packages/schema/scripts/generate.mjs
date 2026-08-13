@@ -153,20 +153,34 @@ function readTemplatePresets(schema) {
     }
 
     const layout = customization.layout;
-    exactKeys(file, layout, ["columns", "placement"], [
-      "sidebarSectionTypes",
-      "surfaceTarget",
-    ]);
-    if (layout.surfaceTarget !== undefined && !surfaceTargets.has(layout.surfaceTarget)) {
-      failTemplate(file, `uses unknown surfaceTarget ${JSON.stringify(layout.surfaceTarget)}.`);
+    exactKeys(
+      file,
+      layout,
+      ["columns", "placement"],
+      ["sidebarSectionTypes", "surfaceTarget"],
+    );
+    if (
+      layout.surfaceTarget !== undefined &&
+      !surfaceTargets.has(layout.surfaceTarget)
+    ) {
+      failTemplate(
+        file,
+        `uses unknown surfaceTarget ${JSON.stringify(layout.surfaceTarget)}.`,
+      );
     }
     if (layout.placement === "keep") {
       if (layout.sidebarSectionTypes !== undefined) {
-        failTemplate(file, "must not define sidebarSectionTypes for placement keep.");
+        failTemplate(
+          file,
+          "must not define sidebarSectionTypes for placement keep.",
+        );
       }
     } else if (layout.placement === "byType") {
       if (!Array.isArray(layout.sidebarSectionTypes)) {
-        failTemplate(file, "must define sidebarSectionTypes for placement byType.");
+        failTemplate(
+          file,
+          "must define sidebarSectionTypes for placement byType.",
+        );
       }
       const selectors = layout.sidebarSectionTypes;
       if (new Set(selectors).size !== selectors.length) {
@@ -174,15 +188,24 @@ function readTemplatePresets(schema) {
       }
       for (const selector of selectors) {
         if (!sectionTypes.has(selector) || selector === "custom") {
-          failTemplate(file, `uses invalid section selector ${JSON.stringify(selector)}.`);
+          failTemplate(
+            file,
+            `uses invalid section selector ${JSON.stringify(selector)}.`,
+          );
         }
       }
     } else {
-      failTemplate(file, `uses unknown placement ${JSON.stringify(layout.placement)}.`);
+      failTemplate(
+        file,
+        `uses unknown placement ${JSON.stringify(layout.placement)}.`,
+      );
     }
 
-    const { placement: _placement, sidebarSectionTypes: _selectors, ...storedLayout } =
-      layout;
+    const {
+      placement: _placement,
+      sidebarSectionTypes: _selectors,
+      ...storedLayout
+    } = layout;
     const storedCustomization = {
       ...customization,
       layout: { ...storedLayout, sections: { main: [], sidebar: [] } },
@@ -197,7 +220,12 @@ function readTemplatePresets(schema) {
   });
 }
 
-export function generateTemplatesTs(presets, sectionTypes, surfaceTargets, outFile) {
+export function generateTemplatesTs(
+  presets,
+  sectionTypes,
+  surfaceTargets,
+  outFile,
+) {
   const sectionTypeUnion = sectionTypes.map(JSON.stringify).join(" | ");
   const surfaceTargetUnion = surfaceTargets.map(JSON.stringify).join(" | ");
   const body = `${generatedHeader("templates/*.json and resume.schema.json")}
@@ -512,7 +540,13 @@ function generateGo(
   }
   raw = raw.slice(packagePrefix.length);
 
-  const presenceMarshal = `
+  // V1 was released before this custom marshal behavior existed. Retained
+  // generated outputs are immutable, so only current and later releases may
+  // carry it.
+  const presenceMarshal =
+    sourceName === "resume.v1.schema.json"
+      ? ""
+      : `
 // MarshalJSON preserves the schema's absent-versus-explicit-empty distinction
 // for personalDetails.details. encoding/json's ordinary omitempty rule would
 // collapse a non-nil empty slice to absence.
@@ -1219,7 +1253,8 @@ async function main() {
     generateTemplatesTs(
       templatePresets,
       schema.$defs.sectionType.enum,
-      schema.$defs.customization.properties.layout.properties.surfaceTarget.enum,
+      schema.$defs.customization.properties.layout.properties.surfaceTarget
+        .enum,
       join(tsDir, "templates.ts"),
     );
     written.push(

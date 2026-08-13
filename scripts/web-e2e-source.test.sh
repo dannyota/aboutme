@@ -7,6 +7,7 @@ export TZ=UTC
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SCRIPT=$ROOT/scripts/web-e2e-source.sh
+REAL_GIT=$(command -v git)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-web-e2e-source.XXXXXX")
 trap 'rm -rf -- "$WORK"' EXIT
 
@@ -52,6 +53,42 @@ run_boundary() {
   (
     cd "$REPO"
     "$SCRIPT" "$COMMIT" "$MANIFEST" "$OUTPUT"
+  )
+}
+
+run_boundary_with_git_failure() {
+  local command=$1 occurrence=$2 state=$WORK/git-failure-state
+  local shim_dir=$WORK/git-failure-bin
+  rm -f "$state"
+  mkdir -p "$shim_dir"
+  sed \
+    -e "s|@REAL_GIT@|$REAL_GIT|g" \
+    >"$shim_dir/git" <<'SHIM'
+#!/usr/bin/env bash
+set -eu
+command_key=$1
+if [ "$command_key" = ls-files ]; then
+  command_key="$command_key ${2:-}"
+fi
+if [ "$command_key" = "${WEB_E2E_FAIL_GIT_COMMAND:?}" ]; then
+  count=0
+  [ ! -f "$WEB_E2E_FAIL_GIT_STATE" ] || read -r count <"$WEB_E2E_FAIL_GIT_STATE"
+  count=$((count + 1))
+  printf '%s\n' "$count" >"$WEB_E2E_FAIL_GIT_STATE"
+  if [ "$count" -eq "${WEB_E2E_FAIL_GIT_OCCURRENCE:?}" ]; then
+    exit 73
+  fi
+fi
+exec @REAL_GIT@ "$@"
+SHIM
+  chmod 0755 "$shim_dir/git"
+  (
+    cd "$REPO"
+    PATH="$shim_dir:$PATH" \
+      WEB_E2E_FAIL_GIT_COMMAND="$command" \
+      WEB_E2E_FAIL_GIT_OCCURRENCE="$occurrence" \
+      WEB_E2E_FAIL_GIT_STATE="$state" \
+      "$SCRIPT" "$COMMIT" "$MANIFEST" "$OUTPUT"
   )
 }
 
@@ -119,6 +156,22 @@ write_manifest apps/web/app.ts
 git -C "$REPO" update-index --skip-worktree apps/web/app.ts
 printf 'hidden skip-worktree replacement\n' >"$REPO/apps/web/app.ts"
 assert_rejected skip-worktree run_boundary
+
+for command_and_occurrence in \
+  'status:1' \
+  'status:2' \
+  'status:3' \
+  'ls-files -v:1' \
+  'ls-files -v:2' \
+  'ls-files -v:3'; do
+  command=${command_and_occurrence%:*}
+  occurrence=${command_and_occurrence##*:}
+  case_name=$(printf '%s-%s' "$command" "$occurrence" | tr ' ' '-')
+  new_repo "git-failure-$case_name"
+  write_manifest apps/web/app.ts
+  assert_rejected "git-failure-$case_name" \
+    run_boundary_with_git_failure "$command" "$occurrence"
+done
 
 new_repo worktree-bytes
 write_manifest apps/web/app.ts
