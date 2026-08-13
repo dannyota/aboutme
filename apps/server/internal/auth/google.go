@@ -33,14 +33,24 @@ type googleProviderConfig struct {
 
 // googleProvider discovers and caches Google's provider on first use.
 func (s *Service) googleProvider(ctx context.Context) (*oidc.Provider, error) {
-	issuer := googleIssuer
+	issuer := s.googleIssuerURL
+	local := s.googleLocalOIDC
 	if s.googleIssuerOverride != "" {
 		issuer = s.googleIssuerOverride
+		local = false
+	}
+	if local {
+		ctx = withLocalProviderHTTPClient(ctx)
 	}
 
 	p, err := s.google.cache.discover(ctx, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("auth: discover google oidc provider: %w", err)
+	}
+	if local {
+		if err := validateLocalOIDCProvider(p, s.publicOrigin, ProviderGoogle); err != nil {
+			return nil, fmt.Errorf("auth: validate google oidc provider: %w", err)
+		}
 	}
 	return p, nil
 }

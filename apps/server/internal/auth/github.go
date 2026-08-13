@@ -42,7 +42,7 @@ type githubProviderConfig struct {
 
 // githubOAuth2Config applies the production or test endpoints.
 func (s *Service) githubOAuth2Config(redirectURL string) oauth2.Config {
-	authorizeURL, tokenURL := githubAuthorizeURL, githubTokenURL
+	authorizeURL, tokenURL := s.githubOAuthAuthorizeURL, s.githubOAuthTokenURL
 	if s.githubEndpointOverride != "" {
 		authorizeURL = s.githubEndpointOverride + "/login/oauth/authorize"
 		tokenURL = s.githubEndpointOverride + "/login/oauth/access_token"
@@ -66,7 +66,7 @@ func (s *Service) githubAPIBaseURLFor() string {
 	if s.githubEndpointOverride != "" {
 		return s.githubEndpointOverride
 	}
-	return githubAPIBaseURL
+	return s.githubAPIBaseURL
 }
 
 // githubRedirectURL must match exactly at authorization and token exchange.
@@ -150,6 +150,7 @@ func (s *Service) buildGitHubAuthorizeURL(ctx context.Context, purpose Purpose, 
 func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// Token exchange and API calls share one bounded client.
 	ctx := withProviderHTTPClient(r.Context())
+	ctx = s.withGitHubProviderHTTPClient(ctx)
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {

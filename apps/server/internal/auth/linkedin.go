@@ -45,14 +45,24 @@ type linkedinProviderConfig struct {
 
 // linkedinProvider discovers and caches LinkedIn's provider on first use.
 func (s *Service) linkedinProvider(ctx context.Context) (*oidc.Provider, error) {
-	issuer := linkedinIssuer
+	issuer := s.linkedinIssuerURL
+	local := s.linkedinLocalOIDC
 	if s.linkedinIssuerOverride != "" {
 		issuer = s.linkedinIssuerOverride
+		local = false
+	}
+	if local {
+		ctx = withLocalProviderHTTPClient(ctx)
 	}
 
 	p, err := s.linkedin.cache.discover(ctx, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("auth: discover linkedin oidc provider: %w", err)
+	}
+	if local {
+		if err := validateLocalOIDCProvider(p, s.publicOrigin, ProviderLinkedIn); err != nil {
+			return nil, fmt.Errorf("auth: validate linkedin oidc provider: %w", err)
+		}
 	}
 	return p, nil
 }
@@ -98,6 +108,9 @@ func (s *Service) buildLinkedInAuthorizeURL(ctx context.Context, purpose Purpose
 func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request) {
 	// Discovery, token exchange, and JWKS fetch share one bounded client.
 	ctx := withProviderHTTPClient(r.Context())
+	if s.linkedinLocalOIDC && s.linkedinIssuerOverride == "" {
+		ctx = withLocalProviderHTTPClient(ctx)
+	}
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {

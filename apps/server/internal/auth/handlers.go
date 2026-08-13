@@ -91,8 +91,16 @@ type Service struct {
 	sessionMgr *SessionManager
 	logger     *slog.Logger
 
-	publicOrigin   string
-	trustedProxies api.TrustedProxies
+	publicOrigin            string
+	trustedProxies          api.TrustedProxies
+	googleIssuerURL         string
+	linkedinIssuerURL       string
+	githubOAuthAuthorizeURL string
+	githubOAuthTokenURL     string
+	githubAPIBaseURL        string
+	googleLocalOIDC         bool
+	linkedinLocalOIDC       bool
+	githubLocalOAuth        bool
 
 	// These fields let tests reduce the shared start-route budget.
 	startRateLimitRequests int
@@ -120,13 +128,21 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 	}
 	sessionMgr := NewSessionManager(q)
 	return &Service{
-		tx:             NewTransactionStore(q),
-		q:              q,
-		sessions:       sessionMgr,
-		sessionMgr:     sessionMgr,
-		logger:         logger,
-		publicOrigin:   cfg.PublicOrigin,
-		trustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		tx:                      NewTransactionStore(q),
+		q:                       q,
+		sessions:                sessionMgr,
+		sessionMgr:              sessionMgr,
+		logger:                  logger,
+		publicOrigin:            cfg.PublicOrigin,
+		trustedProxies:          api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		googleIssuerURL:         endpointOrDefault(cfg.GoogleOIDCIssuerURL, googleIssuer),
+		linkedinIssuerURL:       endpointOrDefault(cfg.LinkedInOIDCIssuerURL, linkedinIssuer),
+		githubOAuthAuthorizeURL: endpointOrDefault(cfg.GitHubOAuthAuthorizeURL, githubAuthorizeURL),
+		githubOAuthTokenURL:     endpointOrDefault(cfg.GitHubOAuthTokenURL, githubTokenURL),
+		githubAPIBaseURL:        endpointOrDefault(cfg.GitHubAPIBaseURL, githubAPIBaseURL),
+		googleLocalOIDC:         cfg.GoogleOIDCIssuerURL != "",
+		linkedinLocalOIDC:       cfg.LinkedInOIDCIssuerURL != "",
+		githubLocalOAuth:        cfg.GitHubOAuthAuthorizeURL != "",
 
 		startRateLimitRequests: startRateLimitRequests,
 		startRateLimitWindow:   startRateLimitWindow,
@@ -143,6 +159,13 @@ func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Serv
 			clientSecret: cfg.LinkedInClientSecret,
 		},
 	}, nil
+}
+
+func endpointOrDefault(configured, fallback string) string {
+	if configured != "" {
+		return configured
+	}
+	return fallback
 }
 
 // RegisterRoutes attaches the authentication and session routes to mux.
@@ -266,6 +289,9 @@ func (s *Service) buildGoogleAuthorizeURL(ctx context.Context, purpose Purpose, 
 func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// Discovery, token exchange, and JWKS fetch share one bounded client.
 	ctx := withProviderHTTPClient(r.Context())
+	if s.googleLocalOIDC && s.googleIssuerOverride == "" {
+		ctx = withLocalProviderHTTPClient(ctx)
+	}
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
