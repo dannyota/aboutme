@@ -1,6 +1,6 @@
 # Template print behavior
 
-Status: **Draft v2** (2026-08-12). Not approved.
+Status: **Approved v2** (2026-08-12).
 
 How a template behaves under Chromium's print engine, which is the authoritative
 rendering. Everything here applies to every template, because print geometry is

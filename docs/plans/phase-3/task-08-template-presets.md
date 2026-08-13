@@ -95,13 +95,16 @@ export function applyTemplate(
       regenerate; pass. Negative generator tests: an out-of-enum font, an
       out-of-enum `sidebarSectionTypes` entry, a duplicate selector, `custom`,
       and a selector present on `keep` each fail generation loudly.
-- [ ] **Step 2a: Contrast conformance.** Assert all 20 committed presets pass
-      `colors.md` §5's contrast targets before clamping, under its normative mix
-      space (gamma-encoded sRGB, `color-mix(in srgb, …)` — not linear light or
-      OKLab), per `contract.md` §8's per-preset conformance requirement. Then
-      derive the runtime level colors and assert every filled mark passes 3:1
-      against both its surface and the actual returned track. The track itself
-      has no contrast floor and may equal the surface after fallback.
+- [ ] **Step 2a: Contrast conformance.** Assert all 20 committed presets' page
+      palettes pass `colors.md` §5's contrast targets before clamping, under its
+      normative mix space (gamma-encoded sRGB, `color-mix(in srgb, …)` — not
+      linear light or OKLab). For a tinted region, assert the per-surface
+      runtime clamp produces passing roles; this clamp is intentionally
+      load-bearing for `executive-band`, as its approved preset rationale
+      states. Derive runtime level colors on every actual surface and assert
+      every filled mark passes 3:1 against both its surface and the actual
+      returned track. The track itself has no contrast floor and may equal the
+      surface after fallback.
 - [ ] **Step 3: `applyTemplate` tests**: `keep` preserves `layout.sections`
       byte-for-byte after exact-once validation; `byType` — property test over
       generated content-key sets (seeded, deterministic): current visual order

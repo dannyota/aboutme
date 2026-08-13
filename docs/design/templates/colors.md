@@ -1,6 +1,6 @@
 # Color and accessibility tokens
 
-Status: **Draft v2** (2026-08-12). Not approved.
+Status: **Approved v2** (2026-08-12).
 
 Defines derived color roles, multi-surface behavior, and the accessibility floor
 for the [template token vocabulary](tokens.md).

@@ -18,6 +18,10 @@
     "./released": {
       "types": "./gen/ts/released.ts",
       "default": "./gen/ts/released.ts"
+    },
+    "./templates": {
+      "types": "./gen/ts/templates.ts",
+      "default": "./gen/ts/templates.ts"
     }
   },
   "scripts": {

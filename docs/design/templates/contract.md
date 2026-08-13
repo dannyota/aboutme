@@ -1,6 +1,6 @@
 # Template contract
 
-Status: **Draft v2** (2026-08-12). Not approved.
+Status: **Approved v2** (2026-08-12).
 
 What a template is, what it may decide, and how it renders the versioned
 [resume document](../data.md#resume-aggregate).
