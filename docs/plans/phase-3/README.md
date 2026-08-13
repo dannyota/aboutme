@@ -1,6 +1,7 @@
 # Phase 3 — Renderer, sanitizer, templates, and fonts
 
-Status: **Revision 5, active** (2026-08-12). Design approved; unblocked.
+Status: **Revision 6, candidate** (2026-08-13). Implementation is complete;
+fresh review and phase gates remain.
 
 This phase builds the pure Vue resume renderer, both display pagination modes,
 the shared sanitizer implementations, self-hosted font catalog, template
@@ -12,8 +13,8 @@ dispatchable in dependency order. The 20 preset JSON files and the
 `header.iconStyle` enum (`none | outline`) already exist; reverify both at the
 execution base.
 
-Task 5 and its per-asset font license checks have landed. Shared-file ownership
-follows the exclusive windows below.
+All task implementations and their narrow checks have landed. Shared-file
+ownership follows the exclusive windows below.
 
 ## Scope boundaries
 
@@ -29,21 +30,21 @@ follows the exclusive windows below.
 
 ## Task index
 
-| Task | Deliverable                                                 | Tier   | State       |
-| ---- | ----------------------------------------------------------- | ------ | ----------- |
-| 0    | Batch pinned web dependencies                               | Normal | Landed      |
-| 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Implemented |
-| 2    | Go sanitizer package                                        | High   | Implemented |
-| 3    | Client DOMPurify wrapper and agreement tests                | High   | Implemented |
-| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Landed      |
-| 5B   | Immutable document v2 font catalog and converters           | High   | Landed      |
-| 6    | Pure renderer in continuous mode                            | High   | Implemented |
-| 7    | Pure pagination engine and editor paged wrapper             | High   | Implemented |
-| 8    | Preset registry, validation, and apply semantics            | Normal | Implemented |
-| 9    | Deterministic HTML golden harness                           | Normal | Implemented |
-| 10   | Renderer import and nondeterminism lint rules               | Normal | Pending     |
-| 11   | Pinned-browser screenshot, offline-font, sanitizer, CSP run | High   | Pending     |
-| Gate | Phase review and exit checklist                             | —      | Pending     |
+| Task | Deliverable                                                 | Tier   | State   |
+| ---- | ----------------------------------------------------------- | ------ | ------- |
+| 0    | Batch pinned web dependencies                               | Normal | Landed  |
+| 1    | Generate sanitizer allowlist and corpus artifacts           | High   | Landed  |
+| 2    | Go sanitizer package                                        | High   | Landed  |
+| 3    | Client DOMPurify wrapper and agreement tests                | High   | Landed  |
+| 5    | Licensed font assets, manifest, coverage, and readiness     | Normal | Landed  |
+| 5B   | Immutable document v2 font catalog and converters           | High   | Landed  |
+| 6    | Pure renderer in continuous mode                            | High   | Landed  |
+| 7    | Pure pagination engine and editor paged wrapper             | High   | Landed  |
+| 8    | Preset registry, validation, and apply semantics            | Normal | Landed  |
+| 9    | Deterministic HTML golden harness                           | Normal | Landed  |
+| 10   | Renderer import and nondeterminism lint rules               | Normal | Landed  |
+| 11   | Pinned-browser screenshot, offline-font, sanitizer, CSP run | High   | Landed  |
+| Gate | Phase review and exit checklist                             | —      | Pending |
 
 Task 4's independent suites are folded into their owning tasks; the required
 cases live in [adversarial coverage](adversarial-coverage.md).
@@ -85,10 +86,8 @@ graph TD
     T11 --> G
 ```
 
-T1, T2, T3, T5, and T5B have landed. T6, T7, and T8 are implemented. T9 can now
-consume the renderer, deterministic pagination seam, and preset registry. Each
-author writes that task's adversarial cases from
-[adversarial coverage](adversarial-coverage.md) as part of the task.
+T0 through T11 have landed. The remaining work is the fresh integrated review
+and the unchanged-candidate phase gate.
 
 ## Exclusive shared-file windows
 

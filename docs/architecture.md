@@ -98,8 +98,13 @@ and P7A.
 The web package contains the licensed font catalog, a pure Vue renderer with
 continuous and deterministic paged modes, and a generated registry for all 20
 validated template presets. Byte-exact HTML goldens cover both starting layouts
-and display modes for every preset. Renderer-boundary lint and the pinned
-browser screenshot harness remain Phase 3 work.
+and display modes for every preset. Renderer-boundary lint rejects runtime,
+state, network, clock, random, and ambient-locale dependencies. A pinned AMD64
+Chromium harness proves the named screenshot and print baselines at zero
+tolerance, all bundled fonts offline, the hostile corpus in a live DOM, and the
+renderer CSP against both harness and normal Nuxt output. Its reviewed manifest
+builds an immutable source archive from the exact commit and excludes the
+worktree, Git metadata, local state, and secret-like paths.
 
 ## Implemented private media boundary
 
@@ -126,6 +131,6 @@ orphan reconciliation.
 
 ## Not implemented
 
-Renderer goldens, the editor, public publishing, Server-Sent Events, PDF and
-image rendering, privacy workers, production infrastructure, staging, production
+The editor, public publishing, Server-Sent Events, production PDF and image
+rendering, privacy workers, production infrastructure, staging, production
 deployment, and Flutter remain planned.

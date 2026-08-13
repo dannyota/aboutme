@@ -72,7 +72,7 @@ is recorded in `playwright.config.ts`'s header comment; local runs use the
 identical `--platform linux/amd64` container. P9A repeats the named set with the
 production ARM64 image as a separate launch gate.
 
-- [ ] **Step 0: Resolve the browser image.** Match the pinned `@playwright/test`
+- [x] **Step 0: Resolve the browser image.** Match the pinned `@playwright/test`
       version, resolve and verify its AMD64 image digest and Chrome executable,
       then replace every placeholder above. Record `uname -m` on the host and
       inside the container and require `x86_64` in both; a platform flag without
@@ -260,16 +260,16 @@ only under the build flag. All `_harness` responses carry `HTML_CSP` via route
 rules. `HTML_CSP` is byte-for-byte D5's fixed directive string; tests do not
 reconstruct or reorder it.
 
-- [ ] **Step 1: Failing gating test.** `harness-absent.test.ts`: a normal
+- [x] **Step 1: Failing gating test.** `harness-absent.test.ts`: a normal
       `nuxt build` output contains no `_harness` route; a `NUXT_HARNESS=1` build
       does. Implement the page + gating; pass.
-- [ ] **Step 2: Offline fonts.** `fonts-offline.spec.ts`: route-block every
+- [x] **Step 2: Offline fonts.** `fonts-offline.spec.ts`: route-block every
       non-`localhost` request and **fail the test if any is attempted**; load
       the full Vietnamese harness page once per catalog family; await
       `fontsReady(catalogId)` for the selected face and fallback; assert the
       manifest's declared loaded faces are ready and zero external requests were
       attempted — the self-hosted/offline proof (AC-REN-003).
-- [ ] **Step 3: Screenshot baselines.** `screenshot.spec.ts` renders the seven
+- [x] **Step 3: Screenshot baselines.** `screenshot.spec.ts` renders the seven
       cells of the named subset above. Before navigation it sets the exact A4 or
       Letter viewport derived from the fixture's `pageFormat`, asserts the
       rendered paper box uses the same dimensions, then waits for
@@ -280,12 +280,12 @@ reconstruct or reorder it.
       generates via the update target; committed; CI compares. Vietnamese
       diacritic fidelity is judged in baseline review (tofu/misplaced marks in a
       baseline = task failure, not a later discovery).
-- [ ] **Step 3a: Print fragmentation goldens.** Run both cases above through
+- [x] **Step 3a: Print fragmentation goldens.** Run both cases above through
       actual `page.pdf()`, raster every page, and compare at zero tolerance.
       Prove sidebar-only and main-only overflow independently, repeated tint,
       correct page order, and no clipped or missing entry. Generate only through
       the owner update target and preserve any divergent output as evidence.
-- [ ] **Step 4: Browser corpus + CSP conformance.** `corpus.spec.ts`, per corpus
+- [x] **Step 4: Browser corpus + CSP conformance.** `corpus.spec.ts`, per corpus
       payload: first fetch the SSR response and prove it contains neither the
       payload bytes nor an active corpus node. Then: (a) sanitized page
       (`?payload=`) — wait for `data-corpus-ready="sanitized"`; collect
@@ -311,7 +311,7 @@ reconstruct or reorder it.
       nonce) that `script-src 'self'` would silently break. `csp.ts`'s doc
       comment states this constant is the renderer-surface baseline and names
       P5A/P8-sec as its production-enforcement owner.
-- [ ] **Step 5: Gate.** Run `make web-lint web-typecheck web-test web-build`,
+- [x] **Step 5: Gate.** Run `make web-lint web-typecheck web-test web-build`,
       then `WEB_E2E_RUN_ID="local-$(date -u +%Y%m%dT%H%M%SZ)" make web-e2e`.
       Record both outputs verbatim; never claim the browser gate ran without
       output.
