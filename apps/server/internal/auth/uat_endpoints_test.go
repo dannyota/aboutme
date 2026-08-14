@@ -10,9 +10,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"golang.org/x/oauth2"
+
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
-	"golang.org/x/oauth2"
 )
 
 type discoveryFixture struct {
@@ -191,7 +192,16 @@ func TestRuntimeOIDCDiscoveryRejectsExternalEndpoints(t *testing.T) {
 }
 
 func TestLocalProviderHTTPClientRejectsExternalEndpoint(t *testing.T) {
-	_, err := auth.LocalProviderHTTPClientForTest().Get("http://192.0.2.1:20442/google/token")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://192.0.2.1:20442/google/token", nil)
+	if err != nil {
+		t.Fatalf("build external endpoint request: %v", err)
+	}
+	resp, err := auth.LocalProviderHTTPClientForTest().Do(req)
+	if resp != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Errorf("close unexpected response: %v", closeErr)
+		}
+	}
 	if err == nil {
 		t.Fatal("GET external endpoint error = nil, want loopback-only rejection")
 	}
@@ -215,7 +225,16 @@ func TestRuntimeGitHubHTTPClientRejectsExternalEndpoint(t *testing.T) {
 	if client == nil {
 		t.Fatal("GitHub provider client = nil")
 	}
-	_, err = client.Get("http://192.0.2.1:20442/github/token")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://192.0.2.1:20442/github/token", nil)
+	if err != nil {
+		t.Fatalf("build external endpoint request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if resp != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Errorf("close unexpected response: %v", closeErr)
+		}
+	}
 	if err == nil {
 		t.Fatal("GET external endpoint error = nil, want loopback-only rejection")
 	}

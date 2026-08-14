@@ -493,8 +493,8 @@ func normalizationBudgetEvidenceSnapshot(t *testing.T) ([]byte, bool) {
 			RawEvidencePath string `json:"rawEvidencePath"`
 		} `json:"protocol"`
 	}
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		t.Fatalf("decode normalization benchmark manifest: %v", err)
+	if decodeErr := json.Unmarshal(manifestBytes, &manifest); decodeErr != nil {
+		t.Fatalf("decode normalization benchmark manifest: %v", decodeErr)
 	}
 	repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
 	if err != nil {

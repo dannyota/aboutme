@@ -29,7 +29,11 @@ var providerHTTPClient = &http.Client{Timeout: providerHTTPTimeout}
 // IPv4 or IPv6 loopback listener. It disables proxy use so a local provider
 // request can never carry credentials through an ambient HTTP proxy.
 func localProviderHTTPClient() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		panic("http.DefaultTransport must be an *http.Transport")
+	}
+	transport := defaultTransport.Clone()
 	transport.Proxy = nil
 	dialer := &net.Dialer{Timeout: providerHTTPTimeout}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {

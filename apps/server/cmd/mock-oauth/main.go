@@ -42,12 +42,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create OAuth mock: %w", err)
 	}
-	ln, err := net.Listen("tcp", net.JoinHostPort(listenHost, listenPort))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", net.JoinHostPort(listenHost, listenPort))
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	return serve(ctx, ln, svc.Handler())
 }
 
@@ -95,6 +96,7 @@ func serve(ctx context.Context, ln net.Listener, handler http.Handler) error {
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+	//nolint:contextcheck // ctx is already canceled, so the drain needs its own timeout context.
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
 	}
