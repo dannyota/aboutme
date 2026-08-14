@@ -725,4 +725,62 @@ describe('resume store adoption and teardown', () => {
     store.clearSessionLost('missing-resume');
     expect(store.recordFor(accepted.metadata.id)).toEqual(record);
   });
+
+  it('resolves only the exact conflict and retains all other state', () => {
+    const { accepted, store } = initialized(withPhoto(acceptedFixture()));
+    const command = titleCommand(accepted, 'In flight');
+    const retained = titleCommand(accepted, 'Queued', 2, 'queued-1');
+    store.enqueue(accepted.metadata.id, command);
+    store.startAttempt(
+      accepted.metadata.id,
+      command,
+      command,
+      attemptFor(command),
+    );
+    store.enqueue(accepted.metadata.id, retained);
+    store.setIssues(accepted.metadata.id, command.id, [
+      { path: '/metadata/title', code: 'invalid' },
+    ]);
+    store.setTemplateState(accepted.metadata.id, { kind: 'partial' } as never);
+    const opaqueCommand = photoUploadCommand(accepted);
+    store.setOpaquePhotoOutcome(accepted.metadata.id, {
+      kind: 'photo-cutoff',
+      command: opaqueCommand,
+      attempt: attemptFor(opaqueCommand),
+      observed: 'unavailable',
+    });
+    store.setPhotoRead(accepted.metadata.id, readyPhoto());
+    store.markSessionLost(accepted.metadata.id);
+    store.markConflict(accepted.metadata.id, { id: 'resolve-me' } as never);
+    store.markConflict(accepted.metadata.id, { id: 'keep-me' } as never);
+    const before = store.recordFor(accepted.metadata.id)!;
+    const retainedState = {
+      accepted: before.accepted,
+      current: before.current,
+      pending: before.pending,
+      attempt: before.attempt,
+      issues: before.issues,
+      templateState: before.templateState,
+      sessionLost: before.sessionLost,
+      photoRead: before.photoRead,
+      opaquePhotoOutcome: before.opaquePhotoOutcome,
+    };
+
+    store.resolveConflict(accepted.metadata.id, 'resolve-me');
+
+    const record = store.recordFor(accepted.metadata.id)!;
+    expect(record.conflicts).toEqual([{ id: 'keep-me' }]);
+    expect(record.accepted).toEqual(retainedState.accepted);
+    expect(record.current).toEqual(retainedState.current);
+    expect(record.pending).toEqual(retainedState.pending);
+    expect(record.attempt).toEqual(retainedState.attempt);
+    expect(record.issues).toEqual(retainedState.issues);
+    expect(record.templateState).toEqual(retainedState.templateState);
+    expect(record.sessionLost).toBe(retainedState.sessionLost);
+    expect(record.photoRead).toEqual(retainedState.photoRead);
+    expect(record.opaquePhotoOutcome).toEqual(retainedState.opaquePhotoOutcome);
+    store.resolveConflict(accepted.metadata.id, 'missing-conflict');
+    store.resolveConflict('missing-resume', 'resolve-me');
+    expect(store.recordFor(accepted.metadata.id)).toEqual(record);
+  });
 });

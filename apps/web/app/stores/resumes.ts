@@ -126,6 +126,7 @@ export interface ResumeStoreActions {
   replaceHead(resumeId: string, item: EditorQueueItem): void;
   dropHead(resumeId: string, itemId: string): void;
   markConflict(resumeId: string, conflict: ConflictRecord): void;
+  resolveConflict(resumeId: string, conflictId: string): void;
   setIssues(
     resumeId: string,
     itemId: string,
@@ -341,6 +342,19 @@ const resumeStore = defineStore('resumes', {
         | undefined;
       if (record === undefined) return;
       record.conflicts = [...record.conflicts, copy(conflict)];
+      replay(record);
+    },
+
+    resolveConflict(resumeId: string, conflictId: string) {
+      const record = this.records.get(resumeId) as unknown as
+        | ResumeRecord
+        | undefined;
+      if (record === undefined) return;
+      const conflicts = record.conflicts.filter(
+        (conflict) => conflict.id !== conflictId,
+      );
+      if (conflicts.length === record.conflicts.length) return;
+      record.conflicts = conflicts;
       replay(record);
     },
 
