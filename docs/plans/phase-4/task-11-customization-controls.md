@@ -79,8 +79,8 @@ it("equals the generated customization leaf set", () => {
     CUSTOMIZATION_FIELDS.find(({ path }) => path === "font.baseSizePx"),
   ).toMatchObject({
     kind: "integer",
-    minimum: 8,
-    maximum: 12,
+    minimum: 10,
+    maximum: 20,
   });
 });
 ```
