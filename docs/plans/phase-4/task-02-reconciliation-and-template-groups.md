@@ -163,6 +163,7 @@ export function recoverTemplateGroup(
   state: Extract<TemplateGroupState, { kind: "partial" }>,
   latest: AcceptedResume,
   action: "retry-remaining" | "restore-pre-apply" | "keep-partial",
+  runtime: EditorRuntime,
 ): TemplateRecovery;
 ```
 
