@@ -16,7 +16,9 @@
 
 **Interfaces:** Panels read Task 05 `ResumeEditorActions.record` and send Task
 01 `structure`, `sectionMetadata`, or `entryReorder` intents through `edit`.
-They never emit customization deltas or call transport.
+Custom section keys come only from `ResumeEditorActions.createEntityId()`.
+Panels never receive the editor runtime, emit customization deltas, or call
+transport.
 
 - [ ] **Step 1: Write the placement RED test**
 
