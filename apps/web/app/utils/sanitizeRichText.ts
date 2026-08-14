@@ -9,7 +9,7 @@ import {
 import type { Config, DOMPurify } from 'dompurify';
 
 const purifier: DOMPurify | undefined
-  = import.meta.client && typeof window !== 'undefined'
+  = import.meta.client && 'window' in globalThis
     ? (await import('dompurify')).default
     : undefined;
 
