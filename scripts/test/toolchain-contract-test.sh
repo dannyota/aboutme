@@ -98,6 +98,12 @@ grep -Fq 'gitleaks/v8@v8.30.1' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin gitleaks 8.30.1"
 grep -Fq 'gitleaks detect --redact --no-banner' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not run the full-history gitleaks gate"
+[ -x "$ROOT/scripts/generate-public-roots.mjs" ] ||
+  fail "public-root generator is missing or not executable"
+head -n 1 "$ROOT/scripts/generate-public-roots.mjs" | grep -Fqx '#!/usr/bin/env node' ||
+  fail "public-root generator does not use the pinned Node runtime"
+node --check "$ROOT/scripts/generate-public-roots.mjs" ||
+  fail "public-root generator does not parse under the pinned Node runtime"
 
 cat >"$BIN/sqlc" <<'EOF'
 #!/usr/bin/env bash

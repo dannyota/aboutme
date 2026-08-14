@@ -9,7 +9,8 @@ paths.
 - Registry/digests: `packages/publicroots/public-roots.v4.json`,
   `packages/publicroots/app-build-sources.v1.json`,
   `packages/publicroots/renderer-build-sources.v1.json`, and
-  `packages/publicroots/public-roots.test.mjs`.
+  `packages/publicroots/public-roots.test.mjs`; static invalid registries under
+  `packages/publicroots/testdata/`.
 - Generator/output: `scripts/generate-public-roots.mjs`,
   `apps/server/internal/publicroots/generated.go`,
   `apps/server/internal/publicroots/generated_test.go`,

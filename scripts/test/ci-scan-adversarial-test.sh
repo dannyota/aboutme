@@ -360,6 +360,21 @@ EOF
   return "$failed"
 }
 
+test_operational_gate_includes_render_topology() {
+  local output failed=0
+  output=$(cd "$ROOT" && /usr/bin/make --no-print-directory -n operational-test 2>&1) ||
+    return 1
+  for command in \
+    'bash scripts/test/render-topology-test.sh' \
+    'bash scripts/dev-https-test.sh --static' \
+    'bash deploy/dev-https-browser/static-test.sh'; do
+    if [[ $output != *"$command"* ]]; then
+      note_failure "operational-test omits $command" || failed=1
+    fi
+  done
+  return "$failed"
+}
+
 run_test "phase scan fails closed without connected Semgrep and still runs gitleaks" \
   test_phase_scan_requires_connected_semgrep
 run_test "local CI preserves a shared DB under pipefail and checks generated Go" \
@@ -370,6 +385,8 @@ run_test "Makefile help distinguishes Compose smoke from native development" \
   test_help_describes_compose_as_smoke_only
 run_test "native status verifies the database host listener" \
   test_native_status_checks_database_host_port
+run_test "operational gate includes render topology and HTTPS parity" \
+  test_operational_gate_includes_render_topology
 
 printf '\n%s passed; %s failed\n' "$passes" "$failures"
 [ "$failures" -eq 0 ]

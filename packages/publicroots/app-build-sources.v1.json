@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "roots": [
+    { "path": "apps/server/cmd/server", "kind": "recursive" },
+    { "path": "apps/server/go.mod", "kind": "file" },
+    { "path": "apps/server/go.sum", "kind": "file" },
+    { "path": "apps/server/internal", "kind": "recursive" },
+    { "path": "packages/publicroots/public-roots.v4.json", "kind": "file" },
+    { "path": "packages/schema/gen/go", "kind": "recursive" }
+  ]
+}

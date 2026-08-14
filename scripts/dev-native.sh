@@ -14,29 +14,7 @@
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-ROOT=$PWD
-
-# Fixed ports keep PUBLIC_ORIGIN-derived cookies, CSRF, and redirects aligned.
-readonly CADDY_PORT=20080
-readonly SERVER_PORT=20081
-readonly WEB_PORT=20030
-readonly PUBLIC_ORIGIN="http://localhost:${CADDY_PORT}"
-
-# Native development and tests use separate logical databases.
-DEV_DATABASE_URL=${ABOUTME_DEV_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable}
-DEV_LOG_LEVEL=${ABOUTME_DEV_LOG_LEVEL:-info}
-
-readonly DEV_DIR=$ROOT/.dev
-readonly BIN_DIR=$DEV_DIR/bin
-readonly MEDIA_DIR=$DEV_DIR/media
-readonly CADDYFILE_SRC=$ROOT/deploy/caddy/Caddyfile
-readonly CADDYFILE_GEN=$DEV_DIR/Caddyfile
-readonly SERVICES=(server web caddy)
-readonly DB_CONTAINER=aboutme-test-db
-
-# --------------------------------------------------------------------------
-# output helpers
-# --------------------------------------------------------------------------
+ROOT=$(pwd -P)
 
 info() { printf '%s\n' "$*"; }
 warn() { printf 'dev-native: %s\n' "$*" >&2; }
@@ -44,6 +22,57 @@ die() {
   printf 'dev-native: %s\n' "$*" >&2
   exit 1
 }
+
+# Fixed ports keep PUBLIC_ORIGIN-derived cookies, CSRF, and redirects aligned.
+readonly CADDY_PORT=20080
+readonly SERVER_PORT=20081
+readonly WEB_PORT=20030
+readonly PUBLIC_ORIGIN="http://localhost:${CADDY_PORT}"
+readonly PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20030
+
+# Native development and tests use separate logical databases.
+DEV_DATABASE_URL=${ABOUTME_DEV_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable}
+DEV_LOG_LEVEL=${ABOUTME_DEV_LOG_LEVEL:-info}
+
+resolve_repository_path() {
+  local raw=$1 label=$2 candidate lexical resolved
+  [ -n "$raw" ] || die "$label must not be empty"
+  if [[ $raw = /* ]]; then
+    candidate=$raw
+  else
+    candidate=$ROOT/$raw
+  fi
+  lexical=$(realpath -ms -- "$candidate") || die "$label could not be resolved"
+  resolved=$(realpath -m -- "$candidate") || die "$label could not be resolved"
+  [ "$resolved" = "$lexical" ] || die "$label must not traverse a symlink"
+  case $resolved in
+  / | "$ROOT") die "$label must name a directory below the repository root" ;;
+  "$ROOT"/*) ;;
+  *) die "$label must stay below the repository root" ;;
+  esac
+  printf '%s' "$resolved"
+}
+
+DEV_DIR=$(resolve_repository_path "${ABOUTME_DEV_STATE_DIR:-.dev}" ABOUTME_DEV_STATE_DIR)
+readonly DEV_DIR
+readonly BIN_DIR=$DEV_DIR/bin
+MEDIA_DIR=$(resolve_repository_path "${ABOUTME_DEV_MEDIA_DIR:-.dev/media}" ABOUTME_DEV_MEDIA_DIR)
+readonly MEDIA_DIR
+readonly CADDYFILE_SRC=$ROOT/deploy/caddy/Caddyfile
+readonly CADDYFILE_GEN=$DEV_DIR/Caddyfile
+readonly CADDY_HASHES=$DEV_DIR/caddy-hashes
+readonly PUBLIC_ROOTS_REGISTRY=$ROOT/packages/publicroots/public-roots.v4.json
+readonly PUBLIC_ROOTS_FRAGMENT=$ROOT/deploy/caddy/public-roots.generated.caddy
+readonly PUBLIC_ROOTS_MARKER=$'\t# ABOUTME_PUBLIC_ROOTS_GENERATED\n\timport /etc/caddy/generated/public-roots.generated.caddy'
+readonly SERVICES=(server web caddy)
+readonly DB_CONTAINER=aboutme-test-db
+
+APP_BUILD_DIGEST=
+PUBLIC_RENDERER_BUILD_DIGEST=
+
+# --------------------------------------------------------------------------
+# output helpers
+# --------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
 # process bookkeeping
@@ -202,8 +231,17 @@ count_occurrences() {
 }
 
 generate_caddyfile() {
-  local content
+  local content fragment marker_count prefix suffix
+  node "$ROOT/scripts/generate-public-roots.mjs" --check >/dev/null ||
+    die "public-root generation check failed"
   content=$(<"$CADDYFILE_SRC")
+  fragment=$(<"$PUBLIC_ROOTS_FRAGMENT")
+  marker_count=$(count_occurrences "$content" "$PUBLIC_ROOTS_MARKER")
+  [ "$marker_count" = 1 ] ||
+    die "$CADDYFILE_SRC: generated marker count is $marker_count, want exactly 1"
+  prefix=${content%%"$PUBLIC_ROOTS_MARKER"*}
+  suffix=${content#*"$PUBLIC_ROOTS_MARKER"}
+  content=$prefix$fragment$suffix
 
   # Site address: `bind` restricts the listener to loopback while leaving
   # the site's host matcher empty, so both http://localhost:20080 and
@@ -219,18 +257,17 @@ generate_caddyfile() {
     "reverse_proxy 127.0.0.1:${SERVER_PORT} {"
     "reverse_proxy 127.0.0.1:${WEB_PORT}"
   )
+  local -a counts=(1 2 2)
 
   local i old new n prefix suffix
   for i in "${!olds[@]}"; do
     old=${olds[$i]}
     new=${news[$i]}
     n=$(count_occurrences "$content" "$old")
-    if [ "$n" != 1 ]; then
-      die "$CADDYFILE_SRC: found $n occurrence(s) of '$old', want exactly 1 — the real Caddyfile's shape changed; update this script's substitution (and route_table_test.go's) to match"
+    if [ "$n" != "${counts[$i]}" ]; then
+      die "$CADDYFILE_SRC: found $n occurrence(s) of '$old', want exactly ${counts[$i]} — the real Caddyfile's shape changed; update this script's substitution (and route_table_test.go's) to match"
     fi
-    prefix=${content%%"$old"*}
-    suffix=${content#*"$old"}
-    content=$prefix$new$suffix
+    content=${content//"$old"/"$new"}
   done
 
   printf '%s\n' "$content"
@@ -242,10 +279,28 @@ generate_caddyfile() {
 
 require_tools() {
   local t
-  for t in podman go npm caddy curl ss setsid; do
+  for t in podman go npm node caddy curl ss setsid realpath sha256sum awk; do
     command -v "$t" >/dev/null 2>&1 || die "$t is not on PATH"
   done
   make -C "$ROOT" --no-print-directory tools-check ARGS=dev
+}
+
+load_source_digests() {
+  local output line
+  output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
+    die "public-root generation check failed"
+  APP_BUILD_DIGEST=
+  PUBLIC_RENDERER_BUILD_DIGEST=
+  while IFS= read -r line; do
+    case $line in
+    APP_BUILD_DIGEST=sha256:[0-9a-f]*) APP_BUILD_DIGEST=${line#APP_BUILD_DIGEST=} ;;
+    PUBLIC_RENDERER_BUILD_DIGEST=sha256:[0-9a-f]*) PUBLIC_RENDERER_BUILD_DIGEST=${line#PUBLIC_RENDERER_BUILD_DIGEST=} ;;
+    *) die "public-root generator returned an unexpected digest line" ;;
+    esac
+  done <<<"$output"
+  [[ $APP_BUILD_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] || die "APP_BUILD_DIGEST is invalid"
+  [[ $PUBLIC_RENDERER_BUILD_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] ||
+    die "PUBLIC_RENDERER_BUILD_DIGEST is invalid"
 }
 
 ensure_database() {
@@ -291,6 +346,9 @@ start_server() {
     DATABASE_URL="$DEV_DATABASE_URL" \
     ENV=dev \
     PUBLIC_ORIGIN="$PUBLIC_ORIGIN" \
+    PUBLIC_RENDER_ORIGIN="$PUBLIC_RENDER_ORIGIN" \
+    APP_BUILD_DIGEST="$APP_BUILD_DIGEST" \
+    PUBLIC_RENDERER_BUILD_DIGEST="$PUBLIC_RENDERER_BUILD_DIGEST" \
     TRUSTED_PROXY_CIDRS=127.0.0.1/32 \
     LOG_LEVEL="$DEV_LOG_LEVEL" \
     MEDIA_BACKEND=fs \
@@ -330,6 +388,11 @@ start_caddy() {
   ! port_blocked_by_stranger caddy || die "port $CADDY_PORT is already in use by a process this script did not start"
   info "--- caddy (:$CADDY_PORT)"
   printf '%s\n' "$generated" >"$CADDYFILE_GEN"
+  {
+    printf 'registry_source_sha256=%s\n' "$(sha256sum "$PUBLIC_ROOTS_REGISTRY" | awk '{print $1}')"
+    printf 'generated_fragment_sha256=%s\n' "$(sha256sum "$PUBLIC_ROOTS_FRAGMENT" | awk '{print $1}')"
+    printf 'effective_caddyfile_sha256=%s\n' "$(sha256sum "$CADDYFILE_GEN" | awk '{print $1}')"
+  } >"$CADDY_HASHES"
   mkdir -p "$DEV_DIR/caddy-state/config" "$DEV_DIR/caddy-state/data"
   # Keep caddy's instance uuid and autosave out of the developer's real
   # ~/.config/caddy and ~/.local/share/caddy.
@@ -344,6 +407,7 @@ start_caddy() {
 
 cmd_up() {
   require_tools
+  load_source_digests
   mkdir -p "$DEV_DIR" "$BIN_DIR" "$MEDIA_DIR"
   ensure_database
   run_migrations
