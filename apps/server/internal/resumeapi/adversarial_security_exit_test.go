@@ -420,8 +420,8 @@ func TestStorageSecretsNeverLeak(t *testing.T) {
 
 	invariantMetricCalls := 0
 	normalizationMetricCalls := 0
-	var invariantMetric func() = func() { invariantMetricCalls++ }
-	var normalizationMetric func(time.Duration) = func(time.Duration) { normalizationMetricCalls++ }
+	invariantMetric := func() { invariantMetricCalls++ }
+	normalizationMetric := func(time.Duration) { normalizationMetricCalls++ }
 	h.service.photoKeyInvariant = invariantMetric
 	h.service.photoNormalizationDuration = normalizationMetric
 
@@ -751,7 +751,7 @@ func securityExitMutationRequest(t *testing.T, h *resumeAPITestHarness,
 		request.Header.Set(auth.CSRFHeaderName, h.csrfToken)
 	}
 	request.Header.Set("Idempotency-Key", uuid.NewString())
-	if !(operation.Method == http.MethodPost && operation.Path == apiResumePath) {
+	if operation.Method != http.MethodPost || operation.Path != apiResumePath {
 		request.Header.Set("If-Match", fmt.Sprintf(`"r%d"`, revision))
 	}
 	if contentType != "" {

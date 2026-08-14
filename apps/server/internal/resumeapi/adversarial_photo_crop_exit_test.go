@@ -10,15 +10,19 @@ import (
 	"net/http"
 	"reflect"
 	"sort"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -28,7 +32,314 @@ func TestPhotoCrop_WriteSafety(t *testing.T) {
 }
 
 func TestPhotoCropContractAndIsolation(t *testing.T) {
+	assertPhotoCropDeclaredVersionMatrix(t)
 	assertPhotoCropReplacementRace(t)
+}
+
+type photoCropValidCase struct {
+	name     string
+	field    string
+	category string
+	body     string
+	want     schema.PhotoCrop
+}
+
+type photoCropRejectedCase struct {
+	name         string
+	field        string
+	category     string
+	body         string
+	status       int
+	code         string
+	message      string
+	issuePath    string
+	issueMessage string
+}
+
+func assertPhotoCropDeclaredVersionMatrix(t *testing.T) {
+	t.Helper()
+	validCases := []photoCropValidCase{
+		{name: "x exact lower", field: "x", category: "valid-lower", body: `{"crop":{"x":0,"y":0.25,"width":0.5,"height":0.5}}`, want: schema.PhotoCrop{X: 0, Y: 0.25, Width: 0.5, Height: 0.5}},
+		{name: "x exact upper", field: "x", category: "valid-upper", body: `{"crop":{"x":1,"y":0.25,"width":0.5,"height":0.5}}`, want: schema.PhotoCrop{X: 1, Y: 0.25, Width: 0.5, Height: 0.5}},
+		{name: "y exact lower", field: "y", category: "valid-lower", body: `{"crop":{"x":0.25,"y":0,"width":0.5,"height":0.5}}`, want: schema.PhotoCrop{X: 0.25, Y: 0, Width: 0.5, Height: 0.5}},
+		{name: "y exact upper", field: "y", category: "valid-upper", body: `{"crop":{"x":0.25,"y":1,"width":0.5,"height":0.5}}`, want: schema.PhotoCrop{X: 0.25, Y: 1, Width: 0.5, Height: 0.5}},
+		{name: "width positive epsilon", field: "width", category: "valid-lower", body: `{"crop":{"x":0.25,"y":0.25,"width":0.000001,"height":0.5}}`, want: schema.PhotoCrop{X: 0.25, Y: 0.25, Width: 0.000001, Height: 0.5}},
+		{name: "width exact upper", field: "width", category: "valid-upper", body: `{"crop":{"x":0.25,"y":0.25,"width":1,"height":0.5}}`, want: schema.PhotoCrop{X: 0.25, Y: 0.25, Width: 1, Height: 0.5}},
+		{name: "height positive epsilon", field: "height", category: "valid-lower", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":0.000001}}`, want: schema.PhotoCrop{X: 0.25, Y: 0.25, Width: 0.5, Height: 0.000001}},
+		{name: "height exact upper", field: "height", category: "valid-upper", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":1}}`, want: schema.PhotoCrop{X: 0.25, Y: 0.25, Width: 0.5, Height: 1}},
+	}
+
+	const boundsMessage = "crop coordinates are outside their bounds"
+	const shapeMessage = "crop must contain x, y, width, and height"
+	const numbersMessage = "crop coordinates must be numbers"
+	rejectedCases := []photoCropRejectedCase{
+		{name: "x below lower by epsilon", field: "x", category: "below-lower", body: `{"crop":{"x":-0.000001,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "x above upper by epsilon", field: "x", category: "above-upper", body: `{"crop":{"x":1.000001,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "y below lower by epsilon", field: "y", category: "below-lower", body: `{"crop":{"x":0.25,"y":-0.000001,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "y above upper by epsilon", field: "y", category: "above-upper", body: `{"crop":{"x":0.25,"y":1.000001,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "width exact excluded lower", field: "width", category: "excluded-lower", body: `{"crop":{"x":0.25,"y":0.25,"width":0,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "width below lower by epsilon", field: "width", category: "below-lower", body: `{"crop":{"x":0.25,"y":0.25,"width":-0.000001,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "width above upper by epsilon", field: "width", category: "above-upper", body: `{"crop":{"x":0.25,"y":0.25,"width":1.000001,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "height exact excluded lower", field: "height", category: "excluded-lower", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":0}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "height below lower by epsilon", field: "height", category: "below-lower", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":-0.000001}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+		{name: "height above upper by epsilon", field: "height", category: "above-upper", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":1.000001}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: boundsMessage},
+
+		{name: "x missing", field: "x", category: "missing", body: `{"crop":{"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: shapeMessage},
+		{name: "y missing", field: "y", category: "missing", body: `{"crop":{"x":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: shapeMessage},
+		{name: "width missing", field: "width", category: "missing", body: `{"crop":{"x":0.25,"y":0.25,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: shapeMessage},
+		{name: "height missing", field: "height", category: "missing", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: shapeMessage},
+
+		{name: "x non-number", field: "x", category: "non-number", body: `{"crop":{"x":"no","y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "y non-number", field: "y", category: "non-number", body: `{"crop":{"x":0.25,"y":"no","width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "width non-number", field: "width", category: "non-number", body: `{"crop":{"x":0.25,"y":0.25,"width":"no","height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "height non-number", field: "height", category: "non-number", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":"no"}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+
+		{name: "x null", field: "x", category: "null", body: `{"crop":{"x":null,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop.x", issueMessage: numbersMessage},
+		{name: "y null", field: "y", category: "null", body: `{"crop":{"x":0.25,"y":null,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop.y", issueMessage: numbersMessage},
+		{name: "width null", field: "width", category: "null", body: `{"crop":{"x":0.25,"y":0.25,"width":null,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop.width", issueMessage: numbersMessage},
+		{name: "height null", field: "height", category: "null", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":null}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop.height", issueMessage: numbersMessage},
+
+		{name: "x positive non-finite equivalent", field: "x", category: "positive-overflow", body: `{"crop":{"x":1e10000,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "x negative non-finite equivalent", field: "x", category: "negative-overflow", body: `{"crop":{"x":-1e10000,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "y positive non-finite equivalent", field: "y", category: "positive-overflow", body: `{"crop":{"x":0.25,"y":1e10000,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "y negative non-finite equivalent", field: "y", category: "negative-overflow", body: `{"crop":{"x":0.25,"y":-1e10000,"width":0.5,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "width positive non-finite equivalent", field: "width", category: "positive-overflow", body: `{"crop":{"x":0.25,"y":0.25,"width":1e10000,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "width negative non-finite equivalent", field: "width", category: "negative-overflow", body: `{"crop":{"x":0.25,"y":0.25,"width":-1e10000,"height":0.5}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "height positive non-finite equivalent", field: "height", category: "positive-overflow", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":1e10000}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+		{name: "height negative non-finite equivalent", field: "height", category: "negative-overflow", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":-1e10000}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: numbersMessage},
+
+		{name: "crop extra field", category: "fragment-extra", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":0.5,"extra":true}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: shapeMessage},
+		{name: "crop supplied key", category: "fragment-key", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":0.5,"key":"client-key"}}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: shapeMessage},
+		{name: "crop wrong type", category: "fragment-type", body: `{"crop":"not-an-object"}`, status: http.StatusUnprocessableEntity, code: "document_invalid", message: "resume document is invalid", issuePath: "crop", issueMessage: shapeMessage},
+
+		{name: "missing crop envelope", category: "envelope-missing", body: `{}`, status: http.StatusBadRequest, code: "request_invalid", message: "request body must contain only crop"},
+		{name: "supplied key envelope", category: "envelope-key", body: `{"key":"client-key"}`, status: http.StatusBadRequest, code: "request_invalid", message: "request body must contain crop"},
+		{name: "extra envelope field", category: "envelope-extra", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":0.5},"extra":true}`, status: http.StatusBadRequest, code: "request_invalid", message: "request body must contain only crop"},
+		{name: "supplied top-level key", category: "envelope-crop-key", body: `{"crop":{"x":0.25,"y":0.25,"width":0.5,"height":0.5},"key":"client-key"}`, status: http.StatusBadRequest, code: "request_invalid", message: "request body must contain only crop"},
+		{name: "NaN token", category: "envelope-nan", body: `{"crop":{"x":NaN,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusBadRequest, code: "request_invalid", message: "request body is not valid JSON"},
+		{name: "positive Infinity token", category: "envelope-positive-infinity", body: `{"crop":{"x":Infinity,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusBadRequest, code: "request_invalid", message: "request body is not valid JSON"},
+		{name: "negative Infinity token", category: "envelope-negative-infinity", body: `{"crop":{"x":-Infinity,"y":0.25,"width":0.5,"height":0.5}}`, status: http.StatusBadRequest, code: "request_invalid", message: "request body is not valid JSON"},
+	}
+	assertPhotoCropCaseCompleteness(t, validCases, rejectedCases)
+
+	for _, version := range []int{1, 2} {
+		t.Run("declared version "+strconv.Itoa(version), func(t *testing.T) {
+			h := newResumeAPITestHarness(t)
+			created := h.createResume(t)
+			uploaded := h.uploadPhotoRequest(t, created.ID, created.Revision, uuid.NewString(), "photo.png", makePhotoPNG(t))
+			if uploaded.status != http.StatusOK {
+				t.Fatalf("seed upload = %d body=%s", uploaded.status, uploaded.body)
+			}
+			_, uploadedDocument := decodedWrittenDocument(t, uploaded)
+			if uploadedDocument.PersonalDetails.Photo == nil {
+				t.Fatal("seed upload returned no photo")
+			}
+			photoKey := uploadedDocument.PersonalDetails.Photo.Key
+			backend := &photoCropExitBackend{delegate: h.service.blobs}
+			h.service.blobs = backend
+			path := fmt.Sprintf("/api/v1/resumes/%s/photo", created.ID)
+			revision := int64(2)
+
+			for _, test := range validCases {
+				t.Run(test.name, func(t *testing.T) {
+					beforeCalls := backend.snapshotCalls()
+					response := photoCropExitVersionedRequest(t, h, path, test.body, revision, version)
+					if response.status != http.StatusOK || response.header.Get(wireVersionHeader) != strconv.Itoa(version) ||
+						response.header.Get("ETag") != fmt.Sprintf(`"r%d"`, revision+1) {
+						t.Fatalf("valid crop = %d headers=%v body=%s", response.status, response.header, response.body)
+					}
+					responseRevision, document := decodedWrittenDocument(t, response)
+					if responseRevision != strconv.FormatInt(revision+1, 10) || document.SchemaVersion != int64(version) ||
+						document.PersonalDetails.Photo == nil || document.PersonalDetails.Photo.Key != photoKey ||
+						document.PersonalDetails.Photo.Crop == nil || *document.PersonalDetails.Photo.Crop != test.want {
+						t.Fatalf("valid crop revision=%q schema=%d photo=%#v, want key %q crop %#v",
+							responseRevision, document.SchemaVersion, document.PersonalDetails.Photo, photoKey, test.want)
+					}
+					stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+					if err != nil {
+						t.Fatalf("read stored valid crop: %v", err)
+					}
+					if stored.StoredSchemaVersion != docmigrate.CurrentVersion ||
+						stored.Doc.SchemaVersion != int64(docmigrate.CurrentVersion) || stored.Revision != revision+1 ||
+						stored.Doc.PersonalDetails.Photo == nil ||
+						stored.Doc.PersonalDetails.Photo.Key != photoKey || stored.Doc.PersonalDetails.Photo.Crop == nil ||
+						*stored.Doc.PersonalDetails.Photo.Crop != test.want {
+						t.Fatalf("stored valid crop versions=%d/%d revision=%d photo=%#v, want current v2, key %q, crop %#v",
+							stored.StoredSchemaVersion, stored.Doc.SchemaVersion, stored.Revision,
+							stored.Doc.PersonalDetails.Photo, photoKey, test.want)
+					}
+					if afterCalls := backend.snapshotCalls(); afterCalls != beforeCalls {
+						t.Fatalf("valid crop made object calls: before=%+v after=%+v", beforeCalls, afterCalls)
+					}
+					revision++
+				})
+			}
+
+			t.Run("null clear", func(t *testing.T) {
+				beforeCalls := backend.snapshotCalls()
+				response := photoCropExitVersionedRequest(t, h, path, `{"crop":null}`, revision, version)
+				if response.status != http.StatusOK || response.header.Get(wireVersionHeader) != strconv.Itoa(version) ||
+					response.header.Get("ETag") != fmt.Sprintf(`"r%d"`, revision+1) {
+					t.Fatalf("clear crop = %d headers=%v body=%s", response.status, response.header, response.body)
+				}
+				responseRevision, document := decodedWrittenDocument(t, response)
+				if responseRevision != strconv.FormatInt(revision+1, 10) || document.SchemaVersion != int64(version) ||
+					document.PersonalDetails.Photo == nil || document.PersonalDetails.Photo.Key != photoKey ||
+					document.PersonalDetails.Photo.Crop != nil {
+					t.Fatalf("clear crop revision=%q schema=%d photo=%#v, want key %q without crop",
+						responseRevision, document.SchemaVersion, document.PersonalDetails.Photo, photoKey)
+				}
+				assertPhotoCropResponseOmitsProperty(t, response.body)
+				stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+				if err != nil {
+					t.Fatalf("read stored cleared crop: %v", err)
+				}
+				if stored.StoredSchemaVersion != docmigrate.CurrentVersion ||
+					stored.Doc.SchemaVersion != int64(docmigrate.CurrentVersion) || stored.Revision != revision+1 ||
+					stored.Doc.PersonalDetails.Photo == nil || stored.Doc.PersonalDetails.Photo.Key != photoKey ||
+					stored.Doc.PersonalDetails.Photo.Crop != nil {
+					t.Fatalf("stored clear versions=%d/%d revision=%d photo=%#v, want current v2 key %q without crop",
+						stored.StoredSchemaVersion, stored.Doc.SchemaVersion, stored.Revision,
+						stored.Doc.PersonalDetails.Photo, photoKey)
+				}
+				assertStoredPhotoCropPropertyAbsent(t, snapshotStoredResumeRow(t, h, created.ID).PersonalDetails)
+				if afterCalls := backend.snapshotCalls(); afterCalls != beforeCalls {
+					t.Fatalf("clear crop made object calls: before=%+v after=%+v", beforeCalls, afterCalls)
+				}
+				revision++
+			})
+
+			for _, test := range rejectedCases {
+				t.Run(test.name, func(t *testing.T) {
+					before := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
+					beforeCalls := backend.snapshotCalls()
+					response := photoCropExitVersionedRequest(t, h, path, test.body, revision, version)
+					assertPhotoCropExitError(t, response, test)
+					if afterCalls := backend.snapshotCalls(); afterCalls != beforeCalls {
+						t.Fatalf("rejected crop made object calls: before=%+v after=%+v", beforeCalls, afterCalls)
+					}
+					after := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
+					if !reflect.DeepEqual(after, before) {
+						t.Fatalf("rejected crop changed resume, idempotency, deletion, or object state:\n before=%+v\n after=%+v", before, after)
+					}
+				})
+			}
+		})
+	}
+}
+
+func assertPhotoCropCaseCompleteness(t *testing.T, valid []photoCropValidCase,
+	rejected []photoCropRejectedCase,
+) {
+	t.Helper()
+	want := map[string]struct{}{}
+	for _, field := range []string{"x", "y"} {
+		for _, category := range []string{"valid-lower", "valid-upper", "below-lower", "above-upper", "missing", "non-number", "null", "positive-overflow", "negative-overflow"} {
+			want[field+"/"+category] = struct{}{}
+		}
+	}
+	for _, field := range []string{"width", "height"} {
+		for _, category := range []string{"valid-lower", "valid-upper", "excluded-lower", "below-lower", "above-upper", "missing", "non-number", "null", "positive-overflow", "negative-overflow"} {
+			want[field+"/"+category] = struct{}{}
+		}
+	}
+	for _, category := range []string{"fragment-extra", "fragment-key", "fragment-type", "envelope-missing", "envelope-key", "envelope-extra", "envelope-crop-key", "envelope-nan", "envelope-positive-infinity", "envelope-negative-infinity"} {
+		want["/"+category] = struct{}{}
+	}
+
+	got := make(map[string]struct{}, len(valid)+len(rejected))
+	for _, test := range valid {
+		key := test.field + "/" + test.category
+		if _, duplicate := got[key]; duplicate {
+			t.Fatalf("duplicate crop contract case %q", key)
+		}
+		got[key] = struct{}{}
+	}
+	for _, test := range rejected {
+		key := test.field + "/" + test.category
+		if _, duplicate := got[key]; duplicate {
+			t.Fatalf("duplicate crop contract case %q", key)
+		}
+		got[key] = struct{}{}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("crop contract inventory mismatch:\n got=%v\nwant=%v", sortedPhotoCropCaseKeys(got), sortedPhotoCropCaseKeys(want))
+	}
+}
+
+func sortedPhotoCropCaseKeys(cases map[string]struct{}) []string {
+	keys := make([]string, 0, len(cases))
+	for key := range cases {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func photoCropExitVersionedRequest(t *testing.T, h *resumeAPITestHarness, path, body string,
+	revision int64, version int,
+) testHTTPResponse {
+	t.Helper()
+	request := newPhotoCropExitRequest(t, h, http.MethodPatch, path, bytes.NewBufferString(body),
+		"application/json", revision, uuid.New())
+	request.Header.Set(wireVersionHeader, strconv.Itoa(version))
+	response, err := h.client.Do(request)
+	if err != nil {
+		t.Fatalf("perform declared-version crop request: %v", err)
+	}
+	return snapshotHTTPResponse(t, response)
+}
+
+func assertPhotoCropExitError(t *testing.T, response testHTTPResponse, want photoCropRejectedCase) {
+	t.Helper()
+	if response.status != want.status {
+		t.Fatalf("crop error status = %d body=%s, want %d", response.status, response.body, want.status)
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(response.body, &root); err != nil {
+		t.Fatalf("decode crop error envelope: %v", err)
+	}
+	if len(root) != 1 || root["error"] == nil {
+		t.Fatalf("crop error envelope fields = %v, want only error", root)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(root["error"], &object); err != nil {
+		t.Fatalf("decode crop error object: %v", err)
+	}
+	var code, message string
+	if err := json.Unmarshal(object["code"], &code); err != nil {
+		t.Fatalf("decode crop error code: %v", err)
+	}
+	if err := json.Unmarshal(object["message"], &message); err != nil {
+		t.Fatalf("decode crop error message: %v", err)
+	}
+	if code != want.code || message != want.message {
+		t.Fatalf("crop error = (%q, %q), want (%q, %q)", code, message, want.code, want.message)
+	}
+	if want.status == http.StatusBadRequest {
+		if len(object) != 2 {
+			t.Fatalf("400 crop error fields = %v, want exactly code and message", object)
+		}
+		return
+	}
+	if len(object) != 3 || object["details"] == nil {
+		t.Fatalf("422 crop error fields = %v, want code, message, and details", object)
+	}
+	var details struct {
+		Issues []struct {
+			Path    string `json:"path"`
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"issues"`
+	}
+	if err := json.Unmarshal(object["details"], &details); err != nil {
+		t.Fatalf("decode crop error details: %v", err)
+	}
+	if len(details.Issues) != 1 || details.Issues[0].Path != want.issuePath ||
+		details.Issues[0].Code != "invalid" || details.Issues[0].Message != want.issueMessage {
+		t.Fatalf("crop error issues = %#v, want path=%q code=invalid message=%q",
+			details.Issues, want.issuePath, want.issueMessage)
+	}
 }
 
 func assertPhotoCropChangedBodyReuse(t *testing.T) {
@@ -316,7 +627,7 @@ func assertPhotoCropReplacementRace(t *testing.T) {
 	}
 	newKey := stored.Doc.PersonalDetails.Photo.Key
 
-	objects := photoCropExitObjectKeys(t, h.ctx, backend.delegate, created.ID)
+	objects := photoCropExitObjectKeys(h.ctx, t, backend.delegate, created.ID)
 	wantObjects := []string{oldKey, newKey}
 	sort.Strings(wantObjects)
 	if !reflect.DeepEqual(objects, wantObjects) {
@@ -403,11 +714,11 @@ func snapshotPhotoCropExitState(t *testing.T, h *resumeAPITestHarness, backend m
 		row:     snapshotStoredResumeRow(t, h, resumeID),
 		records: h.snapshotUserTable(t, "idempotency_records"),
 		jobs:    photoCropExitDeletionKeys(t, h, resumeID),
-		objects: photoCropExitObjectKeys(t, h.ctx, backend, resumeID),
+		objects: photoCropExitObjectKeys(h.ctx, t, backend, resumeID),
 	}
 }
 
-func photoCropExitObjectKeys(t *testing.T, ctx context.Context, backend media.Backend,
+func photoCropExitObjectKeys(ctx context.Context, t *testing.T, backend media.Backend,
 	resumeID uuid.UUID,
 ) []string {
 	t.Helper()
