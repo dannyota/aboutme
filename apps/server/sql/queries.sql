@@ -451,6 +451,14 @@ INSERT INTO media_deletion_jobs (resume_id, object_key)
 VALUES ($1, $2)
 ON CONFLICT (object_key) DO NOTHING;
 
+-- name: GetMediaDeletionJobByObjectKey :one
+-- Ambiguous-delete recovery proves the exact immutable cleanup job without
+-- scanning or exposing unrelated object keys.
+SELECT *
+FROM media_deletion_jobs
+WHERE resume_id = sqlc.arg(resume_id)::uuid
+  AND object_key = sqlc.arg(object_key)::text;
+
 -- name: GetPublicState :one
 SELECT singleton, discovery_generation
 FROM public_state
