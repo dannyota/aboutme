@@ -51,9 +51,13 @@ it("exports only the sanitizer-v1 vocabulary", () => {
   ]);
   expect(
     serializeRichText(parseRichTextHTML("<h1>x</h1><img src=x><p></p>")),
-  ).toBe("");
+  ).toBe("<p>x</p>");
 });
 ```
+
+The unsupported heading and image elements cannot enter the ProseMirror
+document. DOMPurify preserves the heading's safe text, which the closed parser
+normalizes to a paragraph.
 
 - [ ] **Step 2: Run the schema/parser test RED**
 
