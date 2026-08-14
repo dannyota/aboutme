@@ -125,6 +125,9 @@ type Querier interface {
 	GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error)
 	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	// Ambiguous-delete recovery proves the exact immutable cleanup job without
+	// scanning or exposing unrelated object keys.
+	GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error)
 	// Locks (creating if absent) the caller's usage row inside the current
 	// transaction. The no-op DO UPDATE assignment is what makes the conflict
 	// arm take the row lock and return the existing row; user_id itself never

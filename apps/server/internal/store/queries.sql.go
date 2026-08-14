@@ -842,6 +842,34 @@ func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdent
 	return i, err
 }
 
+const getMediaDeletionJobByObjectKey = `-- name: GetMediaDeletionJobByObjectKey :one
+SELECT id, resume_id, object_key, enqueued_at, next_attempt_at, attempt_count
+FROM media_deletion_jobs
+WHERE resume_id = $1::uuid
+  AND object_key = $2::text
+`
+
+type GetMediaDeletionJobByObjectKeyParams struct {
+	ResumeID  uuid.UUID
+	ObjectKey string
+}
+
+// Ambiguous-delete recovery proves the exact immutable cleanup job without
+// scanning or exposing unrelated object keys.
+func (q *Queries) GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error) {
+	row := q.db.QueryRow(ctx, getMediaDeletionJobByObjectKey, arg.ResumeID, arg.ObjectKey)
+	var i MediaDeletionJob
+	err := row.Scan(
+		&i.ID,
+		&i.ResumeID,
+		&i.ObjectKey,
+		&i.EnqueuedAt,
+		&i.NextAttemptAt,
+		&i.AttemptCount,
+	)
+	return i, err
+}
+
 const getOrCreateIdempotencyUsageForUpdate = `-- name: GetOrCreateIdempotencyUsageForUpdate :one
 INSERT INTO idempotency_usage (user_id, retained_records, stored_bytes)
 VALUES ($1, 0, 0)
