@@ -109,6 +109,10 @@ export interface ResumeStoreActions {
     state: Exclude<AttemptState, { kind: "dispatching" }>,
   ): void;
   adoptComplete(resumeId: string, accepted: AcceptedResume): CompletionAdoption;
+  adoptCompleteRead(
+    resumeId: string,
+    accepted: AcceptedResume,
+  ): CompletionAdoption;
   adoptStaleWinner(resumeId: string, accepted: AcceptedResume): void;
   acknowledgeChild(resumeId: string, itemId: string, etag: ParentETag): void;
   acknowledgeResumeDelete(resumeId: string, itemId: string): void;
@@ -222,6 +226,13 @@ derived state. A missing resume, non-template attempt, or mismatched ID is a
 no-op. The coordinator uses this transition after an accepted child when the
 group remains running or becomes partial; a complete group is still removed with
 `dropHead`.
+
+`adoptCompleteRead` consumes a validated complete owner read. It accepts an
+equal or newer revision, replaces the full accepted state, clears
+`completeReadRequired`, and replays retained work. It rejects an older read
+without changing state. The coordinator uses this action after a bodyless child
+acknowledgement because that acknowledgement already advanced the parent
+revision to the complete read's revision.
 
 - [ ] **Step 4: Rerun the state/replay test GREEN**
 

@@ -120,6 +120,10 @@ export interface ResumeStoreActions {
     state: Exclude<AttemptState, { kind: 'dispatching' }>,
   ): void;
   adoptComplete(resumeId: string, accepted: AcceptedResume): CompletionAdoption;
+  adoptCompleteRead(
+    resumeId: string,
+    accepted: AcceptedResume,
+  ): CompletionAdoption;
   adoptStaleWinner(resumeId: string, accepted: AcceptedResume): void;
   acknowledgeChild(resumeId: string, itemId: string, etag: ParentETag): void;
   acknowledgeResumeDelete(resumeId: string, itemId: string): void;
@@ -247,6 +251,25 @@ const resumeStore = defineStore('resumes', {
         return { kind: 'older', winner: cloneAccepted(accepted) };
       }
       if (compareRevision(accepted.revision, record.accepted.revision) <= 0) {
+        return { kind: 'older', winner: record.accepted };
+      }
+      record.accepted = cloneAccepted(accepted);
+      record.completeReadRequired = false;
+      replay(record);
+      return { kind: 'adopted', accepted: record.accepted };
+    },
+
+    adoptCompleteRead(
+      resumeId: string,
+      accepted: AcceptedResume,
+    ): CompletionAdoption {
+      const record = this.records.get(resumeId) as unknown as
+        | ResumeRecord
+        | undefined;
+      if (record === undefined) {
+        return { kind: 'older', winner: cloneAccepted(accepted) };
+      }
+      if (compareRevision(accepted.revision, record.accepted.revision) < 0) {
         return { kind: 'older', winner: record.accepted };
       }
       record.accepted = cloneAccepted(accepted);
