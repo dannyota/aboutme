@@ -71,6 +71,24 @@ describe('resume editor actions', () => {
       (coordinator as { schedule: ReturnType<typeof vi.fn> }).schedule,
     ).toHaveBeenCalledTimes(2);
   });
+
+  it('creates entity IDs only through the injected runtime', () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const store = useResumeStore();
+    store.initialize(accepted);
+    const uuid = vi.fn(() => 'entity-1');
+    const actions = createResumeEditorActions({
+      resumeId: accepted.metadata.id,
+      store,
+      coordinator: { schedule: vi.fn() } as never,
+      auth: { user: computed(() => ({ id: 'owner-1' })) } as never,
+      runtime: { nowEpochMs: () => 0, uuid, delay: async () => {} },
+    });
+
+    expect(actions.createEntityId()).toBe('entity-1');
+    expect(uuid).toHaveBeenCalledOnce();
+  });
 });
 
 describe('mutation coordinator', () => {
