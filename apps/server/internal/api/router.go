@@ -149,7 +149,8 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 	// side effect of where it happens to sit: it is outermost specifically
 	// so every rejection this chain can produce — RateLimit's 429 and its
 	// own 400 invalid_client_ip, BodyLimit's 413, the mux's 404/405 — all
-	// carry Cache-Control: no-store, not just a successful response. A
+	// carry Cache-Control: no-store, no-transform, not just a successful
+	// response. A
 	// public route group can substitute a different policy (for example,
 	// PublicJSONCache for public JSON) by wrapping just that group's
 	// handler INSIDE the mux: that inner middleware's Cache-Control write

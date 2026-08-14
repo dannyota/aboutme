@@ -16,7 +16,7 @@ const (
 	// no intermediary — a browser cache, CloudFront, a corporate proxy —
 	// ever stores a copy that could later be served back to a different
 	// account sharing that cache.
-	CacheControlNoStore = "no-store"
+	CacheControlNoStore = "no-store, no-transform"
 	// CacheControlPublicJSON is the Cache-Control value PublicJSONCache
 	// sends. It is paired with an ETag so a cache must always
 	// revalidate with the origin (a conditional round-trip) before reusing
@@ -25,7 +25,8 @@ const (
 	CacheControlPublicJSON = "no-cache, must-revalidate"
 )
 
-// NoStoreCache returns middleware that sets Cache-Control: no-store on
+// NoStoreCache returns middleware that sets Cache-Control: no-store,
+// no-transform on
 // every response it wraps, including error responses — it sets the header
 // before calling next, the same pattern SecurityHeaders uses (see that
 // doc comment for why that ordering is what makes a rejection path, not

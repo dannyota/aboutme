@@ -13,7 +13,7 @@ fail() {
   exit 1
 }
 
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts network-policy.ts run.sh; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 
@@ -30,7 +30,7 @@ readonly IMAGE_META=$WORK/image.meta
 readonly INPUT=$WORK/input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts network-policy.ts run.sh; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'static-test-only' \
@@ -67,6 +67,7 @@ build)
   grep -Fq '"@playwright/test": "1.62.1"' "$context/package.json"
   grep -Fq '"@playwright/test": "1.62.1"' "$context/package-lock.json"
   grep -Fq 'network-policy.ts' "$context/Dockerfile"
+  grep -Fq 'transport.spec.ts' "$context/Dockerfile"
   printf '%s\n' built >"$FAKE_IMAGE_META"
   ;;
 image)
@@ -95,7 +96,14 @@ image)
   ;;
 run)
   [ -s "$FAKE_IMAGE_META" ]
-  [ "${!#}" = "$FAKE_EXPECTED_IMAGE_ID" ]
+  case ${!#} in
+  "$FAKE_EXPECTED_IMAGE_ID") ;;
+  transport)
+    previous_index=$(($# - 1))
+    [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
+    ;;
+  *) exit 64 ;;
+  esac
   printf '%s\n' "$*" | grep -Eq '(^| )--pull=never( |$)'
   ;;
 *)
@@ -186,6 +194,32 @@ if grep -Eq '(/var/run/docker\.sock|/run/podman/podman\.sock|dst=/home|dst=/work
   "$READABLE_LOG"; then
   fail 'runtime exposes a forbidden host path or socket'
 fi
+image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
+[ -n "$image_line" ] || fail 'auth run lacks the verified image ID'
+[ -z "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" ] ||
+  fail 'three-argument auth run gained a mode argument'
+
+readonly TRANSPORT_EVIDENCE=$WORK/transport-evidence
+install -d -m 0700 "$TRANSPORT_EVIDENCE"
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$TRANSPORT_EVIDENCE" transport
+tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
+grep -Fxq transport "$READABLE_LOG" || fail 'transport mode did not reach the image'
+image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
+[ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = transport ] ||
+  fail 'transport mode was not passed after the verified image ID'
+
+readonly INVALID_MODE_EVIDENCE=$WORK/invalid-mode-evidence
+install -d -m 0700 "$INVALID_MODE_EVIDENCE"
+: >"$CALL_LOG"
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
+  fail 'invalid host mode was accepted'
+fi
+grep -Fq 'mode must be auth or transport' <<<"$output" ||
+  fail 'invalid host mode returned the wrong diagnostic'
+[ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
 for source in "$SOURCE"/*.sh "$SOURCE"/*.ts "$SOURCE"/Dockerfile; do
   if grep -nE '[[:blank:]]+$' "$source"; then
@@ -261,25 +295,31 @@ for (const [actual, expected] of cases) {
 }
 NETWORK_POLICY_TEST
 
-node --input-type=module - "$SOURCE/auth.spec.ts" <<'ROUTING_SCOPE_TEST'
+node --input-type=module - "$SOURCE/auth.spec.ts" "$SOURCE/transport.spec.ts" <<'ROUTING_SCOPE_TEST'
 import { readFile } from 'node:fs/promises';
 
-const source = await readFile(process.argv[2], 'utf8');
-const httpRoute = source.indexOf("await context.route('**/*'");
-const websocketRoute = source.indexOf("await context.routeWebSocket('**/*'");
-const firstNavigation = source.indexOf("await page.goto('/login')");
-if (httpRoute === -1 || websocketRoute === -1 || firstNavigation === -1) process.exit(1);
-if (httpRoute > firstNavigation || websocketRoute > firstNavigation) process.exit(1);
-if (source.includes("await page.route('**/*'")) process.exit(1);
-if (!source.includes('isAllowedHTTPURL(route.request().url())')) process.exit(1);
-if (!source.includes('isAllowedWebSocketURL(webSocket.url())')) process.exit(1);
-if (!source.includes("await webSocket.close({ code: 1008, reason: 'blocked' })")) {
-  process.exit(1);
+for (const path of process.argv.slice(2)) {
+  const source = await readFile(path, 'utf8');
+  const httpRoute = source.indexOf('await context.route(');
+  const websocketRoute = source.indexOf('await context.routeWebSocket(');
+  const firstNavigation = source.indexOf('await page.goto(');
+  if (httpRoute === -1 || websocketRoute === -1 || firstNavigation === -1) process.exit(1);
+  if (httpRoute > firstNavigation || websocketRoute > firstNavigation) process.exit(1);
+  if (source.includes('await page.route(')) process.exit(1);
+  if (!source.includes('isAllowedHTTPURL(')) process.exit(1);
+  if (!source.includes('isAllowedWebSocketURL(webSocket.url())')) process.exit(1);
+  if (!source.includes('await webSocket.close({ code: 1008')) {
+    process.exit(1);
+  }
+  const attachFixture = source.indexOf('attachPageDiagnostics(page);');
+  const attachFuture = source.indexOf('context.on(');
+  if (attachFixture === -1 || attachFuture === -1) process.exit(1);
+  if (attachFixture > firstNavigation || attachFuture > firstNavigation) process.exit(1);
 }
-const attachFixture = source.indexOf('attachPageDiagnostics(page);');
-const attachFuture = source.indexOf("context.on('page', attachPageDiagnostics);");
-if (attachFixture === -1 || attachFuture === -1) process.exit(1);
-if (attachFixture > firstNavigation || attachFuture > firstNavigation) process.exit(1);
+const transport = await readFile(process.argv[3], 'utf8');
+const networkHeaders = transport.indexOf('Network.requestWillBeSentExtraInfo');
+const transportNavigation = transport.indexOf('await page.goto(');
+if (networkHeaders === -1 || networkHeaders > transportNavigation) process.exit(1);
 ROUTING_SCOPE_TEST
 
 ln -s "$ROOT/apps/web/node_modules" "$CONTEXT/node_modules"
@@ -287,6 +327,8 @@ readonly LIST_OUTPUT=$("$ROOT/apps/web/node_modules/.bin/playwright" test --list
   --config "$CONTEXT/playwright.config.ts")
 grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
   <<<"$LIST_OUTPUT" || fail 'Playwright could not compile and list the auth proof'
+grep -Fq 'proves authenticated transport preserves cache and precondition bytes' \
+  <<<"$LIST_OUTPUT" || fail 'Playwright could not compile and list the transport proof'
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
@@ -304,7 +346,7 @@ sed \
   -e "s#/uat-input#$INSIDE_INPUT#g" \
   -e "s#/evidence#$INSIDE_EVIDENCE#g" \
   -e "s#/tmp/home#$INSIDE_TMP/home#g" \
-  -e "s#/tmp/playwright-auth.log#$INSIDE_TMP/playwright-auth.log#g" \
+  -e "s#/tmp/playwright-uat.log#$INSIDE_TMP/playwright-uat.log#g" \
   -e "s#/opt/aboutme-auth#$INSIDE_APP#g" \
   "$SOURCE/run.sh" >"$INSIDE_RUN"
 chmod 0700 "$INSIDE_RUN"
@@ -374,12 +416,35 @@ fail)
   printf '%s\n' 'browser-secret-must-not-escape'
   exit 1
   ;;
-malformed) printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/auth-proof.json" ;;
+malformed)
+  case " $* " in
+  *' transport.spec.ts '*) evidence=transport-proof.json ;;
+  *) evidence=auth-proof.json ;;
+  esac
+  printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
+  ;;
 oversized)
-  head -c 5000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/auth-proof.json"
+  case " $* " in
+  *' transport.spec.ts '*) evidence=transport-proof.json ;;
+  *) evidence=auth-proof.json ;;
+  esac
+  head -c 5000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
   ;;
 good)
-  cat >"$FAKE_INSIDE_EVIDENCE/auth-proof.json" <<'JSON'
+  case " $* " in
+  *' transport.spec.ts '*)
+    cat >"$FAKE_INSIDE_EVIDENCE/transport-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "authenticated-transport",
+  "schemaVersion": 1,
+  "steps": {"auth": true, "cache": true, "etag": true, "ifMatch": true, "teardown": true}
+}
+JSON
+    ;;
+  *)
+    cat >"$FAKE_INSIDE_EVIDENCE/auth-proof.json" <<'JSON'
 {
   "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
   "origin": "https://localhost:20443",
@@ -388,10 +453,12 @@ good)
   "steps": {"1": true, "2": true, "3": true, "4": true, "5": true, "6": true, "7": true, "8": true, "9": true, "10": true}
 }
 JSON
+    ;;
+  esac
   ;;
 *) exit 64 ;;
 esac
-chmod 0600 "$FAKE_INSIDE_EVIDENCE/auth-proof.json"
+chmod 0600 "$FAKE_INSIDE_EVIDENCE"/*.json
 FAKE_PLAYWRIGHT
 chmod 0700 "$INSIDE_BIN/findmnt" "$INSIDE_BIN/certutil" \
   "$INSIDE_APP/node_modules/.bin/playwright"
@@ -404,14 +471,18 @@ export FAKE_BROWSER_LOG=$BROWSER_LOG
 
 reset_inside() {
   rm -rf -- "$INSIDE_EVIDENCE" "$INSIDE_TMP/home" \
-    "$INSIDE_TMP/playwright-auth.log" "$INSIDE_TMP/imported-ca"
+    "$INSIDE_TMP/playwright-uat.log" "$INSIDE_TMP/imported-ca"
   install -d -m 0700 "$INSIDE_EVIDENCE"
   : >"$CERT_LOG"
   : >"$BROWSER_LOG"
 }
 
 run_inside() {
-  PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside
+  if [ "$#" -eq 0 ]; then
+    PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside
+  else
+    PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside "$1"
+  fi
 }
 
 assert_inside_rejected() {
@@ -431,6 +502,24 @@ reset_inside
 FAKE_ROOT_OPTIONS=rw FAKE_BROWSER_MODE=good \
   assert_inside_rejected root-writable 'root filesystem is not read-only' >/dev/null
 [ ! -s "$BROWSER_LOG" ] || fail 'writable root reached the browser'
+
+reset_inside
+if output=$(FAKE_ROOT_OPTIONS=rw FAKE_BROWSER_MODE=good \
+  PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside transport 2>&1); then
+  fail 'transport accepted a writable root'
+fi
+grep -Fq 'root filesystem is not read-only' <<<"$output" ||
+  fail 'transport writable-root diagnostic drifted'
+[ ! -s "$BROWSER_LOG" ] || fail 'transport writable root reached the browser'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside invalid 2>&1); then
+  fail 'invalid inside mode was accepted'
+fi
+grep -Fq 'mode must be auth or transport' <<<"$output" ||
+  fail 'invalid inside mode returned the wrong diagnostic'
+[ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
 reset_inside
 FAKE_INPUT_OPTIONS=rw FAKE_BROWSER_MODE=good \
@@ -510,5 +599,30 @@ tr '\0' '\n' <"$CERT_LOG" >"$INSIDE_ROOT/certutil.calls.txt"
 grep -Fxq -- '-N' "$INSIDE_ROOT/certutil.calls.txt" || fail 'certutil -N did not run'
 grep -Fxq -- '-A' "$INSIDE_ROOT/certutil.calls.txt" || fail 'certutil -A did not run'
 grep -Fxq -- '-L' "$INSIDE_ROOT/certutil.calls.txt" || fail 'certutil -L did not run'
+
+reset_inside
+readonly TRANSPORT_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside transport)
+grep -Fq 'dev-https-browser transport proof: PASS' <<<"$TRANSPORT_INSIDE_OUTPUT" ||
+  fail 'inside-container transport success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts transport.spec.ts' "$BROWSER_LOG" ||
+  fail 'focused transport invocation drifted'
+[ -f "$INSIDE_EVIDENCE/transport-proof.json" ] ||
+  fail 'transport evidence filename drifted'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside transport 2>&1); then
+  fail 'malformed transport evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed transport evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside transport 2>&1); then
+  fail 'oversized transport evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
+  fail 'oversized transport evidence returned the wrong diagnostic'
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

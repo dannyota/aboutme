@@ -739,8 +739,9 @@ func remainingAssertSuccessStatus(t *testing.T, operationID string, response tes
 	if response.status != want {
 		t.Fatalf("%s status = %d, want %d (body=%s)", operationID, response.status, want, response.body)
 	}
-	if response.header.Get("Cache-Control") != "no-store" {
-		t.Fatalf("%s Cache-Control = %q, want no-store", operationID, response.header.Get("Cache-Control"))
+	const wantCacheControl = "no-store, no-transform"
+	if response.header.Get("Cache-Control") != wantCacheControl {
+		t.Fatalf("%s Cache-Control = %q, want %q", operationID, response.header.Get("Cache-Control"), wantCacheControl)
 	}
 	if response.status == http.StatusNoContent && (len(response.body) != 0 || response.header.Get("Content-Type") != "") {
 		t.Fatalf("%s 204 response has body/content type: %q / %q",

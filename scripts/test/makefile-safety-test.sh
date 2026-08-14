@@ -109,7 +109,7 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,network-policy.ts,run.sh} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,network-policy.ts,run.sh} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
 printf '%s\n' 'static test root' > \
   "$HTTPS_REPO/.dev/native-https/input/caddy-root.crt"
@@ -252,6 +252,23 @@ read_https_calls | grep -Fxq -- 'deploy/dev-https-browser' || {
   exit 1
 }
 
+cp "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts" \
+  "$WORK/transport.spec.ts.clean"
+printf '%s\n' '// source-drift' >> \
+  "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts"
+: >"$HTTPS_CALLS"
+if run_https_make dev-https-auth-check >"$WORK/https-source-drift.out" 2>&1; then
+  printf 'makefile-safety-test: transport source drift was accepted\n' >&2
+  exit 1
+fi
+if read_https_calls | grep -Fxq podman; then
+  printf 'makefile-safety-test: source drift reached the browser runtime\n' >&2
+  exit 1
+fi
+cp "$WORK/transport.spec.ts.clean" \
+  "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts"
+rm -rf "$HTTPS_REPO/.dev/native-https/evidence"
+
 rm -f "$HTTPS_MANIFEST"
 : >"$HTTPS_CALLS"
 if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-auth-check \
@@ -327,5 +344,70 @@ if grep -Eq '(/run/podman/podman\.sock|/var/run/docker\.sock|dst=/home|dst=/repo
   printf 'makefile-safety-test: auth run exposed a forbidden host path\n' >&2
   exit 1
 fi
+[ "$(grep -c '^transport$' "$HTTPS_RUNTIME_LOG")" -eq 0 ] || {
+  printf 'makefile-safety-test: three-argument auth run gained a mode argument\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-transport-check \
+  >"$WORK/https-transport-preflight.out" 2>&1; then
+  printf 'makefile-safety-test: transport check passed failed status\n' >&2
+  exit 1
+fi
+if read_https_calls | grep -Fxq podman; then
+  printf 'makefile-safety-test: transport check mutated after failed status\n' >&2
+  exit 1
+fi
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ] || {
+  printf 'makefile-safety-test: failed transport preflight created evidence\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+run_https_make dev-https-transport-check >"$WORK/https-transport.out" 2>&1 || {
+  sed -n '1,120p' "$WORK/https-transport.out" >&2
+  printf 'makefile-safety-test: transport check target failed\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2 ] || {
+  printf 'makefile-safety-test: transport check did not create separate evidence\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'google-auth.*' | wc -l)" -eq 1 ] || {
+  printf 'makefile-safety-test: auth evidence directory naming drifted\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'transport.*' | wc -l)" -eq 1 ] || {
+  printf 'makefile-safety-test: transport evidence directory naming drifted\n' >&2
+  exit 1
+}
+find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%m\n' |
+  awk '$0 != "700" { exit 1 }' || {
+  printf 'makefile-safety-test: evidence directory mode drifted\n' >&2
+  exit 1
+}
+HTTPS_TRANSPORT_LOG=$WORK/https-transport-runtime.calls
+read_https_calls >"$HTTPS_TRANSPORT_LOG"
+grep -Fxq transport "$HTTPS_TRANSPORT_LOG" || {
+  printf 'makefile-safety-test: transport mode did not reach the runner\n' >&2
+  exit 1
+}
+grep -Fxq -- '--pull=never' "$HTTPS_TRANSPORT_LOG" || {
+  printf 'makefile-safety-test: transport run can pull an image\n' >&2
+  exit 1
+}
+grep -Fxq -- '--network=host' "$HTTPS_TRANSPORT_LOG" || {
+  printf 'makefile-safety-test: transport run lacks host network\n' >&2
+  exit 1
+}
+grep -Fxq -- '--read-only' "$HTTPS_TRANSPORT_LOG" || {
+  printf 'makefile-safety-test: transport run lacks read-only root\n' >&2
+  exit 1
+}
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_TRANSPORT_LOG")" -eq 2 ] || {
+  printf 'makefile-safety-test: transport run has the wrong bind-mount count\n' >&2
+  exit 1
+}
 
 printf 'Makefile native HTTPS safety tests passed\n'

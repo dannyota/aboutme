@@ -27,6 +27,7 @@ func jsonHandler(status int, body string) http.Handler {
 
 func TestNoStoreCache_SetsCacheControlNoStore(t *testing.T) {
 	t.Parallel()
+	const wantCacheControl = "no-store, no-transform"
 
 	handler := api.NoStoreCache()(passthroughHandler())
 
@@ -34,8 +35,8 @@ func TestNoStoreCache_SetsCacheControlNoStore(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if got := rec.Header().Get("Cache-Control"); got != api.CacheControlNoStore {
-		t.Errorf("Cache-Control = %q, want %q", got, api.CacheControlNoStore)
+	if got := rec.Header().Get("Cache-Control"); got != wantCacheControl {
+		t.Errorf("Cache-Control = %q, want %q", got, wantCacheControl)
 	}
 }
 
@@ -45,6 +46,7 @@ func TestNoStoreCache_SetsCacheControlNoStore(t *testing.T) {
 // rejects the request.
 func TestNoStoreCache_AppliesToRejectedResponses(t *testing.T) {
 	t.Parallel()
+	const wantCacheControl = "no-store, no-transform"
 
 	rejecting := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusTeapot, "rejected_for_test", "rejected")
@@ -58,8 +60,8 @@ func TestNoStoreCache_AppliesToRejectedResponses(t *testing.T) {
 	if rec.Code != http.StatusTeapot {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusTeapot)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != api.CacheControlNoStore {
-		t.Errorf("Cache-Control on rejected response = %q, want %q", got, api.CacheControlNoStore)
+	if got := rec.Header().Get("Cache-Control"); got != wantCacheControl {
+		t.Errorf("Cache-Control on rejected response = %q, want %q", got, wantCacheControl)
 	}
 }
 

@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs dev-https-browser-image dev-https-auth-check
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs dev-https-browser-image dev-https-auth-check dev-https-transport-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
@@ -17,6 +17,7 @@ DEV_HTTPS_BROWSER_SOURCES := \
 	deploy/dev-https-browser/package-lock.json \
 	deploy/dev-https-browser/playwright.config.ts \
 	deploy/dev-https-browser/auth.spec.ts \
+	deploy/dev-https-browser/transport.spec.ts \
 	deploy/dev-https-browser/network-policy.ts \
 	deploy/dev-https-browser/run.sh
 
@@ -262,48 +263,62 @@ dev-https-browser-image: dev-https-status ## Build and record the pinned trusted
 	printf 'dev-https-browser-image: %s\n' "$$image_id"
 
 dev-https-auth-check: dev-https-status ## Run the trusted local Google auth proof and retain only bounded local evidence
+
+dev-https-transport-check: dev-https-status ## Run the trusted authenticated transport proof and retain only bounded local evidence
+
+dev-https-auth-check dev-https-transport-check:
 	@set -Eeuo pipefail; \
 	repo=$$(pwd -P); \
 	state="$$repo/.dev/native-https"; \
 	manifest="$$repo/$(DEV_HTTPS_BROWSER_MANIFEST)"; \
 	input="$$state/input"; \
 	evidence_root="$$state/evidence"; \
+	target='$@'; \
+	case "$$target" in \
+	dev-https-auth-check) mode=auth; evidence_prefix=google-auth ;; \
+	dev-https-transport-check) mode=transport; evidence_prefix=transport ;; \
+	*) echo 'dev-https-browser-check: invalid target' >&2; exit 1 ;; \
+	esac; \
 	uid=$$(id -u); \
-	[ -d "$$state" ] && [ ! -L "$$state" ] && [ "$$(realpath -e -- "$$state")" = "$$state" ] || { echo 'dev-https-auth-check: invalid state directory' >&2; exit 1; }; \
-	[ "$$(stat -c %u "$$state")" = "$$uid" ] && [ "$$(stat -c %a "$$state")" = 700 ] || { echo 'dev-https-auth-check: state directory ownership or mode mismatch' >&2; exit 1; }; \
-	[ -f "$$manifest" ] && [ ! -L "$$manifest" ] && [ "$$(stat -c %u "$$manifest")" = "$$uid" ] && [ "$$(stat -c %a "$$manifest")" = 600 ] || { echo 'dev-https-auth-check: invalid browser image manifest' >&2; exit 1; }; \
+	[ -d "$$state" ] && [ ! -L "$$state" ] && [ "$$(realpath -e -- "$$state")" = "$$state" ] || { echo "$$target: invalid state directory" >&2; exit 1; }; \
+	[ "$$(stat -c %u "$$state")" = "$$uid" ] && [ "$$(stat -c %a "$$state")" = 700 ] || { echo "$$target: state directory ownership or mode mismatch" >&2; exit 1; }; \
+	[ -f "$$manifest" ] && [ ! -L "$$manifest" ] && [ "$$(stat -c %u "$$manifest")" = "$$uid" ] && [ "$$(stat -c %a "$$manifest")" = 600 ] || { echo "$$target: invalid browser image manifest" >&2; exit 1; }; \
 	mapfile -t manifest_lines <"$$manifest"; \
-	[ "$${#manifest_lines[@]}" -eq 2 ] || { echo 'dev-https-auth-check: malformed browser image manifest' >&2; exit 1; }; \
-	[[ $${manifest_lines[0]} =~ ^image_id=(sha256:[0-9a-f]{64})$$ ]] || { echo 'dev-https-auth-check: malformed browser image ID' >&2; exit 1; }; \
+	[ "$${#manifest_lines[@]}" -eq 2 ] || { echo "$$target: malformed browser image manifest" >&2; exit 1; }; \
+	[[ $${manifest_lines[0]} =~ ^image_id=(sha256:[0-9a-f]{64})$$ ]] || { echo "$$target: malformed browser image ID" >&2; exit 1; }; \
 	image_id=$${BASH_REMATCH[1]}; \
-	[[ $${manifest_lines[1]} =~ ^source_sha256=([0-9a-f]{64})$$ ]] || { echo 'dev-https-auth-check: malformed browser source hash' >&2; exit 1; }; \
+	[[ $${manifest_lines[1]} =~ ^source_sha256=([0-9a-f]{64})$$ ]] || { echo "$$target: malformed browser source hash" >&2; exit 1; }; \
 	recorded_source=$${BASH_REMATCH[1]}; \
 	current_source=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
 	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
 	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
-	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-auth-check: cannot hash browser sources' >&2; exit 1; }; \
-	[ "$$current_source" = "$$recorded_source" ] || { echo 'dev-https-auth-check: browser sources changed after image build' >&2; exit 1; }; \
-	[ -d "$$input" ] && [ ! -L "$$input" ] && [ "$$(realpath -e -- "$$input")" = "$$input" ] || { echo 'dev-https-auth-check: invalid CA input directory' >&2; exit 1; }; \
-	[ "$$(stat -c %u "$$input")" = "$$uid" ] && [ "$$(stat -c %a "$$input")" = 700 ] || { echo 'dev-https-auth-check: CA input ownership or mode mismatch' >&2; exit 1; }; \
+	done; } | sha256sum | awk '{print $$1}') || { echo "$$target: cannot hash browser sources" >&2; exit 1; }; \
+	[ "$$current_source" = "$$recorded_source" ] || { echo "$$target: browser sources changed after image build" >&2; exit 1; }; \
+	[ -d "$$input" ] && [ ! -L "$$input" ] && [ "$$(realpath -e -- "$$input")" = "$$input" ] || { echo "$$target: invalid CA input directory" >&2; exit 1; }; \
+	[ "$$(stat -c %u "$$input")" = "$$uid" ] && [ "$$(stat -c %a "$$input")" = 700 ] || { echo "$$target: CA input ownership or mode mismatch" >&2; exit 1; }; \
 	mapfile -t input_entries < <(find "$$input" -mindepth 1 -maxdepth 1 -printf '%f\n'); \
-	[ "$${#input_entries[@]}" -eq 1 ] && [ "$${input_entries[0]}" = caddy-root.crt ] || { echo 'dev-https-auth-check: CA input must contain one root' >&2; exit 1; }; \
+	[ "$${#input_entries[@]}" -eq 1 ] && [ "$${input_entries[0]}" = caddy-root.crt ] || { echo "$$target: CA input must contain one root" >&2; exit 1; }; \
 	root="$$input/caddy-root.crt"; \
-	[ -f "$$root" ] && [ ! -L "$$root" ] && [ "$$(stat -c %u "$$root")" = "$$uid" ] && [ "$$(stat -c %a "$$root")" = 600 ] || { echo 'dev-https-auth-check: invalid Caddy root' >&2; exit 1; }; \
+	[ -f "$$root" ] && [ ! -L "$$root" ] && [ "$$(stat -c %u "$$root")" = "$$uid" ] && [ "$$(stat -c %a "$$root")" = 600 ] || { echo "$$target: invalid Caddy root" >&2; exit 1; }; \
 	if [[ -e "$$evidence_root" || -L "$$evidence_root" ]]; then \
-	  [ -d "$$evidence_root" ] && [ ! -L "$$evidence_root" ] && [ "$$(realpath -e -- "$$evidence_root")" = "$$evidence_root" ] || { echo 'dev-https-auth-check: invalid evidence root' >&2; exit 1; }; \
-	  [ "$$(stat -c %u "$$evidence_root")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence_root")" = 700 ] || { echo 'dev-https-auth-check: evidence root ownership or mode mismatch' >&2; exit 1; }; \
+	  [ -d "$$evidence_root" ] && [ ! -L "$$evidence_root" ] && [ "$$(realpath -e -- "$$evidence_root")" = "$$evidence_root" ] || { echo "$$target: invalid evidence root" >&2; exit 1; }; \
+	  [ "$$(stat -c %u "$$evidence_root")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence_root")" = 700 ] || { echo "$$target: evidence root ownership or mode mismatch" >&2; exit 1; }; \
 	else \
 	  install -d -m 0700 "$$evidence_root"; \
 	fi; \
-	evidence=$$(mktemp -d "$$evidence_root/google-auth.XXXXXX"); \
-	[ "$$(stat -c %u "$$evidence")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence")" = 700 ] || { echo 'dev-https-auth-check: evidence directory ownership or mode mismatch' >&2; exit 1; }; \
-	deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence"; \
+	evidence=$$(mktemp -d "$$evidence_root/$$evidence_prefix.XXXXXX"); \
+	[ "$$(stat -c %u "$$evidence")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence")" = 700 ] || { echo "$$target: evidence directory ownership or mode mismatch" >&2; exit 1; }; \
+	if [ "$$mode" = auth ]; then \
+	  deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence"; \
+	else \
+	  deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence" transport; \
+	fi; \
 	current_source_after=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
 	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
 	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
-	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-auth-check: cannot rehash browser sources' >&2; exit 1; }; \
-	[ "$$current_source_after" = "$$recorded_source" ] || { echo 'dev-https-auth-check: browser sources changed during authentication check' >&2; exit 1; }; \
-	printf 'dev-https-auth-check evidence: %s\n' "$$evidence"
+	done; } | sha256sum | awk '{print $$1}') || { echo "$$target: cannot rehash browser sources" >&2; exit 1; }; \
+	[ "$$current_source_after" = "$$recorded_source" ] || { echo "$$target: browser sources changed during check" >&2; exit 1; }; \
+	printf '%s evidence: %s\n' "$$target" "$$evidence"
 
 test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the `aboutme` test DB and the `aboutme_dev` native-dev DB; 512 MB cap). One DB container total is the rule — never start a second
 	@if ! running_containers="$$(podman ps --format '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}')"; then \

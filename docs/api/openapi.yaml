@@ -97,7 +97,8 @@ tags:
       would reject.
 
 
-      Every authenticated response carries `Cache-Control: no-store` and
+      Every authenticated response carries
+      `Cache-Control: no-store, no-transform` and
       `X-Request-ID`; those request-scoped headers are never stored for
       idempotent replay and are not repeated on each operation below.
   - name: media
