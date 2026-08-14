@@ -90,7 +90,8 @@ export async function renderPublicResume(
     const html = [
       '<!doctype html>',
       `<html lang="${request.publicResume.lng}"><head>${head}</head>`,
-      '<body><main id="public-resume" ',
+      '<body><a href="#public-resume">Skip to content</a>',
+      '<main id="public-resume" ',
       `data-revision="${request.publicResume.revision}">${body}</main>`,
       '<script type="module" src="/_nuxt/assets/public-resume.mjs"></script>',
       '</body></html>',
