@@ -2,8 +2,8 @@
 # ownership; docs/api/openapi.yaml owns implemented HTTP contracts. This
 # listener is HTTP-only and does not satisfy the P9 HTTPS/443 UAT gate.
 #
-# /api/v1/* and generated discovery paths go to Go. /print is internal and
-# denied at the viewer edge. All other paths go to Nuxt.
+# Generated fixed routes and valid public slugs go to their registry owner.
+# Denied and reserved roots never reach an upstream. Other paths go to Nuxt.
 {
 	admin off
 }
@@ -11,7 +11,6 @@
 :80 {
 	encode zstd gzip
 
-	@print path /print /print/*
 	# Caddy is the client-IP trust boundary. Remove viewer forwarding headers
 	# before setting the sole header Go accepts. See docs/design/deployment.md.
 	# This direct-peer rule is for the current local deployment only.
@@ -19,17 +18,8 @@
 	request_header -X-Forwarded-For
 	request_header -Forwarded
 
-	handle @print {
-		respond 404
-	}
-
-	@go path /api/v1/* /healthz /readyz /sitemap.xml /robots.txt /llms.txt /*.md
-	handle @go {
-		reverse_proxy server:8080 {
-			# The current local viewer connects directly to Caddy.
-			header_up X-Real-IP {http.request.remote.host}
-		}
-	}
+	# ABOUTME_PUBLIC_ROOTS_GENERATED
+	import /etc/caddy/generated/public-roots.generated.caddy
 
 	handle {
 		reverse_proxy web:3000

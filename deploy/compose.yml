@@ -20,7 +20,7 @@
 # which this project does not own (podman's unqualified-search-registries
 # includes docker.io by default).
 #
-# Four disjoint networks enforce the trust boundaries in
+# Five disjoint networks enforce the trust boundaries in
 # docs/design/deployment.md.
 #   - db:       postgres, migrate, server — the only peers allowed to reach
 #     Postgres.
@@ -35,6 +35,8 @@
 #     subnet with `edge`, so web is never a trusted proxy of the Go server.
 #   - media:    minio, media-init, server — private object storage is not
 #     reachable from Caddy, Nuxt, or Postgres and is never host-published.
+#   - render:   server, web — private Go-to-Nuxt render calls only. Go does
+#     not listen on this network and the subnet is never trusted or published.
 
 name: aboutme
 
@@ -176,7 +178,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Go binds to the private network; only Caddy publishes a host port.
-      LISTEN_HOST: "0.0.0.0"
+      LISTEN_HOST: "10.90.0.2"
       # Trust exactly the fixed edge subnet shared only by Caddy and Go.
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-10.90.0.0/28}
       # Origin the browser reaches the stack on — auth cookie scope, OAuth
@@ -185,6 +187,9 @@ services:
       # diverge from the port Caddy actually publishes; setting
       # PUBLIC_ORIGIN explicitly overrides both.
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:${CADDY_HTTP_PORT:-80}}
+      PUBLIC_RENDER_ORIGIN: http://web:3000
+      APP_BUILD_DIGEST: ${APP_BUILD_DIGEST:?APP_BUILD_DIGEST is required}
+      PUBLIC_RENDERER_BUILD_DIGEST: ${PUBLIC_RENDERER_BUILD_DIGEST:?PUBLIC_RENDERER_BUILD_DIGEST is required}
       ENV: dev
       MEDIA_BACKEND: s3
       MEDIA_BUCKET: ${MEDIA_BUCKET:-aboutme-media}
@@ -203,16 +208,18 @@ services:
           "-q",
           "-O",
           "/dev/null",
-          "http://127.0.0.1:8080/healthz",
+          "http://10.90.0.2:8080/healthz",
         ]
       interval: 5s
       timeout: 3s
       retries: 10
       start_period: 5s
     networks:
-      - db
-      - edge
-      - media
+      db: {}
+      edge:
+        ipv4_address: 10.90.0.2
+      media: {}
+      render: {}
 
   web:
     build:
@@ -234,6 +241,7 @@ services:
       start_period: 10s
     networks:
       - frontend
+      - render
 
   caddy:
     image: docker.io/library/caddy:2.11.4-alpine
@@ -254,6 +262,7 @@ services:
       # (enforcing on Fedora hosts); without it, rootless Podman denies the
       # container read access to a host-owned file.
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+      - ./caddy:/etc/caddy/generated:ro,Z
     networks:
       - edge
       - frontend
@@ -279,3 +288,10 @@ networks:
   # minio, media-init, server — private object storage only. No edge or
   # frontend peer can reach it, and no media port is published to the host.
   media: {}
+  # server and web only. Internal and untrusted: Go calls Nuxt here, but Go
+  # binds only its fixed edge address and no render port is host-published.
+  render:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.91.0.0/28

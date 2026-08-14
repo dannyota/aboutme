@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs dev-https-browser-image dev-https-auth-check dev-https-transport-check
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs dev-https-browser-image dev-https-auth-check dev-https-transport-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
@@ -38,7 +38,8 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 	bash scripts/check-tool-versions.sh $(ARGS)
 
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
-	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash scripts/test/render-topology-test.sh
 	bash scripts/dev-https-test.sh --static
 	bash deploy/dev-https-browser/static-test.sh
 	scripts/test/ci-failure-propagation-test.sh
@@ -191,10 +192,18 @@ dev: ## HTTP image/network smoke and self-hosting stack; not for daily developme
 	  echo "make dev: aboutme-test-db is running; only the integration owner may stop it after every live-DB worker is idle." >&2; \
 	  exit 1; \
 	fi; \
-	podman compose --env-file .env -f deploy/compose.yml up -d --build
+	digest_output="$$(node scripts/generate-public-roots.mjs --check)" || exit 1; \
+	app_digest=$$(awk -F= '$$1 == "APP_BUILD_DIGEST" { print $$2 }' <<<"$$digest_output"); \
+	renderer_digest=$$(awk -F= '$$1 == "PUBLIC_RENDERER_BUILD_DIGEST" { print $$2 }' <<<"$$digest_output"); \
+	[[ $$app_digest =~ ^sha256:[0-9a-f]{64}$$ ]] || { echo 'make dev: invalid APP_BUILD_DIGEST' >&2; exit 1; }; \
+	[[ $$renderer_digest =~ ^sha256:[0-9a-f]{64}$$ ]] || { echo 'make dev: invalid PUBLIC_RENDERER_BUILD_DIGEST' >&2; exit 1; }; \
+	APP_BUILD_DIGEST="$$app_digest" PUBLIC_RENDERER_BUILD_DIGEST="$$renderer_digest" \
+	  podman compose --env-file .env -f deploy/compose.yml up -d --build
 
 dev-down: ## Stop the compose stack and remove containers (keeps the postgres volume)
-	podman compose --env-file .env -f deploy/compose.yml down
+	@APP_BUILD_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+	  PUBLIC_RENDERER_BUILD_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+	  podman compose --env-file .env -f deploy/compose.yml down
 
 dev-native: ## Daily development — native server, web, and Caddy on http://localhost:20080 against the shared database
 	bash scripts/dev-native.sh up
@@ -394,5 +403,11 @@ server-migration-test: ## Run the migration harness + migrate CLI (needs test-db
 	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./migrations/... ./cmd/migrate/... -count=1 -v
 
-route-table-test: ## Run the Caddy route-table integration test (needs a caddy binary; set CADDY_BIN or have caddy on PATH)
+public-roots-check: ## Verify the closed public-root registry, generated consumers, and source manifests
+	node --test packages/publicroots/public-roots.test.mjs
+	node scripts/generate-public-roots.mjs --check
+	cd apps/server && go test ./internal/publicroots -count=1
+	cd apps/web && npx vitest run test/public-roots.generated.test.ts
+
+route-table-test: public-roots-check ## Run the Caddy route-table integration test (needs a caddy binary; set CADDY_BIN or have caddy on PATH)
 	cd apps/server && CADDY_BIN=$${CADDY_BIN:-caddy} go test ./internal/routetable/... -run RouteTable -count=1 -v

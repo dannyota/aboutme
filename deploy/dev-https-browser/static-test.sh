@@ -16,6 +16,19 @@ fail() {
 for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts network-policy.ts run.sh; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
+for file in \
+  packages/publicroots/public-roots.v4.json \
+  packages/publicroots/app-build-sources.v1.json \
+  packages/publicroots/renderer-build-sources.v1.json \
+  deploy/caddy/public-roots.generated.caddy; do
+  [ -f "$ROOT/$file" ] || fail "missing $file"
+done
+digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
+  fail 'public-root generation check failed'
+[[ $digest_output == *$'APP_BUILD_DIGEST=sha256:'* ]] ||
+  fail 'application source-manifest digest is missing'
+[[ $digest_output == *$'PUBLIC_RENDERER_BUILD_DIGEST=sha256:'* ]] ||
+  fail 'renderer source-manifest digest is missing'
 
 readonly WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-dev-https-browser.XXXXXX")
 cleanup() {
@@ -250,6 +263,7 @@ node --input-type=module - "$SOURCE/network-policy.ts" <<'NETWORK_POLICY_TEST'
 const policyPath = process.argv[2];
 const {
   ALLOWED_ORIGIN,
+  DIRECT_RENDER_ORIGIN,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
   isExpectedNegativeHTTPConsole,
@@ -259,8 +273,12 @@ const cases = [
   [ALLOWED_ORIGIN, 'https://localhost:20443'],
   [isAllowedHTTPURL('https://localhost:20443/login'), true],
   [isAllowedHTTPURL('https://localhost:20443/path?value=1#part'), true],
+  [isAllowedHTTPURL(`${ALLOWED_ORIGIN}/internal-render`), true],
+  [isAllowedHTTPURL(`${ALLOWED_ORIGIN}/internal-render/public`), true],
   [isAllowedHTTPURL('http://localhost:20443/login'), false],
   [isAllowedHTTPURL('https://localhost:20444/login'), false],
+  [DIRECT_RENDER_ORIGIN, 'http://127.0.0.1:20440'],
+  [isAllowedHTTPURL(`${DIRECT_RENDER_ORIGIN}/internal-render/public`), false],
   [isAllowedHTTPURL('https://127.0.0.1:20443/login'), false],
   [isAllowedHTTPURL('https://user:pass@localhost:20443/login'), false],
   [isAllowedHTTPURL('not a URL'), false],

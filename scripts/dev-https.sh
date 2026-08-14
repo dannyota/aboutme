@@ -11,6 +11,7 @@ readonly SERVER_PORT=20441
 readonly MOCK_PORT=20442
 readonly CADDY_PORT=20443
 readonly PUBLIC_ORIGIN="https://localhost:${CADDY_PORT}"
+readonly PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20440
 readonly GOOGLE_CLIENT_ID=aboutme-local-google
 readonly GOOGLE_CLIENT_SECRET=not-a-secret-local-google
 readonly GOOGLE_ISSUER_URL="http://127.0.0.1:${MOCK_PORT}/google"
@@ -27,6 +28,9 @@ readonly CADDY_DIR=$STATE_DIR/caddy
 readonly INPUT_DIR=$STATE_DIR/input
 readonly CADDYFILE_SRC=$ROOT/deploy/caddy/Caddyfile
 readonly CADDYFILE_GEN=$STATE_DIR/Caddyfile
+readonly PUBLIC_ROOTS_REGISTRY=$ROOT/packages/publicroots/public-roots.v4.json
+readonly PUBLIC_ROOTS_FRAGMENT=$ROOT/deploy/caddy/public-roots.generated.caddy
+readonly PUBLIC_ROOTS_MARKER=$'\t# ABOUTME_PUBLIC_ROOTS_GENERATED\n\timport /etc/caddy/generated/public-roots.generated.caddy'
 readonly CADDY_ROOT=$CADDY_DIR/data/caddy/pki/authorities/local/root.crt
 readonly EXPORTED_ROOT=$INPUT_DIR/caddy-root.crt
 readonly EFFECTIVE_CONFIG=$STATE_DIR/effective-config
@@ -51,6 +55,8 @@ wait "$child"'
 
 STARTUP_ARMED=0
 declare -a STARTED_SERVICES=()
+APP_BUILD_DIGEST=
+PUBLIC_RENDERER_BUILD_DIGEST=
 
 info() { printf '%s\n' "$*"; }
 warn() { printf 'dev-https: %s\n' "$*" >&2; }
@@ -501,39 +507,57 @@ count_occurrences() {
   printf '%d' "$count"
 }
 
-replace_once() {
-  local content=$1 old=$2 new=$3 count prefix suffix
+replace_exact() {
+  local content=$1 old=$2 new=$3 expected=${4:-1} count
   count=$(count_occurrences "$content" "$old")
-  if [ "$count" != 1 ]; then
-    warn "$CADDYFILE_SRC: found $count occurrence(s) of '$old', want exactly 1"
+  if [ "$count" != "$expected" ]; then
+    warn "$CADDYFILE_SRC: found $count occurrence(s) of '$old', want exactly $expected"
     return 1
   fi
-  prefix=${content%%"$old"*}
-  suffix=${content#*"$old"}
-  printf '%s' "$prefix$new$suffix"
+  printf '%s' "${content//"$old"/"$new"}"
 }
 
 generate_caddyfile() {
-  local content
+  local content fragment generated
+  node "$ROOT/scripts/generate-public-roots.mjs" --check >/dev/null || return 1
   content=$(<"$CADDYFILE_SRC") || return 1
-  content=$(replace_once "$content" $'\tadmin off' \
+  fragment=$(<"$PUBLIC_ROOTS_FRAGMENT") || return 1
+  generated=$'\t@uat_google_authorize path /__uat/oauth/google/authorize\n\thandle @uat_google_authorize {\n\t\treverse_proxy 127.0.0.1:'"${MOCK_PORT}"$'\n\t}\n\n'"$fragment"
+  content=$(replace_exact "$content" "$PUBLIC_ROOTS_MARKER" "$generated") || return 1
+  content=$(replace_exact "$content" $'\tadmin off' \
     $'\tadmin off\n\tskip_install_trust\n\tauto_https disable_redirects') || return 1
-  content=$(replace_once "$content" ':80 {' \
+  content=$(replace_exact "$content" ':80 {' \
     "https://localhost:${CADDY_PORT} {"$'\n\tbind 127.0.0.1\n\ttls internal') || return 1
-  content=$(replace_once "$content" 'reverse_proxy server:8080 {' \
-    "reverse_proxy 127.0.0.1:${SERVER_PORT} {") || return 1
-  content=$(replace_once "$content" 'reverse_proxy web:3000' \
-    "reverse_proxy 127.0.0.1:${WEB_PORT}") || return 1
-  content=$(replace_once "$content" $'\t@print path /print /print/*' \
-    $'\t@uat_google_authorize path /__uat/oauth/google/authorize\n\thandle @uat_google_authorize {\n\t\treverse_proxy 127.0.0.1:'"${MOCK_PORT}"$'\n\t}\n\n\t@print path /print /print/*') || return 1
+  content=$(replace_exact "$content" 'reverse_proxy server:8080 {' \
+    "reverse_proxy 127.0.0.1:${SERVER_PORT} {" 2) || return 1
+  content=$(replace_exact "$content" 'reverse_proxy web:3000' \
+    "reverse_proxy 127.0.0.1:${WEB_PORT}" 2) || return 1
   printf '%s\n' "$content"
 }
 
 require_tools() {
   local tool
-  for tool in podman go npm caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv find; do
+  for tool in podman go npm node caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv find; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
   done
+}
+
+load_source_digests() {
+  local output line
+  output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
+    die "public-root generation check failed"
+  APP_BUILD_DIGEST=
+  PUBLIC_RENDERER_BUILD_DIGEST=
+  while IFS= read -r line; do
+    case $line in
+    APP_BUILD_DIGEST=sha256:[0-9a-f]*) APP_BUILD_DIGEST=${line#APP_BUILD_DIGEST=} ;;
+    PUBLIC_RENDERER_BUILD_DIGEST=sha256:[0-9a-f]*) PUBLIC_RENDERER_BUILD_DIGEST=${line#PUBLIC_RENDERER_BUILD_DIGEST=} ;;
+    *) die "public-root generator returned an unexpected digest line" ;;
+    esac
+  done <<<"$output"
+  [[ $APP_BUILD_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] || die "APP_BUILD_DIGEST is invalid"
+  [[ $PUBLIC_RENDERER_BUILD_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] ||
+    die "PUBLIC_RENDERER_BUILD_DIGEST is invalid"
 }
 
 normal_native_active() {
@@ -697,8 +721,8 @@ write_service_env() {
       127.0.0.1 "$MOCK_PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" >"$file"
     ;;
   server)
-    printf 'PORT=%q\nLISTEN_HOST=%q\nDATABASE_URL=%q\nENV=%q\nPUBLIC_ORIGIN=%q\nTRUSTED_PROXY_CIDRS=%q\nLOG_LEVEL=%q\nMEDIA_BACKEND=%q\nMEDIA_FS_DIR=%q\nGOOGLE_CLIENT_ID=%q\nGOOGLE_CLIENT_SECRET=%q\nGOOGLE_OIDC_ISSUER_URL=%q\n' \
-      "$SERVER_PORT" 127.0.0.1 "$DATABASE_URL" dev "$PUBLIC_ORIGIN" 127.0.0.1/32 "$LOG_LEVEL" fs "$MEDIA_DIR" \
+    printf 'PORT=%q\nLISTEN_HOST=%q\nDATABASE_URL=%q\nENV=%q\nPUBLIC_ORIGIN=%q\nPUBLIC_RENDER_ORIGIN=%q\nAPP_BUILD_DIGEST=%q\nPUBLIC_RENDERER_BUILD_DIGEST=%q\nTRUSTED_PROXY_CIDRS=%q\nLOG_LEVEL=%q\nMEDIA_BACKEND=%q\nMEDIA_FS_DIR=%q\nGOOGLE_CLIENT_ID=%q\nGOOGLE_CLIENT_SECRET=%q\nGOOGLE_OIDC_ISSUER_URL=%q\n' \
+      "$SERVER_PORT" 127.0.0.1 "$DATABASE_URL" dev "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" 127.0.0.1/32 "$LOG_LEVEL" fs "$MEDIA_DIR" \
       "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_ISSUER_URL" >"$file"
     ;;
   web) : >"$file" ;;
@@ -937,6 +961,9 @@ render_effective_config() {
   printf 'database_target=127.0.0.1:20432/aboutme_dev?sslmode=disable\n'
   printf 'log_level=%s\n' "$LOG_LEVEL"
   printf 'public_origin=%s\n' "$PUBLIC_ORIGIN"
+  printf 'public_render_origin=%s\n' "$PUBLIC_RENDER_ORIGIN"
+  printf 'app_build_digest=%s\n' "$APP_BUILD_DIGEST"
+  printf 'public_renderer_build_digest=%s\n' "$PUBLIC_RENDERER_BUILD_DIGEST"
   printf 'google_client_id=%s\n' "$GOOGLE_CLIENT_ID"
   printf 'google_issuer_url=%s\n' "$GOOGLE_ISSUER_URL"
   printf 'web_port=%s\nserver_port=%s\nmock_port=%s\ncaddy_port=%s\n' \
@@ -944,7 +971,10 @@ render_effective_config() {
   printf 'stop_term_attempts=%s\nstop_kill_attempts=%s\n' "$STOP_TERM_ATTEMPTS" "$STOP_KILL_ATTEMPTS"
   printf 'lifecycle_source_sha256=%s\n' "$(sha256_file "$ROOT/scripts/dev-https.sh")"
   printf 'deployed_route_source_sha256=%s\n' "$(sha256_file "$CADDYFILE_SRC")"
+  printf 'registry_source_sha256=%s\n' "$(sha256_file "$PUBLIC_ROOTS_REGISTRY")"
+  printf 'generated_fragment_sha256=%s\n' "$(sha256_file "$PUBLIC_ROOTS_FRAGMENT")"
   printf 'generated_route_sha256=%s\n' "$(printf '%s' "$generated_route" | sha256sum | awk '{print $1}')"
+  printf 'effective_caddyfile_sha256=%s\n' "$(sha256_file "$CADDYFILE_GEN")"
   printf 'web_source_sha256=%s\n' "$(web_source_hash)"
   printf 'migrate_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/migrate")"
   printf 'mock_oauth_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/mock-oauth")"
@@ -1002,6 +1032,7 @@ start_stack() {
 cmd_up() {
   [ -z "${ABOUTME_DEV_DATABASE_URL+x}" ] || die "ABOUTME_DEV_DATABASE_URL is not permitted; the HTTPS harness uses only 127.0.0.1:20432/aboutme_dev"
   require_tools
+  load_source_digests
   validate_state_path_integrity
   reject_http_stack
   if any_pidfile; then
@@ -1054,6 +1085,7 @@ probe_https() {
 
 cmd_status() {
   local name pid port state listening probe_status failed=0 mode generated
+  load_source_digests
   validate_state_path_integrity
   printf '%-12s %-8s %-10s %-6s %s\n' SERVICE PID STATE PORT LISTENING
   for name in "${SERVICES[@]}"; do

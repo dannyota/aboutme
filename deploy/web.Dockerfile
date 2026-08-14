@@ -29,6 +29,7 @@ RUN npm --prefix apps/web ci
 
 COPY apps/web/app/ ./apps/web/app/
 COPY apps/web/public/ ./apps/web/public/
+COPY apps/web/server/ ./apps/web/server/
 
 RUN npm --prefix apps/web run build
 

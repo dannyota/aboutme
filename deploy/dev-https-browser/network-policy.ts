@@ -1,4 +1,5 @@
 export const ALLOWED_ORIGIN = 'https://localhost:20443';
+export const DIRECT_RENDER_ORIGIN = 'http://127.0.0.1:20440';
 
 function parsedURL(value: string): URL | null {
   try {

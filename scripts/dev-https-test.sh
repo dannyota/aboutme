@@ -65,8 +65,8 @@ mock-oauth)
     "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "${DATABASE_URL-}" >>"$FAKE_EFFECTS"
   ;;
 server)
-  printf 'service:%s host=%s port=%s origin=%s issuer=%s db=%s\n' \
-    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_OIDC_ISSUER_URL" "$DATABASE_URL" >>"$FAKE_EFFECTS"
+  printf 'service:%s host=%s port=%s origin=%s render=%s app=%s renderer=%s issuer=%s db=%s\n' \
+    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" "$GOOGLE_OIDC_ISSUER_URL" "$DATABASE_URL" >>"$FAKE_EFFECTS"
   ;;
 web) printf 'service:web\n' >>"$FAKE_EFFECTS" ;;
 caddy)
@@ -133,6 +133,21 @@ printf 'npm:%s\n' "$*" >>"$FAKE_EFFECTS"
 exec fake-service web
 EOF
 
+  cat >"$fakebin/node" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[ "$#" -eq 2 ]
+[[ $1 == */scripts/generate-public-roots.mjs ]]
+[ "$2" = --check ]
+[ -f "$PWD/packages/publicroots/public-roots.v4.json" ]
+[ -f "$PWD/deploy/caddy/public-roots.generated.caddy" ]
+[ "$(sha256sum "$PWD/packages/publicroots/public-roots.v4.json" | awk '{print $1}')" = "$FAKE_REGISTRY_SHA256" ]
+[ "$(sha256sum "$PWD/deploy/caddy/public-roots.generated.caddy" | awk '{print $1}')" = "$FAKE_FRAGMENT_SHA256" ]
+printf '%s\n' \
+  'APP_BUILD_DIGEST=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  'PUBLIC_RENDERER_BUILD_DIGEST=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+EOF
+
   cat >"$fakebin/caddy" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -150,8 +165,8 @@ count() { grep -Foc -- "$1" "$config"; }
 [ "$(count 'tls internal')" = 1 ]
 [ "$(count 'skip_install_trust')" = 1 ]
 [ "$(count 'auto_https disable_redirects')" = 1 ]
-[ "$(count 'reverse_proxy 127.0.0.1:20441 {')" = 1 ]
-[ "$(count 'reverse_proxy 127.0.0.1:20440')" = 1 ]
+[ "$(count 'reverse_proxy 127.0.0.1:20441 {')" = 2 ]
+[ "$(count 'reverse_proxy 127.0.0.1:20440')" = 2 ]
 [ "$(count '@uat_google_authorize path /__uat/oauth/google/authorize')" = 1 ]
 [ "$(count 'reverse_proxy 127.0.0.1:20442')" = 1 ]
 printf 'caddy-config-validated\n' >>"$FAKE_EFFECTS"
@@ -255,9 +270,13 @@ new_fixture() {
   local fixture
   fixture=$(mktemp -d)
   mkdir -p "$fixture/repo/scripts" "$fixture/repo/deploy/caddy" \
+    "$fixture/repo/packages/publicroots" \
     "$fixture/repo/apps/server" "$fixture/repo/apps/web/node_modules"
   cp "$SOURCE_SCRIPT" "$fixture/repo/scripts/dev-https.sh"
+  cp "$SOURCE_ROOT/scripts/generate-public-roots.mjs" "$fixture/repo/scripts/generate-public-roots.mjs"
   cp "$SOURCE_ROOT/deploy/caddy/Caddyfile" "$fixture/repo/deploy/caddy/Caddyfile"
+  cp "$SOURCE_ROOT/deploy/caddy/public-roots.generated.caddy" "$fixture/repo/deploy/caddy/public-roots.generated.caddy"
+  cp "$SOURCE_ROOT/packages/publicroots/public-roots.v4.json" "$fixture/repo/packages/publicroots/public-roots.v4.json"
   cat >"$fixture/repo/Makefile" <<'EOF'
 .PHONY: tools-check test-db-up
 tools-check:
@@ -287,6 +306,8 @@ fixture_env() {
   export FAKE_PODMAN_PS=$fixture/podman-ps
   export DEV_HTTPS_PID_AUDIT_FILE=$fixture/all-pids
   export FAKE_GO_FAIL_MARKER=$fixture/go-fail-marker
+  export FAKE_REGISTRY_SHA256=$(sha256sum "$fixture/repo/packages/publicroots/public-roots.v4.json" | awk '{print $1}')
+  export FAKE_FRAGMENT_SHA256=$(sha256sum "$fixture/repo/deploy/caddy/public-roots.generated.caddy" | awk '{print $1}')
   export DEV_HTTPS_STOP_TERM_ATTEMPTS=5
   export DEV_HTTPS_STOP_KILL_ATTEMPTS=20
 }
@@ -308,7 +329,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_MUTATIONS" 'go-build:server:./cmd/server'
   assert_log_line "$FAKE_EFFECTS" 'migrate:db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google db='
-  assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 issuer=http://127.0.0.1:20442/google db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
+  assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   assert_log_line "$FAKE_EFFECTS" 'npm:run dev -- --port 20440 --host 127.0.0.1'
   assert_log_line "$FAKE_EFFECTS" 'caddy-config-validated'
 
@@ -323,6 +344,12 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$manifest" 'log_level=info'
   assert_contains "$manifest" 'google_client_id=aboutme-local-google'
   assert_contains "$manifest" 'google_issuer_url=http://127.0.0.1:20442/google'
+  assert_contains "$manifest" 'public_render_origin=http://127.0.0.1:20440'
+  assert_contains "$manifest" 'app_build_digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  assert_contains "$manifest" 'public_renderer_build_digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  assert_contains "$manifest" 'registry_source_sha256='
+  assert_contains "$manifest" 'generated_fragment_sha256='
+  assert_contains "$manifest" 'effective_caddyfile_sha256='
   assert_contains "$manifest" 'generated_route_sha256='
   assert_contains "$manifest" 'server_expected_executable='
   assert_contains "$manifest" 'server_expected_cmdline_sha256='
@@ -538,6 +565,34 @@ run_route_drift_check() (
   fi
   assert_contains "$output" 'want exactly 1'
   [ ! -s "$FAKE_MUTATIONS" ] || fail "route-drift rejection performed a mutation"
+)
+
+run_fragment_drift_check() (
+  local fixture output
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  printf '\n# stale generated fragment\n' >>deploy/caddy/public-roots.generated.caddy
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail "up accepted a stale generated public-root fragment"
+  fi
+  assert_contains "$output" 'public-root generation check failed'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail "fragment-drift rejection performed a mutation"
+)
+
+run_missing_fragment_check() (
+  local fixture output
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  rm deploy/caddy/public-roots.generated.caddy
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail "up accepted a missing generated public-root fragment"
+  fi
+  assert_contains "$output" 'public-root generation check failed'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail "missing-fragment rejection performed a mutation"
 )
 
 run_foreign_ownership_down_check() (
@@ -945,6 +1000,8 @@ main() {
   run_database_override_check
   run_active_http_stack_checks
   run_route_drift_check
+  run_missing_fragment_check
+  run_fragment_drift_check
   run_foreign_ownership_down_check
   run_identity_field_tamper_check
   run_process_group_drain_check

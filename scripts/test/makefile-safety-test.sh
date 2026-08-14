@@ -410,4 +410,31 @@ grep -Fxq -- '--read-only' "$HTTPS_TRANSPORT_LOG" || {
   exit 1
 }
 
+ROUTE_PLAN=$(cd "$ROOT" && /usr/bin/make --no-print-directory -n route-table-test)
+GENERATOR_LINE=$(grep -Fn 'node scripts/generate-public-roots.mjs --check' <<<"$ROUTE_PLAN" | head -n 1 | cut -d: -f1)
+ROUTE_LINE=$(grep -Fn 'go test ./internal/routetable/' <<<"$ROUTE_PLAN" | head -n 1 | cut -d: -f1)
+if [ -z "$GENERATOR_LINE" ] || [ -z "$ROUTE_LINE" ] ||
+  [ "$GENERATOR_LINE" -ge "$ROUTE_LINE" ]; then
+  printf 'makefile-safety-test: route-table-test does not verify generated roots first\n' >&2
+  exit 1
+fi
+
+DEV_DOWN_PLAN=$(cd "$ROOT" && /usr/bin/make --no-print-directory -n dev-down)
+[[ $DEV_DOWN_PLAN != *'node scripts/generate-public-roots.mjs --check'* ]] || {
+  printf 'makefile-safety-test: dev-down depends on source generation\n' >&2
+  exit 1
+}
+[[ $DEV_DOWN_PLAN == *'APP_BUILD_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000'* ]] || {
+  printf 'makefile-safety-test: dev-down lacks a safe application digest placeholder\n' >&2
+  exit 1
+}
+[[ $DEV_DOWN_PLAN == *'PUBLIC_RENDERER_BUILD_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000'* ]] || {
+  printf 'makefile-safety-test: dev-down lacks a safe renderer digest placeholder\n' >&2
+  exit 1
+}
+[[ $DEV_DOWN_PLAN == *'podman compose --env-file .env -f deploy/compose.yml down'* ]] || {
+  printf 'makefile-safety-test: dev-down no longer invokes the expected Compose teardown\n' >&2
+  exit 1
+}
+
 printf 'Makefile native HTTPS safety tests passed\n'

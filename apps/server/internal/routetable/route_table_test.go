@@ -85,6 +85,8 @@ const caddyBinEnv = "CADDY_BIN"
 // each stub asserts its identity directly and only that.
 const stubHeader = "X-Stub-Backend"
 
+const bodyDigestETag = `"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"`
+
 // caddyBinary returns the caddy executable to run, or skips the test if
 // CADDY_BIN is unset.
 func caddyBinary(t *testing.T) string {
@@ -169,6 +171,18 @@ func newStubBackend(t *testing.T, name string) *httptest.Server {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(stubHeader, name)
+		if name == "go" && r.URL.Path == "/etag" {
+			w.Header().Set("ETag", bodyDigestETag)
+			if r.Header.Get("If-None-Match") == bodyDigestETag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			if _, err := io.WriteString(w, strings.Repeat("body-digest-etag\n", 80)); err != nil {
+				t.Logf("stub backend %s: writing ETag response: %v", name, err)
+			}
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		if _, err := fmt.Fprintf(w, "%s-backend %s", name, r.URL.Path); err != nil {
 			// The client already has the response headers/status by the
@@ -186,8 +200,9 @@ func newStubBackend(t *testing.T, name string) *httptest.Server {
 // caddyfileReplacement is one required, exact substitution applied to the
 // real Caddyfile before it is handed to a test Caddy process.
 type caddyfileReplacement struct {
-	old string
-	new string
+	old   string
+	new   string
+	count int
 }
 
 // adaptedCaddyfile reads the real deploy/caddy/Caddyfile and returns its
@@ -214,19 +229,29 @@ func adaptedCaddyfile(t *testing.T, sitePort, goPort, webPort int) string {
 		t.Fatalf("reading %s: %v", caddyfilePath, err)
 	}
 	content := string(raw)
+	fragmentPath := findUpward(t, wd, filepath.Join("deploy", "caddy", "public-roots.generated.caddy"))
+	fragment, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("reading %s: %v", fragmentPath, err)
+	}
+	const generatedMarker = "\t# ABOUTME_PUBLIC_ROOTS_GENERATED\n\timport /etc/caddy/generated/public-roots.generated.caddy"
+	if got := strings.Count(content, generatedMarker); got != 1 {
+		t.Fatalf("%s: generated marker count = %d, want 1", caddyfilePath, got)
+	}
+	content = strings.Replace(content, generatedMarker, strings.TrimSuffix(string(fragment), "\n"), 1)
 
 	replacements := []caddyfileReplacement{
-		{old: ":80 {", new: fmt.Sprintf(":%d {", sitePort)},
-		{old: "reverse_proxy server:8080 {", new: fmt.Sprintf("reverse_proxy 127.0.0.1:%d {", goPort)},
-		{old: "reverse_proxy web:3000", new: fmt.Sprintf("reverse_proxy 127.0.0.1:%d", webPort)},
+		{old: ":80 {", new: fmt.Sprintf(":%d {", sitePort), count: 1},
+		{old: "reverse_proxy server:8080 {", new: fmt.Sprintf("reverse_proxy 127.0.0.1:%d {", goPort), count: 2},
+		{old: "reverse_proxy web:3000", new: fmt.Sprintf("reverse_proxy 127.0.0.1:%d", webPort), count: 2},
 	}
 	for _, r := range replacements {
-		if got := strings.Count(content, r.old); got != 1 {
-			t.Fatalf("%s: found %d occurrence(s) of %q, want exactly 1 — "+
+		if got := strings.Count(content, r.old); got != r.count {
+			t.Fatalf("%s: found %d occurrence(s) of %q, want exactly %d — "+
 				"the real Caddyfile's shape changed; update this test's substitution to match",
-				caddyfilePath, got, r.old)
+				caddyfilePath, got, r.old, r.count)
 		}
-		content = strings.Replace(content, r.old, r.new, 1)
+		content = strings.ReplaceAll(content, r.old, r.new)
 	}
 	return content
 }
@@ -346,21 +371,29 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 	waitForCaddyReady(t, baseURL, 10*time.Second)
 
 	cases := []struct {
-		name string
-		path string
-		want wantBackend
+		name   string
+		method string
+		path   string
+		want   wantBackend
 	}{
 		// go-proxied: UAT-P0-06's `/api/v1/nope`, `/sitemap.xml`,
 		// `/robots.txt`, `/llms.txt`, plus the root-level `/*.md` class
 		// and the unversioned health endpoints, all under the @go
 		// matcher in deploy/caddy/Caddyfile.
-		{name: "api_v1_wildcard", path: "/api/v1/nope", want: wantGo},
-		{name: "sitemap_xml", path: "/sitemap.xml", want: wantGo},
-		{name: "robots_txt", path: "/robots.txt", want: wantGo},
-		{name: "llms_txt", path: "/llms.txt", want: wantGo},
-		{name: "root_level_md_slug", path: "/someone.md", want: wantGo},
-		{name: "healthz", path: "/healthz", want: wantGo},
-		{name: "readyz", path: "/readyz", want: wantGo},
+		{name: "api", method: http.MethodGet, path: "/api", want: wantGo},
+		{name: "api_v1_wildcard", method: http.MethodGet, path: "/api/v1/nope", want: wantGo},
+		{name: "sitemap_xml", method: http.MethodGet, path: "/sitemap.xml", want: wantGo},
+		{name: "robots_txt", method: http.MethodGet, path: "/robots.txt", want: wantGo},
+		{name: "llms_txt", method: http.MethodGet, path: "/llms.txt", want: wantGo},
+		{name: "root_level_md_slug", method: http.MethodGet, path: "/someone.md", want: wantGo},
+		{name: "healthz", method: http.MethodGet, path: "/healthz", want: wantGo},
+		{name: "readyz", method: http.MethodGet, path: "/readyz", want: wantGo},
+		{name: "healthz_subpath", method: http.MethodGet, path: "/healthz/nope", want: wantGo},
+		{name: "healthz_markdown", method: http.MethodGet, path: "/healthz.md", want: wantGo},
+		{name: "minimum_slug", method: http.MethodGet, path: "/a1-b", want: wantGo},
+		{name: "maximum_slug", method: http.MethodGet, path: "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", want: wantGo},
+		{name: "minimum_markdown_slug", method: http.MethodGet, path: "/a1-b.md", want: wantGo},
+		{name: "maximum_markdown_slug", method: http.MethodGet, path: "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.md", want: wantGo},
 
 		// web-proxied: UAT-P0-06's `/`, plus an arbitrary unmatched path
 		// and a *nested* .md path — the Caddyfile's own comment says its
@@ -368,19 +401,41 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		// through to the catch-all, not the @go matcher. This is the
 		// negative case that actually distinguishes "root-level slug
 		// page" from "any file ending in .md".
-		{name: "root", path: "/", want: wantWeb},
-		{name: "unmatched_editor_route", path: "/resume/editor/summary", want: wantWeb},
-		{name: "nested_md_does_not_match_go", path: "/nested/path.md", want: wantWeb},
+		{name: "root", method: http.MethodGet, path: "/", want: wantWeb},
+		{name: "app", method: http.MethodGet, path: "/app", want: wantWeb},
+		{name: "app_subpath", method: http.MethodGet, path: "/app/resumes/x", want: wantWeb},
+		{name: "nuxt_assets", method: http.MethodGet, path: "/_nuxt/app.js", want: wantWeb},
+		{name: "login", method: http.MethodGet, path: "/login", want: wantWeb},
+		{name: "login_markdown", method: http.MethodGet, path: "/login.md", want: wantWeb},
+		{name: "unmatched_editor_route", method: http.MethodGet, path: "/resume/editor/summary", want: wantWeb},
+		{name: "nested_md_does_not_match_go", method: http.MethodGet, path: "/nested/path.md", want: wantWeb},
+		{name: "too_short_slug", method: http.MethodGet, path: "/abc", want: wantWeb},
+		{name: "too_long_slug", method: http.MethodGet, path: "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", want: wantWeb},
+		{name: "leading_hyphen", method: http.MethodGet, path: "/-abcd", want: wantWeb},
+		{name: "trailing_hyphen", method: http.MethodGet, path: "/abcd-", want: wantWeb},
+		{name: "double_hyphen", method: http.MethodGet, path: "/ab--cd", want: wantWeb},
+		{name: "uppercase_slug", method: http.MethodGet, path: "/ABCD", want: wantWeb},
+		{name: "underscore_slug", method: http.MethodGet, path: "/ab_cd", want: wantWeb},
+		{name: "unregistered_extension", method: http.MethodGet, path: "/someone.txt", want: wantWeb},
 
 		// denied: UAT-P0-06's `/print`, `/print/x` — Caddy answers
 		// directly (respond 404), never proxying to either backend.
-		{name: "print_denied", path: "/print", want: wantDenied},
-		{name: "print_subpath_denied", path: "/print/x", want: wantDenied},
+		{name: "print_denied", method: http.MethodGet, path: "/print", want: wantDenied},
+		{name: "print_subpath_denied", method: http.MethodGet, path: "/print/x", want: wantDenied},
+		{name: "print_markdown_denied", method: http.MethodGet, path: "/print.md", want: wantDenied},
+		{name: "admin_denied", method: http.MethodGet, path: "/admin", want: wantDenied},
+		{name: "admin_subpath_denied", method: http.MethodGet, path: "/admin/x", want: wantDenied},
+		{name: "admin_markdown_denied", method: http.MethodGet, path: "/admin.md", want: wantDenied},
+		{name: "people_denied", method: http.MethodGet, path: "/people", want: wantDenied},
+		{name: "u_denied", method: http.MethodGet, path: "/u", want: wantDenied},
+		{name: "internal_render_exact_denied", method: http.MethodGet, path: "/internal-render", want: wantDenied},
+		{name: "internal_render_denied", method: http.MethodPost, path: "/internal-render/public", want: wantDenied},
+		{name: "internal_render_markdown_denied", method: http.MethodGet, path: "/internal-render.md", want: wantDenied},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+tc.path, nil)
+			req, err := http.NewRequestWithContext(context.Background(), tc.method, baseURL+tc.path, nil)
 			if err != nil {
 				t.Fatalf("GET %s: building request: %v", tc.path, err)
 			}
@@ -429,4 +484,55 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("encoded_body_digest_etags_preserve_conditional_parity", func(t *testing.T) {
+		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
+		for _, encoding := range []string{"identity", "gzip", "zstd"} {
+			t.Run(encoding, func(t *testing.T) {
+				request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/etag", nil)
+				if err != nil {
+					t.Fatalf("building %s ETag request: %v", encoding, err)
+				}
+				request.Header.Set("Accept-Encoding", encoding)
+				response, err := client.Do(request)
+				if err != nil {
+					t.Fatalf("requesting %s ETag response: %v", encoding, err)
+				}
+				if err := response.Body.Close(); err != nil {
+					t.Fatalf("closing %s ETag response: %v", encoding, err)
+				}
+				if response.StatusCode != http.StatusOK {
+					t.Fatalf("%s response status = %d, want 200", encoding, response.StatusCode)
+				}
+				etag := response.Header.Get("ETag")
+				if encoding == "identity" {
+					if etag != bodyDigestETag || response.Header.Get("Content-Encoding") != "" {
+						t.Fatalf("identity ETag/encoding = %q/%q", etag, response.Header.Get("Content-Encoding"))
+					}
+				} else {
+					wantETag := strings.TrimSuffix(bodyDigestETag, "\"") + "-" + encoding + "\""
+					if etag != wantETag || response.Header.Get("Content-Encoding") != encoding {
+						t.Fatalf("%s ETag/encoding = %q/%q", encoding, etag, response.Header.Get("Content-Encoding"))
+					}
+				}
+
+				conditional, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/etag", nil)
+				if err != nil {
+					t.Fatalf("building %s conditional request: %v", encoding, err)
+				}
+				conditional.Header.Set("Accept-Encoding", encoding)
+				conditional.Header.Set("If-None-Match", etag)
+				conditionalResponse, err := client.Do(conditional)
+				if err != nil {
+					t.Fatalf("requesting %s conditional response: %v", encoding, err)
+				}
+				if err := conditionalResponse.Body.Close(); err != nil {
+					t.Fatalf("closing %s conditional response: %v", encoding, err)
+				}
+				if conditionalResponse.StatusCode != http.StatusNotModified {
+					t.Fatalf("%s conditional status = %d, want 304", encoding, conditionalResponse.StatusCode)
+				}
+			})
+		}
+	})
 }
