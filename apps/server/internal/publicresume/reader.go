@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
@@ -14,7 +15,10 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-var ErrUnavailable = errors.New("public resume unavailable")
+var (
+	ErrNotFound    = errors.New("public resume not found")
+	ErrUnavailable = errors.New("public resume unavailable")
+)
 
 type Snapshot struct {
 	ResumeID         uuid.UUID
@@ -53,7 +57,16 @@ func NewReader(dependencies ReaderDependencies) (*Reader, error) {
 func (r *Reader) ReadResume(ctx context.Context, slug string, representation publicstate.Representation) (Snapshot, *publicstate.Lease, error) {
 	for attempt := 0; attempt < 2; attempt++ {
 		row, err := r.store.GetPublicResumeBySlug(ctx, slug)
-		if err != nil || row.Slug == nil || *row.Slug != slug || !row.Live || row.Revision <= 0 {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Snapshot{}, nil, ErrNotFound
+		}
+		if err != nil {
+			return Snapshot{}, nil, ErrUnavailable
+		}
+		if row.Slug == nil || *row.Slug != slug || !row.Live {
+			return Snapshot{}, nil, ErrNotFound
+		}
+		if row.Revision <= 0 {
 			return Snapshot{}, nil, ErrUnavailable
 		}
 		lease, err := r.coordinator.AcquireResume(ctx, row.ID, row.Revision, representation)
@@ -71,7 +84,7 @@ func (r *Reader) ReadResume(ctx context.Context, slug string, representation pub
 		}
 		if representation == publicstate.RepresentationPhoto && snapshot.photoKey == "" {
 			lease.Release()
-			return Snapshot{}, nil, ErrUnavailable
+			return Snapshot{}, nil, ErrNotFound
 		}
 		return snapshot, lease, nil
 	}

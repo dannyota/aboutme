@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
@@ -19,7 +20,7 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
-func TestMarkdownHandlerAdmitsBeforeCachedResponse(t *testing.T) {
+func TestMarkdownHandlerRejectsClosedAdmission(t *testing.T) {
 	// This fails if a pre-revocation cache value can bypass the live-state lease.
 	slug, reader, coordinator := formatTestReader(t, true)
 	cache, err := publiccache.New(4, time.Minute, time.Now)
@@ -39,11 +40,43 @@ func TestMarkdownHandlerAdmitsBeforeCachedResponse(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug+".md", nil))
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", w.Code)
+	if w.Code != http.StatusServiceUnavailable || w.Body.String() != "Service temporarily unavailable.\n" || w.Header().Get("Retry-After") != "1" {
+		t.Fatalf("response = %d %#v %q, want 503 with retry", w.Code, w.Header(), w.Body.String())
 	}
 	if err := transition.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMarkdownHandlerClassifiesReaderAbsenceAndFailure(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		readErr    error
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "absent", readErr: pgx.ErrNoRows, wantStatus: http.StatusNotFound, wantBody: "Not found.\n"},
+		{name: "unavailable", readErr: errors.New("database unavailable"), wantStatus: http.StatusServiceUnavailable, wantBody: "Service temporarily unavailable.\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			slug, reader, _ := formatTestReaderWithError(t, true, test.readErr)
+			cache, err := publiccache.New(4, time.Minute, time.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler, err := NewMarkdownHandler(MarkdownDependencies{Reader: reader, Cache: cache, AppDigest: "sha256:app"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug+".md", nil))
+			if w.Code != test.wantStatus || w.Body.String() != test.wantBody {
+				t.Fatalf("response = %d %q, want %d %q", w.Code, w.Body.String(), test.wantStatus, test.wantBody)
+			}
+			if test.wantStatus == http.StatusServiceUnavailable && w.Header().Get("Retry-After") != "1" {
+				t.Fatalf("Retry-After = %q, want 1", w.Header().Get("Retry-After"))
+			}
+		})
 	}
 }
 
@@ -133,6 +166,10 @@ func (w *formatBlockingWriter) Write(body []byte) (int, error) {
 var formatResumeID = uuid.MustParse("00000000-0000-0000-0000-000000000008")
 
 func formatTestReader(t *testing.T, discovery bool) (string, *publicresume.Reader, *publicstate.Coordinator) {
+	return formatTestReaderWithError(t, discovery, nil)
+}
+
+func formatTestReaderWithError(t *testing.T, discovery bool, readErr error) (string, *publicresume.Reader, *publicstate.Coordinator) {
 	t.Helper()
 	slug, lng, name := "ada", "en", "Ada"
 	document := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
@@ -147,20 +184,23 @@ func formatTestReader(t *testing.T, discovery bool) (string, *publicresume.Reade
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{Store: formatReadStore{row: store.Resume{ID: formatResumeID, Slug: &slug, Live: true, SEOGeoEnabled: discovery, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}}, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin})
+	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{Store: formatReadStore{row: store.Resume{ID: formatResumeID, Slug: &slug, Live: true, SEOGeoEnabled: discovery, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}, err: readErr}, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return slug, reader, coordinator
 }
 
-type formatReadStore struct{ row store.Resume }
+type formatReadStore struct {
+	row store.Resume
+	err error
+}
 
 func (s formatReadStore) GetPublicState(context.Context) (store.PublicState, error) {
 	return store.PublicState{Singleton: true, DiscoveryGeneration: 1}, nil
 }
 func (s formatReadStore) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
-	return s.row, nil
+	return s.row, s.err
 }
 func (s formatReadStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")
