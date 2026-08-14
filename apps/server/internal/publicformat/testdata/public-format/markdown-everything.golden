@@ -1,0 +1,60 @@
+# Full
+
+- Email: mail@example\.test
+- Phone: \+1
+- Location: Hanoi
+- Website: [https://site\.test](https://site.test)
+- LinkedIn: [https://linkedin\.test](https://linkedin.test)
+- GitHub: [https://github\.test](https://github.test)
+- Twitter: [https://twitter\.test](https://twitter.test)
+- Detail: detail
+- Custom label: custom@example\.test
+
+## Profile
+
+Profile body
+
+## Work
+
+### Work title
+[Employer](https://employer.test)
+01/2001 – 02/2002 · City, Country
+Work body
+
+## Education
+
+### Degree
+[School](https://school.test)
+03/2003 – Present
+Education body
+
+## Skills
+
+### Skill
+Level: 4/5
+Skill body
+
+## Languages
+
+### Language
+Level: 4/5
+
+## Certificates
+
+### [Certificate](https://certificate.test)
+Issuer
+04/2005
+Certificate body
+
+## Projects
+
+### [Project](https://project.test)
+2006 – 2007
+Project body
+
+## Custom
+
+### [Custom title](https://custom.test)
+Subtitle
+2008 · Custom city
+Custom body
