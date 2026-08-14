@@ -88,6 +88,10 @@ paths.
   `testutil_test.go`, `execution_order_test.go`, `semantic_idempotency_test.go`,
   `adversarial_security_exit_test.go`, and
   `adversarial_photo_crop_exit_test.go`.
+- T07 owns the narrow transaction-liveness producer addition in
+  `apps/server/internal/auth/session.go` and `session_test.go`; it exports the
+  existing session-death decision without duplicating timeout policy in
+  `resumeapi`.
 - New `apps/server/internal/resumeapi/transition.go`, `transition_test.go`,
   `recovery.go`, and `recovery_test.go`.
 

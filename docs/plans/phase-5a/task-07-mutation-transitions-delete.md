@@ -15,6 +15,18 @@ files; do not edit fences, idempotency, migrations/sqlc, or public reads.
 and Task 06 policy names exactly. Produces transition-aware `resumeapi.Service`,
 publish registration, and a recovery resolver.
 
+The final transaction reuses the authentication package's sole session-death
+decision through this narrow producer; `resumeapi` must not copy the session
+timeout constants or liveness rules:
+
+```go
+func auth.RequireLiveSession(store.Session, time.Time) error
+```
+
+It returns `auth.ErrSessionInvalid` for a revoked, idle-expired,
+absolute-expired, or rotation-grace-dead row. The transaction separately maps an
+absent row or mismatched user to the same error.
+
 Extend `resumeapi.Options` with the exact composition seam below. Task 11 reads
 the durable discovery generation, creates one coordinator, and injects the same
 pointer into mutation, public-read, and readiness consumers. Recovery uses the
