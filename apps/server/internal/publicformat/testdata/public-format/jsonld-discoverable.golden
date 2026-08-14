@@ -1,0 +1,1 @@
+{"@context":"https://schema.org","@type":"ProfilePage","url":"https://aboutme.example/ada","name":"Ada \u0026 \\\" — Resume","inLanguage":"en-US","mainEntity":{"@type":"Person","name":"Ada \u0026 \\\"","description":"Build \u003csafe\u003e things\n","image":"https://aboutme.example/api/v1/public/resumes/ada/photo","sameAs":["https://example.test/a"]}}

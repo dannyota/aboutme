@@ -1,0 +1,4 @@
+# aboutme resumes
+- https://aboutme.example/ada
+- https://aboutme.example/m
+- https://aboutme.example/zeta
