@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	"golang.org/x/oauth2"
 )
 
 // NewSessionManagerForTest builds a manager with an injected clock.
@@ -52,7 +53,10 @@ func LocalProviderHTTPClientForTest() *http.Client {
 // GitHubProviderHTTPClientForTest exposes the effective runtime HTTP boundary.
 func GitHubProviderHTTPClientForTest(svc *Service) *http.Client {
 	ctx := svc.withGitHubProviderHTTPClient(context.Background())
-	client, _ := ctx.Value(oauth2.HTTPClient).(*http.Client)
+	client, ok := ctx.Value(oauth2.HTTPClient).(*http.Client)
+	if !ok {
+		return nil
+	}
 	return client
 }
 

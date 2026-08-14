@@ -215,15 +215,15 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		canceled <- acquireErr
 	}()
 	cancel()
-	if err := <-canceled; !errors.Is(err, context.Canceled) {
-		t.Fatalf("canceled waiter error = %v, want context.Canceled", err)
+	if canceledErr := <-canceled; !errors.Is(canceledErr, context.Canceled) {
+		t.Fatalf("canceled waiter error = %v, want context.Canceled", canceledErr)
 	}
 
-	if waitingRelease, err := admission.Acquire(context.Background()); !errors.Is(err, ErrMediaBusy) {
+	if waitingRelease, acquireErr := admission.Acquire(context.Background()); !errors.Is(acquireErr, ErrMediaBusy) {
 		if waitingRelease != nil {
 			waitingRelease()
 		}
-		t.Fatalf("busy waiter error = %v, want ErrMediaBusy", err)
+		t.Fatalf("busy waiter error = %v, want ErrMediaBusy", acquireErr)
 	}
 
 	release()

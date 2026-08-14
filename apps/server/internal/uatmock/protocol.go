@@ -131,7 +131,11 @@ func (s *Service) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "authorization unavailable", http.StatusInternalServerError)
 			return
 		}
-		redirect, _ := url.Parse(s.cfg.RedirectURL)
+		redirect, err := url.Parse(s.cfg.RedirectURL)
+		if err != nil {
+			http.Error(w, "authorization unavailable", http.StatusInternalServerError)
+			return
+		}
 		query := redirect.Query()
 		query.Set("code", code)
 		query.Set("state", r.PostForm.Get("state"))
@@ -326,5 +330,7 @@ func (s *Service) writeTokenError(w http.ResponseWriter, errorCode string) {
 func (s *Service) writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		return
+	}
 }

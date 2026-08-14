@@ -61,7 +61,8 @@ func TestLoadConfigAcceptsOnlyNativeHTTPSHarnessValues(t *testing.T) {
 func TestServeDrainsInFlightRequest(t *testing.T) {
 	t.Parallel()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -75,15 +76,24 @@ func TestServeDrainsInFlightRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- serve(ctx, ln, handler) }()
+	requestDone := make(chan error, 1)
 	go func() {
-		resp, requestErr := http.Get("http://" + ln.Addr().String())
-		if requestErr == nil {
-			_ = resp.Body.Close()
+		req, requestErr := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+ln.Addr().String(), nil)
+		if requestErr != nil {
+			requestDone <- requestErr
+			return
 		}
+		resp, requestErr := http.DefaultClient.Do(req)
+		if requestErr == nil {
+			requestErr = resp.Body.Close()
+		}
+		requestDone <- requestErr
 	}()
 
 	select {
 	case <-started:
+	case requestErr := <-requestDone:
+		t.Fatalf("request before handler started: %v", requestErr)
 	case <-time.After(5 * time.Second):
 		t.Fatal("request did not start")
 	}
@@ -101,5 +111,8 @@ func TestServeDrainsInFlightRequest(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("serve did not stop")
+	}
+	if requestErr := <-requestDone; requestErr != nil {
+		t.Errorf("request: %v", requestErr)
 	}
 }

@@ -1,6 +1,7 @@
 package uatmock
 
 import (
+	"context"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -52,7 +53,7 @@ func TestAuthorizationGETRendersAccessibleAccountForm(t *testing.T) {
 	t.Parallel()
 
 	svc := newTestService(t)
-	req := httptest.NewRequest(http.MethodGet, authorizePath+"?"+validAuthorizeQuery().Encode(), nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizePath+"?"+validAuthorizeQuery().Encode(), nil)
 	rec := httptest.NewRecorder()
 	svc.Handler().ServeHTTP(rec, req)
 
@@ -90,7 +91,7 @@ func TestHandlerRejectsUnsupportedMethodsAndContentTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader("{}"))
+			req := httptest.NewRequestWithContext(context.Background(), tt.method, tt.path, strings.NewReader("{}"))
 			if tt.contentType != "" {
 				req.Header.Set("Content-Type", tt.contentType)
 			}
@@ -133,7 +134,7 @@ func TestAuthorizationRejectsInvalidAndOversizedFields(t *testing.T) {
 			} else {
 				form.Set(tt.field, tt.value)
 			}
-			req := httptest.NewRequest(http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			rec := httptest.NewRecorder()
 			svc.Handler().ServeHTTP(rec, req)
@@ -153,7 +154,7 @@ func TestAuthorizationRejectsDuplicateAccountField(t *testing.T) {
 	svc := newTestService(t)
 	form := validAuthorizeQuery()
 	form["account"] = []string{googleSubject, googleSubject}
-	req := httptest.NewRequest(http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	svc.Handler().ServeHTTP(rec, req)

@@ -2,6 +2,7 @@ package uatmock
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -167,7 +168,7 @@ func TestTokenRejectsOversizedBody(t *testing.T) {
 	t.Parallel()
 
 	svc := newTestService(t)
-	req := httptest.NewRequest(http.MethodPost, tokenPath, strings.NewReader(strings.Repeat("x", maxFormBytes+1)))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, tokenPath, strings.NewReader(strings.Repeat("x", maxFormBytes+1)))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	svc.Handler().ServeHTTP(rec, req)
@@ -178,7 +179,8 @@ func TestTokenRejectsOversizedBody(t *testing.T) {
 
 func startTestServer(t *testing.T) (string, func()) {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -187,13 +189,27 @@ func startTestServer(t *testing.T) (string, func()) {
 	cfg.IssuerURL = baseURL + "/google"
 	svc, err := New(cfg)
 	if err != nil {
-		_ = ln.Close()
+		if closeErr := ln.Close(); closeErr != nil {
+			t.Errorf("close listener: %v", closeErr)
+		}
 		t.Fatalf("New(): %v", err)
 	}
 	server := &http.Server{Handler: svc.Handler(), ReadHeaderTimeout: time.Second}
-	go func() { _ = server.Serve(ln) }()
+	serverDone := make(chan error, 1)
+	go func() {
+		serveErr := server.Serve(ln)
+		if errors.Is(serveErr, http.ErrServerClosed) {
+			serveErr = nil
+		}
+		serverDone <- serveErr
+	}()
 	return baseURL, func() {
-		_ = server.Close()
+		if closeErr := server.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+			t.Errorf("close server: %v", closeErr)
+		}
+		if serveErr := <-serverDone; serveErr != nil {
+			t.Errorf("serve test server: %v", serveErr)
+		}
 	}
 }
 
@@ -220,13 +236,25 @@ func authorizeThroughHTTP(t *testing.T, baseURL string, form url.Values) (string
 			return http.ErrUseLastResponse
 		},
 	}
-	resp, err := client.PostForm(baseURL+authorizePath, form)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+authorizePath, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("build authorize request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Errorf("close authorize response: %v", closeErr)
+		}
+	}()
 	if resp.StatusCode != http.StatusFound {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			t.Fatalf("read authorize response: %v", readErr)
+		}
 		t.Fatalf("authorize status = %d, body = %s", resp.StatusCode, body)
 	}
 	redirect, err := url.Parse(resp.Header.Get("Location"))
@@ -240,7 +268,7 @@ func authorizeThroughHandler(t *testing.T, handler http.Handler, form url.Values
 	t.Helper()
 	form = cloneValues(form)
 	form.Set("account", googleSubject)
-	req := httptest.NewRequest(http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -275,7 +303,7 @@ func exchangeThroughHandler(t *testing.T, handler http.Handler, code, verifier s
 }
 
 func exchangeFormThroughHandler(handler http.Handler, form url.Values) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, tokenPath, strings.NewReader(form.Encode()))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, tokenPath, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
