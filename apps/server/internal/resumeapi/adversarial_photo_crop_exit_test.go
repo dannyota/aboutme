@@ -23,6 +23,7 @@ import (
 
 func TestPhotoCrop_WriteSafety(t *testing.T) {
 	assertPhotoCropChangedBodyReuse(t)
+	assertPhotoCropNullClear(t)
 }
 
 func TestPhotoCropContractAndIsolation(t *testing.T) {
@@ -77,6 +78,87 @@ func assertPhotoCropChangedBodyReuse(t *testing.T) {
 	after := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
 	if !reflect.DeepEqual(after, before) {
 		t.Fatalf("changed-body reuse changed state:\n before=%+v\n after=%+v", before, after)
+	}
+}
+
+func assertPhotoCropNullClear(t *testing.T) {
+	t.Helper()
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	uploaded := h.uploadPhotoRequest(t, created.ID, created.Revision, uuid.NewString(), "photo.png", makePhotoPNG(t))
+	if uploaded.status != http.StatusOK {
+		t.Fatalf("seed upload = %d body=%s", uploaded.status, uploaded.body)
+	}
+	_, uploadedDocument := decodedWrittenDocument(t, uploaded)
+	if uploadedDocument.PersonalDetails.Photo == nil {
+		t.Fatal("seed upload returned no photo")
+	}
+	photoKey := uploadedDocument.PersonalDetails.Photo.Key
+
+	backend := &photoCropExitBackend{delegate: h.service.blobs}
+	h.service.blobs = backend
+	path := fmt.Sprintf("/api/v1/resumes/%s/photo", created.ID)
+	set := h.mutationRequest(t, http.MethodPatch, path,
+		bytes.NewBufferString(`{"crop":{"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`),
+		2, uuid.NewString())
+	if set.status != http.StatusOK || set.header.Get("ETag") != `"r3"` {
+		t.Fatalf("set crop = %d headers=%v body=%s", set.status, set.header, set.body)
+	}
+	_, setDocument := decodedWrittenDocument(t, set)
+	if setDocument.PersonalDetails.Photo == nil ||
+		setDocument.PersonalDetails.Photo.Key != photoKey ||
+		setDocument.PersonalDetails.Photo.Crop == nil {
+		t.Fatalf("set crop changed key or omitted crop: %#v", setDocument.PersonalDetails.Photo)
+	}
+
+	clearKey := uuid.NewString()
+	clearBody := `{"crop":null}`
+	cleared := h.mutationRequest(t, http.MethodPatch, path, bytes.NewBufferString(clearBody), 3, clearKey)
+	if cleared.status != http.StatusOK || cleared.header.Get("ETag") != `"r4"` {
+		t.Fatalf("clear crop = %d headers=%v body=%s", cleared.status, cleared.header, cleared.body)
+	}
+	clearRevision, clearedDocument := decodedWrittenDocument(t, cleared)
+	if clearRevision != "4" || clearedDocument.PersonalDetails.Photo == nil ||
+		clearedDocument.PersonalDetails.Photo.Key != photoKey ||
+		clearedDocument.PersonalDetails.Photo.Crop != nil {
+		t.Fatalf("clear crop revision=%q photo=%#v", clearRevision, clearedDocument.PersonalDetails.Photo)
+	}
+	if calls := backend.snapshotCalls(); calls != (photoCropExitObjectCalls{}) {
+		t.Fatalf("crop set or clear made object calls: %+v", calls)
+	}
+
+	beforeReplay := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
+	beforeCalls := backend.snapshotCalls()
+	replayed := h.mutationRequest(t, http.MethodPatch, path, bytes.NewBufferString(clearBody), 3, clearKey)
+	if replayed.status != cleared.status || !bytes.Equal(replayed.body, cleared.body) ||
+		!reflect.DeepEqual(stableResumeHeaders(replayed.header), stableResumeHeaders(cleared.header)) {
+		t.Fatalf("clear replay differs: first=%d headers=%v body=%s replay=%d headers=%v body=%s",
+			cleared.status, cleared.header, cleared.body, replayed.status, replayed.header, replayed.body)
+	}
+	if replayed.header.Get("X-Request-ID") == "" || replayed.header.Get("X-Request-ID") == cleared.header.Get("X-Request-ID") {
+		t.Fatalf("clear replay request id = %q, first = %q", replayed.header.Get("X-Request-ID"), cleared.header.Get("X-Request-ID"))
+	}
+
+	reused := h.mutationRequest(t, http.MethodPatch, path, bytes.NewBufferString(`{"crop": null}`), 3, clearKey)
+	if reused.status != http.StatusConflict ||
+		!bytes.Contains(reused.body, []byte(`"code":"idempotency_key_reuse"`)) {
+		t.Fatalf("changed clear-body reuse = %d body=%s", reused.status, reused.body)
+	}
+	if afterCalls := backend.snapshotCalls(); afterCalls != beforeCalls {
+		t.Fatalf("clear replay or reuse made object calls: before=%+v after=%+v", beforeCalls, afterCalls)
+	}
+	afterReplay := snapshotPhotoCropExitState(t, h, backend.delegate, created.ID)
+	if !reflect.DeepEqual(afterReplay, beforeReplay) {
+		t.Fatalf("clear replay or reuse changed state:\n before=%+v\n after=%+v", beforeReplay, afterReplay)
+	}
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatalf("read stored clear state: %v", err)
+	}
+	if stored.Revision != 4 || stored.Doc.PersonalDetails.Photo == nil ||
+		stored.Doc.PersonalDetails.Photo.Key != photoKey ||
+		stored.Doc.PersonalDetails.Photo.Crop != nil {
+		t.Fatalf("stored clear state revision=%d photo=%#v", stored.Revision, stored.Doc.PersonalDetails.Photo)
 	}
 }
 
