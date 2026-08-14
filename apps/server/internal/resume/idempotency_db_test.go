@@ -119,7 +119,7 @@ func TestIdempotencyRecheck_DecidesWithoutWritesOrUsageMutation(t *testing.T) {
 
 // A transition's optimistic probe is not its final authority: a committed
 // contender between probe and Execute must replay without invoking mutate.
-func TestSameKeyContenderBetweenRecheckAndExecuteReplaysWithoutCallback(t *testing.T) {
+func TestSameKeyContenderRechecksBeforeCAS(t *testing.T) {
 	idem, _, q, _, ctx := newIntegrationIdempotencyStore(t, testutil.NewClockAtEpoch().Now)
 	userID := createTestUser(t, q)
 	key := uuid.New()
