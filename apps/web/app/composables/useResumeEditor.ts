@@ -46,6 +46,7 @@ export type TemplateActionResult
 
 export interface ResumeEditorActions {
   readonly record: ComputedRef<ResumeRecord | undefined>;
+  createEntityId(): string;
   edit(intent: AtomicCommandIntent): EditorActionResult;
   applyTemplate(preset: Readonly<TemplatePreset>): TemplateActionResult;
   resolveOpaquePhoto(
@@ -146,6 +147,7 @@ export function createResumeEditorActions(
   };
   return {
     record,
+    createEntityId: () => deps.runtime.uuid(),
     edit,
     applyTemplate,
     resolveOpaquePhoto: (commandId, decision) =>
