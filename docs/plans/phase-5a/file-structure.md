@@ -79,11 +79,15 @@ paths.
 
 - Existing `apps/server/internal/resumeapi/routes.go`, `routes_test.go`,
   `chain.go`, `chain_test.go`, `writesafety.go`, `writesafety_test.go`,
-  `persist.go`, `persist_test.go`, `resumes.go`, `resumes_test.go`, `photo.go`,
-  `photo_test.go`, `entries.go`, `entries_test.go`, `sections.go`,
-  `sections_test.go`, `structure.go`, `structure_test.go`,
-  `personal_details.go`, `personal_details_test.go`, `customization.go`, and
-  `customization_test.go`.
+  `persist.go`, `persist_test.go`, `errors.go`, `errors_test.go`, `resumes.go`,
+  `resumes_test.go`, `photo.go`, `photo_test.go`, `entries.go`,
+  `entries_test.go`, `sections.go`, `sections_test.go`, `structure.go`,
+  `structure_test.go`, `personal_details.go`, `personal_details_test.go`,
+  `customization.go`, and `customization_test.go`.
+- T07 also owns the minimal exact-interface fixture updates in
+  `testutil_test.go`, `execution_order_test.go`, `semantic_idempotency_test.go`,
+  `adversarial_security_exit_test.go`, and
+  `adversarial_photo_crop_exit_test.go`.
 - New `apps/server/internal/resumeapi/transition.go`, `transition_test.go`,
   `recovery.go`, and `recovery_test.go`.
 
