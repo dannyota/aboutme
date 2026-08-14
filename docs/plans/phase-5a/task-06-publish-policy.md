@@ -20,8 +20,9 @@ functions, and limiter interface for Task 07.
 
 - [ ] Add strict decode tests for required booleans and omitted/nonempty slug.
       Reject `slug:null`, `slug:""`, singleton-header violations, unknown/
-      duplicate fields, wrong types, trailing data, and body overflow as exact
-      `400 request_invalid` before policy or limiter work.
+      duplicate fields, wrong types, and trailing data as exact
+      `400 request_invalid` before policy or limiter work. Reject body overflow
+      as the shared exact `413 body_too_large` before policy or limiter work.
 - [ ] Add a complete table for every issue in `public-contract.md`. Assert exact
       path/code/message, UTF-8 path then code then message order, deduplication,
       and collection of independent failures without short circuit.
