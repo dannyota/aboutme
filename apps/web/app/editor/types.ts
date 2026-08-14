@@ -103,6 +103,8 @@ export interface ResumeMetadata {
   readonly title: string;
   readonly lng: string;
   readonly live: boolean;
+  readonly downloadEnabled: boolean;
+  readonly seoGeoEnabled: boolean;
   readonly slug: string | null;
   readonly schemaVersion: typeof CURRENT_VERSION;
   readonly createdAt: string;
