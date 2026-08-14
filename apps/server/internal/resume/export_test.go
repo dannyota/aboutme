@@ -103,6 +103,18 @@ func NewIdempotencyStoreWithHooksForTest(pool *store.Pool, now func() time.Time,
 	}
 }
 
+// NewIdempotencyStoreWithRecheckBlockerForTest exposes Recheck's one
+// deterministic placement point after it owns the user lock and before its
+// exact-record lookup. It is test-only so transition consumers receive only
+// the production Recheck contract.
+func NewIdempotencyStoreWithRecheckBlockerForTest(pool *store.Pool, now func() time.Time,
+	afterLock func(),
+) *IdempotencyStore {
+	return &IdempotencyStore{
+		pool: pool, q: store.New(pool), now: now, afterRecheckLock: afterLock,
+	}
+}
+
 // ExecuteForTest preserves the response/replayed/error view used by the
 // Phase 2A suites while production callers consume ExecuteResult's commit
 // classification. The underlying execution path is exactly Execute.
