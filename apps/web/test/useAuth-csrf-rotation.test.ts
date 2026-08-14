@@ -72,9 +72,8 @@ describe('useAuth mutate() CSRF x rotation self-heal', () => {
               // First resolution (the mount) hands out the token that
               // will go stale; the refetch mid-retry hands out the one
               // a real session rotation would mint.
-              csrfToken: meGetCalls === 1
-                ? 'test-csrf-token'
-                : 'rotated-csrf-token',
+              csrfToken:
+                meGetCalls === 1 ? 'test-csrf-token' : 'rotated-csrf-token',
               identities: [{ provider: 'google' }],
             },
           };

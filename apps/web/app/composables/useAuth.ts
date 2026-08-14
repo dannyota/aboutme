@@ -49,10 +49,13 @@ export interface UseAuthReturn {
   user: ComputedRef<AuthUser | null>;
   csrfToken: ComputedRef<string | null>;
   identities: ComputedRef<AuthIdentity[]>;
+  authState: ComputedRef<AuthState>;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
   mutate: <T = void>(url: string, options: MutateOptions) => Promise<T>;
 }
+
+export type AuthState = 'loading' | 'authenticated' | 'anonymous' | 'error';
 
 /** Headers for a CSRF-protected call, including JSON only with a body. */
 export function csrfHeaders(
@@ -68,18 +71,22 @@ export function csrfHeaders(
 
 /** True for a caught fetch error whose body is `{error:{code:"..."}}`. */
 function hasErrorCode(error: unknown, code: string): boolean {
-  const actual = (
-    error as { data?: { error?: { code?: string } } }
-  )?.data?.error?.code;
+  const actual = (error as { data?: { error?: { code?: string } } })?.data
+    ?.error?.code;
   return actual === code;
 }
 
 export function useAuth(): UseAuthReturn {
   // Authenticated reads wait for the browser, where the cookie and proxy exist.
-  const { data, refresh: refreshMe } = useFetch<MeEnvelope>(
-    '/api/v1/me',
-    { credentials: 'include', server: false },
-  );
+  const {
+    data,
+    error,
+    status,
+    refresh: refreshMe,
+  } = useFetch<MeEnvelope>('/api/v1/me', {
+    credentials: 'include',
+    server: false,
+  });
 
   // Optional-chain all the way through: an unexpected response shape (a
   // contract drift, a proxy error page, ...) must degrade to "logged out"
@@ -87,9 +94,24 @@ export function useAuth(): UseAuthReturn {
   const user = computed(() => data.value?.data?.user ?? null);
   const csrfToken = computed(() => data.value?.data?.csrfToken ?? null);
   const identities = computed(() => data.value?.data?.identities ?? []);
+  const authState = computed<AuthState>(() => {
+    if (status.value === 'idle' || status.value === 'pending') return 'loading';
+    if ((error.value as { statusCode?: number } | null)?.statusCode === 401) {
+      return 'anonymous';
+    }
+    if (error.value) return 'error';
+    return data.value?.data?.user === undefined ? 'error' : 'authenticated';
+  });
+
+  let refreshing: Promise<void> | null = null;
 
   async function refresh(): Promise<void> {
-    await refreshMe();
+    if (refreshing === null) {
+      refreshing = refreshMe().finally(() => {
+        refreshing = null;
+      });
+    }
+    await refreshing;
   }
 
   // Rotation can invalidate the cached CSRF token. Refresh and retry once;
@@ -122,5 +144,5 @@ export function useAuth(): UseAuthReturn {
     await navigateTo('/login');
   }
 
-  return { user, csrfToken, identities, refresh, logout, mutate };
+  return { user, csrfToken, identities, authState, refresh, logout, mutate };
 }
