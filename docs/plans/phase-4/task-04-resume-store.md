@@ -123,6 +123,7 @@ export interface ResumeStoreActions {
   setTemplateState(resumeId: string, state: TemplateGroupState | null): void;
   setPhotoRead(resumeId: string, state: PhotoReadState): void;
   markSessionLost(resumeId: string): void;
+  clearSessionLost(resumeId: string): void;
   setOpaquePhotoOutcome(
     resumeId: string,
     state: OpaquePhotoOutcome | null,

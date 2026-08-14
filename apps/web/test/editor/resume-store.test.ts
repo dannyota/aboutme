@@ -671,4 +671,58 @@ describe('resume store adoption and teardown', () => {
     store.removeResume(accepted.metadata.id);
     expect(store.recordFor(accepted.metadata.id)).toBeUndefined();
   });
+
+  it('clears only session loss while retaining work', () => {
+    const { accepted, store } = initialized(withPhoto(acceptedFixture()));
+    const command = titleCommand(accepted, 'In flight');
+    const retained = titleCommand(accepted, 'Queued', 2, 'queued-1');
+    store.enqueue(accepted.metadata.id, command);
+    store.startAttempt(
+      accepted.metadata.id,
+      command,
+      command,
+      attemptFor(command),
+    );
+    store.enqueue(accepted.metadata.id, retained);
+    store.setIssues(accepted.metadata.id, command.id, [
+      { path: '/metadata/title', code: 'invalid' },
+    ]);
+    store.markConflict(accepted.metadata.id, { id: 'conflict-1' } as never);
+    store.setTemplateState(accepted.metadata.id, { kind: 'partial' } as never);
+    const opaqueCommand = photoUploadCommand(accepted);
+    store.setOpaquePhotoOutcome(accepted.metadata.id, {
+      kind: 'photo-cutoff',
+      command: opaqueCommand,
+      attempt: attemptFor(opaqueCommand),
+      observed: 'unavailable',
+    });
+    store.setPhotoRead(accepted.metadata.id, readyPhoto());
+    store.markSessionLost(accepted.metadata.id);
+    const before = structuredClone(
+      toRaw(store.recordFor(accepted.metadata.id)!),
+    );
+    expect(before.attempt).not.toBeNull();
+    expect(before.pending).toEqual([retained]);
+    expect(before.conflicts).toHaveLength(1);
+    expect(before.photoRead).toMatchObject({
+      kind: 'suspended',
+      reason: 'session-lost',
+    });
+
+    store.clearSessionLost(accepted.metadata.id);
+
+    const record = store.recordFor(accepted.metadata.id)!;
+    expect(record.sessionLost).toBe(false);
+    expect(record.accepted).toEqual(before.accepted);
+    expect(record.current).toEqual(before.current);
+    expect(record.pending).toEqual(before.pending);
+    expect(record.attempt).toEqual(before.attempt);
+    expect(record.conflicts).toEqual(before.conflicts);
+    expect(record.issues).toEqual(before.issues);
+    expect(record.templateState).toEqual(before.templateState);
+    expect(record.opaquePhotoOutcome).toEqual(before.opaquePhotoOutcome);
+    expect(record.photoRead).toEqual(before.photoRead);
+    store.clearSessionLost('missing-resume');
+    expect(store.recordFor(accepted.metadata.id)).toEqual(record);
+  });
 });
