@@ -464,6 +464,24 @@ SELECT singleton, discovery_generation
 FROM public_state
 WHERE singleton = true;
 
+-- name: GetPublicDiscoverySnapshot :one
+-- The generation and eligible slug set are selected by one PostgreSQL
+-- statement so aggregate discovery admission cannot pair different commits.
+SELECT
+    ps.discovery_generation,
+    COALESCE(
+        array_agg(r.slug::text ORDER BY r.slug::text COLLATE "C")
+            FILTER (WHERE r.slug IS NOT NULL),
+        ARRAY[]::text[]
+    )::text[] AS slugs
+FROM public_state AS ps
+LEFT JOIN resumes AS r
+    ON r.slug IS NOT NULL
+    AND r.live = true
+    AND r.seo_geo_enabled = true
+WHERE ps.singleton = true
+GROUP BY ps.discovery_generation;
+
 -- name: LockPublicState :one
 SELECT singleton, discovery_generation
 FROM public_state
