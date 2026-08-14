@@ -159,4 +159,23 @@ describe("openapi contract", () => {
       "Linked identities ordered by `(created_at, id)`, oldest first",
     );
   });
+
+  it("defines a closed public resume distinct from the owner resume", () => {
+    const publicResume = doc.components.schemas.PublicResume;
+    expect(publicResume.additionalProperties).toBe(false);
+    expect(Object.keys(publicResume.properties)).toEqual([
+      "slug",
+      "revision",
+      "lng",
+      "downloadEnabled",
+      "document",
+    ]);
+    expect(publicResume.properties.revision.$ref).toBe(
+      "#/components/schemas/Revision",
+    );
+    expect(doc.components.schemas.Resume.properties).toBeUndefined();
+    expect(JSON.stringify(publicResume)).not.toMatch(
+      /createdAt|updatedAt|seoGeoEnabled|\"key\"|\"isHidden\"/,
+    );
+  });
 });

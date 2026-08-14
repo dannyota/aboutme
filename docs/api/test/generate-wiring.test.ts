@@ -18,6 +18,10 @@ import { describe, expect, it } from "vitest";
 
 const makefilePath = process.env.MAKEFILE_PATH ?? "Makefile";
 const makefile = readFileSync(makefilePath, "utf8");
+const generatedClient = readFileSync(
+  "apps/web/app/api/generated/openapi.ts",
+  "utf8",
+);
 
 /** The prerequisites declared on a target line: `name: a b c ## help`. */
 function prerequisites(target: string): string[] {
@@ -47,7 +51,8 @@ function recipe(target: string): string {
   return body.join("\n");
 }
 
-const hasApiGen = prerequisites("api-gen").length > 0 || recipe("api-gen") !== "";
+const hasApiGen =
+  prerequisites("api-gen").length > 0 || recipe("api-gen") !== "";
 
 describe("generated-artifact wiring", () => {
   it("keeps `make generate` the one command that regenerates everything", () => {
@@ -82,9 +87,17 @@ describe.skipIf(!hasApiGen)("generated API client wiring", () => {
   it("`api-gen` is declared .PHONY", () => {
     // Without this, a directory or file named api-gen would make the
     // target a silent no-op.
-    const phony = makefile
-      .split("\n")
-      .find((l) => l.startsWith(".PHONY:")) ?? "";
+    const phony =
+      makefile.split("\n").find((l) => l.startsWith(".PHONY:")) ?? "";
     expect(phony).toContain("api-gen");
+  });
+});
+
+describe("Phase 5A generated public contract", () => {
+  it("contains the publish request and closed public resume types", () => {
+    expect(generatedClient).toContain("PublishResumeRequest:");
+    expect(generatedClient).toContain("PublicResume:");
+    expect(generatedClient).toContain("getPublicResume:");
+    expect(generatedClient).toContain("getPublicResumePhoto:");
   });
 });
