@@ -1,6 +1,6 @@
 # Phase 4 Editor Contract
 
-Status: Implementation design pending review.
+Status: **Approved — ready for implementation planning.**
 
 ## Purpose
 

@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 15, active** (2026-08-14).
+Status: **Revision 16, active** (2026-08-14).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior; it is approved at v4. This
@@ -12,42 +12,62 @@ keep everything runnable on the laptop until the whole product works there.
 
 ## Current baseline
 
-| Slice                         | State                                      | Remaining work                                  |
-| ----------------------------- | ------------------------------------------ | ----------------------------------------------- |
-| P0 foundations                | Complete                                   | None                                            |
-| P0F TypeScript API client     | Complete                                   | None                                            |
-| P1 authentication             | Complete                                   | None                                            |
-| P1.1 authentication hardening | Complete                                   | None                                            |
-| P2A resume domain and store   | Complete                                   | None                                            |
-| P3 renderer lane              | Complete                                   | None                                            |
-| P2B server lane               | Complete                                   | None                                            |
-| P9 HTTPS overlay              | Needed before authenticated browser checks | Small overlay lane, pulled in when P4 starts    |
-| PI infrastructure             | Adopted, not executed                      | Refresh after runtime phases; no cloud mutation |
+| Slice                         | State                           | Remaining work                                  |
+| ----------------------------- | ------------------------------- | ----------------------------------------------- |
+| P0 foundations                | Complete                        | None                                            |
+| P0F TypeScript API client     | Complete                        | None                                            |
+| P1 authentication             | Complete                        | None                                            |
+| P1.1 authentication hardening | Complete                        | None                                            |
+| P2A resume domain and store   | Complete                        | None                                            |
+| P3 renderer lane              | Complete                        | None                                            |
+| P2B server lane               | Complete                        | None                                            |
+| P4 authenticated editor       | Ready for dispatch              | Execute the approved editor design              |
+| P5A publish and public SSR    | Ready for dispatch              | Execute the approved publish/public design      |
+| P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
+| PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
 
 The settings page uses authenticated CSRF-protected POST for provider linking
 and reauthentication. P1.1's contract, tests, browser proof, and gates agree.
 
 ## Delivery order
 
-Two lanes run in parallel. They own disjoint paths: the renderer lane owns
-`apps/web/**` and `packages/schema/**`; the server lane owns `apps/server/**`
-and `docs/api/openapi.yaml`.
+P3 and P2B are complete. P4 and P5A are the next two delivery lanes and may run
+in parallel after both implementation plans pass independent review:
 
-| Lane          | Phase | Work                                                     |
-| ------------- | ----- | -------------------------------------------------------- |
-| Renderer lane | P3    | Fonts, document schema v2, renderer, pagination, presets |
-| Server lane   | P2B   | Resume HTTP surface, write-safety kernel, private photos |
+| Lane        | Phase | Work                                                        |
+| ----------- | ----- | ----------------------------------------------------------- |
+| Editor      | P4    | Authenticated editor, autosave, conflicts, private photos   |
+| Public read | P5A   | Publish state, revocation, public artifacts, and public SSR |
 
-One sync point: P3 Task 5B releases document schema v2, after which P2B's
-wire-version tasks (T9 and the version cases in T1) can close. Every other P2B
-task depends only on the Go sanitizer package, which has landed. P2B does not
-edit `packages/schema/**`; it consumes generated types.
+The lanes consume the same released document schema and renderer but own
+different implementation paths. Root manifests, generated contracts, Caddy,
+native harness scripts, migrations, and shared traceability indexes use the
+serialized integration-owner windows named by their phase plans. Full gates run
+once per phase, never concurrently.
+
+Shared-path windows use this total order across both phase graphs:
+
+1. P4 Task 00 lands the authenticated cache/validator prerequisite, editor
+   dependencies, and its generated-client baseline.
+2. P5A Task 00 lands render topology, generated public-root routing, and native
+   harness parity on that baseline.
+3. P5A Tasks 01 and 04 run the migration/sqlc and OpenAPI/client owner windows,
+   in that order, before P4 transport work or public route authors consume the
+   generated interfaces.
+4. The P5A Task 09 manifest/lock/Nuxt owner subwindow runs after P4 Task 00 and
+   before either phase starts its final browser window.
+5. P4 Task 15 owns the first final native-HTTPS harness window. P5A Task 12
+   follows with the native-public capture window and must preserve the P4
+   scenario.
+
+No worker edits a shared path during these windows. The integration owner
+finishes and verifies one window before opening the next. Disjoint phase tasks
+may continue in parallel between them.
 
 After both lanes close their phase review and exit checklist:
 
-1. P4 editor and P5A publish/public SSR, plus the P9 HTTPS overlay so
-   authenticated flows can be browser-checked as they land.
-2. P6 realtime, P7 print and images, P8 privacy lifecycle.
+1. P5B publish UX and P6 realtime.
+2. P7 print and images and P8 privacy lifecycle.
 3. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
 
@@ -77,6 +97,7 @@ graph TD
     P3 -. schema v2 .-> P2B
     P2B --> P4[P4 editor]
     P3 --> P4
+    P9H --> P4
     P2B --> P5A[P5A publish and public SSR]
     P3 --> P5A
     P4 --> P5B[P5B publish UX]
@@ -128,9 +149,12 @@ reviewer confirms those invariants by name.
 
 Daily work uses the native stack at `http://localhost:20080` and one shared
 PostgreSQL container. `make dev` stays HTTP-only for image and network smoke
-checks. Authenticated browser flows need Secure `__Host-` cookies, so they wait
-for the P9 HTTPS overlay on port 443; until it exists, cover those flows with
-server and component tests and say what was not browser-checked.
+checks. Authenticated browser flows need Secure `__Host-` cookies. The landed
+native HTTPS harness serves trusted local checks at `https://localhost:20443`;
+P4 owns its editor scenario and must not bypass TLS or the external-request
+firewall. P5A's unauthenticated public SSR may use the native HTTP origin. The
+later P9 overlay still owns isolated port-443 whole-product UAT and is not a
+P4/P5A implementation prerequisite.
 
 P9 validates complete user workflows locally and records browser, network,
 console, server, and database evidence. Only after it passes may the human owner
@@ -148,6 +172,8 @@ human approval.
 | P2A   | [Resume domain and store](phase-2a/README.md)                                 |
 | P2B   | [Resume HTTP and media](phase-2b/README.md)                                   |
 | P3    | [Renderer, sanitizer, templates, and fonts](phase-3/README.md)                |
+| P4    | [Authenticated editor](phase-4/README.md)                                     |
+| P5A   | [Publish and public SSR](phase-5a/README.md)                                  |
 | PI    | [Infrastructure](phase-pi/README.md)                                          |
 | P9    | [HTTPS overlay and local UAT](phase-9/README.md)                              |
 
