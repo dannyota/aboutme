@@ -134,6 +134,7 @@ export interface ResumeStoreActions {
   setTemplateState(resumeId: string, state: TemplateGroupState | null): void;
   setPhotoRead(resumeId: string, state: PhotoReadState): void;
   markSessionLost(resumeId: string): void;
+  clearSessionLost(resumeId: string): void;
   setOpaquePhotoOutcome(
     resumeId: string,
     state: OpaquePhotoOutcome | null,
@@ -410,6 +411,15 @@ const resumeStore = defineStore('resumes', {
           reason: 'session-lost',
         };
       }
+      replay(record);
+    },
+
+    clearSessionLost(resumeId: string) {
+      const record = this.records.get(resumeId) as unknown as
+        | ResumeRecord
+        | undefined;
+      if (record === undefined) return;
+      record.sessionLost = false;
       replay(record);
     },
 
