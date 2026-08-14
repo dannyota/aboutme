@@ -182,6 +182,24 @@ describe('command capture', () => {
       value: 'owner-1',
     });
   });
+
+  it('preserves owner metadata booleans through capture and replay', () => {
+    const { accepted, command } = capture({
+      kind: 'metadataField',
+      field: 'title',
+      value: 'Changed',
+    });
+    const replayed = replayCommand(accepted, command);
+
+    expect(accepted.metadata).toMatchObject({
+      downloadEnabled: false,
+      seoGeoEnabled: false,
+    });
+    expect(replayed.metadata).toMatchObject({
+      downloadEnabled: false,
+      seoGeoEnabled: false,
+    });
+  });
 });
 
 function withWorkEntry() {

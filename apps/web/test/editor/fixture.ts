@@ -15,6 +15,8 @@ const fixedMetadata: ResumeMetadata = {
   title: 'Fixture',
   lng: 'en',
   live: false,
+  downloadEnabled: false,
+  seoGeoEnabled: false,
   slug: null,
   schemaVersion: CURRENT_VERSION,
   createdAt: '2026-01-01T00:00:00Z',
