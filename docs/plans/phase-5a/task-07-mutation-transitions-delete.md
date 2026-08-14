@@ -15,6 +15,21 @@ files; do not edit fences, idempotency, migrations/sqlc, or public reads.
 and Task 06 policy names exactly. Produces transition-aware `resumeapi.Service`,
 publish registration, and a recovery resolver.
 
+Extend `resumeapi.Options` with the exact composition seam below. Task 11 reads
+the durable discovery generation, creates one coordinator, and injects the same
+pointer into mutation, public-read, and readiness consumers. Recovery uses the
+pool to take a new connection after an ambiguous commit. A missing dependency
+fails closed before transition or database work; code never guesses a
+generation.
+
+```go
+type Options struct {
+  // Existing fields remain unchanged.
+  Coordinator *publicstate.Coordinator
+  RecoveryPool *store.Pool
+}
+```
+
 ## Step 1 — RED every revision mutation and transition outcome
 
 - [ ] Make a route inventory assertion cover every existing metadata, entry,

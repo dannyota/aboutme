@@ -111,6 +111,13 @@ stays closed until a read-only resolver proves one outcome; mixed/unavailable
 proof fails readiness and never reruns mutation. Task 02 alone names the 22 ADR
 0022 race tests.
 
+Task 11 reads the exact durable discovery generation once at composition,
+constructs one coordinator, and shares that pointer with `resumeapi`, public
+readers, and readiness. `resumeapi.Options` also receives the server
+`*store.Pool` as `RecoveryPool` so ambiguous recovery can use a new connection.
+Missing composition dependencies fail closed before transition or database work;
+no consumer guesses an initial generation.
+
 ## D4 — Existing idempotency transaction protocol
 
 Task 03 adds `Recheck`; it does not replace existing transaction ownership.

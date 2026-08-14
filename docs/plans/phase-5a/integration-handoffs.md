@@ -25,20 +25,20 @@ Compose/Caddy/native harness, root Makefile, or master record.
 
 The producer and every consumer use these names unchanged:
 
-| Producer | Consumers      | Exact interface                                                                                                                     |
-| -------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 00       | 06, 11         | `publicroots.Reserved(string) bool`; generated dispatch fixture and Caddy fragment                                                  |
-| 01       | 05, 07, 08, 11 | Task 01 exact `store.PublicReadQueries`/`PublicMutationQueries`, generated parameter/result types, and compile assertion            |
-| 02       | 05, 07, 11     | D3 `Representation`, constants, `ResumeTarget`, `Plan`, `CommittedState`, recovery types, `Coordinator`, `Lease`, and `Transition`  |
-| 03       | 07             | D4 existing `StoredResponse`/`CommitOutcome`/`ExecuteResult`/`Execute` plus exact `RecheckDecision`, `RecheckResult`, and `Recheck` |
-| 04       | 05, 06, 09     | OpenAPI `PublicResume`/document leaf wire authority and `PublishResumeRequest`                                                      |
-| 05       | 08, 10, 11     | D2 `PublicOrigin`, details presence, `PublicResume`, `Snapshot`, `Project`, `Reader`; D10 cache and selected-response signatures    |
-| 06       | 07             | `publishInput`, `publishPrepared`, `decodePublish`, `validatePublish`, `slugAttemptLimiter` in package `resumeapi`                  |
-| 07       | 11             | Transition-aware `resumeapi.Service`, registered publish route, `RecoveryResolver` implementation                                   |
-| 08       | 09, 10         | D5 format functions and `JSONLDResult`; shared exact goldens                                                                        |
-| 09       | 10             | D7 four-field TypeScript request and worker runtime; external asset paths/build digest inputs                                       |
-| 10       | 11             | D6 `RenderOrigin`, `PublicRenderRequest`, `Result`, `Client`; D10 `HTMLDependencies` and `NewHTMLHandler`                           |
-| 11       | 12             | D8 `PublicRoutes`, `ReadinessDependencies`, `NewReadiness`, composite readiness, and complete server composition                    |
+| Producer | Consumers      | Exact interface                                                                                                                        |
+| -------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 00       | 06, 11         | `publicroots.Reserved(string) bool`; generated dispatch fixture and Caddy fragment                                                     |
+| 01       | 05, 07, 08, 11 | Task 01 exact `store.PublicReadQueries`/`PublicMutationQueries`, generated parameter/result types, and compile assertion               |
+| 02       | 05, 07, 11     | D3 `Representation`, constants, `ResumeTarget`, `Plan`, `CommittedState`, recovery types, `Coordinator`, `Lease`, and `Transition`     |
+| 03       | 07             | D4 existing `StoredResponse`/`CommitOutcome`/`ExecuteResult`/`Execute` plus exact `RecheckDecision`, `RecheckResult`, and `Recheck`    |
+| 04       | 05, 06, 09     | OpenAPI `PublicResume`/document leaf wire authority and `PublishResumeRequest`                                                         |
+| 05       | 08, 10, 11     | D2 `PublicOrigin`, details presence, `PublicResume`, `Snapshot`, `Project`, `Reader`; D10 cache and selected-response signatures       |
+| 06       | 07             | `publishInput`, `publishPrepared`, `decodePublish`, `validatePublish`, `slugAttemptLimiter` in package `resumeapi`                     |
+| 07       | 11             | Transition-aware `resumeapi.Service`, registered publish route, recovery resolver, and exact `Options.Coordinator`/`RecoveryPool` seam |
+| 08       | 09, 10         | D5 format functions and `JSONLDResult`; shared exact goldens                                                                           |
+| 09       | 10             | D7 four-field TypeScript request and worker runtime; external asset paths/build digest inputs                                          |
+| 10       | 11             | D6 `RenderOrigin`, `PublicRenderRequest`, `Result`, `Client`; D10 `HTMLDependencies` and `NewHTMLHandler`                              |
+| 11       | 12             | D8 `PublicRoutes`, `ReadinessDependencies`, `NewReadiness`, composite readiness, and complete server composition                       |
 
 An interface mismatch returns to its producer. Consumers do not alias, rename,
 wrap around, or locally re-declare it.

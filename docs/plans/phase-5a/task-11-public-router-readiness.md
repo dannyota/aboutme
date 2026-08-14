@@ -71,7 +71,11 @@ expanded `api.New`, composite readiness, and server composition.
 
   Consume, do not wrap or redeclare, each producer in implementation. Compile
   `var _ store.PublicReadQueries = (*store.Queries)(nil)` and initialize the
-  coordinator only from its exact `GetPublicState` result.
+  coordinator only from its exact `GetPublicState` result. Inject that same
+  coordinator pointer into `resumeapi.Options.Coordinator`, every public reader,
+  and readiness. Inject the server `*store.Pool` as
+  `resumeapi.Options.RecoveryPool`; no other component constructs or guesses a
+  recovery database handle.
 
 - [ ] Add these fields to existing `config.Config`, and keep its existing
       `PublicOrigin string` field for auth/CSRF consumers. The composition root
