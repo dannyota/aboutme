@@ -1,10 +1,163 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import vue from '@vitejs/plugin-vue';
+import { build as viteBuild } from 'vite';
 
 import { HTML_CSP } from './app/utils/csp';
+import {
+  buildPublicResumeValidator,
+} from './server/utils/public-render/worker-build';
 
 const harnessEnabled = process.env.NUXT_HARNESS === '1';
 const isolatedBuildTest = process.env.NUXT_BUILD_TEST === '1';
+const publicRenderBuildDir = resolve('.nuxt/public-render-worker');
+const publicRenderAssetsDir = resolve('.nuxt/public-render-assets');
+const publicRenderWorker = resolve(publicRenderBuildDir, 'public-render.mjs');
+const publicResumeHydration = resolve(
+  publicRenderAssetsDir,
+  'public-resume.mjs',
+);
+const publicResumeValidator = resolve(
+  publicRenderBuildDir,
+  'public-resume-validator.mjs',
+);
+const editorSanitizer = resolve('app/utils/sanitizeRichText.ts');
+const publicSanitizer = resolve(
+  'server/workers/public-render/public-sanitize.ts',
+);
+
+const publicRenderSanitizerPlugin = () => ({
+  name: 'public-render-sanitizer-boundary',
+  resolveId(id: string, importer: string | undefined) {
+    if (importer === undefined || !id.startsWith('.')) return undefined;
+    const candidate = resolve(dirname(importer), id);
+    if (
+      candidate === editorSanitizer.slice(0, -3)
+      || candidate === editorSanitizer
+    ) {
+      return publicSanitizer;
+    }
+    return undefined;
+  },
+});
+
+const buildPublicRenderWorker = async (): Promise<void> => {
+  await viteBuild({
+    configFile: false,
+    plugins: [publicRenderSanitizerPlugin(), vue()],
+    resolve: {
+      alias: {
+        '#public-render-validator': publicResumeValidator,
+        [editorSanitizer]: publicSanitizer,
+        '../../../utils/sanitizeRichText': publicSanitizer,
+      },
+    },
+    build: {
+      ssr: resolve('server/workers/public-render/worker-entry.ts'),
+      outDir: publicRenderBuildDir,
+      // The validator and hydration asset share this private build directory.
+      emptyOutDir: false,
+      rollupOptions: {
+        treeshake: { moduleSideEffects: false },
+        output: {
+          entryFileNames: 'public-render.mjs',
+          format: 'es',
+          inlineDynamicImports: true,
+        },
+      },
+    },
+    ssr: {
+      noExternal: ['vue', 'vue/server-renderer'],
+      external: ['@aboutme/schema', '@aboutme/schema/sanitizer'],
+    },
+  });
+};
+
+const buildPublicResumeHydration = async (): Promise<void> => {
+  await viteBuild({
+    configFile: false,
+    plugins: [
+      publicRenderSanitizerPlugin(),
+      vue(),
+      publicRenderWorkerPlugin(false),
+    ],
+    resolve: {
+      alias: {
+        [editorSanitizer]: publicSanitizer,
+        '../../../utils/sanitizeRichText': publicSanitizer,
+      },
+    },
+    build: {
+      lib: {
+        entry: resolve('app/public/public-resume.client.ts'),
+        formats: ['es'],
+        fileName: () => 'public-resume.mjs',
+      },
+      outDir: publicRenderAssetsDir,
+      emptyOutDir: false,
+      rollupOptions: {
+        output: { inlineDynamicImports: true },
+      },
+    },
+  });
+};
+
+const publicRenderWorkerPlugin = (emitAssets = true) => ({
+  name: 'public-render-worker-modules',
+  buildStart(
+    this: {
+      emitFile: (asset: {
+        type: 'asset';
+        name: string;
+        source: string;
+      }) => string;
+    },
+  ) {
+    if (!emitAssets) return;
+    if (!existsSync(publicResumeHydration)) {
+      throw new Error('Public resume hydration asset was not built.');
+    }
+    this.emitFile({
+      type: 'asset',
+      name: 'public-resume.mjs',
+      source: readFileSync(publicResumeHydration, 'utf8'),
+    });
+  },
+  resolveId(id: string) {
+    if (id === '#public-render-worker-url') return '\0public-render-worker-url';
+    if (id === '#public-render-validator') return '\0public-render-validator';
+    return undefined;
+  },
+  load(
+    this: {
+      emitFile: (asset: {
+        type: 'asset';
+        fileName: string;
+        source: string;
+      }) => string;
+    },
+    id: string,
+  ) {
+    if (id === '\0public-render-validator') {
+      if (!existsSync(publicResumeValidator)) {
+        throw new Error('PublicResume validator was not built.');
+      }
+      return readFileSync(publicResumeValidator, 'utf8');
+    }
+    if (id === '\0public-render-worker-url') {
+      if (!existsSync(publicRenderWorker)) {
+        throw new Error('Public render worker was not built.');
+      }
+      const reference = this.emitFile({
+        type: 'asset',
+        fileName: 'workers/public-render.mjs',
+        source: readFileSync(publicRenderWorker, 'utf8'),
+      });
+      return `export default import.meta.ROLLUP_FILE_URL_${reference};`;
+    }
+    return undefined;
+  },
+});
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -31,6 +184,10 @@ export default defineNuxtConfig({
     : isolatedBuildTest
       ? '.nuxt/normal-test'
       : '.nuxt',
+
+  alias: {
+    '#public-render-validator': publicResumeValidator,
+  },
 
   routeRules: {
     '/app/resumes/**': { ssr: false },
@@ -60,9 +217,33 @@ export default defineNuxtConfig({
           ? '.output/normal-test'
           : '.output',
     },
+    publicAssets: [{
+      dir: publicRenderAssetsDir,
+      baseURL: '/_nuxt/assets',
+    }],
+    rollupConfig: {
+      plugins: [publicRenderWorkerPlugin()],
+      output: {
+        assetFileNames: (asset) => asset.name === 'public-resume.mjs'
+          ? 'assets/public-resume.mjs'
+          : 'assets/[name]-[hash][extname]',
+      },
+    },
+  },
+
+  vite: {
+    plugins: [publicRenderWorkerPlugin(false)],
   },
 
   hooks: {
+    'build:before': () => {
+      buildPublicResumeValidator(publicRenderBuildDir);
+    },
+    'nitro:build:before': async () => {
+      buildPublicResumeValidator(publicRenderBuildDir);
+      await buildPublicRenderWorker();
+      await buildPublicResumeHydration();
+    },
     'pages:extend': (pages) => {
       const retained = pages.filter((page) => {
         const file = page.file?.replaceAll('\\', '/');
@@ -93,9 +274,13 @@ export default defineNuxtConfig({
         if (existsSync(typeConfig)) continue;
         writeFileSync(
           typeConfig,
-          `${JSON.stringify({
-            extends: `./harness/tsconfig.${name}.json`,
-          }, null, 2)}\n`,
+          `${JSON.stringify(
+            {
+              extends: `./harness/tsconfig.${name}.json`,
+            },
+            null,
+            2,
+          )}\n`,
           { flag: 'wx' },
         );
       }
