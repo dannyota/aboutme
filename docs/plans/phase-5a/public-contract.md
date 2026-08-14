@@ -58,6 +58,7 @@ Errors are:
 | `409`  | `slug_taken`            | Current claim or unexpired tombstone                        |
 | `409`  | `idempotency_key_reuse` | Same key, different fingerprint                             |
 | `412`  | `revision_mismatch`     | Stale CAS with winning revision and document                |
+| `413`  | `body_too_large`        | JSON body exceeds the shared bounded request limit          |
 | `422`  | `publish_invalid`       | Effective state, slug, or completeness failed               |
 | `428`  | `precondition_required` | Missing `If-Match`                                          |
 | `429`  | `rate_limited`          | Write or dedicated slug-attempt policy                      |

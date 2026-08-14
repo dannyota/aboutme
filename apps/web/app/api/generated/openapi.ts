@@ -434,6 +434,28 @@ export interface paths {
         patch: operations["updateResumeMetadata"];
         trace?: never;
     };
+    "/resumes/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change a resume's publish state and public slug
+         * @description Atomically applies the requested publish flags and optional slug to one owned resume. Omitted `slug` preserves its current value. The three booleans are always required; null or empty slug values are malformed requests, while a present nonempty slug is checked by the publish policy.
+         *
+         *     A fresh rename that releases a live slug requires recent reauthentication. Every accepted change uses the normal parent CAS and idempotency envelope. A retained exact replay returns before the reauthentication and public-generation work.
+         */
+        post: operations["publishResume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/resumes/{id}/entries/{sectionKey}": {
         parameters: {
             query?: never;
@@ -608,6 +630,54 @@ export interface paths {
         patch: operations["updateResumePhotoCrop"];
         trace?: never;
     };
+    "/public/resumes/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one published resume as public JSON
+         * @description Returns the closed privacy-filtered public projection for a live resume. Missing, private, renamed, deleted, tombstoned, and malformed slugs are indistinguishable `404` responses. The generation gate runs before cache reuse or conditional evaluation.
+         */
+        get: operations["getPublicResume"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Read public resume JSON headers
+         * @description Performs the same admission, generation, conditional comparison, and response selection as GET. It sends the GET representation's status and headers, including Content-Length, but no body bytes.
+         */
+        head: operations["headPublicResume"];
+        patch?: never;
+        trace?: never;
+    };
+    "/public/resumes/{slug}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a published resume's normalized photo
+         * @description Returns the current normalized JPEG or PNG only while the resume is live and still references that exact private object. Object keys and provider validators never reach the public response.
+         */
+        get: operations["getPublicResumePhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Read published photo headers
+         * @description Performs the same admission, object read, byte validation, and conditional comparison as GET. It sends the GET representation's status and headers, including Content-Length, but no body bytes.
+         */
+        head: operations["headPublicResumePhoto"];
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -778,6 +848,269 @@ export interface components {
          * @enum {string}
          */
         OAuthCallbackErrorCode: "auth_failed" | "email_not_verified" | "cancelled" | "email_already_registered" | "identity_already_linked" | "reauth_required";
+        /** @description Complete publish-state command. Omitted slug preserves stored state; the three booleans are always explicit. A present empty or null slug is a malformed request, not a publish-policy issue. */
+        PublishResumeRequest: {
+            /** @description Requested public slug. Grammar, length, reserved-root, claim, and tombstone checks are semantic publish policy after JSON decoding. */
+            slug?: string;
+            live: boolean;
+            downloadEnabled: boolean;
+            seoGeoEnabled: boolean;
+        };
+        /** @description One deterministic semantic publish-policy issue. */
+        PublishValidationIssue: {
+            path: string;
+            /** @enum {string} */
+            code: "required_for_live" | "requires_live" | "invalid_format" | "reserved" | "required" | "visible_entry_required";
+            message: string;
+        };
+        /** @description The standard Error envelope narrowed to `publish_invalid` issue details. Its outer shape and required code/message fields are the same API-wide error family. */
+        PublishError: {
+            error: {
+                /** @constant */
+                code: "publish_invalid";
+                /** @constant */
+                message: "resume cannot be published";
+                details: {
+                    issues: components["schemas"]["PublishValidationIssue"][];
+                };
+            };
+        };
+        /** @description Privacy-filtered public resume. Owner identity, title, internal resume id, timestamps, storage keys, and non-public publish flags are absent. */
+        PublicResume: {
+            slug: string;
+            revision: components["schemas"]["Revision"];
+            /** @description Canonical BCP 47 content language. */
+            lng: string;
+            downloadEnabled: boolean;
+            document: components["schemas"]["PublicResumeDocument"];
+        };
+        PublicResumeDocument: {
+            schemaVersion: number;
+            personalDetails: components["schemas"]["PublicPersonalDetails"];
+            content: components["schemas"]["PublicContent"];
+            customization: components["schemas"]["PublicCustomization"];
+        };
+        /** @description Public personal details after hidden and empty contacts are removed. Details remains optional; if source details was present, an empty result is emitted as an explicit empty array. */
+        PublicPersonalDetails: {
+            fullName: string;
+            headline?: string;
+            photo?: components["schemas"]["PublicPhoto"];
+            details?: components["schemas"]["PublicPersonalDetail"][];
+        };
+        PublicPersonalDetail: {
+            /** Format: uuid */
+            id: string;
+            label?: string;
+            /** @enum {string} */
+            type: "email" | "phone" | "location" | "website" | "linkedin" | "github" | "twitter" | "custom";
+            value: string;
+        };
+        PublicPhoto: {
+            /** Format: uri */
+            url: string;
+            crop?: components["schemas"]["PublicPhotoCrop"];
+        };
+        PublicPhotoCrop: {
+            height: number;
+            width: number;
+            x: number;
+            y: number;
+        };
+        PublicYearMonth: {
+            m?: number;
+            y: number;
+        };
+        PublicDateRange: {
+            end: components["schemas"]["PublicYearMonth"] | null;
+            present: boolean;
+            start: components["schemas"]["PublicYearMonth"];
+        } & (unknown & unknown);
+        /** @description Current-version sanitized HTML. The server also enforces the 16 KiB UTF-8 field budget before emitting public bytes. */
+        PublicRichText: string;
+        /** Format: uri */
+        PublicLink: string;
+        PublicProfileEntry: {
+            /** Format: uuid */
+            id: string;
+            text?: components["schemas"]["PublicRichText"];
+        };
+        PublicWorkEntry: {
+            city?: string;
+            country?: string;
+            dates?: components["schemas"]["PublicDateRange"];
+            description?: components["schemas"]["PublicRichText"];
+            employer?: string;
+            employerLink?: components["schemas"]["PublicLink"];
+            /** Format: uuid */
+            id: string;
+            jobTitle?: string;
+        };
+        PublicEducationEntry: {
+            city?: string;
+            country?: string;
+            dates?: components["schemas"]["PublicDateRange"];
+            degree?: string;
+            description?: components["schemas"]["PublicRichText"];
+            /** Format: uuid */
+            id: string;
+            school?: string;
+            schoolLink?: components["schemas"]["PublicLink"];
+        };
+        PublicSkillEntry: {
+            /** Format: uuid */
+            id: string;
+            infoHtml?: components["schemas"]["PublicRichText"];
+            level?: number;
+            name?: string;
+        };
+        PublicLanguageEntry: {
+            /** Format: uuid */
+            id: string;
+            level?: number;
+            name?: string;
+        };
+        PublicCertificateEntry: {
+            date?: components["schemas"]["PublicYearMonth"];
+            description?: components["schemas"]["PublicRichText"];
+            /** Format: uuid */
+            id: string;
+            issuer?: string;
+            title?: string;
+            titleLink?: components["schemas"]["PublicLink"];
+        };
+        PublicProjectEntry: {
+            dates?: components["schemas"]["PublicDateRange"];
+            description?: components["schemas"]["PublicRichText"];
+            /** Format: uuid */
+            id: string;
+            link?: components["schemas"]["PublicLink"];
+            title?: string;
+        };
+        PublicCustomEntry: {
+            city?: string;
+            dates?: components["schemas"]["PublicDateRange"];
+            description?: components["schemas"]["PublicRichText"];
+            /** Format: uuid */
+            id: string;
+            subtitle?: string;
+            title?: string;
+            titleLink?: components["schemas"]["PublicLink"];
+        };
+        /** @description One visible section. Empty projected sections are omitted, so every variant contains at least one visible entry. */
+        PublicSection: {
+            /** @constant */
+            sectionType: "profile";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicProfileEntry"][];
+        } | {
+            /** @constant */
+            sectionType: "work";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicWorkEntry"][];
+        } | {
+            /** @constant */
+            sectionType: "education";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicEducationEntry"][];
+        } | {
+            /** @constant */
+            sectionType: "skill";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicSkillEntry"][];
+        } | {
+            /** @constant */
+            sectionType: "language";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicLanguageEntry"][];
+        } | {
+            /** @constant */
+            sectionType: "certificate";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicCertificateEntry"][];
+        } | {
+            /** @constant */
+            sectionType: "project";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicProjectEntry"][];
+        } | {
+            /** @constant */
+            sectionType: "custom";
+            displayName?: string;
+            iconKey?: string;
+            entries: components["schemas"]["PublicCustomEntry"][];
+        };
+        /** @description Visible sections keyed by the retained document section key. */
+        PublicContent: {
+            [key: string]: components["schemas"]["PublicSection"];
+        };
+        /** @description Current schema presentation settings for the public renderer. */
+        PublicCustomization: {
+            font: {
+                /** @enum {string} */
+                family: "be-vietnam-pro" | "inter" | "noto-sans" | "noto-serif" | "roboto" | "open-sans" | "plus-jakarta-sans" | "work-sans" | "nunito-sans" | "montserrat" | "fira-sans" | "barlow" | "alegreya" | "spectral" | "literata" | "newsreader" | "space-mono" | "crimson-pro" | "eb-garamond" | "aleo" | "cormorant-garamond" | "roboto-serif" | "roboto-mono" | "dm-sans" | "atkinson-hyperlegible-next" | "source-sans-3";
+                baseSizePx: number;
+            };
+            colors: {
+                primary: string;
+                text: string;
+                background: string;
+                accent?: string;
+                surface?: string;
+            };
+            spacing: {
+                sectionGap: number;
+                entryGap: number;
+                lineHeight: number;
+                pageMargin?: {
+                    x: number;
+                    y: number;
+                };
+            };
+            heading: {
+                /** @enum {string} */
+                style: "uppercase" | "titlecase" | "normal";
+                showRule: boolean;
+            };
+            header?: {
+                /** @enum {string} */
+                align: "left" | "center";
+                /** @enum {string} */
+                detailsLayout: "inline" | "stacked";
+                /** @enum {string} */
+                iconStyle: "none" | "outline";
+            };
+            layout: {
+                /** @enum {integer} */
+                columns: 1 | 2;
+                /** @enum {string} */
+                surfaceTarget?: "none" | "header" | "sidebar";
+                sections: {
+                    main: string[];
+                    sidebar: string[];
+                };
+            };
+            sectionDisplay: {
+                skill: {
+                    /** @enum {string} */
+                    style: "text" | "tag" | "bar" | "dots";
+                };
+                language: {
+                    /** @enum {string} */
+                    style: "text" | "tag" | "bar" | "dots";
+                };
+            };
+            /** @enum {string} */
+            pageFormat: "a4" | "letter";
+            /** @enum {string} */
+            dateFormat: "MM/YYYY" | "Mon YYYY" | "YYYY";
+        };
         /**
          * @description One owned resume without its document: enough to list, name, and route to it. Publish state is included because the owner's list shows it; the public slug is null until the resume is published.
          * @example {
@@ -787,6 +1120,8 @@ export interface components {
          *       "revision": "42",
          *       "live": true,
          *       "slug": "ada-lovelace",
+         *       "downloadEnabled": true,
+         *       "seoGeoEnabled": true,
          *       "schemaVersion": 2,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
@@ -807,6 +1142,10 @@ export interface components {
             live: boolean;
             /** @description Globally unique public slug, or null when the resume has never been published. Resumes are the public entity; users are not. */
             slug: string | null;
+            /** @description Whether public download representations are enabled. */
+            downloadEnabled: boolean;
+            /** @description Whether this live resume participates in discovery. */
+            seoGeoEnabled: boolean;
             /** @description Document version this response was emitted at. Equal to the `X-Resume-Schema-Version` response header. */
             schemaVersion: number;
             /** Format: date-time */
@@ -989,6 +1328,8 @@ export interface components {
                  *         "revision": "42",
                  *         "live": true,
                  *         "slug": "ada-lovelace",
+                 *         "downloadEnabled": true,
+                 *         "seoGeoEnabled": true,
                  *         "schemaVersion": 2,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
@@ -1020,6 +1361,8 @@ export interface components {
                  *         "revision": "43",
                  *         "live": true,
                  *         "slug": "ada-lovelace",
+                 *         "downloadEnabled": true,
+                 *         "seoGeoEnabled": true,
                  *         "schemaVersion": 2,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
@@ -1451,6 +1794,229 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description `csrf_rejected` when the CSRF or exact-origin chain fails, or `reauth_required` when a fresh change would release a slug and the current session has no recent full OAuth login. Rejection begins no publish transaction. */
+        ResumePublishForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "reauth_required",
+                 *         "message": "recent reauthentication is required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A publish-domain conflict, never staleness: `slug_taken` when another resume or an unexpired tombstone owns the requested slug, or `idempotency_key_reuse` when one retained key arrives with a changed fingerprint. */
+        ResumePublishConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "slug_taken",
+                 *         "message": "that slug is not available"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `publish_invalid`: the request parsed, but its effective flags, slug, or resume completeness cannot be published. The outer message is exactly `resume cannot be published`; `details.issues[]` contains every applicable closed publish issue in deterministic order. */
+        ResumePublishInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "publish_invalid",
+                 *         "message": "resume cannot be published",
+                 *         "details": {
+                 *           "issues": [
+                 *             {
+                 *               "path": "personalDetails.fullName",
+                 *               "code": "required",
+                 *               "message": "full name is required for publication"
+                 *             }
+                 *           ]
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["PublishError"];
+            };
+        };
+        /** @description `public_state_busy`: a required public-generation drain did not finish within the shared five-second deadline. No mutation transaction began. */
+        PublicStateBusy: {
+            headers: {
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 1
+                 */
+                "Retry-After"?: 1;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "public_state_busy",
+                 *         "message": "public state is busy; retry shortly"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The exact unencoded public JSON representation. */
+        PublicResumeRead: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Envelope"] & {
+                    data?: components["schemas"]["PublicResume"];
+                };
+            };
+        };
+        /** @description The exact normalized public photo representation. */
+        PublicPhotoRead: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "image/jpeg": string;
+                "image/png": string;
+            };
+        };
+        /** @description The strong conditional tag matches the selected public JSON bytes. Zero body bytes and no Content-Length. */
+        PublicResumeNotModified: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                /**
+                 * @description Media type of the selected GET representation.
+                 * @example application/json; charset=utf-8
+                 */
+                "Content-Type"?: "application/json; charset=utf-8";
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description The strong conditional tag matches the selected normalized photo bytes. Zero body bytes and no Content-Length. */
+        PublicPhotoNotModified: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                /**
+                 * @description Media type of the selected GET representation.
+                 * @example image/jpeg
+                 */
+                "Content-Type"?: "image/jpeg" | "image/png";
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description `request_invalid`: after public admission, the conditional header is repeated, comma-folded, weak, wildcard, whitespace-padded, or otherwise malformed. No ETag is sent. */
+        PublicBadRequest: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "request is invalid"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `public_not_found`: the uniform answer for missing, private, renamed, deleted, tombstoned, malformed, wrong-target, or flag-disabled public state. No ETag is sent. */
+        PublicNotFound: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "public_not_found",
+                 *         "message": "public resume not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed`: the recognized public JSON or photo path accepts only GET and HEAD. Dispatch happens before resource lookup or body read. */
+        PublicMethodNotAllowed: {
+            headers: {
+                /**
+                 * @description Methods this public path serves.
+                 * @example GET, HEAD
+                 */
+                Allow?: "GET, HEAD";
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method is not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `temporarily_unavailable`: an admitted dependency failure or generation transition mismatch. Stale bytes are never substituted and no ETag is sent. */
+        PublicUnavailable: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 1
+                 */
+                "Retry-After"?: 1;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "temporarily_unavailable",
+                 *         "message": "service temporarily unavailable"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description `method_not_allowed` on the resume collection. */
         MethodNotAllowedResumes: {
             headers: {
@@ -1561,6 +2127,28 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description `method_not_allowed` on the publish transition. */
+        MethodNotAllowedPublish: {
+            headers: {
+                /**
+                 * @description Methods this path serves.
+                 * @example POST
+                 */
+                Allow?: "POST";
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /**
@@ -1627,6 +2215,11 @@ export interface components {
          */
         ResumeID: string;
         /**
+         * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+         * @example ada-lovelace
+         */
+        PublicSlug: string;
+        /**
          * @description A section's key inside the resume document's `content` map. Its path shape matches the released resume schema; malformed keys are `400 request_invalid`, while a well-formed unknown key is a `404 resume_not_found`-shaped domain failure.
          * @example experience
          */
@@ -1646,7 +2239,7 @@ export interface components {
          */
         SchemaVersionHeader: string;
         /**
-         * @description Conditional photo read. Accepts exactly one well-formed strong entity tag: an exact match returns `304` with no body, a different tag returns `200` and the bytes.
+         * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
          *
          *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
          * @example "p-3f2a91c8"
@@ -1670,6 +2263,21 @@ export interface components {
          * @example 2
          */
         EmittedSchemaVersion: number;
+        /**
+         * @description Public representations must revalidate at the origin before reuse. Public responses remain transformable so Caddy can own content encoding and its validator suffix.
+         * @example no-cache, must-revalidate
+         */
+        PublicCacheControl: "no-cache, must-revalidate";
+        /**
+         * @description Strong validator: lowercase SHA-256 of the exact unencoded selected response body, quoted with no domain or representation prefix. Caddy may add its encoding suffix only on the viewer-facing response.
+         * @example "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+         */
+        PublicBodyETag: string;
+        /**
+         * @description Byte length of the exact GET representation. HEAD sends the same value while suppressing body bytes.
+         * @example 512
+         */
+        RepresentationContentLength: number;
     };
     pathItems: never;
 }
@@ -2616,6 +3224,8 @@ export interface operations {
                      *           "revision": "42",
                      *           "live": true,
                      *           "slug": "ada-lovelace",
+                     *           "downloadEnabled": true,
+                     *           "seoGeoEnabled": true,
                      *           "schemaVersion": 2,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
@@ -2704,6 +3314,8 @@ export interface operations {
                      *         "revision": "1",
                      *         "live": false,
                      *         "slug": null,
+                     *         "downloadEnabled": false,
+                     *         "seoGeoEnabled": false,
                      *         "schemaVersion": 2,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",
@@ -2886,6 +3498,73 @@ export interface operations {
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    publishResume: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Optimistic-concurrency precondition, ETag form: `"r<revision>"` (quotes included, per RFC 9110). Required on every mutation of an existing resume. Resume creation has no prior revision and rejects an `If-Match` header. A mismatch returns `412 Precondition Failed` with the current revision/document — never `409` (see the write-safety section above).
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 precondition_malformed`, never silently first-wins.
+                 * @example "r42"
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+                /**
+                 * @description Client-generated UUID scoping this mutation to `(user, canonical operation identity, key)`. The operation identity contains the method, registered operation, and canonical concrete target values. Replaying the same scoped key with a matching semantic request fingerprint returns the original stored response; a different fingerprint is rejected as a domain conflict.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 idempotency_key_invalid`, never silently first-wins.
+                 * @example 018f0f3e-9e3a-7000-8000-000000000001
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /**
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 *
+                 *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
+                 *
+                 *     Singleton header: exactly one field line with one value. A repeated field line or a comma-folded value is `400 unsupported_schema_version`, never silently first-wins.
+                 * @example 2
+                 */
+                "X-Resume-Schema-Version"?: components["parameters"]["SchemaVersionHeader"];
+            };
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "slug": "ada-lovelace",
+                 *       "live": true,
+                 *       "downloadEnabled": true,
+                 *       "seoGeoEnabled": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["PublishResumeRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ResumeWritten"];
+            400: components["responses"]["ResumeWriteBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            403: components["responses"]["ResumePublishForbidden"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPublish"];
+            409: components["responses"]["ResumePublishConflict"];
+            412: components["responses"]["ResumeRevisionMismatch"];
+            413: components["responses"]["ResumeBodyTooLarge"];
+            422: components["responses"]["ResumePublishInvalid"];
+            428: components["responses"]["ResumePreconditionRequired"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            503: components["responses"]["PublicStateBusy"];
         };
     };
     upsertResumeEntry: {
@@ -3324,7 +4003,7 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Conditional photo read. Accepts exactly one well-formed strong entity tag: an exact match returns `304` with no body, a different tag returns `200` and the bytes.
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
                  *
                  *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
                  * @example "p-3f2a91c8"
@@ -3562,6 +4241,130 @@ export interface operations {
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    getPublicResume: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicResumeRead"];
+            304: components["responses"]["PublicResumeNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    headPublicResume: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicResumeRead"];
+            304: components["responses"]["PublicResumeNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    getPublicResumePhoto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicPhotoRead"];
+            304: components["responses"]["PublicPhotoNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    headPublicResumePhoto: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicPhotoRead"];
+            304: components["responses"]["PublicPhotoNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            503: components["responses"]["PublicUnavailable"];
         };
     };
 }

@@ -108,6 +108,12 @@ tags:
       direct public `/assets` origin. Intake normalizes every accepted image
       to metadata-free JPEG or PNG pixels under a server-derived immutable
       key.
+  - name: public
+    description: >-
+      Unauthenticated published-resume JSON and photo representations. These
+      routes use privacy-safe public DTOs, exact-body validators, and the
+      shared public generation gate. They never expose owner resume objects or
+      private media keys.
 paths:
   /healthz:
     servers:
@@ -1156,6 +1162,8 @@ paths:
                     revision: "42"
                     live: true
                     slug: ada-lovelace
+                    downloadEnabled: true
+                    seoGeoEnabled: true
                     schemaVersion: 2
                     createdAt: 2026-08-01T09:00:00Z
                     updatedAt: 2026-08-11T18:20:00Z
@@ -1260,6 +1268,8 @@ paths:
                   revision: "1"
                   live: false
                   slug: null
+                  downloadEnabled: false
+                  seoGeoEnabled: false
                   schemaVersion: 2
                   createdAt: 2026-08-12T09:00:00Z
                   updatedAt: 2026-08-12T09:00:00Z
@@ -1430,6 +1440,71 @@ paths:
           $ref: "#/components/responses/ResumeRateLimited"
         "500":
           $ref: "#/components/responses/ResumeInternalError"
+  /resumes/{id}/publish:
+    post:
+      operationId: publishResume
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Change a resume's publish state and public slug
+      description: >-
+        Atomically applies the requested publish flags and optional slug to
+        one owned resume. Omitted `slug` preserves its current value. The
+        three booleans are always required; null or empty slug values are
+        malformed requests, while a present nonempty slug is checked by the
+        publish policy.
+
+
+        A fresh rename that releases a live slug requires recent
+        reauthentication. Every accepted change uses the normal parent CAS
+        and idempotency envelope. A retained exact replay returns before the
+        reauthentication and public-generation work.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/SchemaVersionHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishResumeRequest"
+            example:
+              slug: ada-lovelace
+              live: true
+              downloadEnabled: true
+              seoGeoEnabled: false
+      responses:
+        "200":
+          $ref: "#/components/responses/ResumeWritten"
+        "400":
+          $ref: "#/components/responses/ResumeWriteBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          $ref: "#/components/responses/ResumePublishForbidden"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedPublish"
+        "409":
+          $ref: "#/components/responses/ResumePublishConflict"
+        "412":
+          $ref: "#/components/responses/ResumeRevisionMismatch"
+        "413":
+          $ref: "#/components/responses/ResumeBodyTooLarge"
+        "422":
+          $ref: "#/components/responses/ResumePublishInvalid"
+        "428":
+          $ref: "#/components/responses/ResumePreconditionRequired"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+        "503":
+          $ref: "#/components/responses/PublicStateBusy"
   /resumes/{id}/entries/{sectionKey}:
     patch:
       operationId: upsertResumeEntry
@@ -2061,6 +2136,86 @@ paths:
         "500":
           $ref: "#/components/responses/ResumeInternalError"
 
+  /public/resumes/{slug}:
+    get:
+      operationId: getPublicResume
+      tags: [public]
+      security: []
+      summary: Read one published resume as public JSON
+      description: >-
+        Returns the closed privacy-filtered public projection for a live
+        resume. Missing, private, renamed, deleted, tombstoned, and malformed
+        slugs are indistinguishable `404` responses. The generation gate runs
+        before cache reuse or conditional evaluation.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: &publicResumeResponses
+        "200":
+          $ref: "#/components/responses/PublicResumeRead"
+        "304":
+          $ref: "#/components/responses/PublicResumeNotModified"
+        "400":
+          $ref: "#/components/responses/PublicBadRequest"
+        "404":
+          $ref: "#/components/responses/PublicNotFound"
+        "405":
+          $ref: "#/components/responses/PublicMethodNotAllowed"
+        "503":
+          $ref: "#/components/responses/PublicUnavailable"
+    head:
+      operationId: headPublicResume
+      tags: [public]
+      security: []
+      summary: Read public resume JSON headers
+      description: >-
+        Performs the same admission, generation, conditional comparison, and
+        response selection as GET. It sends the GET representation's status
+        and headers, including Content-Length, but no body bytes.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: *publicResumeResponses
+  /public/resumes/{slug}/photo:
+    get:
+      operationId: getPublicResumePhoto
+      tags: [public, media]
+      security: []
+      summary: Read a published resume's normalized photo
+      description: >-
+        Returns the current normalized JPEG or PNG only while the resume is
+        live and still references that exact private object. Object keys and
+        provider validators never reach the public response.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: &publicPhotoResponses
+        "200":
+          $ref: "#/components/responses/PublicPhotoRead"
+        "304":
+          $ref: "#/components/responses/PublicPhotoNotModified"
+        "400":
+          $ref: "#/components/responses/PublicBadRequest"
+        "404":
+          $ref: "#/components/responses/PublicNotFound"
+        "405":
+          $ref: "#/components/responses/PublicMethodNotAllowed"
+        "503":
+          $ref: "#/components/responses/PublicUnavailable"
+    head:
+      operationId: headPublicResumePhoto
+      tags: [public, media]
+      security: []
+      summary: Read published photo headers
+      description: >-
+        Performs the same admission, object read, byte validation, and
+        conditional comparison as GET. It sends the GET representation's
+        status and headers, including Content-Length, but no body bytes.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: *publicPhotoResponses
+
 components:
   responses:
     AuthStartRateLimited:
@@ -2108,6 +2263,8 @@ components:
               revision: "42"
               live: true
               slug: ada-lovelace
+              downloadEnabled: true
+              seoGeoEnabled: true
               schemaVersion: 2
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-11T18:20:00Z
@@ -2137,6 +2294,8 @@ components:
               revision: "43"
               live: true
               slug: ada-lovelace
+              downloadEnabled: true
+              seoGeoEnabled: true
               schemaVersion: 2
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-12T09:05:00Z
@@ -2461,6 +2620,221 @@ components:
             error:
               code: internal_error
               message: internal server error
+    ResumePublishForbidden:
+      description: >-
+        `csrf_rejected` when the CSRF or exact-origin chain fails, or
+        `reauth_required` when a fresh change would release a slug and the
+        current session has no recent full OAuth login. Rejection begins no
+        publish transaction.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: reauth_required
+              message: recent reauthentication is required
+    ResumePublishConflict:
+      description: >-
+        A publish-domain conflict, never staleness: `slug_taken` when another
+        resume or an unexpired tombstone owns the requested slug, or
+        `idempotency_key_reuse` when one retained key arrives with a changed
+        fingerprint.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: slug_taken
+              message: that slug is not available
+    ResumePublishInvalid:
+      description: >-
+        `publish_invalid`: the request parsed, but its effective flags, slug,
+        or resume completeness cannot be published. The outer message is
+        exactly `resume cannot be published`; `details.issues[]` contains
+        every applicable closed publish issue in deterministic order.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PublishError"
+          example:
+            error:
+              code: publish_invalid
+              message: resume cannot be published
+              details:
+                issues:
+                  - path: personalDetails.fullName
+                    code: required
+                    message: full name is required for publication
+    PublicStateBusy:
+      description: >-
+        `public_state_busy`: a required public-generation drain did not finish
+        within the shared five-second deadline. No mutation transaction began.
+      headers:
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            const: 1
+          example: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: public_state_busy
+              message: public state is busy; retry shortly
+    PublicResumeRead:
+      description: The exact unencoded public JSON representation.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/PublicResume"
+    PublicPhotoRead:
+      description: The exact normalized public photo representation.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+      content:
+        image/jpeg:
+          schema:
+            type: string
+            format: binary
+        image/png:
+          schema:
+            type: string
+            format: binary
+    PublicResumeNotModified:
+      description: >-
+        The strong conditional tag matches the selected public JSON bytes.
+        Zero body bytes and no Content-Length.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Type:
+          description: Media type of the selected GET representation.
+          schema:
+            type: string
+            const: application/json; charset=utf-8
+          example: application/json; charset=utf-8
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+    PublicPhotoNotModified:
+      description: >-
+        The strong conditional tag matches the selected normalized photo
+        bytes. Zero body bytes and no Content-Length.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Type:
+          description: Media type of the selected GET representation.
+          schema:
+            type: string
+            enum: [image/jpeg, image/png]
+          example: image/jpeg
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+    PublicBadRequest:
+      description: >-
+        `request_invalid`: after public admission, the conditional header is
+        repeated, comma-folded, weak, wildcard, whitespace-padded, or otherwise
+        malformed. No ETag is sent.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: request_invalid
+              message: request is invalid
+    PublicNotFound:
+      description: >-
+        `public_not_found`: the uniform answer for missing, private, renamed,
+        deleted, tombstoned, malformed, wrong-target, or flag-disabled public
+        state. No ETag is sent.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: public_not_found
+              message: public resume not found
+    PublicMethodNotAllowed:
+      description: >-
+        `method_not_allowed`: the recognized public JSON or photo path accepts
+        only GET and HEAD. Dispatch happens before resource lookup or body read.
+      headers:
+        Allow:
+          description: Methods this public path serves.
+          schema:
+            type: string
+            const: GET, HEAD
+          example: GET, HEAD
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: method_not_allowed
+              message: method is not allowed
+    PublicUnavailable:
+      description: >-
+        `temporarily_unavailable`: an admitted dependency failure or generation
+        transition mismatch. Stale bytes are never substituted and no ETag is
+        sent.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            const: 1
+          example: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: temporarily_unavailable
+              message: service temporarily unavailable
     MethodNotAllowedResumes:
       description: "`method_not_allowed` on the resume collection."
       headers:
@@ -2541,6 +2915,23 @@ components:
             error:
               code: method_not_allowed
               message: method not allowed
+    MethodNotAllowedPublish:
+      description: "`method_not_allowed` on the publish transition."
+      headers:
+        Allow:
+          description: Methods this path serves.
+          schema:
+            type: string
+            const: POST
+          example: POST
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: method_not_allowed
+              message: method not allowed
   headers:
     ParentETag:
       description: The owning resume's revision as a strong entity tag,
@@ -2562,6 +2953,32 @@ components:
         type: integer
         minimum: 1
       example: 2
+    PublicCacheControl:
+      description: >-
+        Public representations must revalidate at the origin before reuse.
+        Public responses remain transformable so Caddy can own content
+        encoding and its validator suffix.
+      schema:
+        type: string
+        const: no-cache, must-revalidate
+      example: no-cache, must-revalidate
+    PublicBodyETag:
+      description: >-
+        Strong validator: lowercase SHA-256 of the exact unencoded selected
+        response body, quoted with no domain or representation prefix. Caddy
+        may add its encoding suffix only on the viewer-facing response.
+      schema:
+        type: string
+        pattern: '^"[0-9a-f]{64}"$'
+      example: '"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"'
+    RepresentationContentLength:
+      description: >-
+        Byte length of the exact GET representation. HEAD sends the same value
+        while suppressing body bytes.
+      schema:
+        type: integer
+        minimum: 0
+      example: 512
 
   schemas:
     Envelope:
@@ -2828,6 +3245,764 @@ components:
         - email_already_registered
         - identity_already_linked
         - reauth_required
+    PublishResumeRequest:
+      type: object
+      description: >-
+        Complete publish-state command. Omitted slug preserves stored state;
+        the three booleans are always explicit. A present empty or null slug
+        is a malformed request, not a publish-policy issue.
+      additionalProperties: false
+      required:
+        - live
+        - downloadEnabled
+        - seoGeoEnabled
+      properties:
+        slug:
+          type: string
+          minLength: 1
+          description: >-
+            Requested public slug. Grammar, length, reserved-root, claim, and
+            tombstone checks are semantic publish policy after JSON decoding.
+        live:
+          type: boolean
+        downloadEnabled:
+          type: boolean
+        seoGeoEnabled:
+          type: boolean
+    PublishValidationIssue:
+      type: object
+      description: One deterministic semantic publish-policy issue.
+      additionalProperties: false
+      required: [path, code, message]
+      properties:
+        path:
+          type: string
+        code:
+          type: string
+          enum:
+            - required_for_live
+            - requires_live
+            - invalid_format
+            - reserved
+            - required
+            - visible_entry_required
+        message:
+          type: string
+    PublishError:
+      description: >-
+        The standard Error envelope narrowed to `publish_invalid` issue
+        details. Its outer shape and required code/message fields are the same
+        API-wide error family.
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, details]
+          properties:
+            code:
+              type: string
+              const: publish_invalid
+            message:
+              type: string
+              const: resume cannot be published
+            details:
+              type: object
+              additionalProperties: false
+              required: [issues]
+              properties:
+                issues:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/PublishValidationIssue"
+    PublicResume:
+      type: object
+      description: >-
+        Privacy-filtered public resume. Owner identity, title, internal resume
+        id, timestamps, storage keys, and non-public publish flags are absent.
+      additionalProperties: false
+      required:
+        - slug
+        - revision
+        - lng
+        - downloadEnabled
+        - document
+      properties:
+        slug:
+          type: string
+          minLength: 4
+          maxLength: 30
+          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+        revision:
+          $ref: "#/components/schemas/Revision"
+        lng:
+          type: string
+          maxLength: 35
+          description: Canonical BCP 47 content language.
+        downloadEnabled:
+          type: boolean
+        document:
+          $ref: "#/components/schemas/PublicResumeDocument"
+    PublicResumeDocument:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - personalDetails
+        - content
+        - customization
+      properties:
+        schemaVersion:
+          type: integer
+          minimum: 1
+        personalDetails:
+          $ref: "#/components/schemas/PublicPersonalDetails"
+        content:
+          $ref: "#/components/schemas/PublicContent"
+        customization:
+          $ref: "#/components/schemas/PublicCustomization"
+    PublicPersonalDetails:
+      type: object
+      description: >-
+        Public personal details after hidden and empty contacts are removed.
+        Details remains optional; if source details was present, an empty
+        result is emitted as an explicit empty array.
+      additionalProperties: false
+      required: [fullName]
+      properties:
+        fullName:
+          type: string
+          maxLength: 160
+        headline:
+          type: string
+          maxLength: 160
+        photo:
+          $ref: "#/components/schemas/PublicPhoto"
+        details:
+          type: array
+          maxItems: 16
+          items:
+            $ref: "#/components/schemas/PublicPersonalDetail"
+    PublicPersonalDetail:
+      type: object
+      additionalProperties: false
+      required: [id, type, value]
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+          maxLength: 40
+        type:
+          type: string
+          enum:
+            - email
+            - phone
+            - location
+            - website
+            - linkedin
+            - github
+            - twitter
+            - custom
+        value:
+          type: string
+          minLength: 1
+          maxLength: 256
+    PublicPhoto:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        crop:
+          $ref: "#/components/schemas/PublicPhotoCrop"
+    PublicPhotoCrop:
+      type: object
+      additionalProperties: false
+      required: [height, width, x, y]
+      properties:
+        height:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        width:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1
+        x:
+          type: number
+          minimum: 0
+          maximum: 1
+        y:
+          type: number
+          minimum: 0
+          maximum: 1
+    PublicYearMonth:
+      type: object
+      additionalProperties: false
+      required: [y]
+      properties:
+        m:
+          type: integer
+          minimum: 1
+          maximum: 12
+        y:
+          type: integer
+          minimum: 1900
+          maximum: 2100
+    PublicDateRange:
+      type: object
+      additionalProperties: false
+      required: [end, present, start]
+      properties:
+        end:
+          anyOf:
+            - $ref: "#/components/schemas/PublicYearMonth"
+            - type: "null"
+        present:
+          type: boolean
+        start:
+          $ref: "#/components/schemas/PublicYearMonth"
+      allOf:
+        - if:
+            properties:
+              present:
+                const: true
+          then:
+            properties:
+              end:
+                type: "null"
+        - if:
+            properties:
+              present:
+                const: false
+          then:
+            properties:
+              end:
+                type: object
+    PublicRichText:
+      type: string
+      maxLength: 16384
+      description: >-
+        Current-version sanitized HTML. The server also enforces the 16 KiB
+        UTF-8 field budget before emitting public bytes.
+    PublicLink:
+      type: string
+      maxLength: 2048
+      format: uri
+      pattern: "^(https://|mailto:|tel:)"
+    PublicProfileEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          $ref: "#/components/schemas/PublicRichText"
+    PublicWorkEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        city:
+          type: string
+          maxLength: 120
+        country:
+          type: string
+          maxLength: 120
+        dates:
+          $ref: "#/components/schemas/PublicDateRange"
+        description:
+          $ref: "#/components/schemas/PublicRichText"
+        employer:
+          type: string
+          maxLength: 160
+        employerLink:
+          $ref: "#/components/schemas/PublicLink"
+        id:
+          type: string
+          format: uuid
+        jobTitle:
+          type: string
+          maxLength: 160
+    PublicEducationEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        city:
+          type: string
+          maxLength: 120
+        country:
+          type: string
+          maxLength: 120
+        dates:
+          $ref: "#/components/schemas/PublicDateRange"
+        degree:
+          type: string
+          maxLength: 160
+        description:
+          $ref: "#/components/schemas/PublicRichText"
+        id:
+          type: string
+          format: uuid
+        school:
+          type: string
+          maxLength: 160
+        schoolLink:
+          $ref: "#/components/schemas/PublicLink"
+    PublicSkillEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        infoHtml:
+          $ref: "#/components/schemas/PublicRichText"
+        level:
+          type: integer
+          minimum: 0
+          maximum: 5
+        name:
+          type: string
+          maxLength: 120
+    PublicLanguageEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        level:
+          type: integer
+          minimum: 0
+          maximum: 5
+        name:
+          type: string
+          maxLength: 120
+    PublicCertificateEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        date:
+          $ref: "#/components/schemas/PublicYearMonth"
+        description:
+          $ref: "#/components/schemas/PublicRichText"
+        id:
+          type: string
+          format: uuid
+        issuer:
+          type: string
+          maxLength: 160
+        title:
+          type: string
+          maxLength: 160
+        titleLink:
+          $ref: "#/components/schemas/PublicLink"
+    PublicProjectEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        dates:
+          $ref: "#/components/schemas/PublicDateRange"
+        description:
+          $ref: "#/components/schemas/PublicRichText"
+        id:
+          type: string
+          format: uuid
+        link:
+          $ref: "#/components/schemas/PublicLink"
+        title:
+          type: string
+          maxLength: 160
+    PublicCustomEntry:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        city:
+          type: string
+          maxLength: 120
+        dates:
+          $ref: "#/components/schemas/PublicDateRange"
+        description:
+          $ref: "#/components/schemas/PublicRichText"
+        id:
+          type: string
+          format: uuid
+        subtitle:
+          type: string
+          maxLength: 160
+        title:
+          type: string
+          maxLength: 160
+        titleLink:
+          $ref: "#/components/schemas/PublicLink"
+    PublicSection:
+      description: >-
+        One visible section. Empty projected sections are omitted, so every
+        variant contains at least one visible entry.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: profile
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicProfileEntry"
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: work
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicWorkEntry"
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: education
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicEducationEntry"
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: skill
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicSkillEntry"
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: language
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicLanguageEntry"
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: certificate
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicCertificateEntry"
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: project
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicProjectEntry"
+        - type: object
+          additionalProperties: false
+          required: [sectionType, entries]
+          properties:
+            sectionType:
+              const: custom
+            displayName:
+              type: string
+              maxLength: 80
+            iconKey:
+              type: string
+              maxLength: 64
+              pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+            entries:
+              type: array
+              minItems: 1
+              maxItems: 64
+              items:
+                $ref: "#/components/schemas/PublicCustomEntry"
+    PublicContent:
+      type: object
+      description: Visible sections keyed by the retained document section key.
+      minProperties: 1
+      maxProperties: 24
+      propertyNames:
+        type: string
+        maxLength: 36
+        pattern: "^[a-z]+$|^[0-9a-f-]{36}$"
+      additionalProperties:
+        $ref: "#/components/schemas/PublicSection"
+    PublicCustomization:
+      type: object
+      description: Current schema presentation settings for the public renderer.
+      additionalProperties: false
+      required:
+        - font
+        - colors
+        - spacing
+        - heading
+        - layout
+        - sectionDisplay
+        - pageFormat
+        - dateFormat
+      properties:
+        font:
+          type: object
+          additionalProperties: false
+          required: [family, baseSizePx]
+          properties:
+            family:
+              type: string
+              enum:
+                - be-vietnam-pro
+                - inter
+                - noto-sans
+                - noto-serif
+                - roboto
+                - open-sans
+                - plus-jakarta-sans
+                - work-sans
+                - nunito-sans
+                - montserrat
+                - fira-sans
+                - barlow
+                - alegreya
+                - spectral
+                - literata
+                - newsreader
+                - space-mono
+                - crimson-pro
+                - eb-garamond
+                - aleo
+                - cormorant-garamond
+                - roboto-serif
+                - roboto-mono
+                - dm-sans
+                - atkinson-hyperlegible-next
+                - source-sans-3
+            baseSizePx:
+              type: integer
+              minimum: 10
+              maximum: 20
+        colors:
+          type: object
+          additionalProperties: false
+          required: [primary, text, background]
+          properties:
+            primary:
+              type: string
+              pattern: "^#[0-9a-fA-F]{6}$"
+            text:
+              type: string
+              pattern: "^#[0-9a-fA-F]{6}$"
+            background:
+              type: string
+              pattern: "^#[0-9a-fA-F]{6}$"
+            accent:
+              type: string
+              pattern: "^#[0-9a-fA-F]{6}$"
+            surface:
+              type: string
+              pattern: "^#[0-9a-fA-F]{6}$"
+        spacing:
+          type: object
+          additionalProperties: false
+          required: [sectionGap, entryGap, lineHeight]
+          properties:
+            sectionGap:
+              type: number
+              minimum: 0
+              maximum: 64
+            entryGap:
+              type: number
+              minimum: 0
+              maximum: 64
+            lineHeight:
+              type: number
+              minimum: 1
+              maximum: 2.5
+            pageMargin:
+              type: object
+              additionalProperties: false
+              required: [x, y]
+              properties:
+                x:
+                  type: number
+                  minimum: 0
+                  maximum: 40
+                y:
+                  type: number
+                  minimum: 0
+                  maximum: 40
+        heading:
+          type: object
+          additionalProperties: false
+          required: [style, showRule]
+          properties:
+            style:
+              type: string
+              enum: [uppercase, titlecase, normal]
+            showRule:
+              type: boolean
+        header:
+          type: object
+          additionalProperties: false
+          required: [align, detailsLayout, iconStyle]
+          properties:
+            align:
+              type: string
+              enum: [left, center]
+            detailsLayout:
+              type: string
+              enum: [inline, stacked]
+            iconStyle:
+              type: string
+              enum: [none, outline]
+        layout:
+          type: object
+          additionalProperties: false
+          required: [columns, sections]
+          properties:
+            columns:
+              type: integer
+              enum: [1, 2]
+            surfaceTarget:
+              type: string
+              enum: [none, header, sidebar]
+            sections:
+              type: object
+              additionalProperties: false
+              required: [main, sidebar]
+              properties:
+                main:
+                  type: array
+                  maxItems: 24
+                  uniqueItems: true
+                  items:
+                    type: string
+                    maxLength: 36
+                    pattern: "^[a-z]+$|^[0-9a-f-]{36}$"
+                sidebar:
+                  type: array
+                  maxItems: 24
+                  uniqueItems: true
+                  items:
+                    type: string
+                    maxLength: 36
+                    pattern: "^[a-z]+$|^[0-9a-f-]{36}$"
+        sectionDisplay:
+          type: object
+          additionalProperties: false
+          required: [skill, language]
+          properties:
+            skill:
+              type: object
+              additionalProperties: false
+              required: [style]
+              properties:
+                style:
+                  type: string
+                  enum: [text, tag, bar, dots]
+            language:
+              type: object
+              additionalProperties: false
+              required: [style]
+              properties:
+                style:
+                  type: string
+                  enum: [text, tag, bar, dots]
+        pageFormat:
+          type: string
+          enum: [a4, letter]
+        dateFormat:
+          type: string
+          enum: [MM/YYYY, Mon YYYY, YYYY]
     ResumeSummary:
       type: object
       description: >-
@@ -2841,6 +4016,8 @@ components:
         - revision
         - live
         - slug
+        - downloadEnabled
+        - seoGeoEnabled
         - schemaVersion
         - createdAt
         - updatedAt
@@ -2869,6 +4046,12 @@ components:
           description: Globally unique public slug, or null when the resume
             has never been published. Resumes are the public entity; users
             are not.
+        downloadEnabled:
+          type: boolean
+          description: Whether public download representations are enabled.
+        seoGeoEnabled:
+          type: boolean
+          description: Whether this live resume participates in discovery.
         schemaVersion:
           type: integer
           minimum: 1
@@ -2887,6 +4070,8 @@ components:
         revision: "42"
         live: true
         slug: ada-lovelace
+        downloadEnabled: true
+        seoGeoEnabled: true
         schemaVersion: 2
         createdAt: 2026-08-01T09:00:00Z
         updatedAt: 2026-08-11T18:20:00Z
@@ -3275,6 +4460,20 @@ components:
         type: string
         format: uuid
       example: 018f5b6a-9a3e-7c21-8b1e-000000000010
+    PublicSlug:
+      name: slug
+      in: path
+      required: true
+      description: >-
+        Public resume slug. The router applies this closed grammar, but a
+        malformed, missing, private, renamed, deleted, tombstoned, or
+        flag-disabled slug receives the same `404 public_not_found` response.
+      schema:
+        type: string
+        minLength: 4
+        maxLength: 30
+        pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+      example: ada-lovelace
     SectionKey:
       name: sectionKey
       in: path
@@ -3327,9 +4526,10 @@ components:
       in: header
       required: false
       description: >-
-        Conditional photo read. Accepts exactly one well-formed strong entity
-        tag: an exact match returns `304` with no body, a different tag
-        returns `200` and the bytes.
+        Conditional representation read. Owner photo and public routes accept
+        exactly one well-formed strong entity tag: an exact match returns
+        `304` with no body, while a different tag returns `200` and the
+        selected bytes.
 
 
         Singleton header: a repeated field line, a comma-folded list, a weak

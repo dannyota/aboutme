@@ -16,6 +16,7 @@ const SURFACE: Record<string, Record<string, string>> = {
     patch: "updateResumeMetadata",
     delete: "deleteResume",
   },
+  "/resumes/{id}/publish": { post: "publishResume" },
   "/resumes/{id}/entries/{sectionKey}": { patch: "upsertResumeEntry" },
   "/resumes/{id}/entries/{sectionKey}/{entryId}": {
     delete: "deleteResumeEntry",
@@ -72,6 +73,13 @@ const SUCCESS: Record<string, Success[]> = {
     },
   ],
   deleteResume: [{ status: "204", mediaTypes: [], headers: [] }],
+  publishResume: [
+    {
+      status: "200",
+      mediaTypes: ["application/json"],
+      headers: ["ETag", "X-Resume-Schema-Version"],
+    },
+  ],
   upsertResumeEntry: [
     {
       status: "200",
@@ -215,6 +223,21 @@ const ERRORS: Record<string, Record<string, string[]>> = {
   },
   updateResumeMetadata: itemWrite(),
   deleteResume: itemDelete(),
+  publishResume: {
+    "400": WRITE_400,
+    "401": ["session_required"],
+    "403": ["csrf_rejected", "reauth_required"],
+    "404": ["resume_not_found"],
+    "405": ["method_not_allowed"],
+    "409": ["slug_taken", "idempotency_key_reuse"],
+    "412": ["revision_mismatch"],
+    "413": ["body_too_large"],
+    "422": ["publish_invalid"],
+    "428": ["precondition_required"],
+    "429": ["rate_limited"],
+    "500": ["internal_error"],
+    "503": ["public_state_busy"],
+  },
   upsertResumeEntry: itemWrite(),
   deleteResumeEntry: itemDelete(),
   updateResumeSection: itemWrite(),
@@ -305,8 +328,8 @@ const codesIn = (response: any): string[] => {
   return [...found];
 };
 
-describe("P2B resume surface", () => {
-  it("declares exactly the nine resume paths and fifteen operations", () => {
+describe("resume surface", () => {
+  it("declares the P2B surface plus the Phase 5A publish operation", () => {
     const declared = Object.keys(doc.paths).filter((p) =>
       p.startsWith("/resumes"),
     );
@@ -618,5 +641,313 @@ describe("P2B resume surface", () => {
   it("enforces example validity through the linter, not by inspection", () => {
     expect(redoclyConfig.rules["no-invalid-media-type-examples"]).toBe("error");
     expect(redoclyConfig.rules["no-invalid-schema-examples"]).toBe("error");
+  });
+});
+
+describe("Phase 5A publish and public wire contract", () => {
+  it("defines the closed publish request and issue result", () => {
+    const request = doc.components.schemas.PublishResumeRequest;
+    expect(request.additionalProperties).toBe(false);
+    expect(request.required).toEqual([
+      "live",
+      "downloadEnabled",
+      "seoGeoEnabled",
+    ]);
+    expect(Object.keys(request.properties)).toEqual([
+      "slug",
+      "live",
+      "downloadEnabled",
+      "seoGeoEnabled",
+    ]);
+    expect(request.properties.slug).toMatchObject({
+      type: "string",
+      minLength: 1,
+    });
+    expect(request.properties.slug.default).toBeUndefined();
+    expect(request.properties.slug.pattern).toBeUndefined();
+    expect(request.properties.slug.maxLength).toBeUndefined();
+
+    const issue = doc.components.schemas.PublishValidationIssue;
+    expect(issue.additionalProperties).toBe(false);
+    expect(issue.required).toEqual(["path", "code", "message"]);
+    expect(issue.properties.code.enum).toEqual([
+      "required_for_live",
+      "requires_live",
+      "invalid_format",
+      "reserved",
+      "required",
+      "visible_entry_required",
+    ]);
+  });
+
+  it("adds required owner flags without weakening owner/public separation", () => {
+    const summary = doc.components.schemas.ResumeSummary;
+    expect(summary.required).toEqual(
+      expect.arrayContaining(["downloadEnabled", "seoGeoEnabled"]),
+    );
+    expect(summary.properties.downloadEnabled.type).toBe("boolean");
+    expect(summary.properties.seoGeoEnabled.type).toBe("boolean");
+
+    const publicResume = doc.components.schemas.PublicResume;
+    expect(publicResume.additionalProperties).toBe(false);
+    expect(publicResume.required).toEqual([
+      "slug",
+      "revision",
+      "lng",
+      "downloadEnabled",
+      "document",
+    ]);
+    expect(Object.keys(publicResume.properties)).toEqual([
+      "slug",
+      "revision",
+      "lng",
+      "downloadEnabled",
+      "document",
+    ]);
+    for (const ownerOnly of [
+      "id",
+      "title",
+      "live",
+      "seoGeoEnabled",
+      "schemaVersion",
+      "createdAt",
+      "updatedAt",
+    ]) {
+      expect(publicResume.properties[ownerOnly]).toBeUndefined();
+    }
+  });
+
+  it("keeps every public document leaf closed and omits private members", () => {
+    const schemas = doc.components.schemas;
+    const document = schemas.PublicResumeDocument;
+    expect(document.additionalProperties).toBe(false);
+    expect(document.required).toEqual([
+      "schemaVersion",
+      "personalDetails",
+      "content",
+      "customization",
+    ]);
+    expect(Object.keys(document.properties)).toEqual(document.required);
+
+    const personal = schemas.PublicPersonalDetails;
+    expect(personal.additionalProperties).toBe(false);
+    expect(personal.required).toEqual(["fullName"]);
+    expect(personal.properties.details.type).toBe("array");
+    expect(personal.properties.details.nullable).toBeUndefined();
+    expect(personal.properties.details.minItems).toBeUndefined();
+    expect(personal.properties.details.items.$ref).toBe(
+      "#/components/schemas/PublicPersonalDetail",
+    );
+
+    for (const name of [
+      "PublicPersonalDetail",
+      "PublicPhoto",
+      "PublicPhotoCrop",
+      "PublicYearMonth",
+      "PublicDateRange",
+      "PublicProfileEntry",
+      "PublicWorkEntry",
+      "PublicEducationEntry",
+      "PublicSkillEntry",
+      "PublicLanguageEntry",
+      "PublicCertificateEntry",
+      "PublicProjectEntry",
+      "PublicCustomEntry",
+      "PublicCustomization",
+    ]) {
+      expect(schemas[name], `${name} exists`).toBeTruthy();
+      expect(schemas[name].additionalProperties, `${name} is closed`).toBe(
+        false,
+      );
+    }
+    for (const name of [
+      "PublicPersonalDetail",
+      "PublicProfileEntry",
+      "PublicWorkEntry",
+      "PublicEducationEntry",
+      "PublicSkillEntry",
+      "PublicLanguageEntry",
+      "PublicCertificateEntry",
+      "PublicProjectEntry",
+      "PublicCustomEntry",
+    ]) {
+      expect(schemas[name].properties.isHidden, name).toBeUndefined();
+    }
+    expect(schemas.PublicPhoto.properties.key).toBeUndefined();
+    expect(schemas.PublicPhoto.required).toEqual(["url"]);
+
+    const exactLeafProperties: Record<string, string[]> = {
+      PublicPersonalDetail: ["id", "label", "type", "value"],
+      PublicPhoto: ["url", "crop"],
+      PublicPhotoCrop: ["height", "width", "x", "y"],
+      PublicYearMonth: ["m", "y"],
+      PublicDateRange: ["end", "present", "start"],
+      PublicProfileEntry: ["id", "text"],
+      PublicWorkEntry: [
+        "city",
+        "country",
+        "dates",
+        "description",
+        "employer",
+        "employerLink",
+        "id",
+        "jobTitle",
+      ],
+      PublicEducationEntry: [
+        "city",
+        "country",
+        "dates",
+        "degree",
+        "description",
+        "id",
+        "school",
+        "schoolLink",
+      ],
+      PublicSkillEntry: ["id", "infoHtml", "level", "name"],
+      PublicLanguageEntry: ["id", "level", "name"],
+      PublicCertificateEntry: [
+        "date",
+        "description",
+        "id",
+        "issuer",
+        "title",
+        "titleLink",
+      ],
+      PublicProjectEntry: ["dates", "description", "id", "link", "title"],
+      PublicCustomEntry: [
+        "city",
+        "dates",
+        "description",
+        "id",
+        "subtitle",
+        "title",
+        "titleLink",
+      ],
+    };
+    for (const [name, properties] of Object.entries(exactLeafProperties)) {
+      expect(Object.keys(schemas[name].properties), name).toEqual(properties);
+    }
+
+    const content = schemas.PublicContent;
+    expect(content.type).toBe("object");
+    expect(content.maxProperties).toBe(24);
+    expect(content.propertyNames).toMatchObject({
+      maxLength: 36,
+      pattern: "^[a-z]+$|^[0-9a-f-]{36}$",
+    });
+    expect(content.additionalProperties.$ref).toBe(
+      "#/components/schemas/PublicSection",
+    );
+    const sections = schemas.PublicSection.oneOf;
+    expect(sections).toHaveLength(8);
+    expect(
+      sections.map((section: any) => section.properties.sectionType.const),
+    ).toEqual([
+      "profile",
+      "work",
+      "education",
+      "skill",
+      "language",
+      "certificate",
+      "project",
+      "custom",
+    ]);
+    expect(
+      sections.every(
+        (section: any) =>
+          section.additionalProperties === false &&
+          JSON.stringify(section).includes("Public") &&
+          !JSON.stringify(section).includes("isHidden"),
+      ),
+    ).toBe(true);
+  });
+
+  it("declares only JSON and photo public API operations", () => {
+    const publicSurface = {
+      "/public/resumes/{slug}": {
+        get: "getPublicResume",
+        head: "headPublicResume",
+      },
+      "/public/resumes/{slug}/photo": {
+        get: "getPublicResumePhoto",
+        head: "headPublicResumePhoto",
+      },
+    } as const;
+    for (const [path, methods] of Object.entries(publicSurface)) {
+      expect(Object.keys(doc.paths[path])).toEqual(Object.keys(methods));
+      for (const [method, operationId] of Object.entries(methods)) {
+        const operation = doc.paths[path][method];
+        expect(operation.operationId).toBe(operationId);
+        expect(operation.security).toEqual([]);
+        expect(paramRefs(operation)).toEqual([
+          "#/components/parameters/PublicSlug",
+          "#/components/parameters/IfNoneMatch",
+        ]);
+        expect(Object.keys(operation.responses).sort()).toEqual([
+          "200",
+          "304",
+          "400",
+          "404",
+          "405",
+          "503",
+        ]);
+        const success = resolve(operation.responses["200"]);
+        const wantedMedia = path.endsWith("/photo")
+          ? ["image/jpeg", "image/png"]
+          : ["application/json"];
+        expect(Object.keys(success.content ?? {}).sort()).toEqual(wantedMedia);
+        expect(Object.keys(success.headers ?? {}).sort()).toEqual([
+          "Cache-Control",
+          "Content-Length",
+          "ETag",
+        ]);
+        const notModified = resolve(operation.responses["304"]);
+        expect(notModified.content).toBeUndefined();
+        expect(Object.keys(notModified.headers ?? {}).sort()).toEqual([
+          "Cache-Control",
+          "Content-Type",
+          "ETag",
+        ]);
+        for (const [status, code] of [
+          ["400", "request_invalid"],
+          ["404", "public_not_found"],
+          ["405", "method_not_allowed"],
+          ["503", "temporarily_unavailable"],
+        ] as const) {
+          const response = resolve(operation.responses[status]);
+          expect(codesIn(response), `${path} ${method} ${status}`).toContain(
+            code,
+          );
+          expect(response.headers["Cache-Control"]).toBeTruthy();
+          expect(response.headers.ETag).toBeUndefined();
+        }
+        expect(resolve(operation.responses["405"]).headers.Allow.example).toBe(
+          "GET, HEAD",
+        );
+        expect(
+          resolve(operation.responses["503"]).headers["Retry-After"].example,
+        ).toBe(1);
+      }
+    }
+
+    expect(doc.components.parameters.PublicSlug.schema).toMatchObject({
+      type: "string",
+      minLength: 4,
+      maxLength: 30,
+      pattern: "^[a-z0-9]+(-[a-z0-9]+)*$",
+    });
+    expect(doc.components.headers.PublicBodyETag.schema.pattern).toBe(
+      '^"[0-9a-f]{64}"$',
+    );
+    for (const proseOnly of [
+      "/{slug}",
+      "/{slug}.md",
+      "/sitemap.xml",
+      "/robots.txt",
+      "/llms.txt",
+      "/internal-render/public",
+    ]) {
+      expect(doc.paths[proseOnly]).toBeUndefined();
+    }
   });
 });
