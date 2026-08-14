@@ -10,14 +10,16 @@ close a row, and this static map does not replace passing gate output.
 ## Candidate and execution evidence
 
 - Source-fix commit: `7c4eb4e5bfbc602a0a1493254fd4a084b4808dd4`.
-- Final candidate/gate commit: pending.
-- Full Suite D/E/F execution at that unchanged candidate: pending.
+- Reviewed implementation candidate: `e1e29fd1ed1e3acd6f2be73c3fa42ded4095d07b`.
+- Full Suite D/E/F execution passed through `make ci` at that unchanged
+  implementation candidate.
 - Status count: **30 Exact, 18 Composed, 0 Open** (48 total).
 - Open rows: none.
 
-The integration owner must retain output from these commands at the final
-candidate. The second command is the complete P2B handler suite. The third
-repeats the current concurrent HTTP cases.
+The record commit is accepted and pushed only after the integration owner reruns
+`make ci` and connected `make scan` without changing it. The second command
+below is the complete P2B handler suite. The third repeats the current
+concurrent HTTP cases.
 
 ```sh
 make test-db-up
@@ -31,8 +33,9 @@ make server-test-p2b
 )
 ```
 
-The media parity gate also remains the exact sequence `make test-s3-up`,
-`make server-test-p2b-s3` from the [exit criteria](exit-criteria.md).
+The media parity gate passed through the exact `make test-s3-up`,
+`make server-test-s3`, `make server-test-p2b-s3`, and `make test-s3-down`
+sequence in `make ci`.
 
 ## Suite D — auth, CSRF, and cross-user authorization
 

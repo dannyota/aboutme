@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 14, active** (2026-08-13).
+Status: **Revision 15, active** (2026-08-14).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior; it is approved at v4. This
@@ -20,7 +20,7 @@ keep everything runnable on the laptop until the whole product works there.
 | P1.1 authentication hardening | Complete                                   | None                                            |
 | P2A resume domain and store   | Complete                                   | None                                            |
 | P3 renderer lane              | Complete                                   | None                                            |
-| P2B server lane               | Implemented; exit gate active              | Fresh review, unchanged-candidate CI and scan   |
+| P2B server lane               | Complete                                   | None                                            |
 | P9 HTTPS overlay              | Needed before authenticated browser checks | Small overlay lane, pulled in when P4 starts    |
 | PI infrastructure             | Adopted, not executed                      | Refresh after runtime phases; no cloud mutation |
 
