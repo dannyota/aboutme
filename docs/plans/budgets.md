@@ -23,6 +23,11 @@ requires a reviewed change with evidence.
 | Anonymous login starts per client IP      | ≤ 30/min                              | P1 auth                                   |
 | Privileged OAuth starts/account and IP    | ≤ 30/min                              | P1 auth                                   |
 | Public revocation drain                   | ≤ 5 s hard, then fail before mutation | P5A                                       |
+| Public render `canonicalOrigin`           | ≤ 512 ASCII bytes                     | P5A Go and Nuxt boundary                  |
+| Internal public-render JSON               | ≤ 532,480 bytes                       | P5A Go and Nuxt boundary                  |
+| Internal public-render HTML               | ≤ 2,097,152 bytes; provisional gate   | P5A renderer corpus                       |
+| Direct public-render wall time            | ≤ 5 s hard; cancel and join           | P5A Go direct-render client               |
+| Slug claim/rename attempts                | ≤ 30/account/hour                     | P5A middleware                            |
 | OAuth cleanup batch                       | ≤ 200 rows/start                      | P1 auth                                   |
 | Resume photo multipart body               | ≤ 2,162,688 bytes                     | P2B route                                 |
 | Resume photo file / normalized object     | ≤ 2,097,152 bytes                     | P2B media                                 |
@@ -105,6 +110,24 @@ write, and upload policies are also separate instances. Each start reaps at most
 200 expired transactions. Structure and customization requests accept at most
 100 ordered operations each; the 256 KiB transport ceiling remains a separate
 byte bound.
+
+**Provenance of the P5A rows.** `canonicalOrigin` is one normalized ASCII `http`
+or `https` origin with no userinfo, non-root path, query, or fragment.
+Production requires `https`; local development may use configured `http`. The
+532,480-byte request bound is the 524,288-byte document ceiling plus an
+8,192-byte envelope. A boundary test must serialize the largest valid canonical
+document with the exact 512-byte origin and prove the closed request fits. The
+projection contains one document-shaped value, and its only possible growth is
+replacement of one bounded photo key by its authorized absolute URL.
+
+The 2,097,152-byte HTML bound is provisional until minimal, full, and 512 KiB
+renderer fixtures pass beneath it without truncation. A breach blocks P5A or
+changes the budget with measured evidence. The direct-render five-second hard
+deadline cancels and joins Nuxt work; it never returns while detached rendering
+continues. The dedicated slug limit applies only when a requested slug differs
+from the stored value. The existing shared five-second revocation bound remains
+one wall-clock deadline across all affected fence drains and fails before the
+mutation transaction.
 
 An orphan object is never public, but retained bytes still need a bound. The
 weekly sweep ignores objects younger than 48 hours, reads at most 1,000 keys per
