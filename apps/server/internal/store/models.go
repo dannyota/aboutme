@@ -63,6 +63,11 @@ type OAuthTransaction struct {
 	ConsumedAt    *time.Time
 }
 
+type PublicState struct {
+	Singleton           bool
+	DiscoveryGeneration int64
+}
+
 type Resume struct {
 	ID              uuid.UUID
 	UserID          uuid.UUID

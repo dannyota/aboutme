@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	// This system backfill intentionally does not change revision or updated_at:
 	// it persists the same projected document already served to readers. It is
 	// not user-scoped. See docs/adr/0017-resume-document-versioning.md.
@@ -28,6 +29,7 @@ type Querier interface {
 	// pgx.ErrNoRows -- that caller lost the race and must not mint a second
 	// successor (see internal/auth.SessionManager.Authenticate).
 	BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error)
+	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
 	// Atomically claims a transaction: only a row that is unexpired and not yet
 	// consumed (as of now, $2) is updated and returned. A handle that is
 	// unknown, expired, or already consumed matches no row, so the caller sees
@@ -102,6 +104,7 @@ type Querier interface {
 	// surfaces as pgx.ErrNoRows; the caller re-reads to distinguish staleness
 	// from absence without creating an existence oracle.
 	DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error)
+	DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePublicCASParams) (Resume, error)
 	// Records exact-key cleanup work in the caller's transaction (ADR 0019).
 	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
 	// table's own check constraint rejects a malformed or cross-resume key.
@@ -127,6 +130,12 @@ type Querier interface {
 	// arm take the row lock and return the existing row; user_id itself never
 	// appears in a SET clause.
 	GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, userID uuid.UUID) (IdempotencyUsage, error)
+	GetPublicResumeByOwner(ctx context.Context, arg GetPublicResumeByOwnerParams) (Resume, error)
+	// Missing, never-published, private, renamed, and deleted rows all surface as
+	// pgx.ErrNoRows. Representation-specific flags are checked after this live
+	// gate without exposing a different lookup result.
+	GetPublicResumeBySlug(ctx context.Context, slug string) (Resume, error)
+	GetPublicState(ctx context.Context) (PublicState, error)
 	// System-job read for the document-version backfill. It is intentionally
 	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
@@ -136,8 +145,15 @@ type Querier interface {
 	// caller's current session, so the lineage values require this read.
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error)
+	GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
+	// Discovery bytes contain only eligible slugs in raw byte order. The
+	// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
+	// string instead of a pointer.
+	ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
 	// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
 	// Lists sessions that internal/auth also considers live:
@@ -161,12 +177,15 @@ type Querier interface {
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
+	LockPublicState(ctx context.Context) (PublicState, error)
+	LockSlugClaim(ctx context.Context, slug string) error
 	LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// Normalizes a candidate response through the same jsonb representation an
 	// insert would store and reports the exact byte count the usage
 	// reservation must account for — the one canonical byte expression shared
 	// with backfill, insert, and cleanup.
 	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
+	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
 	// Releases exactly the counters of physically deleted records, in the same
 	// transaction as their deletion. The migration's purge-then-backfill order
 	// plus transactional maintenance guarantee this can never underflow the

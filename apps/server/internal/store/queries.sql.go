@@ -14,6 +14,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const advanceDiscoveryGeneration = `-- name: AdvanceDiscoveryGeneration :one
+UPDATE public_state
+SET discovery_generation = discovery_generation + 1
+WHERE singleton = true
+RETURNING discovery_generation
+`
+
+func (q *Queries) AdvanceDiscoveryGeneration(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, advanceDiscoveryGeneration)
+	var discovery_generation int64
+	err := row.Scan(&discovery_generation)
+	return discovery_generation, err
+}
+
 const backfillResumeDocumentCAS = `-- name: BackfillResumeDocumentCAS :execrows
 UPDATE resumes
 SET personal_details = $1,
@@ -79,6 +93,26 @@ type BeginSessionRotationParams struct {
 // successor (see internal/auth.SessionManager.Authenticate).
 func (q *Queries) BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, beginSessionRotation, arg.ID, arg.RotationGraceUntil)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const consumeExpiredSlugTombstone = `-- name: ConsumeExpiredSlugTombstone :one
+DELETE FROM slug_tombstones
+WHERE slug = $1::text
+  AND released_at + interval '180 days' <=
+      $2::timestamptz
+RETURNING id
+`
+
+type ConsumeExpiredSlugTombstoneParams struct {
+	Slug       string
+	ReusableAt time.Time
+}
+
+func (q *Queries) ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, consumeExpiredSlugTombstone, arg.Slug, arg.ReusableAt)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -631,6 +665,43 @@ func (q *Queries) DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeFo
 	return i, err
 }
 
+const deleteResumePublicCAS = `-- name: DeleteResumePublicCAS :one
+DELETE FROM resumes
+WHERE id = $1::uuid
+  AND user_id = $2::uuid
+  AND revision = $3::bigint
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at
+`
+
+type DeleteResumePublicCASParams struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	ExpectedRevision int64
+}
+
+func (q *Queries) DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePublicCASParams) (Resume, error) {
+	row := q.db.QueryRow(ctx, deleteResumePublicCAS, arg.ID, arg.UserID, arg.ExpectedRevision)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const enqueueMediaDeletionJob = `-- name: EnqueueMediaDeletionJob :execrows
 INSERT INTO media_deletion_jobs (resume_id, object_key)
 VALUES ($1, $2)
@@ -790,6 +861,84 @@ func (q *Queries) GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, user
 	return i, err
 }
 
+const getPublicResumeByOwner = `-- name: GetPublicResumeByOwner :one
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes
+WHERE user_id = $1::uuid
+  AND id = $2::uuid
+`
+
+type GetPublicResumeByOwnerParams struct {
+	UserID uuid.UUID
+	ID     uuid.UUID
+}
+
+func (q *Queries) GetPublicResumeByOwner(ctx context.Context, arg GetPublicResumeByOwnerParams) (Resume, error) {
+	row := q.db.QueryRow(ctx, getPublicResumeByOwner, arg.UserID, arg.ID)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPublicResumeBySlug = `-- name: GetPublicResumeBySlug :one
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes
+WHERE slug = $1::text AND live = true
+`
+
+// Missing, never-published, private, renamed, and deleted rows all surface as
+// pgx.ErrNoRows. Representation-specific flags are checked after this live
+// gate without exposing a different lookup result.
+func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (Resume, error) {
+	row := q.db.QueryRow(ctx, getPublicResumeBySlug, slug)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPublicState = `-- name: GetPublicState :one
+SELECT singleton, discovery_generation
+FROM public_state
+WHERE singleton = true
+`
+
+func (q *Queries) GetPublicState(ctx context.Context) (PublicState, error) {
+	row := q.db.QueryRow(ctx, getPublicState)
+	var i PublicState
+	err := row.Scan(&i.Singleton, &i.DiscoveryGeneration)
+	return i, err
+}
+
 const getResumeByID = `-- name: GetResumeByID :one
 SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE id = $1
 `
@@ -904,6 +1053,33 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 	return i, err
 }
 
+const getSlugClaim = `-- name: GetSlugClaim :one
+SELECT id FROM resumes WHERE slug = $1::text
+`
+
+func (q *Queries) GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getSlugClaim, slug)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getSlugTombstoneForUpdate = `-- name: GetSlugTombstoneForUpdate :one
+SELECT id, slug, released_by_user_id, released_at FROM slug_tombstones WHERE slug = $1 FOR UPDATE
+`
+
+func (q *Queries) GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error) {
+	row := q.db.QueryRow(ctx, getSlugTombstoneForUpdate, slug)
+	var i SlugTombstone
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.ReleasedByUserID,
+		&i.ReleasedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE email = $1
 `
@@ -938,6 +1114,64 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertSlugTombstone = `-- name: InsertSlugTombstone :one
+INSERT INTO slug_tombstones (slug, released_by_user_id, released_at)
+VALUES (
+  $1::text,
+  $2::uuid,
+  $3::timestamptz
+)
+RETURNING id, slug, released_by_user_id, released_at
+`
+
+type InsertSlugTombstoneParams struct {
+	Slug             string
+	ReleasedByUserID *uuid.UUID
+	ReleasedAt       time.Time
+}
+
+func (q *Queries) InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error) {
+	row := q.db.QueryRow(ctx, insertSlugTombstone, arg.Slug, arg.ReleasedByUserID, arg.ReleasedAt)
+	var i SlugTombstone
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.ReleasedByUserID,
+		&i.ReleasedAt,
+	)
+	return i, err
+}
+
+const listEligiblePublicSlugs = `-- name: ListEligiblePublicSlugs :many
+SELECT COALESCE(slug, '')::text AS slug
+FROM resumes
+WHERE slug IS NOT NULL AND live = true AND seo_geo_enabled = true
+ORDER BY slug COLLATE "C" ASC
+`
+
+// Discovery bytes contain only eligible slugs in raw byte order. The
+// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
+// string instead of a pointer.
+func (q *Queries) ListEligiblePublicSlugs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listEligiblePublicSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		items = append(items, slug)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listIdentitiesByUserID = `-- name: ListIdentitiesByUserID :many
@@ -1108,6 +1342,31 @@ func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]R
 	return items, nil
 }
 
+const lockPublicState = `-- name: LockPublicState :one
+SELECT singleton, discovery_generation
+FROM public_state
+WHERE singleton = true
+FOR UPDATE
+`
+
+func (q *Queries) LockPublicState(ctx context.Context) (PublicState, error) {
+	row := q.db.QueryRow(ctx, lockPublicState)
+	var i PublicState
+	err := row.Scan(&i.Singleton, &i.DiscoveryGeneration)
+	return i, err
+}
+
+const lockSlugClaim = `-- name: LockSlugClaim :exec
+SELECT pg_advisory_xact_lock(
+  hashtextextended('aboutme.slug.v1:' || $1::text, 0)
+)
+`
+
+func (q *Queries) LockSlugClaim(ctx context.Context, slug string) error {
+	_, err := q.db.Exec(ctx, lockSlugClaim, slug)
+	return err
+}
+
 const lockUserForResumeWrite = `-- name: LockUserForResumeWrite :one
 SELECT id FROM users WHERE id = $1 FOR UPDATE
 `
@@ -1145,6 +1404,75 @@ func (q *Queries) NormalizeIdempotencyResponse(ctx context.Context, arg Normaliz
 	row := q.db.QueryRow(ctx, normalizeIdempotencyResponse, arg.ResponseBody, arg.ResponseHeaders)
 	var i NormalizeIdempotencyResponseRow
 	err := row.Scan(&i.ResponseBody, &i.ResponseHeaders, &i.StoredBytes)
+	return i, err
+}
+
+const publishResumeCAS = `-- name: PublishResumeCAS :one
+WITH input AS (
+  SELECT
+    $1::uuid AS id,
+    $2::uuid AS user_id,
+    $3::bigint AS expected_revision,
+    $4::text AS slug,
+    $5::boolean AS live,
+    $6::boolean AS download_enabled,
+    $7::boolean AS seo_geo_enabled,
+    $8::timestamptz AS updated_at
+)
+UPDATE resumes AS resume
+SET slug = input.slug,
+    live = input.live,
+    download_enabled = input.download_enabled,
+    seo_geo_enabled = input.seo_geo_enabled,
+    revision = resume.revision + 1,
+    updated_at = input.updated_at
+FROM input
+WHERE resume.id = input.id
+  AND resume.user_id = input.user_id
+  AND resume.revision = input.expected_revision
+RETURNING resume.id, resume.user_id, resume.title, resume.slug, resume.live, resume.download_enabled, resume.seo_geo_enabled, resume.schema_version, resume.revision, resume.lng, resume.personal_details, resume.content, resume.customization, resume.created_at, resume.updated_at
+`
+
+type PublishResumeCASParams struct {
+	ID               uuid.UUID
+	UserID           uuid.UUID
+	ExpectedRevision int64
+	Slug             *string
+	Live             bool
+	DownloadEnabled  bool
+	SEOGeoEnabled    bool
+	UpdatedAt        time.Time
+}
+
+func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error) {
+	row := q.db.QueryRow(ctx, publishResumeCAS,
+		arg.ID,
+		arg.UserID,
+		arg.ExpectedRevision,
+		arg.Slug,
+		arg.Live,
+		arg.DownloadEnabled,
+		arg.SEOGeoEnabled,
+		arg.UpdatedAt,
+	)
+	var i Resume
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Slug,
+		&i.Live,
+		&i.DownloadEnabled,
+		&i.SEOGeoEnabled,
+		&i.SchemaVersion,
+		&i.Revision,
+		&i.Lng,
+		&i.PersonalDetails,
+		&i.Content,
+		&i.Customization,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 
