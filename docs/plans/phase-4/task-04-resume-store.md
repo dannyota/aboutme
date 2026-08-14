@@ -114,6 +114,7 @@ export interface ResumeStoreActions {
   acknowledgeResumeDelete(resumeId: string, itemId: string): void;
   replaceHead(resumeId: string, item: EditorQueueItem): void;
   dropHead(resumeId: string, itemId: string): void;
+  continueTemplateGroup(resumeId: string, groupId: string): void;
   markConflict(resumeId: string, conflict: ConflictRecord): void;
   resolveConflict(resumeId: string, conflictId: string): void;
   setIssues(
@@ -213,6 +214,14 @@ derived state. A missing resume or conflict is a no-op. The coordinator calls
 this explicit action after Accept latest drops the conflicted intent or after
 Apply mine installs its guarded replacement; conflict resolution never clears
 the queue by itself.
+
+`continueTemplateGroup` requires the active attempt's queue item to be the
+template group with exact `groupId`. It clears only that attempt, restores the
+same frozen group at the pending queue head ahead of all later work, and replays
+derived state. A missing resume, non-template attempt, or mismatched ID is a
+no-op. The coordinator uses this transition after an accepted child when the
+group remains running or becomes partial; a complete group is still removed with
+`dropHead`.
 
 - [ ] **Step 4: Rerun the state/replay test GREEN**
 

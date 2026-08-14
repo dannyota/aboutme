@@ -127,6 +127,7 @@ export interface ResumeStoreActions {
   dropHead(resumeId: string, itemId: string): void;
   markConflict(resumeId: string, conflict: ConflictRecord): void;
   resolveConflict(resumeId: string, conflictId: string): void;
+  continueTemplateGroup(resumeId: string, groupId: string): void;
   setIssues(
     resumeId: string,
     itemId: string,
@@ -355,6 +356,24 @@ const resumeStore = defineStore('resumes', {
       );
       if (conflicts.length === record.conflicts.length) return;
       record.conflicts = conflicts;
+      replay(record);
+    },
+
+    continueTemplateGroup(resumeId: string, groupId: string) {
+      const record = this.records.get(resumeId) as unknown as
+        | ResumeRecord
+        | undefined;
+      const active = record?.attempt;
+      if (
+        active === null
+        || active === undefined
+        || active.queueItem.kind !== 'templateGroup'
+        || active.queueItem.id !== groupId
+      ) {
+        return;
+      }
+      record.attempt = null;
+      record.pending = [active.queueItem, ...record.pending];
       replay(record);
     },
 
