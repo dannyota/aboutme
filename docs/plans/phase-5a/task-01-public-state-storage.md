@@ -61,6 +61,9 @@ Step 2. Consumes existing resume/idempotency tables and `public.citext` mapping.
     GetPublicResumeByOwner(context.Context, GetPublicResumeByOwnerParams) (Resume, error)
     ListEligiblePublicSlugs(context.Context) ([]string, error)
   }
+  type PublicDiscoveryQueries interface {
+    GetPublicDiscoverySnapshot(context.Context) (GetPublicDiscoverySnapshotRow, error)
+  }
   type PublicMutationQueries interface {
     PublicReadQueries
     LockPublicState(context.Context) (PublicState, error)
@@ -74,6 +77,7 @@ Step 2. Consumes existing resume/idempotency tables and `public.citext` mapping.
     DeleteResumePublicCAS(context.Context, DeleteResumePublicCASParams) (Resume, error)
   }
   var _ PublicMutationQueries = (*Queries)(nil)
+  var _ PublicDiscoveryQueries = (*Queries)(nil)
   ```
 
   SQL aliases and annotations must generate these names and Go types exactly; an

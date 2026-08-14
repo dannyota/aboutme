@@ -37,9 +37,10 @@ route adapters, and language-neutral goldens.
   func (o PublicOrigin) Resolve(path string) string
   ```
 
-  Compile `var _ store.PublicReadQueries = (*store.Queries)(nil)`; aggregate
-  handlers use its exact `GetPublicState` and `ListEligiblePublicSlugs`
-  signatures and no owner-list query.
+  Compile `var _ store.PublicDiscoveryQueries = (*store.Queries)(nil)`;
+  aggregate handlers use its exact `GetPublicDiscoverySnapshot` signature and no
+  owner-list query. That single generated statement reads the durable generation
+  and bytewise eligible-slug snapshot together.
 
   Use no owner schema type except the retained customization leaf.
 

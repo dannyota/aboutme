@@ -14,6 +14,12 @@ type PublicReadQueries interface {
 	ListEligiblePublicSlugs(context.Context) ([]string, error)
 }
 
+// PublicDiscoveryQueries reads the durable discovery generation and its
+// eligible slug set from one PostgreSQL statement.
+type PublicDiscoveryQueries interface {
+	GetPublicDiscoverySnapshot(context.Context) (GetPublicDiscoverySnapshotRow, error)
+}
+
 // PublicMutationQueries adds transaction-scoped publication mutation primitives.
 type PublicMutationQueries interface {
 	PublicReadQueries
@@ -29,3 +35,4 @@ type PublicMutationQueries interface {
 }
 
 var _ PublicMutationQueries = (*Queries)(nil)
+var _ PublicDiscoveryQueries = (*Queries)(nil)

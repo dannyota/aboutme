@@ -80,6 +80,37 @@ func createPublicStoreResume(
 	return id
 }
 
+func TestPublicDiscoverySnapshotReadsGenerationAndEligibleSlugsTogether(t *testing.T) {
+	ctx, _, tx, queries := newPublicStoreTx(t)
+	userID := createPublicStoreUser(ctx, t, tx)
+	if _, err := tx.Exec(ctx, `UPDATE public_state SET discovery_generation = 71 WHERE singleton = true`); err != nil {
+		t.Fatalf("set discovery generation: %v", err)
+	}
+	suffix := uuid.NewString()[:8]
+	first, second, hidden := "snap-z-"+suffix, "snap-a-"+suffix, "snap-h-"+suffix
+	createPublicStoreResume(ctx, t, tx, userID, &first, true, true)
+	createPublicStoreResume(ctx, t, tx, userID, &second, true, true)
+	createPublicStoreResume(ctx, t, tx, userID, &hidden, true, false)
+
+	snapshot, err := queries.GetPublicDiscoverySnapshot(ctx)
+	if err != nil {
+		t.Fatalf("GetPublicDiscoverySnapshot() error: %v", err)
+	}
+	if snapshot.DiscoveryGeneration != 71 {
+		t.Fatalf("generation = %d, want 71", snapshot.DiscoveryGeneration)
+	}
+	if !sort.StringsAreSorted(snapshot.Slugs) {
+		t.Fatalf("slugs are not bytewise sorted: %v", snapshot.Slugs)
+	}
+	eligible := map[string]bool{}
+	for _, slug := range snapshot.Slugs {
+		eligible[slug] = true
+	}
+	if !eligible[first] || !eligible[second] || eligible[hidden] {
+		t.Fatalf("slugs = %v, want %q and %q but not %q", snapshot.Slugs, first, second, hidden)
+	}
+}
+
 func requireNoRows(t *testing.T, err error) {
 	t.Helper()
 	if !errors.Is(err, pgx.ErrNoRows) {

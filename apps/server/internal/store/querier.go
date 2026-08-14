@@ -133,6 +133,9 @@ type Querier interface {
 	// arm take the row lock and return the existing row; user_id itself never
 	// appears in a SET clause.
 	GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, userID uuid.UUID) (IdempotencyUsage, error)
+	// The generation and eligible slug set are selected by one PostgreSQL
+	// statement so aggregate discovery admission cannot pair different commits.
+	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
 	GetPublicResumeByOwner(ctx context.Context, arg GetPublicResumeByOwnerParams) (Resume, error)
 	// Missing, never-published, private, renamed, and deleted rows all surface as
 	// pgx.ErrNoRows. Representation-specific flags are checked after this live
