@@ -450,3 +450,100 @@ SELECT EXISTS (
 INSERT INTO media_deletion_jobs (resume_id, object_key)
 VALUES ($1, $2)
 ON CONFLICT (object_key) DO NOTHING;
+
+-- name: GetPublicState :one
+SELECT singleton, discovery_generation
+FROM public_state
+WHERE singleton = true;
+
+-- name: LockPublicState :one
+SELECT singleton, discovery_generation
+FROM public_state
+WHERE singleton = true
+FOR UPDATE;
+
+-- name: AdvanceDiscoveryGeneration :one
+UPDATE public_state
+SET discovery_generation = discovery_generation + 1
+WHERE singleton = true
+RETURNING discovery_generation;
+
+-- name: GetPublicResumeBySlug :one
+-- Missing, never-published, private, renamed, and deleted rows all surface as
+-- pgx.ErrNoRows. Representation-specific flags are checked after this live
+-- gate without exposing a different lookup result.
+SELECT * FROM resumes
+WHERE slug = sqlc.arg(slug)::text AND live = true;
+
+-- name: GetPublicResumeByOwner :one
+SELECT * FROM resumes
+WHERE user_id = sqlc.arg(user_id)::uuid
+  AND id = sqlc.arg(id)::uuid;
+
+-- name: ListEligiblePublicSlugs :many
+-- Discovery bytes contain only eligible slugs in raw byte order. The
+-- COALESCE is unreachable under the predicate and gives sqlc a non-null Go
+-- string instead of a pointer.
+SELECT COALESCE(slug, '')::text AS slug
+FROM resumes
+WHERE slug IS NOT NULL AND live = true AND seo_geo_enabled = true
+ORDER BY slug COLLATE "C" ASC;
+
+-- name: LockSlugClaim :exec
+SELECT pg_advisory_xact_lock(
+  hashtextextended('aboutme.slug.v1:' || sqlc.arg(slug)::text, 0)
+);
+
+-- name: GetSlugClaim :one
+SELECT id FROM resumes WHERE slug = sqlc.arg(slug)::text;
+
+-- name: GetSlugTombstoneForUpdate :one
+SELECT * FROM slug_tombstones WHERE slug = $1 FOR UPDATE;
+
+-- name: ConsumeExpiredSlugTombstone :one
+DELETE FROM slug_tombstones
+WHERE slug = sqlc.arg(slug)::text
+  AND released_at + interval '180 days' <=
+      sqlc.arg(reusable_at)::timestamptz
+RETURNING id;
+
+-- name: InsertSlugTombstone :one
+INSERT INTO slug_tombstones (slug, released_by_user_id, released_at)
+VALUES (
+  sqlc.arg(slug)::text,
+  sqlc.narg(released_by_user_id)::uuid,
+  sqlc.arg(released_at)::timestamptz
+)
+RETURNING *;
+
+-- name: PublishResumeCAS :one
+WITH input AS (
+  SELECT
+    sqlc.arg(id)::uuid AS id,
+    sqlc.arg(user_id)::uuid AS user_id,
+    sqlc.arg(expected_revision)::bigint AS expected_revision,
+    sqlc.narg(slug)::text AS slug,
+    sqlc.arg(live)::boolean AS live,
+    sqlc.arg(download_enabled)::boolean AS download_enabled,
+    sqlc.arg(seo_geo_enabled)::boolean AS seo_geo_enabled,
+    sqlc.arg(updated_at)::timestamptz AS updated_at
+)
+UPDATE resumes AS resume
+SET slug = input.slug,
+    live = input.live,
+    download_enabled = input.download_enabled,
+    seo_geo_enabled = input.seo_geo_enabled,
+    revision = resume.revision + 1,
+    updated_at = input.updated_at
+FROM input
+WHERE resume.id = input.id
+  AND resume.user_id = input.user_id
+  AND resume.revision = input.expected_revision
+RETURNING resume.*;
+
+-- name: DeleteResumePublicCAS :one
+DELETE FROM resumes
+WHERE id = sqlc.arg(id)::uuid
+  AND user_id = sqlc.arg(user_id)::uuid
+  AND revision = sqlc.arg(expected_revision)::bigint
+RETURNING *;
