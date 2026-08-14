@@ -394,4 +394,14 @@ export default withNuxt(
       ],
     },
   },
+).append(
+  {
+    name: 'aboutme/public-source-unignore',
+    ignores: [
+      '!app/public',
+      '!app/public/**',
+      '!app/components/public',
+      '!app/components/public/**',
+    ],
+  },
 );

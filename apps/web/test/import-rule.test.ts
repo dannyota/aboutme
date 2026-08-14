@@ -228,3 +228,29 @@ new EventSource('/events');
     messages.filter(({ ruleId }) => ruleId !== null && taskRuleIds.has(ruleId)),
   ).toEqual([]);
 });
+
+test.each([
+  ['public client modules', 'app/public/__lint__/fixture.ts'],
+  [
+    'public resume components',
+    'app/components/public/__lint__/fixture.vue',
+  ],
+])('normal style rules cover %s', async (_name, filePath) => {
+  const code = filePath.endsWith('.vue')
+    ? '<script setup lang="ts">\nconst value="public"\n</script>\n'
+    : 'export const value="public"\n';
+  const messages = await lint(code, filePath);
+
+  expect(messages).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        ruleId: '@stylistic/quotes',
+        severity: 2,
+      }),
+      expect.objectContaining({
+        ruleId: '@stylistic/semi',
+        severity: 2,
+      }),
+    ]),
+  );
+});
