@@ -1,6 +1,6 @@
 # Phase 4 Editor Design
 
-Status: Approved product direction; implementation design pending review.
+Status: **Approved — ready for implementation planning.**
 
 ## Purpose
 
