@@ -79,6 +79,7 @@ const request = () => {
 describe('public Vue worker document', () => {
   it('uses Task 08 JSON-LD bytes and a complete titled document', async () => {
     const html = await renderPublicResume(request());
+    await expect(renderPublicResume(request())).resolves.toBe(html);
     expect(html).toContain(
       '<title>Ada &lt;&amp;&gt; Lovelace — Resume</title>',
     );
@@ -86,6 +87,13 @@ describe('public Vue worker document', () => {
       '<link rel="canonical" href="https://resume.example/ada1">',
     );
     expect(html).toContain('<main id="public-resume" data-revision="1">');
+    const skipLinks = html.match(
+      /<a href="#public-resume">Skip to content<\/a>/gu,
+    );
+    expect(skipLinks).toHaveLength(1);
+    expect(html).toContain(
+      '</head><body><a href="#public-resume">Skip to content</a><main ',
+    );
     expect(html).toContain('/_nuxt/assets/public-resume.mjs');
     expect(html).toContain(
       '<script type="application/ld+json">'
