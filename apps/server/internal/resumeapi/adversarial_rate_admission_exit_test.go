@@ -136,7 +136,10 @@ func TestRateLimitsHold(t *testing.T) {
 				req = req.WithContext(ctx)
 				recorder := httptest.NewRecorder()
 				limited.ServeHTTP(recorder, req)
-				body, _ := req.Body.(*exitRateAdmissionBody)
+				body, ok := req.Body.(*exitRateAdmissionBody)
+				if !ok {
+					t.Fatalf("request body type = %T, want *exitRateAdmissionBody", req.Body)
+				}
 				return recorder, body
 			}
 
@@ -241,6 +244,7 @@ func (b *exitRateAdmissionBackend) Put(ctx context.Context, key, contentType str
 }
 
 func TestMediaAdmissionAndCleanup(t *testing.T) {
+	assertPhotoPutDeadlineAuthority(t)
 	originalAdmission := taskPhotoAdmission
 	t.Cleanup(func() { taskPhotoAdmission = originalAdmission })
 
@@ -258,7 +262,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		taskPhotoAdmission = media.NewPhotoAdmission()
 
 		before := snapshotPhotoUploadState(t, h, created.ID)
-		response := exitRateAdmissionUpload(t, h, context.Background(), created.ID, created.Revision,
+		response := exitRateAdmissionUpload(context.Background(), t, h, created.ID, created.Revision,
 			makePhotoPNG(t), &photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()})
 		events.add("response")
 		if response.status != http.StatusInternalServerError {
@@ -270,8 +274,9 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 			t.Fatal("object Put context has no deadline")
 		}
 		remaining := time.Until(deadline)
-		if remaining < 4*time.Second || remaining > photoPutTimeout+time.Second {
-			t.Fatalf("object Put deadline remaining = %v, want about %v", remaining, photoPutTimeout)
+		const deadlineJitter = 500 * time.Millisecond
+		if remaining < requiredPhotoPutTimeout-deadlineJitter || remaining > requiredPhotoPutTimeout+deadlineJitter {
+			t.Fatalf("object Put deadline remaining = %v, want %v (+/-%v)", remaining, requiredPhotoPutTimeout, deadlineJitter)
 		}
 		if got := events.snapshot(); fmt.Sprint(got) != "[normalized put-start put-end response]" {
 			t.Fatalf("synchronous event order = %v", got)
@@ -295,7 +300,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		payload, contentType := exitRateAdmissionMultipart(t, makePhotoPNG(t))
 		recorder := &photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
-		req := exitRateAdmissionRequest(t, h, ctx, created.ID, created.Revision, payload, contentType)
+		req := exitRateAdmissionRequest(ctx, t, h, created.ID, created.Revision, payload, contentType)
 		done := make(chan struct{})
 		go func() {
 			h.handler.ServeHTTP(recorder, req)
@@ -356,7 +361,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 			if test.plainRecorder {
 				recorder = httptest.NewRecorder()
 			}
-			response := exitRateAdmissionUploadRaw(t, h, context.Background(), created.ID, created.Revision,
+			response := exitRateAdmissionUploadRaw(context.Background(), t, h, created.ID, created.Revision,
 				test.payload, test.contentType, recorder)
 			if response.status != test.wantStatus {
 				t.Fatalf("response = %d body=%s, want %d", response.status, response.body, test.wantStatus)
@@ -380,7 +385,7 @@ func TestMediaAdmissionAndCleanup(t *testing.T) {
 		h.service.photoNormalizationDuration = func(time.Duration) { events.add("normalized") }
 		taskPhotoAdmission = media.NewPhotoAdmission()
 
-		response := exitRateAdmissionUpload(t, h, context.Background(), created.ID, created.Revision,
+		response := exitRateAdmissionUpload(context.Background(), t, h, created.ID, created.Revision,
 			makePhotoPNG(t), &photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()})
 		events.add("response")
 		if response.status != http.StatusOK {
@@ -407,12 +412,21 @@ func assertExitPhotoPermitFree(t *testing.T) {
 	release()
 }
 
-func exitRateAdmissionUpload(t *testing.T, h *resumeAPITestHarness, ctx context.Context,
+const requiredPhotoPutTimeout = 5 * time.Second
+
+func assertPhotoPutDeadlineAuthority(t *testing.T) {
+	t.Helper()
+	if photoPutTimeout != requiredPhotoPutTimeout {
+		t.Fatalf("production photo Put timeout = %v, Task 11 requires %v", photoPutTimeout, requiredPhotoPutTimeout)
+	}
+}
+
+func exitRateAdmissionUpload(ctx context.Context, t *testing.T, h *resumeAPITestHarness,
 	id uuid.UUID, revision int64, payload []byte, recorder http.ResponseWriter,
 ) testHTTPResponse {
 	t.Helper()
 	body, contentType := exitRateAdmissionMultipart(t, payload)
-	return exitRateAdmissionUploadRaw(t, h, ctx, id, revision, body, contentType, recorder)
+	return exitRateAdmissionUploadRaw(ctx, t, h, id, revision, body, contentType, recorder)
 }
 
 func exitRateAdmissionMultipart(t *testing.T, payload []byte) ([]byte, string) {
@@ -428,7 +442,7 @@ func exitRateAdmissionMultipart(t *testing.T, payload []byte) ([]byte, string) {
 	})
 }
 
-func exitRateAdmissionRequest(t *testing.T, h *resumeAPITestHarness, ctx context.Context,
+func exitRateAdmissionRequest(ctx context.Context, t *testing.T, h *resumeAPITestHarness,
 	id uuid.UUID, revision int64, body []byte, contentType string,
 ) *http.Request {
 	t.Helper()
@@ -443,7 +457,7 @@ func exitRateAdmissionRequest(t *testing.T, h *resumeAPITestHarness, ctx context
 	return req
 }
 
-func exitRateAdmissionUploadRaw(t *testing.T, h *resumeAPITestHarness, ctx context.Context,
+func exitRateAdmissionUploadRaw(ctx context.Context, t *testing.T, h *resumeAPITestHarness,
 	id uuid.UUID, revision int64, body []byte, contentType string, recorder http.ResponseWriter,
 ) testHTTPResponse {
 	t.Helper()
@@ -463,11 +477,12 @@ func exitRateAdmissionUploadRaw(t *testing.T, h *resumeAPITestHarness, ctx conte
 		body = wrapped.Bytes()
 		contentType = writer.FormDataContentType()
 	}
-	req := exitRateAdmissionRequest(t, h, ctx, id, revision, body, contentType)
+	req := exitRateAdmissionRequest(ctx, t, h, id, revision, body, contentType)
 	h.handler.ServeHTTP(recorder, req)
 	resultRecorder, ok := recorder.(interface{ Result() *http.Response })
 	if !ok {
 		t.Fatalf("recorder %T does not expose a response", recorder)
 	}
-	return snapshotHTTPResponse(t, resultRecorder.Result())
+	response := resultRecorder.Result() //nolint:bodyclose // snapshotHTTPResponse closes the synthetic response body.
+	return snapshotHTTPResponse(t, response)
 }

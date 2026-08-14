@@ -13,12 +13,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -117,6 +119,61 @@ type photoUploadState struct {
 	objects []string
 }
 
+type photoMultipartAuthority struct {
+	requestBytes  int64
+	fileBytes     int
+	filenameBytes int
+}
+
+func assertPhotoMultipartAuthorityCompleteness(t *testing.T) photoMultipartAuthority {
+	t.Helper()
+	budgets, err := os.ReadFile("../../../../docs/plans/budgets.md")
+	if err != nil {
+		t.Fatalf("read photo budget authority: %v", err)
+	}
+	authority := photoMultipartAuthority{
+		requestBytes:  int64(boundsBudget(t, budgets, "Resume photo multipart body", "bytes")),
+		fileBytes:     boundsBudget(t, budgets, "Resume photo file / normalized object", "bytes"),
+		filenameBytes: 255,
+	}
+	if photoRequestBytes != authority.requestBytes {
+		t.Fatalf("production photo request limit = %d, budgets.md requires %d", photoRequestBytes, authority.requestBytes)
+	}
+	if photoFileBytes != authority.fileBytes {
+		t.Fatalf("production photo file limit = %d, budgets.md requires %d", photoFileBytes, authority.fileBytes)
+	}
+	if photoFilenameBytes != authority.filenameBytes {
+		t.Fatalf("production photo filename limit = %d, Task 11 requires %d UTF-8 bytes", photoFilenameBytes, authority.filenameBytes)
+	}
+	return authority
+}
+
+func assertPhotoMultipartBoundaryCompleteness(t *testing.T, authority photoMultipartAuthority,
+	exercised map[string]int64,
+) {
+	t.Helper()
+	want := map[string]int64{
+		"request/exact":          authority.requestBytes,
+		"request/plus-one":       authority.requestBytes + 1,
+		"file/exact":             int64(authority.fileBytes),
+		"file/plus-one":          int64(authority.fileBytes + 1),
+		"filename-utf8/exact":    int64(authority.filenameBytes),
+		"filename-utf8/plus-one": int64(authority.filenameBytes + 1),
+	}
+	if !reflect.DeepEqual(exercised, want) {
+		t.Fatalf("photo multipart authority inventory mismatch:\n got=%v\nwant=%v", exercised, want)
+	}
+}
+
+const requiredPhotoReadTimeout = 60 * time.Second
+
+func assertPhotoReadDeadlineAuthority(t *testing.T) {
+	t.Helper()
+	if photoReadTimeout != requiredPhotoReadTimeout {
+		t.Fatalf("production photo read timeout = %v, Task 11 requires %v", photoReadTimeout, requiredPhotoReadTimeout)
+	}
+}
+
 var photoDirectIPCounter atomic.Uint32
 
 func setUniquePhotoDirectRemoteAddr(req *http.Request) {
@@ -202,6 +259,7 @@ func (b *orphanSweepBackend) deleteSnapshot() []orphanSweepDelete {
 }
 
 func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
+	authority := assertPhotoMultipartAuthorityCompleteness(t)
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)
 	pngPayload := makePhotoPNG(t)
@@ -265,8 +323,18 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+	filenameAtLimit := strings.Repeat("é", 125) + "a.png"
+	filenameOverLimit := strings.Repeat("é", 126) + ".png"
+	if len([]byte(filenameAtLimit)) != authority.filenameBytes || utf8.RuneCountInString(filenameAtLimit) == len([]byte(filenameAtLimit)) {
+		t.Fatalf("filename-at-limit bytes=%d runes=%d, want %d UTF-8 bytes with a distinct rune count",
+			len([]byte(filenameAtLimit)), utf8.RuneCountInString(filenameAtLimit), authority.filenameBytes)
+	}
+	if len([]byte(filenameOverLimit)) != authority.filenameBytes+1 || utf8.RuneCountInString(filenameOverLimit) == len([]byte(filenameOverLimit)) {
+		t.Fatalf("filename-over-limit bytes=%d runes=%d, want %d UTF-8 bytes with a distinct rune count",
+			len([]byte(filenameOverLimit)), utf8.RuneCountInString(filenameOverLimit), authority.filenameBytes+1)
+	}
 	filename256, filename256Type := photoMultipartBody(t, func(writer *multipart.Writer) {
-		part, err := writer.CreateFormFile("file", strings.Repeat("a", 252)+".png")
+		part, err := writer.CreateFormFile("file", filenameOverLimit)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -279,12 +347,12 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := part.Write(bytes.Repeat([]byte{'x'}, photoFileBytes+1)); err != nil {
+		if _, err := part.Write(bytes.Repeat([]byte{'x'}, authority.fileBytes+1)); err != nil {
 			t.Fatal(err)
 		}
 	})
 	requestOverflow := append(append([]byte(nil), valid...),
-		bytes.Repeat([]byte{'x'}, int(photoRequestBytes+1)-len(valid))...)
+		bytes.Repeat([]byte{'x'}, int(authority.requestBytes+1)-len(valid))...)
 	exactRequestBody := func(size int64) []byte {
 		const prefix = "--b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.bin\"\r\nX-Pad: "
 		const suffix = "\r\n\r\nx\r\n--b--\r\n"
@@ -305,10 +373,18 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 			}
 		})
 	}
-	exactFile, exactFileType := exactFileBody(photoFileBytes)
-	fileLimitPlusOne, fileLimitPlusOneType := exactFileBody(photoFileBytes + 1)
-	exactRequest := exactRequestBody(photoRequestBytes)
-	requestLimitPlusOne := exactRequestBody(photoRequestBytes + 1)
+	exactFile, exactFileType := exactFileBody(authority.fileBytes)
+	fileLimitPlusOne, fileLimitPlusOneType := exactFileBody(authority.fileBytes + 1)
+	exactRequest := exactRequestBody(authority.requestBytes)
+	requestLimitPlusOne := exactRequestBody(authority.requestBytes + 1)
+	assertPhotoMultipartBoundaryCompleteness(t, authority, map[string]int64{
+		"request/exact":          int64(len(exactRequest)),
+		"request/plus-one":       int64(len(requestLimitPlusOne)),
+		"file/exact":             int64(authority.fileBytes),
+		"file/plus-one":          int64(authority.fileBytes + 1),
+		"filename-utf8/exact":    int64(len([]byte(filenameAtLimit))),
+		"filename-utf8/plus-one": int64(len([]byte(filenameOverLimit))),
+	})
 
 	for _, test := range []struct {
 		name          string
@@ -355,7 +431,7 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 		admittedHarness := newResumeAPITestHarness(t)
 		resume := admittedHarness.createResume(t)
 		body, contentType := photoMultipartBody(t, func(writer *multipart.Writer) {
-			part, err := writer.CreateFormFile("file", strings.Repeat("a", 251)+".png")
+			part, err := writer.CreateFormFile("file", filenameAtLimit)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -393,6 +469,7 @@ func TestPhotoMultipartBoundaryRealHandler(t *testing.T) {
 }
 
 func TestPhotoStreamingReadDeadlinePrecedesBodyRead(t *testing.T) {
+	assertPhotoReadDeadlineAuthority(t)
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)
 	recorder := &photoDeadlineRecorder{ResponseRecorder: httptest.NewRecorder()}
@@ -415,8 +492,9 @@ func TestPhotoStreamingReadDeadlinePrecedesBodyRead(t *testing.T) {
 		t.Fatalf("deadline set=%v body read=%v, want deadline before read", recorder.deadlineSet.Load(), body.read.Load())
 	}
 	remaining := recorder.deadline.Sub(started)
-	if remaining < photoReadTimeout-time.Second || remaining > photoReadTimeout+time.Second {
-		t.Fatalf("read deadline = %v after start, want %v", remaining, photoReadTimeout)
+	const deadlineJitter = time.Second
+	if remaining < requiredPhotoReadTimeout-deadlineJitter || remaining > requiredPhotoReadTimeout+deadlineJitter {
+		t.Fatalf("read deadline = %v after start, want %v (+/-%v)", remaining, requiredPhotoReadTimeout, deadlineJitter)
 	}
 }
 
@@ -774,10 +852,10 @@ func TestMediaOrphans(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	req, err := http.NewRequestWithContext(h.ctx, http.MethodPost,
+	req, requestErr := http.NewRequestWithContext(h.ctx, http.MethodPost,
 		h.server.URL+fmt.Sprintf("/api/v1/resumes/%s/photo", created.ID), bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
+	if requestErr != nil {
+		t.Fatal(requestErr)
 	}
 	req.AddCookie(h.cookie)
 	req.Header.Set("Origin", resumeAPITestOrigin)
@@ -791,7 +869,7 @@ func TestMediaOrphans(t *testing.T) {
 	}
 	responseCh := make(chan requestResult, 1)
 	go func() {
-		response, requestErr := h.client.Do(req)
+		response, requestErr := h.client.Do(req) //nolint:bodyclose // The receiving goroutine closes this response body.
 		responseCh <- requestResult{response: response, err: requestErr}
 	}()
 
@@ -799,7 +877,9 @@ func TestMediaOrphans(t *testing.T) {
 	case <-pausedBeforeExecute:
 	case result := <-responseCh:
 		if result.response != nil {
-			_ = result.response.Body.Close()
+			if closeErr := result.response.Body.Close(); closeErr != nil {
+				t.Fatalf("close early upload response: %v", closeErr)
+			}
 		}
 		t.Fatalf("upload returned before candidate pause: %v", result.err)
 	case <-time.After(10 * time.Second):
@@ -812,18 +892,18 @@ func TestMediaOrphans(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("proved-created candidate key was not recorded")
 	}
-	objects, _, err := backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
-	if err != nil || len(objects) != 1 || objects[0].Key != candidateKey {
-		t.Fatalf("candidate before sweep = %#v err=%v, want only %q", objects, err, candidateKey)
+	objects, _, listErr := backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
+	if listErr != nil || len(objects) != 1 || objects[0].Key != candidateKey {
+		t.Fatalf("candidate before sweep = %#v err=%v, want only %q", objects, listErr, candidateKey)
 	}
 
 	clockNow = sweepAt
 	if err := backend.Delete(h.ctx, candidateKey); err != nil {
 		t.Fatalf("simulate orphan sweep delete: %v", err)
 	}
-	objects, _, err = backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
-	if err != nil || len(objects) != 0 {
-		t.Fatalf("objects after sweep = %#v err=%v, want none", objects, err)
+	objects, _, listErr = backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
+	if listErr != nil || len(objects) != 0 {
+		t.Fatalf("objects after sweep = %#v err=%v, want none", objects, listErr)
 	}
 	resumeOnce.Do(func() { close(resumeExecution) })
 
@@ -841,9 +921,9 @@ func TestMediaOrphans(t *testing.T) {
 		t.Fatalf("expired swept candidate response = %d body=%s", response.status, response.body)
 	}
 
-	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
-	if err != nil {
-		t.Fatal(err)
+	stored, getErr := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if getErr != nil {
+		t.Fatal(getErr)
 	}
 	if stored.Revision != created.Revision || stored.Doc.PersonalDetails.Photo != nil {
 		t.Fatalf("stored after sweep revision=%d photo=%#v", stored.Revision, stored.Doc.PersonalDetails.Photo)
@@ -858,9 +938,9 @@ func TestMediaOrphans(t *testing.T) {
 	if records != 0 || jobs != 0 {
 		t.Fatalf("database state after sweep records=%d deletion_jobs=%d, want zero", records, jobs)
 	}
-	objects, _, err = backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
-	if err != nil || len(objects) != 0 {
-		t.Fatalf("objects after resumed request = %#v err=%v, want none", objects, err)
+	objects, _, listErr = backend.ListPage(h.ctx, "resumes/"+created.ID.String()+"/", "", 10)
+	if listErr != nil || len(objects) != 0 {
+		t.Fatalf("objects after resumed request = %#v err=%v, want none", objects, listErr)
 	}
 	deletes := backend.deleteSnapshot()
 	if len(deletes) != 2 || deletes[0].key != candidateKey || deletes[0].err != nil ||

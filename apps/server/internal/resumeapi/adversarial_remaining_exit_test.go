@@ -281,7 +281,11 @@ func TestHeadersAndDeleteBodiesFailClosed(t *testing.T) {
 				if counter.counts() != (remainingIdempotencyCounts{}) {
 					t.Fatalf("%s %s reached idempotency inspection: %+v", operationID, bodyCase.name, counter.counts())
 				}
-				if bodyCase.mustNotRead && request.Body.(*remainingObservedBody).read.Load() {
+				observedBody, observed := request.Body.(*remainingObservedBody)
+				if bodyCase.mustNotRead && !observed {
+					t.Fatalf("%s body type = %T, want *remainingObservedBody", operationID, request.Body)
+				}
+				if bodyCase.mustNotRead && observedBody.read.Load() {
 					t.Fatalf("%s positive Content-Length body was read", operationID)
 				}
 				assertRemainingExitState(t, h, fixture.resume.ID, before)
@@ -506,8 +510,8 @@ func newRemainingFixture(t *testing.T, h *resumeAPITestHarness) remainingFixture
 		t.Fatalf("seed adversarial photo object = (%v, %v), want PutCreated", outcome, err)
 	}
 	document.PersonalDetails.Photo = &schema.Photo{Key: photoKey}
-	if _, err := h.resumes.SaveDocument(h.ctx, h.userID, created.ID, document, created.Revision); err != nil {
-		t.Fatalf("attach adversarial photo: %v", err)
+	if _, saveErr := h.resumes.SaveDocument(h.ctx, h.userID, created.ID, document, created.Revision); saveErr != nil {
+		t.Fatalf("attach adversarial photo: %v", saveErr)
 	}
 	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
 	if err != nil {
