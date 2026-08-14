@@ -21,7 +21,8 @@ function sanitizerTag(tag: string): string {
 
 function allowedHref(value: string): boolean {
   const match = /^([a-z][a-z0-9+.-]*):/.exec(value);
-  return match !== null && allowedSchemes.has(match[1]);
+  const scheme = match?.[1];
+  return scheme !== undefined && allowedSchemes.has(scheme);
 }
 
 function linkAttributes(
