@@ -29,6 +29,9 @@ export type FieldIntent<T> =
 
 Controls emit intent, not API payloads. `PersonalDetailsPanel` converts intent
 to Task 01 `AtomicCommandIntent` and calls Task 05 `ResumeEditorActions.edit`.
+New contact IDs come only from `ResumeEditorActions.createEntityId()`, which
+delegates to the injected editor runtime. Forms do not receive a runtime or UUID
+callback.
 
 - [ ] **Step 1: Write the shared field/date RED test**
 
@@ -97,8 +100,8 @@ it("captures ordered contact edits through the action boundary", async () => {
 ```
 
 Add assertions for fullName/headline, immutable IDs, set/clear/unset, all
-contact types, lowercase `https://` for web profiles, issues, and one injected
-UUID.
+contact types, lowercase `https://` for web profiles, issues, and exactly one
+`actions.createEntityId()` call.
 
 - [ ] **Step 6: Run the personal/contact test RED**
 

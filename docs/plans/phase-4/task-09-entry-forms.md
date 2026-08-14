@@ -26,7 +26,9 @@ entry unions, Task 07 rich text, Task 08 shared fields, and D5/D12/D17.
 Every entry component accepts its generated entry type and emits Task 08
 `FieldIntent`; the panel sends Task 01 intents through Task 05
 `ResumeEditorActions.edit`. No component calls transport, structure, template,
-or renderer modules.
+or renderer modules. `SectionPanel` receives `sectionKey` separately because the
+generated `Section` value has no key member. New entry IDs come only from
+`ResumeEditorActions.createEntityId()`; forms do not receive the editor runtime.
 
 - [ ] **Step 1: Write the all-eight shape RED test**
 
@@ -53,7 +55,6 @@ const actionsSpy = () =>
   };
 const sectionFixture = (sectionType: Section["sectionType"]): Section =>
   ({
-    key: `${sectionType}-section`,
     sectionType,
     entries: [{ id: "entry-1" }],
   }) as Section;
@@ -94,7 +95,11 @@ const cases = [
 ] as const;
 it.each(cases)("renders only %s fields", (sectionType, fields) => {
   const wrapper = mount(SectionPanel, {
-    props: { section: sectionFixture(sectionType), actions: actionsSpy() },
+    props: {
+      sectionKey: `${sectionType}-section`,
+      section: sectionFixture(sectionType),
+      actions: actionsSpy(),
+    },
   });
   expect(
     wrapper
@@ -160,7 +165,11 @@ it.each(cases)(
   async (sectionType) => {
     const actions = actionsSpy();
     const wrapper = mount(SectionPanel, {
-      props: { section: sectionFixture(sectionType), actions },
+      props: {
+        sectionKey: `${sectionType}-section`,
+        section: sectionFixture(sectionType),
+        actions,
+      },
     });
     await wrapper.get('[data-action="add-entry"]').trigger("click");
     await wrapper.get("[data-entry-field]").setValue("");
@@ -191,13 +200,16 @@ reducer; leave payload serialization to Task 03.
 const add = () =>
   props.actions.edit({
     kind: "entryUpsert",
-    sectionKey: props.section.key,
-    entry: createEmptyEntry(props.section.sectionType, runtime.uuid()),
+    sectionKey: props.sectionKey,
+    entry: createEmptyEntry(
+      props.section.sectionType,
+      props.actions.createEntityId(),
+    ),
   });
 const edit = (entryId: string, path: EntryFieldPath, value: Presence) =>
   props.actions.edit({
     kind: "entryField",
-    sectionKey: props.section.key,
+    sectionKey: props.sectionKey,
     entryId,
     path,
     value,
@@ -205,7 +217,7 @@ const edit = (entryId: string, path: EntryFieldPath, value: Presence) =>
 const remove = (entryId: string) =>
   props.actions.edit({
     kind: "entryDelete",
-    sectionKey: props.section.key,
+    sectionKey: props.sectionKey,
     entryId,
   });
 ```
