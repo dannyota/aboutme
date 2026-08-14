@@ -38,7 +38,7 @@ func (op personalDetailsMutation) Run(ctx context.Context, qtx *store.Queries, m
 	if !ok || input.Response == nil || mutation.ExpectedRevision == nil {
 		return mutationRunResult{}, fmt.Errorf("resumeapi: personal-details mutation received the wrong prepared input")
 	}
-	current, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
+	current, err := op.service.currentMutationResume(ctx, qtx, mutation, input.ResumeID)
 	if err != nil {
 		return mutationRunResult{}, err
 	}
@@ -110,7 +110,8 @@ func (s *Service) handleUpdateResumePersonalDetails(w http.ResponseWriter, r *ht
 				Response: s.resumeResponseBuilder(http.StatusOK, false),
 			}}, nil
 		},
-		Run: personalDetailsMutation{service: s},
+		Run:        personalDetailsMutation{service: s},
+		Transition: s.nonDrainingTransition,
 	}
 	s.executeMutation(w, r, spec)
 }

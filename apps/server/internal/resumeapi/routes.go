@@ -18,6 +18,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -39,6 +40,11 @@ type Options struct {
 	PhotoKeyInvariant          func()
 	PhotoRandom                io.Reader
 	PhotoNormalizationDuration func(time.Duration)
+	// Coordinator is the shared public-generation coordinator. Composition
+	// initializes it from durable public_state before serving mutations.
+	Coordinator *publicstate.Coordinator
+	// RecoveryPool opens an independent connection for ambiguous outcomes.
+	RecoveryPool *store.Pool
 }
 
 // Service owns the authenticated resume HTTP surface and its write-safety
@@ -59,6 +65,11 @@ type Service struct {
 	photoKeyInvariant          func()
 	photoRandom                io.Reader
 	photoNormalizationDuration func(time.Duration)
+	coordinator                *publicstate.Coordinator
+	recoveryPool               *store.Pool
+	slugAttempts               slugAttemptLimiter
+	transactionOrderHook       func(string)
+	publishPreflightOrderHook  func(string)
 }
 
 type resumeBoundary interface {
@@ -71,6 +82,7 @@ type resumeBoundary interface {
 
 type idempotencyBoundary interface {
 	Inspect(context.Context, uuid.UUID, string, uuid.UUID, [32]byte) (resume.StoredResponse, bool, error)
+	Recheck(context.Context, uuid.UUID, string, uuid.UUID, [32]byte) (resume.RecheckResult, error)
 	Execute(context.Context, uuid.UUID, string, uuid.UUID, [32]byte,
 		func(*store.Queries) (resume.StoredResponse, error)) (resume.ExecuteResult, error)
 }
@@ -99,6 +111,7 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 			defaultPhotoNormalizationNanoseconds.Add(uint64(max(elapsed.Nanoseconds(), 0)))
 		}
 	}
+	limiter := slugAttemptLimiter(newSlugAttemptLimiter())
 	return &Service{
 		resumes: store, idempotency: idem, projector: proj, blobs: blobs,
 		logger: opts.Logger, sessions: opts.SessionManager,
@@ -108,6 +121,9 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 		photoKeyInvariant:          opts.PhotoKeyInvariant,
 		photoRandom:                opts.PhotoRandom,
 		photoNormalizationDuration: opts.PhotoNormalizationDuration,
+		coordinator:                opts.Coordinator,
+		recoveryPool:               opts.RecoveryPool,
+		slugAttempts:               limiter,
 	}
 }
 

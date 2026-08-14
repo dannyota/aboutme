@@ -205,33 +205,15 @@ func TestMutationOperationsPersistOnlyCompleteDocuments(t *testing.T) {
 	}
 }
 
-func TestDeleteOperationUsesDeleteOnlyAndRunsHookAfterDelete(t *testing.T) {
-	t.Parallel()
-
-	userID := uuid.New()
-	resumeID := uuid.New()
-	expected := int64(4)
-	spy := &operationStoreSpy{deleted: resume.Resume{ID: resumeID, UserID: userID, Revision: expected, Doc: loadMinimalDocument(t)}}
-	service := &Service{resumes: documentAwareOperationStore{operationStoreSpy: spy}}
-	hookErr := errors.New("deletion job failed")
-	_, err := (deleteOperation{service: service}).Run(context.Background(), nil, mutationContext{
-		UserID: userID, ExpectedRevision: &expected, WireVersion: docmigrate.CurrentVersion,
-	}, preparedInput{Value: deletePreparedInput{
-		ResumeID: resumeID,
-		BeforeDelete: func(context.Context, *store.Queries, resume.Resume) error {
-			spy.calls = append(spy.calls, "deletion-job")
-			return hookErr
-		},
-		Response: operationResponse,
-	}})
-	if !errors.Is(err, hookErr) {
-		t.Fatalf("error = %v, want deletion job error", err)
+func TestDeleteOperationUsesPublicCAS(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	response := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision, uuid.NewString())
+	if response.status != http.StatusNoContent || len(response.body) != 0 {
+		t.Fatalf("delete response = %d body=%q, want bodyless 204", response.status, response.body)
 	}
-	if !reflect.DeepEqual(spy.calls, []string{"delete", "deletion-job"}) {
-		t.Fatalf("calls = %v, want delete then deletion-job", spy.calls)
-	}
-	if spy.completeWrites != 0 {
-		t.Fatalf("complete document writes = %d, want none", spy.completeWrites)
+	if _, err := h.resumes.Get(h.ctx, h.userID, created.ID); !errors.Is(err, resume.ErrNotFound) {
+		t.Fatalf("deleted resume lookup error = %v, want resume.ErrNotFound", err)
 	}
 }
 

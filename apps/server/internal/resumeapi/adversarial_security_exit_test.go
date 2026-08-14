@@ -656,6 +656,12 @@ func (i *securityExitCountingIdempotency) Inspect(ctx context.Context, userID uu
 	return i.delegate.Inspect(ctx, userID, operation, key, fingerprint)
 }
 
+func (i *securityExitCountingIdempotency) Recheck(ctx context.Context, userID uuid.UUID,
+	operation string, key uuid.UUID, fingerprint [32]byte,
+) (resume.RecheckResult, error) {
+	return i.delegate.Recheck(ctx, userID, operation, key, fingerprint)
+}
+
 func (i *securityExitCountingIdempotency) Execute(ctx context.Context, userID uuid.UUID,
 	operation string, key uuid.UUID, fingerprint [32]byte,
 	run func(*store.Queries) (resume.StoredResponse, error),

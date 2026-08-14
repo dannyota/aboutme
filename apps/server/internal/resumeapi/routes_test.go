@@ -23,8 +23,8 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 	t.Parallel()
 
 	routes := registeredRoutes()
-	if len(routes) != 15 {
-		t.Fatalf("registered route count = %d, want 15", len(routes))
+	if len(routes) != 16 {
+		t.Fatalf("registered route count = %d, want 16", len(routes))
 	}
 	mutations := 0
 	var got []string
@@ -34,13 +34,14 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 			mutations++
 		}
 	}
-	if mutations != 12 {
-		t.Fatalf("mutation route count = %d, want 12", mutations)
+	if mutations != 13 {
+		t.Fatalf("mutation route count = %d, want 13", mutations)
 	}
 	sort.Strings(got)
 	want := []string{
 		http.MethodGet + " /api/v1/resumes",
 		http.MethodPost + " /api/v1/resumes",
+		http.MethodPost + " /api/v1/resumes/{id}/publish",
 		http.MethodDelete + " /api/v1/resumes/{id}",
 		http.MethodGet + " /api/v1/resumes/{id}",
 		http.MethodPatch + " /api/v1/resumes/{id}",
@@ -86,6 +87,7 @@ func TestEveryMutationRegistersExactlyOneConcreteOperation(t *testing.T) {
 		"createResume":                operationCreate,
 		"updateResumeMetadata":        operationMetadata,
 		"deleteResume":                operationDelete,
+		"publishResume":               operationPublish,
 		"upsertResumeEntry":           operationAggregate,
 		"deleteResumeEntry":           operationAggregate,
 		"updateResumeSection":         operationAggregate,

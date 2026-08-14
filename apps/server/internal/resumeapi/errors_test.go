@@ -164,7 +164,7 @@ func TestDetailsVocabularyIsExactlyD7(t *testing.T) {
 
 	want := map[string]struct{}{
 		"document_invalid": {}, "revision_mismatch": {}, "unsupported_schema_version": {},
-		"media_invalid": {},
+		"media_invalid": {}, "publish_invalid": {},
 	}
 	if !reflect.DeepEqual(detailsErrorVocabulary, want) {
 		t.Fatalf("details vocabulary = %#v, want %#v", detailsErrorVocabulary, want)

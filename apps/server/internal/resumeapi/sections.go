@@ -197,5 +197,6 @@ func (s *Service) handleUpdateResumeSection(w http.ResponseWriter, r *http.Reque
 		CanonicalTargets:    sectionCanonicalTargets,
 		Prepare:             s.prepareSectionMutation,
 		Run:                 aggregateOperation{service: s},
+		Transition:          s.nonDrainingTransition,
 	})
 }
