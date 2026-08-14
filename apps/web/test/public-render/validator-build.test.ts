@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -19,6 +19,14 @@ afterEach(() => {
 });
 
 describe('public resume validator build', () => {
+  it('prepares Nuxt types before a development worker build', () => {
+    const packageJSON = JSON.parse(
+      readFileSync(join(process.cwd(), 'package.json'), 'utf8'),
+    ) as { scripts?: Record<string, unknown> };
+
+    expect(packageJSON.scripts?.dev).toBe('nuxt prepare && nuxt dev');
+  });
+
   it('loads as native ESM without a CommonJS runtime', async () => {
     const directory = mkdtempSync(
       join(process.cwd(), '.nuxt/validator-test-'),
