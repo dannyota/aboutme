@@ -10,10 +10,21 @@ behavior that future contract changes must implement.
 - JSON success uses `{data: ...}`. Declared binary photo and PDF reads return
   their bytes directly. Failure uses `{error:{code,message,details?}}`;
   `details` is optional and structured per error code.
-- Authenticated API responses use `Cache-Control: no-store`. Public JSON uses
-  `no-cache, must-revalidate` with a strong entity tag (ETag).
+- Authenticated API responses use exact `Cache-Control: no-store, no-transform`.
+  Public responses use `no-cache, must-revalidate` with a strong entity tag
+  (ETag).
 - Resume revisions are signed 64-bit integers but serialize as decimal strings.
-  ETags and `If-Match` use the form `"r<revision>"`.
+  Authenticated resume resource ETags and `If-Match` use the form
+  `"r<revision>"`. Caddy does not encode or alter these responses. Route-parity
+  tests prove that an owner read with `Accept-Encoding` still returns exact
+  `"r<revision>"` and that a later exact `If-Match` reaches Go unchanged.
+- A successful public response that carries a strong ETag uses the quoted
+  64-character lowercase hexadecimal SHA-256 digest of its exact unencoded
+  selected body. The applicable live-state or discovery gate runs before cache
+  selection, conditional comparison, or revalidation. Caddy owns the
+  encoding-specific strong-tag suffix and strips it before forwarding
+  `If-None-Match`; separate route-parity tests prove encoded public conditional
+  requests.
 - The optional `X-Resume-Schema-Version` request header declares the client's
   document version. Absence means current. Every response containing resume data
   names its emitted version in the same header.

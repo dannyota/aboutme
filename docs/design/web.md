@@ -136,6 +136,14 @@ corpus proves Go, client, public SSR, internal print SSR, and a real browser
 surface. See
 [Authentication and security](security.md#untrusted-document-content).
 
+Discoverable public HTML contains exactly one deterministic JSON-LD script. Its
+response keeps the Phase 3 Content Security Policy (CSP) and adds exactly one
+response-specific `'sha256-<base64>'` source for that script's exact UTF-8 text
+bytes. Go verifies the matching script and policy before sending success.
+Non-discoverable public HTML contains no JSON-LD and uses the exact Phase 3 base
+policy. A nonce, `'unsafe-inline'` in `script-src`, and any other inline script
+are forbidden.
+
 ## Pagination and print
 
 - Editor preview measures rendered entries and breaks at entry boundaries. It is
