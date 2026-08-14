@@ -103,6 +103,25 @@ type ExecuteResult struct {
 	Outcome  CommitOutcome
 }
 
+// RecheckDecision is the read-only idempotency decision a transition makes
+// after it owns its fence but before it closes public admission. Its values
+// are a closed producer contract for resumeapi: fresh can proceed to CAS,
+// replay returns Response, and reuse maps to the normal idempotency conflict.
+type RecheckDecision uint8
+
+const (
+	RecheckFresh RecheckDecision = iota
+	RecheckReplay
+	RecheckReuse
+)
+
+// RecheckResult is the outcome of a read-only serialized idempotency probe.
+// Response is populated only for RecheckReplay.
+type RecheckResult struct {
+	Decision RecheckDecision
+	Response StoredResponse
+}
+
 // ErrIdempotencyKeyReuse is returned by Execute and Inspect when key has
 // already been used, by this user for this operation, with a different
 // request hash: the caller reused an Idempotency-Key for a logically
@@ -146,6 +165,11 @@ type IdempotencyStore struct {
 	// pool begin and tx commit.
 	beginTx  func(ctx context.Context) (pgx.Tx, error)
 	commitTx func(ctx context.Context, tx pgx.Tx) error
+
+	// afterRecheckLock is test-only placement control. Production stores leave
+	// it nil; it lets a live-DB test prove Recheck's user lock bounds its
+	// read-only transaction without scheduling or sleeps.
+	afterRecheckLock func()
 }
 
 // NewIdempotencyStore builds an IdempotencyStore backed by pool, using the
@@ -180,24 +204,81 @@ func (s *IdempotencyStore) Inspect(ctx context.Context, userID uuid.UUID,
 	row, err := s.q.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 		UserID: userID, Route: operation, IdempotencyKey: key,
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return StoredResponse{}, false, nil
-	case err != nil:
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return StoredResponse{}, false, fmt.Errorf("resume: idempotency: inspect record: %w", err)
 	}
-	if !row.ExpiresAt.After(s.now()) {
-		// Expired: treated as fresh; Execute's own transaction deletes it.
-		return StoredResponse{}, false, nil
+	result, decisionErr := exactIdempotencyRecordDecision(row, err == nil, requestHash, s.now())
+	if decisionErr != nil {
+		return StoredResponse{}, false, decisionErr
 	}
-	if !bytes.Equal(row.RequestHash, requestHash[:]) {
+	if result.Decision == RecheckReuse {
 		return StoredResponse{}, false, ErrIdempotencyKeyReuse
 	}
-	resp, err := storedResponseFromRecord(row.ResponseStatus, row.ResponseBody, row.ResponseHeaders)
+	return result.Response, result.Decision == RecheckReplay, nil
+}
+
+// Recheck serializes one read-only idempotency decision with the normal user
+// lock. It is the transition seam, not a mutation authority: it does not clean
+// expired records, reserve usage, invoke a callback, or write a record.
+// Execute remains the final post-fence decision and transaction owner.
+func (s *IdempotencyStore) Recheck(ctx context.Context, userID uuid.UUID,
+	operation string, key uuid.UUID, requestHash [32]byte,
+) (RecheckResult, error) {
+	tx, err := s.begin(ctx)
 	if err != nil {
-		return StoredResponse{}, false, err
+		return RecheckResult{}, fmt.Errorf("resume: idempotency: begin recheck transaction: %w", err)
 	}
-	return resp, true, nil
+	committed := false
+	defer func() {
+		if !committed {
+			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				return
+			}
+		}
+	}()
+	qtx := s.q.WithTx(tx)
+
+	if _, err := qtx.LockUserForResumeWrite(ctx, userID); err != nil {
+		return RecheckResult{}, fmt.Errorf("resume: idempotency: recheck lock owner row: %w", err)
+	}
+	if s.afterRecheckLock != nil {
+		s.afterRecheckLock()
+	}
+	row, err := qtx.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
+		UserID: userID, Route: operation, IdempotencyKey: key,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return RecheckResult{}, fmt.Errorf("resume: idempotency: recheck record: %w", err)
+	}
+	result, err := exactIdempotencyRecordDecision(row, err == nil, requestHash, s.now())
+	if err != nil {
+		return RecheckResult{}, err
+	}
+	if err := s.commit(ctx, tx); err != nil {
+		return RecheckResult{}, fmt.Errorf("resume: idempotency: commit recheck transaction: %w", err)
+	}
+	committed = true
+	return result, nil
+}
+
+// exactIdempotencyRecordDecision is the single retained-record decision shared
+// by optimistic Inspect, serialized Recheck, and Execute's final decision.
+// Expiry means fresh here; only Execute deletes expired records and releases
+// their retained usage under its mutation transaction.
+func exactIdempotencyRecordDecision(row store.IdempotencyRecord, found bool,
+	requestHash [32]byte, now time.Time,
+) (RecheckResult, error) {
+	if !found || !row.ExpiresAt.After(now) {
+		return RecheckResult{Decision: RecheckFresh}, nil
+	}
+	if !bytes.Equal(row.RequestHash, requestHash[:]) {
+		return RecheckResult{Decision: RecheckReuse}, nil
+	}
+	response, err := storedResponseFromRecord(row.ResponseStatus, row.ResponseBody, row.ResponseHeaders)
+	if err != nil {
+		return RecheckResult{}, err
+	}
+	return RecheckResult{Decision: RecheckReplay, Response: response}, nil
 }
 
 // Execute ensures that only one transaction's database effects and response
@@ -284,25 +365,27 @@ func (s *IdempotencyStore) Execute(ctx context.Context, userID uuid.UUID,
 	existing, getErr := qtx.GetIdempotencyRecord(ctx, store.GetIdempotencyRecordParams{
 		UserID: userID, Route: operation, IdempotencyKey: key,
 	})
-	switch {
-	case getErr == nil:
-		if !bytes.Equal(existing.RequestHash, requestHash[:]) {
+	if getErr == nil {
+		decision, decisionErr := exactIdempotencyRecordDecision(existing, true, requestHash, now)
+		if decisionErr != nil {
+			return rolledBack(decisionErr)
+		}
+		switch decision.Decision {
+		case RecheckReuse:
 			return rolledBack(ErrIdempotencyKeyReuse)
+		case RecheckReplay:
+			// The replayed record is already durable; this transaction wrote
+			// nothing (a live record excludes the expired-key delete above), so
+			// its own commit result cannot change the replay.
+			if commitErr := s.commit(ctx, tx); commitErr == nil {
+				committed = true
+			}
+			return ExecuteResult{Response: decision.Response, Replayed: true, Outcome: CommitCommitted}, nil
+		case RecheckFresh:
+			// Execute has already removed an expired exact key; retain this
+			// branch as the helper's defensive full contract.
 		}
-		resp, respErr := storedResponseFromRecord(existing.ResponseStatus, existing.ResponseBody, existing.ResponseHeaders)
-		if respErr != nil {
-			return rolledBack(respErr)
-		}
-		// The replayed record is already durable; this transaction wrote
-		// nothing (a live record excludes the expired-key delete above), so
-		// its own commit result cannot change the replay.
-		if commitErr := s.commit(ctx, tx); commitErr == nil {
-			committed = true
-		}
-		return ExecuteResult{Response: resp, Replayed: true, Outcome: CommitCommitted}, nil
-	case errors.Is(getErr, pgx.ErrNoRows):
-		// No live record: fall through and run mutate.
-	default:
+	} else if !errors.Is(getErr, pgx.ErrNoRows) {
 		return rolledBack(fmt.Errorf("resume: idempotency: check existing record: %w", getErr))
 	}
 
