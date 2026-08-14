@@ -363,7 +363,8 @@ const resumeStore = defineStore('resumes', {
       const record = this.records.get(resumeId) as unknown as
         | ResumeRecord
         | undefined;
-      const active = record?.attempt;
+      if (record === undefined) return;
+      const active = record.attempt;
       if (
         active === null
         || active === undefined
