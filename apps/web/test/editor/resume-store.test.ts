@@ -525,6 +525,59 @@ describe('resume store adoption and teardown', () => {
     expect(store.saveStateFor(accepted.metadata.id)).toBe('dirty');
   });
 
+  it('adopts a validated same-revision complete read after a child ack', () => {
+    const { accepted, store } = initialized(withEntry(acceptedFixture({
+      revision: parseRevision('5'),
+    })));
+    const command = entryDeleteCommand(accepted);
+    const retained = titleCommand(accepted, 'Retained', 2, 'retained-1');
+    store.enqueue(accepted.metadata.id, command);
+    store.enqueue(accepted.metadata.id, retained);
+    store.startAttempt(
+      accepted.metadata.id,
+      command,
+      command,
+      attemptFor(command),
+    );
+    store.acknowledgeChild(
+      accepted.metadata.id,
+      command.id,
+      parentETag(parseRevision('6')),
+    );
+    store.dropHead(accepted.metadata.id, command.id);
+
+    const afterAck = store.recordFor(accepted.metadata.id)!;
+    const complete = {
+      ...structuredClone(toRaw(afterAck.accepted)),
+      metadata: {
+        ...structuredClone(toRaw(afterAck.accepted.metadata)),
+        title: 'Server title',
+      },
+      metadataFreshness: 'fresh' as const,
+    };
+    expect(
+      store.adoptCompleteRead(accepted.metadata.id, complete),
+    ).toMatchObject({ kind: 'adopted' });
+    expect(store.recordFor(accepted.metadata.id)!).toMatchObject({
+      accepted: {
+        revision: parseRevision('6'),
+        metadata: { title: 'Server title' },
+        metadataFreshness: 'fresh',
+      },
+      completeReadRequired: false,
+      pending: [retained],
+      current: { metadata: { title: 'Retained' } },
+    });
+
+    const older = acceptedFixture({ revision: parseRevision('5') });
+    expect(
+      store.adoptCompleteRead(accepted.metadata.id, older),
+    ).toMatchObject({ kind: 'older' });
+    expect(store.recordFor(accepted.metadata.id)!.accepted.revision).toBe(
+      parseRevision('6'),
+    );
+  });
+
   it('acknowledges photo delete without retaining ready data', () => {
     const { accepted, store } = initialized(withPhoto(acceptedFixture({
       revision: parseRevision('5'),
