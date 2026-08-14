@@ -166,11 +166,20 @@ func assertPhotoMultipartBoundaryCompleteness(t *testing.T, authority photoMulti
 }
 
 const requiredPhotoReadTimeout = 60 * time.Second
+const requiredPhotoCandidateLifetime = 5 * time.Minute
 
 func assertPhotoReadDeadlineAuthority(t *testing.T) {
 	t.Helper()
 	if photoReadTimeout != requiredPhotoReadTimeout {
 		t.Fatalf("production photo read timeout = %v, Task 11 requires %v", photoReadTimeout, requiredPhotoReadTimeout)
+	}
+}
+
+func assertPhotoCandidateLifetimeAuthority(t *testing.T) {
+	t.Helper()
+	if photoCandidateLifetime != requiredPhotoCandidateLifetime {
+		t.Fatalf("production photo candidate lifetime = %v, Task 11 requires %v",
+			photoCandidateLifetime, requiredPhotoCandidateLifetime)
 	}
 }
 
@@ -765,6 +774,7 @@ func TestPhotoUnknownPutStopsBeforeDatabaseAndNeverDeletes(t *testing.T) {
 }
 
 func TestPhotoExpiredCandidateNeverExecutesAndIsCompensated(t *testing.T) {
+	assertPhotoCandidateLifetimeAuthority(t)
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)
 	base := time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
@@ -781,7 +791,7 @@ func TestPhotoExpiredCandidateNeverExecutesAndIsCompensated(t *testing.T) {
 		if afterPutCalls == 1 {
 			return base
 		}
-		return base.Add(photoCandidateLifetime + time.Second)
+		return base.Add(requiredPhotoCandidateLifetime + time.Second)
 	}
 
 	response := h.uploadPhotoRequest(t, created.ID, created.Revision, uuid.NewString(), "photo.png", makePhotoPNG(t))
