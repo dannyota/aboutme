@@ -10,9 +10,39 @@ import { parse } from 'yaml';
 type Schema = Record<string, unknown>;
 
 const publicResumeRef = '#/components/schemas/PublicResume';
+const ucs2LengthRequire
+  = /const (\w+) = require\("ajv\/dist\/runtime\/ucs2length"\)\.default;/u;
+const uriFormatRequire
+  = /const (\w+) = require\("ajv-formats\/dist\/formats"\)\.fullFormats\.uri;/u;
 const openapiPath = fileURLToPath(
   new URL('../../../../../docs/api/openapi.yaml', import.meta.url),
 );
+
+const nativeESM = (source: string): string => {
+  if (!ucs2LengthRequire.test(source) || !uriFormatRequire.test(source)) {
+    throw new Error('PublicResume validator runtime helpers changed');
+  }
+  const output = source
+    .replace(
+      ucs2LengthRequire,
+      'const $1 = ucs2LengthRuntime;',
+    )
+    .replace(uriFormatRequire, 'const $1 = formatsRuntime.fullFormats.uri;');
+  if (/\brequire\(/u.test(output)) {
+    throw new Error(
+      'PublicResume validator contains an unsupported CommonJS helper',
+    );
+  }
+  return [
+    'import ucs2LengthModule from \'ajv/dist/runtime/ucs2length.js\';',
+    'import formatsModule from \'ajv-formats/dist/formats.js\';',
+    'const ucs2LengthRuntime = typeof ucs2LengthModule === \'function\'',
+    '  ? ucs2LengthModule : ucs2LengthModule.default;',
+    'const formatsRuntime = \'fullFormats\' in formatsModule',
+    '  ? formatsModule : formatsModule.default;',
+    output,
+  ].join('\n');
+};
 
 const refName = (reference: string): string => {
   const prefix = '#/components/schemas/';
@@ -93,7 +123,7 @@ export function buildPublicResumeValidator(buildDir: string): string {
   const validate = ajv.compile(schema);
   const output = resolve(buildDir, 'public-resume-validator.mjs');
   mkdirSync(buildDir, { recursive: true });
-  writeFileSync(output, standaloneCode(ajv, validate));
+  writeFileSync(output, nativeESM(standaloneCode(ajv, validate)));
   writeFileSync(
     resolve(buildDir, 'public-resume-validator.d.ts'),
     [
