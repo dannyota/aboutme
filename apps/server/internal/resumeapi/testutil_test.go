@@ -19,6 +19,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/media/mediatest"
+	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -78,6 +79,16 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 	idempotency := resume.NewIdempotencyStore(pool)
 	blobs := newResumeAPITestMediaBackend(ctx, t)
 	manager := auth.NewSessionManager(queries)
+	publicState, err := queries.GetPublicState(ctx)
+	if err != nil {
+		pool.Close(context.Background())
+		t.Fatalf("read public state: %v", err)
+	}
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: publicState.DiscoveryGeneration})
+	if err != nil {
+		pool.Close(context.Background())
+		t.Fatalf("create public coordinator: %v", err)
+	}
 
 	var suffix [12]byte
 	if _, randErr := rand.Read(suffix[:]); randErr != nil {
@@ -102,6 +113,8 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		SessionManager: manager,
 		PublicOrigin:   resumeAPITestOrigin,
+		Coordinator:    coordinator,
+		RecoveryPool:   pool,
 	})
 	handler := api.New(slog.New(slog.NewTextHandler(io.Discard, nil)), pool, api.Options{}, service.RegisterRoutes)
 	server := httptest.NewServer(handler)

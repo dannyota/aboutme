@@ -436,5 +436,6 @@ func (s *Service) handleUpdateResumeStructure(w http.ResponseWriter, r *http.Req
 		CanonicalTargets:    structureCanonicalTargets,
 		Prepare:             s.prepareStructureMutation,
 		Run:                 aggregateOperation{service: s},
+		Transition:          s.nonDrainingTransition,
 	})
 }

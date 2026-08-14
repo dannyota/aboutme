@@ -106,14 +106,16 @@ func publishCompleteDocument(t *testing.T) schema.Resume {
 	t.Helper()
 	name := "Ada Lovelace"
 	role := "Mathematician"
-	return schema.Resume{
-		PersonalDetails: schema.PersonalDetails{FullName: &name},
-		Content: map[string]schema.Section{
-			"work": schema.NewWorkSection(nil, nil, []schema.WorkEntry{{
-				ID: "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60", JobTitle: &role, Employer: &role,
-			}}),
-		},
+	document := loadMinimalDocument(t)
+	document.PersonalDetails = schema.PersonalDetails{FullName: &name}
+	document.Content = map[string]schema.Section{
+		"work": schema.NewWorkSection(nil, nil, []schema.WorkEntry{{
+			ID: "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60", JobTitle: &role, Employer: &role,
+		}}),
 	}
+	document.Customization.Layout.Sections.Main = []string{"work"}
+	document.Customization.Layout.Sections.Sidebar = []string{}
+	return document
 }
 
 func TestPublishShapeErrorDoesNotExposeInput(t *testing.T) {

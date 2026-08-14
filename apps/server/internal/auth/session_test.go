@@ -28,6 +28,35 @@ func TestSessionCookieName_MatchesHostPrefixContract(t *testing.T) {
 	}
 }
 
+func TestRequireLiveSession(t *testing.T) {
+	now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	live := store.Session{LastSeenAt: now.Add(-time.Hour), AbsoluteExpiresAt: now.Add(time.Hour)}
+	cases := []struct {
+		name string
+		sess store.Session
+	}{
+		{name: "revoked", sess: func() store.Session { s := live; revoked := now; s.RevokedAt = &revoked; return s }()},
+		{name: "idle expired", sess: func() store.Session { s := live; s.LastSeenAt = now.Add(-31 * 24 * time.Hour); return s }()},
+		{name: "absolute expired", sess: func() store.Session { s := live; s.AbsoluteExpiresAt = now.Add(-time.Second); return s }()},
+		{name: "grace dead", sess: func() store.Session {
+			s := live
+			grace := now.Add(-time.Second)
+			s.RotationGraceUntil = &grace
+			return s
+		}()},
+	}
+	if err := auth.RequireLiveSession(live, now); err != nil {
+		t.Fatalf("RequireLiveSession(live) error = %v, want nil", err)
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := auth.RequireLiveSession(tc.sess, now); !errors.Is(err, auth.ErrSessionInvalid) {
+				t.Fatalf("RequireLiveSession() error = %v, want ErrSessionInvalid", err)
+			}
+		})
+	}
+}
+
 // TestIssueThenAuthenticate_ReturnsSameSession_NoRotation issues a session,
 // authenticates with the raw token it
 // returns, and confirm the round trip returns the same session with no

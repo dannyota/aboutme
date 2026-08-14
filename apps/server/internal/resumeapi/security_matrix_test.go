@@ -429,6 +429,8 @@ func routeSecurityBody(route routeSpec) io.Reader {
 		return strings.NewReader(`{"title":"security matrix"}`)
 	case "updateResumeMetadata":
 		return strings.NewReader(`{"title":"security matrix"}`)
+	case "publishResume":
+		return strings.NewReader(`{"live":false,"downloadEnabled":false,"seoGeoEnabled":false}`)
 	case "upsertResumeEntry":
 		return strings.NewReader(`{"entry":{"id":"01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60"}}`)
 	case "updateResumeSection":

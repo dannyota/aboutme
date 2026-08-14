@@ -14,6 +14,7 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -57,6 +58,7 @@ const (
 	operationDelete
 	operationAggregate
 	operationPhotoCandidate
+	operationPublish
 )
 
 func (kind operationKind) build(service *Service) mutationOperation {
@@ -71,6 +73,8 @@ func (kind operationKind) build(service *Service) mutationOperation {
 		return aggregateOperation{service: service}
 	case operationPhotoCandidate:
 		return photoCandidateOperation{aggregateOperation{service: service}}
+	case operationPublish:
+		return publishOperation{service: service}
 	case operationNone:
 		return nil
 	default:
@@ -95,6 +99,7 @@ type aggregatePreparedInput struct {
 
 type deletePreparedInput struct {
 	ResumeID     uuid.UUID
+	ReleasedAt   time.Time
 	BeforeDelete func(context.Context, *store.Queries, resume.Resume) error
 	Response     mutationResponseBuilder
 }
@@ -131,7 +136,7 @@ func (op aggregateOperation) Run(ctx context.Context, qtx *store.Queries, mutati
 	if !ok || input.Apply == nil || input.Response == nil || mutation.ExpectedRevision == nil {
 		return mutationRunResult{}, fmt.Errorf("resumeapi: aggregate operation received the wrong prepared input")
 	}
-	current, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, input.ResumeID)
+	current, err := op.service.currentMutationResume(ctx, qtx, mutation, input.ResumeID)
 	if err != nil {
 		return mutationRunResult{}, err
 	}
@@ -173,16 +178,38 @@ func (op deleteOperation) Run(ctx context.Context, qtx *store.Queries, mutation 
 	if !ok || input.Response == nil || mutation.ExpectedRevision == nil {
 		return mutationRunResult{}, fmt.Errorf("resumeapi: delete operation received the wrong prepared input")
 	}
-	deleted, err := op.service.resumes.DeleteTx(ctx, qtx, mutation.UserID, input.ResumeID, *mutation.ExpectedRevision)
+	current, err := op.service.currentMutationResume(ctx, qtx, mutation, input.ResumeID)
 	if err != nil {
 		return mutationRunResult{}, err
 	}
+	if current.Slug != nil {
+		if err := auth.RequireRecentReauth(mutation.Session, op.service.clock()); err != nil {
+			return mutationRunResult{}, err
+		}
+		releasedAt := input.ReleasedAt
+		if releasedAt.IsZero() {
+			releasedAt = op.service.clock()
+		}
+		if _, err := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
+			Slug: *current.Slug, ReleasedByUserID: &mutation.UserID, ReleasedAt: releasedAt,
+		}); err != nil {
+			return mutationRunResult{}, err
+		}
+		if _, err := qtx.AdvanceDiscoveryGeneration(ctx); err != nil {
+			return mutationRunResult{}, err
+		}
+	}
+	if _, err := qtx.DeleteResumePublicCAS(ctx, store.DeleteResumePublicCASParams{
+		ID: input.ResumeID, UserID: mutation.UserID, ExpectedRevision: *mutation.ExpectedRevision,
+	}); err != nil {
+		return mutationRunResult{}, err
+	}
 	if input.BeforeDelete != nil {
-		if beforeDeleteErr := input.BeforeDelete(ctx, qtx, deleted); beforeDeleteErr != nil {
+		if beforeDeleteErr := input.BeforeDelete(ctx, qtx, current); beforeDeleteErr != nil {
 			return mutationRunResult{}, beforeDeleteErr
 		}
 	}
-	response, err := input.Response(deleted, deleted.Doc, mutation.WireVersion)
+	response, err := input.Response(current, current.Doc, mutation.WireVersion)
 	return mutationRunResult{Response: response}, err
 }
 

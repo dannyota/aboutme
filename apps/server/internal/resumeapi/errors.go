@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 )
@@ -20,6 +22,7 @@ var productionErrorVocabulary = map[string]struct{}{
 	"unsupported_schema_version": {}, "customization_path_denied": {},
 	"media_type_unsupported": {}, "media_too_large": {}, "media_invalid": {},
 	"media_busy": {}, "media_not_found": {},
+	"publish_invalid": {}, "slug_taken": {}, "reauth_required": {}, "public_state_busy": {},
 }
 
 var genericErrorVocabulary = map[string]struct{}{
@@ -30,7 +33,8 @@ var genericErrorVocabulary = map[string]struct{}{
 
 var detailsErrorVocabulary = map[string]struct{}{
 	"document_invalid": {}, "revision_mismatch": {}, "unsupported_schema_version": {},
-	"media_invalid": {},
+	"media_invalid":   {},
+	"publish_invalid": {},
 }
 
 var mediaInvalidReasons = map[string]struct{}{
@@ -142,6 +146,10 @@ func mapMutationError(err error) *clientError {
 	if errors.As(err, &client) {
 		return client
 	}
+	var publishShape *publishShapeError
+	if errors.As(err, &publishShape) {
+		return &clientError{Status: http.StatusBadRequest, Code: "request_invalid", Message: "publish request is invalid"}
+	}
 	if errors.Is(err, resume.ErrNotFound) {
 		return &clientError{Status: http.StatusNotFound, Code: "resume_not_found", Message: "resume not found"}
 	}
@@ -150,6 +158,16 @@ func mapMutationError(err error) *clientError {
 	}
 	if errors.Is(err, resume.ErrIdempotencyKeyReuse) {
 		return &clientError{Status: http.StatusConflict, Code: "idempotency_key_reuse", Message: "idempotency key was already used for a different request"}
+	}
+	if errors.Is(err, auth.ErrSessionInvalid) {
+		return &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"}
+	}
+	if errors.Is(err, auth.ErrReauthRequired) {
+		return &clientError{Status: http.StatusForbidden, Code: "reauth_required", Message: "recent reauthentication is required"}
+	}
+	var drainTimeout *publicstate.DrainTimeoutError
+	if errors.As(err, &drainTimeout) {
+		return &clientError{Status: http.StatusServiceUnavailable, Code: "public_state_busy", Message: "public state is busy", Headers: map[string]string{"Retry-After": "1"}}
 	}
 	if errors.Is(err, docmigrate.ErrInvalidDocument) {
 		return &clientError{

@@ -297,6 +297,17 @@ func RequireRecentReauth(sess store.Session, now time.Time) error {
 	return nil
 }
 
+// RequireLiveSession applies the opaque terminal-session checks at a caller's
+// authoritative clock. Transactional mutation paths use it after their final
+// session-row read so a session revoked while a public-state fence is closing
+// cannot commit a write.
+func RequireLiveSession(sess store.Session, now time.Time) error {
+	if sessionDead(sess, now) {
+		return ErrSessionInvalid
+	}
+	return nil
+}
+
 // randomSessionToken returns an unpadded base64url bearer token.
 func randomSessionToken() (string, error) {
 	b := make([]byte, sessionTokenBytes)

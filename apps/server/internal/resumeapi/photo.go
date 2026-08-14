@@ -136,7 +136,8 @@ func (s *Service) handleUploadResumePhoto(w http.ResponseWriter, r *http.Request
 			candidate = created.photoCandidate
 			return s.preparePhotoReplacement(ctx, input, decoded.ResumeID, created.Key, created.ExecuteBefore)
 		},
-		Run: photoCandidateOperation{aggregateOperation{service: s}},
+		Run:        photoCandidateOperation{aggregateOperation{service: s}},
+		Transition: s.nonDrainingTransition,
 		Finalize: func(ctx context.Context, prepared preparedInput, result resume.ExecuteResult, executeErr error) {
 			s.finalizePhotoCandidate(candidate)(ctx, prepared, result, executeErr)
 		},
@@ -332,7 +333,8 @@ func (s *Service) handleUpdateResumePhotoCrop(w http.ResponseWriter, r *http.Req
 				Response: s.resumeResponseBuilder(http.StatusOK, false),
 			}}, nil
 		},
-		Run: aggregateOperation{service: s},
+		Run:        aggregateOperation{service: s},
+		Transition: s.nonDrainingTransition,
 	}
 	s.executeMutation(w, r, spec)
 }
@@ -376,7 +378,8 @@ func (s *Service) handleDeleteResumePhoto(w http.ResponseWriter, r *http.Request
 				Response: deletedChildResponse,
 			}}, nil
 		},
-		Run: aggregateOperation{service: s},
+		Run:        aggregateOperation{service: s},
+		Transition: s.nonDrainingTransition,
 	}
 	s.executeMutation(w, r, spec)
 }

@@ -27,11 +27,16 @@ type orderedIdempotency struct {
 	executeErr      error
 	runCallback     bool
 	executeDeadline time.Time
+	qtx             *store.Queries
 }
 
 func (s *orderedIdempotency) Inspect(context.Context, uuid.UUID, string, uuid.UUID, [32]byte) (resume.StoredResponse, bool, error) {
 	*s.events = append(*s.events, "inspect")
 	return s.inspectResponse, s.inspectReplay, s.inspectErr
+}
+
+func (s *orderedIdempotency) Recheck(context.Context, uuid.UUID, string, uuid.UUID, [32]byte) (resume.RecheckResult, error) {
+	return resume.RecheckResult{Decision: resume.RecheckFresh}, nil
 }
 
 func (s *orderedIdempotency) Execute(ctx context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ [32]byte,
@@ -40,7 +45,7 @@ func (s *orderedIdempotency) Execute(ctx context.Context, _ uuid.UUID, _ string,
 	*s.events = append(*s.events, "execute")
 	s.executeDeadline, _ = ctx.Deadline()
 	if s.runCallback {
-		response, err := mutate(nil)
+		response, err := mutate(s.qtx)
 		if err != nil {
 			return s.executeResult, err
 		}
@@ -58,7 +63,7 @@ func TestExecuteMutation_CandidateDeadlineBoundsExecute(t *testing.T) {
 		events: &events, runCallback: true,
 		executeResult: resume.ExecuteResult{Outcome: resume.CommitCommitted},
 	}
-	service := orderedService(&events, idempotency)
+	service, request := orderedService(t, &events, idempotency)
 	service.clock = func() time.Time { return clock }
 	spec := orderedMutationSpec(&events)
 	spec.Prepare = func(context.Context, boundedInput, idempotencyInspection) (preparedInput, error) {
@@ -67,7 +72,7 @@ func TestExecuteMutation_CandidateDeadlineBoundsExecute(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	before := time.Now()
-	service.executeMutation(rec, orderedMutationRequest(t), spec)
+	service.executeMutation(rec, request, spec)
 	remaining := time.Until(idempotency.executeDeadline)
 	if idempotency.executeDeadline.IsZero() || remaining > 5*time.Minute || remaining < 4*time.Minute+55*time.Second {
 		t.Fatalf("execute deadline = %v (started %v), want approximately five minutes", idempotency.executeDeadline, before)
@@ -80,7 +85,7 @@ func TestExecuteMutation_ExpiredCandidateNeverStartsAndFinalizes(t *testing.T) {
 	var events []string
 	clock := time.Date(2026, 8, 13, 0, 5, 0, 0, time.UTC)
 	idempotency := &orderedIdempotency{events: &events}
-	service := orderedService(&events, idempotency)
+	service, request := orderedService(t, &events, idempotency)
 	service.clock = func() time.Time { return clock }
 	spec := orderedMutationSpec(&events)
 	spec.Prepare = func(context.Context, boundedInput, idempotencyInspection) (preparedInput, error) {
@@ -88,7 +93,7 @@ func TestExecuteMutation_ExpiredCandidateNeverStartsAndFinalizes(t *testing.T) {
 		return preparedInput{ExecuteBefore: clock}, nil
 	}
 	rec := httptest.NewRecorder()
-	service.executeMutation(rec, orderedMutationRequest(t), spec)
+	service.executeMutation(rec, request, spec)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
@@ -98,11 +103,10 @@ func TestExecuteMutation_ExpiredCandidateNeverStartsAndFinalizes(t *testing.T) {
 	}
 }
 
-func orderedMutationRequest(t *testing.T) *http.Request {
+func orderedMutationRequest(t *testing.T, session store.Session) *http.Request {
 	t.Helper()
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 	req.Header.Set("Idempotency-Key", uuid.NewString())
-	session := store.Session{UserID: uuid.New()}
 	return req.WithContext(auth.ContextWithSession(req.Context(), session))
 }
 
@@ -138,12 +142,12 @@ func orderedMutationSpec(events *[]string) mutationSpec {
 func TestExecuteMutation_OrderFresh(t *testing.T) {
 	t.Parallel()
 	var events []string
-	service := orderedService(&events, &orderedIdempotency{
+	service, request := orderedService(t, &events, &orderedIdempotency{
 		events: &events, runCallback: true,
 		executeResult: resume.ExecuteResult{Outcome: resume.CommitCommitted},
 	})
 	rec := httptest.NewRecorder()
-	service.executeMutation(rec, orderedMutationRequest(t), orderedMutationSpec(&events))
+	service.executeMutation(rec, request, orderedMutationSpec(&events))
 	want := []string{"decode", "targets", "semantic", "inspect", "prepare", "execute", "operation", "finalize", "writer"}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
@@ -153,12 +157,12 @@ func TestExecuteMutation_OrderFresh(t *testing.T) {
 func TestExecuteMutation_PreflightReplaySkipsPreparationOperationAndFinalize(t *testing.T) {
 	t.Parallel()
 	var events []string
-	service := orderedService(&events, &orderedIdempotency{
+	service, request := orderedService(t, &events, &orderedIdempotency{
 		events: &events, inspectReplay: true,
 		inspectResponse: resume.StoredResponse{Status: http.StatusNoContent},
 	})
 	rec := httptest.NewRecorder()
-	service.executeMutation(rec, orderedMutationRequest(t), orderedMutationSpec(&events))
+	service.executeMutation(rec, request, orderedMutationSpec(&events))
 	want := []string{"decode", "targets", "semantic", "inspect", "writer"}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
@@ -168,7 +172,7 @@ func TestExecuteMutation_PreflightReplaySkipsPreparationOperationAndFinalize(t *
 func TestExecuteMutation_ConcurrentReplayAfterPrepareFinalizes(t *testing.T) {
 	t.Parallel()
 	var events []string
-	service := orderedService(&events, &orderedIdempotency{
+	service, request := orderedService(t, &events, &orderedIdempotency{
 		events: &events,
 		executeResult: resume.ExecuteResult{
 			Response: resume.StoredResponse{Status: http.StatusNoContent},
@@ -176,7 +180,7 @@ func TestExecuteMutation_ConcurrentReplayAfterPrepareFinalizes(t *testing.T) {
 		},
 	})
 	rec := httptest.NewRecorder()
-	service.executeMutation(rec, orderedMutationRequest(t), orderedMutationSpec(&events))
+	service.executeMutation(rec, request, orderedMutationSpec(&events))
 	want := []string{"decode", "targets", "semantic", "inspect", "prepare", "execute", "finalize", "writer"}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
@@ -192,12 +196,12 @@ func TestExecuteMutation_CallbackFailureFinalizesAndWritesError(t *testing.T) {
 		events = append(events, "operation")
 		return mutationRunResult{}, injected
 	})
-	service := orderedService(&events, &orderedIdempotency{
+	service, request := orderedService(t, &events, &orderedIdempotency{
 		events: &events, runCallback: true,
 		executeResult: resume.ExecuteResult{Outcome: resume.CommitDefinitelyRolledBack},
 	})
 	rec := httptest.NewRecorder()
-	service.executeMutation(rec, orderedMutationRequest(t), spec)
+	service.executeMutation(rec, request, spec)
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
@@ -211,7 +215,7 @@ func TestExecuteMutation_CandidateCleanupFailureCannotReplaceStoredSuccess(t *te
 	t.Parallel()
 	var events []string
 	backend := &candidateBackend{deleteErr: errors.New("cleanup failed")}
-	service := orderedService(&events, &orderedIdempotency{
+	service, request := orderedService(t, &events, &orderedIdempotency{
 		events: &events,
 		executeResult: resume.ExecuteResult{
 			Response: resume.StoredResponse{Status: http.StatusNoContent},
@@ -227,7 +231,7 @@ func TestExecuteMutation_CandidateCleanupFailureCannotReplaceStoredSuccess(t *te
 		cleanup(ctx, prepared, result, err)
 	}
 	rec := httptest.NewRecorder()
-	service.executeMutation(rec, orderedMutationRequest(t), spec)
+	service.executeMutation(rec, request, spec)
 	if rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Fatalf("response = status %d body %q, want stored bodyless 204", rec.Code, rec.Body.String())
 	}
@@ -240,12 +244,16 @@ func TestExecuteMutation_CandidateCleanupFailureCannotReplaceStoredSuccess(t *te
 	}
 }
 
-func orderedService(events *[]string, idempotency idempotencyBoundary) *Service {
-	return &Service{
-		idempotency: idempotency, acceptedVersions: []int32{2},
-		writeResponse: func(w http.ResponseWriter, response resume.StoredResponse) {
-			*events = append(*events, "writer")
-			writeStoredResponse(w, response)
-		},
+func orderedService(t *testing.T, events *[]string, idempotency *orderedIdempotency) (*Service, *http.Request) {
+	t.Helper()
+	h := newResumeAPITestHarness(t)
+	idempotency.qtx = h.queries
+	service := h.service
+	service.idempotency = idempotency
+	service.acceptedVersions = []int32{2}
+	service.writeResponse = func(w http.ResponseWriter, response resume.StoredResponse) {
+		*events = append(*events, "writer")
+		writeStoredResponse(w, response)
 	}
+	return service, orderedMutationRequest(t, h.session)
 }

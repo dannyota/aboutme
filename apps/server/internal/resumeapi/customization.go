@@ -78,7 +78,8 @@ func (s *Service) handleUpdateResumeCustomization(w http.ResponseWriter, r *http
 				Response: s.resumeResponseBuilder(http.StatusOK, false), TargetsFont: targetsFont,
 			}}, nil
 		},
-		Run: aggregateOperation{service: s},
+		Run:        aggregateOperation{service: s},
+		Transition: s.nonDrainingTransition,
 	})
 }
 

@@ -19,8 +19,10 @@ func TestExecuteMutation_ChangedSemanticInputRejectsIdempotencyKeyReuse(t *testi
 	t.Parallel()
 
 	idempotency := newSemanticIdempotencyBoundary()
-	service := &Service{idempotency: idempotency, acceptedVersions: []int32{2}}
-	userID := uuid.MustParse("01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f")
+	h := newResumeAPITestHarness(t)
+	idempotency.qtx = h.queries
+	service := h.service
+	service.idempotency = idempotency
 	targetID := uuid.MustParse("01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60")
 	key := uuid.MustParse("01890f47-7e8a-7b2a-8d70-9a1f2c3d4e61")
 	payload := []byte(`{"value":"unchanged"}`)
@@ -50,7 +52,7 @@ func TestExecuteMutation_ChangedSemanticInputRejectsIdempotencyKeyReuse(t *testi
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/semantic", bytes.NewReader(payload))
 		req.Header.Set("Idempotency-Key", key.String())
 		req.Header.Set("If-Match", `"r42"`)
-		return req.WithContext(auth.ContextWithSession(req.Context(), store.Session{UserID: userID}))
+		return req.WithContext(auth.ContextWithSession(req.Context(), h.session))
 	}
 
 	first := httptest.NewRecorder()
@@ -90,6 +92,7 @@ type semanticIdempotencyRecord struct {
 
 type semanticIdempotencyBoundary struct {
 	records map[semanticIdempotencyRecordKey]semanticIdempotencyRecord
+	qtx     *store.Queries
 }
 
 func newSemanticIdempotencyBoundary() *semanticIdempotencyBoundary {
@@ -109,6 +112,19 @@ func (s *semanticIdempotencyBoundary) Inspect(_ context.Context, userID uuid.UUI
 	return record.response, true, nil
 }
 
+func (s *semanticIdempotencyBoundary) Recheck(_ context.Context, userID uuid.UUID, operation string,
+	key uuid.UUID, requestHash [32]byte,
+) (resume.RecheckResult, error) {
+	record, ok := s.records[semanticIdempotencyRecordKey{userID: userID, operation: operation, key: key}]
+	if !ok {
+		return resume.RecheckResult{Decision: resume.RecheckFresh}, nil
+	}
+	if record.requestHash != requestHash {
+		return resume.RecheckResult{Decision: resume.RecheckReuse}, nil
+	}
+	return resume.RecheckResult{Decision: resume.RecheckReplay, Response: record.response}, nil
+}
+
 func (s *semanticIdempotencyBoundary) Execute(_ context.Context, userID uuid.UUID, operation string,
 	key uuid.UUID, requestHash [32]byte, mutate func(*store.Queries) (resume.StoredResponse, error),
 ) (resume.ExecuteResult, error) {
@@ -119,7 +135,7 @@ func (s *semanticIdempotencyBoundary) Execute(_ context.Context, userID uuid.UUI
 		}
 		return resume.ExecuteResult{Response: record.response, Replayed: true, Outcome: resume.CommitCommitted}, nil
 	}
-	response, err := mutate(nil)
+	response, err := mutate(s.qtx)
 	if err != nil {
 		return resume.ExecuteResult{Outcome: resume.CommitDefinitelyRolledBack}, err
 	}

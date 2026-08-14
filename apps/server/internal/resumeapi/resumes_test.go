@@ -30,16 +30,18 @@ type resumeTestEnvelope struct {
 }
 
 type resumeTestResource struct {
-	ID            uuid.UUID       `json:"id"`
-	Title         string          `json:"title"`
-	Lng           string          `json:"lng"`
-	Revision      string          `json:"revision"`
-	Live          bool            `json:"live"`
-	Slug          *string         `json:"slug"`
-	SchemaVersion int32           `json:"schemaVersion"`
-	CreatedAt     time.Time       `json:"createdAt"`
-	UpdatedAt     time.Time       `json:"updatedAt"`
-	Document      json.RawMessage `json:"document"`
+	ID              uuid.UUID       `json:"id"`
+	Title           string          `json:"title"`
+	Lng             string          `json:"lng"`
+	Revision        string          `json:"revision"`
+	Live            bool            `json:"live"`
+	Slug            *string         `json:"slug"`
+	DownloadEnabled bool            `json:"downloadEnabled"`
+	SEOGeoEnabled   bool            `json:"seoGeoEnabled"`
+	SchemaVersion   int32           `json:"schemaVersion"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+	Document        json.RawMessage `json:"document"`
 }
 
 func resumeRequest(t *testing.T, h *resumeAPITestHarness, method, path, body string, revision int64,
@@ -199,6 +201,120 @@ func TestResumeCRUD_LifecycleAndWriteEnvelope(t *testing.T) {
 	}
 	missingDelete := resumeRequest(t, h, http.MethodDelete, path, "", 2, uuid.New(), "2")
 	assertResumeTestError(t, missingDelete, http.StatusNotFound, "resume_not_found")
+}
+
+func TestPublishTransitionStoresFlagsAndReplaysExactResponse(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Published", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatalf("create publishable resume: %v", err)
+	}
+	path := apiResumePath + "/" + created.ID.String() + "/publish"
+	slug := "publish-" + uuid.NewString()[:8]
+	key := uuid.NewString()
+	body := `{"slug":"` + slug + `","live":true,"downloadEnabled":true,"seoGeoEnabled":true}`
+	first := h.mutationRequest(t, http.MethodPost, path, strings.NewReader(body), created.Revision, key)
+	if first.status != http.StatusOK || first.header.Get("ETag") != `"r2"` {
+		t.Fatalf("publish = status %d etag %q body=%s, want 200 r2", first.status, first.header.Get("ETag"), first.body)
+	}
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatalf("read published resume: %v", err)
+	}
+	if stored.Slug == nil || *stored.Slug != slug || !stored.Live || !stored.DownloadEnabled || !stored.SEOGeoEnabled {
+		t.Fatalf("stored publish state = %+v, want live claimed flags", stored)
+	}
+	replay := h.mutationRequest(t, http.MethodPost, path, strings.NewReader(body), created.Revision, key)
+	if replay.status != first.status || !bytes.Equal(replay.body, first.body) || replay.header.Get("ETag") != first.header.Get("ETag") {
+		t.Fatalf("publish replay differs: first=%d %s replay=%d %s", first.status, first.body, replay.status, replay.body)
+	}
+}
+
+func TestPublishChangedBodyRejectsIdempotencyKeyReuse(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Published", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := apiResumePath + "/" + created.ID.String() + "/publish"
+	slug := "replay-" + uuid.NewString()[:8]
+	key := uuid.NewString()
+	first := h.mutationRequest(t, http.MethodPost, path, strings.NewReader(`{"slug":"`+slug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, key)
+	if first.status != http.StatusOK {
+		t.Fatalf("first publish = %d %s", first.status, first.body)
+	}
+	changed := h.mutationRequest(t, http.MethodPost, path, strings.NewReader(`{"slug":"`+slug+`","live":true,"downloadEnabled":true,"seoGeoEnabled":false}`), created.Revision, key)
+	assertResumeTestError(t, changed, http.StatusConflict, "idempotency_key_reuse")
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Revision != created.Revision+1 || stored.DownloadEnabled {
+		t.Fatalf("changed-body replay mutated stored publish state: %+v", stored)
+	}
+}
+
+func TestDeleteReplayPrecedesExpiredReauthAndFence(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Delete replay", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug := "delete-" + uuid.NewString()[:8]
+	published := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+slug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, uuid.NewString())
+	if published.status != http.StatusOK {
+		t.Fatalf("publish = %d %s", published.status, published.body)
+	}
+	key := uuid.NewString()
+	deleted := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+1, key)
+	if deleted.status != http.StatusNoContent {
+		t.Fatalf("delete = %d %s", deleted.status, deleted.body)
+	}
+	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() - interval '16 minutes' WHERE id = $1`, h.session.ID); err != nil {
+		t.Fatal(err)
+	}
+	replay := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+1, key)
+	if replay.status != http.StatusNoContent || len(replay.body) != 0 {
+		t.Fatalf("expired-reauth replay = %d %s, want exact 204", replay.status, replay.body)
+	}
+	if err := h.service.coordinator.Ready(); err != nil {
+		t.Fatalf("replay left fence closed: %v", err)
+	}
+}
+
+func TestContentContendersSerializeThenLoserGetsFresh412(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+	path := apiResumePath + "/" + created.ID.String()
+	start := make(chan struct{})
+	responses := make(chan testHTTPResponse, 2)
+	for _, title := range []string{"winner-a", "winner-b"} {
+		title := title
+		go func() {
+			<-start
+			responses <- resumeRequest(t, h, http.MethodPatch, path, `{"title":"`+title+`"}`, created.Revision, uuid.New(), "2")
+		}()
+	}
+	close(start)
+	first, second := <-responses, <-responses
+	var stale testHTTPResponse
+	if first.status == http.StatusOK && second.status == http.StatusPreconditionFailed {
+		stale = second
+	} else if second.status == http.StatusOK && first.status == http.StatusPreconditionFailed {
+		stale = first
+	} else {
+		t.Fatalf("content contenders = (%d,%s), (%d,%s); want 200 and fresh 412", first.status, first.body, second.status, second.body)
+	}
+	var envelope struct {
+		Error struct {
+			Details struct {
+				Revision string `json:"revision"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(stale.body, &envelope); err != nil || envelope.Error.Details.Revision != "2" {
+		t.Fatalf("stale contender details = %s err=%v, want winner revision 2", stale.body, err)
+	}
 }
 
 func assertResumeTestError(t *testing.T, response testHTTPResponse, status int, code string) {

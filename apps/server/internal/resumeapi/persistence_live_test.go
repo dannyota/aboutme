@@ -23,7 +23,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-func TestDeleteJobFailureRollsBackMutationAndIdempotencyRecord(t *testing.T) {
+func TestDeleteRollbackAndCommitProofAreAtomic(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created := h.createResume(t)
 	beforeRecords := h.snapshotUserTable(t, "idempotency_records")
@@ -45,7 +45,8 @@ func TestDeleteJobFailureRollsBackMutationAndIdempotencyRecord(t *testing.T) {
 				Response: operationResponse,
 			}}, nil
 		},
-		Run: deleteOperation{service: h.service},
+		Run:        deleteOperation{service: h.service},
+		Transition: h.service.deleteTransition,
 	}
 	req := httptest.NewRequestWithContext(auth.ContextWithSession(context.Background(), h.session), http.MethodDelete, "/", nil)
 	req.Header.Set("Idempotency-Key", uuid.NewString())

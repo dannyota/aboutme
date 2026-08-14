@@ -362,6 +362,7 @@ func (s *Service) handleUpsertResumeEntry(w http.ResponseWriter, r *http.Request
 		CanonicalTargets:    entryCanonicalTargets,
 		Prepare:             s.prepareEntryMutation,
 		Run:                 aggregateOperation{service: s},
+		Transition:          s.nonDrainingTransition,
 	})
 }
 func (s *Service) handleDeleteResumeEntry(w http.ResponseWriter, r *http.Request) {
@@ -372,5 +373,6 @@ func (s *Service) handleDeleteResumeEntry(w http.ResponseWriter, r *http.Request
 		CanonicalTargets:    entryCanonicalTargets,
 		Prepare:             s.prepareEntryMutation,
 		Run:                 aggregateOperation{service: s},
+		Transition:          s.nonDrainingTransition,
 	})
 }

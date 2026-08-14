@@ -566,21 +566,21 @@ func assertPhotoCropReplacementRace(t *testing.T) {
 		err      error
 	}
 	results := make(chan namedResult, 2)
-	start := make(chan struct{})
-	for _, request := range []struct {
-		name string
-		req  *http.Request
-	}{
-		{name: "replacement", req: uploadRequest},
-		{name: "crop", req: cropRequest},
-	} {
-		go func(name string, req *http.Request) {
-			<-start
-			response, err := performPhotoCropExitRequest(h.client, req)
+	perform := func(name string, request *http.Request) {
+		go func() {
+			response, err := performPhotoCropExitRequest(h.client, request)
 			results <- namedResult{name: name, response: response, err: err}
-		}(request.name, request.req)
+		}()
 	}
-	close(start)
+	// Force the former deadlock schedule: crop completes its fresh Inspect
+	// before replacement is allowed to start transition ownership.
+	perform("crop", cropRequest)
+	select {
+	case <-ordered.cropInspected:
+	case <-time.After(10 * time.Second):
+		t.Fatal("crop did not complete fresh inspection")
+	}
+	perform("replacement", uploadRequest)
 
 	responses := make(map[string]testHTTPResponse, 2)
 	for range 2 {
@@ -775,17 +775,19 @@ func photoCropExitIdempotencyCount(t *testing.T, h *resumeAPITestHarness, key uu
 }
 
 type photoCropOrderedIdempotency struct {
-	delegate   idempotencyBoundary
-	uploadKey  uuid.UUID
-	cropKey    uuid.UUID
-	ready      chan struct{}
-	uploadDone chan struct{}
+	delegate        idempotencyBoundary
+	uploadKey       uuid.UUID
+	cropKey         uuid.UUID
+	bothInspected   chan struct{}
+	uploadCommitted chan struct{}
+	cropInspected   chan struct{}
 
 	mu          sync.Mutex
 	arrived     int
 	inspections map[uuid.UUID]int
 	replays     map[uuid.UUID]bool
-	readyOnce   sync.Once
+	bothOnce    sync.Once
+	cropOnce    sync.Once
 	uploadOnce  sync.Once
 }
 
@@ -794,7 +796,7 @@ func newPhotoCropOrderedIdempotency(delegate idempotencyBoundary, uploadKey,
 ) *photoCropOrderedIdempotency {
 	return &photoCropOrderedIdempotency{
 		delegate: delegate, uploadKey: uploadKey, cropKey: cropKey,
-		ready: make(chan struct{}), uploadDone: make(chan struct{}),
+		bothInspected: make(chan struct{}), uploadCommitted: make(chan struct{}), cropInspected: make(chan struct{}),
 		inspections: make(map[uuid.UUID]int), replays: make(map[uuid.UUID]bool),
 	}
 }
@@ -806,8 +808,38 @@ func (i *photoCropOrderedIdempotency) Inspect(ctx context.Context, userID uuid.U
 	i.mu.Lock()
 	i.inspections[key]++
 	i.replays[key] = replayed
+	i.arrived++
+	both := i.arrived == 2
 	i.mu.Unlock()
+	if both {
+		i.bothOnce.Do(func() { close(i.bothInspected) })
+	}
+	if key == i.cropKey {
+		i.cropOnce.Do(func() { close(i.cropInspected) })
+		select {
+		case <-i.uploadCommitted:
+		case <-ctx.Done():
+			return resume.StoredResponse{}, false, ctx.Err()
+		case <-time.After(10 * time.Second):
+			return resume.StoredResponse{}, false, fmt.Errorf("photo crop race: timed out waiting for replacement commit")
+		}
+	}
+	if key == i.uploadKey {
+		select {
+		case <-i.bothInspected:
+		case <-ctx.Done():
+			return resume.StoredResponse{}, false, ctx.Err()
+		case <-time.After(10 * time.Second):
+			return resume.StoredResponse{}, false, fmt.Errorf("photo crop race: timed out waiting for both fresh inspections")
+		}
+	}
 	return response, replayed, err
+}
+
+func (i *photoCropOrderedIdempotency) Recheck(ctx context.Context, userID uuid.UUID,
+	operation string, key uuid.UUID, fingerprint [32]byte,
+) (resume.RecheckResult, error) {
+	return i.delegate.Recheck(ctx, userID, operation, key, fingerprint)
 }
 
 func (i *photoCropOrderedIdempotency) Execute(ctx context.Context, userID uuid.UUID,
@@ -817,33 +849,11 @@ func (i *photoCropOrderedIdempotency) Execute(ctx context.Context, userID uuid.U
 	if key != i.uploadKey && key != i.cropKey {
 		return i.delegate.Execute(ctx, userID, operation, key, fingerprint, run)
 	}
-	i.mu.Lock()
-	i.arrived++
-	if i.arrived == 2 {
-		i.readyOnce.Do(func() { close(i.ready) })
+	result, err := i.delegate.Execute(ctx, userID, operation, key, fingerprint, run)
+	if key == i.uploadKey {
+		i.uploadOnce.Do(func() { close(i.uploadCommitted) })
 	}
-	i.mu.Unlock()
-	select {
-	case <-i.ready:
-	case <-ctx.Done():
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, ctx.Err()
-	case <-time.After(10 * time.Second):
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted},
-			fmt.Errorf("photo crop race: timed out waiting for both Execute calls")
-	}
-	if key == i.cropKey {
-		select {
-		case <-i.uploadDone:
-		case <-ctx.Done():
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, ctx.Err()
-		case <-time.After(10 * time.Second):
-			return resume.ExecuteResult{Outcome: resume.CommitNotAttempted},
-				fmt.Errorf("photo crop race: timed out waiting for replacement commit")
-		}
-		return i.delegate.Execute(ctx, userID, operation, key, fingerprint, run)
-	}
-	defer i.uploadOnce.Do(func() { close(i.uploadDone) })
-	return i.delegate.Execute(ctx, userID, operation, key, fingerprint, run)
+	return result, err
 }
 
 func (i *photoCropOrderedIdempotency) inspectedFresh(keys ...uuid.UUID) bool {
@@ -854,7 +864,7 @@ func (i *photoCropOrderedIdempotency) inspectedFresh(keys ...uuid.UUID) bool {
 			return false
 		}
 	}
-	return i.arrived == len(keys)
+	return true
 }
 
 func newPhotoCropExitRequest(t *testing.T, h *resumeAPITestHarness, method, path string,
