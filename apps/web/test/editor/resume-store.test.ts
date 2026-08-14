@@ -783,4 +783,84 @@ describe('resume store adoption and teardown', () => {
     store.resolveConflict('missing-resume', 'resolve-me');
     expect(store.recordFor(accepted.metadata.id)).toEqual(record);
   });
+
+  it('continues only the active template group ahead of later work', () => {
+    const { accepted, store } = initialized(withPhoto(acceptedFixture()));
+    const group = {
+      kind: 'templateGroup',
+      id: 'template-1',
+      sequence: 1,
+      intendedFinal: {
+        document: accepted.document,
+        metadata: { ...accepted.metadata, title: 'Template' },
+      },
+    } as EditorQueueItem;
+    const activeCommand = titleCommand(accepted, 'Template child');
+    const later = titleCommand(accepted, 'Later', 2, 'later-1');
+    store.enqueue(accepted.metadata.id, group);
+    store.enqueue(accepted.metadata.id, later);
+    store.startAttempt(
+      accepted.metadata.id,
+      group,
+      activeCommand,
+      attemptFor(activeCommand),
+    );
+    store.setIssues(accepted.metadata.id, activeCommand.id, [
+      { path: '/metadata/title', code: 'invalid' },
+    ]);
+    store.setTemplateState(accepted.metadata.id, { kind: 'partial' } as never);
+    store.markConflict(accepted.metadata.id, { id: 'conflict-1' } as never);
+    store.setPhotoRead(accepted.metadata.id, readyPhoto());
+    store.markSessionLost(accepted.metadata.id);
+    const before = store.recordFor(accepted.metadata.id)!;
+    const retainedState = {
+      accepted: before.accepted,
+      issues: before.issues,
+      templateState: before.templateState,
+      conflicts: before.conflicts,
+      photoRead: before.photoRead,
+      sessionLost: before.sessionLost,
+      opaquePhotoOutcome: before.opaquePhotoOutcome,
+    };
+
+    store.continueTemplateGroup(accepted.metadata.id, 'wrong-group');
+    expect(store.recordFor(accepted.metadata.id)!.attempt).toEqual(
+      before.attempt,
+    );
+    expect(store.recordFor(accepted.metadata.id)!.pending).toEqual([later]);
+
+    store.continueTemplateGroup(accepted.metadata.id, group.id);
+
+    const record = store.recordFor(accepted.metadata.id)!;
+    expect(record.attempt).toBeNull();
+    expect(record.pending).toEqual([group, later]);
+    expect(record.current.metadata.title).toBe('Later');
+    expect(record.accepted).toEqual(retainedState.accepted);
+    expect(record.issues).toEqual(retainedState.issues);
+    expect(record.templateState).toEqual(retainedState.templateState);
+    expect(record.conflicts).toEqual(retainedState.conflicts);
+    expect(record.photoRead).toEqual(retainedState.photoRead);
+    expect(record.sessionLost).toBe(retainedState.sessionLost);
+    expect(record.opaquePhotoOutcome).toEqual(retainedState.opaquePhotoOutcome);
+    store.continueTemplateGroup(accepted.metadata.id, group.id);
+    store.continueTemplateGroup('missing-resume', group.id);
+    expect(store.recordFor(accepted.metadata.id)).toEqual(record);
+  });
+
+  it('does not continue an atomic active attempt', () => {
+    const { accepted, store } = initialized();
+    const command = titleCommand(accepted, 'Atomic');
+    store.enqueue(accepted.metadata.id, command);
+    store.startAttempt(
+      accepted.metadata.id,
+      command,
+      command,
+      attemptFor(command),
+    );
+    const before = store.recordFor(accepted.metadata.id)!;
+
+    store.continueTemplateGroup(accepted.metadata.id, 'template-1');
+
+    expect(store.recordFor(accepted.metadata.id)).toEqual(before);
+  });
 });
