@@ -3,6 +3,7 @@ package resumeapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -123,6 +124,7 @@ func assertPhotoCropNullClear(t *testing.T) {
 		clearedDocument.PersonalDetails.Photo.Crop != nil {
 		t.Fatalf("clear crop revision=%q photo=%#v", clearRevision, clearedDocument.PersonalDetails.Photo)
 	}
+	assertPhotoCropResponseOmitsProperty(t, cleared.body)
 	if calls := backend.snapshotCalls(); calls != (photoCropExitObjectCalls{}) {
 		t.Fatalf("crop set or clear made object calls: %+v", calls)
 	}
@@ -151,6 +153,7 @@ func assertPhotoCropNullClear(t *testing.T) {
 	if !reflect.DeepEqual(afterReplay, beforeReplay) {
 		t.Fatalf("clear replay or reuse changed state:\n before=%+v\n after=%+v", beforeReplay, afterReplay)
 	}
+	assertStoredPhotoCropPropertyAbsent(t, afterReplay.row.PersonalDetails)
 	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
 	if err != nil {
 		t.Fatalf("read stored clear state: %v", err)
@@ -159,6 +162,47 @@ func assertPhotoCropNullClear(t *testing.T) {
 		stored.Doc.PersonalDetails.Photo.Key != photoKey ||
 		stored.Doc.PersonalDetails.Photo.Crop != nil {
 		t.Fatalf("stored clear state revision=%d photo=%#v", stored.Revision, stored.Doc.PersonalDetails.Photo)
+	}
+}
+
+func assertPhotoCropResponseOmitsProperty(t *testing.T, raw []byte) {
+	t.Helper()
+	var envelope struct {
+		Data struct {
+			Document json.RawMessage `json:"document"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("decode cleared response envelope: %v", err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(envelope.Data.Document, &document); err != nil {
+		t.Fatalf("decode cleared response document: %v", err)
+	}
+	assertPhotoRawOmitsCrop(t, document["personalDetails"], "cleared response")
+}
+
+func assertStoredPhotoCropPropertyAbsent(t *testing.T, raw string) {
+	t.Helper()
+	assertPhotoRawOmitsCrop(t, json.RawMessage(raw), "stored personal_details")
+}
+
+func assertPhotoRawOmitsCrop(t *testing.T, personalDetails json.RawMessage, source string) {
+	t.Helper()
+	var personal map[string]json.RawMessage
+	if err := json.Unmarshal(personalDetails, &personal); err != nil {
+		t.Fatalf("decode %s: %v", source, err)
+	}
+	photoRaw, exists := personal["photo"]
+	if !exists {
+		t.Fatalf("%s omitted photo", source)
+	}
+	var photo map[string]json.RawMessage
+	if err := json.Unmarshal(photoRaw, &photo); err != nil {
+		t.Fatalf("decode %s photo: %v", source, err)
+	}
+	if _, exists := photo["crop"]; exists {
+		t.Fatalf("%s retained crop property: %s", source, photoRaw)
 	}
 }
 
