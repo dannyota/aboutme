@@ -47,8 +47,9 @@ registerEndpoint('/api/v1/me', () => ({ data: meData }));
 
 const Probe = defineComponent({
   setup() {
-    const { user, csrfToken, identities, logout, mutate, refresh } = useAuth();
-    return { user, csrfToken, identities, logout, mutate, refresh };
+    const { user, csrfToken, identities, authState, logout, mutate, refresh }
+      = useAuth();
+    return { user, csrfToken, identities, authState, logout, mutate, refresh };
   },
   render() {
     return h('div', [
@@ -59,6 +60,7 @@ const Probe = defineComponent({
         { 'data-testid': 'identities' },
         JSON.stringify(this.identities),
       ),
+      h('span', { 'data-testid': 'auth-state' }, this.authState),
       h(
         'button',
         {
@@ -100,98 +102,119 @@ describe('useAuth', () => {
     vi.mocked(navigateTo).mockClear();
   });
 
-  it('logout() posts to /api/v1/auth/logout as a bodiless mutation',
-    async () => {
-      let receivedMethod: string | undefined;
-      let receivedHeader: string | undefined;
-      let receivedContentType: string | undefined;
-      registerEndpoint('/api/v1/auth/logout', {
-        method: 'POST',
-        handler: (event) => {
-          receivedMethod = event.method;
-          receivedHeader = requestHeader(event, 'x-csrf-token');
-          receivedContentType = requestHeader(event, 'content-type');
-          setResponseStatus(event, 204);
-          return null;
-        },
-      });
-
-      const wrapper = await mountSuspended(Probe);
-      await flushPromises();
-
-      await wrapper.get('[data-testid="logout-button"]').trigger('click');
-      await flushPromises();
-
-      expect(receivedMethod).toBe('POST');
-      expect(receivedHeader).toBe('test-csrf-token');
-      expect(receivedContentType).toBeUndefined();
+  // eslint-disable-next-line max-len
+  it('logout() posts to /api/v1/auth/logout as a bodiless mutation', async () => {
+    let receivedMethod: string | undefined;
+    let receivedHeader: string | undefined;
+    let receivedContentType: string | undefined;
+    registerEndpoint('/api/v1/auth/logout', {
+      method: 'POST',
+      handler: (event) => {
+        receivedMethod = event.method;
+        receivedHeader = requestHeader(event, 'x-csrf-token');
+        receivedContentType = requestHeader(event, 'content-type');
+        setResponseStatus(event, 204);
+        return null;
+      },
     });
-
-  it('keeps application/json on mutations that have a JSON body',
-    async () => {
-      let receivedContentType: string | undefined;
-      let receivedBody: string | undefined;
-      registerEndpoint('/api/v1/test-json-mutation', {
-        method: 'POST',
-        handler: async (event) => {
-          receivedContentType = requestHeader(event, 'content-type');
-          receivedBody = await readRawBody(event);
-          setResponseStatus(event, 204);
-          return null;
-        },
-      });
-
-      const wrapper = await mountSuspended(Probe);
-      await flushPromises();
-
-      await wrapper
-        .get('[data-testid="json-mutation-button"]')
-        .trigger('click');
-      await flushPromises();
-
-      expect(receivedContentType).toBe('application/json');
-      expect(receivedBody).toBe('{"enabled":true}');
-    });
-
-  it('logout() navigates to /login once the session is destroyed',
-    async () => {
-      registerEndpoint('/api/v1/auth/logout', {
-        method: 'POST',
-        handler: (event) => {
-          setResponseStatus(event, 204);
-          return null;
-        },
-      });
-
-      const wrapper = await mountSuspended(Probe);
-      await flushPromises();
-
-      await wrapper.get('[data-testid="logout-button"]').trigger('click');
-      await flushPromises();
-
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
-    });
-
-  it('renders a logged-out state instead of throwing on an unexpected '
-    + '/me response shape', async () => {
-    // Simulates contract drift (e.g. a missing `data` envelope key) —
-    // `data.value?.data.user` would throw reading `.user` off
-    // `undefined`; `data.value?.data?.user` must degrade to null instead.
-    registerEndpoint('/api/v1/me', { method: 'GET', handler: () => ({}) });
 
     const wrapper = await mountSuspended(Probe);
     await flushPromises();
-    // Force a genuine refetch against the malformed handler above —
-    // `useFetch`'s automatic initial fetch is keyed by URL and can reuse
-    // an already-`success` result from an earlier test's mount in this
-    // same file, so asserting against it alone isn't reliable; `refresh()`
-    // always re-fetches.
-    await wrapper.get('[data-testid="refresh-button"]').trigger('click');
+
+    await wrapper.get('[data-testid="logout-button"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.get('[data-testid="user"]').text()).toBe('null');
-    expect(wrapper.get('[data-testid="csrf"]').text()).toBe('null');
-    expect(wrapper.get('[data-testid="identities"]').text()).toBe('[]');
+    expect(receivedMethod).toBe('POST');
+    expect(receivedHeader).toBe('test-csrf-token');
+    expect(receivedContentType).toBeUndefined();
+  });
+
+  it('keeps application/json on mutations that have a JSON body', async () => {
+    let receivedContentType: string | undefined;
+    let receivedBody: string | undefined;
+    registerEndpoint('/api/v1/test-json-mutation', {
+      method: 'POST',
+      handler: async (event) => {
+        receivedContentType = requestHeader(event, 'content-type');
+        receivedBody = await readRawBody(event);
+        setResponseStatus(event, 204);
+        return null;
+      },
+    });
+
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="json-mutation-button"]').trigger('click');
+    await flushPromises();
+
+    expect(receivedContentType).toBe('application/json');
+    expect(receivedBody).toBe('{"enabled":true}');
+  });
+
+  it('logout() navigates to /login once the session is destroyed', async () => {
+    registerEndpoint('/api/v1/auth/logout', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, 204);
+        return null;
+      },
+    });
+
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="logout-button"]').trigger('click');
+    await flushPromises();
+
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+  });
+
+  it(
+    'renders a logged-out state instead of throwing on an unexpected '
+    + '/me response shape',
+    async () => {
+      // Simulates contract drift (e.g. a missing `data` envelope key) —
+      // `data.value?.data.user` would throw reading `.user` off
+      // `undefined`; `data.value?.data?.user` must degrade to null instead.
+      registerEndpoint('/api/v1/me', { method: 'GET', handler: () => ({}) });
+
+      const wrapper = await mountSuspended(Probe);
+      await flushPromises();
+      // Force a genuine refetch against the malformed handler above —
+      // `useFetch`'s automatic initial fetch is keyed by URL and can reuse
+      // an already-`success` result from an earlier test's mount in this
+      // same file, so asserting against it alone isn't reliable; `refresh()`
+      // always re-fetches.
+      await wrapper.get('[data-testid="refresh-button"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="user"]').text()).toBe('null');
+      expect(wrapper.get('[data-testid="csrf"]').text()).toBe('null');
+      expect(wrapper.get('[data-testid="identities"]').text()).toBe('[]');
+      expect(wrapper.get('[data-testid="auth-state"]').text()).toBe('error');
+    },
+  );
+
+  it('resolves refresh after identity, state, and CSRF update', async () => {
+    const refreshed = {
+      ...meData,
+      user: { ...meData.user, id: 'owner-1' },
+      csrfToken: 'csrf-new',
+    };
+    registerEndpoint('/api/v1/me', {
+      method: 'GET',
+      handler: () => ({ data: refreshed }),
+    });
+
+    const wrapper = await mountSuspended(Probe);
+    await wrapper.vm.refresh();
+
+    expect(wrapper.get('[data-testid="auth-state"]').text()).toBe(
+      'authenticated',
+    );
+    expect(wrapper.get('[data-testid="user"]').text()).toContain('owner-1');
+    expect(wrapper.get('[data-testid="csrf"]').text()).toBe('"csrf-new"');
   });
 
   describe('CSRF x rotation self-heal (mutate())', () => {
@@ -201,7 +224,35 @@ describe('useAuth', () => {
     // deterministic (see that file's own doc comment), which a shared
     // instance with this file's other tests can't reliably guarantee.
 
-    it('surfaces a second csrf_rejected instead of retrying forever',
+    // eslint-disable-next-line max-len
+    it('surfaces a second csrf_rejected instead of retrying forever', async () => {
+      let logoutCalls = 0;
+      registerEndpoint('/api/v1/auth/logout', {
+        method: 'POST',
+        handler: (event) => {
+          logoutCalls += 1;
+          setResponseStatus(event, 403);
+          return { error: { code: 'csrf_rejected', message: 'x' } };
+        },
+      });
+
+      const wrapper = await mountSuspended(Probe);
+      await flushPromises();
+
+      await wrapper.get('[data-testid="logout-button"]').trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      // Exactly the original attempt plus one retry — a second genuine
+      // rejection surfaces (no navigation), it does not loop.
+      expect(logoutCalls).toBe(2);
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    });
+
+    it(
+      'does not retry a 403 that is not csrf_rejected (e.g. '
+      + 'reauth_required) — a mutation the server already refused must '
+      + 'not be double-fired',
       async () => {
         let logoutCalls = 0;
         registerEndpoint('/api/v1/auth/logout', {
@@ -209,7 +260,7 @@ describe('useAuth', () => {
           handler: (event) => {
             logoutCalls += 1;
             setResponseStatus(event, 403);
-            return { error: { code: 'csrf_rejected', message: 'x' } };
+            return { error: { code: 'reauth_required', message: 'x' } };
           },
         });
 
@@ -220,39 +271,14 @@ describe('useAuth', () => {
         await flushPromises();
         await flushPromises();
 
-        // Exactly the original attempt plus one retry — a second genuine
-        // rejection surfaces (no navigation), it does not loop.
-        expect(logoutCalls).toBe(2);
+        // A boolean flag can't tell "called once" from "called twice" — a
+        // weakened guard checking the status code instead of the specific
+        // error code (`if (statusCode !== 403) throw`) would also retry
+        // this, silently double-firing a request the server already
+        // refused for a reason retrying can never fix.
+        expect(logoutCalls).toBe(1);
         expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-      });
-
-    it('does not retry a 403 that is not csrf_rejected (e.g. '
-      + 'reauth_required) — a mutation the server already refused must '
-      + 'not be double-fired', async () => {
-      let logoutCalls = 0;
-      registerEndpoint('/api/v1/auth/logout', {
-        method: 'POST',
-        handler: (event) => {
-          logoutCalls += 1;
-          setResponseStatus(event, 403);
-          return { error: { code: 'reauth_required', message: 'x' } };
-        },
-      });
-
-      const wrapper = await mountSuspended(Probe);
-      await flushPromises();
-
-      await wrapper.get('[data-testid="logout-button"]').trigger('click');
-      await flushPromises();
-      await flushPromises();
-
-      // A boolean flag can't tell "called once" from "called twice" — a
-      // weakened guard checking the status code instead of the specific
-      // error code (`if (statusCode !== 403) throw`) would also retry
-      // this, silently double-firing a request the server already
-      // refused for a reason retrying can never fix.
-      expect(logoutCalls).toBe(1);
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-    });
+      },
+    );
   });
 });
