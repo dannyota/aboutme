@@ -115,6 +115,7 @@ export interface ResumeStoreActions {
   replaceHead(resumeId: string, item: EditorQueueItem): void;
   dropHead(resumeId: string, itemId: string): void;
   markConflict(resumeId: string, conflict: ConflictRecord): void;
+  resolveConflict(resumeId: string, conflictId: string): void;
   setIssues(
     resumeId: string,
     itemId: string,
@@ -205,6 +206,13 @@ record.current = [...active, ...record.pending].reduce(
 `replayQueueItem` applies atomic commands and a template group's captured final
 snapshot. `saved` is impossible while any queue, in-flight, conflict, partial,
 unknown, or session-loss state remains.
+
+`resolveConflict` removes only the conflict whose exact `id` matches
+`conflictId`, preserves all other conflicts and retained work, and replays the
+derived state. A missing resume or conflict is a no-op. The coordinator calls
+this explicit action after Accept latest drops the conflicted intent or after
+Apply mine installs its guarded replacement; conflict resolution never clears
+the queue by itself.
 
 - [ ] **Step 4: Rerun the state/replay test GREEN**
 
