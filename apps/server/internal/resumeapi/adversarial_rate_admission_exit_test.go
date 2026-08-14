@@ -136,9 +136,13 @@ func TestRateLimitsHold(t *testing.T) {
 				req = req.WithContext(ctx)
 				recorder := httptest.NewRecorder()
 				limited.ServeHTTP(recorder, req)
-				body, ok := req.Body.(*exitRateAdmissionBody)
-				if !ok {
-					t.Fatalf("request body type = %T, want *exitRateAdmissionBody", req.Body)
+				var body *exitRateAdmissionBody
+				if req.Body != http.NoBody {
+					var ok bool
+					body, ok = req.Body.(*exitRateAdmissionBody)
+					if !ok {
+						t.Fatalf("request body type = %T, want *exitRateAdmissionBody", req.Body)
+					}
 				}
 				return recorder, body
 			}

@@ -295,6 +295,7 @@ func TestPhotoIfNoneMatchIsSingletonStrongTag(t *testing.T) {
 
 func TestPhotoCandidateRetriesOnlyProvedCollisionsAndUsesNormalizedExtension(t *testing.T) {
 	resumeID := uuid.MustParse("01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f")
+	createdAt := time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC)
 	randomness := bytes.Repeat([]byte{0x01}, 16)
 	randomness = append(randomness, bytes.Repeat([]byte{0x02}, 16)...)
 	backend := &photoBackendStub{
@@ -302,12 +303,16 @@ func TestPhotoCandidateRetriesOnlyProvedCollisionsAndUsesNormalizedExtension(t *
 		errors:   []error{media.ErrAlreadyExists, nil},
 	}
 	normalized := media.NormalizedPhoto{Bytes: []byte("normalized"), ContentType: "image/png", Extension: "png"}
-	candidate, err := createPhotoCandidate(context.Background(), backend, bytes.NewReader(randomness), resumeID, normalized, time.Now)
+	candidate, err := createPhotoCandidate(context.Background(), backend, bytes.NewReader(randomness), resumeID, normalized,
+		func() time.Time { return createdAt })
 	if err != nil {
 		t.Fatalf("create candidate: %v", err)
 	}
 	if !candidate.Created || len(backend.puts) != 2 || candidate.Key != backend.puts[1].key {
 		t.Fatalf("candidate=%#v puts=%#v", candidate, backend.puts)
+	}
+	if want := createdAt.Add(requiredPhotoCandidateLifetime); !candidate.ExecuteBefore.Equal(want) {
+		t.Fatalf("candidate execute-before = %v, want exact five-minute deadline %v", candidate.ExecuteBefore, want)
 	}
 	if _, err := media.ParsePhotoKey(resumeID, candidate.Key); err != nil || !strings.HasSuffix(candidate.Key, ".png") {
 		t.Fatalf("candidate key = %q: %v", candidate.Key, err)
