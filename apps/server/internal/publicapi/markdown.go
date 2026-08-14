@@ -53,10 +53,19 @@ func NewMarkdownHandler(dependencies MarkdownDependencies) (http.Handler, error)
 		}
 		slug := strings.TrimSuffix(strings.TrimPrefix(request.URL.Path, "/"), ".md")
 		snapshot, lease, err := dependencies.Reader.ReadResume(request.Context(), slug, publicstate.RepresentationMarkdown)
-		if err != nil || !snapshot.DiscoveryEnabled {
+		if err != nil {
 			if lease != nil {
 				lease.Release()
 			}
+			if errors.Is(err, publicresume.ErrNotFound) {
+				serveTextError(w, request, http.StatusNotFound)
+				return
+			}
+			serveTextError(w, request, http.StatusServiceUnavailable)
+			return
+		}
+		if !snapshot.DiscoveryEnabled {
+			lease.Release()
 			serveTextError(w, request, http.StatusNotFound)
 			return
 		}

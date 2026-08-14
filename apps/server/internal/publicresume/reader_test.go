@@ -7,8 +7,10 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
@@ -19,6 +21,7 @@ import (
 
 type readerStore struct {
 	row   store.Resume
+	err   error
 	calls int
 }
 
@@ -59,7 +62,119 @@ func (s *readerStore) GetPublicState(context.Context) (store.PublicState, error)
 }
 func (s *readerStore) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
 	s.calls++
-	return s.row, nil
+	return s.row, s.err
+}
+
+func TestReaderReadResumeClassifiesAbsentRowsAsNotFound(t *testing.T) {
+	slug, lng, name := "ada", "en", "Ada"
+	doc := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
+	pd, _ := json.Marshal(doc.PersonalDetails)
+	content, _ := json.Marshal(doc.Content)
+	customization, _ := json.Marshal(doc.Customization)
+	valid := store.Resume{ID: uuid.New(), Slug: &slug, Live: true, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}
+
+	for _, test := range []struct {
+		name           string
+		store          *readerStore
+		representation publicstate.Representation
+	}{
+		{name: "query found no row", store: &readerStore{err: pgx.ErrNoRows}, representation: publicstate.RepresentationJSON},
+		{name: "wrong slug", store: &readerStore{row: func() store.Resume { row := valid; other := "grace"; row.Slug = &other; return row }()}, representation: publicstate.RepresentationJSON},
+		{name: "not live", store: &readerStore{row: func() store.Resume { row := valid; row.Live = false; return row }()}, representation: publicstate.RepresentationJSON},
+		{name: "photo absent", store: &readerStore{row: valid}, representation: publicstate.RepresentationPhoto},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reader := newTestReader(t, test.store)
+			_, lease, err := reader.ReadResume(context.Background(), slug, test.representation)
+			if lease != nil {
+				lease.Release()
+				t.Fatal("ReadResume() returned a lease for an absent resource")
+			}
+			if !errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnavailable) {
+				t.Fatalf("ReadResume() error = %v, want only ErrNotFound", err)
+			}
+		})
+	}
+}
+
+func TestReaderReadResumeClassifiesDependencyAndDurableFailuresAsUnavailable(t *testing.T) {
+	slug := "ada"
+	for _, test := range []struct {
+		name  string
+		store *readerStore
+	}{
+		{name: "store failure", store: &readerStore{err: errors.New("database unavailable")}},
+		{name: "invalid revision", store: &readerStore{row: store.Resume{ID: uuid.New(), Slug: &slug, Live: true, Revision: 0}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reader := newTestReader(t, test.store)
+			_, lease, err := reader.ReadResume(context.Background(), slug, publicstate.RepresentationJSON)
+			if lease != nil {
+				lease.Release()
+				t.Fatal("ReadResume() returned a lease for an unavailable resource")
+			}
+			if !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrNotFound) {
+				t.Fatalf("ReadResume() error = %v, want only ErrUnavailable", err)
+			}
+		})
+	}
+}
+
+func TestReaderReadResumeClassifiesClosedFenceAsUnavailable(t *testing.T) {
+	slug := "ada"
+	row := validReaderRow(t, slug)
+	reader := newTestReader(t, &readerStore{row: row})
+	transition, err := reader.coordinator.Begin(context.Background(), publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: row.ID, ExpectedRevision: row.Revision, Class: publicstate.Revoking}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := transition.Close(context.Background(), time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := transition.Rollback(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if _, _, err := reader.ReadResume(context.Background(), slug, publicstate.RepresentationJSON); !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrNotFound) {
+		t.Fatalf("ReadResume() error = %v, want only ErrUnavailable", err)
+	}
+}
+
+func newTestReader(t *testing.T, readStore *readerStore) *Reader {
+	t.Helper()
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := NewReader(ReaderDependencies{Store: readStore, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return reader
+}
+
+func validReaderRow(t *testing.T, slug string) store.Resume {
+	t.Helper()
+	lng, name := "en", "Ada"
+	doc := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
+	pd, err := json.Marshal(doc.PersonalDetails)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := json.Marshal(doc.Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	customization, err := json.Marshal(doc.Customization)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store.Resume{ID: uuid.New(), Slug: &slug, Live: true, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}
 }
 func (s *readerStore) GetPublicResumeByOwner(context.Context, store.GetPublicResumeByOwnerParams) (store.Resume, error) {
 	return store.Resume{}, errors.New("unused")
