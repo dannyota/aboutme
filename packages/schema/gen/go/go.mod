@@ -1,3 +1,3 @@
 module github.com/dannyota/aboutme/packages/schema/gen/go
 
-go 1.26.5
+go 1.26.6

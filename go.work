@@ -4,7 +4,7 @@
 // fidelity"). Contributor/CI-only — never required at container runtime
 // (the built server binary embeds its own compiled code; see
 // deploy/server.Dockerfile).
-go 1.26.5
+go 1.26.6
 
 use (
 	./apps/server
