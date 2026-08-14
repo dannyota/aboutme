@@ -1,6 +1,6 @@
 # Phase 2B — Resume HTTP API and media
 
-Status: **Revision 4, implementation complete; exit gate active** (2026-08-13).
+Status: **Revision 5, complete** (2026-08-14).
 
 This phase adds the authenticated resume HTTP surface, granular autosave
 commands, full write-safety enforcement, document-version negotiation, and
@@ -99,7 +99,7 @@ the root Makefile, workflows, manifests, and shared scripts.
 | 9    | Personal details and wire-version proof            | High   | Landed |
 | 10   | Fixed-allowlist customization deltas               | High   | Landed |
 | 11   | Photo upload, read, crop, replace, and delete      | High   | Landed |
-| Gate | Phase review and exit checklist                    | —      | Active |
+| Gate | Phase review and exit checklist                    | —      | Passed |
 
 The adversarial suites are folded into the tasks that own the behavior; their
 cases live in [adversarial coverage](adversarial-coverage.md).
@@ -127,8 +127,11 @@ Task details:
 | W4   | Phase review and exit checklist   | Candidate is unchanged and every criterion passes     |
 
 W3 is implemented. All 15 routes use concrete handlers, and no construction stub
-remains. The write-safety, sanitizer, database, filesystem-media, and S3-media
-suites are integrated for W4 review and exit checks.
+remains. W4 passed on the reviewed implementation candidate with the
+write-safety, sanitizer, database, filesystem-media, and S3-media suites, the
+connected scan, and the fresh phase review. The record commit is accepted only
+after the integration owner reruns `make ci` and connected `make scan` without
+changing it.
 
 W3 file authoring runs in parallel, but its build, race, database, and S3
 verification commands queue in at most two batches of three workers. The
