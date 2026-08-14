@@ -19,6 +19,7 @@ import (
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
@@ -257,7 +258,7 @@ func (s *Service) handleGetResumePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 	if matched {
 		w.Header().Set("ETag", etag)
-		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Cache-Control", api.CacheControlNoStore)
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -285,7 +286,7 @@ func (s *Service) handleGetResumePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Cache-Control", api.CacheControlNoStore)
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	if _, copyErr := io.Copy(w, body); copyErr != nil {

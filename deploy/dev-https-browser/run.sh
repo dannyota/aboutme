@@ -21,7 +21,12 @@ mount_has_option() {
 }
 
 inside_container() {
-  [ "$#" -eq 0 ] || fail 'container entrypoint accepts no arguments'
+  [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
+  local mode=${1:-auth}
+  case $mode in
+  auth | transport) ;;
+  *) fail 'mode must be auth or transport' ;;
+  esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
   local root_target root_options input_target input_options
@@ -82,39 +87,62 @@ inside_container() {
   certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null ||
     fail 'cannot verify the imported Caddy root'
 
-  local log_file=/tmp/playwright-auth.log status=0
+  local evidence_name proof_name spec
+  case $mode in
+  auth)
+    evidence_name=auth-proof.json
+    proof_name=authentication
+    spec=auth.spec.ts
+    ;;
+  transport)
+    evidence_name=transport-proof.json
+    proof_name=transport
+    spec=transport.spec.ts
+    ;;
+  esac
+  local log_file=/tmp/playwright-uat.log status=0
   cd /opt/aboutme-auth
-  ./node_modules/.bin/playwright test --config playwright.config.ts auth.spec.ts \
+  ./node_modules/.bin/playwright test --config playwright.config.ts "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
-    fail 'authentication proof failed; volatile browser output was withheld'
+    fail "$proof_name proof failed; volatile browser output was withheld"
   fi
 
   evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n')
-  [ "$evidence_entries" = auth-proof.json ] ||
+  [ "$evidence_entries" = "$evidence_name" ] ||
     fail 'browser produced unexpected evidence'
-  [ -f /evidence/auth-proof.json ] && [ ! -L /evidence/auth-proof.json ] ||
+  local evidence_path=/evidence/$evidence_name
+  [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ] ||
     fail 'browser evidence is not a regular file'
-  [ "$(stat -c %u /evidence/auth-proof.json)" = "$uid" ] ||
+  [ "$(stat -c %u "$evidence_path")" = "$uid" ] ||
     fail 'browser evidence owner mismatch'
-  [ "$(stat -c %a /evidence/auth-proof.json)" = 600 ] ||
+  [ "$(stat -c %a "$evidence_path")" = 600 ] ||
     fail 'browser evidence mode must be 0600'
-  [ "$(stat -c %s /evidence/auth-proof.json)" -le 4096 ] ||
+  [ "$(stat -c %s "$evidence_path")" -le 4096 ] ||
     fail 'browser evidence exceeds its bound'
 
-  if ! node --input-type=module - /evidence/auth-proof.json <<'VERIFY_EVIDENCE'
+  if ! node --input-type=module - "$mode" "$evidence_path" <<'VERIFY_EVIDENCE'
 import { readFile } from 'node:fs/promises';
 
-const path = process.argv[2];
+const mode = process.argv[2];
+const path = process.argv[3];
 const actual = JSON.parse(await readFile(path, 'utf8'));
-const expected = {
+const common = {
   errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
   origin: 'https://localhost:20443',
+};
+const expected = mode === 'auth' ? {
+  ...common,
   scenario: 'google-authentication',
   schemaVersion: 1,
   steps: Object.fromEntries(
     Array.from({ length: 10 }, (_, index) => [String(index + 1), true]),
   ),
+} : {
+  ...common,
+  scenario: 'authenticated-transport',
+  schemaVersion: 1,
+  steps: { auth: true, cache: true, etag: true, ifMatch: true, teardown: true },
 };
 if (JSON.stringify(actual) !== JSON.stringify(expected)) process.exit(1);
 VERIFY_EVIDENCE
@@ -122,13 +150,18 @@ VERIFY_EVIDENCE
     fail 'browser evidence has invalid schema'
   fi
 
-  printf '%s\n' 'dev-https-browser authentication proof: PASS'
+  printf 'dev-https-browser %s proof: PASS\n' "$proof_name"
 }
 
 host_run() {
-  [ "$#" -eq 3 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory>'
-  local image=$1 input=$2 evidence=$3 uid gid input_entries evidence_entries
+  [ "$#" -ge 3 ] && [ "$#" -le 4 ] ||
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory> [auth|transport]'
+  local image=$1 input=$2 evidence=$3 mode=${4:-auth}
+  case $mode in
+  auth | transport) ;;
+  *) fail 'mode must be auth or transport' ;;
+  esac
+  local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
   [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] ||
     fail 'image must be an immutable sha256 ID'
@@ -182,6 +215,8 @@ host_run() {
     [ "$playwright" = "$IMAGE_PLAYWRIGHT" ] && [ "$nss" = "$IMAGE_NSS" ] ||
     fail 'browser image contract mismatch'
 
+  local -a mode_args=()
+  [ "$mode" = auth ] || mode_args=(transport)
   exec podman run \
     --rm \
     --pull=never \
@@ -196,7 +231,7 @@ host_run() {
     --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
     --mount="type=bind,src=$input,dst=/uat-input,ro=true" \
     --mount="type=bind,src=$evidence,dst=/evidence,rw=true" \
-    "$image"
+    "$image" "${mode_args[@]}"
 }
 
 if [ "${1-}" = --inside ]; then

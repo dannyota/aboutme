@@ -11,6 +11,7 @@
       "types": "./gen/ts/resume.ts",
       "default": "./gen/ts/resume.ts"
     },
+    "./current-schema": "./resume.schema.json",
     "./sanitizer": {
       "types": "./gen/ts/sanitizer.ts",
       "default": "./gen/ts/sanitizer.ts"
@@ -22,6 +23,10 @@
     "./templates": {
       "types": "./gen/ts/templates.ts",
       "default": "./gen/ts/templates.ts"
+    },
+    "./validation": {
+      "types": "./validation/store.ts",
+      "default": "./validation/store.ts"
     }
   },
   "scripts": {

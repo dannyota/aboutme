@@ -8,7 +8,7 @@ const isolatedBuildTest = process.env.NUXT_BUILD_TEST === '1';
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@nuxt/eslint'],
+  modules: ['@nuxt/eslint', '@pinia/nuxt'],
 
   // Server-side rendering is required: public resume pages and SEO/GEO
   // surfaces must be crawlable without JS (spec §5).
@@ -32,13 +32,16 @@ export default defineNuxtConfig({
       ? '.nuxt/normal-test'
       : '.nuxt',
 
-  routeRules: harnessEnabled
-    ? {
-        '/_harness/**': {
-          headers: { 'Content-Security-Policy': HTML_CSP },
-        },
-      }
-    : {},
+  routeRules: {
+    '/app/resumes/**': { ssr: false },
+    ...(harnessEnabled
+      ? {
+          '/_harness/**': {
+            headers: { 'Content-Security-Policy': HTML_CSP },
+          },
+        }
+      : {}),
+  },
 
   devServer: {
     port: 3000,

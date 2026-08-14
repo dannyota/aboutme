@@ -16,7 +16,7 @@ export default defineConfig({
   reporter: [['line']],
   retries: 0,
   testDir: import.meta.dirname,
-  testMatch: ['auth.spec.ts'],
+  testMatch: ['auth.spec.ts', 'transport.spec.ts'],
   timeout: 30_000,
   updateSnapshots: 'none',
   use: {

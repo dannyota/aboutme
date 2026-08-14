@@ -32,6 +32,72 @@ type securityExitOpenAPIOperation struct {
 	ContentTypes []string
 }
 
+func TestAuthenticatedResponsesUseExactNoStoreCachePolicy(t *testing.T) {
+	const wantCacheControl = "no-store, no-transform"
+	h := newResumeAPITestHarness(t)
+	created := h.createResume(t)
+
+	perform := func(request *http.Request) testHTTPResponse {
+		t.Helper()
+		request.Header.Set("Accept-Encoding", "gzip, zstd")
+		response, err := h.client.Do(request)
+		if err != nil {
+			t.Fatalf("perform %s %s: %v", request.Method, request.URL.Path, err)
+		}
+		return snapshotHTTPResponse(t, response)
+	}
+	assertPolicy := func(name string, response testHTTPResponse, wantStatus int) {
+		t.Helper()
+		if response.status != wantStatus {
+			t.Fatalf("%s status = %d, want %d (body=%s)", name, response.status, wantStatus, response.body)
+		}
+		if got := response.header.Get("Cache-Control"); got != wantCacheControl {
+			t.Fatalf("%s Cache-Control = %q, want %q", name, got, wantCacheControl)
+		}
+		if got := response.header.Get("Content-Encoding"); got != "" {
+			t.Fatalf("%s Content-Encoding = %q, want empty", name, got)
+		}
+	}
+	readRequest := func(path string, cookie *http.Cookie) *http.Request {
+		t.Helper()
+		request, err := http.NewRequestWithContext(h.ctx, http.MethodGet, h.server.URL+path, nil)
+		if err != nil {
+			t.Fatalf("build GET %s: %v", path, err)
+		}
+		if cookie != nil {
+			request.AddCookie(cookie)
+		}
+		request.Header.Set(wireVersionHeader, "2")
+		return request
+	}
+
+	resumePath := apiResumePath + "/" + created.ID.String()
+	assertPolicy("resume 200", perform(readRequest(resumePath, h.cookie)), http.StatusOK)
+	assertPolicy("resume 401", perform(readRequest(resumePath, nil)), http.StatusUnauthorized)
+
+	firstPatch := newAdversarialExitMutationRequest(t, h, http.MethodPatch, resumePath,
+		[]byte(`{"title":"cache proof"}`), created.Revision, uuid.NewString(), "2", "application/json")
+	assertPolicy("resume PATCH 200", perform(firstPatch), http.StatusOK)
+	stalePatch := newAdversarialExitMutationRequest(t, h, http.MethodPatch, resumePath,
+		[]byte(`{"title":"stale"}`), created.Revision, uuid.NewString(), "2", "application/json")
+	assertPolicy("resume 412", perform(stalePatch), http.StatusPreconditionFailed)
+
+	uploaded := h.uploadPhotoRequest(t, created.ID, created.Revision+1, uuid.NewString(), "cache.png", makePhotoPNG(t))
+	if uploaded.status != http.StatusOK {
+		t.Fatalf("upload setup status = %d, want 200 (body=%s)", uploaded.status, uploaded.body)
+	}
+	photoPath := resumePath + "/photo"
+	photoRead := perform(readRequest(photoPath, h.cookie))
+	assertPolicy("photo 200", photoRead, http.StatusOK)
+	conditional := readRequest(photoPath, h.cookie)
+	conditional.Header.Set("If-None-Match", photoRead.header.Get("ETag"))
+	assertPolicy("photo 304", perform(conditional), http.StatusNotModified)
+
+	missingPhoto := h.createResume(t)
+	missingPhotoPath := apiResumePath + "/" + missingPhoto.ID.String() + "/photo"
+	assertPolicy("photo error", perform(readRequest(missingPhotoPath, h.cookie)), http.StatusNotFound)
+}
+
 func TestEveryRoute_NoSession_401(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	before := snapshotSecurityExitState(t, h)

@@ -63,7 +63,7 @@ function richTextFieldsFor(sectionType: string | undefined): string[] {
   ) {
     return [];
   }
-  return RICH_TEXT_FIELDS_BY_SECTION_TYPE[sectionType];
+  return RICH_TEXT_FIELDS_BY_SECTION_TYPE[sectionType]!;
 }
 
 /**
