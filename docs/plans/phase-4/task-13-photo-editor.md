@@ -40,7 +40,7 @@ The controller calls only Task 03 `readOwnerPhoto` and Task 04 `setPhotoRead`.
 The panel sends atomic intents through Task 05 `ResumeEditorActions.edit` and
 never derives a URL from `photo.key`.
 
-- [ ] **Step 1: Write the generation/binding RED test**
+- [x] **Step 1: Write the generation/binding RED test**
 
 ```ts
 const deferred = <T>() => {
@@ -92,7 +92,7 @@ Add rows for absent metadata, conditional `304`, invalid MIME/tag, failure,
 delete, and clear. Every late-generation row records state before resolution and
 asserts byte-for-byte equality after resolution.
 
-- [ ] **Step 2: Run the generation/binding test RED**
+- [x] **Step 2: Run the generation/binding test RED**
 
 ```sh
 (cd apps/web && npx vitest run test/editor/photo-controller.test.ts)
@@ -100,7 +100,7 @@ asserts byte-for-byte equality after resolution.
 
 Expected RED: FAIL because controller does not exist.
 
-- [ ] **Step 3: Implement minimal keyed read state**
+- [x] **Step 3: Implement minimal keyed read state**
 
 Capture the requested binding and a monotonically increasing generation:
 
@@ -132,11 +132,11 @@ Encode only accepted bytes. A stale generation or replaced store state returns
 without mutation; only the still-current loading generation may write ready,
 read-failed, or binding-mismatch. Clear data on replace/delete/mismatch/unmount.
 
-- [ ] **Step 4: Rerun the generation/binding test GREEN**
+- [x] **Step 4: Rerun the generation/binding test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 5: Write the upload/cutoff RED test**
+- [x] **Step 5: Write the upload/cutoff RED test**
 
 Before acceptance assert zero FileReader, Image, canvas, object URL, data URL,
 storage, or preview operation. Test original file bytes, progress, replacement
@@ -167,7 +167,7 @@ it.each([
 });
 ```
 
-- [ ] **Step 6: Run the upload/cutoff test RED**
+- [x] **Step 6: Run the upload/cutoff test RED**
 
 Run:
 
@@ -177,7 +177,7 @@ Run:
 
 Expected RED: FAIL because photo controls do not exist.
 
-- [ ] **Step 7: Implement minimal lifecycle controls**
+- [x] **Step 7: Implement minimal lifecycle controls**
 
 The file input creates one `photoUpload` command holding the original `File`. Do
 not inspect bytes in the panel. Replacement preview remains suspended until a
@@ -199,11 +199,11 @@ const replace = (file: File) =>
   );
 ```
 
-- [ ] **Step 8: Rerun the upload/cutoff test GREEN**
+- [x] **Step 8: Rerun the upload/cutoff test GREEN**
 
 Run the Step 6 command. Expected GREEN: PASS.
 
-- [ ] **Step 9: Write the crop/suspension RED test**
+- [x] **Step 9: Write the crop/suspension RED test**
 
 Test pointer changes and four labelled numeric inputs for normalized x/y/width/
 height, exact bounds, `{crop: rectangle}` versus `{crop: null}`, keyboard-only
@@ -232,12 +232,12 @@ it("captures normalized crop against the accepted photo binding", async () => {
 });
 ```
 
-- [ ] **Step 10: Run the crop/suspension test RED**
+- [x] **Step 10: Run the crop/suspension test RED**
 
 Run the Step 6 command. Expected RED: FAIL on the first missing crop or
 suspension behavior.
 
-- [ ] **Step 11: Implement minimal crop binding**
+- [x] **Step 11: Implement minimal crop binding**
 
 Keep numeric draft strings separate until all four parse to finite bounded JSON
 numbers. Capture `photoCrop` against exact accepted photo-key context. A changed
@@ -250,11 +250,11 @@ const submitCrop = () => {
 };
 ```
 
-- [ ] **Step 12: Rerun the crop/suspension test GREEN**
+- [x] **Step 12: Rerun the crop/suspension test GREEN**
 
 Run the Step 10 command. Expected GREEN: PASS.
 
-- [ ] **Step 13: Run the final task gate and report**
+- [x] **Step 13: Run the final task gate and report**
 
 ```sh
 (cd apps/web && npx vitest run \
