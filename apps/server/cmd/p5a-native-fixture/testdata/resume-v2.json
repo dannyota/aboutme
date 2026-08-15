@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 2,
+  "personalDetails": {
+    "fullName": "Ada Lovelace",
+    "headline": "Principal Engineer",
+    "details": []
+  },
+  "content": {
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "52000000-0000-4000-8000-000000000001",
+          "isHidden": false,
+          "jobTitle": "Principal Engineer",
+          "employer": "Analytical Engines Ltd",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": { "start": { "y": 2022 }, "end": null, "present": true },
+          "description": "<p>Led <strong>critical</strong> migrations.</p><script>alert(1)</script><img src=x onerror=alert(2)><a href=\"javascript:alert(3)\">x</a>"
+        },
+        {
+          "id": "52000000-0000-4000-8000-000000000002",
+          "isHidden": false,
+          "jobTitle": "Engineer",
+          "employer": "Difference Engines Inc",
+          "city": "London",
+          "country": "United Kingdom",
+          "dates": { "start": { "y": 2019 }, "end": { "y": 2022 }, "present": false },
+          "description": ""
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "school",
+      "entries": [
+        {
+          "id": "52000000-0000-4000-8000-000000000003",
+          "isHidden": false,
+          "degree": "BSc Computer Science",
+          "school": "University of Hanoi",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": { "start": { "y": 2015 }, "end": { "y": 2019 }, "present": false },
+          "description": ""
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        { "id": "52000000-0000-4000-8000-000000000004", "isHidden": false, "name": "Go", "level": 5, "infoHtml": "" },
+        { "id": "52000000-0000-4000-8000-000000000005", "isHidden": false, "name": "TypeScript", "level": 4, "infoHtml": "" }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "globe",
+      "entries": [
+        { "id": "52000000-0000-4000-8000-000000000006", "isHidden": false, "name": "English", "level": 5 }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Projects",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "52000000-0000-4000-8000-000000000007",
+          "isHidden": false,
+          "title": "Open Source Resume Builder",
+          "dates": { "start": { "y": 2023 }, "end": null, "present": true },
+          "description": ""
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certificates",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "52000000-0000-4000-8000-000000000008",
+          "isHidden": false,
+          "title": "Certified Kubernetes Administrator",
+          "issuer": "CNCF",
+          "date": { "y": 2023 },
+          "description": ""
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "inter",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#1a1a1a",
+      "text": "#1a1a1a",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 16,
+      "entryGap": 8,
+      "lineHeight": 1.4
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": false
+    },
+    "layout": {
+      "columns": 1,
+      "sections": {
+        "main": ["work", "education", "skill", "language", "project", "certificate"],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": { "style": "text" },
+      "language": { "style": "text" }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}
