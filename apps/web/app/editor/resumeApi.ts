@@ -148,7 +148,8 @@ export function requestFromAttempt(
 }
 
 export function parseObjectETag(value: string | null): ObjectETag {
-  if (value === null || !/^"[^"\\s,]+"$/.test(value)) {
+  // eslint-disable-next-line no-control-regex -- ETags forbid C0 and DEL.
+  if (value === null || !/^"[^"\\\s,\x00-\x1F\x7F]+"$/.test(value)) {
     throw new Error('invalid object ETag');
   }
   return value as ObjectETag;

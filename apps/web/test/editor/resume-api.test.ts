@@ -511,6 +511,20 @@ describe('resume API transport', () => {
 
   it('rejects weak object tags and sends valid photo tags', async () => {
     expect(() => parseObjectETag('W/"photo-1"')).toThrow();
+    expect(parseObjectETag('"ordinary"')).toBe('"ordinary"');
+    expect(parseObjectETag('"s"')).toBe('"s"');
+    for (const invalid of [
+      '"a b"',
+      '"a,b"',
+      '"a\\b"',
+      '"a\t"',
+      '"a\n"',
+      '"a\u0000"',
+      '"a\u001f"',
+      '"a\u007f"',
+    ]) {
+      expect(() => parseObjectETag(invalid)).toThrow();
+    }
     const fetcher = vi.fn().mockResolvedValue(
       new Response(null, {
         status: 304,
