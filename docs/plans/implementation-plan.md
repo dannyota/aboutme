@@ -21,8 +21,8 @@ keep everything runnable on the laptop until the whole product works there.
 | P2A resume domain and store   | Complete                        | None                                            |
 | P3 renderer lane              | Complete                        | None                                            |
 | P2B server lane               | Complete                        | None                                            |
-| P4 authenticated editor       | Ready for dispatch              | Execute the approved editor design              |
-| P5A publish and public SSR    | Ready for dispatch              | Execute the approved publish/public design      |
+| P4 authenticated editor       | Implemented                      | Phase review, then `make ci` and connected `make scan`; mark AC-EDITOR PROVEN |
+| P5A publish and public SSR    | Implemented                      | T12 native public capture; phase review; `make ci`/`make scan`; mark AC-PUB PROVEN |
 | PA password authentication    | Approved, queued                | Start after P4 and P5A integrate                |
 | P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
 | PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
@@ -32,8 +32,9 @@ and reauthentication. P1.1's contract, tests, browser proof, and gates agree.
 
 ## Delivery order
 
-P3 and P2B are complete. P4 and P5A are the next two delivery lanes and may run
-in parallel after both implementation plans pass independent review:
+P3 and P2B are complete. P4 and P5A are implemented: their task code is landed,
+and only P5A T12 (native public capture) plus the fresh phase review and
+definitive exit gates remain before either is marked complete:
 
 | Lane        | Phase | Work                                                        |
 | ----------- | ----- | ----------------------------------------------------------- |
