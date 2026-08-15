@@ -224,22 +224,22 @@ in the mode-`0700` run root under `/dev/shm`; teardown proves that root is gone.
 Tier: **High risk, implementation author**.
 
 Own `deploy/uat-browser/{Dockerfile,package.json,.containerignore}`,
-`scripts/uat-mcp.sh` and `scripts/uat-mcp-test.sh`. The integration owner
-generates `deploy/uat-browser/package-lock.json` in a serialized lockfile
+`scripts/uat-browser.sh` and `scripts/uat-browser-test.sh`. The integration
+owner generates `deploy/uat-browser/package-lock.json` in a serialized lockfile
 window. First write the static wrapper test and record its expected failure.
 Resolve every image digest and executable before dispatch. Build and test
 exactly, with U6 running:
 
 ```sh
-bash -n scripts/uat-mcp.sh
-bash -n scripts/uat-mcp-test.sh
-bash scripts/uat-mcp-test.sh --static
+bash -n scripts/uat-browser.sh
+bash -n scripts/uat-browser-test.sh
+bash scripts/uat-browser-test.sh --static
 . scripts/uat-identities.sh paths
 podman build --pull=never -f deploy/uat-browser/Dockerfile \
   --iidfile "$P9_BROWSER_IID_FILE" deploy/uat-browser
 IFS= read -r P9_BROWSER_IMAGE_ID < "$P9_BROWSER_IID_FILE"
-bash scripts/uat-mcp-test.sh --image-id "$P9_BROWSER_IMAGE_ID"
-bash scripts/uat-mcp.sh --check --image-id "$P9_BROWSER_IMAGE_ID"
+bash scripts/uat-browser-test.sh --image-id "$P9_BROWSER_IMAGE_ID"
+bash scripts/uat-browser.sh --check --image-id "$P9_BROWSER_IMAGE_ID"
 node scripts/uat-browser-trust-test.mjs --image-id "$P9_BROWSER_IMAGE_ID"
 ```
 
@@ -249,11 +249,11 @@ Dockerfile uses named `COPY` sources, never `COPY .`. Static and image-inventory
 tests place an unexpected context file and prove it, `.env`, `.git`,
 `.superpowers`, `.dev`, and test output cannot enter the context or image.
 
-The wrapper, local MCP configuration, and U8 target accept only the immutable ID
-read from the IID file; they reject a tag, missing ID, or contract mismatch. The
-check reaches `https://localhost/healthz` through host networking with IPv4
-pinned and no TLS bypass. It records the image ID, executable, root, resolved
-address, raw formats, trace allowlist, and capture flags in
+The wrapper, scripted Playwright configuration, and U8 target accept only the
+immutable ID read from the IID file; they reject a tag, missing ID, or contract
+mismatch. The check reaches `https://localhost/healthz` through host networking
+with IPv4 pinned and no TLS bypass. It records the image ID, executable, root,
+resolved address, raw formats, trace allowlist, and capture flags in
 `.superpowers/uat/p9-tooling/<commit>/browser-output-contract.json`. That closed
 file and its digest are the U7-to-U10 handoff.
 
