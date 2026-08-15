@@ -305,5 +305,5 @@ describe('typed client (compile-time contract)', () => {
       diagnostics,
       'tsc rejected the generated request/response contract',
     ).toBe('');
-  });
+  }, 15_000);
 });

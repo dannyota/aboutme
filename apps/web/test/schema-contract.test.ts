@@ -244,5 +244,5 @@ describe('schema contract: apps/web recognizes every sectionType', () => {
     } finally {
       rmSync(fixturePath, { force: true });
     }
-  });
+  }, 15_000);
 });

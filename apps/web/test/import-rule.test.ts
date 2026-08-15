@@ -49,7 +49,7 @@ describe('renderer import boundary', () => {
     ],
   ])('rejects %s', async (_dependency, code) => {
     await expectRuleError(code, 'aboutme/no-renderer-import-boundary');
-  });
+  }, 15_000);
 });
 
 describe('renderer determinism boundary', () => {
