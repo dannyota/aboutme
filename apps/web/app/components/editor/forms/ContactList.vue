@@ -162,7 +162,9 @@ function isWebProfile(type: PersonalDetail['type']): boolean {
         :key="detail.id"
         :data-detail-index="index"
       >
-        <span data-detail-id>{{ detail.id }}</span>
+        <strong :data-detail-id="detail.id">
+          Contact detail {{ index + 1 }}
+        </strong>
         <label>
           Type
           <select

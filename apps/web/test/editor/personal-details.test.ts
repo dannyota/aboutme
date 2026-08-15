@@ -218,6 +218,30 @@ describe('DateRangeField', () => {
       expect(wrapper.emitted('intent')).toBeUndefined();
     },
   );
+
+  it(
+    'uses January for a missing month and keeps an absent cleared range quiet',
+    async () => {
+      const wrapper = mount(DateRangeField, {
+        props: { fieldId: 'dates', modelValue: undefined },
+      });
+      await wrapper.get('[data-part="start-year"]').setValue('2024');
+      await wrapper.get('[data-part="end-year"]').setValue('2024');
+      await wrapper.get('[data-part="end-month"]').setValue('1');
+      await wrapper.get('[data-part="end-month"]').trigger('blur');
+      expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual({
+        kind: 'set',
+        value: {
+          start: { y: 2024 }, end: { y: 2024, m: 1 }, present: false,
+        },
+      });
+      await wrapper.get('[data-part="start-year"]').setValue('');
+      await wrapper.get('[data-part="end-year"]').setValue('');
+      await wrapper.get('[data-part="end-month"]').setValue('');
+      await wrapper.get('[data-part="end-month"]').trigger('blur');
+      expect(wrapper.find('[data-error="date-order"]').exists()).toBe(false);
+    },
+  );
 });
 
 describe('PersonalDetailsPanel', () => {
@@ -322,7 +346,9 @@ describe('PersonalDetailsPanel', () => {
     await wrapper.get('[data-action="add-detail"]').trigger('click');
 
     expect(actions.createEntityId).toHaveBeenCalledOnce();
-    expect(wrapper.get('[data-detail-id]').text()).toBe('detail-1');
+    expect(wrapper.get('[data-detail-id]').text()).toBe('Contact detail 1');
+    expect(wrapper.get('[data-detail-id]').attributes('data-detail-id'))
+      .toBe('detail-1');
     expect(wrapper.find('input[value="detail-1"]').exists()).toBe(false);
   });
 

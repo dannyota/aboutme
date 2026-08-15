@@ -33,7 +33,7 @@ New contact IDs come only from `ResumeEditorActions.createEntityId()`, which
 delegates to the injected editor runtime. Forms do not receive a runtime or UUID
 callback.
 
-- [ ] **Step 1: Write the shared field/date RED test**
+- [x] **Step 1: Write the shared field/date RED test**
 
 ```ts
 it.each([
@@ -53,7 +53,7 @@ it.each([
 Add exact `YearMonth` and `DateRange` rows, including zero-preserving month,
 presence, null end, and local start-after-end display.
 
-- [ ] **Step 2: Run the shared-field test RED**
+- [x] **Step 2: Run the shared-field test RED**
 
 ```sh
 (cd apps/web && npx vitest run test/editor/personal-details.test.ts)
@@ -61,7 +61,7 @@ presence, null end, and local start-after-end display.
 
 Expected RED: FAIL because shared fields do not exist.
 
-- [ ] **Step 3: Implement minimal shared field transitions**
+- [x] **Step 3: Implement minimal shared field transitions**
 
 ```ts
 const dirty = ref(false);
@@ -79,11 +79,11 @@ const commit = () => {
 Clear is rendered only where empty string is schema-valid. Unset removes the
 property. Reject non-finite/fractional year/month before capture.
 
-- [ ] **Step 4: Rerun the shared-field test GREEN**
+- [x] **Step 4: Rerun the shared-field test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 5: Write the personal/contact RED test**
+- [x] **Step 5: Write the personal/contact RED test**
 
 ```ts
 it("captures ordered contact edits through the action boundary", async () => {
@@ -103,11 +103,11 @@ Add assertions for fullName/headline, immutable IDs, set/clear/unset, all
 contact types, lowercase `https://` for web profiles, issues, and exactly one
 `actions.createEntityId()` call.
 
-- [ ] **Step 6: Run the personal/contact test RED**
+- [x] **Step 6: Run the personal/contact test RED**
 
 Run the Step 2 command. Expected RED: FAIL because panel capture is absent.
 
-- [ ] **Step 7: Implement minimal personal/contact capture**
+- [x] **Step 7: Implement minimal personal/contact capture**
 
 ```ts
 const commitDetails = (details: readonly PersonalDetail[]) =>
@@ -121,11 +121,11 @@ const commitDetails = (details: readonly PersonalDetail[]) =>
 Construct details from accepted siblings plus the action. IDs render as text,
 never inputs.
 
-- [ ] **Step 8: Rerun the personal/contact test GREEN**
+- [x] **Step 8: Rerun the personal/contact test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 9: Run the final task gate and report**
+- [x] **Step 9: Run the final task gate and report**
 
 ```sh
 (cd apps/web && npx vitest run test/editor/personal-details.test.ts)
