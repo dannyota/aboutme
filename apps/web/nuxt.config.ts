@@ -167,10 +167,11 @@ export default defineNuxtConfig({
   // surfaces must be crawlable without JS (spec §5).
   ssr: true,
 
-  devtools: { enabled: true },
+  devtools: { enabled: false },
 
   app: {
     head: {
+      htmlAttrs: { lang: 'en' },
       script: [{ src: '/theme-bootstrap.js' }],
     },
   },

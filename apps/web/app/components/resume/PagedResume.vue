@@ -529,4 +529,8 @@ export default defineComponent({
 .resume-document .pagination-atomic .section-heading:empty {
   min-block-size: 1px;
 }
+
+.resume-document .pagination-atomic .entry {
+  min-block-size: 1px;
+}
 </style>

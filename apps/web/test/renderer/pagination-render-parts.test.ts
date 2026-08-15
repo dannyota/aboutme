@@ -82,6 +82,9 @@ describe('section pagination parts', () => {
       '.resume-document .pagination-atomic .section-heading:empty',
     );
     expect(compiled.code).toContain(
+      '.resume-document .pagination-atomic .entry {\n  min-block-size: 1px',
+    );
+    expect(compiled.code).toContain(
       '.resume-page[data-page-overflow=\'true\']',
     );
     expect(compiled.code).toContain(

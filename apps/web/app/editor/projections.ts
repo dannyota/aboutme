@@ -67,7 +67,13 @@ export function projectIntent(
       };
     case 'resumeDelete':
       return {
-        target: { present: true, value: snapshot },
+        target: {
+          present: true,
+          value: {
+            document: snapshot.document,
+            metadata: snapshot.metadata,
+          },
+        },
         context: { ownerId: { present: false } },
       };
     default:

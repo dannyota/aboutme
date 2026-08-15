@@ -435,6 +435,42 @@ describe('useResumeList', () => {
     expect(list.items.value).toEqual([]);
   });
 
+  it(
+    'flushes a confirmed delete and waits for definitive removal',
+    async () => {
+      setActivePinia(createPinia());
+      const accepted = acceptedFixture();
+      const store = useResumeStore();
+      const flush = vi.fn(async (id: string) => store.removeResume(id));
+      const refreshAuth = vi.fn().mockResolvedValue(undefined);
+      const list = useResumeList({
+        api: {
+          list: vi.fn().mockResolvedValue({
+            kind: 'ready',
+            items: [{ ...accepted.metadata, revision: accepted.revision }],
+          }),
+          read: vi.fn().mockResolvedValue({ kind: 'complete', accepted }),
+        } as never,
+        store,
+        coordinator: { flush } as unknown as ResumeMutationCoordinator,
+        refreshAuth,
+        actionsFor: () => ({
+          edit: () => ({ kind: 'enqueued' }),
+        }) as never,
+        authState: computed(() => 'authenticated') as never,
+      });
+      await nextTick();
+      await list.settled();
+
+      await list.remove(accepted.metadata.id, accepted.metadata.title);
+      await nextTick();
+
+      expect(flush).toHaveBeenCalledWith(accepted.metadata.id);
+      expect(refreshAuth).toHaveBeenCalledOnce();
+      expect(list.items.value).toEqual([]);
+    },
+  );
+
   it('isolates busy state to the active resume row', () => {
     const first = {
       ...acceptedFixture().metadata,

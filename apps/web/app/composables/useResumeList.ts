@@ -52,6 +52,7 @@ export interface ResumeListDeps {
   coordinator?: ResumeMutationCoordinator;
   store?: ReturnType<typeof useResumeStore>;
   actionsFor?: (resumeId: string) => ResumeEditorActions;
+  refreshAuth?: () => Promise<void>;
 }
 
 export function createStatusMessage(result: CreateResumeResult): string | null {
@@ -85,6 +86,8 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   });
   const actionsFor = deps.actionsFor ?? ((resumeId: string) =>
     createResumeEditorActions({ resumeId, store, coordinator, auth, runtime }));
+  const refreshAuth = deps.refreshAuth
+    ?? (deps.authState === undefined ? auth.refresh : async () => {});
   const view = ref<ResumeListView>({ kind: 'waiting-auth' });
   const actionMessage = ref<string | null>(null);
   const removalFocusId = ref<string | null>(null);
@@ -213,6 +216,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     confirmedTitle?: string,
   ): Promise<ResumeEditorActions | null> => {
     actionMessage.value = null;
+    await refreshAuth();
     const read = await api.read(id);
     if (read.kind !== 'complete') {
       view.value = { kind: 'unavailable' };
@@ -239,7 +243,10 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   const remove = async (id: string, confirmedTitle: string): Promise<void> => {
     const actions = await initializeForAction(id, confirmedTitle);
     const result = actions?.edit({ kind: 'resumeDelete', confirmedTitle });
-    if (result?.kind === 'enqueued') deleting.add(id);
+    if (result?.kind === 'enqueued') {
+      deleting.add(id);
+      await coordinator.flush(id);
+    }
   };
 
   return {

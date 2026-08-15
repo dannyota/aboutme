@@ -150,22 +150,27 @@ export function createMutationCoordinator(deps: {
           deps.store.dropHead(resumeId, queueItem.id);
           continue;
         }
-        const groupDecision = reconcileTemplateGroup(
-          queueItem,
-          record.accepted,
-        );
-        if (groupDecision.kind === 'satisfied') {
-          deps.store.setTemplateState(resumeId, null);
-          deps.store.dropHead(resumeId, queueItem.id);
-          continue;
-        }
-        if (groupDecision.kind === 'conflict') {
-          deps.store.markConflict(resumeId, groupDecision.conflict);
-          return;
+        if (
+          record.templateState.kind === 'queued'
+          && record.templateState.nextChild === 0
+        ) {
+          const groupDecision = reconcileTemplateGroup(
+            queueItem,
+            record.accepted,
+          );
+          if (groupDecision.kind === 'satisfied') {
+            deps.store.setTemplateState(resumeId, null);
+            deps.store.dropHead(resumeId, queueItem.id);
+            continue;
+          }
+          if (groupDecision.kind === 'conflict') {
+            deps.store.markConflict(resumeId, groupDecision.conflict);
+            return;
+          }
         }
         const command = nextTemplateChild(queueItem, record.templateState);
         if (command === null) return;
-        await dispatchCommand(resumeId, queueItem, command);
+        if (!await dispatchCommand(resumeId, queueItem, command)) return;
         continue;
       }
       const decision = reconcileCommand(queueItem, record.accepted);
@@ -177,7 +182,7 @@ export function createMutationCoordinator(deps: {
         deps.store.markConflict(resumeId, decision.conflict);
         return;
       }
-      await dispatchCommand(resumeId, queueItem, queueItem);
+      if (!await dispatchCommand(resumeId, queueItem, queueItem)) return;
     }
   }
 
@@ -185,10 +190,22 @@ export function createMutationCoordinator(deps: {
     resumeId: string,
     queueItem: EditorQueueItem,
     command: AtomicEditorCommand,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const record = deps.store.recordFor(resumeId);
-    const csrfToken = dispatchToken(resumeId, queueItem.ownerId);
-    if (record === undefined || csrfToken === null) return;
+    let csrfToken = dispatchToken(resumeId, queueItem.ownerId);
+    if (
+      record !== undefined
+      && csrfToken === null
+      && !record.sessionLost
+    ) {
+      try {
+        await deps.auth.refresh();
+      } catch {
+        return false;
+      }
+      csrfToken = dispatchToken(resumeId, queueItem.ownerId);
+    }
+    if (record === undefined || csrfToken === null) return false;
     const attempt = freezeAttempt(command, record.accepted, deps.runtime);
     deps.store.startAttempt(resumeId, queueItem, command, attempt);
     await settle(
@@ -198,6 +215,7 @@ export function createMutationCoordinator(deps: {
       attempt,
       await deps.api.dispatch(attempt, csrfToken),
     );
+    return true;
   }
 
   async function settle(
@@ -239,6 +257,7 @@ export function createMutationCoordinator(deps: {
         return;
       case 'validation-rejected':
         deps.store.setIssues(resumeId, queueItem.id, result.issues);
+        if (markTemplateChildFailed(resumeId, queueItem)) return;
         holdFailed(
           deps.store,
           resumeId,
@@ -280,6 +299,7 @@ export function createMutationCoordinator(deps: {
         await refreshAndReconcile(resumeId);
         return;
       case 'rejected':
+        if (markTemplateChildFailed(resumeId, queueItem)) return;
         holdFailed(
           deps.store,
           resumeId,
@@ -364,6 +384,32 @@ export function createMutationCoordinator(deps: {
       return;
     }
     deps.store.continueTemplateGroup(resumeId, group.id);
+  }
+
+  function markTemplateChildFailed(
+    resumeId: string,
+    queueItem: EditorQueueItem,
+  ): boolean {
+    if (queueItem.kind !== 'templateGroup') return false;
+    const record = deps.store.recordFor(resumeId);
+    const state = record?.templateState;
+    if (
+      record === undefined
+      || state === undefined
+      || state === null
+      || state.kind === 'complete'
+      || state.kind === 'partial'
+    ) {
+      return false;
+    }
+    deps.store.setTemplateState(resumeId, {
+      kind: 'partial',
+      accepted: record.accepted,
+      nextChild: state.nextChild,
+      reason: 'child-failed',
+    });
+    deps.store.continueTemplateGroup(resumeId, queueItem.id);
+    return true;
   }
 
   async function refreshThenRetrySameAttemptOnce(

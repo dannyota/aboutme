@@ -1,6 +1,6 @@
 import type { ResumeApi } from './resumeApi';
 import type { AcceptedResume } from './types';
-import type { useResumeStore } from '../stores/resumes';
+import type { PhotoReadState, useResumeStore } from '../stores/resumes';
 
 export interface PhotoController {
   sync(accepted: AcceptedResume): Promise<void>;
@@ -47,9 +47,15 @@ export function createPhotoController(deps: {
     const retained = prior?.kind === 'ready' && prior.binding === binding
       ? prior
       : undefined;
-    deps.store.setPhotoRead(resumeId, { kind: 'loading', binding, generation });
+    if (retained === undefined) {
+      deps.store.setPhotoRead(resumeId, {
+        kind: 'loading',
+        binding,
+        generation,
+      });
+    }
     const result = await deps.api.readOwnerPhoto(resumeId, retained?.etag);
-    if (!isCurrentLoading(deps.store, resumeId, binding, generation)) return;
+    if (!isCurrentSync(resumeId, binding, generation, retained)) return;
     if (acceptedPhotoKey(deps.store, resumeId) !== binding) {
       deps.store.setPhotoRead(resumeId, {
         kind: 'suspended',
@@ -62,7 +68,12 @@ export function createPhotoController(deps: {
 
     if (result.kind === 'not-modified') {
       if (retained === undefined || retained.etag !== result.etag) {
-        suspend(deps.store, resumeId, binding, generation, 'read-failed');
+        deps.store.setPhotoRead(resumeId, {
+          kind: 'suspended',
+          binding,
+          generation,
+          reason: 'read-failed',
+        });
         return;
       }
       deps.store.setPhotoRead(resumeId, {
@@ -75,13 +86,13 @@ export function createPhotoController(deps: {
       return;
     }
     if (result.kind === 'unavailable') {
-      suspend(
-        deps.store,
-        resumeId,
+      deps.store.setPhotoRead(resumeId, {
+        kind: 'suspended',
         binding,
         generation,
-        result.reason === 'session-lost' ? 'session-lost' : 'read-failed',
-      );
+        reason:
+          result.reason === 'session-lost' ? 'session-lost' : 'read-failed',
+      });
       return;
     }
 
@@ -89,10 +100,17 @@ export function createPhotoController(deps: {
     try {
       dataUrl = await deps.codec.toDataURL(result.bytes, result.mime);
     } catch {
-      suspend(deps.store, resumeId, binding, generation, 'read-failed');
+      if (isCurrentSync(resumeId, binding, generation, retained)) {
+        deps.store.setPhotoRead(resumeId, {
+          kind: 'suspended',
+          binding,
+          generation,
+          reason: 'read-failed',
+        });
+      }
       return;
     }
-    if (!isCurrentLoading(deps.store, resumeId, binding, generation)) return;
+    if (!isCurrentSync(resumeId, binding, generation, retained)) return;
     if (acceptedPhotoKey(deps.store, resumeId) !== binding) {
       deps.store.setPhotoRead(resumeId, {
         kind: 'suspended',
@@ -111,21 +129,29 @@ export function createPhotoController(deps: {
     });
   };
 
-  return { sync, clear };
-}
+  const isCurrentSync = (
+    resumeId: string,
+    binding: string,
+    generation: number,
+    retained: Extract<PhotoReadState, { kind: 'ready' }> | undefined,
+  ): boolean => {
+    if (generation !== activeGeneration || activeResumeId !== resumeId) {
+      return false;
+    }
+    const current = deps.store.recordFor(resumeId)?.photoRead;
+    if (retained === undefined) {
+      return current?.kind === 'loading'
+        && current.binding === binding
+        && current.generation === generation;
+    }
+    return current?.kind === 'ready'
+      && current.binding === retained.binding
+      && current.generation === retained.generation
+      && current.etag === retained.etag
+      && current.dataUrl === retained.dataUrl;
+  };
 
-function isCurrentLoading(
-  store: ReturnType<typeof useResumeStore>,
-  resumeId: string,
-  binding: string,
-  generation: number,
-): boolean {
-  const photoRead = store.recordFor(resumeId)?.photoRead;
-  return (
-    photoRead?.kind === 'loading'
-    && photoRead.binding === binding
-    && photoRead.generation === generation
-  );
+  return { sync, clear };
 }
 
 function acceptedPhotoKey(
@@ -134,20 +160,4 @@ function acceptedPhotoKey(
 ): string | undefined {
   return store.recordFor(resumeId)?.accepted.document.personalDetails.photo
     ?.key;
-}
-
-function suspend(
-  store: ReturnType<typeof useResumeStore>,
-  resumeId: string,
-  binding: string,
-  generation: number,
-  reason: 'read-failed' | 'session-lost',
-): void {
-  if (!isCurrentLoading(store, resumeId, binding, generation)) return;
-  store.setPhotoRead(resumeId, {
-    kind: 'suspended',
-    binding,
-    generation,
-    reason,
-  });
 }

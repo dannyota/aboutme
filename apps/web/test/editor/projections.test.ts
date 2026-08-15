@@ -108,7 +108,10 @@ describe('command projections', () => {
         ],
       });
 
-      expect(deletion.target).toEqual({ present: true, value: snapshot });
+      expect(deletion.target).toEqual({
+        present: true,
+        value: { document: snapshot.document, metadata: snapshot.metadata },
+      });
       expect(deletion.context.ownerId).toEqual({ present: false });
       expect(structure.target).toMatchObject({
         present: true,

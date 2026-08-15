@@ -181,6 +181,10 @@ describe('command capture', () => {
       present: true,
       value: 'owner-1',
     });
+    expect(command.intended).toEqual({
+      target: { present: false },
+      context: { ownerId: { present: true, value: 'owner-1' } },
+    });
   });
 
   it('preserves owner metadata booleans through capture and replay', () => {

@@ -1,6 +1,7 @@
 import type { TemplatePreset } from '@aboutme/schema/templates';
 
 import { applyTemplate } from '../components/resume/applyTemplate';
+import { cloneReactiveSafe } from './clone';
 import {
   captureCommand,
   equalProjection,
@@ -443,7 +444,7 @@ function snapshotForTarget(
 }
 
 function freezeCopy<T>(value: T): T {
-  const copied = structuredClone(value);
+  const copied = cloneReactiveSafe(value);
   return freeze(copied);
 }
 
@@ -479,7 +480,7 @@ function structureChildProjection(
   customization: ResumeSnapshot['document']['customization'],
 ): Projection {
   return {
-    target: { present: true, value: structuredClone(placement) },
+    target: { present: true, value: cloneReactiveSafe(placement) },
     context: {
       ...contentContext(snapshot),
       customization: {
@@ -499,7 +500,7 @@ function customizationChildProjection(
     target: { present: true, value: templateCustomization(customization) },
     context: {
       ...contentContext(snapshot),
-      placement: { present: true, value: structuredClone(placement) },
+      placement: { present: true, value: cloneReactiveSafe(placement) },
     },
   };
 }

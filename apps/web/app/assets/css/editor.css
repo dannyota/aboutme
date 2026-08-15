@@ -210,7 +210,7 @@
 
 .aboutme-app .editor-outline nav button[aria-current="page"] {
   background: color-mix(in oklab, var(--positive) 16%, var(--card));
-  color: var(--positive);
+  color: var(--foreground);
 }
 
 .aboutme-app .editor-add-section {
