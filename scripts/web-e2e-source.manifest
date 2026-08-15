@@ -1,4 +1,5 @@
 apps/web/app/app.vue
+apps/web/app/assets/css/app.css
 apps/web/app/assets/css/fonts.css
 apps/web/app/assets/fonts/alegreya-400.woff2
 apps/web/app/assets/fonts/alegreya-700.woff2
@@ -63,7 +64,10 @@ apps/web/app/components/resume/sections/ProjectSection.vue
 apps/web/app/components/resume/sections/SkillSection.vue
 apps/web/app/components/resume/sections/WorkSection.vue
 apps/web/app/components/resume/useResumeStyles.ts
+apps/web/app/components/ui/AccountControl.vue
+apps/web/app/components/ui/ThemeToggle.vue
 apps/web/app/composables/useAuth.ts
+apps/web/app/composables/useTheme.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
 apps/web/app/pages/_harness/render.vue
@@ -122,6 +126,7 @@ apps/web/public/font-licenses/source-sans-3/LICENSE.md
 apps/web/public/font-licenses/space-mono/OFL.txt
 apps/web/public/font-licenses/spectral/ofl.txt
 apps/web/public/font-licenses/work-sans/OFL.txt
+apps/web/public/theme-bootstrap.js
 apps/web/server/plugins/csp-externalize.ts
 apps/web/server/utils/cspExternalize.ts
 apps/web/test/sanitizer/neutralization.ts
@@ -130,6 +135,7 @@ packages/schema/fixtures/full.json
 packages/schema/fixtures/vn-full.json
 packages/schema/gen/ts/released.ts
 packages/schema/gen/ts/resume.ts
+packages/schema/gen/ts/sanitizer-policy.ts
 packages/schema/gen/ts/sanitizer.ts
 packages/schema/gen/ts/templates.ts
 packages/schema/package.json

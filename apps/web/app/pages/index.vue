@@ -5,8 +5,10 @@ useHead({
 </script>
 
 <template>
-  <PlaceholderHero
-    title="aboutme"
-    tagline="Open-source resume builder — SSR skeleton is live."
-  />
+  <main class="app-page">
+    <PlaceholderHero
+      title="aboutme"
+      tagline="Open-source resume builder — SSR skeleton is live."
+    />
+  </main>
 </template>

@@ -196,3 +196,23 @@ commit. The sole fresh phase review reads that commit. After fixes, definitive
 `make ci` and connected `make scan` rerun at the unchanged final candidate. A
 failure corrects completion records before review/gates repeat; no pushed commit
 silently follows the gated candidate.
+
+### D23 — Nova visual system is app-owned
+
+The authenticated app follows the owner-selected shadcn create configuration:
+Nova style, Zinc base and theme, Emerald chart/accent color, Inter text, Lucide
+icons, default `0.625rem` radius, solid menu, and subtle menu accent. It adopts
+the visual tokens and interaction density without adding a shadcn runtime or
+making Tailwind a renderer dependency.
+
+The editor uses a compact app rail, a document-derived section outline, a
+central paged preview, and a focused inspector. The outline reads only
+`customization.layout.sections`; it is never a second order authority. Phase 4
+does not render the mock's Publish or global undo/redo controls because D21
+excludes publishing and the template contract permits only guarded template
+undo.
+
+Light and dark themes share the same semantic token names. A user toggle stores
+only `light` or `dark` in a non-sensitive preference cookie. Theme state never
+uses local storage, session storage, IndexedDB, a URL, or the resume store. App
+CSS is scoped away from the pure resume renderer and print surface.

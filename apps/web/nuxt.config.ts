@@ -169,7 +169,13 @@ export default defineNuxtConfig({
 
   devtools: { enabled: true },
 
-  css: ['~/assets/css/fonts.css'],
+  app: {
+    head: {
+      script: [{ src: '/theme-bootstrap.js' }],
+    },
+  },
+
+  css: ['~/assets/css/fonts.css', '~/assets/css/app.css'],
 
   runtimeConfig: {
     public: {

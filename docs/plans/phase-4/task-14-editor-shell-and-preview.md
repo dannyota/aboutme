@@ -3,8 +3,9 @@
 **Owner:** One high-judgment web integration author.
 
 **Authorities:** all of `design.md` Resume editor through Error ownership,
-`editor-contract.md` Editor layout/Validation/Conflict controls/Accessibility,
-Phase 3 renderer interfaces, ADR 0005, and D11/D16/D17.
+`editor-contract.md` Editor layout/Visual system/Validation/Conflict
+controls/Accessibility, Phase 3 renderer interfaces, ADR 0005, and
+D11/D16/D17/D23.
 
 **Acceptance:** AC-EDITOR-006 and AC-EDITOR-014 through AC-EDITOR-016.
 
@@ -18,7 +19,19 @@ Phase 3 renderer interfaces, ADR 0005, and D11/D16/D17.
 - Create: `apps/web/app/components/editor/ConflictPanel.vue`
 - Create: `apps/web/app/editor/pageCountObserver.ts`
 - Create: `apps/web/app/composables/useUnsavedNavigationGuard.ts`
+- Create: `apps/web/app/composables/useTheme.ts`
+- Create: `apps/web/app/components/ui/ThemeToggle.vue`
+- Create: `apps/web/app/assets/css/app.css`
+- Create: `apps/web/public/theme-bootstrap.js`
 - Create: `apps/web/app/assets/css/editor.css`
+- Modify: `apps/web/app/app.vue`
+- Modify: `apps/web/app/pages/index.vue`
+- Modify: `apps/web/app/pages/login.vue`
+- Modify: `apps/web/app/pages/app/resumes/index.vue`
+- Modify: `apps/web/app/components/PlaceholderHero.vue`
+- Modify: `apps/web/app/components/editor/list/ResumeList.vue`
+- Modify: `apps/web/nuxt.config.ts`
+- Create: `apps/web/test/editor/theme.test.ts`
 - Create: `apps/web/test/editor/editor-shell.test.ts`
 - Create: `apps/web/test/editor/editor-preview.test.ts`
 - Create: `apps/web/test/editor/page-count-observer.test.ts`
@@ -51,10 +64,56 @@ export function observeSettledVisiblePageCount(
 ): () => void;
 ```
 
+`useTheme` exposes only resolved theme and toggle state. Its cookie contains
+only the exact values `light` or `dark`; invalid or absent values follow the
+system preference. A self-hosted head bootstrap resolves first paint without
+inline code or browser storage. `ThemeToggle` uses Lucide icons and a labelled
+native button. App CSS carries the selected Nova/Zinc/Emerald semantic variables
+and never targets `.resume-document`, `.resume-page`, or renderer descendants.
+
+The selected desktop shell has a compact app rail, document-derived outline,
+dominant preview, and focused inspector. The outline changes local focus only;
+structure writes remain in `StructurePanel`. Do not render Publish or global
+undo/redo controls. Phase 4 owns neither behavior.
+
+In authenticated shells, render the labelled theme toggle directly beside the
+signed-in account control. Do not hide theme selection in Settings or an
+overflow menu.
+
+- [x] **Step 0a: Write the theme and app-surface RED test**
+
+Assert absent/invalid preferences follow the injected system mode, toggle writes
+only `light` or `dark`, SSR emits no resume request, and no Storage, IndexedDB,
+history, URL, or beacon API is touched. Mount the unauthenticated home/login and
+resume-list states and assert labelled theme control, Nova app landmarks,
+visible focus classes, and no renderer selector under app CSS.
+
+- [x] **Step 0b: Run the theme and app-surface RED**
+
+Run:
+
+```sh
+(cd apps/web && npx vitest run test/editor/theme.test.ts)
+```
+
+Expected RED: FAIL because the theme boundary and app styles do not exist.
+
+- [x] **Step 0c: Implement the minimal visual system**
+
+Add exact light/dark semantic variables, Inter app typography, default radius,
+solid navigation, subtle selected state, and Emerald semantic accents. Scope all
+element styling below the app root. Persist only the two-state preference
+cookie. Style the existing home, login, list, forms, and dialogs without
+changing their transport or auth behavior.
+
+- [x] **Step 0d: Rerun the theme and app-surface test GREEN**
+
+Run the Step 0b command. Expected GREEN: PASS.
+
 It passes `{ document, context: { lng, mode: 'paged', photoUrl } }` and never
 changes renderer code.
 
-- [ ] **Step 1: Write the route/shell RED test**
+- [x] **Step 1: Write the route/shell RED test**
 
 Server-render the page and assert zero `/me` or resume request. In browser mode,
 wait for resolved auth; redirect anonymous only with no local work; initialize a
@@ -76,7 +135,7 @@ it("does no owner I/O during SSR and waits for resolved auth", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the route/shell test RED**
+- [x] **Step 2: Run the route/shell test RED**
 
 Run:
 
@@ -86,14 +145,16 @@ Run:
 
 Expected RED: FAIL because route/shell do not exist.
 
-- [ ] **Step 3: Implement minimal route composition**
+- [x] **Step 3: Implement minimal route composition**
 
 The page calls `useResumeEditor(route.params.id)` only on client after auth. The
 composable exhaustively maps Task 03 `ResumeReadResult`; only `complete`
 initializes Task 04 state. Wide shell renders controls/preview side by side;
 narrow shell toggles visibility without unmounting either subtree.
 `EditorShell.vue` imports `editor.css`. Panels are imports only; shell performs
-no transport write.
+no transport write. At the desktop acceptance viewport it renders the D23 app
+rail, document-derived outline, dominant preview, and focused inspector. The top
+bar exposes safe save state and preview plus adjacent theme/account controls.
 
 ```ts
 onMounted(async () => {
@@ -105,11 +166,11 @@ onMounted(async () => {
 });
 ```
 
-- [ ] **Step 4: Rerun the route/shell test GREEN**
+- [x] **Step 4: Rerun the route/shell test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 5: Write the preview/page-count RED test**
+- [x] **Step 5: Write the preview/page-count RED test**
 
 Assert immediate optimistic render, matching-photo requirement, loading/read
 failure suspension, typed renderer/pagination failures without state mutation,
@@ -170,7 +231,7 @@ it("reports only a settled contiguous visible page set", () => {
 });
 ```
 
-- [ ] **Step 6: Run the preview/page-count test RED**
+- [x] **Step 6: Run the preview/page-count test RED**
 
 Run:
 
@@ -181,7 +242,7 @@ Run:
 
 Expected RED: FAIL because adapter is absent.
 
-- [ ] **Step 7: Implement the preview adapter and observer**
+- [x] **Step 7: Implement the preview adapter and observer**
 
 Pass only props from the interface. Include `photoUrl` only when Task 04 ready
 binding equals current photo key. Catch `ResumeRenderError` and
@@ -253,11 +314,11 @@ the deterministic function above.
 
 Disconnect the observer and cancel frames on unmount.
 
-- [ ] **Step 8: Rerun the preview/page-count test GREEN**
+- [x] **Step 8: Rerun the preview/page-count test GREEN**
 
 Run the Step 6 command. Expected GREEN: PASS.
 
-- [ ] **Step 9: Write the status/error/conflict/accessibility RED test**
+- [x] **Step 9: Write the status/error/conflict/accessibility RED test**
 
 Exercise every save state and template partial in polite regions. Handled errors
 focus summary; mapped paths focus labelled fields; unmapped paths remain listed;
@@ -287,7 +348,7 @@ it.each([
 });
 ```
 
-- [ ] **Step 10: Run the status/accessibility test RED**
+- [x] **Step 10: Run the status/accessibility test RED**
 
 Run:
 
@@ -298,7 +359,7 @@ Run:
 
 Expected RED: FAIL on the first missing status/error/focus behavior.
 
-- [ ] **Step 11: Implement minimal status/error/conflict UI**
+- [x] **Step 11: Implement minimal status/error/conflict UI**
 
 Use exhaustive discriminated-union switches and stable copy keyed by error code.
 Never interpolate raw server messages, object keys, filenames, tokens, request
@@ -314,11 +375,11 @@ const applyMine = (conflict: ConflictRecord) => {
 };
 ```
 
-- [ ] **Step 12: Rerun the status/accessibility test GREEN**
+- [x] **Step 12: Rerun the status/accessibility test GREEN**
 
 Run the Step 10 command. Expected GREEN: PASS.
 
-- [ ] **Step 13: Write the leave/session/persistence RED test**
+- [x] **Step 13: Write the leave/session/persistence RED test**
 
 Warn for pending, in-flight, failed, unknown, partial, conflicted, or
 session-lost work; do not warn when fully accepted; never send unload request or
@@ -377,7 +438,7 @@ it("keeps failed and session-lost edits only in memory", async () => {
 });
 ```
 
-- [ ] **Step 14: Run the persistence-boundary test RED**
+- [x] **Step 14: Run the persistence-boundary test RED**
 
 Run:
 
@@ -388,7 +449,7 @@ Run:
 
 Expected RED: FAIL because guards/boundary proof are absent.
 
-- [ ] **Step 15: Implement minimal guard/session UI**
+- [x] **Step 15: Implement minimal guard/session UI**
 
 Route leave returns false while unsafe work exists. `beforeunload` only sets
 `event.returnValue`; it calls no async API. Session loss keeps the mounted shell
@@ -407,19 +468,20 @@ const discardAndSignIn = async () => {
 };
 ```
 
-- [ ] **Step 16: Rerun the persistence-boundary test GREEN**
+- [x] **Step 16: Rerun the persistence-boundary test GREEN**
 
 Run the Step 14 command. Expected GREEN: PASS.
 
-- [ ] **Step 17: Run the final task gate and report**
+- [x] **Step 17: Run the final task gate and report**
 
 ```sh
 (cd apps/web && npx vitest run \
-  test/editor/{editor-shell,editor-preview,page-count-observer,navigation-guard,accessibility,persistence-boundary}.test.ts)
+  test/editor/{theme,editor-shell,editor-preview,page-count-observer,navigation-guard,accessibility,persistence-boundary}.test.ts)
 (cd apps/web && npx eslint app/pages/app/resumes/'[id].vue' \
   app/components/editor/{EditorShell,EditorPreview,SaveStatus,ErrorSummary,ConflictPanel}.vue \
-  app/editor/pageCountObserver.ts app/composables/useUnsavedNavigationGuard.ts \
-  test/editor/{editor-shell,editor-preview,page-count-observer,navigation-guard,accessibility,persistence-boundary}.test.ts)
+  app/components/ui/ThemeToggle.vue app/editor/pageCountObserver.ts \
+  app/composables/{useTheme,useUnsavedNavigationGuard}.ts \
+  test/editor/{theme,editor-shell,editor-preview,page-count-observer,navigation-guard,accessibility,persistence-boundary}.test.ts)
 make web-lint web-typecheck web-test web-build
 ```
 

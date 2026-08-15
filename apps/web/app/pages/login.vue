@@ -50,26 +50,28 @@ const errorMessage = computed(() => {
 </script>
 
 <template>
-  <section class="login">
-    <h1>Sign in</h1>
+  <main class="app-page app-page--narrow">
+    <section class="login">
+      <h1>Sign in</h1>
 
-    <p
-      v-if="errorMessage"
-      data-testid="login-error"
-      role="alert"
-    >
-      {{ errorMessage }}
-    </p>
-
-    <ul class="login-providers">
-      <li
-        v-for="provider in providers"
-        :key="provider.id"
+      <p
+        v-if="errorMessage"
+        data-testid="login-error"
+        role="alert"
       >
-        <a :href="`/api/v1/auth/${provider.id}/start`">
-          {{ provider.label }}
-        </a>
-      </li>
-    </ul>
-  </section>
+        {{ errorMessage }}
+      </p>
+
+      <ul class="login-providers">
+        <li
+          v-for="provider in providers"
+          :key="provider.id"
+        >
+          <a :href="`/api/v1/auth/${provider.id}/start`">
+            {{ provider.label }}
+          </a>
+        </li>
+      </ul>
+    </section>
+  </main>
 </template>

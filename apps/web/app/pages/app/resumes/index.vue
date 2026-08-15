@@ -67,7 +67,7 @@ async function remove(id: string, title: string): Promise<void> {
 </script>
 
 <template>
-  <main>
+  <main class="app-page resume-list-page">
     <p
       v-if="list.view.value.kind === 'waiting-auth'"
       role="status"

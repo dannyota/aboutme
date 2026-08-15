@@ -21,9 +21,12 @@ withDefaults(
 <template>
   <section
     class="placeholder-hero"
+    aria-labelledby="placeholder-hero-title"
     data-testid="placeholder-hero"
   >
-    <h1>{{ title }}</h1>
+    <h1 id="placeholder-hero-title">
+      {{ title }}
+    </h1>
     <p>{{ tagline }}</p>
   </section>
 </template>
