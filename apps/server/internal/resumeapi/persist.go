@@ -183,26 +183,26 @@ func (op deleteOperation) Run(ctx context.Context, qtx *store.Queries, mutation 
 		return mutationRunResult{}, err
 	}
 	if current.Slug != nil {
-		if err := auth.RequireRecentReauth(mutation.Session, op.service.clock()); err != nil {
-			return mutationRunResult{}, err
+		if reauthErr := auth.RequireRecentReauth(mutation.Session, op.service.clock()); reauthErr != nil {
+			return mutationRunResult{}, reauthErr
 		}
 		releasedAt := input.ReleasedAt
 		if releasedAt.IsZero() {
 			releasedAt = op.service.clock()
 		}
-		if _, err := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
+		if _, tombstoneErr := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
 			Slug: *current.Slug, ReleasedByUserID: &mutation.UserID, ReleasedAt: releasedAt,
-		}); err != nil {
-			return mutationRunResult{}, err
+		}); tombstoneErr != nil {
+			return mutationRunResult{}, tombstoneErr
 		}
-		if _, err := qtx.AdvanceDiscoveryGeneration(ctx); err != nil {
-			return mutationRunResult{}, err
+		if _, generationErr := qtx.AdvanceDiscoveryGeneration(ctx); generationErr != nil {
+			return mutationRunResult{}, generationErr
 		}
 	}
-	if _, err := qtx.DeleteResumePublicCAS(ctx, store.DeleteResumePublicCASParams{
+	if _, deleteErr := qtx.DeleteResumePublicCAS(ctx, store.DeleteResumePublicCASParams{
 		ID: input.ResumeID, UserID: mutation.UserID, ExpectedRevision: *mutation.ExpectedRevision,
-	}); err != nil {
-		return mutationRunResult{}, err
+	}); deleteErr != nil {
+		return mutationRunResult{}, deleteErr
 	}
 	if input.BeforeDelete != nil {
 		if beforeDeleteErr := input.BeforeDelete(ctx, qtx, current); beforeDeleteErr != nil {

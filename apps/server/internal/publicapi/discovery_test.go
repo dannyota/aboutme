@@ -34,7 +34,7 @@ func TestDiscoveryHandlerRetriesOneGenerationMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/sitemap.xml", nil))
 	if w.Code != http.StatusOK || w.Body.String() != "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n  <url><loc>https://aboutme.example/ada</loc></url>\n  <url><loc>https://aboutme.example/zeta</loc></url>\n</urlset>\n" {
 		t.Fatalf("response = %d %q", w.Code, w.Body.String())
 	}
@@ -63,7 +63,7 @@ func TestDiscoveryHandlerFailsClosedAfterSecondGenerationMismatch(t *testing.T) 
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/sitemap.xml", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", w.Code)
 	}
@@ -86,8 +86,8 @@ func TestDiscoveryHandlerClosedAdmissionDoesNotServeCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := transition.Close(context.Background(), time.Now().Add(time.Second)); err != nil {
-		t.Fatal(err)
+	if closeErr := transition.Close(context.Background(), time.Now().Add(time.Second)); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	cache, err := publiccache.New(4, time.Minute, time.Now)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestDiscoveryHandlerClosedAdmissionDoesNotServeCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/llms.txt", nil))
+	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/llms.txt", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", w.Code)
 	}

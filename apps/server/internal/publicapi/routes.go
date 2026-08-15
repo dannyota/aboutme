@@ -20,6 +20,7 @@ const (
 	publicRouteLLMS
 )
 
+// Recognizes reports whether escapedPath belongs to a public route.
 func (s *Service) Recognizes(escapedPath string) bool {
 	return classifyPublicRoute(escapedPath) != publicRouteNone
 }

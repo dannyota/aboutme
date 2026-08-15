@@ -17,6 +17,7 @@ import (
 
 const htmlFormatVersion = 1
 
+// HTMLDependencies contains the dependencies for public HTML responses.
 type HTMLDependencies struct {
 	Reader         *publicresume.Reader
 	Cache          *publiccache.Cache
@@ -26,6 +27,7 @@ type HTMLDependencies struct {
 	RendererDigest string
 }
 
+// NewHTMLHandler creates the handler for public resume HTML pages.
 func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 	if dependencies.Reader == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
@@ -73,6 +75,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
+		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
 		result, err := dependencies.Renderer.Render(lease.Context(), directrender.PublicRenderRequest{
 			PublicResume:     snapshot.Public,
 			Mode:             directrender.PublicRenderMode,
@@ -123,7 +126,9 @@ func serveHTMLError(w http.ResponseWriter, request *http.Request, status int) {
 	}
 	w.WriteHeader(status)
 	if request.Method != http.MethodHead {
-		_, _ = w.Write(body)
+		if _, err := w.Write(body); err != nil {
+			return
+		}
 	}
 }
 

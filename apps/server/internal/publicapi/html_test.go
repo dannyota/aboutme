@@ -51,7 +51,7 @@ func TestPublicHTMLDiscoverableValidatesWorkerDocumentAndConditionalResponse(t *
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/ada", nil))
+	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ada", nil))
 	if w.Code != http.StatusOK || w.Body.String() != body {
 		t.Fatalf("response = %d %q", w.Code, w.Body.String())
 	}
@@ -62,7 +62,7 @@ func TestPublicHTMLDiscoverableValidatesWorkerDocumentAndConditionalResponse(t *
 		t.Fatalf("X-Robots-Tag = %q", got)
 	}
 	conditional := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodHead, "/ada", nil)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodHead, "/ada", nil)
 	request.Header.Set("If-None-Match", w.Header().Get("ETag"))
 	handler.ServeHTTP(conditional, request)
 	if conditional.Code != http.StatusNotModified || conditional.Body.Len() != 0 || conditional.Header().Get("Content-Length") != "" || conditional.Header().Get("Content-Security-Policy") != jsonLD.CSP {
@@ -101,7 +101,7 @@ func TestPublicHTMLNondiscoverableRejectsUnexpectedScript(t *testing.T) {
 				t.Fatal(handlerErr)
 			}
 			w := httptest.NewRecorder()
-			handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug, nil))
+			handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
 			if w.Code != test.want {
 				t.Fatalf("status = %d, want %d", w.Code, test.want)
 			}
@@ -156,7 +156,7 @@ func TestPublicHTMLRejectsWrongMainAssetJSONLDAndOversize(t *testing.T) {
 				t.Fatal(err)
 			}
 			w := httptest.NewRecorder()
-			handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug, nil))
+			handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
 			if w.Code != http.StatusServiceUnavailable {
 				t.Fatalf("status = %d, want 503", w.Code)
 			}
@@ -185,7 +185,7 @@ func TestPublicHTMLHoldsLeaseThroughResponseWrite(t *testing.T) {
 	writer := &formatBlockingWriter{header: make(http.Header), wrote: make(chan struct{}), unblock: make(chan struct{})}
 	done := make(chan struct{})
 	go func() {
-		handler.ServeHTTP(writer, httptest.NewRequest(http.MethodGet, "/"+slug, nil))
+		handler.ServeHTTP(writer, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
 		close(done)
 	}()
 	select {
@@ -249,7 +249,7 @@ func TestPublicHTMLRejectsUnexpectedResourceLoads(t *testing.T) {
 				t.Fatal(err)
 			}
 			w := httptest.NewRecorder()
-			handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug, nil))
+			handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
 			if w.Code != http.StatusServiceUnavailable {
 				t.Fatalf("status = %d, want 503", w.Code)
 			}
@@ -301,7 +301,7 @@ func TestPublicHTMLClassifiesNotFoundAndUnavailableReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	notFound := httptest.NewRecorder()
-	handler.ServeHTTP(notFound, httptest.NewRequest(http.MethodGet, "/missing", nil))
+	handler.ServeHTTP(notFound, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/missing", nil))
 	if notFound.Code != http.StatusNotFound || notFound.Header().Get("Retry-After") != "" || notFound.Header().Get("ETag") != "" {
 		t.Fatalf("not found response = %d %#v", notFound.Code, notFound.Header())
 	}
@@ -313,7 +313,7 @@ func TestPublicHTMLClassifiesNotFoundAndUnavailableReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	unavailable := httptest.NewRecorder()
-	handler.ServeHTTP(unavailable, httptest.NewRequest(http.MethodGet, "/"+slug, nil))
+	handler.ServeHTTP(unavailable, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
 	if unavailable.Code != http.StatusServiceUnavailable || unavailable.Header().Get("Retry-After") != "1" || unavailable.Header().Get("ETag") != "" {
 		t.Fatalf("unavailable response = %d %#v", unavailable.Code, unavailable.Header())
 	}
@@ -341,7 +341,7 @@ func TestPublicHTMLReleasesLeaseAfterRendererFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug, nil))
+	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
 	if w.Code != http.StatusServiceUnavailable || w.Header().Get("Retry-After") != "1" {
 		t.Fatalf("renderer failure response = %d %#v", w.Code, w.Header())
 	}

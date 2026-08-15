@@ -62,6 +62,7 @@ func isDevelopment(environment string) bool {
 
 func (o PublicOrigin) String() string { return o.value }
 
+// Resolve returns path at the canonical public origin.
 func (o PublicOrigin) Resolve(path string) string {
 	if !strings.HasPrefix(path, "/") {
 		return ""

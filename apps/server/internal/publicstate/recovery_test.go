@@ -57,27 +57,27 @@ func TestAmbiguousEvidenceControlsAdmissionAndReadiness(t *testing.T) {
 	resolver := recoveryResolverFunc(func(context.Context) (RecoveryProof, error) {
 		return RecoveryProof{}, cause
 	})
-	err := transition.Recover(context.Background(), resolver)
+	recoverErr := transition.Recover(context.Background(), resolver)
 	var unresolved *RecoveryUnresolvedError
-	if !errors.As(err, &unresolved) || !errors.Is(err, cause) {
-		t.Fatalf("Recover() error = %v, want RecoveryUnresolvedError wrapping %v", err, cause)
+	if !errors.As(recoverErr, &unresolved) || !errors.Is(recoverErr, cause) {
+		t.Fatalf("Recover() error = %v, want RecoveryUnresolvedError wrapping %v", recoverErr, cause)
 	}
-	if _, err := coordinator.AcquireResume(context.Background(), id, 7, RepresentationJSON); !errors.Is(err, ErrAdmissionClosed) {
-		t.Fatalf("AcquireResume(unresolved) error = %v, want ErrAdmissionClosed", err)
+	if _, acquireErr := coordinator.AcquireResume(context.Background(), id, 7, RepresentationJSON); !errors.Is(acquireErr, ErrAdmissionClosed) {
+		t.Fatalf("AcquireResume(unresolved) error = %v, want ErrAdmissionClosed", acquireErr)
 	}
-	if err := coordinator.Ready(); err == nil {
+	if readyErr := coordinator.Ready(); readyErr == nil {
 		t.Fatal("Ready() error = nil, want unresolved recovery failure")
 	}
-	if err := transition.Recover(context.Background(), recoveryResolverFunc(func(context.Context) (RecoveryProof, error) {
+	if retryErr := transition.Recover(context.Background(), recoveryResolverFunc(func(context.Context) (RecoveryProof, error) {
 		return RecoveryProof{
 			Disposition: RecoveryNotCommitted,
 			State:       CommittedState{ResumeRevisions: map[uuid.UUID]int64{id: 7}},
 		}, nil
-	})); err != nil {
-		t.Fatalf("Recover(definite non-commit) error = %v", err)
+	})); retryErr != nil {
+		t.Fatalf("Recover(definite non-commit) error = %v", retryErr)
 	}
-	if err := coordinator.Ready(); err != nil {
-		t.Fatalf("Ready() after proof error = %v", err)
+	if readyErr := coordinator.Ready(); readyErr != nil {
+		t.Fatalf("Ready() after proof error = %v", readyErr)
 	}
 	lease, err := coordinator.AcquireResume(context.Background(), id, 7, RepresentationJSON)
 	if err != nil {

@@ -8,12 +8,15 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
+	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 )
 
+// MarkdownFormatVersion identifies the public Markdown byte format.
 const MarkdownFormatVersion = 1
 
+// Markdown encodes a public resume as safe Markdown.
 func Markdown(resume publicresume.PublicResume) ([]byte, error) {
 	blocks := []string{"# " + plain(resume.Document.PersonalDetails.FullName)}
 	if line := plainPointer(resume.Document.PersonalDetails.Headline); line != "" {
@@ -181,7 +184,7 @@ func escapeDestination(value string) string {
 	var out strings.Builder
 	for _, b := range []byte(value) {
 		if b == ' ' || b == '(' || b == ')' || b < 0x20 || b == 0x7f {
-			out.WriteString(fmt.Sprintf("%%%02X", b))
+			fmt.Fprintf(&out, "%%%02X", b)
 			continue
 		}
 		out.WriteByte(b)
@@ -223,7 +226,7 @@ func dateRange(value *publicresume.PublicDateRange, format schema.DateFormat) st
 	if value == nil {
 		return ""
 	}
-	end := ""
+	var end string
 	if value.Present {
 		end = "Present"
 	} else {

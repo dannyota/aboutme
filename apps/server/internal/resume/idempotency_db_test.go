@@ -68,7 +68,7 @@ func TestIdempotencyRecheck_UserLockBoundsReadOnlyTransaction(t *testing.T) {
 	if err != nil || held {
 		t.Fatalf("user lock after Recheck = (%t, %v), want false, nil", held, err)
 	}
-	assertRecheckNoWrite(t, ctx, pool, userID, 0, 0)
+	assertRecheckNoWrite(ctx, t, pool, userID, 0, 0)
 }
 
 // Removing the retained-record decision or treating expiry as reuse would
@@ -92,7 +92,7 @@ func TestIdempotencyRecheck_DecidesWithoutWritesOrUsageMutation(t *testing.T) {
 
 	result, err := idem.Recheck(ctx, userID, idempotencyTestRoute, key, hash)
 	assertRecheck("absent", resume.RecheckFresh, nil, result, err)
-	assertRecheckNoWrite(t, ctx, pool, userID, 0, 0)
+	assertRecheckNoWrite(ctx, t, pool, userID, 0, 0)
 
 	seed := resume.StoredResponse{Status: 200, Body: json.RawMessage(`{"seeded":true}`)}
 	committed, err := idem.Execute(ctx, userID, idempotencyTestRoute, key, hash,
@@ -100,21 +100,21 @@ func TestIdempotencyRecheck_DecidesWithoutWritesOrUsageMutation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed Execute: %v", err)
 	}
-	assertRecheckNoWrite(t, ctx, pool, userID, 1, 1)
+	assertRecheckNoWrite(ctx, t, pool, userID, 1, 1)
 
 	result, err = idem.Recheck(ctx, userID, idempotencyTestRoute, key, hash)
 	assertRecheck("same hash", resume.RecheckReplay, committed.Response.Body, result, err)
-	assertRecheckNoWrite(t, ctx, pool, userID, 1, 1)
+	assertRecheckNoWrite(ctx, t, pool, userID, 1, 1)
 
 	otherHash := sha256.Sum256([]byte("recheck changed request"))
 	result, err = idem.Recheck(ctx, userID, idempotencyTestRoute, key, otherHash)
 	assertRecheck("different hash", resume.RecheckReuse, nil, result, err)
-	assertRecheckNoWrite(t, ctx, pool, userID, 1, 1)
+	assertRecheckNoWrite(ctx, t, pool, userID, 1, 1)
 
 	clock.Advance(resume.IdempotencyTTL + time.Second)
 	result, err = idem.Recheck(ctx, userID, idempotencyTestRoute, key, hash)
 	assertRecheck("expired", resume.RecheckFresh, nil, result, err)
-	assertRecheckNoWrite(t, ctx, pool, userID, 1, 1)
+	assertRecheckNoWrite(ctx, t, pool, userID, 1, 1)
 }
 
 // A transition's optimistic probe is not its final authority: a committed
@@ -222,7 +222,7 @@ func TestCommitOutcome_CancellationAfterCommitBeginsIsUnknown(t *testing.T) {
 	}
 }
 
-func assertRecheckNoWrite(t *testing.T, ctx context.Context, pool *store.Pool, userID uuid.UUID, wantRecords, wantUsageRows int64) {
+func assertRecheckNoWrite(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, wantRecords, wantUsageRows int64) {
 	t.Helper()
 	var records, usageRows, retained int64
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM idempotency_records WHERE user_id = $1`, userID).Scan(&records); err != nil {
@@ -243,7 +243,7 @@ func TestIdempotencyRecheck_FailuresDoNotWrite(t *testing.T) {
 	_, _, q, pool, ctx := newIntegrationIdempotencyStore(t, clock.Now)
 
 	t.Run("canceled context", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		canceled, cancel := context.WithCancel(ctx)
 		cancel()
 		idem := resume.NewIdempotencyStoreForTest(pool, clock.Now)
@@ -251,11 +251,11 @@ func TestIdempotencyRecheck_FailuresDoNotWrite(t *testing.T) {
 		if err == nil || result.Decision != resume.RecheckFresh {
 			t.Fatalf("Recheck(canceled) = (%+v, %v), want fresh result plus error", result, err)
 		}
-		assertRecheckNoWrite(t, ctx, pool, userID, 0, 0)
+		assertRecheckNoWrite(ctx, t, pool, userID, 0, 0)
 	})
 
 	t.Run("lock failure", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		injected := errors.New("lock failed")
 		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
 			func(ctx context.Context) (pgx.Tx, error) {
@@ -269,11 +269,11 @@ func TestIdempotencyRecheck_FailuresDoNotWrite(t *testing.T) {
 		if !errors.Is(err, injected) {
 			t.Fatalf("Recheck(lock failure) error = %v, want injected", err)
 		}
-		assertRecheckNoWrite(t, ctx, pool, userID, 0, 0)
+		assertRecheckNoWrite(ctx, t, pool, userID, 0, 0)
 	})
 
 	t.Run("lookup failure", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		injected := errors.New("lookup failed")
 		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now,
 			func(ctx context.Context) (pgx.Tx, error) {
@@ -287,11 +287,11 @@ func TestIdempotencyRecheck_FailuresDoNotWrite(t *testing.T) {
 		if !errors.Is(err, injected) {
 			t.Fatalf("Recheck(lookup failure) error = %v, want injected", err)
 		}
-		assertRecheckNoWrite(t, ctx, pool, userID, 0, 0)
+		assertRecheckNoWrite(ctx, t, pool, userID, 0, 0)
 	})
 
 	t.Run("commit failure", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		injected := errors.New("recheck commit failed")
 		idem := resume.NewIdempotencyStoreWithHooksForTest(pool, clock.Now, nil,
 			func(context.Context, pgx.Tx) error { return injected })
@@ -299,11 +299,11 @@ func TestIdempotencyRecheck_FailuresDoNotWrite(t *testing.T) {
 		if !errors.Is(err, injected) {
 			t.Fatalf("Recheck(commit failure) error = %v, want injected", err)
 		}
-		assertRecheckNoWrite(t, ctx, pool, userID, 0, 0)
+		assertRecheckNoWrite(ctx, t, pool, userID, 0, 0)
 	})
 
 	t.Run("malformed stored response", func(t *testing.T) {
-		userID := createTestUser(t, q)
+		userID := createTestUserWithContext(ctx, t, q)
 		key := uuid.New()
 		hash := sha256.Sum256([]byte("malformed response"))
 		inserted, err := q.CreateIdempotencyRecord(ctx, store.CreateIdempotencyRecordParams{
@@ -320,6 +320,6 @@ func TestIdempotencyRecheck_FailuresDoNotWrite(t *testing.T) {
 		if err == nil {
 			t.Fatal("Recheck(malformed stored response) error = nil, want error")
 		}
-		assertRecheckNoWrite(t, ctx, pool, userID, 1, 1)
+		assertRecheckNoWrite(ctx, t, pool, userID, 1, 1)
 	})
 }

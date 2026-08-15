@@ -16,10 +16,13 @@ import (
 )
 
 var (
-	ErrNotFound    = errors.New("public resume not found")
+	// ErrNotFound reports an absent or non-public resume.
+	ErrNotFound = errors.New("public resume not found")
+	// ErrUnavailable reports a public-resume dependency or consistency failure.
 	ErrUnavailable = errors.New("public resume unavailable")
 )
 
+// Snapshot is an admitted public resume projection and its generation data.
 type Snapshot struct {
 	ResumeID         uuid.UUID
 	Revision         int64
@@ -28,6 +31,7 @@ type Snapshot struct {
 	photoKey         string
 }
 
+// ReaderDependencies contains the stores and services needed to read a resume.
 type ReaderDependencies struct {
 	Store       store.PublicReadQueries
 	Projector   *docmigrate.Projector
@@ -36,6 +40,7 @@ type ReaderDependencies struct {
 	Origin      PublicOrigin
 }
 
+// Reader reads public resume projections behind public-state admission.
 type Reader struct {
 	store       store.PublicReadQueries
 	projector   *docmigrate.Projector
@@ -44,6 +49,7 @@ type Reader struct {
 	origin      PublicOrigin
 }
 
+// NewReader creates a reader with the required public dependencies.
 func NewReader(dependencies ReaderDependencies) (*Reader, error) {
 	if dependencies.Store == nil || dependencies.Projector == nil || dependencies.Coordinator == nil || dependencies.Origin.value == "" {
 		return nil, errors.New("invalid public reader dependencies")

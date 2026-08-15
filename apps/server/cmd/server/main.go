@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
@@ -29,7 +31,6 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 const shutdownTimeout = 10 * time.Second

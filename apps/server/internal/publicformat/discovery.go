@@ -9,11 +9,15 @@ import (
 )
 
 const (
+	// SitemapFormatVersion identifies the sitemap byte format.
 	SitemapFormatVersion = 1
-	RobotsFormatVersion  = 1
-	LLMSFormatVersion    = 1
+	// RobotsFormatVersion identifies the robots.txt byte format.
+	RobotsFormatVersion = 1
+	// LLMSFormatVersion identifies the llms.txt byte format.
+	LLMSFormatVersion = 1
 )
 
+// Sitemap encodes the sorted discoverable slugs as XML.
 func Sitemap(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	if origin.String() == "" {
 		return nil, errors.New("public origin is required")
@@ -32,10 +36,12 @@ func Sitemap(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// Robots encodes the canonical robots.txt response.
 func Robots(origin publicresume.PublicOrigin) []byte {
 	return []byte("User-agent: *\nAllow: /\nSitemap: " + origin.Resolve("/sitemap.xml") + "\n")
 }
 
+// LLMS encodes the sorted discoverable slugs as llms.txt.
 func LLMS(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	if origin.String() == "" {
 		return nil, errors.New("public origin is required")

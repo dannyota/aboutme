@@ -44,6 +44,7 @@ type Service struct {
 	llms     http.Handler
 }
 
+// NewService creates the public-route dispatcher from its dependencies.
 func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Reader == nil || dependencies.DiscoveryStore == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
@@ -134,6 +135,7 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 			SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}.ServeHTTP(w, request)
 			return
 		}
+		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
 		body, contentType, err := reader.ReadPhoto(lease.Context(), snapshot)
 		if err != nil {
 			servePublicJSONError(w, request, http.StatusServiceUnavailable)
@@ -160,11 +162,12 @@ func publicJSONGetOrHead(w http.ResponseWriter, request *http.Request) bool {
 
 func servePublicJSONError(w http.ResponseWriter, request *http.Request, status int) {
 	code, message := "temporarily_unavailable", "service temporarily unavailable"
-	if status == http.StatusNotFound {
+	switch status {
+	case http.StatusNotFound:
 		code, message = "public_not_found", "public resume not found"
-	} else if status == http.StatusMethodNotAllowed {
+	case http.StatusMethodNotAllowed:
 		code, message = "method_not_allowed", "method is not allowed"
-	} else if status == http.StatusBadRequest {
+	case http.StatusBadRequest:
 		code, message = "request_invalid", "request is invalid"
 	}
 	body := []byte(`{"error":{"code":"` + code + `","message":"` + message + `"}}` + "\n")
@@ -176,6 +179,8 @@ func servePublicJSONError(w http.ResponseWriter, request *http.Request, status i
 	}
 	w.WriteHeader(status)
 	if request.Method != http.MethodHead {
-		_, _ = w.Write(body)
+		if _, err := w.Write(body); err != nil {
+			return
+		}
 	}
 }

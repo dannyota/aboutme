@@ -12,12 +12,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 func TestMarkdownHandlerRejectsClosedAdmission(t *testing.T) {
@@ -39,7 +40,7 @@ func TestMarkdownHandlerRejectsClosedAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug+".md", nil))
+	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug+".md", nil))
 	if w.Code != http.StatusServiceUnavailable || w.Body.String() != "Service temporarily unavailable.\n" || w.Header().Get("Retry-After") != "1" {
 		t.Fatalf("response = %d %#v %q, want 503 with retry", w.Code, w.Header(), w.Body.String())
 	}
@@ -69,7 +70,7 @@ func TestMarkdownHandlerClassifiesReaderAbsenceAndFailure(t *testing.T) {
 				t.Fatal(err)
 			}
 			w := httptest.NewRecorder()
-			handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug+".md", nil))
+			handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug+".md", nil))
 			if w.Code != test.wantStatus || w.Body.String() != test.wantBody {
 				t.Fatalf("response = %d %q, want %d %q", w.Code, w.Body.String(), test.wantStatus, test.wantBody)
 			}
@@ -92,7 +93,7 @@ func TestMarkdownHandlerRequiresDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+slug+".md", nil))
+	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug+".md", nil))
 	if w.Code != http.StatusNotFound || w.Body.String() != "Not found.\n" {
 		t.Fatalf("response = %d %q", w.Code, w.Body.String())
 	}
@@ -112,7 +113,7 @@ func TestMarkdownHandlerHoldsLeaseThroughResponseWrite(t *testing.T) {
 	writer := &formatBlockingWriter{header: make(http.Header), wrote: make(chan struct{}), unblock: make(chan struct{})}
 	done := make(chan struct{})
 	go func() {
-		handler.ServeHTTP(writer, httptest.NewRequest(http.MethodGet, "/"+slug+".md", nil))
+		handler.ServeHTTP(writer, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug+".md", nil))
 		close(done)
 	}()
 	select {
@@ -173,9 +174,18 @@ func formatTestReaderWithError(t *testing.T, discovery bool, readErr error) (str
 	t.Helper()
 	slug, lng, name := "ada", "en", "Ada"
 	document := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
-	pd, _ := json.Marshal(document.PersonalDetails)
-	content, _ := json.Marshal(document.Content)
-	customization, _ := json.Marshal(document.Customization)
+	pd, err := json.Marshal(document.PersonalDetails)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := json.Marshal(document.Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	customization, err := json.Marshal(document.Customization)
+	if err != nil {
+		t.Fatal(err)
+	}
 	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
 	if err != nil {
 		t.Fatal(err)

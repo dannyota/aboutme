@@ -42,6 +42,7 @@ type publishRecoveryProof struct {
 	ReleasedAt time.Time
 }
 
+// Resolve proves the mutation result after an indeterminate transaction outcome.
 func (r *mutationRecovery) Resolve(ctx context.Context) (publicstate.RecoveryProof, error) {
 	if r.pool == nil {
 		return publicstate.RecoveryProof{}, errors.New("resumeapi: recovery pool is unavailable")
@@ -54,11 +55,11 @@ func (r *mutationRecovery) Resolve(ctx context.Context) (publicstate.RecoveryPro
 		if !bytes.Equal(record.RequestHash, r.identity.RequestHash[:]) {
 			return publicstate.RecoveryProof{}, errors.New("resumeapi: recovery record fingerprint mismatch")
 		}
-		if err := r.exactStoredDeleteResponse(record); err != nil {
-			return publicstate.RecoveryProof{}, err
+		if deleteErr := r.exactStoredDeleteResponse(record); deleteErr != nil {
+			return publicstate.RecoveryProof{}, deleteErr
 		}
-		if err := r.exactStoredPublishResponse(record); err != nil {
-			return publicstate.RecoveryProof{}, err
+		if publishErr := r.exactStoredPublishResponse(record); publishErr != nil {
+			return publicstate.RecoveryProof{}, publishErr
 		}
 		stored, decodeErr := storedResponseFromRecord(record)
 		if decodeErr != nil {

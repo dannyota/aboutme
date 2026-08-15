@@ -22,10 +22,12 @@ type Readiness struct {
 
 var errNotReady = errors.New("public service is not ready")
 
+// NewReadiness combines a coordinator with the process dependency checks.
 func NewReadiness(coordinator *Coordinator, dependencies ReadinessDependencies) *Readiness {
 	return &Readiness{coordinator: coordinator, dependencies: dependencies}
 }
 
+// Ping returns an opaque error unless all admission dependencies are ready.
 func (r *Readiness) Ping(ctx context.Context) error {
 	if r == nil || r.coordinator == nil || r.dependencies.PingDatabase == nil || r.dependencies.ProbeRenderer == nil {
 		return errNotReady

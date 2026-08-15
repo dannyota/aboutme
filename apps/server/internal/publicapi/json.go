@@ -6,6 +6,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 )
 
+// NewPublicJSON encodes resume in the public JSON envelope.
 func NewPublicJSON(resume publicresume.PublicResume) (SelectedResponse, error) {
 	body, err := json.Marshal(struct {
 		Data publicresume.PublicResume `json:"data"`

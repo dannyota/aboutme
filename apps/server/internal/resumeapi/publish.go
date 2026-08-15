@@ -50,12 +50,12 @@ func decodePublish(body io.Reader) (publishInput, error) {
 	if err != nil {
 		return publishInput{}, err
 	}
-	if err := validateJSONTokens(raw, maxJSONDepth); err != nil {
+	if tokenErr := validateJSONTokens(raw, maxJSONDepth); tokenErr != nil {
 		return publishInput{}, &publishShapeError{Field: "body"}
 	}
 
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
+	if decodeErr := json.Unmarshal(raw, &fields); decodeErr != nil || fields == nil {
 		return publishInput{}, &publishShapeError{Field: "body"}
 	}
 	for name := range fields {
