@@ -44,10 +44,9 @@ only allowed UAT runtime resources and leaves the ignored evidence directory.
 
 ## Trusted browser
 
-The browser image, platform, Playwright MCP, Chrome, and package lock are
-pinned. Its entrypoint imports the Caddy root into a disposable trust store. It
-never changes host trust, uses a personal profile, or bypasses certificate
-errors.
+The browser image, platform, Playwright, Chrome, and package lock are pinned.
+Its entrypoint imports the Caddy root into a disposable trust store. It never
+changes host trust, uses a personal profile, or bypasses certificate errors.
 
 The wrapper mounts only:
 
@@ -62,9 +61,8 @@ disposable tmpfs paths. It uses `--security-opt label=disable` so SELinux does
 not relabel host paths; the input stays read-only and the dedicated output path
 is the only writable bind mount.
 
-The ignored `.mcp.json` uses `--isolated`, exact Chrome, `https://localhost` as
-the sole origin, no output eviction, arbitrary code, or host-file access, and
-the volatile scenario directory as output.
+The browser config pins exact Chrome and `https://localhost` as the sole origin
+and writes only to the volatile scenario directory as output.
 
 ## Mock OAuth contract
 
@@ -226,11 +224,11 @@ in the mode-`0700` run root under `/dev/shm`; teardown proves that root is gone.
 Tier: **High risk, implementation author**.
 
 Own `deploy/uat-browser/{Dockerfile,package.json,.containerignore}`,
-`scripts/uat-mcp.sh`, `scripts/uat-mcp-test.sh`, and local ignored `.mcp.json`.
-The integration owner generates `deploy/uat-browser/package-lock.json` in a
-serialized lockfile window. First write the static wrapper test and record its
-expected failure. Resolve every image digest and executable before dispatch.
-Build and test exactly, with U6 running:
+`scripts/uat-mcp.sh` and `scripts/uat-mcp-test.sh`. The integration owner
+generates `deploy/uat-browser/package-lock.json` in a serialized lockfile
+window. First write the static wrapper test and record its expected failure.
+Resolve every image digest and executable before dispatch. Build and test
+exactly, with U6 running:
 
 ```sh
 bash -n scripts/uat-mcp.sh

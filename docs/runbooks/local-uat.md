@@ -86,7 +86,7 @@ P9 can start only when all of these are true:
   other aboutme PostgreSQL container is running;
 - image IDs, migration head, configuration names without values, and tool
   versions can be recorded;
-- the project-scoped Playwright service can reach the HTTPS origin;
+- the scripted headless Playwright harness can reach the HTTPS origin;
 - no AWS, Cloudflare, certificate, DNS, registry, or staging mutation is
   required.
 
@@ -106,9 +106,9 @@ At the accepted candidate commit, the main session will:
    is running.
 2. Record the commit, image IDs, migration head, commands, timestamps, tool
    versions, configuration names, and every state change.
-3. Run each frozen scenario through Playwright and attach accessibility,
-   screenshot, console, network, request-ID, server-log, and database evidence
-   as required by that criterion.
+3. Run each frozen scenario through the scripted headless Playwright suites and
+   attach accessibility, screenshot, console, network, request-ID, server-log,
+   and database evidence as required by that criterion.
 4. Record expected and observed results with `PASS`, `FAIL`, or `BLOCKED`.
    Missing evidence and `BLOCKED` both fail the gate.
 5. Send the pinned evidence to a fresh independent reviewer for a live,

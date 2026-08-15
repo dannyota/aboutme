@@ -67,9 +67,11 @@ through `make scan`, batching SAST and Supply Chain analysis rather than paying
 them per commit.
 
 **Browser validation moves earlier.** User-visible changes are exercised through
-the project-scoped Playwright MCP server as they land, instead of deferring all
-browser defects to P9. P9 UAT and its evidence review are unchanged and remain
-the gate before AWS authorization.
+scripted headless Playwright (`make web-e2e` and the `make dev-https-*-check`
+suites) as they land, instead of deferring all browser defects to P9. The
+project-scoped Playwright MCP server is for agent exploration and test authoring
+only. P9 UAT and its evidence review are unchanged and remain the gate before
+AWS authorization.
 
 **Design work runs in parallel with implementation.** Template, UI, and spec
 design depends only on frozen contracts, so it does not queue behind the store
