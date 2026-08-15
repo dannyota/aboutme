@@ -1,6 +1,6 @@
 # Password authentication design
 
-Status: Draft for written review (design decisions approved 2026-08-15)
+Status: Approved for implementation planning (2026-08-15)
 
 ## Purpose
 
@@ -74,6 +74,18 @@ Provider identity resolution follows these rules:
 5. A subject already bound to another user returns a generic link conflict and
    changes nothing.
 
+Two concurrent first-login callbacks for the same subject may race on either the
+account email or subject unique constraint. The loser rolls back the whole
+attempted user transaction, re-reads the subject first, and continues as a
+returning login for its owner. Only authenticated linking reports a cross-user
+subject conflict.
+
+Every provider login, password login, and ADR 0015 request-time rotation
+successor acquires the same user-row lock before it inserts a session. Reset and
+password change use that lock too. An issuance can therefore commit before a
+reset and be revoked by it, or commit after the reset as a distinct login/use;
+it cannot insert a session across the reset commit boundary.
+
 ## Data model
 
 An additive migration introduces four bounded tables.
@@ -98,6 +110,12 @@ active key ID and a bounded current-plus-previous key ring. Each row stores its
 key ID. This allows a key rotation to retain decryption only through the 24-hour
 maximum job lifetime. Plaintext email bodies and bearer tokens never exist in
 PostgreSQL.
+
+Startup checks every key ID referenced by a pending or leased job and fails
+readiness if the key ring cannot decrypt one. Development persists and reuses
+its generated key ring while its database persists. Production cannot remove a
+referenced previous key or perform another rotation that would strand an older
+live job.
 
 Replacing a registration or reset token cancels its unsent jobs in the same
 transaction. Before delivery, the worker recomputes the token digest from the
@@ -169,8 +187,10 @@ fragment with `history.replaceState`, and posts it to the API. The page sends
 Verification atomically consumes the pending row and inserts the user and
 credential. The existing unique user-email constraint is final authority. If a
 provider signup won the race, verification consumes the pending registration,
-creates no password, and directs the email owner to sign in through an existing
-method. Verification never creates a session; success redirects to login.
+creates no password, and returns the same successful verification result. The
+page always says “Email verified. Sign in.” and never identifies the race
+outcome or an existing provider. Verification never creates a session; success
+redirects to login.
 
 ## Login and reauthentication
 
@@ -209,10 +229,13 @@ credential. An account with a credential replaces it.
 
 The transaction locks the user, current session, and credential state and
 rechecks live-session and recent-reauthentication requirements after the lock. A
-successful add or change rotates the current session and revokes every other
-session. It commits a non-click security-notification email job with the
-credential update. Notification delivery failure does not roll back the
-credential change.
+successful add or change creates a fresh current session with no ADR 0015
+rotation lineage, revokes the old current session and every other session in the
+same transaction, and sets the new cookie after commit. A lost response leaves
+the old cookie revoked rather than extending predecessor grace. The transaction
+commits a non-click security-notification email job with the credential update.
+Encryption or enqueue failure rolls back the credential transaction. Delivery
+failure after commit does not roll back the credential change.
 
 Password removal is absent. This avoids introducing last-authenticator and
 account-recovery rules in this phase.
@@ -256,14 +279,19 @@ configuration set that reports delivery, bounce, and complaint signals through
 SNS or CloudWatch alarms. AWS credentials use the standard runtime credential
 chain and are never stored in repository files.
 
-A bounded worker claims jobs with short leases and `SKIP LOCKED`. It decrypts
-only the claimed payload, validates current token authority when applicable,
-sends through SES, and clears ciphertext after SES accepts the message. It
-retries only classified temporary failures with capped exponential backoff and
-injected jitter. Permanent failure, expiry, or the eighth failed attempt marks
-the job terminal and clears ciphertext. Logs carry job ID, kind, attempt, and a
-closed outcome only. An ambiguous SES result may cause a duplicate email, but
-cannot duplicate a token or account mutation; every token remains single-use.
+A bounded worker claims jobs with short leases and `SKIP LOCKED`. Before one
+send it opens a bounded transaction, locks the registration/reset/user scope and
+leased job in that order, decrypts, and validates current authority. It holds
+those locks through the at-most-ten-second sender call and finalizes the job
+before commit. Token replacement uses the same lock order, so replacement
+commits first and cancels delivery, or waits until the authorized send has
+finished. There is no stale check-to-send gap. The worker retries only
+classified temporary failures with capped exponential backoff and injected
+jitter. Permanent failure, expiry, or the eighth failed attempt marks the job
+terminal and clears every encryption field. Logs carry job ID, kind, attempt,
+and a closed outcome only. An ambiguous SES result may cause a duplicate email,
+but cannot duplicate a token or account mutation; every token remains
+single-use.
 
 Native development starts a loopback-only mail-capture command through
 `make dev-native`. It retains a bounded number of messages in memory, exposes
@@ -298,6 +326,8 @@ The public error vocabulary is closed:
 | `400 credential_token_invalid`   | Well-shaped token is absent, expired, consumed, or replaced                       |
 | `401 authentication_failed`      | Unknown email, no credential, or wrong password                                   |
 | `401 reauth_failed`              | Password reauthentication failed                                                  |
+| `401 authentication_required`    | Authenticated password route has no live session                                  |
+| `403 csrf_rejected`              | Exact Origin/Referer or synchronizer-token check failed                           |
 | `403 reauth_required`            | Existing recent-reauthentication window is not satisfied                          |
 | `413 body_too_large`             | Request exceeded its route budget                                                 |
 | `415 media_type_unsupported`     | Exact JSON media type was absent                                                  |
