@@ -68,14 +68,17 @@ acceptance catalog and no separate acceptance worker.
 
 Model assignment depends on the coordinator:
 
-| Work                                                                                                | Claude Code | Codex                    |
-| --------------------------------------------------------------------------------------------------- | ----------- | ------------------------ |
-| High-judgment work across files, including new components, concurrency, security, and defect review | Opus        | `gpt-5.6-sol`            |
-| Implementation from a complete contract                                                             | Sonnet      | `gpt-5.6-terra` subagent |
-| Search, exploration, and summaries                                                                  | Haiku       | `gpt-5.6-luna` subagent  |
+| Work                                                                                 | Claude Code | Codex                    |
+| ------------------------------------------------------------------------------------ | ----------- | ------------------------ |
+| High-judgment work across files, including new components, concurrency, and security | Opus        | `gpt-5.6-sol`            |
+| Code review (defect and phase review)                                                | Sonnet      | `gpt-5.6-terra` subagent |
+| Implementation from a complete contract                                              | Haiku       | `gpt-5.6-luna` subagent  |
+| Search, exploration, and summaries                                                   | Haiku       | `gpt-5.6-luna` subagent  |
 
 Codex uses Terra and Luna for the corresponding worker roles. Claude Code uses
-Sonnet and Haiku. When unsure, use the coordinator's high-judgment model.
+Sonnet and Haiku: Haiku writes the mechanical implementation from a complete
+contract for speed, and Sonnet reviews the result. When unsure, use the
+coordinator's high-judgment model.
 
 ## Resource rules
 
