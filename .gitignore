@@ -17,3 +17,5 @@ coverage/
 .DS_Store
 .playwright-mcp/
 
+!AGENTS.md
+!CLAUDE.md
