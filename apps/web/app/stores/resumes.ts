@@ -15,6 +15,7 @@ import type {
   EditorQueueItem,
   TemplateGroupState,
 } from '../editor/templateGroup';
+import { templateUndoAvailable } from '../editor/templateGroup';
 import type {
   AcceptedResume,
   ParentETag,
@@ -535,6 +536,12 @@ function replay(value: unknown): void {
     replayQueueItem,
     snapshotFromAccepted(record.accepted),
   );
+  if (
+    record.templateState?.kind === 'complete'
+    && !templateUndoAvailable(record.templateState.undo, record.current)
+  ) {
+    record.templateState = null;
+  }
   clearPhotoWhenUnbound(record);
 }
 

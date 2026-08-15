@@ -17,7 +17,7 @@
 02 recovery/undo functions. They do not call `captureTemplateGroup` directly,
 issue child requests, or recreate group rules.
 
-- [ ] **Step 1: Write the apply/status RED test**
+- [x] **Step 1: Write the apply/status RED test**
 
 Render every `TEMPLATES` item. Prove No changes, content preservation, immediate
 optimistic result, page/date warnings, base size 10 warning, margins below 5 mm,
@@ -37,7 +37,7 @@ it("delegates one preset and renders only the returned group state", async () =>
 });
 ```
 
-- [ ] **Step 2: Run the apply/status test RED**
+- [x] **Step 2: Run the apply/status test RED**
 
 Run:
 
@@ -47,7 +47,7 @@ Run:
 
 Expected RED: FAIL because template components do not exist.
 
-- [ ] **Step 3: Implement minimal apply/status binding**
+- [x] **Step 3: Implement minimal apply/status binding**
 
 On Apply, call `actions.applyTemplate(preset)` once. Announce `No changes` for
 `no-change`; render the captured intended final snapshot for `enqueued`; retain
@@ -62,11 +62,11 @@ const apply = (preset: Readonly<TemplatePreset>) => {
 };
 ```
 
-- [ ] **Step 4: Rerun the apply/status test GREEN**
+- [x] **Step 4: Rerun the apply/status test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 5: Write the partial/recovery/undo RED test**
+- [x] **Step 5: Write the partial/recovery/undo RED test**
 
 Partial displays accepted subset and intended final, with exactly Retry
 remaining, Restore pre-apply, Keep partial. Undo appears only for the latest
@@ -97,12 +97,12 @@ it.each([
 });
 ```
 
-- [ ] **Step 6: Run the recovery/undo test RED**
+- [x] **Step 6: Run the recovery/undo test RED**
 
 Run the Step 2 command. Expected RED: FAIL on the first missing recovery
 control.
 
-- [ ] **Step 7: Implement minimal recovery binding**
+- [x] **Step 7: Implement minimal recovery binding**
 
 Each button requests a Task 02 transition. Enqueue only an `enqueue` result;
 close on `keep-partial`; keep dialog open with safe reason on `unavailable`.
@@ -124,11 +124,11 @@ const recover = (
 };
 ```
 
-- [ ] **Step 8: Rerun the recovery/undo test GREEN**
+- [x] **Step 8: Rerun the recovery/undo test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 9: Run the final task gate and report**
+- [x] **Step 9: Run the final task gate and report**
 
 ```sh
 (cd apps/web && npx vitest run test/editor/template-panel.test.ts)
