@@ -211,7 +211,7 @@ func TestHealthContract_OpenAPIAndHandlerAgree(t *testing.T) {
 					tc.method, tc.path, tc.wantStatus, media.Schema.Ref, wantRef)
 			}
 
-			handler := api.New(testLogger(), tc.pinger, api.Options{})
+			handler := api.New(testLogger(), tc.pinger, api.Options{}, nil)
 			srv := httptest.NewServer(handler)
 			defer srv.Close()
 

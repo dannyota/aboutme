@@ -43,7 +43,7 @@ func TestRouter_RegisterExtraRoutes_GetsStandardMiddlewareChain(t *testing.T) {
 			w.WriteHeader(http.StatusTeapot)
 		}))
 	}
-	handler := api.New(testLogger(), fakePinger{}, api.Options{}, register)
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil, register)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/probe", nil)
 	rec := httptest.NewRecorder()
@@ -54,6 +54,65 @@ func TestRouter_RegisterExtraRoutes_GetsStandardMiddlewareChain(t *testing.T) {
 	}
 	if rec.Header().Get(api.RequestIDHeader) == "" {
 		t.Error("response missing X-Request-Id header — the registered route must go through the standard middleware chain")
+	}
+}
+
+type publicRoutesStub struct {
+	recognizes func(string) bool
+	handler    http.Handler
+}
+
+func (s publicRoutesStub) Recognizes(path string) bool { return s.recognizes(path) }
+func (s publicRoutesStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.handler.ServeHTTP(w, r)
+}
+
+type panicBody struct{}
+
+func (panicBody) Read([]byte) (int, error) {
+	panic("default body middleware read a public wrong-method body")
+}
+
+func TestPublicDispatchWrongMethodPrecedesDefaultBodyAndRateChain(t *testing.T) {
+	t.Parallel()
+
+	public := publicRoutesStub{
+		recognizes: func(path string) bool {
+			for _, publicPath := range []string{
+				"/api/v1/public/resumes/ada-lovelace",
+				"/api/v1/public/resumes/ada-lovelace/photo",
+				"/ada-lovelace",
+				"/ada-lovelace.md",
+				"/sitemap.xml",
+				"/robots.txt",
+				"/llms.txt",
+			} {
+				if path == publicPath {
+					return true
+				}
+			}
+			return false
+		},
+		handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				w.Header().Set("Allow", "GET, HEAD")
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}),
+	}
+	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 1}, public)
+	for _, path := range []string{"/api/v1/public/resumes/ada-lovelace", "/api/v1/public/resumes/ada-lovelace/photo", "/ada-lovelace", "/ada-lovelace.md", "/sitemap.xml", "/robots.txt", "/llms.txt"} {
+		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch} {
+			req := httptest.NewRequest(method, path, panicBody{})
+			req.ContentLength = 1 << 20
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "GET, HEAD" {
+				t.Errorf("%s %s response = %d Allow=%q, want 405 GET, HEAD", method, path, rec.Code, rec.Header().Get("Allow"))
+			}
+		}
 	}
 }
 
@@ -73,7 +132,7 @@ func TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply(t *testing.T) {
 			w.WriteHeader(http.StatusAccepted)
 		}))
 	}
-	handler := api.New(testLogger(), fakePinger{}, api.Options{}, first, second)
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil, first, second)
 
 	for path, want := range map[string]int{"/probe-a": http.StatusOK, "/probe-b": http.StatusAccepted} {
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
@@ -88,7 +147,7 @@ func TestRouter_RegisterExtraRoutes_MultipleFuncsAllApply(t *testing.T) {
 func TestRouter_Healthz_ReturnsOK(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -105,7 +164,7 @@ func TestRouter_Healthz_ReturnsOK(t *testing.T) {
 func TestRouter_Readyz_ReturnsOKWhenDBReachable(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
@@ -130,7 +189,7 @@ func TestRouter_Readyz_Returns503AgainstRealUnreachableStore(t *testing.T) {
 	}
 	defer pool.Close(ctx)
 
-	handler := api.New(testLogger(), pool, api.Options{ReadyTimeout: 500 * time.Millisecond})
+	handler := api.New(testLogger(), pool, api.Options{ReadyTimeout: 500 * time.Millisecond}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
@@ -164,7 +223,7 @@ func TestRouter_Healthz_IgnoresDBOutage(t *testing.T) {
 	}
 	defer pool.Close(ctx)
 
-	handler := api.New(testLogger(), pool, api.Options{})
+	handler := api.New(testLogger(), pool, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -184,7 +243,7 @@ func TestRouter_Healthz_IgnoresDBOutage(t *testing.T) {
 func TestRouter_BodyLimitAppliesToAllRoutes(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/anything", bytes.NewReader(bytes.Repeat([]byte("a"), 20)))
 	req.ContentLength = 20
@@ -207,7 +266,7 @@ func TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		}))
 	}
-	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10}, register)
+	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10}, nil, register)
 	canonicalID := "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f"
 
 	for _, tc := range []struct {
@@ -274,7 +333,7 @@ func decodeErrorEnvelope(t *testing.T, rec *httptest.ResponseRecorder) struct {
 func TestRouter_UnknownRoute_Returns404WithErrorEnvelope(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/does-not-exist", nil)
 	rec := httptest.NewRecorder()
@@ -292,7 +351,7 @@ func TestRouter_UnknownRoute_Returns404WithErrorEnvelope(t *testing.T) {
 func TestRouter_UnknownAPIRoute_Returns404WithErrorEnvelope(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/does-not-exist", nil)
 	rec := httptest.NewRecorder()
@@ -310,7 +369,7 @@ func TestRouter_UnknownAPIRoute_Returns404WithErrorEnvelope(t *testing.T) {
 func TestRouter_WrongMethodOnExistingRoute_Returns405WithErrorEnvelope(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -340,7 +399,7 @@ func TestRouter_WrongMethodOnExistingRoute_Returns405WithErrorEnvelope(t *testin
 func TestRouter_Healthz_HeadRequest_ReturnsOKWithEmptyBody(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
@@ -376,7 +435,7 @@ func TestRouter_Healthz_HeadRequest_ReturnsOKWithEmptyBody(t *testing.T) {
 func TestRouter_Readyz_HeadRequest_MatchesGetStatus(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	getReq := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	getRec := httptest.NewRecorder()
@@ -400,7 +459,7 @@ func TestRouter_Readyz_HeadRequest_MatchesGetStatus(t *testing.T) {
 func TestRouter_Healthz_PostStillReturns405(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -430,7 +489,7 @@ func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 
-			handler := api.New(testLogger(), fakePinger{}, api.Options{})
+			handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 			var sawTooManyRequests bool
 			for i := 0; i < api.DefaultRateLimitRequests+50; i++ {
@@ -462,7 +521,7 @@ func TestRouter_PercentEncodedHealthPath_DoesNotBypassRateLimit(t *testing.T) {
 func TestRouter_HealthEndpoints_BodyCapIndependentOfOptions(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10 * 1024 * 1024})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10 * 1024 * 1024}, nil)
 
 	body := bytes.Repeat([]byte("a"), int(api.HealthBodyLimitBytes)+1)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", bytes.NewReader(body))
@@ -508,7 +567,7 @@ func (c *countingReader) bytesRead() int64 {
 func TestRouter_HealthEndpoint_BoundedBodyRead(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	const oversizedBody = 256 * 1024
 	cr := &countingReader{r: bytes.NewReader(bytes.Repeat([]byte("a"), oversizedBody))}
@@ -597,7 +656,7 @@ func TestRouter_Readyz_ConcurrentFloodPerformsExactlyOnePing(t *testing.T) {
 	handler := api.New(testLogger(), pinger, api.Options{
 		Clock:        clock.Now,
 		ReadyTimeout: 5 * time.Second,
-	})
+	}, nil)
 
 	const n = 25
 	var wg sync.WaitGroup
@@ -646,7 +705,7 @@ func TestRouter_Readyz_CachesResultUntilTTLThenPingsAgain(t *testing.T) {
 	handler := api.New(testLogger(), pinger, api.Options{
 		Clock:    clock.Now,
 		ReadyTTL: time.Second,
-	})
+	}, nil)
 	req := func() *http.Request {
 		return httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	}
@@ -688,7 +747,7 @@ func TestRouter_Readyz_FailingPingIsAlsoCachedForTTL(t *testing.T) {
 	handler := api.New(testLogger(), pinger, api.Options{
 		Clock:    clock.Now,
 		ReadyTTL: time.Second,
-	})
+	}, nil)
 	req := func() *http.Request {
 		return httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/readyz", nil)
 	}

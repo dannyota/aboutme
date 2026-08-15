@@ -116,7 +116,7 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 		Coordinator:    coordinator,
 		RecoveryPool:   pool,
 	})
-	handler := api.New(slog.New(slog.NewTextHandler(io.Discard, nil)), pool, api.Options{}, service.RegisterRoutes)
+	handler := api.New(slog.New(slog.NewTextHandler(io.Discard, nil)), pool, api.Options{}, nil, service.RegisterRoutes)
 	server := httptest.NewServer(handler)
 	h := &resumeAPITestHarness{
 		ctx: ctx, pool: pool, queries: queries, resumes: resumeStore, service: service, handler: handler,

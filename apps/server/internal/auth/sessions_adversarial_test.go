@@ -358,7 +358,7 @@ func TestRequireSession_RotatedRequest_CarriesSuccessorCookie(t *testing.T) {
 	clk := testutil.NewClockAtEpoch()
 	sm := auth.NewSessionManagerForTest(q, clk.Now)
 	auth.SetSessionManagerForTest(svc, sm)
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 
 	userID := createTestUser(t, q)
 	rawOld, _, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.91")

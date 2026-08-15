@@ -69,6 +69,13 @@ type Options struct {
 	Clock func() time.Time
 }
 
+// PublicRoutes is the public-route boundary. It receives recognized public
+// paths before default request-body and rate middleware can read a viewer body.
+type PublicRoutes interface {
+	Recognizes(escapedPath string) bool
+	ServeHTTP(http.ResponseWriter, *http.Request)
+}
+
 func (o Options) withDefaults() Options {
 	if o.BodyLimitBytes <= 0 {
 		o.BodyLimitBytes = DefaultBodyLimitBytes
@@ -102,7 +109,7 @@ func (o Options) withDefaults() Options {
 // wrapped around it, so every extra route gets the same RequestID/
 // SecurityHeaders/Logging/RateLimit/BodyLimit treatment as /healthz and
 // /readyz's siblings.
-func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*http.ServeMux)) http.Handler {
+func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes, register ...func(*http.ServeMux)) http.Handler {
 	opts = opts.withDefaults()
 
 	// Readyz never sees the raw pinger directly: cachedPinger memoizes it
@@ -187,6 +194,10 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, register ...func(*h
 	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isHealthPath(r.URL.EscapedPath()) {
 			healthChain.ServeHTTP(w, r)
+			return
+		}
+		if public != nil && public.Recognizes(r.URL.EscapedPath()) {
+			public.ServeHTTP(w, r)
 			return
 		}
 		if isPhotoUploadPath(r.Method, r.URL.EscapedPath()) {
