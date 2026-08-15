@@ -136,8 +136,8 @@ func TestPublicStateGeneratedContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPublicState() error: %v", err)
 	}
-	if !state.Singleton || state.DiscoveryGeneration != 1 {
-		t.Fatalf("GetPublicState() = %+v, want singleton generation 1", state)
+	if !state.Singleton || state.DiscoveryGeneration <= 0 {
+		t.Fatalf("GetPublicState() = %+v, want singleton with positive generation", state)
 	}
 	locked, err := queries.LockPublicState(ctx)
 	if err != nil {
@@ -150,8 +150,8 @@ func TestPublicStateGeneratedContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AdvanceDiscoveryGeneration() error: %v", err)
 	}
-	if generation != 2 {
-		t.Fatalf("AdvanceDiscoveryGeneration() = %d, want 2", generation)
+	if generation != state.DiscoveryGeneration+1 {
+		t.Fatalf("AdvanceDiscoveryGeneration() = %d, want %d", generation, state.DiscoveryGeneration+1)
 	}
 }
 
@@ -341,6 +341,10 @@ func TestSlugLockUsesExactDomain(t *testing.T) {
 
 func TestPublishRollbackRestoresClaimAndGeneration(t *testing.T) {
 	ctx, _, tx, queries := newPublicStoreTx(t)
+	initialState, err := queries.GetPublicState(ctx)
+	if err != nil {
+		t.Fatalf("GetPublicState() error: %v", err)
+	}
 	userID := createPublicStoreUser(ctx, t, tx)
 	resumeID := createPublicStoreResume(ctx, t, tx, userID, nil, false, false)
 	releasedAt := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -398,7 +402,7 @@ func TestPublishRollbackRestoresClaimAndGeneration(t *testing.T) {
 	}
 
 	assertPrivateResumeUnchanged(ctx, t, queries, userID, resumeID)
-	assertPublicGeneration(ctx, t, queries, 1)
+	assertPublicGeneration(ctx, t, queries, initialState.DiscoveryGeneration)
 	if _, claimErr := queries.GetSlugClaim(ctx, claimedSlug); !errors.Is(claimErr, pgx.ErrNoRows) {
 		t.Fatalf("GetSlugClaim() after rollback error = %v, want pgx.ErrNoRows", claimErr)
 	}
@@ -414,6 +418,10 @@ func TestPublishRollbackRestoresClaimAndGeneration(t *testing.T) {
 
 func TestDeleteRollbackRestoresRowTombstoneAndJob(t *testing.T) {
 	ctx, _, tx, queries := newPublicStoreTx(t)
+	initialState, err := queries.GetPublicState(ctx)
+	if err != nil {
+		t.Fatalf("GetPublicState() error: %v", err)
+	}
 	userID := createPublicStoreUser(ctx, t, tx)
 	slug := "delete-slug"
 	resumeID := createPublicStoreResume(ctx, t, tx, userID, &slug, true, true)
@@ -478,7 +486,7 @@ func TestDeleteRollbackRestoresRowTombstoneAndJob(t *testing.T) {
 		t.Fatalf("GetPublicResumeByOwner(after rollback) error: %v", err)
 	}
 	assertSamePublicResume(t, after, before)
-	assertPublicGeneration(ctx, t, queries, 1)
+	assertPublicGeneration(ctx, t, queries, initialState.DiscoveryGeneration)
 	if _, err := queries.GetSlugTombstoneForUpdate(ctx, slug); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("GetSlugTombstoneForUpdate() after rollback error = %v, want pgx.ErrNoRows", err)
 	}
