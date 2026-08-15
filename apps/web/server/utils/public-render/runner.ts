@@ -56,7 +56,7 @@ export function runPublicRenderWorker(
     return Promise.reject(failure());
   }
   if (options.signal.aborted) return Promise.reject(failure());
-  return new Promise((resolve, reject) => {
+  const rendered = new Promise<string>((resolve, reject) => {
     let result: string | undefined;
     let failureReason: Error | undefined;
     let terminated = false;
@@ -119,4 +119,6 @@ export function runPublicRenderWorker(
       finish();
     });
   });
+  void rendered.catch(() => undefined);
+  return rendered;
 }

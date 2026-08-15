@@ -121,6 +121,33 @@ describe('public render worker lifecycle', () => {
     }
   });
 
+  it('does not leave the deadline rejection unhandled while joining exit',
+    async () => {
+      vi.useFakeTimers();
+      const worker = new ObservedWorker();
+      let unhandled: unknown;
+      const observeUnhandled = (reason: unknown): void => {
+        unhandled = reason;
+      };
+      process.on('unhandledRejection', observeUnhandled);
+      try {
+        const rendered = runPublicRenderWorker(request, {
+          signal: new AbortController().signal,
+          deadlineMs: 5_000,
+          workerUrl: new URL('./spin-worker.mjs', import.meta.url),
+          workerFactory: () => worker,
+        });
+        await vi.advanceTimersByTimeAsync(5_000);
+        worker.emit('exit', 1);
+        await vi.runAllTimersAsync();
+        expect(unhandled).toBeUndefined();
+        await expect(rendered).rejects.toThrow('public render failed');
+      } finally {
+        process.off('unhandledRejection', observeUnhandled);
+        vi.useRealTimers();
+      }
+    });
+
   it('terminates once and waits for the observed abort exit', async () => {
     const worker = new ObservedWorker();
     const controller = new AbortController();
