@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 16, active** (2026-08-14).
+Status: **Revision 17, active** (2026-08-15).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior; it is approved at v4. This
@@ -23,6 +23,7 @@ keep everything runnable on the laptop until the whole product works there.
 | P2B server lane               | Complete                        | None                                            |
 | P4 authenticated editor       | Ready for dispatch              | Execute the approved editor design              |
 | P5A publish and public SSR    | Ready for dispatch              | Execute the approved publish/public design      |
+| PA password authentication    | Approved, queued                | Start after P4 and P5A integrate                |
 | P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
 | PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
 
@@ -66,9 +67,10 @@ may continue in parallel between them.
 
 After both lanes close their phase review and exit checklist:
 
-1. P5B publish UX and P6 realtime.
-2. P7 print and images and P8 privacy lifecycle.
-3. P9 local UAT over the complete product, then human cloud authorization, PI
+1. PA password authentication, including local encrypted mail/capture UAT.
+2. P5B publish UX and P6 realtime.
+3. P7 print and images and P8 privacy lifecycle.
+4. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
 
 ## Remaining gates
@@ -100,6 +102,8 @@ graph TD
     P9H --> P4
     P2B --> P5A[P5A publish and public SSR]
     P3 --> P5A
+    P4 --> PA[PA password authentication]
+    P5A --> PA
     P4 --> P5B[P5B publish UX]
     P5A --> P5B
     P2A --> P6A[P6A SSE transport]
@@ -115,6 +119,7 @@ graph TD
     P6B --> P9
     P7B --> P9
     P8P --> P9
+    PA --> P9
     P9H --> P9
     PI[PI local IaC] --> P9
     P9 --> AUTH{Human authorizes cloud resources}
@@ -174,6 +179,7 @@ human approval.
 | P3    | [Renderer, sanitizer, templates, and fonts](phase-3/README.md)                |
 | P4    | [Authenticated editor](phase-4/README.md)                                     |
 | P5A   | [Publish and public SSR](phase-5a/README.md)                                  |
+| PA    | [Password authentication](phase-pa/README.md)                                 |
 | PI    | [Infrastructure](phase-pi/README.md)                                          |
 | P9    | [HTTPS overlay and local UAT](phase-9/README.md)                              |
 
