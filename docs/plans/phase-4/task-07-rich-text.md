@@ -25,7 +25,7 @@ export function serializeRichText(node: PMNode): string;
 `RichTextEditor` accepts `modelValue: string` and emits `update:modelValue` only
 for a distinct sanitized serialization. It imports no store or transport.
 
-- [ ] **Step 1: Write the closed-schema/parser RED test**
+- [x] **Step 1: Write the closed-schema/parser RED test**
 
 Require exactly doc, paragraph, text, hard_break, ordered_list, bullet_list, and
 list_item nodes; strong, em, underline, link marks; and only href/rel/target
@@ -59,7 +59,7 @@ The unsupported heading and image elements cannot enter the ProseMirror
 document. DOMPurify preserves the heading's safe text, which the closed parser
 normalizes to a paragraph.
 
-- [ ] **Step 2: Run the schema/parser test RED**
+- [x] **Step 2: Run the schema/parser test RED**
 
 Run:
 
@@ -69,7 +69,7 @@ Run:
 
 Expected RED: FAIL because schema/parser/serializer are absent.
 
-- [ ] **Step 3: Implement the minimal schema/parser/serializer**
+- [x] **Step 3: Implement the minimal schema/parser/serializer**
 
 Build the schema from `ALLOWED_TAGS`, `ALLOWED_ATTRIBUTES`,
 `ALLOWED_URL_SCHEMES`, and `EXTERNAL_REL`. Parse only this order:
@@ -84,11 +84,11 @@ Serializer rewrites external link attributes to exact
 `rel="noopener noreferrer"`, preserves optional `_blank`, emits `<br>`, and
 normalizes one empty paragraph to `""`.
 
-- [ ] **Step 4: Rerun the schema/parser test GREEN**
+- [x] **Step 4: Rerun the schema/parser test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 5: Write the hostile-input/interaction RED test**
+- [x] **Step 5: Write the hostile-input/interaction RED test**
 
 Iterate the committed hostile corpus. Admit exact lowercase `https:`, `mailto:`,
 and `tel:` only. Reject relative, protocol-relative, mixed/control schemes,
@@ -119,11 +119,11 @@ it("blocks file paste", () => {
 });
 ```
 
-- [ ] **Step 6: Run the hostile-input test RED**
+- [x] **Step 6: Run the hostile-input test RED**
 
 Run the Step 2 command. Expected RED: FAIL at the first missing editor case.
 
-- [ ] **Step 7: Implement minimal editor transaction rules**
+- [x] **Step 7: Implement minimal editor transaction rules**
 
 On paste, sanitize HTML before `parseSlice`; on drop/paste with any file, call
 `preventDefault` and insert nothing. Serialize after each document-changing
@@ -144,11 +144,11 @@ handlePaste(view, event) {
 }
 ```
 
-- [ ] **Step 8: Rerun the hostile-input test GREEN**
+- [x] **Step 8: Rerun the hostile-input test GREEN**
 
 Run the Step 2 command. Expected GREEN: PASS.
 
-- [ ] **Step 9: Run the final task gate and report**
+- [x] **Step 9: Run the final task gate and report**
 
 ```sh
 (cd apps/web && npx vitest run test/editor/rich-text.test.ts)

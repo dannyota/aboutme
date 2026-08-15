@@ -10,7 +10,10 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { parseRichTextHTML, richTextSchema } from './schema';
 import { serializeRichText } from './serialize';
 
-const props = defineProps<{ readonly modelValue: string }>();
+const props = withDefaults(
+  defineProps<{ readonly label?: string; readonly modelValue: string }>(),
+  { label: 'Rich text' },
+);
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 
 const editorRoot = ref<HTMLElement>();
@@ -114,7 +117,7 @@ onMounted(() => {
   if (editorRoot.value === undefined) return;
   view = new EditorView(editorRoot.value, {
     attributes: {
-      'aria-label': 'Rich text',
+      'aria-label': props.label,
       'aria-multiline': 'true',
       'role': 'textbox',
     },

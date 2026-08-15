@@ -1,4 +1,4 @@
-import { EXTERNAL_REL } from '@aboutme/schema/sanitizer';
+import { EXTERNAL_REL } from '@aboutme/schema/sanitizer-policy';
 import type { Mark, Node as PMNode } from 'prosemirror-model';
 
 const escapeHTML = (value: string): string =>

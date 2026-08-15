@@ -5,7 +5,7 @@ import {
   EXTERNAL_REL,
   FORBIDDEN_ATTRIBUTE_PREFIXES,
   FORBIDDEN_TAGS,
-} from '@aboutme/schema/sanitizer';
+} from '@aboutme/schema/sanitizer-policy';
 import type { Config, DOMPurify } from 'dompurify';
 
 const purifier: DOMPurify | undefined

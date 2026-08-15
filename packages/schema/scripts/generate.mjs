@@ -1101,25 +1101,16 @@ function tsFrozenArray(values, indent = "") {
   return `Object.freeze([\n${entries}\n${indent}])`;
 }
 
-function generateSanitizerTs(contract, outFile) {
+function generateSanitizerPolicyTs(contract, outFile) {
   const attributes = Object.entries(contract.attributes)
     .map(
       ([tag, values]) =>
         `  ${JSON.stringify(tag)}: ${tsFrozenArray(values, "  ")},`,
     )
     .join("\n");
-  const payloads = contract.payloads
-    .map(
-      (entry) => `  Object.freeze({
-    id: ${JSON.stringify(entry.id)},
-    category: ${JSON.stringify(entry.category)},
-    payload: ${JSON.stringify(entry.payload)},
-  }),`,
-    )
-    .join("\n");
 
   const body = `${generatedHeader(
-    "validation/sanitizer-allowlist.v1.json and validation/hostile-corpus.json",
+    "validation/sanitizer-allowlist.v1.json",
   )}
 
 export const SANITIZER_ALLOWLIST_VERSION = ${contract.version} as const;
@@ -1145,6 +1136,28 @@ export const FORBIDDEN_URL_SCHEMES = ${tsFrozenArray(
   )};
 
 export const EXTERNAL_REL = ${JSON.stringify(contract.externalRel)} as const;
+`;
+
+  writeFileSync(outFile, body);
+  execFileSync(prettierBin, ["--write", outFile], { stdio: "ignore" });
+}
+
+function generateSanitizerTs(contract, outFile) {
+  const payloads = contract.payloads
+    .map(
+      (entry) => `  Object.freeze({
+    id: ${JSON.stringify(entry.id)},
+    category: ${JSON.stringify(entry.category)},
+    payload: ${JSON.stringify(entry.payload)},
+  }),`,
+    )
+    .join("\n");
+
+  const body = `${generatedHeader(
+    "validation/sanitizer-allowlist.v1.json and validation/hostile-corpus.json",
+  )}
+
+export * from "./sanitizer-policy";
 
 export interface HostilePayload {
   readonly id: string;
@@ -1249,6 +1262,10 @@ async function main() {
     const sanitizerContract = readSanitizerSources(schema);
     const templatePresets = readTemplatePresets(schema);
     generateSanitizerGo(sanitizerContract, join(goDir, "sanitizer.go"));
+    generateSanitizerPolicyTs(
+      sanitizerContract,
+      join(tsDir, "sanitizer-policy.ts"),
+    );
     generateSanitizerTs(sanitizerContract, join(tsDir, "sanitizer.ts"));
     generateTemplatesTs(
       templatePresets,
@@ -1259,6 +1276,7 @@ async function main() {
     );
     written.push(
       "gen/go/sanitizer.go",
+      "gen/ts/sanitizer-policy.ts",
       "gen/ts/sanitizer.ts",
       "gen/ts/templates.ts",
     );

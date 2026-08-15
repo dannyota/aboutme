@@ -3,7 +3,7 @@ import {
   ALLOWED_TAGS,
   ALLOWED_URL_SCHEMES,
   EXTERNAL_REL,
-} from '@aboutme/schema/sanitizer';
+} from '@aboutme/schema/sanitizer-policy';
 import { DOMParser as PMDOMParser, Schema } from 'prosemirror-model';
 
 import { sanitizeRichText } from '../../../utils/sanitizeRichText';
