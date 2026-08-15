@@ -93,8 +93,8 @@ func (s *Service) runMutation(ctx context.Context, identity mutationIdentity, pl
 	if s.clock != nil {
 		now = s.clock()
 	}
-	if err := transition.Close(ctx, now.Add(publicStateDrainTimeout)); err != nil {
-		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, err
+	if closeErr := transition.Close(ctx, now.Add(publicStateDrainTimeout)); closeErr != nil {
+		return resume.ExecuteResult{Outcome: resume.CommitNotAttempted}, closeErr
 	}
 	var committed publicstate.CommittedState
 	result, executeErr := s.idempotency.Execute(ctx, identity.UserID, identity.Operation, identity.Key, identity.RequestHash,

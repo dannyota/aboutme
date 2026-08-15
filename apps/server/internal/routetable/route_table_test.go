@@ -498,8 +498,8 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 				if err != nil {
 					t.Fatalf("requesting %s ETag response: %v", encoding, err)
 				}
-				if err := response.Body.Close(); err != nil {
-					t.Fatalf("closing %s ETag response: %v", encoding, err)
+				if closeErr := response.Body.Close(); closeErr != nil {
+					t.Fatalf("closing %s ETag response: %v", encoding, closeErr)
 				}
 				if response.StatusCode != http.StatusOK {
 					t.Fatalf("%s response status = %d, want 200", encoding, response.StatusCode)

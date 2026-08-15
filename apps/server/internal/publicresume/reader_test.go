@@ -12,11 +12,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 type readerStore struct {
@@ -68,9 +69,18 @@ func (s *readerStore) GetPublicResumeBySlug(context.Context, string) (store.Resu
 func TestReaderReadResumeClassifiesAbsentRowsAsNotFound(t *testing.T) {
 	slug, lng, name := "ada", "en", "Ada"
 	doc := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
-	pd, _ := json.Marshal(doc.PersonalDetails)
-	content, _ := json.Marshal(doc.Content)
-	customization, _ := json.Marshal(doc.Customization)
+	pd, err := json.Marshal(doc.PersonalDetails)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := json.Marshal(doc.Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	customization, err := json.Marshal(doc.Customization)
+	if err != nil {
+		t.Fatal(err)
+	}
 	valid := store.Resume{ID: uuid.New(), Slug: &slug, Live: true, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}
 
 	for _, test := range []struct {
@@ -186,15 +196,27 @@ func (s *readerStore) ListEligiblePublicSlugs(context.Context) ([]string, error)
 func TestReaderReadResumeAcquiresCurrentRevision(t *testing.T) {
 	slug, lng, name := "ada", "en", "Ada"
 	doc := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
-	pd, _ := json.Marshal(doc.PersonalDetails)
-	content, _ := json.Marshal(doc.Content)
-	customization, _ := json.Marshal(doc.Customization)
+	pd, err := json.Marshal(doc.PersonalDetails)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := json.Marshal(doc.Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	customization, err := json.Marshal(doc.Customization)
+	if err != nil {
+		t.Fatal(err)
+	}
 	row := store.Resume{ID: uuid.New(), Slug: &slug, Live: true, Revision: 4, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}
 	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	origin, _ := ParsePublicOrigin("https://resume.example", "production")
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
 	reader, err := NewReader(ReaderDependencies{Store: &readerStore{row: row}, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin})
 	if err != nil {
 		t.Fatal(err)
@@ -212,9 +234,18 @@ func TestReaderReadResumeAcquiresCurrentRevision(t *testing.T) {
 func TestPublicReadMismatchRetriesOnceThenUnavailable(t *testing.T) {
 	slug, lng, name := "ada", "en", "Ada"
 	doc := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
-	pd, _ := json.Marshal(doc.PersonalDetails)
-	content, _ := json.Marshal(doc.Content)
-	customization, _ := json.Marshal(doc.Customization)
+	pd, err := json.Marshal(doc.PersonalDetails)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := json.Marshal(doc.Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	customization, err := json.Marshal(doc.Customization)
+	if err != nil {
+		t.Fatal(err)
+	}
 	id := uuid.New()
 	row := store.Resume{ID: id, Slug: &slug, Live: true, Revision: 3, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}
 	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
@@ -226,7 +257,10 @@ func TestPublicReadMismatchRetriesOnceThenUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	lease.Release()
-	origin, _ := ParsePublicOrigin("https://resume.example", "production")
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
 	publicStore := &readerStore{row: row}
 	reader, err := NewReader(ReaderDependencies{Store: publicStore, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin})
 	if err != nil {

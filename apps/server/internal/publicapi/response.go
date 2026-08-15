@@ -9,16 +9,19 @@ import (
 	"strings"
 )
 
+// ErrInvalidSelectedResponse reports a response that violates cache invariants.
 var ErrInvalidSelectedResponse = errors.New("invalid public response")
 
 const maxSelectedBodyBytes = 2_097_152
 
+// SelectedResponse is a validated cacheable HTTP response.
 type SelectedResponse struct {
 	Status int
 	Header http.Header
 	Body   []byte
 }
 
+// NewSelectedResponse validates and constructs a cacheable public response.
 func NewSelectedResponse(status int, contentType, cacheControl string, body []byte, extra http.Header) (SelectedResponse, error) {
 	if status != http.StatusOK || contentType == "" || cacheControl != "no-cache, must-revalidate" || len(body) == 0 || len(body) > maxSelectedBodyBytes || containsCookie(extra) {
 		return SelectedResponse{}, ErrInvalidSelectedResponse
@@ -65,7 +68,9 @@ func (s SelectedResponse) ServeHTTP(w http.ResponseWriter, request *http.Request
 	writeHeader(w, header)
 	w.WriteHeader(s.Status)
 	if request.Method != http.MethodHead {
-		_, _ = w.Write(s.Body)
+		if _, err := w.Write(s.Body); err != nil {
+			return
+		}
 	}
 }
 
@@ -76,7 +81,9 @@ func serveConditionalError(w http.ResponseWriter, request *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(http.StatusBadRequest)
 	if request.Method != http.MethodHead {
-		_, _ = w.Write(body)
+		if _, err := w.Write(body); err != nil {
+			return
+		}
 	}
 }
 

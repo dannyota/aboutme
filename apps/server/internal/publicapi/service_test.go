@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
@@ -19,7 +21,6 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 func TestPublicServiceDispatchesJSONAndRejectsWrongMethodBeforeLookup(t *testing.T) {
@@ -44,7 +45,7 @@ func TestPublicServiceDispatchesJSONAndRejectsWrongMethodBeforeLookup(t *testing
 	}
 
 	wrong := httptest.NewRecorder()
-	service.ServeHTTP(wrong, httptest.NewRequest(http.MethodPost, "/api/v1/public/resumes/"+slug, nil))
+	service.ServeHTTP(wrong, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/public/resumes/"+slug, nil))
 	if got, want := wrong.Code, http.StatusMethodNotAllowed; got != want {
 		t.Fatalf("POST status = %d, want %d", got, want)
 	}
@@ -76,7 +77,7 @@ func TestPublicJSONCacheSitsAfterLiveAdmission(t *testing.T) {
 	service := newPublicServiceForReader(t, reader, coordinator, cache)
 
 	first := httptest.NewRecorder()
-	service.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/"+slug, nil))
+	service.ServeHTTP(first, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/public/resumes/"+slug, nil))
 	if first.Code != http.StatusOK {
 		t.Fatalf("initial status = %d", first.Code)
 	}
@@ -98,7 +99,7 @@ func TestPublicJSONCacheSitsAfterLiveAdmission(t *testing.T) {
 	}
 
 	second := httptest.NewRecorder()
-	service.ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/"+slug, nil))
+	service.ServeHTTP(second, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/public/resumes/"+slug, nil))
 	if second.Code != http.StatusOK || second.Body.String() == "stale" {
 		t.Fatalf("new-generation response = %d %q, want a current body", second.Code, second.Body.String())
 	}
@@ -125,7 +126,7 @@ func TestRestartGenerationAndInvalidationFailureCannotRestoreAccess(t *testing.T
 		t.Fatal(err)
 	}
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/llms.txt", nil))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/llms.txt", nil))
 	if response.Code != http.StatusOK || response.Body.String() == "stale" || !strings.Contains(response.Body.String(), "/current") {
 		t.Fatalf("restart response = %d %q, want committed generation body", response.Code, response.Body.String())
 	}
@@ -153,15 +154,15 @@ func TestOriginAdmissionBoundaryAroundCompletedEdgeValidation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("close did not cancel the already-admitted origin response")
 	}
-	if _, err := coordinator.AcquireDiscovery(context.Background(), 41, publicstate.RepresentationLLMS); !errors.Is(err, publicstate.ErrAdmissionClosed) {
-		t.Fatalf("post-close admission error = %v, want ErrAdmissionClosed", err)
+	if _, acquireErr := coordinator.AcquireDiscovery(context.Background(), 41, publicstate.RepresentationLLMS); !errors.Is(acquireErr, publicstate.ErrAdmissionClosed) {
+		t.Fatalf("post-close admission error = %v, want ErrAdmissionClosed", acquireErr)
 	}
 	lease.Release()
-	if err := <-closed; err != nil {
-		t.Fatal(err)
+	if closeErr := <-closed; closeErr != nil {
+		t.Fatal(closeErr)
 	}
-	if err := transition.Commit(publicstate.CommittedState{DiscoveryGeneration: int64Pointer(42)}); err != nil {
-		t.Fatal(err)
+	if commitErr := transition.Commit(publicstate.CommittedState{DiscoveryGeneration: int64Pointer(42)}); commitErr != nil {
+		t.Fatal(commitErr)
 	}
 	current, err := coordinator.AcquireDiscovery(context.Background(), 42, publicstate.RepresentationLLMS)
 	if err != nil {

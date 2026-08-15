@@ -1,3 +1,4 @@
+// Package directrender calls the local renderer for a public resume response.
 package directrender
 
 import (
@@ -37,6 +38,7 @@ type renderOutcome struct {
 	err      error
 }
 
+// Render returns a bounded, validated HTML representation for request.
 func (c *Client) Render(ctx context.Context, request PublicRenderRequest) (Result, error) {
 	if c == nil || c.http == nil || c.origin.value == "" {
 		return Result{}, renderUnavailable(errors.New("direct render client is not configured"))
@@ -54,6 +56,7 @@ func (c *Client) Render(ctx context.Context, request PublicRenderRequest) (Resul
 	httpRequest.Header.Set("Content-Type", "application/json; charset=utf-8")
 	done := make(chan renderOutcome, 1)
 	go func() {
+		//nolint:bodyclose // Render joins the request and readResponse closes every returned body.
 		response, doErr := c.http.Do(httpRequest)
 		done <- renderOutcome{response: response, err: doErr}
 	}()
@@ -65,13 +68,10 @@ func (c *Client) Render(ctx context.Context, request PublicRenderRequest) (Resul
 		// The direct call owns no work after this function returns: wait for the
 		// transport to observe cancellation, then close a late response.
 		outcome = <-done
-		if outcome.response != nil && outcome.response.Body != nil {
-			_ = outcome.response.Body.Close()
-		}
-		return Result{}, renderUnavailable(renderCtx.Err())
+		return Result{}, renderUnavailable(errors.Join(renderCtx.Err(), closeResponse(outcome.response)))
 	}
 	if outcome.err != nil {
-		return Result{}, renderUnavailable(outcome.err)
+		return Result{}, renderUnavailable(errors.Join(outcome.err, closeResponse(outcome.response)))
 	}
 	if outcome.response == nil || outcome.response.Body == nil {
 		return Result{}, renderUnavailable(errInvalidRenderResponse)
@@ -93,13 +93,14 @@ func encodeRequest(request PublicRenderRequest) ([]byte, error) {
 
 func readResponse(response *http.Response) (Result, error) {
 	if response.StatusCode != http.StatusOK {
-		_ = response.Body.Close()
-		return Result{}, renderUnavailable(&RenderStatusError{Status: response.StatusCode})
+		return Result{}, renderUnavailable(errors.Join(
+			&RenderStatusError{Status: response.StatusCode},
+			closeResponse(response),
+		))
 	}
 	contentTypes := response.Header.Values("Content-Type")
 	if len(contentTypes) != 1 || contentTypes[0] != "text/html; charset=utf-8" {
-		_ = response.Body.Close()
-		return Result{}, renderUnavailable(errInvalidRenderResponse)
+		return Result{}, renderUnavailable(errors.Join(errInvalidRenderResponse, closeResponse(response)))
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, publicRenderResponseMaxBytes+1))
 	closeErr := response.Body.Close()
@@ -113,6 +114,13 @@ func readResponse(response *http.Response) (Result, error) {
 		return Result{}, renderUnavailable(&RenderResponseTooLargeError{Limit: publicRenderResponseMaxBytes})
 	}
 	return Result{HTML: body}, nil
+}
+
+func closeResponse(response *http.Response) error {
+	if response == nil || response.Body == nil {
+		return nil
+	}
+	return response.Body.Close()
 }
 
 func renderUnavailable(cause error) error {

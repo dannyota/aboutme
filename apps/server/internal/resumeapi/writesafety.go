@@ -534,7 +534,10 @@ func (s *Service) replayCommittedState(ctx context.Context, userID uuid.UUID, pl
 type mutationRequestKeyContext struct{}
 
 func mutationKeyFromContext(ctx context.Context) uuid.UUID {
-	key, _ := ctx.Value(mutationRequestKeyContext{}).(uuid.UUID)
+	key, ok := ctx.Value(mutationRequestKeyContext{}).(uuid.UUID)
+	if !ok {
+		return uuid.Nil
+	}
 	return key
 }
 

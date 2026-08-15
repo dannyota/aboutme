@@ -46,6 +46,7 @@ type publishMutationPrepared struct {
 
 type publishOperation struct{ service *Service }
 
+// Run applies a validated publish mutation inside the idempotency transaction.
 func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation mutationContext, prepared preparedInput) (mutationRunResult, error) {
 	input, ok := prepared.Value.(publishMutationPrepared)
 	if !ok || mutation.ExpectedRevision == nil {
@@ -61,8 +62,8 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 		return mutationRunResult{}, publishInvalidError(validated.Issues)
 	}
 	if publishRequiresRecentReauth(state, validated) {
-		if err := auth.RequireRecentReauth(mutation.Session, op.service.clock()); err != nil {
-			return mutationRunResult{}, err
+		if reauthErr := auth.RequireRecentReauth(mutation.Session, op.service.clock()); reauthErr != nil {
+			return mutationRunResult{}, reauthErr
 		}
 	}
 	if validated.ChangedSlug && validated.Effective.Slug != nil {
@@ -89,8 +90,8 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 		}
 	}
 	if state.Slug != nil && validated.ChangedSlug {
-		if _, err := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{Slug: *state.Slug, ReleasedByUserID: &mutation.UserID, ReleasedAt: input.ReleasedAt}); err != nil {
-			return mutationRunResult{}, err
+		if _, tombstoneErr := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{Slug: *state.Slug, ReleasedByUserID: &mutation.UserID, ReleasedAt: input.ReleasedAt}); tombstoneErr != nil {
+			return mutationRunResult{}, tombstoneErr
 		}
 	}
 	updated, err := qtx.PublishResumeCAS(ctx, store.PublishResumeCASParams{ID: current.ID, UserID: mutation.UserID, ExpectedRevision: *mutation.ExpectedRevision, Slug: validated.Effective.Slug, Live: validated.Effective.Live, DownloadEnabled: validated.Effective.DownloadEnabled, SEOGeoEnabled: validated.Effective.SEOGeoEnabled, UpdatedAt: op.service.clock()})
@@ -98,8 +99,8 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 		return mutationRunResult{}, err
 	}
 	if publishChangesDiscovery(state, validated.Effective) {
-		if _, err := qtx.AdvanceDiscoveryGeneration(ctx); err != nil {
-			return mutationRunResult{}, err
+		if _, generationErr := qtx.AdvanceDiscoveryGeneration(ctx); generationErr != nil {
+			return mutationRunResult{}, generationErr
 		}
 	}
 	row, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, updated.ID)

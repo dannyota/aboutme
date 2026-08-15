@@ -1,3 +1,4 @@
+// Package publicresume projects and represents data safe for public responses.
 package publicresume
 
 import (
@@ -8,6 +9,7 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
+// PublicResume is the complete public representation of one live resume.
 type PublicResume struct {
 	Slug            string               `json:"slug"`
 	Revision        string               `json:"revision"`
@@ -16,6 +18,9 @@ type PublicResume struct {
 	Document        PublicResumeDocument `json:"document"`
 }
 
+// PublicResumeDocument is the public document payload for a resume.
+//
+//nolint:revive // The public JSON DTO name distinguishes it from schema.Resume.
 type PublicResumeDocument struct {
 	SchemaVersion   int64                 `json:"schemaVersion"`
 	PersonalDetails PublicPersonalDetails `json:"personalDetails"`
@@ -23,6 +28,7 @@ type PublicResumeDocument struct {
 	Customization   schema.Customization  `json:"customization"`
 }
 
+// PublicPersonalDetails contains public identity and contact information.
 type PublicPersonalDetails struct {
 	Details  PublicDetails
 	FullName string       `json:"fullName"`
@@ -30,23 +36,29 @@ type PublicPersonalDetails struct {
 	Photo    *PublicPhoto `json:"photo,omitempty"`
 }
 
+// PublicDetails preserves whether the source details array was present.
 type PublicDetails struct {
 	present bool
 	value   []PublicPersonalDetail
 }
 
+// AbsentPublicDetails returns an absent public details value.
 func AbsentPublicDetails() PublicDetails { return PublicDetails{} }
 
+// PresentPublicDetails returns a present copy of value.
 func PresentPublicDetails(value []PublicPersonalDetail) PublicDetails {
 	return PublicDetails{present: true, value: append([]PublicPersonalDetail{}, value...)}
 }
 
+// Present reports whether public details were present in the source document.
 func (d PublicDetails) Present() bool { return d.present }
 
+// Value returns a copy of the public details.
 func (d PublicDetails) Value() []PublicPersonalDetail {
 	return append([]PublicPersonalDetail{}, d.value...)
 }
 
+// MarshalJSON preserves the presence semantics of Details.
 func (p PublicPersonalDetails) MarshalJSON() ([]byte, error) {
 	type wire struct {
 		Details  []PublicPersonalDetail `json:"details,omitempty"`
@@ -67,6 +79,7 @@ func (p PublicPersonalDetails) MarshalJSON() ([]byte, error) {
 	return json.Marshal(w)
 }
 
+// PublicPersonalDetail is one public contact detail.
 type PublicPersonalDetail struct {
 	ID    string  `json:"id"`
 	Label *string `json:"label,omitempty"`
@@ -74,29 +87,40 @@ type PublicPersonalDetail struct {
 	Value string  `json:"value"`
 }
 
+// PublicPhoto identifies a public photo endpoint and optional crop.
 type PublicPhoto struct {
 	URL  string           `json:"url"`
 	Crop *PublicPhotoCrop `json:"crop,omitempty"`
 }
+
+// PublicPhotoCrop describes the normalized crop for a public photo.
 type PublicPhotoCrop struct {
 	Height float64 `json:"height"`
 	Width  float64 `json:"width"`
 	X      float64 `json:"x"`
 	Y      float64 `json:"y"`
 }
+
+// PublicYearMonth represents a year and optional month.
 type PublicYearMonth struct {
 	M *int64 `json:"m,omitempty"`
 	Y int64  `json:"y"`
 }
+
+// PublicDateRange represents a public start, end, or present range.
 type PublicDateRange struct {
 	End     *PublicYearMonth `json:"end"`
 	Present bool             `json:"present"`
 	Start   PublicYearMonth  `json:"start"`
 }
+
+// PublicProfileEntry is one public profile entry.
 type PublicProfileEntry struct {
 	ID   string  `json:"id"`
 	Text *string `json:"text,omitempty"`
 }
+
+// PublicWorkEntry is one public work entry.
 type PublicWorkEntry struct {
 	City         *string          `json:"city,omitempty"`
 	Country      *string          `json:"country,omitempty"`
@@ -107,6 +131,8 @@ type PublicWorkEntry struct {
 	ID           string           `json:"id"`
 	JobTitle     *string          `json:"jobTitle,omitempty"`
 }
+
+// PublicEducationEntry is one public education entry.
 type PublicEducationEntry struct {
 	City        *string          `json:"city,omitempty"`
 	Country     *string          `json:"country,omitempty"`
@@ -117,17 +143,23 @@ type PublicEducationEntry struct {
 	School      *string          `json:"school,omitempty"`
 	SchoolLink  *string          `json:"schoolLink,omitempty"`
 }
+
+// PublicSkillEntry is one public skill entry.
 type PublicSkillEntry struct {
 	ID       string  `json:"id"`
 	InfoHTML *string `json:"infoHtml,omitempty"`
 	Level    *int64  `json:"level,omitempty"`
 	Name     *string `json:"name,omitempty"`
 }
+
+// PublicLanguageEntry is one public language entry.
 type PublicLanguageEntry struct {
 	ID    string  `json:"id"`
 	Level *int64  `json:"level,omitempty"`
 	Name  *string `json:"name,omitempty"`
 }
+
+// PublicCertificateEntry is one public certificate entry.
 type PublicCertificateEntry struct {
 	Date        *PublicYearMonth `json:"date,omitempty"`
 	Description *string          `json:"description,omitempty"`
@@ -136,6 +168,8 @@ type PublicCertificateEntry struct {
 	Title       *string          `json:"title,omitempty"`
 	TitleLink   *string          `json:"titleLink,omitempty"`
 }
+
+// PublicProjectEntry is one public project entry.
 type PublicProjectEntry struct {
 	Dates       *PublicDateRange `json:"dates,omitempty"`
 	Description *string          `json:"description,omitempty"`
@@ -143,6 +177,8 @@ type PublicProjectEntry struct {
 	Link        *string          `json:"link,omitempty"`
 	Title       *string          `json:"title,omitempty"`
 }
+
+// PublicCustomEntry is one public custom-section entry.
 type PublicCustomEntry struct {
 	City        *string          `json:"city,omitempty"`
 	Dates       *PublicDateRange `json:"dates,omitempty"`
@@ -153,6 +189,7 @@ type PublicCustomEntry struct {
 	TitleLink   *string          `json:"titleLink,omitempty"`
 }
 
+// PublicSection is one public resume section and its typed entries.
 type PublicSection struct {
 	SectionType        string
 	DisplayName        *string
@@ -167,6 +204,7 @@ type PublicSection struct {
 	CustomEntries      []PublicCustomEntry
 }
 
+// MarshalJSON emits one entry list appropriate for SectionType.
 func (s PublicSection) MarshalJSON() ([]byte, error) {
 	entries := any(nil)
 	switch s.SectionType {
@@ -195,8 +233,10 @@ func (s PublicSection) MarshalJSON() ([]byte, error) {
 	}{s.SectionType, s.DisplayName, s.IconKey, entries})
 }
 
+// PublicContent maps public section keys to their public sections.
 type PublicContent map[string]PublicSection
 
+// MarshalJSON emits public sections in stable key order.
 func (c PublicContent) MarshalJSON() ([]byte, error) {
 	keys := make([]string, 0, len(c))
 	for key := range c {

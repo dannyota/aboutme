@@ -43,6 +43,7 @@ func newSlugAttemptLimiter(maxKeys ...int) *memorySlugAttemptLimiter {
 	return &memorySlugAttemptLimiter{maxKeys: cap, buckets: make(map[uuid.UUID]*slugAttemptBucket)}
 }
 
+// AllowChangedSlug records and evaluates one account's changed-slug attempt.
 func (l *memorySlugAttemptLimiter) AllowChangedSlug(accountID uuid.UUID, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()

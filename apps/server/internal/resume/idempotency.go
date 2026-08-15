@@ -110,8 +110,11 @@ type ExecuteResult struct {
 type RecheckDecision uint8
 
 const (
+	// RecheckFresh permits the caller to continue with its normal mutation.
 	RecheckFresh RecheckDecision = iota
+	// RecheckReplay returns the response stored for the matching request.
 	RecheckReplay
+	// RecheckReuse rejects a key whose request fingerprint differs.
 	RecheckReuse
 )
 
@@ -238,8 +241,8 @@ func (s *IdempotencyStore) Recheck(ctx context.Context, userID uuid.UUID,
 	}()
 	qtx := s.q.WithTx(tx)
 
-	if _, err := qtx.LockUserForResumeWrite(ctx, userID); err != nil {
-		return RecheckResult{}, fmt.Errorf("resume: idempotency: recheck lock owner row: %w", err)
+	if _, lockErr := qtx.LockUserForResumeWrite(ctx, userID); lockErr != nil {
+		return RecheckResult{}, fmt.Errorf("resume: idempotency: recheck lock owner row: %w", lockErr)
 	}
 	if s.afterRecheckLock != nil {
 		s.afterRecheckLock()

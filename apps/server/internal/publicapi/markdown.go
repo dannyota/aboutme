@@ -12,6 +12,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 )
 
+// ErrUnavailableDependencies reports missing required public-route dependencies.
 var ErrUnavailableDependencies = errors.New("public dependencies unavailable")
 
 func publicGetOrHead(w http.ResponseWriter, request *http.Request) bool {
@@ -33,16 +34,20 @@ func serveTextError(w http.ResponseWriter, request *http.Request, status int) {
 	}
 	w.WriteHeader(status)
 	if request.Method != http.MethodHead {
-		_, _ = w.Write([]byte(body))
+		if _, err := w.Write([]byte(body)); err != nil {
+			return
+		}
 	}
 }
 
+// MarkdownDependencies contains the dependencies for public Markdown responses.
 type MarkdownDependencies struct {
 	Reader    *publicresume.Reader
 	Cache     *publiccache.Cache
 	AppDigest string
 }
 
+// NewMarkdownHandler creates the handler for public resume Markdown.
 func NewMarkdownHandler(dependencies MarkdownDependencies) (http.Handler, error) {
 	if dependencies.Reader == nil || dependencies.Cache == nil || dependencies.AppDigest == "" {
 		return nil, ErrUnavailableDependencies

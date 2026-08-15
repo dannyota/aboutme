@@ -19,8 +19,8 @@ func TestLeaseReleaseIsIdempotentAndCancelHookIsSynchronous(t *testing.T) {
 		t.Fatalf("AcquireResume() error = %v", err)
 	}
 	canceled := make(chan struct{}, 1)
-	if err := lease.OnCancel(func() { canceled <- struct{}{} }); err != nil {
-		t.Fatalf("OnCancel() error = %v", err)
+	if hookErr := lease.OnCancel(func() { canceled <- struct{}{} }); hookErr != nil {
+		t.Fatalf("OnCancel() error = %v", hookErr)
 	}
 	transition, err := coordinator.Begin(context.Background(), Plan{Resumes: []ResumeTarget{{
 		ID: id, ExpectedRevision: 7, Class: Revoking,

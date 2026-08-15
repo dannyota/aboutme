@@ -7,8 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
+	"github.com/dannyota/aboutme/apps/server/internal/resume"
 )
 
 func TestProjectionPrivacyAndSanitizer(t *testing.T) {
@@ -60,7 +61,10 @@ func TestProjectionPrivacyAndSanitizer(t *testing.T) {
 }
 
 func TestProjectionDetailsPresence(t *testing.T) {
-	origin, _ := ParsePublicOrigin("https://resume.example", "production")
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
 	slug, lng, fullName := "ada", "en", "Ada"
 	base := resume.Resume{Slug: &slug, Revision: 1, Lng: &lng, Doc: schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &fullName}, Content: map[string]schema.Section{}}}
 	for _, test := range []struct {
@@ -90,7 +94,10 @@ func TestProjectionDetailsPresence(t *testing.T) {
 }
 
 func TestProjectionLanguageIsCanonicalAndTotal(t *testing.T) {
-	origin, _ := ParsePublicOrigin("https://resume.example", "production")
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
 	slug, fullName := "ada", "Ada"
 	for _, test := range []struct {
 		name string
@@ -117,7 +124,10 @@ func TestProjectionLanguageIsCanonicalAndTotal(t *testing.T) {
 }
 
 func TestProjectionEveryPublicLeafAndRichText(t *testing.T) {
-	origin, _ := ParsePublicOrigin("https://resume.example", "production")
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
 	slug, lng, fullName, visible, empty := "ada", "en", "Ada", false, ""
 	level, month, year := int64(4), int64(2), int64(2024)
 	dates := &schema.DateRange{Start: schema.YearMonth{Y: 2020}, End: &schema.YearMonth{M: &month, Y: year}}

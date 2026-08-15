@@ -13,10 +13,11 @@ import (
 
 	"github.com/google/uuid"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 type scriptedTransitionResumes struct {
@@ -129,7 +130,9 @@ func (*unknownCommitIdempotency) Recheck(context.Context, uuid.UUID, string, uui
 }
 func (s *unknownCommitIdempotency) Execute(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ [32]byte, callback func(*store.Queries) (resume.StoredResponse, error)) (resume.ExecuteResult, error) {
 	s.callbacks++
-	_, _ = callback(nil)
+	if _, callbackErr := callback(nil); callbackErr != nil {
+		return resume.ExecuteResult{Outcome: resume.CommitDefinitelyRolledBack}, callbackErr
+	}
 	return resume.ExecuteResult{Outcome: resume.CommitUnknown}, errors.New("commit result unknown")
 }
 
@@ -313,8 +316,8 @@ func TestRunMutationRecheckReplayReleasesBegunTransitionWithoutExecute(t *testin
 	if want := []string{"recheck"}; !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
 	}
-	if err := coordinator.Ready(); err != nil {
-		t.Fatalf("coordinator readiness after replay = %v", err)
+	if readyErr := coordinator.Ready(); readyErr != nil {
+		t.Fatalf("coordinator readiness after replay = %v", readyErr)
 	}
 	lease, err := coordinator.AcquireResume(context.Background(), resumeID, 7, publicstate.RepresentationJSON)
 	if err != nil {
@@ -334,11 +337,11 @@ func TestSameKeyContenderRechecksAfterBeginMismatchAndReturnsReplay(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := winner.Close(context.Background(), time.Now().Add(time.Second)); err != nil {
-		t.Fatal(err)
+	if closeErr := winner.Close(context.Background(), time.Now().Add(time.Second)); closeErr != nil {
+		t.Fatal(closeErr)
 	}
-	if err := winner.Commit(publicstate.CommittedState{ResumeRevisions: map[uuid.UUID]int64{id: 8}}); err != nil {
-		t.Fatal(err)
+	if commitErr := winner.Commit(publicstate.CommittedState{ResumeRevisions: map[uuid.UUID]int64{id: 8}}); commitErr != nil {
+		t.Fatal(commitErr)
 	}
 	events := []string{}
 	service := &Service{coordinator: coordinator, idempotency: replayBeforeCloseIdempotency{events: &events}}
@@ -602,8 +605,8 @@ func TestTransitionTransactionOrderReadsResumeBeforeSessionForRenameAndSlugDelet
 	assertOrder("initial claim", []string{"slug", "public_state", "resume", "session", "tombstone", "claim"}, func() testHTTPResponse {
 		return h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+oldSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, uuid.NewString())
 	})
-	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); err != nil {
-		t.Fatal(err)
+	if _, updateErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	newSlug := "order-new-" + uuid.NewString()[:8]
 	assertOrder("rename", []string{"slug", "public_state", "resume", "session", "tombstone", "claim"}, func() testHTTPResponse {
@@ -634,8 +637,8 @@ func TestPublishSlugPreflightRejectsUnavailableWithoutClosingLeaseAndAllowsExact
 	if targetPublished.status != http.StatusOK {
 		t.Fatalf("target initial claim = %d %s", targetPublished.status, targetPublished.body)
 	}
-	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); err != nil {
-		t.Fatal(err)
+	if _, updateErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	currentRevision := target.Revision + 1
 	lease, err := h.service.coordinator.AcquireResume(h.ctx, target.ID, currentRevision, publicstate.RepresentationJSON)

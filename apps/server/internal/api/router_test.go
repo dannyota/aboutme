@@ -105,7 +105,7 @@ func TestPublicDispatchWrongMethodPrecedesDefaultBodyAndRateChain(t *testing.T) 
 	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 1}, public)
 	for _, path := range []string{"/api/v1/public/resumes/ada-lovelace", "/api/v1/public/resumes/ada-lovelace/photo", "/ada-lovelace", "/ada-lovelace.md", "/sitemap.xml", "/robots.txt", "/llms.txt"} {
 		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch} {
-			req := httptest.NewRequest(method, path, panicBody{})
+			req := httptest.NewRequestWithContext(context.Background(), method, path, panicBody{})
 			req.ContentLength = 1 << 20
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)

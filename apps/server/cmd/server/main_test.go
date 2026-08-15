@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 func TestPublicRenderConfigRejectsSwappedOriginsAndUnsafeDigests(t *testing.T) {

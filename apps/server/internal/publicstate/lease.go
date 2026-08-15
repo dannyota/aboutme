@@ -5,6 +5,7 @@ import (
 	"sync"
 )
 
+// Lease keeps a public response admitted until it is released or canceled.
 type Lease struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -24,8 +25,10 @@ func newLease(parent context.Context, fence *fence, set *leaseSet, representatio
 	return &Lease{ctx: ctx, cancel: cancel, fence: fence, set: set, representation: representation}
 }
 
+// Context is canceled when the fence revokes this lease.
 func (l *Lease) Context() context.Context { return l.ctx }
 
+// OnCancel registers hook to run once if the fence revokes this lease.
 func (l *Lease) OnCancel(hook func()) error {
 	if hook == nil {
 		return errorsNewNilCancelHook()
@@ -56,6 +59,7 @@ func (l *Lease) cancelLease() {
 	}
 }
 
+// Release ends the lease and is safe to call more than once.
 func (l *Lease) Release() {
 	l.mu.Lock()
 	if l.released {

@@ -30,7 +30,10 @@ func TestClientPostsClosedRequestToDirectOrigin(t *testing.T) {
 	client := New(origin, &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		gotMethod, gotURL, gotContentType = request.Method, request.URL.String(), request.Header.Get("Content-Type")
 		gotAmbient = request.Header.Clone()
-		body, _ := io.ReadAll(request.Body)
+		body, readErr := io.ReadAll(request.Body)
+		if readErr != nil {
+			t.Fatalf("read request body: %v", readErr)
+		}
 		gotBody = string(body)
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(bytes.NewBufferString("<html></html>"))}, nil
 	})})
@@ -122,8 +125,8 @@ func TestClientCapsRequestBeforeTransportAndSetsFiveSecondDeadline(t *testing.T)
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(bytes.NewBufferString("ok"))}, nil
 	})})
 	before := time.Now()
-	if _, err := client.Render(context.Background(), renderRequest()); err != nil {
-		t.Fatal(err)
+	if _, renderErr := client.Render(context.Background(), renderRequest()); renderErr != nil {
+		t.Fatal(renderErr)
 	}
 	duration := deadline.Sub(before)
 	if duration < 4_900*time.Millisecond || duration > 5_100*time.Millisecond {
@@ -207,8 +210,8 @@ func TestClientStripsJarCookiesAndRejectsRedirects(t *testing.T) {
 		cookie = request.Header.Get("Cookie")
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(bytes.NewBufferString("ok"))}, nil
 	})})
-	if _, err := client.Render(context.Background(), renderRequest()); err != nil {
-		t.Fatal(err)
+	if _, renderErr := client.Render(context.Background(), renderRequest()); renderErr != nil {
+		t.Fatal(renderErr)
 	}
 	if cookie != "" {
 		t.Fatalf("ambient Cookie = %q", cookie)

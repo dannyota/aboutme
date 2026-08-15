@@ -9,16 +9,20 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 )
 
+// JSONLDFormatVersion identifies the JSON-LD byte format.
 const JSONLDFormatVersion = 1
 
+// BaseCSP is the fixed CSP for public resume HTML.
 const BaseCSP = "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; media-src 'none'; worker-src 'none'"
 
+// JSONLDResult contains the JSON-LD document, script tag, and matching CSP.
 type JSONLDResult struct {
 	JSON   []byte
 	Script []byte
 	CSP    string
 }
 
+// JSONLD returns JSON-LD and a CSP for a discoverable public resume.
 func JSONLD(resume publicresume.PublicResume, origin publicresume.PublicOrigin, discoverable bool) (JSONLDResult, error) {
 	if !discoverable {
 		return JSONLDResult{CSP: BaseCSP}, nil

@@ -12,6 +12,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
+// DiscoveryDependencies contains dependencies for discovery documents.
 type DiscoveryDependencies struct {
 	Store        store.PublicDiscoveryQueries
 	Coordinator  *publicstate.Coordinator
@@ -24,14 +25,17 @@ var _ store.PublicDiscoveryQueries = (*store.Queries)(nil)
 
 type discoveryEncoder func(publicresume.PublicOrigin, []string) ([]byte, error)
 
+// NewSitemapHandler creates the sitemap handler.
 func NewSitemapHandler(dependencies DiscoveryDependencies) (http.Handler, error) {
 	return newDiscoveryHandler(dependencies, publicstate.RepresentationSitemap, publicformat.SitemapFormatVersion, "application/xml; charset=utf-8", publicformat.Sitemap)
 }
 
+// NewLLMSHandler creates the llms.txt handler.
 func NewLLMSHandler(dependencies DiscoveryDependencies) (http.Handler, error) {
 	return newDiscoveryHandler(dependencies, publicstate.RepresentationLLMS, publicformat.LLMSFormatVersion, "text/plain; charset=utf-8", publicformat.LLMS)
 }
 
+// NewRobotsHandler creates the robots.txt handler.
 func NewRobotsHandler(dependencies DiscoveryDependencies) (http.Handler, error) {
 	if dependencies.Cache == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" {
 		return nil, ErrUnavailableDependencies

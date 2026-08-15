@@ -1,6 +1,8 @@
 package publicapi
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -22,7 +24,7 @@ func TestSelectedResponseGETHEADAnd304(t *testing.T) {
 		{"not modified", http.MethodGet, selected.Header.Get("ETag"), http.StatusNotModified, "", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			req := httptest.NewRequest(test.method, "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), test.method, "/", nil)
 			if test.inm != "" {
 				req.Header.Set("If-None-Match", test.inm)
 			}
@@ -43,7 +45,7 @@ func TestSelectedResponseRejectsMalformedConditional(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Add("If-None-Match", `"ok"`)
 	req.Header.Add("If-None-Match", `"also"`)
 	w := httptest.NewRecorder()
@@ -72,7 +74,7 @@ func TestSelectedResponseRejectsContractBypasses(t *testing.T) {
 		{"mixed cookie", http.StatusOK, "image/png", "no-cache, must-revalidate", validBody, http.Header{"SeT-CoOkIe": {"x=y"}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := NewSelectedResponse(test.status, test.contentType, test.cacheControl, test.body, test.extra); err != ErrInvalidSelectedResponse {
+			if _, err := NewSelectedResponse(test.status, test.contentType, test.cacheControl, test.body, test.extra); !errors.Is(err, ErrInvalidSelectedResponse) {
 				t.Fatalf("NewSelectedResponse() error = %v, want %v", err, ErrInvalidSelectedResponse)
 			}
 		})

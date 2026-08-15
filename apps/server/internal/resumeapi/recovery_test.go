@@ -160,8 +160,8 @@ func TestPublishRenameRecoveryRequiresExactRowClaimTombstoneAndResponse(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); err != nil {
-		t.Fatal(err)
+	if _, updateErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); updateErr != nil {
+		t.Fatal(updateErr)
 	}
 	newSlug := "recover-new-" + uuid.NewString()[:8]
 	key := uuid.New()

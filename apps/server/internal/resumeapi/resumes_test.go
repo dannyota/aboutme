@@ -555,6 +555,9 @@ func TestResumeDelete_ExactPhotoCleanupIsTransactional(t *testing.T) {
 		racedKeys = append(racedKeys, objectKey)
 	}
 	rows.Close()
+	if rowsErr := rows.Err(); rowsErr != nil {
+		t.Fatalf("iterate raced deletion jobs: %v", rowsErr)
+	}
 	if !reflect.DeepEqual(racedKeys, []string{winnerKey}) {
 		t.Fatalf("raced deletion jobs = %v, want only transaction-time %q", racedKeys, winnerKey)
 	}

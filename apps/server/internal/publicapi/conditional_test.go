@@ -11,12 +11,13 @@ import (
 
 	"github.com/google/uuid"
 
+	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
+
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
-	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 )
 
 type admissionStore struct{ row store.Resume }
@@ -63,16 +64,28 @@ func TestConditionalStrictSingleton(t *testing.T) {
 func TestCacheAndConditionalHitAcquireLeaseFirst(t *testing.T) {
 	slug, lng, name := "ada", "en", "Ada"
 	doc := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
-	pd, _ := json.Marshal(doc.PersonalDetails)
-	content, _ := json.Marshal(doc.Content)
-	customization, _ := json.Marshal(doc.Customization)
+	pd, err := json.Marshal(doc.PersonalDetails)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := json.Marshal(doc.Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	customization, err := json.Marshal(doc.Customization)
+	if err != nil {
+		t.Fatal(err)
+	}
 	id := uuid.New()
 	row := store.Resume{ID: id, Slug: &slug, Live: true, Revision: 1, Lng: &lng, SchemaVersion: int32(schema.CurrentVersion), PersonalDetails: pd, Content: content, Customization: customization}
 	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	origin, _ := publicresume.ParsePublicOrigin("https://resume.example", "production")
+	origin, err := publicresume.ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
 	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{Store: admissionStore{row: row}, Projector: docmigrate.NewIdentityProjector(), Coordinator: coordinator, Origin: origin})
 	if err != nil {
 		t.Fatal(err)
@@ -81,15 +94,15 @@ func TestCacheAndConditionalHitAcquireLeaseFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := transition.Close(context.Background(), time.Now().Add(time.Second)); err != nil {
-		t.Fatal(err)
+	if closeErr := transition.Close(context.Background(), time.Now().Add(time.Second)); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	cache, err := publiccache.New(1, time.Second, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cacheTouched, conditionalTouched := false, false
-	if _, lease, err := reader.ReadResume(context.Background(), slug, publicstate.RepresentationJSON); err == nil {
+	if _, lease, readErr := reader.ReadResume(context.Background(), slug, publicstate.RepresentationJSON); readErr == nil {
 		defer lease.Release()
 		cacheTouched = true
 		cache.Get(publiccache.Key{ResumeID: id, Generation: 1})
@@ -99,8 +112,8 @@ func TestCacheAndConditionalHitAcquireLeaseFirst(t *testing.T) {
 	if cacheTouched || conditionalTouched {
 		t.Fatalf("cache=%v conditional=%v before admission", cacheTouched, conditionalTouched)
 	}
-	if err := transition.Rollback(); err != nil {
-		t.Fatal(err)
+	if rollbackErr := transition.Rollback(); rollbackErr != nil {
+		t.Fatal(rollbackErr)
 	}
 	_, lease, err := reader.ReadResume(context.Background(), slug, publicstate.RepresentationJSON)
 	if err != nil {
@@ -137,7 +150,7 @@ func TestConditionalInvalidGrammarHasExactNoValidator400(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, values := range [][]string{{`W/"x"`}, {"*"}, {`"x", "y"`}, {` "x"`}, {`"x" `}, {`"x`}, {`"x"`, `"y"`}} {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.Header["If-None-Match"] = values
 		w := httptest.NewRecorder()
 		selected.ServeHTTP(w, req)

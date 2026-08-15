@@ -25,17 +25,17 @@ func TestNonDrainingCommitLetsOldLeaseFinishAndRejectsNewOldLease(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
 	}
-	if err := transition.Close(context.Background(), time.Now().Add(time.Second)); err != nil {
-		t.Fatalf("Close() error = %v", err)
+	if closeErr := transition.Close(context.Background(), time.Now().Add(time.Second)); closeErr != nil {
+		t.Fatalf("Close() error = %v", closeErr)
 	}
-	if _, err := coordinator.AcquireResume(context.Background(), id, 7, RepresentationJSON); !errors.Is(err, ErrAdmissionClosed) {
-		t.Fatalf("AcquireResume(closed old) error = %v, want ErrAdmissionClosed", err)
+	if _, acquireErr := coordinator.AcquireResume(context.Background(), id, 7, RepresentationJSON); !errors.Is(acquireErr, ErrAdmissionClosed) {
+		t.Fatalf("AcquireResume(closed old) error = %v, want ErrAdmissionClosed", acquireErr)
 	}
-	if err := transition.Commit(CommittedState{ResumeRevisions: map[uuid.UUID]int64{id: 8}}); err != nil {
-		t.Fatalf("Commit() error = %v", err)
+	if commitErr := transition.Commit(CommittedState{ResumeRevisions: map[uuid.UUID]int64{id: 8}}); commitErr != nil {
+		t.Fatalf("Commit() error = %v", commitErr)
 	}
-	if err := oldLease.Context().Err(); err != nil {
-		t.Fatalf("old Lease Context() error = %v, want active", err)
+	if contextErr := oldLease.Context().Err(); contextErr != nil {
+		t.Fatalf("old Lease Context() error = %v, want active", contextErr)
 	}
 	newLease, err := coordinator.AcquireResume(context.Background(), id, 8, RepresentationJSON)
 	if err != nil {
@@ -55,8 +55,8 @@ func TestLaterRevocationDrainsRetainedGenerationSets(t *testing.T) {
 		t.Fatalf("AcquireResume(old) error = %v", err)
 	}
 	advance := beginAndClose(t, coordinator, Plan{Resumes: []ResumeTarget{{ID: id, ExpectedRevision: 7, Class: NonDraining}}})
-	if err := advance.Commit(CommittedState{ResumeRevisions: map[uuid.UUID]int64{id: 8}}); err != nil {
-		t.Fatalf("Commit(non-draining) error = %v", err)
+	if commitErr := advance.Commit(CommittedState{ResumeRevisions: map[uuid.UUID]int64{id: 8}}); commitErr != nil {
+		t.Fatalf("Commit(non-draining) error = %v", commitErr)
 	}
 	currentLease, err := coordinator.AcquireResume(context.Background(), id, 8, RepresentationHTML)
 	if err != nil {
@@ -277,8 +277,8 @@ func TestPreCloseRollbackDoesNotReplaceOrRetainFenceSets(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := transition.Close(ctx, time.Now().Add(time.Second)); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Close(pre-canceled) error = %v, want context.Canceled", err)
+	if closeErr := transition.Close(ctx, time.Now().Add(time.Second)); !errors.Is(closeErr, context.Canceled) {
+		t.Fatalf("Close(pre-canceled) error = %v, want context.Canceled", closeErr)
 	}
 	assertFenceCurrentAndSetCount(t, fence, original, 1)
 	lease, err = coordinator.AcquireResume(context.Background(), id, 7, RepresentationJSON)
