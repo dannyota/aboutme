@@ -13,7 +13,7 @@ fail() {
   exit 1
 }
 
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 for file in \
@@ -31,6 +31,7 @@ digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
   fail 'renderer source-manifest digest is missing'
 for file in \
   deploy/dev-https-browser/editor.spec.ts \
+  deploy/dev-https-browser/public.spec.ts \
   deploy/dev-https-browser/editor-fixtures.ts; do
   grep -Eq "^[[:blank:]]*${file//./\\.}[[:blank:]]+\\\\$" "$ROOT/Makefile" ||
     fail "browser source hash does not include ${file##*/}"
@@ -49,7 +50,7 @@ readonly IMAGE_META=$WORK/image.meta
 readonly INPUT=$WORK/input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'static-test-only' \
@@ -90,6 +91,7 @@ build)
   grep -Fq 'network-policy.ts' "$context/Dockerfile"
   grep -Fq 'transport.spec.ts' "$context/Dockerfile"
   grep -Fq 'editor.spec.ts' "$context/Dockerfile"
+  grep -Fq 'public.spec.ts' "$context/Dockerfile"
   grep -Fq 'editor-fixtures.ts' "$context/Dockerfile"
   printf '%s\n' built >"$FAKE_IMAGE_META"
   ;;
@@ -121,7 +123,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor)
+  transport | editor | public)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -251,7 +253,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, or editor' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, or public' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -635,7 +637,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, or editor' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, or public' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 

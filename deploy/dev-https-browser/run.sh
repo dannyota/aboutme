@@ -24,8 +24,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport | editor) ;;
-  *) fail 'mode must be auth, transport, or editor' ;;
+  auth | transport | editor | public) ;;
+  *) fail 'mode must be auth, transport, editor, or public' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -107,6 +107,12 @@ inside_container() {
     proof_name=editor
     spec=editor.spec.ts
     ;;
+  public)
+    evidence_name=public-proof.json
+    evidence_limit=4096
+    proof_name=public
+    spec=public.spec.ts
+    ;;
   esac
   local log_file=/tmp/playwright-uat.log status=0
   cd /opt/aboutme-auth
@@ -162,6 +168,12 @@ const expected = mode === 'auth' ? {
   scenario: 'authenticated-transport',
   schemaVersion: 1,
   steps: { auth: true, cache: true, etag: true, ifMatch: true, teardown: true },
+} : mode === 'public' ? {
+  schemaVersion: 1,
+  scenario: 'public-resume-hydration',
+  origin: 'https://localhost:20443',
+  errors: { console: 0, externalRequest: 0, page: 0 },
+  steps: { published: true, ssr: true, hydrated: true },
 } : {
   schemaVersion: 1,
   scenario: 'authenticated-editor',
@@ -196,8 +208,8 @@ host_run() {
     fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory> [auth|transport|editor]'
   local image=$1 input=$2 evidence=$3 mode=${4:-auth}
   case $mode in
-  auth | transport | editor) ;;
-  *) fail 'mode must be auth, transport, or editor' ;;
+  auth | transport | editor | public) ;;
+  *) fail 'mode must be auth, transport, editor, or public' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
