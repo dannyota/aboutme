@@ -667,6 +667,24 @@ async function provePhotoSessionPersistence(
   await expect(page.getByLabel('Replace photo')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Delete photo' })).toBeVisible();
 
+  editorDiagnosticStage = 'photo-delete';
+  await page.getByRole('button', { name: 'Delete photo' }).press('Enter');
+  const deleteDialog = page.getByRole('alertdialog', { name: 'Delete photo' });
+  await expect(deleteDialog).toBeVisible();
+  const deleteAccepted = page.waitForResponse((response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    return request.method() === 'DELETE'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
+  });
+  await deleteDialog.getByRole('button', { name: 'Delete photo' }).press('Enter');
+  expect((await deleteAccepted).status()).toBe(204);
+  await expect(page.locator('[data-photo-preview] img')).toHaveCount(0);
+  await expect(page.getByLabel('Upload photo')).toBeVisible();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+
   editorDiagnosticStage = 'session-personal-details';
   await page
     .getByRole('navigation', { name: 'Resume outline' })
