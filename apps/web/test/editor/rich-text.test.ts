@@ -210,6 +210,16 @@ describe('RichTextEditor', () => {
     });
   });
 
+  it('uses an explicit accessible label when supplied', () => {
+    const wrapper = mount(RichTextEditor, {
+      props: { label: 'Work description', modelValue: '' },
+    });
+    const editor = wrapper.get('[contenteditable="true"]');
+    expect(editor.attributes('aria-label')).toBe(
+      'Work description',
+    );
+  });
+
   it('emits an empty string when a present value is cleared', async () => {
     const wrapper = mount(RichTextEditor, {
       props: { modelValue: '<p>text</p>' },

@@ -24,6 +24,7 @@ const files = [
   "gen/go/released.go",
   "gen/ts/released.ts",
   "gen/go/sanitizer.go",
+  "gen/ts/sanitizer-policy.ts",
   "gen/ts/sanitizer.ts",
   "gen/ts/templates.ts",
   ...released.flatMap((entry) => [

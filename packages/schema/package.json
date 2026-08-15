@@ -16,6 +16,10 @@
       "types": "./gen/ts/sanitizer.ts",
       "default": "./gen/ts/sanitizer.ts"
     },
+    "./sanitizer-policy": {
+      "types": "./gen/ts/sanitizer-policy.ts",
+      "default": "./gen/ts/sanitizer-policy.ts"
+    },
     "./released": {
       "types": "./gen/ts/released.ts",
       "default": "./gen/ts/released.ts"
