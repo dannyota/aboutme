@@ -113,10 +113,10 @@ one reauthentication prompt. For each start request, record the method, complete
 URL, headers, and body; fulfill
 `{"data":{"authorizeUrl":"http://localhost:20080/__uat/oauth/p1-authorized"}}`;
 and assert the page performs that top-level navigation. The `unsafe` suffix is
-the exact tool name exposed by the repository-pinned `@playwright/mcp@0.0.78`;
-it does not authorize code outside this bounded browser procedure. The request
-must be POST, carry the query purpose and CSRF header, have no body, and omit
-`Content-Type`. Save the MCP accessibility snapshot and network evidence under
+the exact tool name exposed by `@playwright/mcp@0.0.78`; it does not authorize
+code outside this bounded browser procedure. The request must be POST, carry the
+query purpose and CSRF header, have no body, and omit `Content-Type`. Save the
+MCP accessibility snapshot and network evidence under
 `.superpowers/acceptance/p1.1/<commit>/<run-id>/`. Full provider round trips
 remain part of P9 HTTPS UAT.
 
