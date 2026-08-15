@@ -62,11 +62,12 @@ export function runPublicRenderWorker(
     let terminated = false;
     let termination: Promise<number> | undefined;
     const workerData = freeze(structuredClone(request));
-    const worker
-      = options.workerFactory?.(
-        options.workerUrl ?? runtimeWorkerUrl(),
-        workerData,
-      ) ?? new Worker(options.workerUrl ?? runtimeWorkerUrl(), { workerData });
+    const workerUrl = options.workerUrl ?? runtimeWorkerUrl();
+    const worker = options.workerFactory?.(workerUrl, workerData)
+      ?? new Worker(
+        typeof workerUrl === 'string' ? new URL(workerUrl) : workerUrl,
+        { workerData },
+      );
     const finish = (): void => {
       clearTimeout(timer);
       options.signal.removeEventListener('abort', abort);
