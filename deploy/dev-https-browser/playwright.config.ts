@@ -1,6 +1,16 @@
 import { defineConfig } from '@playwright/test';
 
 const baseURL = 'https://localhost:20443';
+const browserModes = ['auth', 'transport', 'editor'] as const;
+type BrowserMode = typeof browserModes[number];
+const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
+
+if (!browserModes.includes(requestedMode as BrowserMode)) {
+  throw new Error('invalid browser mode');
+}
+
+const mode = requestedMode as BrowserMode;
+const timeout = mode === 'editor' ? 120_000 : 30_000;
 
 for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   if (Object.hasOwn(process.env, name)) {
@@ -16,8 +26,8 @@ export default defineConfig({
   reporter: [['line']],
   retries: 0,
   testDir: import.meta.dirname,
-  testMatch: ['auth.spec.ts', 'transport.spec.ts'],
-  timeout: 30_000,
+  testMatch: [`${mode}.spec.ts`],
+  timeout,
   updateSnapshots: 'none',
   use: {
     acceptDownloads: false,

@@ -41,3 +41,10 @@ export function isExpectedNegativeHTTPConsole(
   }
   return false;
 }
+
+export function httpFailureStatus(message: string): number | null {
+  const match = message.match(
+    /^Failed to load resource: the server responded with a status of ([1-5][0-9]{2}) \([^\r\n]*\)$/,
+  );
+  return match?.[1] === undefined ? null : Number(match[1]);
+}

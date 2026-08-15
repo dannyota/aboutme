@@ -43,6 +43,7 @@ export interface PersistenceCounts {
 }
 export interface BrowserPersistenceProbe {
   read(): Promise<PersistenceCounts>;
+  reset(): Promise<void>;
 }
 export function installBrowserPersistenceProbes(
   page: Page,
@@ -97,12 +98,16 @@ while opening the editor, capture its authenticated `GET /api/v1/resumes/{id}`
 response at `https://localhost:20443` through Caddy (not the Nuxt HTML response
 from `/app/resumes/{id}`). Require that browser request to carry
 `Accept-Encoding`, exact `no-store, no-transform`, and exact strong `"rN"`;
-edit; require no mutation before 1000 ms inactivity and exact observed ETag
-bytes as `If-Match`; reload; prove persistence; logout.
+edit; use Chromium's monotonic input and Resource Timing clocks to require that
+the mutation starts no earlier than 1000 ms after the last input event; require
+exact observed ETag bytes as `If-Match`; load the same editor URL in a fresh
+page in the authenticated context and prove server persistence without retained
+client state; logout.
 
 ```ts
 async function proveListLoadAutosave(
   page: Page,
+  context: BrowserContext,
   createdIds: Set<string>,
 ): Promise<AcceptedResume> {
   const accepted = await createBlankResume(page, uniqueTitle());
@@ -134,11 +139,18 @@ async function proveListLoadAutosave(
       return displayedCount === String(settledCount) ? settledCount : null;
     })
     .not.toBeNull();
+  await installLastInputClock(page.getByLabel("Resume title"));
   await page.getByLabel("Resume title").fill("Changed title");
-  await expectNoMutationFor(page, 999);
-  await expect.poll(() => capturedIfMatch(page)).toBe(observedETag);
-  await page.reload();
-  await expect(page.getByLabel("Resume title")).toHaveValue("Changed title");
+  await page.getByLabel("Resume title").press("Tab");
+  const mutation = await capturedMutation(page);
+  expect(await browserMonotonicDelay(mutation)).toBeGreaterThanOrEqual(1000);
+  expect(mutation.headers()["if-match"]).toBe(observedETag);
+  const verificationPage = await context.newPage();
+  await verificationPage.goto(page.url());
+  await expect(verificationPage.getByLabel("Resume title")).toHaveValue(
+    "Changed title",
+  );
+  await verificationPage.close();
   return accepted;
 }
 ```
@@ -197,11 +209,16 @@ read-failure suspension with usable forms/replace/delete. Destroy session in a
 second tab; retain first-tab edit; reauthenticate; resume and save.
 
 Before editor navigation, inject counters for local/session Storage get/set/
-remove/clear, IndexedDB open/delete, history push/replace, and sendBeacon. After
-editor load, record the full URL/query/hash baseline. Require zero calls and the
-unchanged full URL, query, and hash before edit, after edit, after session loss,
-after reauthentication, and after save. Never put counter details or resume
-content in evidence.
+remove/clear, IndexedDB open/delete, history push/replace, and sendBeacon. Nuxt
+development bootstrap performs framework-owned storage reads and History API
+normalization before hydration settles, so reset the counters only after the
+editor is interactive and the full URL/query/hash baseline is recorded. Require
+zero calls and the unchanged baseline before edit, after edit, after session
+loss, after reauthentication, and after save. For the fresh-page persistence
+read, install the same probes before navigation, wait for restored editor state,
+then reset the bootstrap counters before its zero-call assertion. Never put
+counter details or resume content in evidence. Component tests remain the direct
+proof that editor-owned mount code does not use these persistence APIs.
 
 ```ts
 async function provePhotoSessionPersistence(
@@ -214,6 +231,7 @@ async function provePhotoSessionPersistence(
     search: location.search,
     hash: location.hash,
   }));
+  await probes.reset();
   const expectURLUnchanged = async () => {
     expect(
       await page.evaluate(() => ({

@@ -13,7 +13,7 @@ fail() {
   exit 1
 }
 
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 for file in \
@@ -29,6 +29,12 @@ digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
   fail 'application source-manifest digest is missing'
 [[ $digest_output == *$'PUBLIC_RENDERER_BUILD_DIGEST=sha256:'* ]] ||
   fail 'renderer source-manifest digest is missing'
+for file in \
+  deploy/dev-https-browser/editor.spec.ts \
+  deploy/dev-https-browser/editor-fixtures.ts; do
+  grep -Eq "^[[:blank:]]*${file//./\\.}[[:blank:]]+\\\\$" "$ROOT/Makefile" ||
+    fail "browser source hash does not include ${file##*/}"
+done
 
 readonly WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-dev-https-browser.XXXXXX")
 cleanup() {
@@ -43,7 +49,7 @@ readonly IMAGE_META=$WORK/image.meta
 readonly INPUT=$WORK/input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'static-test-only' \
@@ -79,8 +85,12 @@ build)
     "$context/Dockerfile"
   grep -Fq '"@playwright/test": "1.62.1"' "$context/package.json"
   grep -Fq '"@playwright/test": "1.62.1"' "$context/package-lock.json"
+  grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package.json"
+  grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
   grep -Fq 'network-policy.ts' "$context/Dockerfile"
   grep -Fq 'transport.spec.ts' "$context/Dockerfile"
+  grep -Fq 'editor.spec.ts' "$context/Dockerfile"
+  grep -Fq 'editor-fixtures.ts' "$context/Dockerfile"
   printf '%s\n' built >"$FAKE_IMAGE_META"
   ;;
 image)
@@ -111,7 +121,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport)
+  transport | editor)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -223,6 +233,17 @@ image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
 [ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = transport ] ||
   fail 'transport mode was not passed after the verified image ID'
 
+readonly EDITOR_EVIDENCE=$WORK/editor-evidence
+install -d -m 0700 "$EDITOR_EVIDENCE"
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$EDITOR_EVIDENCE" editor
+tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
+grep -Fxq editor "$READABLE_LOG" || fail 'editor mode did not reach the image'
+image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
+[ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = editor ] ||
+  fail 'editor mode was not passed after the verified image ID'
+
 readonly INVALID_MODE_EVIDENCE=$WORK/invalid-mode-evidence
 install -d -m 0700 "$INVALID_MODE_EVIDENCE"
 : >"$CALL_LOG"
@@ -230,7 +251,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth or transport' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, or editor' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -258,6 +279,10 @@ grep -Fq '/uat-input/caddy-root.crt' "$SOURCE/run.sh" ||
   fail 'runner does not use the closed CA path'
 grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
+grep -Fqx "const timeout = mode === 'editor' ? 120_000 : 30_000;" \
+  "$SOURCE/playwright.config.ts" || fail 'editor timeout is not explicitly bounded'
+grep -Fq '  timeout,' "$SOURCE/playwright.config.ts" ||
+  fail 'Playwright does not use the bounded mode timeout'
 
 node --input-type=module - "$SOURCE/network-policy.ts" <<'NETWORK_POLICY_TEST'
 const policyPath = process.argv[2];
@@ -267,6 +292,7 @@ const {
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
   isExpectedNegativeHTTPConsole,
+  httpFailureStatus,
 } =
   await import(`file://${policyPath}`);
 const cases = [
@@ -307,16 +333,23 @@ const cases = [
     'Failed to load resource: the server responded with a status of 403 ()',
     'https://example.invalid/api/v1/auth/google/start?purpose=reauth',
   ), false],
+  [httpFailureStatus(
+    'Failed to load resource: the server responded with a status of 412 (Precondition Failed)',
+  ), 412],
+  [httpFailureStatus(
+    'Failed to load resource: the server responded with a status of 500 ()',
+  ), 500],
+  [httpFailureStatus('Failed to fetch private data'), null],
 ];
 for (const [actual, expected] of cases) {
   if (actual !== expected) process.exit(1);
 }
 NETWORK_POLICY_TEST
 
-node --input-type=module - "$SOURCE/auth.spec.ts" "$SOURCE/transport.spec.ts" <<'ROUTING_SCOPE_TEST'
+node --input-type=module - "$SOURCE/auth.spec.ts" "$SOURCE/transport.spec.ts" "$SOURCE/editor.spec.ts" <<'ROUTING_SCOPE_TEST'
 import { readFile } from 'node:fs/promises';
 
-for (const path of process.argv.slice(2)) {
+for (const path of process.argv.slice(2, 4)) {
   const source = await readFile(path, 'utf8');
   const httpRoute = source.indexOf('await context.route(');
   const websocketRoute = source.indexOf('await context.routeWebSocket(');
@@ -338,15 +371,50 @@ const transport = await readFile(process.argv[3], 'utf8');
 const networkHeaders = transport.indexOf('Network.requestWillBeSentExtraInfo');
 const transportNavigation = transport.indexOf('await page.goto(');
 if (networkHeaders === -1 || networkHeaders > transportNavigation) process.exit(1);
+const editor = await readFile(process.argv[4], 'utf8');
+const diagnosticsInstall = editor.indexOf('await installDiagnostics(context, page)');
+const editorNavigation = editor.indexOf('await loginAsDevelopmentUser(page)');
+if (diagnosticsInstall === -1 || editorNavigation === -1 || diagnosticsInstall > editorNavigation) {
+  process.exit(1);
+}
+for (const required of [
+  'await context.route(',
+  'await context.routeWebSocket(',
+  "await webSocket.close({ code: 1008",
+  'isAllowedHTTPURL(',
+  'isAllowedWebSocketURL(webSocket.url())',
+  "context.on('serviceworker'",
+  "openedPage.on('download'",
+]) {
+  if (!editor.includes(required)) process.exit(1);
+}
 ROUTING_SCOPE_TEST
 
-ln -s "$ROOT/apps/web/node_modules" "$CONTEXT/node_modules"
-readonly LIST_OUTPUT=$("$ROOT/apps/web/node_modules/.bin/playwright" test --list \
-  --config "$CONTEXT/playwright.config.ts")
+ln -s "$SOURCE/node_modules" "$CONTEXT/node_modules"
+readonly AUTH_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=auth \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
 grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
-  <<<"$LIST_OUTPUT" || fail 'Playwright could not compile and list the auth proof'
+  <<<"$AUTH_LIST_OUTPUT" || fail 'Playwright could not compile and list the auth proof'
+if grep -Fq 'proves authenticated transport preserves cache and precondition bytes' \
+  <<<"$AUTH_LIST_OUTPUT"; then
+  fail 'auth mode listed the transport proof'
+fi
+readonly TRANSPORT_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=transport \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
 grep -Fq 'proves authenticated transport preserves cache and precondition bytes' \
-  <<<"$LIST_OUTPUT" || fail 'Playwright could not compile and list the transport proof'
+  <<<"$TRANSPORT_LIST_OUTPUT" || fail 'Playwright could not compile and list the transport proof'
+if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
+  <<<"$TRANSPORT_LIST_OUTPUT"; then
+  fail 'transport mode listed the auth proof'
+fi
+readonly EDITOR_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=editor \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
+grep -Fq 'proves authenticated editor behavior over trusted HTTPS' \
+  <<<"$EDITOR_LIST_OUTPUT" || fail 'Playwright could not compile and list the editor proof'
+if grep -Fq 'proves authenticated transport preserves cache and precondition bytes' \
+  <<<"$EDITOR_LIST_OUTPUT"; then
+  fail 'editor mode listed the transport proof'
+fi
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
@@ -426,7 +494,8 @@ FAKE_CERTUTIL
 cat >"$INSIDE_APP/node_modules/.bin/playwright" <<'FAKE_PLAYWRIGHT'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-printf 'HOME=%s\nARGV=' "$HOME" >>"$FAKE_BROWSER_LOG"
+printf 'HOME=%s\nMODE=%s\nARGV=' "$HOME" "${ABOUTME_BROWSER_MODE:-}" \
+  >>"$FAKE_BROWSER_LOG"
 printf '%q ' "$@" >>"$FAKE_BROWSER_LOG"
 printf '\n' >>"$FAKE_BROWSER_LOG"
 case ${FAKE_BROWSER_MODE:-good} in
@@ -434,8 +503,15 @@ fail)
   printf '%s\n' 'browser-secret-must-not-escape'
   exit 1
   ;;
+editor-fail)
+  printf '%s\n' 'browser-secret-must-not-escape'
+  printf '%s\n' 'editor-stage:entries-missing-select'
+  printf '%s\n' 'editor-stage:photo-session'
+  exit 1
+  ;;
 malformed)
   case " $* " in
+  *' editor.spec.ts '*) evidence=editor-proof.json ;;
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
@@ -443,13 +519,25 @@ malformed)
   ;;
 oversized)
   case " $* " in
+  *' editor.spec.ts '*) evidence=editor-proof.json ;;
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
-  head -c 5000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
+  head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
   ;;
 good)
   case " $* " in
+  *' editor.spec.ts '*)
+    cat >"$FAKE_INSIDE_EVIDENCE/editor-proof.json" <<'JSON'
+{
+  "schemaVersion": 1,
+  "scenario": "authenticated-editor",
+  "origin": "https://localhost:20443",
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "steps": {"auth": true, "cache": true, "etag": true, "ifMatch": true, "autosave": true, "conflict": true, "template": true, "photo": true, "session": true, "persistence": true, "accessibility": true, "teardown": true}
+}
+JSON
+    ;;
   *' transport.spec.ts '*)
     cat >"$FAKE_INSIDE_EVIDENCE/transport-proof.json" <<'JSON'
 {
@@ -473,6 +561,18 @@ JSON
 JSON
     ;;
   esac
+  ;;
+within-editor-bound)
+  case " $* " in
+  *' editor.spec.ts '*) ;;
+  *) exit 64 ;;
+  esac
+  cat >"$FAKE_INSIDE_EVIDENCE/editor-proof.json" <<'JSON'
+{"schemaVersion":1,"scenario":"authenticated-editor","origin":"https://localhost:20443","errors":{"certificate":0,"console":0,"externalRequest":0,"page":0},"steps":{"auth":true,"cache":true,"etag":true,"ifMatch":true,"autosave":true,"conflict":true,"template":true,"photo":true,"session":true,"persistence":true,"accessibility":true,"teardown":true}}
+JSON
+  while [ "$(stat -c %s "$FAKE_INSIDE_EVIDENCE/editor-proof.json")" -lt 5000 ]; do
+    printf ' ' >>"$FAKE_INSIDE_EVIDENCE/editor-proof.json"
+  done
   ;;
 *) exit 64 ;;
 esac
@@ -535,7 +635,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth or transport' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, or editor' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -596,6 +696,17 @@ if grep -Fq 'browser-secret-must-not-escape' <<<"$BROWSER_FAILURE"; then
 fi
 
 reset_inside
+if output=$(FAKE_BROWSER_MODE=editor-fail PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside editor 2>&1); then
+  fail 'editor browser failure was accepted'
+fi
+grep -Fxq 'dev-https-browser: editor-stage:photo-session' <<<"$output" ||
+  fail 'editor failure did not expose its last bounded stage'
+if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
+  fail 'editor failure leaked volatile output'
+fi
+
+reset_inside
 assert_inside_rejected malformed-evidence \
   'browser evidence has invalid schema' FAKE_BROWSER_MODE=malformed >/dev/null
 
@@ -611,6 +722,8 @@ grep -Fq "HOME=$INSIDE_TMP/home" "$BROWSER_LOG" ||
   fail 'browser did not use the isolated HOME'
 grep -Fq 'ARGV=test --config playwright.config.ts auth.spec.ts' "$BROWSER_LOG" ||
   fail 'focused Playwright invocation drifted'
+grep -Fxq 'MODE=auth' "$BROWSER_LOG" ||
+  fail 'auth mode did not reach Playwright config'
 [ -f "$INSIDE_TMP/home/.pki/nssdb/cert9.db" ] ||
   fail 'inside flow did not initialize the empty NSS database'
 tr '\0' '\n' <"$CERT_LOG" >"$INSIDE_ROOT/certutil.calls.txt"
@@ -624,6 +737,8 @@ grep -Fq 'dev-https-browser transport proof: PASS' <<<"$TRANSPORT_INSIDE_OUTPUT"
   fail 'inside-container transport success did not complete'
 grep -Fq 'ARGV=test --config playwright.config.ts transport.spec.ts' "$BROWSER_LOG" ||
   fail 'focused transport invocation drifted'
+grep -Fxq 'MODE=transport' "$BROWSER_LOG" ||
+  fail 'transport mode did not reach Playwright config'
 [ -f "$INSIDE_EVIDENCE/transport-proof.json" ] ||
   fail 'transport evidence filename drifted'
 
@@ -642,5 +757,43 @@ if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized transport evidence returned the wrong diagnostic'
+
+reset_inside
+readonly EDITOR_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside editor)
+grep -Fq 'dev-https-browser editor proof: PASS' <<<"$EDITOR_INSIDE_OUTPUT" ||
+  fail 'inside-container editor success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts editor.spec.ts' "$BROWSER_LOG" ||
+  fail 'focused editor invocation drifted'
+grep -Fxq 'MODE=editor' "$BROWSER_LOG" ||
+  fail 'editor mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/editor-proof.json" ] ||
+  fail 'editor evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/editor-proof.json")" = 600 ] ||
+  fail 'editor evidence mode drifted'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=within-editor-bound PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside editor 2>&1); then
+  grep -Fq 'dev-https-browser editor proof: PASS' <<<"$output" ||
+    fail 'within-bound editor evidence did not complete'
+else
+  fail 'editor evidence below 8 KiB was rejected'
+fi
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside editor 2>&1); then
+  fail 'malformed editor evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed editor evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside editor 2>&1); then
+  fail 'oversized editor evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
+  fail 'oversized editor evidence returned the wrong diagnostic'
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

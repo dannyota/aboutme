@@ -24,8 +24,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport) ;;
-  *) fail 'mode must be auth or transport' ;;
+  auth | transport | editor) ;;
+  *) fail 'mode must be auth, transport, or editor' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -87,24 +87,43 @@ inside_container() {
   certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null ||
     fail 'cannot verify the imported Caddy root'
 
-  local evidence_name proof_name spec
+  local evidence_name evidence_limit proof_name spec
   case $mode in
   auth)
     evidence_name=auth-proof.json
+    evidence_limit=4096
     proof_name=authentication
     spec=auth.spec.ts
     ;;
   transport)
     evidence_name=transport-proof.json
+    evidence_limit=4096
     proof_name=transport
     spec=transport.spec.ts
+    ;;
+  editor)
+    evidence_name=editor-proof.json
+    evidence_limit=8192
+    proof_name=editor
+    spec=editor.spec.ts
     ;;
   esac
   local log_file=/tmp/playwright-uat.log status=0
   cd /opt/aboutme-auth
-  ./node_modules/.bin/playwright test --config playwright.config.ts "$spec" \
+  ABOUTME_BROWSER_MODE=$mode \
+    ./node_modules/.bin/playwright test --config playwright.config.ts "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
+    if [ "$mode" = editor ]; then
+      local -a editor_stages=()
+      mapfile -t editor_stages < <(
+        grep -E '^editor-stage:[a-z0-9-]+$' "$log_file" || true
+      )
+      if [ "${#editor_stages[@]}" -gt 0 ]; then
+        printf 'dev-https-browser: %s\n' \
+          "${editor_stages[${#editor_stages[@]} - 1]}" >&2
+      fi
+    fi
     fail "$proof_name proof failed; volatile browser output was withheld"
   fi
 
@@ -118,7 +137,7 @@ inside_container() {
     fail 'browser evidence owner mismatch'
   [ "$(stat -c %a "$evidence_path")" = 600 ] ||
     fail 'browser evidence mode must be 0600'
-  [ "$(stat -c %s "$evidence_path")" -le 4096 ] ||
+  [ "$(stat -c %s "$evidence_path")" -le "$evidence_limit" ] ||
     fail 'browser evidence exceeds its bound'
 
   if ! node --input-type=module - "$mode" "$evidence_path" <<'VERIFY_EVIDENCE'
@@ -138,11 +157,30 @@ const expected = mode === 'auth' ? {
   steps: Object.fromEntries(
     Array.from({ length: 10 }, (_, index) => [String(index + 1), true]),
   ),
-} : {
+} : mode === 'transport' ? {
   ...common,
   scenario: 'authenticated-transport',
   schemaVersion: 1,
   steps: { auth: true, cache: true, etag: true, ifMatch: true, teardown: true },
+} : {
+  schemaVersion: 1,
+  scenario: 'authenticated-editor',
+  origin: 'https://localhost:20443',
+  errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+  steps: {
+    auth: true,
+    cache: true,
+    etag: true,
+    ifMatch: true,
+    autosave: true,
+    conflict: true,
+    template: true,
+    photo: true,
+    session: true,
+    persistence: true,
+    accessibility: true,
+    teardown: true,
+  },
 };
 if (JSON.stringify(actual) !== JSON.stringify(expected)) process.exit(1);
 VERIFY_EVIDENCE
@@ -155,11 +193,11 @@ VERIFY_EVIDENCE
 
 host_run() {
   [ "$#" -ge 3 ] && [ "$#" -le 4 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory> [auth|transport]'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory> [auth|transport|editor]'
   local image=$1 input=$2 evidence=$3 mode=${4:-auth}
   case $mode in
-  auth | transport) ;;
-  *) fail 'mode must be auth or transport' ;;
+  auth | transport | editor) ;;
+  *) fail 'mode must be auth, transport, or editor' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
@@ -216,7 +254,7 @@ host_run() {
     fail 'browser image contract mismatch'
 
   local -a mode_args=()
-  [ "$mode" = auth ] || mode_args=(transport)
+  [ "$mode" = auth ] || mode_args=("$mode")
   exec podman run \
     --rm \
     --pull=never \
