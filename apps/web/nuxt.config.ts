@@ -67,7 +67,10 @@ const buildPublicRenderWorker = async (): Promise<void> => {
       },
     },
     ssr: {
-      noExternal: ['vue', 'vue/server-renderer'],
+      // @lucide/vue must be bundled with this build's single vue instance;
+      // externalizing it leaves its inject() calling a second node_modules
+      // vue, which has no current instance during SSR and fails the render.
+      noExternal: ['vue', 'vue/server-renderer', '@lucide/vue'],
       external: ['@aboutme/schema', '@aboutme/schema/sanitizer'],
     },
   });
@@ -148,12 +151,15 @@ const publicRenderWorkerPlugin = (emitAssets = true) => ({
       if (!existsSync(publicRenderWorker)) {
         throw new Error('Public render worker was not built.');
       }
-      const reference = this.emitFile({
+      // Resolve against the server entry (import.meta.url), not the importing
+      // chunk: ROLLUP_FILE_URL breaks under nuxt dev and code-split builds.
+      this.emitFile({
         type: 'asset',
         fileName: 'workers/public-render.mjs',
         source: readFileSync(publicRenderWorker, 'utf8'),
       });
-      return `export default import.meta.ROLLUP_FILE_URL_${reference};`;
+      return `export default new URL('./workers/public-render.mjs', `
+        + 'import.meta.url).href;';
     }
     return undefined;
   },

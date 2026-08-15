@@ -59,6 +59,16 @@ describe('public render worker lifecycle', () => {
     ).resolves.toContain('Ada Lovelace');
   });
 
+  it('loads a worker from a file:// URL string', async () => {
+    await expect(
+      runPublicRenderWorker(request, {
+        signal: new AbortController().signal,
+        deadlineMs: 5_000,
+        workerUrl: new URL('./result-worker.mjs', import.meta.url).href,
+      }),
+    ).resolves.toContain('Ada Lovelace');
+  });
+
   it('rejects a non-cooperative worker generically', async () => {
     const controller = new AbortController();
     const spinningWorkerUrl = new URL('./spin-worker.mjs', import.meta.url);
