@@ -10,6 +10,7 @@ func TestRenderOriginEnvironmentAllowlist(t *testing.T) {
 		valid                  bool
 	}{
 		{"production direct listener", "http://127.0.0.1:3000", "production", "http://127.0.0.1:3000", true},
+		{"canonical prod environment", "http://127.0.0.1:3000", "prod", "http://127.0.0.1:3000", true},
 		{"staging direct listener", "http://127.0.0.1:3000", "staging", "http://127.0.0.1:3000", true},
 		{"development Nuxt", "http://127.0.0.1:20030", "development", "http://127.0.0.1:20030", true},
 		{"development fixture", "http://127.0.0.1:20440", "development", "http://127.0.0.1:20440", true},

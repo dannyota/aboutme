@@ -27,7 +27,7 @@ func ParseRenderOrigin(raw, environment string) (RenderOrigin, error) {
 }
 
 func allowedRenderOrigin(raw, environment string) bool {
-	if environment == "production" || environment == "staging" {
+	if environment == "prod" || environment == "production" || environment == "staging" {
 		return raw == "http://127.0.0.1:3000"
 	}
 	if environment == "development" || environment == "dev" || environment == "test" {

@@ -40,6 +40,11 @@ type Config struct {
 	// a different origin — so, like Env, Load requires it and fails fast
 	// rather than silently guessing. OAuth URLs and CSRF validation use it.
 	PublicOrigin string
+	// PublicRenderOrigin is the direct Nuxt listener used only for public SSR.
+	PublicRenderOrigin string
+	// AppBuildDigest and PublicRendererBuildDigest version private public caches.
+	AppBuildDigest            string
+	PublicRendererBuildDigest string
 	// TrustedProxyCIDRs is the set of reverse-proxy hops this server
 	// treats as able to assert a request's real client IP and scheme (see
 	// api.TrustedProxies for the spoofing risk of getting this wrong).
@@ -172,6 +177,9 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	publicRenderOrigin := getenv("PUBLIC_RENDER_ORIGIN")
+	appBuildDigest := getenv("APP_BUILD_DIGEST")
+	publicRendererBuildDigest := getenv("PUBLIC_RENDERER_BUILD_DIGEST")
 
 	providerCfg, err := loadProviderEndpoints(getenv, env, publicOrigin)
 	if err != nil {
@@ -209,32 +217,35 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	return Config{
-		Port:                    port,
-		ListenHost:              listenHost,
-		DatabaseURL:             databaseURL,
-		LogLevel:                logLevel,
-		Env:                     env,
-		PublicOrigin:            publicOrigin,
-		TrustedProxyCIDRs:       trustedProxyCIDRs,
-		GoogleClientID:          googleClientID,
-		GoogleClientSecret:      googleClientSecret,
-		GitHubClientID:          githubClientID,
-		GitHubClientSecret:      githubClientSecret,
-		LinkedInClientID:        linkedInClientID,
-		LinkedInClientSecret:    linkedInClientSecret,
-		GoogleOIDCIssuerURL:     providerCfg.googleIssuer,
-		LinkedInOIDCIssuerURL:   providerCfg.linkedinIssuer,
-		GitHubOAuthAuthorizeURL: providerCfg.githubAuthorize,
-		GitHubOAuthTokenURL:     providerCfg.githubToken,
-		GitHubAPIBaseURL:        providerCfg.githubAPI,
-		MediaBackend:            mediaCfg.backend,
-		MediaFSDir:              mediaCfg.fsDir,
-		MediaBucket:             mediaCfg.bucket,
-		MediaRegion:             mediaCfg.region,
-		MediaEndpoint:           mediaCfg.endpoint,
-		MediaAccessKeyID:        mediaCfg.accessKeyID,
-		MediaSecretAccessKey:    mediaCfg.secretAccessKey,
-		MediaForcePathStyle:     mediaCfg.forcePathStyle,
+		Port:                      port,
+		ListenHost:                listenHost,
+		DatabaseURL:               databaseURL,
+		LogLevel:                  logLevel,
+		Env:                       env,
+		PublicOrigin:              publicOrigin,
+		PublicRenderOrigin:        publicRenderOrigin,
+		AppBuildDigest:            appBuildDigest,
+		PublicRendererBuildDigest: publicRendererBuildDigest,
+		TrustedProxyCIDRs:         trustedProxyCIDRs,
+		GoogleClientID:            googleClientID,
+		GoogleClientSecret:        googleClientSecret,
+		GitHubClientID:            githubClientID,
+		GitHubClientSecret:        githubClientSecret,
+		LinkedInClientID:          linkedInClientID,
+		LinkedInClientSecret:      linkedInClientSecret,
+		GoogleOIDCIssuerURL:       providerCfg.googleIssuer,
+		LinkedInOIDCIssuerURL:     providerCfg.linkedinIssuer,
+		GitHubOAuthAuthorizeURL:   providerCfg.githubAuthorize,
+		GitHubOAuthTokenURL:       providerCfg.githubToken,
+		GitHubAPIBaseURL:          providerCfg.githubAPI,
+		MediaBackend:              mediaCfg.backend,
+		MediaFSDir:                mediaCfg.fsDir,
+		MediaBucket:               mediaCfg.bucket,
+		MediaRegion:               mediaCfg.region,
+		MediaEndpoint:             mediaCfg.endpoint,
+		MediaAccessKeyID:          mediaCfg.accessKeyID,
+		MediaSecretAccessKey:      mediaCfg.secretAccessKey,
+		MediaForcePathStyle:       mediaCfg.forcePathStyle,
 	}, nil
 }
 

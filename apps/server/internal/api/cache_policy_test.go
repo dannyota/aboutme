@@ -260,7 +260,7 @@ func TestPublicJSONCache_PreservesHandlerHeaders(t *testing.T) {
 func TestRouter_HealthEndpoints_AreNoStore(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	for _, path := range []string{"/healthz", "/readyz"} {
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
@@ -282,7 +282,7 @@ func TestRouter_HealthEndpoints_AreNoStore(t *testing.T) {
 func TestRouter_HealthEndpoint_BodyTooLargeStillCarriesNoStore(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	body := bytes.Repeat([]byte("a"), int(api.HealthBodyLimitBytes)+1)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz",
@@ -312,7 +312,7 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 	t.Run("404 unknown route", func(t *testing.T) {
 		t.Parallel()
 
-		handler := api.New(testLogger(), fakePinger{}, api.Options{})
+		handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/does-not-exist", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -328,7 +328,7 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 	t.Run("413 body too large", func(t *testing.T) {
 		t.Parallel()
 
-		handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10})
+		handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10}, nil)
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/anything",
 			bytes.NewReader(bytes.Repeat([]byte("a"), 20)))
 		req.ContentLength = 20
@@ -347,7 +347,7 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 		t.Parallel()
 
 		clock := testutil.NewClockAtEpoch()
-		handler := api.New(testLogger(), fakePinger{}, api.Options{Clock: clock.Now})
+		handler := api.New(testLogger(), fakePinger{}, api.Options{Clock: clock.Now}, nil)
 		var rec *httptest.ResponseRecorder
 		for i := 0; i < api.DefaultRateLimitRequests+1; i++ {
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/anything", nil)
@@ -367,7 +367,7 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 
 		handler := api.New(testLogger(), fakePinger{}, api.Options{
 			TrustedProxies: api.LoopbackTrustedProxies(),
-		})
+		}, nil)
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/anything", nil)
 		req.RemoteAddr = "127.0.0.1:9000" // trusted peer, no canonical header
 		rec := httptest.NewRecorder()
@@ -389,7 +389,7 @@ func TestRouter_NonHealthChain_AllRejectionsCarryNoStore(t *testing.T) {
 func TestRouter_HealthEndpoints_BypassRateLimit(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	// api.New wires RateLimit with its package-default budget
 	// (api.DefaultRateLimitRequests); comfortably exceed it against a

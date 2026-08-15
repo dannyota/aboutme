@@ -612,7 +612,7 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 	clk := testutil.NewClockAtEpoch()
 	sm := auth.NewSessionManagerForTest(q, clk.Now)
 	auth.SetSessionManagerForTest(svc, sm)
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 
 	// Create the existing link through a real login against this handler.
 	subject, priorResp := googleLoginAttempt(t, handler, p, uniqueEmail(t)) //nolint:bodyclose // googleLoginAttempt -> doCallback/doGet closes the body itself before returning.

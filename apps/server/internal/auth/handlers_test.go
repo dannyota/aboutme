@@ -180,7 +180,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 		auth.SetStartRateLimitForTest(svc, sc.startRateLimit, sc.startRateWindow)
 	}
 
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 	return handler, q
 }
 
@@ -356,7 +356,7 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 
 	entered, release := p.BlockDiscoveryForTest()
 	t.Cleanup(release) // in case the test fails before reaching the explicit release() below
@@ -850,7 +850,7 @@ func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *te
 	clk := testutil.NewClockAtEpoch()
 	sm := auth.NewSessionManagerForTest(q, clk.Now)
 	auth.SetSessionManagerForTest(svc, sm)
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 
 	txCookie, state, nonce := beginGoogle(t, handler)
 	subject := uniqueSubject(t)

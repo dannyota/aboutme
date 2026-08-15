@@ -249,7 +249,7 @@ func newServiceWithOrigin(t *testing.T, q *store.Queries, issuer, origin string)
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
-	return api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	return api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 }
 
 // TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin uses two

@@ -31,7 +31,7 @@ func newSessionAPITestService(t *testing.T) (http.Handler, *store.Queries) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 	return handler, q
 }
 
@@ -400,7 +400,7 @@ func TestGetMe_RotatesSessionOnAuthenticate_SetsNewCookie(t *testing.T) {
 	clk := testutil.NewClockAtEpoch()
 	sm := auth.NewSessionManagerForTest(q, clk.Now)
 	auth.SetSessionManagerForTest(svc, sm)
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 
 	userID := createTestUser(t, q)
 	raw, predecessor, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.61")

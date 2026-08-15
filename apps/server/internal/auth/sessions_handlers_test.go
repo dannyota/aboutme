@@ -241,7 +241,7 @@ func newRotationCapableTestService(t *testing.T) (http.Handler, *store.Queries, 
 	clk := testutil.NewClockAtEpoch()
 	sm := auth.NewSessionManagerForTest(q, clk.Now)
 	auth.SetSessionManagerForTest(svc, sm)
-	handler := api.New(testLogger(), noopPinger{}, api.Options{}, svc.RegisterRoutes)
+	handler := api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes)
 	return handler, q, clk, sm
 }
 

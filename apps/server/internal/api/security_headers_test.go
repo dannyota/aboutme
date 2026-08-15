@@ -143,7 +143,7 @@ func TestSecurityHeaders_AppliesToRejectedResponses(t *testing.T) {
 func TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{TrustedProxies: api.LoopbackTrustedProxies()})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{TrustedProxies: api.LoopbackTrustedProxies()}, nil)
 
 	plain := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
 	plain.RemoteAddr = "203.0.113.9:1111" // not loopback: not the trusted Caddy hop
@@ -173,7 +173,7 @@ func TestRouter_New_HSTSAbsentOnPlainHTTPAndPresentViaTrustedProxy(t *testing.T)
 func TestRouter_New_DefaultOptions_NeverTrustsAnyPeer(t *testing.T) {
 	t.Parallel()
 
-	handler := api.New(testLogger(), fakePinger{}, api.Options{})
+	handler := api.New(testLogger(), fakePinger{}, api.Options{}, nil)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
 	req.RemoteAddr = "127.0.0.1:1111" // would be the trusted Caddy hop, IF configured

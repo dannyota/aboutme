@@ -23,12 +23,34 @@ func env(vars map[string]string) func(string) string {
 		// media-specific tests override these keys, including with an empty
 		// value when they need to prove a missing-variable failure.
 		switch key {
+		case "PUBLIC_RENDER_ORIGIN":
+			return "http://127.0.0.1:20030"
+		case "APP_BUILD_DIGEST":
+			return "sha256:app"
+		case "PUBLIC_RENDERER_BUILD_DIGEST":
+			return "sha256:renderer"
 		case "MEDIA_BACKEND":
 			return "fs"
 		case "MEDIA_FS_DIR":
 			return "/tmp/aboutme-config-test-media"
 		}
 		return vars[key]
+	}
+}
+
+func TestPublicRenderConfigReadsSeparateRuntimeValues(t *testing.T) {
+	t.Parallel()
+
+	vars := validDevEnv()
+	vars["PUBLIC_RENDER_ORIGIN"] = "http://web:3000"
+	vars["APP_BUILD_DIGEST"] = "sha256:application"
+	vars["PUBLIC_RENDERER_BUILD_DIGEST"] = "sha256:renderer"
+	got, err := config.Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PublicRenderOrigin != vars["PUBLIC_RENDER_ORIGIN"] || got.AppBuildDigest != vars["APP_BUILD_DIGEST"] || got.PublicRendererBuildDigest != vars["PUBLIC_RENDERER_BUILD_DIGEST"] {
+		t.Fatalf("public runtime config = %#v", got)
 	}
 }
 
