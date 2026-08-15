@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   advanceTemplateGroup,
+  captureTemplateUndo,
   captureTemplateGroup,
   nextTemplateChild,
   recoverTemplateGroup,
@@ -54,6 +55,96 @@ function group() {
 }
 
 describe('template groups', () => {
+  it('captures an immutable reverse only from the recorded final', () => {
+    const captured = group()!;
+    const final = {
+      ...captured.intendedFinal,
+      revision: parseRevision('2'),
+      metadataFreshness: 'complete' as const,
+    };
+    const complete = advanceTemplateGroup(
+      captured,
+      { kind: 'running', nextChild: 1, lastRevision: parseRevision('1') },
+      final,
+    );
+    if (complete.kind !== 'complete') throw new Error('expected complete');
+    const reverse = captureTemplateUndo({
+      undo: complete.undo,
+      current: final,
+      ownerId: 'owner-1',
+      sequence: 5,
+      dependencyIds: [],
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'reverse-id',
+        delay: async () => {},
+      },
+    });
+
+    expect(reverse).toMatchObject({
+      kind: 'enqueue',
+      group: {
+        preApply: final,
+        intendedFinal: { document: captured.preApply.document },
+      },
+    });
+    if (reverse.kind !== 'enqueue') throw new Error('expected reverse');
+    expect(Object.isFrozen(reverse.group)).toBe(true);
+    const changed = structuredClone(final);
+    changed.document.customization.spacing.entryGap = 99;
+    expect(reverse.group.preApply.document.customization.spacing.entryGap)
+      .not.toBe(99);
+    expect(
+      captureTemplateUndo({
+        undo: complete.undo,
+        current: { ...changed, revision: parseRevision('3') },
+        ownerId: 'owner-1',
+        sequence: 5,
+        dependencyIds: [],
+        runtime: {
+          nowEpochMs: () => 0,
+          uuid: () => 'ignored',
+          delay: async () => {},
+        },
+      }),
+    ).toEqual({ kind: 'unavailable', reason: 'state-changed' });
+  });
+
+  it('keeps undo after an unrelated accepted entry-field edit', () => {
+    const captured = group()!;
+    const final = {
+      ...captured.intendedFinal,
+      revision: parseRevision('2'),
+      metadataFreshness: 'complete' as const,
+    };
+    const complete = advanceTemplateGroup(
+      captured,
+      { kind: 'running', nextChild: 1, lastRevision: parseRevision('1') },
+      final,
+    );
+    if (complete.kind !== 'complete') throw new Error('expected complete');
+    const edited = structuredClone(final);
+    edited.revision = parseRevision('3');
+    edited.document.content.skill!.entries = [{
+      id: 'entry-1',
+      name: 'Unrelated entry edit',
+    }];
+
+    const reverse = captureTemplateUndo({
+      undo: complete.undo,
+      current: edited,
+      ownerId: 'owner-1',
+      sequence: 5,
+      dependencyIds: [],
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'reverse-id',
+        delay: async () => {},
+      },
+    });
+
+    expect(reverse).toMatchObject({ kind: 'enqueue' });
+  });
   it('returns null when the helper result is already current', () => {
     const fixture = acceptedFixture();
     const current = {

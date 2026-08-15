@@ -14,7 +14,10 @@ import {
 import { createResumeApi } from '../editor/resumeApi';
 import {
   captureTemplateGroup,
+  captureTemplateUndo,
+  recoverTemplateGroup,
   type TemplateGroupCommand,
+  type TemplateRecovery,
 } from '../editor/templateGroup';
 import type { ConflictConfirmation } from '../editor/reconcile';
 import type { EditorRuntime } from '../editor/types';
@@ -49,6 +52,10 @@ export interface ResumeEditorActions {
   createEntityId(): string;
   edit(intent: AtomicCommandIntent): EditorActionResult;
   applyTemplate(preset: Readonly<TemplatePreset>): TemplateActionResult;
+  undoTemplate(): TemplateRecovery;
+  recoverTemplate(
+    action: 'retry-remaining' | 'restore-pre-apply' | 'keep-partial',
+  ): TemplateRecovery;
   resolveOpaquePhoto(
     commandId: string,
     decision: OpaquePhotoDecision,
@@ -145,11 +152,67 @@ export function createResumeEditorActions(
     deps.coordinator.schedule(deps.resumeId);
     return { kind: 'enqueued', group };
   };
+  const recoverTemplate = (
+    action: 'retry-remaining' | 'restore-pre-apply' | 'keep-partial',
+  ): TemplateRecovery => {
+    const state = record.value;
+    const group = activeTemplateGroup(state);
+    if (state?.templateState?.kind !== 'partial' || group === undefined) {
+      return { kind: 'unavailable', reason: 'state-changed' };
+    }
+    if (state.completeReadRequired) {
+      return { kind: 'unavailable', reason: 'read-required' };
+    }
+    const result = recoverTemplateGroup(
+      group,
+      state.templateState,
+      toRaw(state.accepted),
+      action,
+      deps.runtime,
+    );
+    if (result.kind === 'keep-partial') {
+      deps.store.dropHead(deps.resumeId, group.id);
+      deps.store.setTemplateState(deps.resumeId, null);
+      return result;
+    }
+    if (result.kind === 'enqueue') {
+      deps.store.replaceHead(deps.resumeId, result.group);
+      deps.store.setTemplateState(deps.resumeId, {
+        kind: 'queued',
+        nextChild: result.group.id === group.id
+          ? state.templateState.nextChild
+          : 0,
+      });
+      deps.coordinator.schedule(deps.resumeId);
+    }
+    return result;
+  };
+  const undoTemplate = (): TemplateRecovery => {
+    const state = record.value;
+    if (state?.templateState?.kind !== 'complete') {
+      return { kind: 'unavailable', reason: 'state-changed' };
+    }
+    const result = captureTemplateUndo({
+      undo: state.templateState.undo,
+      current: toRaw(state.accepted),
+      ownerId: deps.auth.user.value?.id ?? '',
+      sequence: nextSequence(state),
+      dependencyIds: dependencyIdsForNewCommand(state),
+      runtime: deps.runtime,
+    });
+    if (result.kind === 'enqueue') {
+      deps.store.enqueue(deps.resumeId, result.group);
+      deps.coordinator.schedule(deps.resumeId);
+    }
+    return result;
+  };
   return {
     record,
     createEntityId: () => deps.runtime.uuid(),
     edit,
     applyTemplate,
+    undoTemplate,
+    recoverTemplate,
     resolveOpaquePhoto: (commandId, decision) =>
       deps.coordinator.resolveOpaquePhoto(deps.resumeId, commandId, decision),
     retry: (commandId) => deps.coordinator.retry(deps.resumeId, commandId),
@@ -160,6 +223,15 @@ export function createResumeEditorActions(
     resumeAfterAuth: () => deps.coordinator.resumeAfterAuth(deps.resumeId),
     discard: () => deps.coordinator.discard(deps.resumeId),
   };
+}
+
+function activeTemplateGroup(
+  state: ResumeRecord | undefined,
+): TemplateGroupCommand | undefined {
+  const active = state?.attempt?.queueItem;
+  if (active?.kind === 'templateGroup') return toRaw(active);
+  const pending = state?.pending.find((item) => item.kind === 'templateGroup');
+  return pending === undefined ? undefined : toRaw(pending);
 }
 
 export function useResumeEditor(

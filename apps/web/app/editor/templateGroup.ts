@@ -59,6 +59,15 @@ export interface TemplateUndo {
   readonly contentContext: Projection['context'];
 }
 
+export interface TemplateUndoInput {
+  readonly undo: TemplateUndo;
+  readonly current: AcceptedResume;
+  readonly ownerId: string;
+  readonly sequence: number;
+  readonly dependencyIds: readonly string[];
+  readonly runtime: EditorRuntime;
+}
+
 export type EditorQueueItem = AtomicEditorCommand | TemplateGroupCommand;
 
 export type TemplateGroupState
@@ -118,6 +127,39 @@ export function captureTemplateGroup(
     input.dependencyIds,
     input.runtime,
   );
+}
+
+export function captureTemplateUndo(
+  input: TemplateUndoInput,
+): Extract<TemplateRecovery, { kind: 'enqueue' | 'unavailable' }> {
+  if (
+    !equalProjection(
+      projectTemplateTarget(input.current),
+      input.undo.finalTarget,
+    )
+    || !contextMatchesUndo(input.undo, input.current)
+  ) {
+    return { kind: 'unavailable', reason: 'state-changed' };
+  }
+  const intendedFinal = snapshotForTarget(
+    input.current,
+    input.undo.preApplyTarget,
+  );
+  if (intendedFinal === null) {
+    return { kind: 'unavailable', reason: 'state-changed' };
+  }
+  const group = createGroup(
+    input.current,
+    intendedFinal,
+    input.current.metadata.id,
+    input.ownerId,
+    input.sequence,
+    input.dependencyIds,
+    input.runtime,
+  );
+  return group === null
+    ? { kind: 'unavailable', reason: 'state-changed' }
+    : { kind: 'enqueue', group };
 }
 
 function createGroup(
@@ -201,7 +243,7 @@ function createGroup(
       );
   const children = [structure, customization].filter(isTemplateChild);
   if (children.length === 0) return null;
-  return {
+  return freezeCopy({
     kind: 'templateGroup',
     id: groupId,
     resumeId,
@@ -214,7 +256,7 @@ function createGroup(
     children,
     preApply,
     intendedFinal,
-  };
+  });
 }
 
 export function advanceTemplateGroup(
@@ -341,6 +383,76 @@ function contextMatches(
     },
     { target: { present: true, value: null }, context: group.contentContext },
   );
+}
+
+export function templateUndoAvailable(
+  undo: TemplateUndo,
+  current: ResumeSnapshot,
+): boolean {
+  return equalProjection(projectTemplateTarget(current), undo.finalTarget)
+    && contextMatchesUndo(undo, current);
+}
+
+function contextMatchesUndo(
+  undo: TemplateUndo,
+  current: ResumeSnapshot,
+): boolean {
+  return equalProjection(
+    {
+      target: { present: true, value: null },
+      context: contentContext(current),
+    },
+    {
+      target: { present: true, value: null },
+      context: undo.contentContext,
+    },
+  );
+}
+
+function snapshotForTarget(
+  current: ResumeSnapshot,
+  target: Projection,
+): ResumeSnapshot | null {
+  if (!target.target.present || target.target.value === null) return null;
+  const value = target.target.value;
+  if (
+    typeof value !== 'object'
+    || !('placement' in value)
+    || !('customization' in value)
+  ) return null;
+  const { placement, customization } = value as {
+    placement: PlacementProjection;
+    customization: TemplateCustomizationProjection;
+  };
+  return {
+    ...current,
+    document: {
+      ...current.document,
+      customization: {
+        ...customization,
+        layout: {
+          ...customization.layout,
+          sections: {
+            main: [...placement.main],
+            sidebar: [...placement.sidebar],
+          },
+        },
+      },
+    },
+  };
+}
+
+function freezeCopy<T>(value: T): T {
+  const copied = structuredClone(value);
+  return freeze(copied);
+}
+
+function freeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object') {
+    for (const nested of Object.values(value as object)) freeze(nested);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 function projectChild(
