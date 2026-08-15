@@ -2,6 +2,13 @@
 
 Status: **Complete** (phase gates verified 2026-08-12).
 
+> **Superseded note (2026-08-15):** the bounded browser proof in Task 1 ran
+> through the Playwright MCP server as a one-off because no scripted headless
+> browser harness existed then. Reusable browser automation is now scripted
+> headless Playwright (`make web-e2e`, `make dev-https-auth-check`,
+> `make dev-https-transport-check`, `make dev-https-editor-check`); the
+> Playwright MCP server is for agent exploration and test authoring only.
+
 P1.1 closes the remaining differences among the authentication server, settings
 UI, OpenAPI, and acceptance evidence. It is a hard predecessor of P2B and adds
 no migration.
@@ -97,10 +104,10 @@ failure, malformed success data, request failure, and preserved session revoke
 actions. They assert a bodiless start has no `Content-Type`, while JSON
 mutations still use `application/json`.
 
-The browser check uses the project Playwright MCP server pinned in `.mcp.json`.
-Start `make dev-native`, then use the pinned server's `browser_run_code_unsafe`
-tool in a fresh isolated context to register `page.route` handlers for
-`/api/v1/me`, `/api/v1/sessions`, and `/api/v1/auth/*/start` before opening
+The browser check uses the project Playwright MCP server. Start
+`make dev-native`, then use the pinned server's `browser_run_code_unsafe` tool
+in a fresh isolated context to register `page.route` handlers for `/api/v1/me`,
+`/api/v1/sessions`, and `/api/v1/auth/*/start` before opening
 `http://localhost:20080/app/settings/sessions`. Exercise one link control and
 one reauthentication prompt. For each start request, record the method, complete
 URL, headers, and body; fulfill

@@ -21,8 +21,8 @@ commit and digests before any deployment or evidence command runs.
 3. Complete the host prerequisite, worker acknowledgements, native shutdown,
    test-service shutdown, and resource checks in the
    [phase index](README.md#host-and-shared-resource-gate).
-4. Record Podman, Compose, Chrome, Playwright MCP, browser and exporter image
-   IDs, migration head, and Caddy root identity. Record the manifest-schema,
+4. Record Podman, Compose, Chrome, Playwright, browser and exporter image IDs,
+   migration head, and Caddy root identity. Record the manifest-schema,
    sentinel-coverage, supported-format, scanner-ruleset, and OCR identities.
    Record configuration names without values.
 5. Confirm that no AWS, Cloudflare, registry, certificate, DNS, or personal
