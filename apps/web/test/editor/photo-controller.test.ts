@@ -57,14 +57,20 @@ describe('private photo controller', () => {
   );
 
   it('retains the exact authorized data URL on a conditional 304', async () => {
-    const { accepted, api, controller, store } = controllerFor({
-      kind: 'not-modified', etag: '"photo-a"' as ObjectETag,
-    });
+    const result = deferred<OwnerPhotoReadResult>();
+    const { accepted, api, controller, store } = controllerFor(result.promise);
     const current = withPhoto(accepted, 'photo-a');
     store.initialize(current);
-    store.setPhotoRead(current.metadata.id, ready('photo-a'));
+    const retained = ready('photo-a');
+    store.setPhotoRead(current.metadata.id, retained);
 
-    await controller.sync(current);
+    const syncing = controller.sync(current);
+
+    expect(store.recordFor(current.metadata.id)!.photoRead).toEqual(retained);
+    result.resolve({
+      kind: 'not-modified', etag: '"photo-a"' as ObjectETag,
+    });
+    await syncing;
 
     expect(api.readOwnerPhoto).toHaveBeenCalledWith(
       current.metadata.id,

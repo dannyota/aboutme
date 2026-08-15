@@ -1,4 +1,4 @@
-import type { ComputedRef } from 'vue';
+import { nextTick, type ComputedRef } from 'vue';
 
 /**
  * `useAuth` — session/identity state backed by `GET /api/v1/me`.
@@ -76,6 +76,22 @@ function hasErrorCode(error: unknown, code: string): boolean {
   return actual === code;
 }
 
+function isRecoveredMeEnvelope(
+  value: unknown,
+  userId: string,
+): value is MeEnvelope {
+  if (typeof value !== 'object' || value === null) return false;
+  const data = (value as { data?: unknown }).data;
+  if (typeof data !== 'object' || data === null) return false;
+  const recovered = data as { csrfToken?: unknown; user?: unknown };
+  if (typeof recovered.user !== 'object' || recovered.user === null) {
+    return false;
+  }
+  return (recovered.user as { id?: unknown }).id === userId
+    && typeof recovered.csrfToken === 'string'
+    && recovered.csrfToken !== '';
+}
+
 export function useAuth(): UseAuthReturn {
   // Authenticated reads wait for the browser, where the cookie and proxy exist.
   const {
@@ -107,7 +123,22 @@ export function useAuth(): UseAuthReturn {
 
   async function refresh(): Promise<void> {
     if (refreshing === null) {
-      refreshing = refreshMe().finally(() => {
+      refreshing = refreshMe().then(async () => {
+        await nextTick();
+        const currentUserId = user.value?.id;
+        if (
+          authState.value !== 'authenticated'
+          || currentUserId === undefined
+          || csrfToken.value !== null
+        ) return;
+        const recovered = await $fetch<unknown>('/api/v1/me', {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        if (isRecoveredMeEnvelope(recovered, currentUserId)) {
+          data.value = recovered;
+        }
+      }).finally(() => {
         refreshing = null;
       });
     }

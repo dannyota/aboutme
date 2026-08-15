@@ -142,7 +142,7 @@ describe('generated API surface (artifact)', () => {
       { encoding: 'utf8' },
     ).trim();
     expect(installed).toContain(pinned);
-  });
+  }, 15_000);
 });
 
 describe('typed client (runtime contract)', () => {

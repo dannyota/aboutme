@@ -217,6 +217,37 @@ describe('useAuth', () => {
     expect(wrapper.get('[data-testid="csrf"]').text()).toBe('"csrf-new"');
   });
 
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('recovers a missing csrf token from a fresh authenticated read', async () => {
+    let reads = 0;
+    let measureRecovery = false;
+    registerEndpoint('/api/v1/me', {
+      method: 'GET',
+      handler: () => {
+        if (measureRecovery) reads += 1;
+        return {
+          data: {
+            ...meData,
+            csrfToken: measureRecovery && reads === 2
+              ? 'csrf-recovered'
+              : null,
+          },
+        };
+      },
+    });
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+
+    measureRecovery = true;
+    await wrapper.vm.refresh();
+
+    expect(reads).toBe(2);
+    expect(wrapper.get('[data-testid="auth-state"]').text()).toBe(
+      'authenticated',
+    );
+    expect(wrapper.get('[data-testid="csrf"]').text()).toBe('"csrf-recovered"');
+  });
+
   describe('CSRF x rotation self-heal (mutate())', () => {
     // "Refetches /me once and retries with the REFRESHED token" lives in
     // its own file, `useAuth-csrf-rotation.test.ts` — it needs the very
@@ -239,9 +270,7 @@ describe('useAuth', () => {
       const wrapper = await mountSuspended(Probe);
       await flushPromises();
 
-      await wrapper.get('[data-testid="logout-button"]').trigger('click');
-      await flushPromises();
-      await flushPromises();
+      await expect(wrapper.vm.logout()).rejects.toBeDefined();
 
       // Exactly the original attempt plus one retry — a second genuine
       // rejection surfaces (no navigation), it does not loop.
@@ -267,9 +296,7 @@ describe('useAuth', () => {
         const wrapper = await mountSuspended(Probe);
         await flushPromises();
 
-        await wrapper.get('[data-testid="logout-button"]').trigger('click');
-        await flushPromises();
-        await flushPromises();
+        await expect(wrapper.vm.logout()).rejects.toBeDefined();
 
         // A boolean flag can't tell "called once" from "called twice" — a
         // weakened guard checking the status code instead of the specific

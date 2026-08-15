@@ -1,4 +1,5 @@
 import { TEMPLATES } from '@aboutme/schema/templates';
+import { reactive } from 'vue';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -55,6 +56,27 @@ function group() {
 }
 
 describe('template groups', () => {
+  it('captures an immutable group from a reactive editor snapshot', () => {
+    const current = reactive(acceptedFixture());
+
+    const captured = captureTemplateGroup({
+      resumeId: current.metadata.id,
+      ownerId: 'owner-1',
+      sequence: 1,
+      current,
+      preset,
+      dependencyIds: [],
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'reactive-id',
+        delay: async () => {},
+      },
+    });
+
+    expect(captured).not.toBeNull();
+    expect(Object.isFrozen(captured)).toBe(true);
+  });
+
   it('captures an immutable reverse only from the recorded final', () => {
     const captured = group()!;
     const final = {

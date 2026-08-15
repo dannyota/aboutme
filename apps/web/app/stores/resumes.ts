@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { toRaw } from 'vue';
 
 import { coalescePending, replayCommand } from '../editor/commands';
+import { cloneReactiveSafe } from '../editor/clone';
 import { compareRevision, parseRevision } from '../editor/revision';
 import type {
   AttemptFailureCode,
@@ -257,7 +258,7 @@ const resumeStore = defineStore('resumes', {
       record.accepted = cloneAccepted(accepted);
       record.completeReadRequired = false;
       replay(record);
-      return { kind: 'adopted', accepted: record.accepted };
+      return { kind: 'adopted', accepted: cloneAccepted(record.accepted) };
     },
 
     adoptCompleteRead(
@@ -276,7 +277,7 @@ const resumeStore = defineStore('resumes', {
       record.accepted = cloneAccepted(accepted);
       record.completeReadRequired = false;
       replay(record);
-      return { kind: 'adopted', accepted: record.accepted };
+      return { kind: 'adopted', accepted: cloneAccepted(record.accepted) };
     },
 
     adoptStaleWinner(resumeId: string, accepted: AcceptedResume) {
@@ -593,7 +594,7 @@ function cloneAccepted(accepted: AcceptedResume): AcceptedResume {
 }
 
 function copy<T>(value: T): T {
-  return structuredClone(toRaw(value)) as T;
+  return cloneReactiveSafe(value);
 }
 
 function isAtomic(item: EditorQueueItem): item is AtomicEditorCommand {

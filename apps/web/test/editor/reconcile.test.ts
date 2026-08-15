@@ -125,7 +125,7 @@ describe('reconcileCommand', () => {
     expect(reconcileCommand(command, changed).kind).toBe('conflict');
   });
 
-  it('treats a resumed owner delete as already satisfied', () => {
+  it('keeps an unchanged resumed owner delete safe to dispatch', () => {
     const accepted = complexFixture();
     const command = captureCommand(
       accepted,
@@ -142,7 +142,7 @@ describe('reconcileCommand', () => {
       runtime,
     );
 
-    expect(reconcileCommand(command, accepted)).toEqual({ kind: 'satisfied' });
+    expect(reconcileCommand(command, accepted)).toEqual({ kind: 'safe-base' });
   });
 });
 

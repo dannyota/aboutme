@@ -171,11 +171,13 @@ export function createResumeEditorActions(
       deps.runtime,
     );
     if (result.kind === 'keep-partial') {
+      deps.store.setIssues(deps.resumeId, group.id, []);
       deps.store.dropHead(deps.resumeId, group.id);
       deps.store.setTemplateState(deps.resumeId, null);
       return result;
     }
     if (result.kind === 'enqueue') {
+      deps.store.setIssues(deps.resumeId, group.id, []);
       deps.store.replaceHead(deps.resumeId, result.group);
       deps.store.setTemplateState(deps.resumeId, {
         kind: 'queued',

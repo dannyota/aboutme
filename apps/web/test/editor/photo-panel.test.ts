@@ -313,6 +313,29 @@ describe('private photo controls', () => {
     ]);
   });
 
+  it('submits a second crop after the accepted crop changes', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(CropEditor, {
+      props: {
+        photoKey: 'photo-a',
+        photoUrl: 'data:image/png;base64,accepted',
+        crop: { x: 0, y: 0, width: 1, height: 1 },
+        actions: actionsFor(edit),
+      },
+    });
+
+    await wrapper.setProps({
+      crop: { x: 0, y: 0, width: 0.75, height: 1 },
+    });
+    await wrapper.get('[name="width"]').setValue('0.5');
+    await wrapper.get('form').trigger('submit');
+
+    expect(edit).toHaveBeenCalledWith({
+      kind: 'photoCrop',
+      crop: { x: 0, y: 0, width: 0.5, height: 1 },
+    });
+  });
+
   it('offers retry only for a valid retryable photo command', async () => {
     const retry = vi.fn();
     const wrapper = mount(PhotoPanel, {

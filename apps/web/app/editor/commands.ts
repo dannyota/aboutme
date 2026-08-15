@@ -1,5 +1,6 @@
 import type { PhotoCrop, Section } from '@aboutme/schema';
 
+import { cloneReactiveSafe } from './clone';
 import { projectIntent } from './projections';
 import { applyIntent } from './reducer';
 import type {
@@ -166,8 +167,14 @@ export function captureCommand(
   const intent = cloneIntent(input.intent);
   const before = projectIntent(snapshot, intent);
   const next = applyIntent(snapshot, intent);
-  const intended
-    = intent.kind === 'photoUpload' ? null : projectIntent(next, intent);
+  const intended = intent.kind === 'photoUpload'
+    ? null
+    : intent.kind === 'resumeDelete'
+      ? {
+          target: { present: false } as const,
+          context: { ownerId: { present: false } as const },
+        }
+      : projectIntent(next, intent);
   const baseProjection = withOwnerContext(before, intent, input.ownerId);
   const intendedProjection = intended === null
     ? null
@@ -180,9 +187,10 @@ export function captureCommand(
     ownerId: input.ownerId,
     sequence: input.sequence,
     targetKey: targetKey(intent, input.sequence, input.resumeId),
-    base: structuredClone(baseProjection),
-    intended:
-      intendedProjection === null ? null : structuredClone(intendedProjection),
+    base: cloneReactiveSafe(baseProjection),
+    intended: intendedProjection === null
+      ? null
+      : cloneReactiveSafe(intendedProjection),
     dependencyIds: [...input.dependencyIds],
   }) as AtomicEditorCommand;
 }

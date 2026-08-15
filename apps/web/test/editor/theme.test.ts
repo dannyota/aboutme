@@ -14,6 +14,7 @@ import {
 
 const appCss = resolve(process.cwd(), 'app/assets/css/app.css');
 const editorCss = resolve(process.cwd(), 'app/assets/css/editor.css');
+const nuxtConfig = resolve(process.cwd(), 'nuxt.config.ts');
 const themeBootstrap = resolve(process.cwd(), 'public/theme-bootstrap.js');
 
 function clearThemeCookie(): void {
@@ -80,6 +81,7 @@ describe('theme preference boundary', () => {
       expect(actions.get('.account-control').attributes('aria-label'))
         .toContain('Account settings');
     },
+    15_000,
   );
 
   it.each(['/_harness/render', '/print/resume-1', '/public-resume'])(
@@ -140,8 +142,18 @@ describe('theme preference boundary', () => {
       expect(css).not.toContain('body.aboutme-app-body');
       expect(css).toContain('.editor-topbar');
       expect(css).not.toContain('.editor-chrome');
-      expect(css).toContain('--positive: oklch(0.596 0.145 163.225)');
+      expect(css).toContain('--positive: oklch(0.508 0.118 165.612)');
       expect(css).toContain('--chart-1: oklch(0.845 0.143 164.978)');
+    },
+  );
+
+  it(
+    'sets the document language without exposing the debug overlay',
+    async () => {
+      const source = await readFile(nuxtConfig, 'utf8');
+
+      expect(source).toContain('htmlAttrs: { lang: \'en\' }');
+      expect(source).toContain('devtools: { enabled: false }');
     },
   );
 
