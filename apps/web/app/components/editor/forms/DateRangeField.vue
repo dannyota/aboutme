@@ -46,6 +46,11 @@ function changePresent(): void {
 
 function commit(): void {
   if (!dirty.value) return;
+  if (allEmpty() && !present.value) {
+    if (props.modelValue !== undefined) emit('intent', { kind: 'unset' });
+    dirty.value = false;
+    return;
+  }
   const start = readYearMonth(startYear.value, startMonth.value);
   if (start === null) {
     if (allEmpty() && props.modelValue !== undefined && !present.value) {
@@ -91,8 +96,8 @@ function allEmpty(): boolean {
 }
 
 function compareYearMonth(left: YearMonth, right: YearMonth): number {
-  const leftMonth = left.m ?? 0;
-  const rightMonth = right.m ?? 0;
+  const leftMonth = left.m ?? 1;
+  const rightMonth = right.m ?? 1;
   return left.y === right.y ? leftMonth - rightMonth : left.y - right.y;
 }
 
