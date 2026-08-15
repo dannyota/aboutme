@@ -1,0 +1,1297 @@
+import { AxeBuilder } from '@axe-core/playwright';
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Page,
+  type Request,
+} from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
+
+import {
+  createBlankResume,
+  deleteRecordedResume,
+  deleteRemoteEntry,
+  installBrowserPersistenceProbes,
+  installPhotoSourceReadProbes,
+  loginAsDevelopmentUser,
+  mutateRemoteHeadline,
+  mutateRemoteMetadata,
+  ownerPhotoHasNoCrop,
+  replaceRemotePhoto,
+  settledVisiblePageCount,
+  uniqueTitle,
+  type AcceptedResume,
+  type BrowserPersistenceProbe,
+} from './editor-fixtures';
+import {
+  ALLOWED_ORIGIN,
+  isAllowedHTTPURL,
+  isAllowedWebSocketURL,
+  isExpectedNegativeHTTPConsole,
+  httpFailureStatus,
+} from './network-policy';
+
+const ORIGIN = ALLOWED_ORIGIN;
+const EVIDENCE_PATH = '/evidence/editor-proof.json';
+const SCHEMA_VERSION = '2';
+const VALID_PNG_BASE64
+  = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAANElEQVR4nOzNsQkA'
+    + 'MAwDQRWGrJn9pwjZweruEWpvknuS3uZfMwAAAAAAAAAAALDVCwAA///3/wKTiM0y'
+    + 'DAAAAABJRU5ErkJggg==';
+let editorDiagnosticStage = 'setup';
+
+interface EditorSteps {
+  accessibility: boolean;
+  auth: boolean;
+  autosave: boolean;
+  cache: boolean;
+  conflict: boolean;
+  etag: boolean;
+  ifMatch: boolean;
+  persistence: boolean;
+  photo: boolean;
+  session: boolean;
+  teardown: boolean;
+  template: boolean;
+}
+
+interface Diagnostics {
+  assertClean(): void;
+  assertTemplateFailureSecondChild(): void;
+  armPhotoReadFailure(): void;
+  armTemplateFailure(): void;
+  expectHTTPFailure(method: string, pathname: string, status: 401 | 412): void;
+  pauseNextPhotoCrop(): PausedPhotoRequest;
+  pauseNextPhotoUpload(): PausedPhotoUpload;
+}
+
+interface PausedPhotoRequest {
+  release(): void;
+  waitUntilPaused(): Promise<void>;
+}
+
+type PausedPhotoUpload = PausedPhotoRequest;
+
+interface URLBaseline {
+  readonly hash: string;
+  readonly href: string;
+  readonly search: string;
+}
+
+interface EditorScenario {
+  readonly accepted: AcceptedResume;
+  readonly baseline: URLBaseline;
+  readonly probes: BrowserPersistenceProbe;
+}
+
+test('proves authenticated editor behavior over trusted HTTPS', async ({
+  context,
+  page,
+}) => {
+  const createdIDs = new Set<string>();
+  const steps: EditorSteps = {
+    auth: false,
+    cache: false,
+    etag: false,
+    ifMatch: false,
+    autosave: false,
+    conflict: false,
+    template: false,
+    photo: false,
+    session: false,
+    persistence: false,
+    accessibility: false,
+    teardown: false,
+  };
+  const diagnostics = await installDiagnostics(context, page);
+  let cleanupPage: Page | undefined;
+  let reauthPage: Page | undefined;
+  let scenarioSucceeded = false;
+
+  try {
+    await loginAsDevelopmentUser(page);
+    steps.auth = true;
+    const scenario = await proveListLoadAutosave(
+      page,
+      context,
+      createdIDs,
+      steps,
+    );
+    await proveKeyboardStructureAndContextActions(
+      page,
+      scenario.accepted.metadata.id,
+      diagnostics,
+      scenario.probes,
+      scenario.baseline,
+    );
+    editorDiagnosticStage = 'conflict-template';
+    await proveConflictAndTemplate(
+      page,
+      scenario.accepted,
+      diagnostics,
+      scenario.probes,
+      scenario.baseline,
+    );
+    steps.conflict = true;
+    steps.template = true;
+    editorDiagnosticStage = 'photo-session';
+    reauthPage = await provePhotoSessionPersistence(
+      page,
+      context,
+      scenario.accepted.metadata.id,
+      diagnostics,
+      scenario.probes,
+      scenario.baseline,
+    );
+    steps.photo = true;
+    steps.session = true;
+    steps.persistence = true;
+    editorDiagnosticStage = 'accessibility';
+    await proveAccessibility(page, scenario.accepted.metadata.id);
+    steps.accessibility = true;
+    editorDiagnosticStage = 'teardown';
+    await deleteThroughListKeyboard(page, scenario.accepted.metadata.id);
+    createdIDs.delete(scenario.accepted.metadata.id);
+    steps.teardown = true;
+    scenarioSucceeded = true;
+  } finally {
+    if (!scenarioSucceeded) {
+      process.stderr.write(`editor-stage:${editorDiagnosticStage}\n`);
+    }
+    if (reauthPage !== undefined && !reauthPage.isClosed()) await reauthPage.close();
+    if (createdIDs.size > 0) {
+      cleanupPage = await context.newPage();
+      try {
+        await ensureAuthenticated(cleanupPage);
+        for (const id of createdIDs) await deleteRecordedResume(cleanupPage, id);
+      } finally {
+        await cleanupPage.close();
+      }
+    }
+  }
+
+  try {
+    editorDiagnosticStage = 'post-scenario';
+    expect(scenarioSucceeded).toBe(true);
+    editorDiagnosticStage = 'post-diagnostics';
+    diagnostics.assertClean();
+    editorDiagnosticStage = 'post-steps';
+    expect(steps).toEqual({
+      auth: true,
+      cache: true,
+      etag: true,
+      ifMatch: true,
+      autosave: true,
+      conflict: true,
+      template: true,
+      photo: true,
+      session: true,
+      persistence: true,
+      accessibility: true,
+      teardown: true,
+    });
+    editorDiagnosticStage = 'post-evidence';
+    await writeEditorEvidence(steps);
+  } catch (error) {
+    process.stderr.write(`editor-stage:${editorDiagnosticStage}\n`);
+    throw error;
+  }
+});
+
+async function proveListLoadAutosave(
+  page: Page,
+  context: BrowserContext,
+  createdIDs: Set<string>,
+  steps: EditorSteps,
+): Promise<EditorScenario> {
+  editorDiagnosticStage = 'list-create-resume';
+  const initialTitle = uniqueTitle();
+  const created = await createBlankResume(page, initialTitle);
+  createdIDs.add(created.metadata.id);
+
+  editorDiagnosticStage = 'list-open';
+  await page.goto('/app/resumes');
+  const row = page.locator(`[data-testid="resume-row-${created.metadata.id}"]`);
+  await expect(row).toBeVisible();
+  editorDiagnosticStage = 'list-rename-open';
+  await row.getByRole('button', { name: `Rename ${initialTitle}` }).press('Enter');
+  const rename = page.getByRole('dialog', { name: 'Rename resume' });
+  const renamedTitle = uniqueTitle();
+  await rename.getByLabel('Title').fill(renamedTitle);
+  const renameMutation = page.waitForResponse((response) =>
+    isResumeMutation(response.request(), created.metadata.id),
+  );
+  editorDiagnosticStage = 'list-rename-save';
+  await rename.getByRole('button', { name: 'Save' }).press('Enter');
+  expect((await renameMutation).status()).toBe(200);
+  await expect(rename).toBeHidden();
+  editorDiagnosticStage = 'list-reload';
+  await page.reload();
+  await expect(row.getByRole('link')).toHaveText(renamedTitle);
+
+  editorDiagnosticStage = 'editor-open';
+  const probes = await installBrowserPersistenceProbes(page);
+  const ownerRead = page.waitForResponse((response) => isOwnerRead(response.request(), created.metadata.id));
+  const headers = await captureOwnerReadHeaders(page, created.metadata.id);
+  await page.goto(`/app/resumes/${created.metadata.id}`);
+  const response = await ownerRead;
+  expect(response.headers()['cache-control']).toBe('no-store, no-transform');
+  const observedETag = response.headers().etag;
+  expect(observedETag).toMatch(/^"r[1-9][0-9]*"$/);
+  const body = await response.json() as { data?: { schemaVersion?: unknown } };
+  expect(body.data?.schemaVersion).toBe(Number(SCHEMA_VERSION));
+  await expect(page.locator('[data-resume-title]')).toHaveText(renamedTitle);
+  await expect.poll(headers.acceptEncoding).not.toBe('');
+  await expect(page.getByText('Estimated pages', { exact: true })).toBeVisible();
+  await expect.poll(async () => {
+    const settled = await settledVisiblePageCount(page);
+    const displayed = await page.getByLabel('Estimated page count').textContent();
+    return displayed === String(settled) ? settled : -1;
+  }).toBeGreaterThan(0);
+  const baseline = await readURLBaseline(page);
+  await probes.reset();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+  steps.cache = true;
+  steps.etag = true;
+
+  editorDiagnosticStage = 'autosave';
+  const headline = page.getByLabel('Headline');
+  await headline.evaluate((element) => {
+    performance.clearResourceTimings();
+    element.addEventListener('input', () => {
+      Reflect.set(globalThis, '__aboutmeAutosaveInputAt', performance.now());
+    }, { capture: true, once: true });
+  });
+  const mutationRequest = page.waitForRequest((request) =>
+    isResumeMutation(request, created.metadata.id),
+  );
+  await headline.fill('Autosaved headline');
+  await headline.press('Tab');
+  const autosaveRequest = await mutationRequest;
+  editorDiagnosticStage = 'autosave-request';
+  expect(autosaveRequest.headers()['if-match']).toBe(observedETag);
+  editorDiagnosticStage = 'autosave-saved-state';
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  editorDiagnosticStage = 'autosave-delay';
+  const autosaveDelay = await page.evaluate((requestURL) => {
+    const inputAt = Reflect.get(globalThis, '__aboutmeAutosaveInputAt');
+    Reflect.deleteProperty(globalThis, '__aboutmeAutosaveInputAt');
+    const requests = performance.getEntriesByName(requestURL, 'resource');
+    const request = requests.at(-1);
+    if (typeof inputAt !== 'number' || request === undefined) return -1;
+    return request.startTime - inputAt;
+  }, autosaveRequest.url());
+  expect(autosaveDelay).toBeGreaterThanOrEqual(1000);
+  editorDiagnosticStage = 'autosave-complete';
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+  await test.step('loads the accepted autosave in a fresh page', async () => {
+    editorDiagnosticStage = 'persistence-new-page';
+    const verificationPage = await context.newPage();
+    editorDiagnosticStage = 'persistence-install-probes';
+    const verificationProbes = await installBrowserPersistenceProbes(
+      verificationPage,
+    );
+    try {
+      editorDiagnosticStage = 'persistence-navigate';
+      const loaded = await verificationPage.goto(baseline.href, {
+        timeout: 10_000,
+        waitUntil: 'domcontentloaded',
+      });
+      expect(loaded?.status()).toBe(200);
+      editorDiagnosticStage = 'persistence-headline';
+      await expect(verificationPage.getByLabel('Headline')).toHaveValue(
+        'Autosaved headline',
+      );
+      editorDiagnosticStage = 'persistence-reset';
+      await verificationProbes.reset();
+      editorDiagnosticStage = 'persistence-assert';
+      await expectURLUnchanged(verificationPage, baseline);
+      await expectNoPersistenceWrites(verificationProbes);
+    } finally {
+      editorDiagnosticStage = 'persistence-close';
+      await verificationPage.close();
+    }
+  }, { timeout: 15_000 });
+  editorDiagnosticStage = 'structure';
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+  steps.ifMatch = true;
+  steps.autosave = true;
+  return { accepted: created, baseline, probes };
+}
+
+async function proveConflictAndTemplate(
+  page: Page,
+  accepted: AcceptedResume,
+  diagnostics: Diagnostics,
+  probes: BrowserPersistenceProbe,
+  baseline: URLBaseline,
+): Promise<void> {
+  editorDiagnosticStage = 'conflict-safe-rebase';
+  await page.getByRole('button', { name: 'Document' }).press('Enter');
+  await mutateRemoteMetadata(page, accepted.metadata.id, uniqueTitle());
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    `/api/v1/resumes/${accepted.metadata.id}/personal-details`,
+    412,
+  );
+  const headline = page.getByLabel('Headline');
+  await headline.fill('Safe stale rebase');
+  await headline.press('Tab');
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+
+  editorDiagnosticStage = 'conflict-accept-latest';
+  await mutateRemoteHeadline(page, accepted.metadata.id, 'Remote conflict winner');
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    `/api/v1/resumes/${accepted.metadata.id}/personal-details`,
+    412,
+  );
+  await headline.fill('Local conflict value');
+  await headline.press('Tab');
+  const conflict = page.getByRole('status').filter({ hasText: 'Review changes' });
+  await expect(conflict).toBeVisible();
+  await conflict.getByRole('button', { name: 'Accept latest' }).press('Enter');
+  await expect(conflict).toBeHidden();
+
+  editorDiagnosticStage = 'conflict-apply-mine';
+  await mutateRemoteHeadline(page, accepted.metadata.id, 'Second remote winner');
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    `/api/v1/resumes/${accepted.metadata.id}/personal-details`,
+    412,
+  );
+  await headline.fill('Apply mine value');
+  await headline.press('Tab');
+  await expect(page.getByRole('button', { name: 'Apply my value' })).toBeVisible();
+  await page.getByRole('button', { name: 'Apply my value' }).press('Enter');
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+
+  editorDiagnosticStage = 'template-apply-undo';
+  await page.getByRole('button', { name: 'Templates' }).press('Enter');
+  await applyTemplate(page, 'academic-dense');
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Template saved' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Undo template changes' }).press('Enter');
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Template saved' }),
+  ).toBeVisible();
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+
+  editorDiagnosticStage = 'template-partial';
+  diagnostics.armTemplateFailure();
+  const firstTemplateChild = page.waitForResponse((response) =>
+    isTemplateChildRequest(response.request()),
+  );
+  await applyTemplate(page, 'modern-sidebar');
+  editorDiagnosticStage = 'template-partial-first-child';
+  expect((await firstTemplateChild).status()).toBe(200);
+  editorDiagnosticStage = 'template-partial-dialog';
+  const partial = page.getByRole('alertdialog', { name: 'Template changes need review' });
+  await expect(partial).toBeVisible();
+  await expect(partial.getByRole('button')).toHaveText([
+    'Retry remaining',
+    'Restore pre-apply',
+    'Keep partial',
+  ]);
+  await partial.getByRole('button', { name: 'Keep partial' }).press('Enter');
+  diagnostics.assertTemplateFailureSecondChild();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+}
+
+async function proveKeyboardStructureAndContextActions(
+  page: Page,
+  resumeID: string,
+  diagnostics: Diagnostics,
+  probes: BrowserPersistenceProbe,
+  baseline: URLBaseline,
+): Promise<void> {
+  editorDiagnosticStage = 'structure-open';
+  await page.getByRole('button', { name: 'Structure' }).press('Enter');
+  await page.getByLabel('Section type').selectOption('work');
+  editorDiagnosticStage = 'structure-add-work';
+  await page.locator('[data-action="create"]').press('Enter');
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await page.getByLabel('Section type').selectOption('skill');
+  editorDiagnosticStage = 'structure-add-skill';
+  await page.locator('[data-action="create"]').press('Enter');
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  editorDiagnosticStage = 'structure-move';
+  await page.locator('[data-section="work"]').getByRole('button', { name: 'Move to sidebar' }).press('Enter');
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+
+  editorDiagnosticStage = 'entries-open';
+  await page.getByRole('button', { name: 'Document' }).press('Enter');
+  await page.getByRole('navigation', { name: 'Resume outline' }).getByRole('button', { name: 'Experience' }).press('Enter');
+  const firstEntryCreated = page.waitForResponse((response) =>
+    isResumeMutation(response.request(), resumeID),
+  );
+  await page.getByRole('button', { name: 'Add entry' }).press('Enter');
+  expect((await firstEntryCreated).status()).toBe(200);
+  await expect(page.locator('[data-entry-id]').first()).toBeVisible();
+  const firstTitle = page.locator('[data-entry-id]').first().getByLabel('Job title');
+  const firstTitleSaved = page.waitForResponse((response) =>
+    isResumeMutation(response.request(), resumeID),
+  );
+  await firstTitle.fill('First role');
+  await firstTitle.press('Tab');
+  expect((await firstTitleSaved).status()).toBe(200);
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  const secondEntryCreated = page.waitForResponse((response) =>
+    isResumeMutation(response.request(), resumeID),
+  );
+  await page.getByRole('button', { name: 'Add entry' }).press('Enter');
+  expect((await secondEntryCreated).status()).toBe(200);
+  await expect(page.locator('[data-entry-id]').nth(1)).toBeVisible();
+  const secondTitle = page.locator('[data-entry-id]').nth(1).getByLabel('Job title');
+  const secondTitleSaved = page.waitForResponse((response) =>
+    isResumeMutation(response.request(), resumeID),
+  );
+  await secondTitle.fill('Second role');
+  await secondTitle.press('Tab');
+  expect((await secondTitleSaved).status()).toBe(200);
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+
+  const deletedEntryID = await requiredAttribute(page.locator('[data-entry-id]').first(), 'data-entry-id');
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    `/api/v1/resumes/${resumeID}/entries/work`,
+    412,
+  );
+  await firstTitle.fill('Deleted remotely');
+  await firstTitle.press('Tab');
+  editorDiagnosticStage = 'entries-missing-conflict';
+  const staleEntryMutation = page.waitForResponse((response) =>
+    response.status() === 412
+    && isResumeMutation(response.request(), resumeID),
+  );
+  await deleteRemoteEntry(page, resumeID, 'work', deletedEntryID);
+  expect((await staleEntryMutation).status()).toBe(412);
+  await expect.poll(
+    async () => page.locator('[data-state]').getAttribute('data-state'),
+  ).not.toBe('saving');
+  const saveState = await page.locator('[data-state]').getAttribute('data-state');
+  editorDiagnosticStage = saveState === 'conflict'
+    ? 'entries-missing-state-conflict'
+    : saveState === 'error'
+      ? 'entries-missing-state-error'
+      : saveState === 'saving'
+        ? 'entries-missing-state-saving'
+        : 'entries-missing-state-other';
+  const missingConflict = page.locator('[data-conflict]').first();
+  await expect(missingConflict).toBeVisible();
+  const missingConflictKind = await missingConflict.getAttribute('data-conflict');
+  editorDiagnosticStage = missingConflictKind === 'identity-missing:entryField'
+    ? 'entries-missing-select'
+    : missingConflictKind === 'target-changed:entryUpsert'
+      ? 'entries-missing-recreate'
+      : 'entries-missing-unexpected';
+  await expect(page.getByRole('button', { name: 'Select another entry' })).toBeVisible();
+  await page.getByRole('button', { name: 'Select another entry' }).press('Enter');
+
+  const reorderEntryCreated = page.waitForResponse((response) =>
+    isResumeMutation(response.request(), resumeID),
+  );
+  await page.getByRole('button', { name: 'Add entry' }).press('Enter');
+  expect((await reorderEntryCreated).status()).toBe(200);
+  await expect(page.locator('[data-entry-id]').nth(1)).toBeVisible();
+  const reorderTitle = page.locator('[data-entry-id]').nth(1).getByLabel('Job title');
+  const reorderTitleSaved = page.waitForResponse((response) =>
+    isResumeMutation(response.request(), resumeID),
+  );
+  await reorderTitle.fill('Reorder role');
+  await reorderTitle.press('Tab');
+  expect((await reorderTitleSaved).status()).toBe(200);
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  const remoteDeletedID = await requiredAttribute(page.locator('[data-entry-id]').nth(1), 'data-entry-id');
+  editorDiagnosticStage = 'entries-reorder-conflict';
+  await page.getByRole('button', { name: 'Structure' }).press('Enter');
+  await deleteRemoteEntry(page, resumeID, 'work', remoteDeletedID);
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    `/api/v1/resumes/${resumeID}/sections/work`,
+    412,
+  );
+  await page.locator('[data-entry-order="work"]').getByRole('button', { name: 'Move entry down' }).first().press('Enter');
+  await expect(page.getByRole('button', { name: 'Reopen entry order' })).toBeVisible();
+  await page.getByRole('button', { name: 'Reopen entry order' }).press('Enter');
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+}
+
+async function provePhotoSessionPersistence(
+  page: Page,
+  context: BrowserContext,
+  resumeID: string,
+  diagnostics: Diagnostics,
+  probes: BrowserPersistenceProbe,
+  baseline: URLBaseline,
+): Promise<Page> {
+  editorDiagnosticStage = 'photo-open';
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+  await page.getByRole('button', { name: 'Photo' }).press('Enter');
+  const upload = page.getByLabel('Upload photo');
+  await expect(page.locator('[data-photo-preview] img')).toHaveCount(0);
+  const sourceReads = await installPhotoSourceReadProbes(page);
+  const uploadPause = diagnostics.pauseNextPhotoUpload();
+  const ownerPhotoRead = page.waitForResponse((response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    return request.method() === 'GET'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
+  });
+  const acceptedPhoto = page.waitForResponse((response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    return request.method() === 'POST'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
+  });
+  await upload.setInputFiles({
+    buffer: Buffer.from(VALID_PNG_BASE64, 'base64'),
+    mimeType: 'image/png',
+    name: 'editor-proof.png',
+  });
+  editorDiagnosticStage = 'photo-upload-paused';
+  await uploadPause.waitUntilPaused();
+  expect(await sourceReads.read()).toEqual({
+    blobArrayBuffer: 0,
+    dataURL: 0,
+    fileReader: 0,
+    imageDecode: 0,
+    objectURL: 0,
+  });
+  await expect(page.locator('[data-photo-preview] img')).toHaveCount(0);
+  uploadPause.release();
+  editorDiagnosticStage = 'photo-upload-accepted';
+  expect((await acceptedPhoto).status()).toBe(200);
+  expect((await ownerPhotoRead).headers()['content-type']).toMatch(/^image\/(?:jpeg|png)/);
+  await expect(page.locator('[data-photo-preview] img')).toBeVisible();
+  await expect.poll(async () => (await sourceReads.read()).dataURL).toBeGreaterThan(0);
+  await expectURLUnchanged(page, baseline);
+  editorDiagnosticStage = 'photo-crop';
+  const acceptedCrop = page.waitForResponse((response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    return request.method() === 'PATCH'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
+  });
+  await page.getByLabel('Width').fill('0.75');
+  await page.getByRole('button', { name: 'Save crop' }).press('Enter');
+  expect((await acceptedCrop).status()).toBe(200);
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+
+  editorDiagnosticStage = 'photo-remote-conflict';
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    `/api/v1/resumes/${resumeID}/photo`,
+    412,
+  );
+  const cropPause = diagnostics.pauseNextPhotoCrop();
+  const staleCrop = page.waitForResponse((response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    return request.method() === 'PATCH'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
+  });
+  await page.getByLabel('Width').fill('0.5');
+  await expect(page.getByLabel('Width')).toHaveValue('0.5');
+  await page.getByRole('button', { name: 'Save crop' }).press('Enter');
+  editorDiagnosticStage = 'photo-remote-conflict-submitted';
+  const cropDispatched = await Promise.race([
+    cropPause.waitUntilPaused().then(() => true),
+    page.waitForTimeout(3_000).then(() => false),
+  ]);
+  if (!cropDispatched) {
+    const draftWidth = await page.getByLabel('Width').inputValue();
+    const invalid = await page.getByText(
+      'Enter a crop within the image bounds.',
+      { exact: true },
+    ).isVisible();
+    editorDiagnosticStage = invalid
+      ? 'photo-remote-conflict-invalid'
+      : draftWidth === '0.5'
+        ? 'photo-remote-conflict-not-dispatched'
+        : 'photo-remote-conflict-reset';
+    throw new Error('photo crop did not dispatch');
+  }
+  editorDiagnosticStage = 'photo-remote-conflict-queued';
+  editorDiagnosticStage = 'photo-remote-conflict-winner';
+  await replaceRemotePhoto(page, resumeID, VALID_PNG_BASE64);
+  cropPause.release();
+  editorDiagnosticStage = 'photo-remote-conflict-response';
+  expect((await staleCrop).status()).toBe(412);
+  editorDiagnosticStage = 'photo-remote-conflict-reopen';
+  await expect(page.locator('[data-state="conflict"]')).toBeVisible();
+  editorDiagnosticStage = 'photo-remote-conflict-state';
+  const photoPanel = page.locator('section[aria-labelledby="photo-title"]');
+  const reopenCrop = photoPanel.getByRole('button', { name: 'Reopen crop' });
+  await expect(reopenCrop).toBeVisible();
+  editorDiagnosticStage = 'photo-remote-conflict-visible';
+  await reopenCrop.press('Enter');
+  editorDiagnosticStage = 'photo-remote-conflict-accepted';
+  await expect(page.getByLabel('Replace photo')).toBeVisible();
+  editorDiagnosticStage = 'photo-read-failure';
+  diagnostics.armPhotoReadFailure();
+  const replacementAccepted = page.waitForResponse((response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    return request.method() === 'POST'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
+  });
+  await page.getByLabel('Replace photo').setInputFiles({
+    buffer: Buffer.from(VALID_PNG_BASE64, 'base64'),
+    mimeType: 'image/png',
+    name: 'editor-proof-replacement.png',
+  });
+  expect((await replacementAccepted).status()).toBe(200);
+  await expect(page.getByText('Photo preview is unavailable.', { exact: true })).toBeVisible();
+  expect(await ownerPhotoHasNoCrop(page, resumeID)).toBe(true);
+  await expect(page.getByLabel('Replace photo')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete photo' })).toBeVisible();
+
+  editorDiagnosticStage = 'session-personal-details';
+  await page
+    .getByRole('navigation', { name: 'Resume outline' })
+    .getByRole('button', { name: 'Personal details', exact: true })
+    .press('Enter');
+  await expect(page.getByLabel('Headline')).toBeVisible();
+  editorDiagnosticStage = 'session-destroyed';
+  const reauthPage = await context.newPage();
+  editorDiagnosticStage = 'session-destroy-request';
+  await destroySessionInSecondPage(reauthPage);
+  editorDiagnosticStage = 'session-local-edit';
+  diagnostics.expectHTTPFailure(
+    'PATCH',
+    `/api/v1/resumes/${resumeID}/personal-details`,
+    401,
+  );
+  await page.getByLabel('Headline').fill('Retained after session loss');
+  editorDiagnosticStage = 'session-local-edit-blur';
+  await page.getByLabel('Headline').press('Tab');
+  editorDiagnosticStage = 'session-loss-alert';
+  await expect(page.getByRole('alert', { name: 'Sign in to continue editing' })).toBeVisible();
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+  editorDiagnosticStage = 'session-reauthenticated';
+  await loginAsDevelopmentUser(reauthPage);
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+  await expect(page.getByLabel('Headline')).toHaveValue('Retained after session loss');
+  await page.getByRole('button', { name: 'Resume after sign-in' }).press('Enter');
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await expect(page.getByLabel('Headline')).toHaveValue('Retained after session loss');
+  await expectURLUnchanged(page, baseline);
+  await expectNoPersistenceWrites(probes);
+  return reauthPage;
+}
+
+async function proveAccessibility(page: Page, resumeID: string): Promise<void> {
+  editorDiagnosticStage = 'accessibility-list';
+  await page.getByRole('link', { name: 'aboutme' }).press('Enter');
+  await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
+  await expect(page.locator(`[data-testid="resume-row-${resumeID}"]`)).toBeVisible();
+  editorDiagnosticStage = 'accessibility-list-audit';
+  const listFindings = await new AxeBuilder({ page }).analyze();
+  const listViolations = seriousOrCritical(listFindings.violations);
+  if (listViolations.length > 0) {
+    const contrast = listFindings.violations.find(
+      ({ id }) => id === 'color-contrast',
+    );
+    const safeTarget = JSON.stringify(contrast?.nodes[0]?.target ?? [])
+      .replaceAll(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, 'resume-id')
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9-]+/g, '-')
+      .replaceAll(/^-+|-+$/g, '')
+      .slice(0, 120);
+    editorDiagnosticStage = `accessibility-list-${listViolations
+      .map(({ id }) => id)
+      .sort()
+      .join('-')}-${safeTarget || 'unknown'}`;
+  }
+  expect(listViolations).toEqual([]);
+  editorDiagnosticStage = 'accessibility-editor-open';
+  await page
+    .locator(`[data-testid="resume-row-${resumeID}"]`)
+    .getByRole('link')
+    .press('Enter');
+  editorDiagnosticStage = 'accessibility-editor-audit';
+  const editorFindings = await new AxeBuilder({ page }).analyze();
+  const editorViolations = seriousOrCritical(editorFindings.violations);
+  if (editorViolations.length > 0) {
+    const first = editorFindings.violations.find(
+      ({ id }) => id === editorViolations[0]?.id,
+    );
+    const safeTarget = JSON.stringify(first?.nodes[0]?.target ?? [])
+      .replaceAll(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, 'resume-id')
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9-]+/g, '-')
+      .replaceAll(/^-+|-+$/g, '')
+      .slice(0, 120);
+    editorDiagnosticStage = `accessibility-editor-${editorViolations
+      .map(({ id }) => id)
+      .sort()
+      .join('-')}-${safeTarget || 'unknown'}`;
+  }
+  expect(editorViolations).toEqual([]);
+}
+
+async function deleteThroughListKeyboard(page: Page, resumeID: string): Promise<void> {
+  editorDiagnosticStage = 'teardown-list';
+  await page.goto('/app/resumes');
+  const row = page.locator(`[data-testid="resume-row-${resumeID}"]`);
+  await expect(row).toBeVisible();
+  editorDiagnosticStage = 'teardown-open';
+  const title = (await row.getByRole('link').innerText()).trim();
+  expect(title).not.toBe('');
+  await row.getByRole('button', { name: `Delete ${title}` }).press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'Delete resume' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Current title').fill(title);
+  const deletion = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'DELETE'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}`;
+  });
+  editorDiagnosticStage = 'teardown-confirm';
+  const confirm = dialog.getByRole('button', { name: 'Delete' });
+  await expect(confirm).toBeEnabled();
+  await confirm.press('Enter');
+  const response = await Promise.race([
+    deletion,
+    page.waitForTimeout(3_000).then(() => null),
+  ]);
+  if (response === null) {
+    const dialogState = await dialog.isVisible() ? 'open' : 'closed';
+    editorDiagnosticStage = `teardown-no-dispatch-dialog-${dialogState}`;
+    throw new Error('resume delete did not dispatch');
+  }
+  expect(response.status()).toBe(204);
+  editorDiagnosticStage = 'teardown-row';
+  await expect(row).toHaveCount(0);
+  editorDiagnosticStage = 'teardown-complete';
+}
+
+async function installDiagnostics(
+  context: BrowserContext,
+  page: Page,
+): Promise<Diagnostics> {
+  let certificateErrors = 0;
+  let consoleErrors = 0;
+  const consoleStatusCounts = new Map<number | 'other', number>();
+  let downloads = 0;
+  let externalRequests = 0;
+  let firstConsoleError = 'none';
+  let firstConsoleStage = 'none';
+  let firstOtherConsoleError = 'none';
+  let firstOtherConsoleLead = 'none';
+  let firstOtherConsoleStage = 'none';
+  let firstPageError = 'none';
+  let firstPageErrorLead = 'none';
+  let firstPageErrorName = 'none';
+  let firstPageStage = 'none';
+  let pageErrors = 0;
+  let serviceWorkers = 0;
+  let failPhotoRead = false;
+  let failTemplateChildAt: number | undefined;
+  let templateChildCount = 0;
+  let templateSecondChildForced = false;
+  let pausedPhotoCrop: PendingRequestGate | undefined;
+  let pausedPhotoUpload: PendingRequestGate | undefined;
+  const expectedRequestFailures: {
+    readonly method: string;
+    readonly pathname: string;
+    readonly status: 401 | 412;
+  }[] = [];
+  const expectedConsoleFailures = new Map<string, number[]>();
+  const expectConsoleFailure = (url: string, status: number): void => {
+    const pending = expectedConsoleFailures.get(url) ?? [];
+    pending.push(status);
+    expectedConsoleFailures.set(url, pending);
+  };
+  const consumeExpectedConsoleFailure = (
+    url: string,
+    status: number | null,
+  ): boolean => {
+    if (status === null) return false;
+    const pending = expectedConsoleFailures.get(url);
+    if (pending?.[0] !== status) return false;
+    pending.shift();
+    if (pending.length === 0) expectedConsoleFailures.delete(url);
+    return true;
+  };
+  const attachPageDiagnostics = (openedPage: Page): void => {
+    openedPage.on('console', (message) => {
+      const status = httpFailureStatus(message.text());
+      const expectedFailure = message.type() === 'error'
+        && consumeExpectedConsoleFailure(message.location().url, status);
+      if (
+        message.type() === 'error'
+        && !expectedFailure
+        && !isExpectedNegativeHTTPConsole(message.text(), message.location().url)
+      ) {
+        consoleErrors += 1;
+        const countedStatus = status ?? 'other';
+        consoleStatusCounts.set(
+          countedStatus,
+          (consoleStatusCounts.get(countedStatus) ?? 0) + 1,
+        );
+        if (countedStatus === 'other' && firstOtherConsoleError === 'none') {
+          firstOtherConsoleError = classifyDiagnosticText(message.text());
+          firstOtherConsoleLead = classifyDiagnosticLead(message.text());
+          firstOtherConsoleStage = editorDiagnosticStage;
+        }
+        if (firstConsoleError === 'none') {
+          firstConsoleError = classifyDiagnosticText(message.text());
+          firstConsoleStage = editorDiagnosticStage;
+        }
+      }
+    });
+    openedPage.on('download', () => {
+      downloads += 1;
+    });
+    openedPage.on('pageerror', (error) => {
+      pageErrors += 1;
+      if (firstPageError === 'none') {
+        firstPageError = classifyDiagnosticText(error.message);
+        firstPageErrorLead = classifyDiagnosticLead(error.message);
+        firstPageErrorName = classifyDiagnosticName(error.name);
+        firstPageStage = editorDiagnosticStage;
+      }
+    });
+    openedPage.on('requestfailed', (request) => {
+      if (/CERT/i.test(request.failure()?.errorText ?? '')) certificateErrors += 1;
+    });
+  };
+  attachPageDiagnostics(page);
+  context.on('page', attachPageDiagnostics);
+  context.on('serviceworker', () => {
+    serviceWorkers += 1;
+  });
+  await context.route('**/*', async (route) => {
+    const request = route.request();
+    if (!isAllowedHTTPURL(request.url())) {
+      externalRequests += 1;
+      await route.abort('blockedbyclient');
+      return;
+    }
+    const requestURL = new URL(request.url());
+    const expectedRequestIndex = expectedRequestFailures.findIndex(
+      (expected) => expected.method === request.method()
+        && expected.pathname === requestURL.pathname,
+    );
+    if (expectedRequestIndex !== -1) {
+      const [expected] = expectedRequestFailures.splice(expectedRequestIndex, 1);
+      expectConsoleFailure(request.url(), expected!.status);
+    }
+    if (failPhotoRead && isPhotoReadRequest(request)) {
+      failPhotoRead = false;
+      expectConsoleFailure(request.url(), 500);
+      await route.fulfill({
+        body: '{"error":{"code":"forced_failure"}}',
+        contentType: 'application/json',
+        headers: { 'Cache-Control': 'no-store, no-transform' },
+        status: 500,
+      });
+      return;
+    } else if (pausedPhotoCrop !== undefined && isPhotoCropRequest(request)) {
+      const gate = pausedPhotoCrop;
+      pausedPhotoCrop = undefined;
+      gate.resolvePaused();
+      await gate.releasePromise;
+      await route.continue();
+      return;
+    } else if (pausedPhotoUpload !== undefined && isPhotoUploadRequest(request)) {
+      const gate = pausedPhotoUpload;
+      pausedPhotoUpload = undefined;
+      gate.resolvePaused();
+      await gate.releasePromise;
+      await route.continue();
+      return;
+    } else if (
+      failTemplateChildAt !== undefined
+      && isTemplateChildRequest(request)
+    ) {
+      templateChildCount += 1;
+      if (templateChildCount === failTemplateChildAt) {
+        failTemplateChildAt = undefined;
+        templateSecondChildForced = true;
+        expectConsoleFailure(request.url(), 422);
+        await route.fulfill({
+          body: JSON.stringify({
+            error: {
+              code: 'document_invalid',
+              message: 'Invalid template child.',
+              details: {
+                issues: [{ path: 'customization', code: 'invalid' }],
+              },
+            },
+          }),
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store, no-transform' },
+          status: 422,
+        });
+        return;
+      }
+      await route.continue();
+      return;
+    } else {
+      await route.continue();
+    }
+  });
+  await context.routeWebSocket('**/*', async (webSocket) => {
+    if (!isAllowedWebSocketURL(webSocket.url())) {
+      externalRequests += 1;
+      await webSocket.close({ code: 1008, reason: 'blocked' });
+      return;
+    }
+    webSocket.connectToServer();
+  });
+  return {
+    armPhotoReadFailure: (): void => {
+      failPhotoRead = true;
+    },
+    armTemplateFailure: (): void => {
+      templateChildCount = 0;
+      templateSecondChildForced = false;
+      failTemplateChildAt = 2;
+    },
+    expectHTTPFailure: (
+      method: string,
+      pathname: string,
+      status: 401 | 412,
+    ): void => {
+      expectedRequestFailures.push({ method, pathname, status });
+    },
+    pauseNextPhotoCrop: (): PausedPhotoRequest => {
+      if (pausedPhotoCrop !== undefined) {
+        throw new Error('photo crop pause already armed');
+      }
+      const gate = createPendingRequestGate();
+      pausedPhotoCrop = gate.pending;
+      return gate.control;
+    },
+    pauseNextPhotoUpload: (): PausedPhotoUpload => {
+      if (pausedPhotoUpload !== undefined) {
+        throw new Error('photo upload pause already armed');
+      }
+      const gate = createPendingRequestGate();
+      pausedPhotoUpload = gate.pending;
+      return gate.control;
+    },
+    assertTemplateFailureSecondChild: (): void => {
+      expect({ childCount: templateChildCount, forced: templateSecondChildForced }).toEqual({
+        childCount: 2,
+        forced: true,
+      });
+    },
+    assertClean: (): void => {
+      editorDiagnosticStage = [
+        'post-diagnostics',
+        `certificate-${certificateErrors}`,
+        `console-${consoleErrors}`,
+        `consolekind-${firstConsoleError}`,
+        `consolestage-${firstConsoleStage}`,
+        `console401-${consoleStatusCounts.get(401) ?? 0}`,
+        `console412-${consoleStatusCounts.get(412) ?? 0}`,
+        `console422-${consoleStatusCounts.get(422) ?? 0}`,
+        `console500-${consoleStatusCounts.get(500) ?? 0}`,
+        `consoleother-${consoleStatusCounts.get('other') ?? 0}`,
+        `consoleotherkind-${firstOtherConsoleError}`,
+        `consoleotherlead-${firstOtherConsoleLead}`,
+        `consoleotherstage-${firstOtherConsoleStage}`,
+        `external-${externalRequests}`,
+        `page-${pageErrors}`,
+        `pagekind-${firstPageError}`,
+        `pagelead-${firstPageErrorLead}`,
+        `pagename-${firstPageErrorName}`,
+        `pagestage-${firstPageStage}`,
+        `download-${downloads}`,
+        `worker-${serviceWorkers}`,
+      ].join('-');
+      expect({
+        certificate: certificateErrors,
+        console: consoleErrors,
+        externalRequest: externalRequests,
+        page: pageErrors,
+      }).toEqual({ certificate: 0, console: 0, externalRequest: 0, page: 0 });
+      expect(expectedRequestFailures).toEqual([]);
+      expect([...expectedConsoleFailures.entries()]).toEqual([]);
+      expect(downloads).toBe(0);
+      expect(serviceWorkers).toBe(0);
+    },
+  };
+}
+
+interface PendingRequestGate {
+  readonly release: () => void;
+  readonly releasePromise: Promise<void>;
+  readonly paused: Promise<void>;
+  readonly resolvePaused: () => void;
+}
+
+function createPendingRequestGate(): {
+  readonly control: PausedPhotoRequest;
+  readonly pending: PendingRequestGate;
+} {
+  let resolvePaused: () => void;
+  let release: () => void;
+  const paused = new Promise<void>((resolve) => {
+    resolvePaused = resolve;
+  });
+  const releasePromise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    control: {
+      release: (): void => release!(),
+      waitUntilPaused: (): Promise<void> => paused,
+    },
+    pending: {
+      paused,
+      release: release!,
+      releasePromise,
+      resolvePaused: resolvePaused!,
+    },
+  };
+}
+
+async function applyTemplate(page: Page, id: string): Promise<void> {
+  const template = page.locator(`[data-template="${id}"]`);
+  await expect(template).toBeVisible();
+  await template.getByRole('button', { name: 'Apply' }).press('Enter');
+}
+
+async function captureOwnerReadHeaders(
+  page: Page,
+  resumeID: string,
+): Promise<{ acceptEncoding(): string }> {
+  let acceptEncoding = '';
+  const session = await page.context().newCDPSession(page);
+  const reads = new Set<string>();
+  const headers = new Map<string, Record<string, unknown>>();
+  const capture = (requestID: string): void => {
+    if (!reads.has(requestID)) return;
+    const value = headers.get(requestID);
+    if (value === undefined) return;
+    const entry = Object.entries(value).find(
+      ([name]) => name.toLowerCase() === 'accept-encoding',
+    );
+    if (typeof entry?.[1] === 'string') acceptEncoding = entry[1];
+  };
+  session.on('Network.requestWillBeSent', (event: unknown) => {
+    const value = object(event);
+    const request = object(value?.request);
+    const requestID = value?.requestId;
+    if (
+      typeof requestID === 'string'
+      && request?.method === 'GET'
+      && request.url === `${ORIGIN}/api/v1/resumes/${resumeID}`
+    ) {
+      reads.add(requestID);
+      capture(requestID);
+    }
+  });
+  session.on('Network.requestWillBeSentExtraInfo', (event: unknown) => {
+    const value = object(event);
+    const requestID = value?.requestId;
+    const extra = object(value?.headers);
+    if (typeof requestID !== 'string' || extra === null) return;
+    headers.set(requestID, extra);
+    capture(requestID);
+  });
+  await session.send('Network.enable');
+  return { acceptEncoding: (): string => acceptEncoding };
+}
+
+async function destroySessionInSecondPage(page: Page): Promise<void> {
+  await page.goto('/');
+  const status = await page.evaluate(async () => {
+    const me = await fetch('/api/v1/me', { cache: 'no-store', credentials: 'include' });
+    const body = await me.json() as { data?: { csrfToken?: unknown } };
+    const token = body.data?.csrfToken;
+    if (typeof token !== 'string' || token === '') return 0;
+    const logout = await fetch('/api/v1/auth/logout', {
+      cache: 'no-store',
+      credentials: 'include',
+      headers: { 'X-CSRF-Token': token },
+      method: 'POST',
+    });
+    return logout.status;
+  });
+  expect(status).toBe(204);
+}
+
+async function expectURLUnchanged(page: Page, baseline: URLBaseline): Promise<void> {
+  await expect.poll(() => readURLBaseline(page)).toEqual(baseline);
+}
+
+async function expectNoPersistenceWrites(
+  probes: BrowserPersistenceProbe,
+): Promise<void> {
+  expect(await probes.read()).toEqual({
+    history: 0,
+    indexedDB: 0,
+    localStorage: 0,
+    sendBeacon: 0,
+    sessionStorage: 0,
+  });
+}
+
+async function ensureAuthenticated(page: Page): Promise<void> {
+  await page.goto('/');
+  const status = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/me', {
+      cache: 'no-store',
+      credentials: 'include',
+    });
+    return response.status;
+  });
+  if (status === 200) return;
+  expect(status).toBe(401);
+  await loginAsDevelopmentUser(page);
+}
+
+async function readURLBaseline(page: Page): Promise<URLBaseline> {
+  return page.evaluate(() => ({
+    hash: location.hash,
+    href: location.href,
+    search: location.search,
+  }));
+}
+
+function isOwnerRead(request: Request, resumeID: string): boolean {
+  const url = new URL(request.url());
+  return request.method() === 'GET'
+    && url.origin === ORIGIN
+    && url.pathname === `/api/v1/resumes/${resumeID}`;
+}
+
+function isResumeMutation(request: Request, resumeID: string): boolean {
+  const url = new URL(request.url());
+  return request.method() !== 'GET'
+    && url.origin === ORIGIN
+    && url.pathname.startsWith(`/api/v1/resumes/${resumeID}`);
+}
+
+function isTemplateChildRequest(request: Request): boolean {
+  if (request.method() !== 'PATCH') return false;
+  const url = new URL(request.url());
+  return url.origin === ORIGIN
+    && /^\/api\/v1\/resumes\/[0-9a-f-]{36}\/(?:customization|structure)$/.test(url.pathname);
+}
+
+function isPhotoReadRequest(request: Request): boolean {
+  if (request.method() !== 'GET') return false;
+  return isPhotoRequest(request);
+}
+
+function isPhotoUploadRequest(request: Request): boolean {
+  if (request.method() !== 'POST') return false;
+  return isPhotoRequest(request);
+}
+
+function isPhotoCropRequest(request: Request): boolean {
+  if (request.method() !== 'PATCH') return false;
+  return isPhotoRequest(request);
+}
+
+function isPhotoRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.origin === ORIGIN
+    && /^\/api\/v1\/resumes\/[0-9a-f-]{36}\/photo$/.test(url.pathname);
+}
+
+function seriousOrCritical(
+  violations: readonly {
+    readonly id: string;
+    readonly impact?: string | null;
+  }[],
+): readonly { readonly id: string; readonly impact?: string | null }[] {
+  return violations.filter(
+    ({ impact }) => impact === 'serious' || impact === 'critical',
+  );
+}
+
+function classifyDiagnosticText(message: string): string {
+  const checks: readonly [RegExp, string][] = [
+    [/structuredclone|could not be cloned|datacloneerror/i, 'clone'],
+    [/cannot read propert|undefined/i, 'undefined'],
+    [/cannot assign|read only/i, 'readonly'],
+    [/unhandled error.*event handler/i, 'event-handler'],
+    [/unhandled error.*watch/i, 'watcher'],
+    [/failed to fetch|load failed|networkerror/i, 'network'],
+    [/401|unauthorized|session/i, 'session'],
+    [/412|revision|conflict/i, 'conflict'],
+    [/422|document.invalid|invalid template/i, 'validation'],
+    [/500|forced.failure|photo preview/i, 'forced-failure'],
+  ];
+  return checks.find(([pattern]) => pattern.test(message))?.[1] ?? 'other';
+}
+
+function classifyDiagnosticName(name: string): string {
+  const normalized = name.toLowerCase();
+  if (normalized === 'error') return 'error';
+  if (normalized === 'typeerror') return 'typeerror';
+  if (normalized === 'aborterror') return 'aborterror';
+  if (normalized === 'fetcherror') return 'fetcherror';
+  if (normalized === 'domexception') return 'domexception';
+  const safe = normalized.replace(/[^a-z]/g, '').slice(0, 24);
+  return safe === '' ? 'other' : safe;
+}
+
+function classifyDiagnosticLead(message: string): string {
+  const lead = message.trim().match(/[A-Za-z]+/)?.[0]?.toLowerCase() ?? '';
+  return lead.slice(0, 24) || 'other';
+}
+
+async function requiredAttribute(
+  locator: ReturnType<Page['locator']>,
+  name: string,
+): Promise<string> {
+  const value = await locator.getAttribute(name);
+  expect(value).not.toBeNull();
+  return value as string;
+}
+
+function object(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+async function writeEditorEvidence(steps: EditorSteps): Promise<void> {
+  const evidence = {
+    schemaVersion: 1,
+    scenario: 'authenticated-editor',
+    origin: ORIGIN,
+    errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
+    steps,
+  };
+  const serialized = `${JSON.stringify(evidence, null, 2)}\n`;
+  if (
+    Buffer.byteLength(serialized) > 8_192
+    || /(?:csrf|cookie|idempotency|oauth|filename|object key|@|\b[a-f0-9]{8}-[a-f0-9-]{27}\b)/i.test(serialized)
+  ) {
+    throw new Error('editor evidence would violate its bounded privacy contract');
+  }
+  await writeFile(EVIDENCE_PATH, serialized, { flag: 'wx', mode: 0o600 });
+}

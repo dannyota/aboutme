@@ -109,7 +109,7 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,network-policy.ts,run.sh} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,editor-fixtures.ts,network-policy.ts,run.sh} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
 printf '%s\n' 'static test root' > \
   "$HTTPS_REPO/.dev/native-https/input/caddy-root.crt"
@@ -267,6 +267,22 @@ if read_https_calls | grep -Fxq podman; then
 fi
 cp "$WORK/transport.spec.ts.clean" \
   "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts"
+
+cp "$HTTPS_REPO/deploy/dev-https-browser/editor.spec.ts" \
+  "$WORK/editor.spec.ts.clean"
+printf '%s\n' '// editor-source-drift' >> \
+  "$HTTPS_REPO/deploy/dev-https-browser/editor.spec.ts"
+: >"$HTTPS_CALLS"
+if run_https_make dev-https-auth-check >"$WORK/https-editor-source-drift.out" 2>&1; then
+  printf 'makefile-safety-test: editor source drift was accepted\n' >&2
+  exit 1
+fi
+if read_https_calls | grep -Fxq podman; then
+  printf 'makefile-safety-test: editor source drift reached the browser runtime\n' >&2
+  exit 1
+fi
+cp "$WORK/editor.spec.ts.clean" \
+  "$HTTPS_REPO/deploy/dev-https-browser/editor.spec.ts"
 rm -rf "$HTTPS_REPO/.dev/native-https/evidence"
 
 rm -f "$HTTPS_MANIFEST"
@@ -407,6 +423,58 @@ grep -Fxq -- '--read-only' "$HTTPS_TRANSPORT_LOG" || {
 }
 [ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_TRANSPORT_LOG")" -eq 2 ] || {
   printf 'makefile-safety-test: transport run has the wrong bind-mount count\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-editor-check \
+  >"$WORK/https-editor-preflight.out" 2>&1; then
+  printf 'makefile-safety-test: editor check passed failed status\n' >&2
+  exit 1
+fi
+if read_https_calls | grep -Fxq podman; then
+  printf 'makefile-safety-test: editor check mutated after failed status\n' >&2
+  exit 1
+fi
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2 ] || {
+  printf 'makefile-safety-test: failed editor preflight created evidence\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+run_https_make dev-https-editor-check >"$WORK/https-editor.out" 2>&1 || {
+  sed -n '1,120p' "$WORK/https-editor.out" >&2
+  printf 'makefile-safety-test: editor check target failed\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 3 ] || {
+  printf 'makefile-safety-test: editor check did not create separate evidence\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'editor.*' | wc -l)" -eq 1 ] || {
+  printf 'makefile-safety-test: editor evidence directory naming drifted\n' >&2
+  exit 1
+}
+HTTPS_EDITOR_LOG=$WORK/https-editor-runtime.calls
+read_https_calls >"$HTTPS_EDITOR_LOG"
+grep -Fxq editor "$HTTPS_EDITOR_LOG" || {
+  printf 'makefile-safety-test: editor mode did not reach the runner\n' >&2
+  exit 1
+}
+grep -Fxq -- '--pull=never' "$HTTPS_EDITOR_LOG" || {
+  printf 'makefile-safety-test: editor run can pull an image\n' >&2
+  exit 1
+}
+grep -Fxq -- '--network=host' "$HTTPS_EDITOR_LOG" || {
+  printf 'makefile-safety-test: editor run lacks host network\n' >&2
+  exit 1
+}
+grep -Fxq -- '--read-only' "$HTTPS_EDITOR_LOG" || {
+  printf 'makefile-safety-test: editor run lacks read-only root\n' >&2
+  exit 1
+}
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_EDITOR_LOG")" -eq 2 ] || {
+  printf 'makefile-safety-test: editor run has the wrong bind-mount count\n' >&2
   exit 1
 }
 

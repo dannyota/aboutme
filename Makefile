@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs dev-https-browser-image dev-https-auth-check dev-https-transport-check
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
@@ -18,6 +18,8 @@ DEV_HTTPS_BROWSER_SOURCES := \
 	deploy/dev-https-browser/playwright.config.ts \
 	deploy/dev-https-browser/auth.spec.ts \
 	deploy/dev-https-browser/transport.spec.ts \
+	deploy/dev-https-browser/editor.spec.ts \
+	deploy/dev-https-browser/editor-fixtures.ts \
 	deploy/dev-https-browser/network-policy.ts \
 	deploy/dev-https-browser/run.sh
 
@@ -275,7 +277,9 @@ dev-https-auth-check: dev-https-status ## Run the trusted local Google auth proo
 
 dev-https-transport-check: dev-https-status ## Run the trusted authenticated transport proof and retain only bounded local evidence
 
-dev-https-auth-check dev-https-transport-check:
+dev-https-editor-check: dev-https-status ## Run the trusted authenticated editor proof and retain only bounded local evidence
+
+dev-https-auth-check dev-https-transport-check dev-https-editor-check:
 	@set -Eeuo pipefail; \
 	repo=$$(pwd -P); \
 	state="$$repo/.dev/native-https"; \
@@ -286,6 +290,7 @@ dev-https-auth-check dev-https-transport-check:
 	case "$$target" in \
 	dev-https-auth-check) mode=auth; evidence_prefix=google-auth ;; \
 	dev-https-transport-check) mode=transport; evidence_prefix=transport ;; \
+	dev-https-editor-check) mode=editor; evidence_prefix=editor ;; \
 	*) echo 'dev-https-browser-check: invalid target' >&2; exit 1 ;; \
 	esac; \
 	uid=$$(id -u); \
@@ -320,7 +325,7 @@ dev-https-auth-check dev-https-transport-check:
 	if [ "$$mode" = auth ]; then \
 	  deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence"; \
 	else \
-	  deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence" transport; \
+	  deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence" "$$mode"; \
 	fi; \
 	current_source_after=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
 	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
