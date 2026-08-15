@@ -37,6 +37,12 @@ runs them in W0 and W9.
 | 05   | `apps/web/app/composables/useAuth.ts`, `apps/web/test/{useAuth,useAuth-csrf-rotation}.test.ts`                                         | Resolved auth/CSRF state                                                    |
 | 05   | `apps/web/test/editor/coordinator.test.ts`                                                                                             | Timing, unknown, stale, template, session matrix                            |
 
+Task 14 is the serialized visual-integration owner after Tasks 06–13 land. It
+may restyle the already landed home, login, resume-list, and app-root paths
+named in Task 14, but it does not change their transport, auth, or mutation
+contracts. Its self-hosted `apps/web/public/theme-bootstrap.js` resolves the
+first theme before paint and uses no browser storage.
+
 ## List and editor controls
 
 | Task | Create                                                                                                                                                                                    | Responsibility                     |

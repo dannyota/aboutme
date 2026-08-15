@@ -26,6 +26,37 @@ On wide screens controls and preview may appear side by side. On narrow screens
 they are switchable regions. Both layouts keep one store and one command queue;
 switching layout never refetches or resets the form.
 
+### Visual system
+
+The owner-selected visual target is shadcn create's Nova style with Zinc base
+and theme, Emerald chart/accent color, Inter, Lucide icons, default radius,
+solid menu, and subtle menu accent. The app consumes those semantic tokens and
+interaction patterns without copying the reference dashboard or adding a shadcn
+runtime dependency.
+
+At the 1440 by 1024 desktop acceptance viewport, the editor presents four
+regions:
+
+- a compact solid app rail for Resumes, Templates, Settings, and Help;
+- a section outline derived from `customization.layout.sections`;
+- the paged resume preview as the dominant central canvas; and
+- one focused inspector for the selected section or editor tool.
+
+The top bar shows the owner-visible title, safe save state, preview control,
+signed-in account control, and only actions Phase 4 owns. The theme toggle is
+always visible beside the signed-in account control. It does not show Publish,
+global undo, or global redo. Guarded template undo stays inside the template
+panel.
+
+Light and dark modes use the same structure and preserve contrast, visible
+focus, and non-color status text. The two-state theme control persists only a
+`light` or `dark` preference cookie. It never writes resume data or theme state
+to local storage, session storage, IndexedDB, or the URL.
+
+App chrome and form styles are scoped outside `components/resume/**`. The
+renderer, print surface, public hydration, and golden harness retain their own
+font, color, spacing, and page geometry.
+
 ## Draft field behavior
 
 Forms use generated current-v2 types. They preserve absence versus explicit

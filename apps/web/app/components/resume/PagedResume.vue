@@ -10,6 +10,8 @@ import {
   onMounted,
   type PropType,
   ref,
+  shallowRef,
+  type ShallowRef,
   toRaw,
   watch,
 } from 'vue';
@@ -178,7 +180,7 @@ export default defineComponent({
     const renderReady = (
       rendered: RenderedPaginationSnapshot,
       settled: boolean,
-      measurementRoot?: ReturnType<typeof ref<HTMLElement | null>>,
+      measurementRoot?: ShallowRef<HTMLElement | null>,
       measured: PaginationSnapshot = rendered,
     ) => {
       const { model, request, pages } = rendered;
@@ -365,7 +367,7 @@ export default defineComponent({
       );
     }
 
-    const measurementRoot = ref<HTMLElement | null>(null);
+    const measurementRoot = shallowRef<HTMLElement | null>(null);
     const initial = snapshot();
     const rendered = ref<RenderedPaginationSnapshot>({
       ...initial,

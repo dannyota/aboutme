@@ -28,6 +28,7 @@ defineEmits<{
 <template>
   <section
     ref="root"
+    class="resume-list"
     aria-labelledby="resume-list-title"
   >
     <div>
