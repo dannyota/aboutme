@@ -233,8 +233,9 @@ func TestLogout_WrongMethod_Returns405(t *testing.T) {
 func newRotationCapableTestService(t *testing.T) (http.Handler, *store.Queries, *testutil.Clock, *auth.SessionManager) {
 	t.Helper()
 
-	q := newTestQueries(t)
-	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, q)
+	pool := newTestPool(t)
+	q := store.New(pool)
+	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, pool)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

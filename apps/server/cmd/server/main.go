@@ -85,7 +85,7 @@ func run() error {
 		return fmt.Errorf("parse public runtime: %w", err)
 	}
 
-	authService, err := auth.NewService(logger, cfg, store.New(pool))
+	authService, err := auth.NewService(logger, cfg, pool)
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
 	}

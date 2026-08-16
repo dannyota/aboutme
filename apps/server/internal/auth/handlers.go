@@ -15,10 +15,10 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/oauth2"
 
+	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -74,20 +74,24 @@ func isUniqueViolation(err error) bool {
 // settingsSessionsPath is the success and error target for privileged callbacks.
 const settingsSessionsPath = "/app/settings/sessions"
 
-// sessionIssuer is the callback's injectable session-issuance seam.
+// sessionIssuer is the callback's injectable session-issuance seam. It exposes
+// the transaction-scoped primitive only: the caller already holds the user row
+// lock in the same transaction.
 type sessionIssuer interface {
-	Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error)
+	IssueTx(ctx context.Context, qtx *store.Queries, user store.User, ua, ip string) (SessionIssue, error)
 }
 
 // Service implements the OAuth login HTTP surface for Google, GitHub, and
 // LinkedIn. It holds shared transaction and session machinery plus each
 // provider's credentials.
 type Service struct {
-	tx       *TransactionStore
-	q        *store.Queries
-	sessions sessionIssuer
-	// sessionMgr supplies the full session surface; sessions narrows issuance
-	// so tests can inject failures without replacing authentication.
+	tx   *TransactionStore
+	q    *store.Queries
+	pool *store.Pool
+	// sessions is the injectable issuance seam; sessionMgr supplies the full
+	// session surface so tests can inject failures without replacing
+	// authentication.
+	sessions   sessionIssuer
 	sessionMgr *SessionManager
 	logger     *slog.Logger
 
@@ -121,15 +125,19 @@ type Service struct {
 }
 
 // NewService builds a Service without network I/O. Provider discovery is lazy
-// and cached. A nil logger disables auth logging.
-func NewService(logger *slog.Logger, cfg config.Config, q *store.Queries) (*Service, error) {
+// and cached. A nil logger disables auth logging. pool may be nil for callers
+// that only exercise route registration or provider discovery, never the login
+// callback; every callback requires it to open the D4 user-lock transaction.
+func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Service, error) {
 	if cfg.PublicOrigin == "" {
 		return nil, fmt.Errorf("auth: NewService: config.PublicOrigin is required")
 	}
-	sessionMgr := NewSessionManager(q)
+	q := store.New(pool)
+	sessionMgr := NewSessionManagerWithPool(pool)
 	return &Service{
 		tx:                      NewTransactionStore(q),
 		q:                       q,
+		pool:                    pool,
 		sessions:                sessionMgr,
 		sessionMgr:              sessionMgr,
 		logger:                  logger,
@@ -381,103 +389,52 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: IssueTx tolerates an empty ip
+	ua := r.UserAgent()
+
+	rawSession, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
+		Provider: ProviderGoogle,
+		Subject:  idToken.Subject,
+	}, ua, clientIP)
+	if err != nil {
+		s.writeInternalError(w, r, ProviderGoogle, "resolve_provider_login", err)
+		return
+	}
+	if found {
+		SetSessionCookie(w, rawSession)
+		ClearOAuthTxCookie(w)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		return
+	}
+
+	// A new subject requires a verified, canonical email.
 	if claims.Email == "" || !claims.EmailVerified {
 		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, emailNotVerifiedErrorCode, reasonEmailNotVerified)
 		return
 	}
-
-	result, err := s.resolveLoginIdentity(ctx, ProviderGoogle, idToken.Subject, claims.Email, claims.Name)
+	canonicalEmail, err := accountemail.Canonicalize(claims.Email)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderGoogle, "resolve_login_identity", err)
-		return
-	}
-	if result.Kind == loginResultEmailCollision {
-		s.redirectEmailAlreadyRegistered(w, r, ProviderGoogle)
+		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, emailNotVerifiedErrorCode, reasonEmailNotVerified)
 		return
 	}
 
-	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
-	rawSession, _, err := s.sessions.Issue(ctx, result.User.ID, r.UserAgent(), clientIP)
+	rawSession, err = s.createProviderLogin(ctx, NewProviderAccount{
+		Subject:       ProviderSubject{Provider: ProviderGoogle, Subject: idToken.Subject},
+		VerifiedEmail: canonicalEmail,
+		Name:          claims.Name,
+	}, ua, clientIP)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderGoogle, "issue_session", err)
+		if errors.Is(err, errEmailAlreadyRegistered) {
+			s.redirectEmailAlreadyRegistered(w, r, ProviderGoogle)
+			return
+		}
+		s.writeInternalError(w, r, ProviderGoogle, "create_provider_login", err)
 		return
 	}
 
 	SetSessionCookie(w, rawSession)
 	ClearOAuthTxCookie(w)
 	http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
-}
-
-// loginResultKind is resolveLoginIdentity's three-way outcome.
-type loginResultKind int
-
-// resolveLoginIdentity has three closed outcomes.
-const (
-	loginResultNewUser loginResultKind = iota
-	loginResultExistingIdentity
-	loginResultEmailCollision
-)
-
-// loginResult carries a user only for new-user and existing-identity outcomes.
-type loginResult struct {
-	Kind loginResultKind
-	User store.User
-}
-
-// resolveLoginIdentity never merges by email. Provider identity wins for a
-// returning login. A verified email owned without that identity yields a
-// collision and no write. Otherwise it creates the user and identity. An empty
-// name falls back to the email local part. See docs/design/security.md.
-func (s *Service) resolveLoginIdentity(ctx context.Context, provider Provider, providerUserID, email, name string) (loginResult, error) {
-	identity, err := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
-		Provider:       string(provider),
-		ProviderUserID: providerUserID,
-	})
-	if err == nil {
-		usr, getErr := s.q.GetUserByID(ctx, identity.UserID)
-		if getErr != nil {
-			return loginResult{}, fmt.Errorf("auth: resolve login identity: get user: %w", getErr)
-		}
-		return loginResult{Kind: loginResultExistingIdentity, User: usr}, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return loginResult{}, fmt.Errorf("auth: resolve login identity: get identity: %w", err)
-	}
-
-	if _, getErr := s.q.GetUserByEmail(ctx, email); getErr == nil {
-		// No provider identity exists, so this email belongs to another account.
-		return loginResult{Kind: loginResultEmailCollision}, nil
-	} else if !errors.Is(getErr, pgx.ErrNoRows) {
-		return loginResult{}, fmt.Errorf("auth: resolve login identity: get user by email: %w", getErr)
-	}
-
-	if name == "" {
-		// Never expose the full email as the display name.
-		name = emailLocalPart(email)
-	}
-
-	usr, err := s.q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: name})
-	if err != nil {
-		if isUniqueViolation(err) {
-			// A concurrent registration may win after the lookup. Re-read to
-			// classify the same email collision.
-			if _, getErr := s.q.GetUserByEmail(ctx, email); getErr == nil {
-				return loginResult{Kind: loginResultEmailCollision}, nil
-			} else if !errors.Is(getErr, pgx.ErrNoRows) {
-				return loginResult{}, fmt.Errorf("auth: resolve login identity: get user by email after race: %w", getErr)
-			}
-			// A missing row after the constraint error is an internal anomaly.
-		}
-		return loginResult{}, fmt.Errorf("auth: resolve login identity: create user: %w", err)
-	}
-	if _, err := s.q.CreateIdentity(ctx, store.CreateIdentityParams{
-		UserID:         usr.ID,
-		Provider:       string(provider),
-		ProviderUserID: providerUserID,
-	}); err != nil {
-		return loginResult{}, fmt.Errorf("auth: resolve login identity: create identity: %w", err)
-	}
-	return loginResult{Kind: loginResultNewUser, User: usr}, nil
 }
 
 // emailLocalPart returns the text before "@", or the input when absent.

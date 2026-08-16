@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 
+	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 )
 
@@ -221,6 +222,25 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: IssueTx tolerates an empty ip
+	ua := r.UserAgent()
+
+	rawSession, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
+		Provider: ProviderGitHub,
+		Subject:  providerUserID,
+	}, ua, clientIP)
+	if err != nil {
+		s.writeInternalError(w, r, ProviderGitHub, "resolve_provider_login", err)
+		return
+	}
+	if found {
+		SetSessionCookie(w, rawSession)
+		ClearOAuthTxCookie(w)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		return
+	}
+
+	// A new subject fetches a verified primary email, then canonicalizes it.
 	var emails []githubEmail
 	if err = s.githubAPIGet(ctx, client, "/user/emails", &emails); err != nil {
 		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonGitHubUserEmailsAPIFailed)
@@ -231,21 +251,23 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, emailNotVerifiedErrorCode, reasonGitHubNoVerifiedPrimaryEmail)
 		return
 	}
-
-	result, err := s.resolveLoginIdentity(ctx, ProviderGitHub, providerUserID, email, githubDisplayName(user))
+	canonicalEmail, err := accountemail.Canonicalize(email)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderGitHub, "resolve_login_identity", err)
-		return
-	}
-	if result.Kind == loginResultEmailCollision {
-		s.redirectEmailAlreadyRegistered(w, r, ProviderGitHub)
+		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, emailNotVerifiedErrorCode, reasonGitHubNoVerifiedPrimaryEmail)
 		return
 	}
 
-	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
-	rawSession, _, err := s.sessions.Issue(ctx, result.User.ID, r.UserAgent(), clientIP)
+	rawSession, err = s.createProviderLogin(ctx, NewProviderAccount{
+		Subject:       ProviderSubject{Provider: ProviderGitHub, Subject: providerUserID},
+		VerifiedEmail: canonicalEmail,
+		Name:          githubDisplayName(user),
+	}, ua, clientIP)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderGitHub, "issue_session", err)
+		if errors.Is(err, errEmailAlreadyRegistered) {
+			s.redirectEmailAlreadyRegistered(w, r, ProviderGitHub)
+			return
+		}
+		s.writeInternalError(w, r, ProviderGitHub, "create_provider_login", err)
 		return
 	}
 

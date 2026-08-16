@@ -280,7 +280,7 @@ func TestGitHubCallback_NoOIDCImportInPackage(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"resolveLinkOrReauth", "resolveLoginIdentity", "redirectAuthFailed"} {
+	for _, name := range []string{"resolveLinkOrReauth", "resolveProviderLogin", "createProviderLogin", "redirectAuthFailed"} {
 		if !visitedNames[name] {
 			t.Errorf("GitHub callback guard did not reach shared helper %s; the static path check is incomplete", name)
 		}

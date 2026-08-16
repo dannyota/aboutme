@@ -289,12 +289,13 @@ func TestGoogleCallback_LinkOrReauth_RotatedRequest_MismatchStillCarriesSuccesso
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	q := newTestQueries(t)
+	pool := newTestPool(t)
+	q := store.New(pool)
 	svc, err := auth.NewServiceForTest(testLogger(), config.Config{
 		PublicOrigin:       testPublicOrigin,
 		GoogleClientID:     oidctest.DefaultClientID,
 		GoogleClientSecret: "test-google-client-secret",
-	}, q, p.URL, "", "")
+	}, pool, p.URL, "", "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
