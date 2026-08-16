@@ -13,7 +13,7 @@ fail() {
   exit 1
 }
 
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 for file in \
@@ -32,6 +32,7 @@ digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
 for file in \
   deploy/dev-https-browser/editor.spec.ts \
   deploy/dev-https-browser/public.spec.ts \
+  deploy/dev-https-browser/password-auth.spec.ts \
   deploy/dev-https-browser/editor-fixtures.ts; do
   grep -Eq "^[[:blank:]]*${file//./\\.}[[:blank:]]+\\\\$" "$ROOT/Makefile" ||
     fail "browser source hash does not include ${file##*/}"
@@ -50,7 +51,7 @@ readonly IMAGE_META=$WORK/image.meta
 readonly INPUT=$WORK/input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'static-test-only' \
@@ -92,6 +93,7 @@ build)
   grep -Fq 'transport.spec.ts' "$context/Dockerfile"
   grep -Fq 'editor.spec.ts' "$context/Dockerfile"
   grep -Fq 'public.spec.ts' "$context/Dockerfile"
+  grep -Fq 'password-auth.spec.ts' "$context/Dockerfile"
   grep -Fq 'editor-fixtures.ts' "$context/Dockerfile"
   printf '%s\n' built >"$FAKE_IMAGE_META"
   ;;
@@ -123,7 +125,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public)
+  transport | editor | public | password-auth)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -246,6 +248,30 @@ image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
 [ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = editor ] ||
   fail 'editor mode was not passed after the verified image ID'
 
+readonly PASSWORD_INPUT=$WORK/password-input
+readonly PASSWORD_EVIDENCE=$WORK/password-evidence
+install -d -m 0700 "$PASSWORD_INPUT" "$PASSWORD_EVIDENCE"
+cp -- "$INPUT/caddy-root.crt" "$PASSWORD_INPUT/caddy-root.crt"
+printf '%s\n' 'static-test-capture-token' >"$PASSWORD_INPUT/mail-capture-token"
+chmod 0600 "$PASSWORD_INPUT/mail-capture-token"
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$PASSWORD_INPUT" "$PASSWORD_EVIDENCE" password-auth
+tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
+grep -Fxq password-auth "$READABLE_LOG" ||
+  fail 'password-auth mode did not reach the image'
+image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
+[ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = password-auth ] ||
+  fail 'password-auth mode was not passed after the verified image ID'
+
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$PASSWORD_EVIDENCE" password-auth 2>&1); then
+  fail 'password-auth accepted a single-file CA input'
+fi
+grep -Fq 'CA input must contain the Caddy root and the capture token' \
+  <<<"$output" ||
+  fail 'password-auth single-file input returned the wrong diagnostic'
+
 readonly INVALID_MODE_EVIDENCE=$WORK/invalid-mode-evidence
 install -d -m 0700 "$INVALID_MODE_EVIDENCE"
 : >"$CALL_LOG"
@@ -253,7 +279,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, or public' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, or password-auth' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -281,8 +307,8 @@ grep -Fq '/uat-input/caddy-root.crt' "$SOURCE/run.sh" ||
   fail 'runner does not use the closed CA path'
 grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
-grep -Fqx "const timeout = mode === 'editor' || mode === 'public' ? 120_000 : 30_000;" \
-  "$SOURCE/playwright.config.ts" || fail 'editor/public timeout is not explicitly bounded'
+grep -Fqx "const timeout = mode === 'editor' || mode === 'public' || mode === 'password-auth'" \
+  "$SOURCE/playwright.config.ts" || fail 'editor/public/password timeout is not explicitly bounded'
 grep -Fq '  timeout,' "$SOURCE/playwright.config.ts" ||
   fail 'Playwright does not use the bounded mode timeout'
 
@@ -420,6 +446,15 @@ if grep -Fq 'proves authenticated transport preserves cache and precondition byt
   <<<"$EDITOR_LIST_OUTPUT"; then
   fail 'editor mode listed the transport proof'
 fi
+readonly PASSWORD_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=password-auth \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
+grep -Fq 'proves password authentication over native HTTPS' \
+  <<<"$PASSWORD_LIST_OUTPUT" ||
+  fail 'Playwright could not compile and list the password-auth proof'
+if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
+  <<<"$PASSWORD_LIST_OUTPUT"; then
+  fail 'password-auth mode listed the auth proof'
+fi
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
@@ -518,6 +553,7 @@ malformed)
   case " $* " in
   *' editor.spec.ts '*) evidence=editor-proof.json ;;
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
+  *' password-auth.spec.ts '*) evidence=password-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -526,6 +562,7 @@ oversized)
   case " $* " in
   *' editor.spec.ts '*) evidence=editor-proof.json ;;
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
+  *' password-auth.spec.ts '*) evidence=password-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -551,6 +588,17 @@ JSON
   "scenario": "authenticated-transport",
   "schemaVersion": 1,
   "steps": {"auth": true, "cache": true, "etag": true, "ifMatch": true, "teardown": true}
+}
+JSON
+    ;;
+  *' password-auth.spec.ts '*)
+    cat >"$FAKE_INSIDE_EVIDENCE/password-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "password-authentication",
+  "schemaVersion": 1,
+  "steps": {"differentEmailLink": true, "newPasswordLogin": true, "oldPasswordRejected": true, "oldSessionsRevoked": true, "passwordAdded": true, "passwordLogin": true, "providerOnlyLogin": true, "registerAccepted": true, "reset": true, "resetReplayRejected": true, "verifiedWithoutSession": true}
 }
 JSON
     ;;
@@ -640,7 +688,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, or public' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, or password-auth' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -800,5 +848,31 @@ if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized editor evidence returned the wrong diagnostic'
+
+reset_inside
+printf '%s\n' 'static-test-capture-token' >"$INSIDE_INPUT/mail-capture-token"
+chmod 0600 "$INSIDE_INPUT/mail-capture-token"
+readonly PASSWORD_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside password-auth)
+grep -Fq 'dev-https-browser password-authentication proof: PASS' \
+  <<<"$PASSWORD_INSIDE_OUTPUT" ||
+  fail 'inside-container password-auth success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts password-auth.spec.ts' \
+  "$BROWSER_LOG" ||
+  fail 'focused password-auth invocation drifted'
+grep -Fxq 'MODE=password-auth' "$BROWSER_LOG" ||
+  fail 'password-auth mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/password-proof.json" ] ||
+  fail 'password-auth evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/password-proof.json")" = 600 ] ||
+  fail 'password-auth evidence mode drifted'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside password-auth 2>&1); then
+  fail 'malformed password-auth evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed password-auth evidence returned the wrong diagnostic'
+rm -- "$INSIDE_INPUT/mail-capture-token"
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

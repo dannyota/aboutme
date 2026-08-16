@@ -17,8 +17,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts \
     && npm cache clean --force
 
-COPY playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts editor-fixtures.ts network-policy.ts run.sh ./
-RUN chmod 0444 package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts editor-fixtures.ts network-policy.ts \
+COPY playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts run.sh ./
+RUN chmod 0444 package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts \
     && chmod 0555 run.sh
 
 USER pwuser

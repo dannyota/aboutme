@@ -2,6 +2,8 @@ package uatmock
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -69,6 +71,53 @@ func TestGoogleFlowUsesRealDiscoveryExchangeAndVerification(t *testing.T) {
 		t.Fatalf("decode claims: %v", err)
 	}
 	if claims.Subject != "uat-google-001" || claims.Email != "developer@example.invalid" || !claims.EmailVerified || claims.Name != "Development User" {
+		t.Fatalf("claims = %+v", claims)
+	}
+}
+
+func TestGoogleFlowIssuesSelectedAccountClaims(t *testing.T) {
+	svc := newTestService(t)
+	form := validAuthorizeQuery()
+	form.Set("account", "uat-google-002")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	svc.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("authorize = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	redirect, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse redirect: %v", err)
+	}
+
+	exchange := exchangeThroughHandler(t, svc.Handler(), redirect.Query().Get("code"), testVerifier)
+	if exchange.Code != http.StatusOK {
+		t.Fatalf("exchange = %d, body = %s", exchange.Code, exchange.Body.String())
+	}
+	var token struct {
+		IDToken string `json:"id_token"`
+	}
+	if err := json.Unmarshal(exchange.Body.Bytes(), &token); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	parts := strings.Split(token.IDToken, ".")
+	if len(parts) != 3 {
+		t.Fatalf("id_token parts = %d", len(parts))
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decode id_token payload: %v", err)
+	}
+	var claims struct {
+		Subject string `json:"sub"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		t.Fatalf("decode claims: %v", err)
+	}
+	if claims.Subject != "uat-google-002" || claims.Email != "alice@example.invalid" || claims.Name != "Alice Local" {
 		t.Fatalf("claims = %+v", claims)
 	}
 }

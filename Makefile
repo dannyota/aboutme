@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check p5a-native-http-check
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check p5a-native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
@@ -20,6 +20,7 @@ DEV_HTTPS_BROWSER_SOURCES := \
 	deploy/dev-https-browser/transport.spec.ts \
 	deploy/dev-https-browser/editor.spec.ts \
 	deploy/dev-https-browser/public.spec.ts \
+	deploy/dev-https-browser/password-auth.spec.ts \
 	deploy/dev-https-browser/editor-fixtures.ts \
 	deploy/dev-https-browser/network-policy.ts \
 	deploy/dev-https-browser/run.sh
@@ -349,6 +350,62 @@ dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-
 	done; } | sha256sum | awk '{print $$1}') || { echo "$$target: cannot rehash browser sources" >&2; exit 1; }; \
 	[ "$$current_source_after" = "$$recorded_source" ] || { echo "$$target: browser sources changed during check" >&2; exit 1; }; \
 	printf '%s evidence: %s\n' "$$target" "$$evidence"
+
+dev-https-password-check: dev-https-status ## Prove password authentication over native HTTPS and retain only bounded local evidence
+	@set -Eeuo pipefail; \
+	repo=$$(pwd -P); \
+	state="$$repo/.dev/native-https"; \
+	manifest="$$repo/$(DEV_HTTPS_BROWSER_MANIFEST)"; \
+	input="$$state/input"; \
+	evidence_root="$$state/evidence"; \
+	uid=$$(id -u); \
+	[ -d "$$state" ] && [ ! -L "$$state" ] && [ "$$(realpath -e -- "$$state")" = "$$state" ] || { echo 'dev-https-password-check: invalid state directory' >&2; exit 1; }; \
+	[ "$$(stat -c %u "$$state")" = "$$uid" ] && [ "$$(stat -c %a "$$state")" = 700 ] || { echo 'dev-https-password-check: state directory ownership or mode mismatch' >&2; exit 1; }; \
+	[ -f "$$manifest" ] && [ ! -L "$$manifest" ] && [ "$$(stat -c %u "$$manifest")" = "$$uid" ] && [ "$$(stat -c %a "$$manifest")" = 600 ] || { echo 'dev-https-password-check: invalid browser image manifest' >&2; exit 1; }; \
+	mapfile -t manifest_lines <"$$manifest"; \
+	[ "$${#manifest_lines[@]}" -eq 2 ] || { echo 'dev-https-password-check: malformed browser image manifest' >&2; exit 1; }; \
+	[[ $${manifest_lines[0]} =~ ^image_id=(sha256:[0-9a-f]{64})$$ ]] || { echo 'dev-https-password-check: malformed browser image ID' >&2; exit 1; }; \
+	image_id=$${BASH_REMATCH[1]}; \
+	[[ $${manifest_lines[1]} =~ ^source_sha256=([0-9a-f]{64})$$ ]] || { echo 'dev-https-password-check: malformed browser source hash' >&2; exit 1; }; \
+	recorded_source=$${BASH_REMATCH[1]}; \
+	current_source=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
+	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
+	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
+	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-password-check: cannot hash browser sources' >&2; exit 1; }; \
+	[ "$$current_source" = "$$recorded_source" ] || { echo 'dev-https-password-check: browser sources changed after image build' >&2; exit 1; }; \
+	[ -f "$$state/secrets/auth-email-capture-bearer" ] && [ ! -L "$$state/secrets/auth-email-capture-bearer" ] && [ "$$(stat -c %u "$$state/secrets/auth-email-capture-bearer")" = "$$uid" ] || { echo 'dev-https-password-check: invalid capture secret' >&2; exit 1; }; \
+	[ -f "$$input/caddy-root.crt" ] && [ ! -L "$$input/caddy-root.crt" ] || { echo 'dev-https-password-check: invalid Caddy root' >&2; exit 1; }; \
+	password_input="$$state/password-input"; \
+	install -d -m 0700 "$$password_input"; \
+	cp -- "$$input/caddy-root.crt" "$$password_input/caddy-root.crt"; \
+	chmod 0600 "$$password_input/caddy-root.crt"; \
+	base64 -w0 -- "$$state/secrets/auth-email-capture-bearer" | tr '+/' '-_' | tr -d '=' >"$$password_input/mail-capture-token"; \
+	chmod 0600 "$$password_input/mail-capture-token"; \
+	if [[ -e "$$evidence_root" || -L "$$evidence_root" ]]; then \
+	  [ -d "$$evidence_root" ] && [ ! -L "$$evidence_root" ] && [ "$$(realpath -e -- "$$evidence_root")" = "$$evidence_root" ] || { echo 'dev-https-password-check: invalid evidence root' >&2; exit 1; }; \
+	  [ "$$(stat -c %u "$$evidence_root")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence_root")" = 700 ] || { echo 'dev-https-password-check: evidence root ownership or mode mismatch' >&2; exit 1; }; \
+	else \
+	  install -d -m 0700 "$$evidence_root"; \
+	fi; \
+	evidence=$$(mktemp -d "$$evidence_root/password.XXXXXX"); \
+	[ "$$(stat -c %u "$$evidence")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence")" = 700 ] || { echo 'dev-https-password-check: evidence directory ownership or mode mismatch' >&2; exit 1; }; \
+	install -d -m 0700 "$$repo/.dev/bin"; \
+	(cd "$$repo/apps/server" && go build -o "$$repo/.dev/bin/password-auth-fixture" ./cmd/password-auth-fixture) || { echo 'dev-https-password-check: fixture build failed' >&2; exit 1; }; \
+	native_dsn='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'; \
+	"$$repo/.dev/bin/password-auth-fixture" cleanup --database-url "$$native_dsn"; \
+	"$$repo/.dev/bin/password-auth-fixture" seed --database-url "$$native_dsn"; \
+	capture_token=$$(base64 -w0 -- "$$state/secrets/auth-email-capture-bearer" | tr '+/' '-_' | tr -d '='); \
+	curl -fsS -X DELETE -H "Authorization: Bearer $$capture_token" "http://127.0.0.1:20444/api/messages"; \
+	deploy/dev-https-browser/run.sh "$$image_id" "$$password_input" "$$evidence" password-auth && status=0 || status=$$?; \
+	"$$repo/.dev/bin/password-auth-fixture" cleanup --database-url "$$native_dsn"; \
+	rm -rf -- "$$password_input"; \
+	[ "$$status" -eq 0 ] || { echo 'dev-https-password-check: password proof failed' >&2; exit "$$status"; }; \
+	current_source_after=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
+	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
+	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
+	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-password-check: cannot rehash browser sources' >&2; exit 1; }; \
+	[ "$$current_source_after" = "$$recorded_source" ] || { echo 'dev-https-password-check: browser sources changed during check' >&2; exit 1; }; \
+	printf 'dev-https-password-check evidence: %s\n' "$$evidence"
 
 p5a-native-http-check: ## Run the deterministic native public HTTP capture and retain only bounded local evidence
 	bash scripts/p5a-native-http-capture.sh

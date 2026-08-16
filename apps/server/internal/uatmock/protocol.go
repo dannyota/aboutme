@@ -29,6 +29,7 @@ type codeBinding struct {
 	redirectURL   string
 	codeChallenge string
 	nonce         string
+	account       account
 }
 
 type discoveryDocument struct {
@@ -61,7 +62,7 @@ var authorizeTemplate = template.Must(template.New("authorize").Parse(`<!doctype
   <h1>Choose a local Google account</h1>
   <form method="post" action="` + authorizePath + `">
     {{range .Fields}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
-    <fieldset><legend>Google account</legend><label><input type="radio" name="account" value="uat-google-001" checked> Development User — developer@example.invalid</label></fieldset>
+    <fieldset><legend>Google account</legend>{{range $i, $a := .Accounts}}<label><input type="radio" name="account" value="{{$a.Subject}}"{{if eq $i 0}} checked{{end}}> {{$a.Name}} — {{$a.Email}}</label>{{end}}</fieldset>
     <button type="submit">Continue with Google</button>
   </form>
 </main>
@@ -114,7 +115,10 @@ func (s *Service) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 			fields = append(fields, formField{Name: name, Value: values.Get(name)})
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := authorizeTemplate.Execute(w, struct{ Fields []formField }{Fields: fields}); err != nil {
+		if err := authorizeTemplate.Execute(w, struct {
+			Fields   []formField
+			Accounts []account
+		}{Fields: fields, Accounts: googleAccounts}); err != nil {
 			http.Error(w, "authorization page unavailable", http.StatusInternalServerError)
 		}
 	case http.MethodPost:
@@ -122,10 +126,16 @@ func (s *Service) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		binding, ok := s.authorizeBinding(r.PostForm)
-		if !ok || !oneBoundedValue(r.PostForm, "account") || r.PostForm.Get("account") != googleSubject {
+		if !ok || !oneBoundedValue(r.PostForm, "account") {
 			http.Error(w, "invalid authorization request", http.StatusBadRequest)
 			return
 		}
+		selected, ok := accountBySubject(r.PostForm.Get("account"))
+		if !ok {
+			http.Error(w, "invalid authorization request", http.StatusBadRequest)
+			return
+		}
+		binding.account = selected
 		code, err := s.storeCode(binding)
 		if err != nil {
 			http.Error(w, "authorization unavailable", http.StatusInternalServerError)
@@ -237,7 +247,7 @@ func (s *Service) serveToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idToken, err := s.signIDToken(binding.nonce)
+	idToken, err := s.signIDToken(binding.nonce, binding.account)
 	if err != nil {
 		http.Error(w, "token unavailable", http.StatusInternalServerError)
 		return
@@ -265,15 +275,15 @@ func validPKCEVerifier(value string) bool {
 	return true
 }
 
-func (s *Service) signIDToken(nonce string) (string, error) {
+func (s *Service) signIDToken(nonce string, acct account) (string, error) {
 	now := s.cfg.Now()
 	payload, err := json.Marshal(map[string]any{
 		"iss":            s.cfg.IssuerURL,
 		"aud":            s.cfg.ClientID,
-		"sub":            googleSubject,
-		"email":          googleEmail,
+		"sub":            acct.Subject,
+		"email":          acct.Email,
 		"email_verified": true,
-		"name":           googleName,
+		"name":           acct.Name,
 		"nonce":          nonce,
 		"iat":            now.Unix(),
 		"exp":            now.Add(time.Duration(accessTokenLifetimeSeconds) * time.Second).Unix(),

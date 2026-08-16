@@ -24,8 +24,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport | editor | public) ;;
-  *) fail 'mode must be auth, transport, editor, or public' ;;
+  auth | transport | editor | public | password-auth) ;;
+  *) fail 'mode must be auth, transport, editor, public, or password-auth' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -64,14 +64,27 @@ inside_container() {
   [ "$(stat -c %a /evidence)" = 700 ] || fail 'evidence mode must be 0700'
   [ -w /evidence ] || fail 'evidence output is not writable'
 
-  input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n')
-  [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
+  input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+  if [ "$mode" = password-auth ]; then
+    [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
+      fail 'CA input must contain the Caddy root and the capture token'
+  else
+    [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
+  fi
   [ -f /uat-input/caddy-root.crt ] && [ ! -L /uat-input/caddy-root.crt ] ||
     fail 'Caddy root is not a regular file'
   [ "$(stat -c %u /uat-input/caddy-root.crt)" = "$uid" ] ||
     fail 'Caddy root owner mismatch'
   [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
     fail 'Caddy root mode must be 0600'
+  if [ "$mode" = password-auth ]; then
+    [ -f /uat-input/mail-capture-token ] && [ ! -L /uat-input/mail-capture-token ] ||
+      fail 'capture token is not a regular file'
+    [ "$(stat -c %u /uat-input/mail-capture-token)" = "$uid" ] ||
+      fail 'capture token owner mismatch'
+    [ "$(stat -c %a /uat-input/mail-capture-token)" = 600 ] ||
+      fail 'capture token mode must be 0600'
+  fi
   evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
 
@@ -112,6 +125,12 @@ inside_container() {
     evidence_limit=4096
     proof_name=public
     spec=public.spec.ts
+    ;;
+  password-auth)
+    evidence_name=password-proof.json
+    evidence_limit=4096
+    proof_name=password-authentication
+    spec=password-auth.spec.ts
     ;;
   esac
   local log_file=/tmp/playwright-uat.log status=0
@@ -174,6 +193,23 @@ const expected = mode === 'auth' ? {
   origin: 'https://localhost:20443',
   errors: { console: 0, externalRequest: 0, page: 0 },
   steps: { published: true, ssr: true, hydrated: true },
+} : mode === 'password-auth' ? {
+  ...common,
+  scenario: 'password-authentication',
+  schemaVersion: 1,
+  steps: {
+    differentEmailLink: true,
+    newPasswordLogin: true,
+    oldPasswordRejected: true,
+    oldSessionsRevoked: true,
+    passwordAdded: true,
+    passwordLogin: true,
+    providerOnlyLogin: true,
+    registerAccepted: true,
+    reset: true,
+    resetReplayRejected: true,
+    verifiedWithoutSession: true,
+  },
 } : {
   schemaVersion: 1,
   scenario: 'authenticated-editor',
@@ -205,11 +241,11 @@ VERIFY_EVIDENCE
 
 host_run() {
   [ "$#" -ge 3 ] && [ "$#" -le 4 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory> [auth|transport|editor]'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth]'
   local image=$1 input=$2 evidence=$3 mode=${4:-auth}
   case $mode in
-  auth | transport | editor | public) ;;
-  *) fail 'mode must be auth, transport, editor, or public' ;;
+  auth | transport | editor | public | password-auth) ;;
+  *) fail 'mode must be auth, transport, editor, public, or password-auth' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
@@ -234,14 +270,27 @@ host_run() {
   [ "$(stat -c %a "$evidence")" = 700 ] || fail 'evidence mode must be 0700'
   [ -w "$evidence" ] || fail 'evidence output is not writable'
 
-  input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n')
-  [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
+  input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+  if [ "$mode" = password-auth ]; then
+    [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
+      fail 'CA input must contain the Caddy root and the capture token'
+  else
+    [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
+  fi
   [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
     fail 'Caddy root is not a regular file'
   [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
     fail 'Caddy root owner mismatch'
   [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
     fail 'Caddy root mode must be 0600'
+  if [ "$mode" = password-auth ]; then
+    [ -f "$input/mail-capture-token" ] && [ ! -L "$input/mail-capture-token" ] ||
+      fail 'capture token is not a regular file'
+    [ "$(stat -c %u "$input/mail-capture-token")" = "$uid" ] ||
+      fail 'capture token owner mismatch'
+    [ "$(stat -c %a "$input/mail-capture-token")" = 600 ] ||
+      fail 'capture token mode must be 0600'
+  fi
   evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
   command -v podman >/dev/null || fail 'podman is required'
