@@ -12,7 +12,7 @@ handle @aboutme_fixed_go {
 	}
 }
 
-@aboutme_fixed_nuxt path /app /app/* /_nuxt /_nuxt/* /login /login/* /login.md
+@aboutme_fixed_nuxt path /app /app/* /forgot-password /forgot-password/* /forgot-password.md /_nuxt /_nuxt/* /login /login/* /login.md /register /register/* /register.md /reset-password /reset-password/* /reset-password.md /verify-email /verify-email/* /verify-email.md
 handle @aboutme_fixed_nuxt {
 	reverse_proxy web:3000
 }

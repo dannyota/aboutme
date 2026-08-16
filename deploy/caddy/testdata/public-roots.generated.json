@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "roots": [
     {
       "root": "admin",
@@ -11,6 +11,10 @@
     },
     {
       "root": "app",
+      "dispatch": "nuxt"
+    },
+    {
+      "root": "forgot-password",
       "dispatch": "nuxt"
     },
     {
@@ -46,6 +50,14 @@
       "dispatch": "go"
     },
     {
+      "root": "register",
+      "dispatch": "nuxt"
+    },
+    {
+      "root": "reset-password",
+      "dispatch": "nuxt"
+    },
+    {
       "root": "robots.txt",
       "dispatch": "go"
     },
@@ -56,6 +68,10 @@
     {
       "root": "u",
       "dispatch": "reserved"
+    },
+    {
+      "root": "verify-email",
+      "dispatch": "nuxt"
     }
   ]
 }

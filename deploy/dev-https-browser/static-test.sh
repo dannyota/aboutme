@@ -17,7 +17,7 @@ for file in Dockerfile package.json package-lock.json playwright.config.ts auth.
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 for file in \
-  packages/publicroots/public-roots.v4.json \
+  packages/publicroots/public-roots.v5.json \
   packages/publicroots/app-build-sources.v1.json \
   packages/publicroots/renderer-build-sources.v1.json \
   deploy/caddy/public-roots.generated.caddy; do
