@@ -101,7 +101,7 @@ func NewWorker(opts WorkerOptions) (*Worker, error) {
 	}, nil
 }
 
-// Run polls once per second until ctx is cancelled. A tick error is logged and
+// Run polls once per second until ctx is canceled. A tick error is logged and
 // the loop continues; cancellation returns nil promptly after in-flight sends
 // join (each send has its own ten-second deadline).
 func (w *Worker) Run(ctx context.Context) error {
@@ -124,7 +124,7 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // RunOnce runs one full tick: requeue expired leases, run the three bounded
 // cleanups, claim at most ten jobs, and send each claimed job with at most two
-// concurrent sends. It joins every send before returning, so a cancelled ctx
+// concurrent sends. It joins every send before returning, so a canceled ctx
 // leaves in-flight jobs in a recoverable leased state rather than a partial
 // finalize.
 func (w *Worker) RunOnce(ctx context.Context) error {
@@ -163,7 +163,7 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 		}()
 	}
 	wg.Wait()
-	return nil
+	return nil //nolint:nilerr // a canceled ctx stops new sends but is not a tick error; Run observes ctx.Done() to stop.
 }
 
 // requeueExpired returns every lease whose lease_expires_at has passed back to
@@ -174,7 +174,11 @@ func (w *Worker) requeueExpired(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.WithoutCancel(ctx))
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			w.logger.Warn("authmail: rollback transaction failed")
+		}
+	}()
 	qtx := w.queries.WithTx(tx)
 	if _, err := qtx.RequeueExpiredAuthEmailLeases(ctx, store.RequeueExpiredAuthEmailLeasesParams{
 		Now:       now,
@@ -221,7 +225,11 @@ func (w *Worker) deleteInTx(ctx context.Context, fn func(*store.Queries) error) 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.WithoutCancel(ctx))
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			w.logger.Warn("authmail: rollback transaction failed")
+		}
+	}()
 	if err := fn(w.queries.WithTx(tx)); err != nil {
 		return err
 	}
@@ -236,7 +244,11 @@ func (w *Worker) claim(ctx context.Context, now time.Time) ([]store.AuthEmailJob
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(context.WithoutCancel(ctx))
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			w.logger.Warn("authmail: rollback transaction failed")
+		}
+	}()
 	jobs, err := w.queries.WithTx(tx).ClaimAuthEmailJobs(ctx, store.ClaimAuthEmailJobsParams{
 		LeaseOwner:     w.id.String(),
 		LeaseExpiresAt: now.Add(leaseDuration),
@@ -271,7 +283,11 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(context.WithoutCancel(ctx))
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			w.logger.Warn("authmail: rollback transaction failed")
+		}
+	}()
 	qtx := w.queries.WithTx(tx)
 	now := w.clock()
 
@@ -315,14 +331,14 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		return nil
 	}
 	if !leased.ExpiresAt.After(now) {
-		if err := w.markTerminal(ctx, qtx, leased.ID, now); err != nil {
-			return err
+		if terminalErr := w.markTerminal(ctx, qtx, leased.ID, now); terminalErr != nil {
+			return terminalErr
 		}
 		return tx.Commit(ctx)
 	}
 	if scope != nil && !scope.tokenMatches(leased.TokenDigest) {
-		if err := w.markTerminal(ctx, qtx, leased.ID, now); err != nil {
-			return err
+		if terminalErr := w.markTerminal(ctx, qtx, leased.ID, now); terminalErr != nil {
+			return terminalErr
 		}
 		return tx.Commit(ctx)
 	}

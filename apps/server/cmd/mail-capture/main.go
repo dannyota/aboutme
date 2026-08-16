@@ -104,19 +104,19 @@ func run(cfg config, logger *slog.Logger) error {
 		return err
 	}
 
-	ln, err := net.Listen("tcp", cfg.addr)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", cfg.addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.addr, err)
 	}
-	defer ln.Close()
 
 	httpServer := &http.Server{
 		Handler:           server.Handler(),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	done := make(chan error, 1)
 	go func() {

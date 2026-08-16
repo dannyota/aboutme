@@ -109,7 +109,7 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,editor-fixtures.ts,network-policy.ts,run.sh} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,editor-fixtures.ts,network-policy.ts,run.sh} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
 printf '%s\n' 'static test root' > \
   "$HTTPS_REPO/.dev/native-https/input/caddy-root.crt"

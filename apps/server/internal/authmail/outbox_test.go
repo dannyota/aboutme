@@ -74,7 +74,7 @@ func isNilAny(a any) bool {
 	}
 	v := reflect.ValueOf(a)
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
 		return v.IsNil()
 	default:
 		return false
@@ -188,75 +188,75 @@ func TestOutboxEnqueueScopeMapping(t *testing.T) {
 			if len(args) != 13 {
 				t.Fatalf("arg count = %d, want 13", len(args))
 			}
-			if got := args[0].(uuid.UUID); got != req.JobID {
+			if got, ok := args[0].(uuid.UUID); !ok || got != req.JobID {
 				t.Errorf("id arg = %s, want %s", got, req.JobID)
 			}
-			if got := args[1].(string); got != tc.wantKind {
+			if got, ok := args[1].(string); !ok || got != tc.wantKind {
 				t.Errorf("kind arg = %q, want %q", got, tc.wantKind)
 			}
-			if got := args[2].(string); got != "pending" {
+			if got, ok := args[2].(string); !ok || got != "pending" {
 				t.Errorf("state arg = %q, want pending", got)
 			}
 
-			regGot, _ := args[3].(*uuid.UUID)
-			tokGot, _ := args[4].(*uuid.UUID)
-			usrGot, _ := args[5].(*uuid.UUID)
+			regGot, regOK := args[3].(*uuid.UUID)
+			tokGot, tokOK := args[4].(*uuid.UUID)
+			usrGot, usrOK := args[5].(*uuid.UUID)
 			switch tc.wantScopeIdx {
 			case 3:
-				if regGot == nil || *regGot != regID {
+				if !regOK || regGot == nil || *regGot != regID {
 					t.Errorf("registration arg = %v, want %s", args[3], regID)
 				}
-				if !isNilAny(args[4]) {
+				if !tokOK || !isNilAny(args[4]) {
 					t.Errorf("reset token arg = %v, want nil", args[4])
 				}
-				if !isNilAny(args[5]) {
+				if !usrOK || !isNilAny(args[5]) {
 					t.Errorf("user arg = %v, want nil", args[5])
 				}
 			case 4:
-				if tokGot == nil || *tokGot != tokID {
+				if !tokOK || tokGot == nil || *tokGot != tokID {
 					t.Errorf("reset token arg = %v, want %s", args[4], tokID)
 				}
-				if !isNilAny(args[3]) {
+				if !regOK || !isNilAny(args[3]) {
 					t.Errorf("registration arg = %v, want nil", args[3])
 				}
-				if !isNilAny(args[5]) {
+				if !usrOK || !isNilAny(args[5]) {
 					t.Errorf("user arg = %v, want nil", args[5])
 				}
 			case 5:
-				if usrGot == nil || *usrGot != userID {
+				if !usrOK || usrGot == nil || *usrGot != userID {
 					t.Errorf("user arg = %v, want %s", args[5], userID)
 				}
-				if !isNilAny(args[3]) {
+				if !regOK || !isNilAny(args[3]) {
 					t.Errorf("registration arg = %v, want nil", args[3])
 				}
-				if !isNilAny(args[4]) {
+				if !tokOK || !isNilAny(args[4]) {
 					t.Errorf("reset token arg = %v, want nil", args[4])
 				}
 			}
 
 			if tc.digest != nil {
-				if got := args[6].([]byte); !bytes.Equal(got, tc.digest[:]) {
+				if got, ok := args[6].([]byte); !ok || !bytes.Equal(got, tc.digest[:]) {
 					t.Errorf("token digest arg = %x, want %x", got, tc.digest[:])
 				}
 			} else if !isNilAny(args[6]) {
 				t.Errorf("token digest arg = %v, want nil", args[6])
 			}
-			if got := args[7].(*string); got == nil || *got != "k-active" {
+			if got, ok := args[7].(*string); !ok || got == nil || *got != "k-active" {
 				t.Errorf("key id arg = %v, want k-active", args[7])
 			}
-			if got := args[8].([]byte); len(got) != 12 {
+			if got, ok := args[8].([]byte); !ok || len(got) != 12 {
 				t.Errorf("nonce arg len = %d, want 12", len(got))
 			}
-			if got := args[9].([]byte); len(got) == 0 {
+			if got, ok := args[9].([]byte); !ok || len(got) == 0 {
 				t.Error("ciphertext arg empty")
 			}
-			if got := args[10].(time.Time); !got.Equal(testNow) {
+			if got, ok := args[10].(time.Time); !ok || !got.Equal(testNow) {
 				t.Errorf("created_at arg = %v, want %v", got, testNow)
 			}
-			if got := args[11].(time.Time); !got.Equal(req.ExpiresAt) {
+			if got, ok := args[11].(time.Time); !ok || !got.Equal(req.ExpiresAt) {
 				t.Errorf("expires_at arg = %v, want %v", got, req.ExpiresAt)
 			}
-			if got := args[12].(*time.Time); got == nil || !got.Equal(testNow) {
+			if got, ok := args[12].(*time.Time); !ok || got == nil || !got.Equal(testNow) {
 				t.Errorf("next_attempt_at arg = %v, want %v", args[12], testNow)
 			}
 		})
@@ -288,7 +288,10 @@ func TestOutboxEnqueueEncryptedOnlyInsert(t *testing.T) {
 	}
 	args := f.inserts[0].args
 
-	ct := args[9].([]byte)
+	ct, ctOK := args[9].([]byte)
+	if !ctOK {
+		t.Fatalf("ciphertext arg = %T, want []byte", args[9])
+	}
 	if bytes.Contains(ct, []byte(payload.To)) {
 		t.Error("ciphertext contains destination plaintext")
 	}
@@ -301,8 +304,8 @@ func TestOutboxEnqueueEncryptedOnlyInsert(t *testing.T) {
 
 	// The digest column holds only the 32-byte digest; the API has no raw-token
 	// field, so no raw token can ever reach the capture.
-	if !bytes.Equal(args[6].([]byte), digest[:]) {
-		t.Errorf("token digest arg = %x, want %x", args[5], digest[:])
+	if got, ok := args[6].([]byte); !ok || !bytes.Equal(got, digest[:]) {
+		t.Errorf("token digest arg = %x, want %x", got, digest[:])
 	}
 
 	dump := dumpArgs(args)
@@ -524,27 +527,27 @@ func TestOutboxEnqueueCommitsEncryptedJob(t *testing.T) {
 		Payload:        validVerifyPayload(),
 		ExpiresAt:      now.Add(time.Hour),
 	}
-	if err := o.EnqueueTx(ctx, qtx, req); err != nil {
-		t.Fatalf("EnqueueTx: %v", err)
+	if enqueueErr := o.EnqueueTx(ctx, qtx, req); enqueueErr != nil {
+		t.Fatalf("EnqueueTx: %v", enqueueErr)
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("Commit: %v", err)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		t.Fatalf("Commit: %v", commitErr)
 	}
 	// Deleting the registration cascades the job, keeping the shared DB clean.
 	t.Cleanup(func() {
-		if _, err := store.New(pool).DeletePasswordRegistration(context.Background(), regID); err != nil {
-			t.Errorf("cleanup delete registration: %v", err)
+		if _, cleanupErr := store.New(pool).DeletePasswordRegistration(context.Background(), regID); cleanupErr != nil {
+			t.Errorf("cleanup delete registration: %v", cleanupErr)
 		}
 	})
 
 	var kind, state, keyID string
 	var nonce, ciphertext, tokenDigest []byte
 	var reg uuid.UUID
-	if err := pool.QueryRow(ctx,
+	if scanErr := pool.QueryRow(ctx,
 		`SELECT kind, state, key_id, nonce, ciphertext, token_digest, registration_id
 		 FROM auth_email_jobs WHERE id = $1`, jobID,
-	).Scan(&kind, &state, &keyID, &nonce, &ciphertext, &tokenDigest, &reg); err != nil {
-		t.Fatalf("read job: %v", err)
+	).Scan(&kind, &state, &keyID, &nonce, &ciphertext, &tokenDigest, &reg); scanErr != nil {
+		t.Fatalf("read job: %v", scanErr)
 	}
 	if kind != "verify" || state != "pending" {
 		t.Fatalf("row = (kind=%s, state=%s), want (verify, pending)", kind, state)

@@ -233,13 +233,17 @@ func testRing(t *testing.T, n int) *KeyRing {
 // beginWorkerTx begins a transaction and guarantees it is rolled back when the
 // test ends, so a mid-test failure releases the pool connection instead of
 // hanging the pool.Close cleanup.
-func beginWorkerTx(t *testing.T, ctx context.Context, pool *store.Pool) pgx.Tx {
+func beginWorkerTx(ctx context.Context, t *testing.T, pool *store.Pool) pgx.Tx {
 	t.Helper()
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
-	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(ctx)) })
+	t.Cleanup(func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("Rollback() error: %v", rollbackErr)
+		}
+	})
 	return tx
 }
 
@@ -281,6 +285,7 @@ func newWorkerRegistration(ctx context.Context, t *testing.T, sp *store.Pool, no
 	if err != nil {
 		t.Fatalf("CreatePasswordRegistration: %v", err)
 	}
+	//nolint:contextcheck // the cleanup intentionally uses a bounded background context (see below), not the already-canceled test ctx.
 	t.Cleanup(func() {
 		// A bounded context so a leftover referenced row (an abandoned test tx)
 		// surfaces as an error instead of hanging the whole suite forever.
@@ -351,7 +356,7 @@ func TestWorkerRunOnceSendsAndMarksSent(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
 
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit: %v", err)
@@ -391,9 +396,11 @@ func TestWorkerTemporaryFailureRequeuesWithBackoff(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	// Identity jitter: next = now + backoffCap(attempt). First claim makes
 	// attempts = 1, so the cap is 30s.
@@ -425,9 +432,11 @@ func TestWorkerSenderErrorIsTemporary(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	// The sender claims success but returns a transport error: ambiguous, so the
 	// outcome is forced temporary and the job is requeued, not marked sent.
@@ -450,9 +459,11 @@ func TestWorkerTemporaryFailureAttempt8Terminal(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 	// Force attempts to 7 (after commit, so the row is visible) so the claim
 	// reaches 8, which must go terminal.
 	if _, err := sp.Exec(ctx, `UPDATE auth_email_jobs SET attempts = 7 WHERE id = $1`, jobID); err != nil {
@@ -476,9 +487,11 @@ func TestWorkerPermanentFailureTerminal(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	sender := &stubSender{result: SendResult{Outcome: SendPermanentFailure}}
 	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
@@ -497,9 +510,11 @@ func TestWorkerExpiryTerminalWithoutSend(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	clock.Advance(2 * time.Hour) // job expires after 1h
 
@@ -523,9 +538,11 @@ func TestWorkerReplacementTerminalWithoutSend(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	// Claim the job to this worker, then simulate a replacement that rotated
 	// the scope's token digest after the claim (scope-before-job ordering).
@@ -563,9 +580,11 @@ func TestWorkerMissingScopeTerminalOrCancelled(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
 	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
@@ -599,9 +618,11 @@ func TestWorkerStaleLeaseDoesNotSendOrFinalize(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	// Worker A claims the job, its lease lapses, and worker B claims it before
 	// A's send handoff runs. A must not send or finalize.
@@ -644,9 +665,11 @@ func TestWorkerRequeueExpiredRestoresPending(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	w := newTestWorker(t, sp, q, ring, &stubSender{result: SendResult{Outcome: SendAccepted}}, clock, nil, uuid.New())
 	claimed, err := w.claim(ctx, clock.Now())
@@ -686,9 +709,11 @@ func TestWorkerClaimStampsThirtySecondLease(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	w := newTestWorker(t, sp, q, ring, &stubSender{result: SendResult{Outcome: SendAccepted}}, clock, nil, uuid.New())
 	claimed, err := w.claim(ctx, clock.Now())
@@ -712,9 +737,11 @@ func TestWorkerSendDeadlineSet(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	probe := &deadlineProbeSender{deadline: make(chan time.Time, 1)}
 	w := newTestWorker(t, sp, q, ring, probe, clock, nil, uuid.New())
@@ -745,13 +772,15 @@ func TestWorkerTwoConcurrentSendsCap(t *testing.T) {
 	ring := testRing(t, 5)
 
 	const n = 5
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	qtx := q.WithTx(tx)
 	for i := 0; i < n; i++ {
 		regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
 		enqueueVerifyJob(ctx, t, qtx, ring, clock.Now, regID, digest)
 	}
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	sender := &countingSender{result: SendResult{Outcome: SendAccepted}}
 	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
@@ -773,13 +802,15 @@ func TestWorkerConcurrentWorkersSendEachJobOnce(t *testing.T) {
 	ring := testRing(t, 4)
 
 	const n = 4
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	qtx := q.WithTx(tx)
 	for i := 0; i < n; i++ {
 		regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
 		enqueueVerifyJob(ctx, t, qtx, ring, clock.Now, regID, digest)
 	}
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	shared := &countingSender{result: SendResult{Outcome: SendAccepted}}
 	var wg sync.WaitGroup
@@ -843,9 +874,11 @@ func TestWorkerCancellationLeavesRecoverableLease(t *testing.T) {
 	clock := testutil.NewClockAtEpoch()
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-	tx := beginWorkerTx(t, ctx, sp)
+	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, clock.Now, regID, digest)
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
 
 	hang := &hangSender{entered: make(chan struct{}), result: SendResult{Outcome: SendAccepted}}
 	w := newTestWorker(t, sp, q, ring, hang, clock, nil, uuid.New())
@@ -869,7 +902,7 @@ func TestWorkerCancellationLeavesRecoverableLease(t *testing.T) {
 		t.Fatal("Run did not return after cancellation")
 	}
 
-	// The cancelled send rolled back, so the job is still leased and therefore
+	// The canceled send rolled back, so the job is still leased and therefore
 	// recoverable by the requeue query, not sent or terminal.
 	state, leasedTo := jobState(ctx, t, sp, jobID)
 	if state != "leased" {
@@ -890,9 +923,11 @@ func TestWorkerClaimOrderAndBatch(t *testing.T) {
 	order := make([]uuid.UUID, 0, 3)
 	for i := 0; i < 3; i++ {
 		regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
-		tx := beginWorkerTx(t, ctx, sp)
+		tx := beginWorkerTx(ctx, t, sp)
 		jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, func() time.Time { return clock.Now().Add(time.Duration(i+1) * time.Minute) }, regID, digest)
-		_ = tx.Commit(ctx)
+		if commitErr := tx.Commit(ctx); commitErr != nil {
+			t.Fatalf("Commit: %v", commitErr)
+		}
 		order = append(order, jobID)
 	}
 	clock.Advance(5 * time.Minute)

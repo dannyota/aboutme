@@ -17,6 +17,7 @@ import (
 // authority for the auth_email_jobs.kind values (D3).
 type Kind string
 
+// Closed Kind values written to auth_email_jobs.kind (D3).
 const (
 	KindVerify          Kind = "verify"
 	KindReset           Kind = "reset"
@@ -184,8 +185,8 @@ func decodePayloadStrict(data []byte) (Payload, error) {
 	var p Payload
 	seen := make(map[string]bool, 3)
 	for dec.More() {
-		keyTok, err := dec.Token()
-		if err != nil {
+		keyTok, keyErr := dec.Token()
+		if keyErr != nil {
 			return Payload{}, ErrStrictJSON
 		}
 		key, ok := keyTok.(string)
@@ -200,19 +201,19 @@ func decodePayloadStrict(data []byte) (Payload, error) {
 		switch key {
 		case "version":
 			var v int
-			if err := dec.Decode(&v); err != nil {
+			if decodeErr := dec.Decode(&v); decodeErr != nil {
 				return Payload{}, ErrStrictJSON
 			}
 			p.Version = v
 		case "to":
 			var s string
-			if err := dec.Decode(&s); err != nil {
+			if decodeErr := dec.Decode(&s); decodeErr != nil {
 				return Payload{}, ErrStrictJSON
 			}
 			p.To = s
 		case "link":
 			var s string
-			if err := dec.Decode(&s); err != nil {
+			if decodeErr := dec.Decode(&s); decodeErr != nil {
 				return Payload{}, ErrStrictJSON
 			}
 			p.Link = s

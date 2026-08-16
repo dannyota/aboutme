@@ -45,7 +45,7 @@ func bearer(s *Server) string {
 
 func authorizedRequest(t *testing.T, s *Server, method, target string, body io.Reader) *http.Request {
 	t.Helper()
-	r := httptest.NewRequest(method, target, body)
+	r := httptest.NewRequestWithContext(context.Background(), method, target, body)
 	r.RemoteAddr = "127.0.0.1:55555"
 	r.Header.Set("Authorization", bearer(s))
 	return r
@@ -89,7 +89,7 @@ func TestMailCaptureNewClientRejectsBadInputs(t *testing.T) {
 
 func TestMailCaptureServerRejectsNonLoopback(t *testing.T) {
 	s := testServer(t)
-	r := httptest.NewRequest(http.MethodPost, "/capture", nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/capture", nil)
 	r.RemoteAddr = "203.0.113.9:12345" // non-loopback, never a real source
 	r.Header.Set("Authorization", bearer(s))
 	rec := httptest.NewRecorder()
@@ -114,7 +114,7 @@ func TestMailCaptureServerRejectsBadAuth(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/api/messages", nil)
+			r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/messages", nil)
 			r.RemoteAddr = "127.0.0.1:55555"
 			if tc.token != "" {
 				r.Header.Set("Authorization", tc.token)
@@ -131,7 +131,10 @@ func TestMailCaptureServerRejectsBadAuth(t *testing.T) {
 func TestMailCaptureServerCaptureEndToEnd(t *testing.T) {
 	s := testServer(t)
 	m := sampleMessage()
-	body, _ := json.Marshal(m)
+	body, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal message: %v", err)
+	}
 
 	r := authorizedRequest(t, s, http.MethodPost, "/capture", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -253,7 +256,10 @@ func TestMailCaptureServerViewerEscapesHTML(t *testing.T) {
 	m.Subject = `<b>bold</b>`
 	m.TextBody = `<script>alert("body")</script>`
 	m.HTMLBody = `<img src=x onerror=alert(1)>`
-	body, _ := json.Marshal(m)
+	body, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal message: %v", err)
+	}
 
 	r := authorizedRequest(t, s, http.MethodPost, "/capture", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -379,11 +385,11 @@ func TestMailCaptureServerLogsNeverIncludeSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Force a 401 and a 403; neither path may log the secret.
-	r := httptest.NewRequest(http.MethodGet, "/api/messages", nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/messages", nil)
 	r.RemoteAddr = "203.0.113.9:12345"
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, r)
-	r2 := httptest.NewRequest(http.MethodGet, "/api/messages", nil)
+	r2 := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/messages", nil)
 	r2.RemoteAddr = "127.0.0.1:55555"
 	r2.Header.Set("Authorization", bearerPrefix+"not-a-secret")
 	rec2 := httptest.NewRecorder()

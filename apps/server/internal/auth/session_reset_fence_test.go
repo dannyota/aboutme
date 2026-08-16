@@ -108,7 +108,11 @@ func TestProviderIssueResetRace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("begin reset tx: %v", err)
 		}
-		defer func() { _ = tx.Rollback(ctx) }()
+		defer func() {
+			if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+				t.Errorf("Rollback() error: %v", err)
+			}
+		}()
 		qtx := q.WithTx(tx)
 		if _, err := qtx.GetUserForUpdate(ctx, userID); err != nil {
 			t.Fatalf("reset lock user: %v", err)
@@ -206,7 +210,11 @@ func TestSessionRotation_ResetFence(t *testing.T) {
 
 		authDone := make(chan string, 1)
 		go func() {
-			_, rotated, _ := sm.Authenticate(ctx, oldRaw)
+			_, rotated, authErr := sm.Authenticate(ctx, oldRaw)
+			if authErr != nil {
+				authDone <- "ERR:" + authErr.Error()
+				return
+			}
 			authDone <- rotated
 		}()
 

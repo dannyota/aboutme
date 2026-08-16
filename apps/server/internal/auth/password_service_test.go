@@ -119,7 +119,7 @@ func withContentType(ct string) passwordRequestOpt {
 // raw body plus the response.
 func (e *passwordEnv) request(t *testing.T, method, path, body string, opts ...passwordRequestOpt) (*http.Response, []byte) {
 	t.Helper()
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), method, path, strings.NewReader(body))
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -280,7 +280,7 @@ func TestPasswordRoutes_Inventory(t *testing.T) {
 		{auth.PasswordMePath, http.MethodPut},
 	}
 	for _, p := range paths {
-		resp, body := e.request(t, p.method, p.path, "{}")
+		resp, body := e.request(t, p.method, p.path, "{}") //nolint:bodyclose // request closes the body itself before returning.
 		// A registered route must not be a 404; a valid route responds with
 		// something other than "no route".
 		if resp.StatusCode == http.StatusNotFound {
@@ -302,7 +302,7 @@ func TestPasswordRoutes_WrongMethod(t *testing.T) {
 		auth.PasswordReauthPath,
 		auth.PasswordMePath,
 	} {
-		resp, body := e.request(t, http.MethodGet, p, "")
+		resp, body := e.request(t, http.MethodGet, p, "") //nolint:bodyclose // request closes the body itself before returning.
 		if resp.StatusCode != http.StatusMethodNotAllowed {
 			t.Errorf("GET %s status = %d, want 405 (body=%s)", p, resp.StatusCode, body)
 		}
@@ -315,7 +315,7 @@ func TestPasswordRoute_MediaTypeRejectedBeforeWork(t *testing.T) {
 	e := newPasswordEnv(t)
 	email := newEmail()
 
-	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath,
+	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, //nolint:bodyclose // request closes the body itself before returning.
 		jsonBody(t, map[string]string{"name": "Ada", "email": email, "password": testPassword}),
 		withContentType("text/plain"))
 	if resp.StatusCode != http.StatusUnsupportedMediaType {
@@ -331,7 +331,7 @@ func TestPasswordRoute_BodyTooLargeRejected(t *testing.T) {
 	e := newPasswordEnv(t)
 
 	huge := `{"name":"` + strings.Repeat("x", 5000) + `"}`
-	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, huge)
+	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, huge) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413 (body=%s)", resp.StatusCode, body)
 	}
@@ -352,7 +352,7 @@ func TestPasswordRoute_MalformedJSONRejected(t *testing.T) {
 		`{"name":"Ada"} extra`,
 	}
 	for _, bad := range badBodies {
-		resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, bad)
+		resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, bad) //nolint:bodyclose // request closes the body itself before returning.
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("body %q status = %d, want 400 (body=%s)", bad, resp.StatusCode, body)
 		}
@@ -367,7 +367,7 @@ func TestPasswordRoute_OriginRejectedAfterJSON(t *testing.T) {
 	// Missing Origin/Referer fails closed (403), and it runs after the strict
 	// JSON chain: a request with BOTH a wrong origin and a malformed body
 	// reports the JSON failure first.
-	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath,
+	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, //nolint:bodyclose // request closes the body itself before returning.
 		`{"name":"Ada","email":"a@example.com","password":"correct horse battery staple"}`,
 		withOrigin(""))
 	if resp.StatusCode != http.StatusForbidden {
@@ -375,7 +375,7 @@ func TestPasswordRoute_OriginRejectedAfterJSON(t *testing.T) {
 	}
 	assertErrorCode(t, body, "csrf_rejected")
 
-	resp, body = e.request(t, http.MethodPost, auth.PasswordRegisterPath,
+	resp, body = e.request(t, http.MethodPost, auth.PasswordRegisterPath, //nolint:bodyclose // request closes the body itself before returning.
 		`{"name":"Ada","email":"a@example.com","password":"correct horse battery staple"`,
 		withOrigin("https://evil.example"))
 	if resp.StatusCode != http.StatusBadRequest {
@@ -392,13 +392,13 @@ func TestPasswordRegisterForgot_ByteIdentical202(t *testing.T) {
 	register := jsonBody(t, map[string]string{
 		"name": "Ada", "email": newEmail(), "password": testPassword,
 	})
-	_, regBody := e.request(t, http.MethodPost, auth.PasswordRegisterPath, register)
+	_, regBody := e.request(t, http.MethodPost, auth.PasswordRegisterPath, register) //nolint:bodyclose // request closes the body itself before returning.
 	wantAccepted := "{\"data\":{\"accepted\":true}}\n"
 	if string(regBody) != wantAccepted {
 		t.Errorf("register 202 body = %q, want %q", regBody, wantAccepted)
 	}
 
-	_, forgotBody := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": newEmail()}))
+	_, forgotBody := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": newEmail()})) //nolint:bodyclose // request closes the body itself before returning.
 	if string(forgotBody) != wantAccepted {
 		t.Errorf("forgot 202 body = %q, want %q", forgotBody, wantAccepted)
 	}
@@ -412,7 +412,7 @@ func TestPasswordLogin_ByteIdentical401(t *testing.T) {
 
 	want := "{\"error\":{\"code\":\"authentication_failed\",\"message\":\"authentication failed\"}}\n"
 	for _, email := range []string{newEmail(), newEmail(), newEmail()} {
-		resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath,
+		resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, //nolint:bodyclose // request closes the body itself before returning.
 			jsonBody(t, map[string]string{"email": email, "password": testPassword}))
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -429,7 +429,7 @@ func TestPasswordRegister_HappyPath(t *testing.T) {
 	e := newPasswordEnv(t)
 	email := newEmail()
 
-	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, jsonBody(t, map[string]string{
+	resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"name": "Ada Lovelace", "email": email, "password": testPassword,
 	}))
 	if resp.StatusCode != http.StatusAccepted {
@@ -461,7 +461,7 @@ func TestPasswordVerify_HappyPath(t *testing.T) {
 	email := newEmail()
 	token, _ := e.createRegistration(t, email, "Ada", testPassword)
 
-	resp, body := e.request(t, http.MethodPost, auth.PasswordVerifyPath, jsonBody(t, map[string]string{"token": token.Raw}))
+	resp, body := e.request(t, http.MethodPost, auth.PasswordVerifyPath, jsonBody(t, map[string]string{"token": token.Raw})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204 (body=%s)", resp.StatusCode, body)
 	}
@@ -488,7 +488,7 @@ func TestPasswordLogin_HappyPath(t *testing.T) {
 	e.setPassword(t, userID, testPassword)
 	email := e.userEmail(t, userID)
 
-	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{
+	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"email": email, "password": testPassword,
 	}))
 	if resp.StatusCode != http.StatusNoContent {
@@ -569,7 +569,7 @@ func TestPasswordForgot_HappyPath(t *testing.T) {
 	e.setPassword(t, userID, testPassword)
 	email := e.userEmail(t, userID)
 
-	resp, body := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": email}))
+	resp, body := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": email})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202 (body=%s)", resp.StatusCode, body)
 	}
@@ -593,7 +593,7 @@ func TestPasswordForgot_UnknownAndProviderOnly_NoOp(t *testing.T) {
 	e := newPasswordEnv(t)
 
 	// Unknown email: 202 and no reset token created.
-	resp, _ := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": newEmail()}))
+	resp, _ := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": newEmail()})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("unknown forgot status = %d, want 202", resp.StatusCode)
 	}
@@ -601,7 +601,7 @@ func TestPasswordForgot_UnknownAndProviderOnly_NoOp(t *testing.T) {
 	// Provider-only account: 202 and no reset token created.
 	userID := e.createUser(t)
 	email := e.userEmail(t, userID)
-	resp, _ = e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": email}))
+	resp, _ = e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": email})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("provider-only forgot status = %d, want 202", resp.StatusCode)
 	}
@@ -620,7 +620,7 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 	token := e.createResetToken(t, userID)
 
 	newPassword := "a completely different password"
-	resp, body := e.request(t, http.MethodPost, auth.PasswordResetPath, jsonBody(t, map[string]string{
+	resp, body := e.request(t, http.MethodPost, auth.PasswordResetPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"token": token.Raw, "password": newPassword,
 	}))
 	if resp.StatusCode != http.StatusNoContent {
@@ -637,10 +637,10 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 	}
 	// The credential is replaced: new password works, old does not.
 	email := e.userEmail(t, userID)
-	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": newPassword})); r.StatusCode != http.StatusNoContent {
+	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": newPassword})); r.StatusCode != http.StatusNoContent { //nolint:bodyclose // request closes the body itself before returning.
 		t.Errorf("login with new password status = %d, want 204", r.StatusCode)
 	}
-	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": testPassword})); r.StatusCode != http.StatusUnauthorized {
+	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": testPassword})); r.StatusCode != http.StatusUnauthorized { //nolint:bodyclose // request closes the body itself before returning.
 		t.Errorf("login with old password status = %d, want 401", r.StatusCode)
 	}
 	_ = raw
@@ -655,7 +655,7 @@ func TestPasswordReauth_HappyPath(t *testing.T) {
 	raw, sess := e.createSession(t, userID)
 
 	e.clk.Advance(10 * time.Minute)
-	resp, body := e.request(t, http.MethodPost, auth.PasswordReauthPath, jsonBody(t, map[string]string{"password": testPassword}),
+	resp, body := e.request(t, http.MethodPost, auth.PasswordReauthPath, jsonBody(t, map[string]string{"password": testPassword}), //nolint:bodyclose // request closes the body itself before returning.
 		withCookie(sessionRequestCookie(raw)), withCSRF(csrfTokenFor(sess)))
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204 (body=%s)", resp.StatusCode, body)
@@ -677,7 +677,7 @@ func TestPasswordReauth_WrongPassword(t *testing.T) {
 	e.setPassword(t, userID, testPassword)
 	raw, sess := e.createSession(t, userID)
 
-	resp, body := e.request(t, http.MethodPost, auth.PasswordReauthPath, jsonBody(t, map[string]string{"password": "totally wrong password"}),
+	resp, body := e.request(t, http.MethodPost, auth.PasswordReauthPath, jsonBody(t, map[string]string{"password": "totally wrong password"}), //nolint:bodyclose // request closes the body itself before returning.
 		withCookie(sessionRequestCookie(raw)), withCSRF(csrfTokenFor(sess)))
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 (body=%s)", resp.StatusCode, body)
@@ -694,7 +694,7 @@ func TestPasswordChange_HappyPath(t *testing.T) {
 	oldRaw, oldSess := e.createSession(t, userID)
 
 	newPassword := "another brand new password"
-	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": newPassword}),
+	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": newPassword}), //nolint:bodyclose // request closes the body itself before returning.
 		withCookie(sessionRequestCookie(oldRaw)), withCSRF(csrfTokenFor(oldSess)))
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204 (body=%s)", resp.StatusCode, body)
@@ -725,10 +725,10 @@ func TestPasswordChange_HappyPath(t *testing.T) {
 
 	// The credential is replaced.
 	email := e.userEmail(t, userID)
-	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": newPassword})); r.StatusCode != http.StatusNoContent {
+	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": newPassword})); r.StatusCode != http.StatusNoContent { //nolint:bodyclose // request closes the body itself before returning.
 		t.Errorf("login with new password status = %d, want 204", r.StatusCode)
 	}
-	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": testPassword})); r.StatusCode != http.StatusUnauthorized {
+	if r, _ := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{"email": email, "password": testPassword})); r.StatusCode != http.StatusUnauthorized { //nolint:bodyclose // request closes the body itself before returning.
 		t.Errorf("login with old password status = %d, want 401", r.StatusCode)
 	}
 }
@@ -741,7 +741,7 @@ func TestPasswordChange_RequiresRecentReauth(t *testing.T) {
 
 	// A stale reauthentication window is rejected before any write.
 	e.clk.Advance(16 * time.Minute)
-	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "another brand new password"}),
+	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "another brand new password"}), //nolint:bodyclose // request closes the body itself before returning.
 		withCookie(sessionRequestCookie(raw)), withCSRF(csrfTokenFor(sess)))
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403 (body=%s)", resp.StatusCode, body)
@@ -756,14 +756,14 @@ func TestPasswordChange_RequiresSessionAndCSRF(t *testing.T) {
 	raw, sess := e.createSession(t, userID)
 
 	// No session cookie -> 401 authentication_required.
-	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "x"}))
+	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "x"})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("no-session status = %d, want 401 (body=%s)", resp.StatusCode, body)
 	}
 	assertErrorCode(t, body, "authentication_required")
 
 	// Session but wrong CSRF token -> 403 csrf_rejected.
-	resp, body = e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "x"}),
+	resp, body = e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "x"}), //nolint:bodyclose // request closes the body itself before returning.
 		withCookie(sessionRequestCookie(raw)), withCSRF("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"))
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("wrong-csrf status = %d, want 403 (body=%s)", resp.StatusCode, body)

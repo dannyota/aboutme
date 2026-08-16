@@ -77,6 +77,7 @@ type sesSender struct {
 	logger           *slog.Logger
 }
 
+// Send delivers msg through SESv2 and classifies the outcome.
 func (s *sesSender) Send(ctx context.Context, msg Message) (SendResult, error) {
 	input := &sesv2.SendEmailInput{
 		FromEmailAddress:     aws.String(s.from),

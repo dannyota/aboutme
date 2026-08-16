@@ -155,8 +155,8 @@ func TestDeterministicCiphertextFixture(t *testing.T) {
 		CiphertextHex    string `json:"ciphertext_hex"`
 		CiphertextSHA256 string `json:"ciphertext_sha256"`
 	}
-	if err := json.Unmarshal(raw, &fx); err != nil {
-		t.Fatalf("parse fixture: %v", err)
+	if unmarshalErr := json.Unmarshal(raw, &fx); unmarshalErr != nil {
+		t.Fatalf("parse fixture: %v", unmarshalErr)
 	}
 
 	jobID := uuid.MustParse(fx.JobID)

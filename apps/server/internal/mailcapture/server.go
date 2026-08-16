@@ -127,13 +127,19 @@ func (c *Client) Send(ctx context.Context, m authmail.Message) (authmail.SendRes
 		c.logger.Warn("mailcapture: client transport failure")
 		return authmail.SendResult{Outcome: authmail.SendTemporaryFailure}, nil
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			c.logger.Warn("mailcapture: client close response body failure")
+		}
+	}()
+	if _, copyErr := io.Copy(io.Discard, io.LimitReader(resp.Body, 4096)); copyErr != nil {
+		c.logger.Warn("mailcapture: client drain response body failure")
+	}
 
-	switch {
-	case resp.StatusCode == http.StatusAccepted:
+	switch resp.StatusCode {
+	case http.StatusAccepted:
 		return authmail.SendResult{Outcome: authmail.SendAccepted}, nil
-	case resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusRequestEntityTooLarge:
+	case http.StatusBadRequest, http.StatusRequestEntityTooLarge:
 		return authmail.SendResult{Outcome: authmail.SendPermanentFailure}, nil
 	default:
 		return authmail.SendResult{Outcome: authmail.SendTemporaryFailure}, nil
@@ -173,7 +179,9 @@ func (s *Server) handleCapture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write([]byte(`{"accepted":true}`))
+	if _, err := w.Write([]byte(`{"accepted":true}`)); err != nil {
+		return
+	}
 }
 
 func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +192,9 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 			msgs = []StoredMessage{}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string][]StoredMessage{"messages": msgs})
+		if err := json.NewEncoder(w).Encode(map[string][]StoredMessage{"messages": msgs}); err != nil {
+			s.logger.Error("mailcapture: encode messages response", "error", err)
+		}
 	case http.MethodDelete:
 		s.store.Reset()
 		w.WriteHeader(http.StatusNoContent)
@@ -209,29 +219,49 @@ func (s *Server) handleViewer(w http.ResponseWriter, r *http.Request) {
 		msgs = msgs[:viewerLimit]
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = io.WriteString(w, "<!doctype html><meta charset=\"utf-8\"><title>Aboutme auth email capture</title><style>body{font:14px/1.4 system-ui,sans-serif;margin:2rem;max-width:64rem}pre{white-space:pre-wrap;background:#f6f6f6;padding:.5rem}li{margin-bottom:1rem}</style>")
-	_, _ = io.WriteString(w, "<h1>Auth email capture</h1>")
-	if len(msgs) == 0 {
-		_, _ = io.WriteString(w, "<p>No messages captured.</p>")
+	if _, err := io.WriteString(w, "<!doctype html><meta charset=\"utf-8\"><title>Aboutme auth email capture</title><style>body{font:14px/1.4 system-ui,sans-serif;margin:2rem;max-width:64rem}pre{white-space:pre-wrap;background:#f6f6f6;padding:.5rem}li{margin-bottom:1rem}</style>"); err != nil {
 		return
 	}
-	_, _ = io.WriteString(w, "<ol>")
+	if _, err := io.WriteString(w, "<h1>Auth email capture</h1>"); err != nil {
+		return
+	}
+	if len(msgs) == 0 {
+		if _, err := io.WriteString(w, "<p>No messages captured.</p>"); err != nil {
+			return
+		}
+		return
+	}
+	if _, err := io.WriteString(w, "<ol>"); err != nil {
+		return
+	}
 	for _, m := range msgs {
-		_, _ = fmt.Fprintf(w, "<li><strong>%s</strong> — %s — to %s<br>",
+		if _, err := fmt.Fprintf(w, "<li><strong>%s</strong> — %s — to %s<br>",
 			html.EscapeString(m.ReceivedAt.UTC().Format(time.RFC3339)),
 			html.EscapeString(string(m.Kind)),
 			html.EscapeString(m.To),
-		)
-		_, _ = fmt.Fprintf(w, "<h2>%s</h2>", html.EscapeString(m.Subject))
+		); err != nil {
+			return
+		}
+		if _, err := fmt.Fprintf(w, "<h2>%s</h2>", html.EscapeString(m.Subject)); err != nil {
+			return
+		}
 		if m.TextBody != "" {
-			_, _ = fmt.Fprintf(w, "<pre>%s</pre>", html.EscapeString(m.TextBody))
+			if _, err := fmt.Fprintf(w, "<pre>%s</pre>", html.EscapeString(m.TextBody)); err != nil {
+				return
+			}
 		}
 		if m.HTMLBody != "" {
-			_, _ = fmt.Fprintf(w, "<pre>%s</pre>", html.EscapeString(m.HTMLBody))
+			if _, err := fmt.Fprintf(w, "<pre>%s</pre>", html.EscapeString(m.HTMLBody)); err != nil {
+				return
+			}
 		}
-		_, _ = io.WriteString(w, "</li>")
+		if _, err := io.WriteString(w, "</li>"); err != nil {
+			return
+		}
 	}
-	_, _ = io.WriteString(w, "</ol>")
+	if _, err := io.WriteString(w, "</ol>"); err != nil {
+		return
+	}
 }
 
 // requireSecretAndLoopback rejects every request that is not loopback-origin or
@@ -288,9 +318,9 @@ func decodeStrictJSON(data []byte, out *authmail.Message) error {
 
 	seen := make(map[string]bool, 5)
 	for dec.More() {
-		keyTok, err := dec.Token()
-		if err != nil {
-			return err
+		keyTok, keyErr := dec.Token()
+		if keyErr != nil {
+			return keyErr
 		}
 		key, ok := keyTok.(string)
 		if !ok {
@@ -302,7 +332,7 @@ func decodeStrictJSON(data []byte, out *authmail.Message) error {
 		seen[key] = true
 
 		var value string
-		if err := dec.Decode(&value); err != nil {
+		if decodeErr := dec.Decode(&value); decodeErr != nil {
 			return fmt.Errorf("mailcapture: invalid %q value", key)
 		}
 		switch key {

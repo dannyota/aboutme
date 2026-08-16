@@ -61,7 +61,7 @@ func (k *KeyRing) Seal(jobID uuid.UUID, kind Kind, p Payload) (Sealed, error) {
 		return Sealed{}, ErrUnknownKey
 	}
 	var nonce [12]byte
-	if _, err := io.ReadFull(k.nonce, nonce[:]); err != nil {
+	if _, nonceErr := io.ReadFull(k.nonce, nonce[:]); nonceErr != nil {
 		return Sealed{}, ErrNonce
 	}
 	ct, err := sealAEAD(key, nonce[:], plaintext, aad(jobID, kind, k.activeID))
