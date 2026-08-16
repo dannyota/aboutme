@@ -79,6 +79,10 @@ const buildPublicRenderWorker = async (): Promise<void> => {
 const buildPublicResumeHydration = async (): Promise<void> => {
   await viteBuild({
     configFile: false,
+    // This client bundle runs in a browser, where `process` does not exist.
+    // Vue's runtime emits `process.env.NODE_ENV` dev-warning guards, so
+    // replace them with a literal to keep the bundle browser-safe.
+    define: { 'process.env.NODE_ENV': JSON.stringify('production') },
     plugins: [
       publicRenderSanitizerPlugin(),
       vue(),
