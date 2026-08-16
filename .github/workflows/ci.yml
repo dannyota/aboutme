@@ -120,9 +120,9 @@ jobs:
       - run: make web-typecheck
       - run: make web-test
       - run: make web-build
+      - run: make web-no-eval-check
 
   web-e2e:
-    needs: web
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -137,6 +137,25 @@ jobs:
           test -z "${UPDATE_GOLDEN+x}"
           test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
           make web-e2e
+
+  # The browser-free half of web-e2e: build the Nuxt app from exactly the files
+  # the source manifest lists. A stale manifest fails here quickly and in
+  # parallel, instead of inside the Playwright image (and without being masked
+  # behind a red `web` job).
+  web-source-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Ignore local result roots
+        run: |
+          grep -qxF '/.dev/' .git/info/exclude ||
+            printf '%s\n' '/.dev/' >> .git/info/exclude
+      - run: make web-source-build
 
   server-integration:
     runs-on: ubuntu-latest

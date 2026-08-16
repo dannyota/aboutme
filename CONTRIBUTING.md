@@ -20,6 +20,8 @@ the conflict in the issue or pull request. Do not choose one silently.
 
 - Follow the Google Go and TypeScript style guides. Use `gofmt`, `goimports`,
   and the configured ESLint rules.
+- Write deterministic tests: inject clocks and randomness, and never let a
+  test's outcome depend on a wall-clock deadline racing a mutation.
 - Keep comments focused on constraints the code cannot express. Put design
   rationale in `docs/design/` or an ADR.
 - Use Mermaid for diagrams in Markdown.
