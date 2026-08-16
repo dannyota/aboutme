@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
@@ -122,7 +123,7 @@ func withStartRateLimit(requests int, window time.Duration) testServiceOption {
 
 // sessionIssuerForTest mirrors the unexported issuance seam structurally.
 type sessionIssuerForTest interface {
-	Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error)
+	IssueTx(ctx context.Context, qtx *store.Queries, user store.User, ua, ip string) (auth.SessionIssue, error)
 }
 
 // withSessionIssuer injects deterministic issuance failures.
@@ -135,7 +136,8 @@ func withSessionIssuer(si sessionIssuerForTest) testServiceOption {
 func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *store.Queries) {
 	t.Helper()
 
-	q := newTestQueries(t)
+	pool := newTestPool(t)
+	q := store.New(pool)
 
 	var sc testServiceConfig
 	for _, opt := range opts {
@@ -169,7 +171,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 
 	// Empty overrides pass through so NewServiceForTest applies the same
 	// unroutable sentinel for every provider.
-	svc, err := auth.NewServiceForTest(logger, cfg, q, sc.googleIssuer, sc.githubEndpoint, sc.linkedinIssuer)
+	svc, err := auth.NewServiceForTest(logger, cfg, pool, sc.googleIssuer, sc.githubEndpoint, sc.linkedinIssuer)
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
@@ -225,8 +227,8 @@ func requestCookie(name, value string) *http.Cookie {
 // Its distinctive error text must not reach clients or logs.
 type failingSessionIssuer struct{}
 
-func (failingSessionIssuer) Issue(context.Context, uuid.UUID, string, string) (string, store.Session, error) {
-	return "", store.Session{}, errors.New("stub: session issuance deliberately failed for a test -- must never leak")
+func (failingSessionIssuer) IssueTx(context.Context, *store.Queries, store.User, string, string) (auth.SessionIssue, error) {
+	return auth.SessionIssue{}, errors.New("stub: session issuance deliberately failed for a test -- must never leak")
 }
 
 // pgErrorSessionIssuer fails with a *pgconn.PgError shaped exactly like a real
@@ -243,8 +245,8 @@ const (
 	pgUniqueViolationConstraint = "users_email_key"
 )
 
-func (pgErrorSessionIssuer) Issue(context.Context, uuid.UUID, string, string) (string, store.Session, error) {
-	return "", store.Session{}, &pgconn.PgError{
+func (pgErrorSessionIssuer) IssueTx(context.Context, *store.Queries, store.User, string, string) (auth.SessionIssue, error) {
+	return auth.SessionIssue{}, &pgconn.PgError{
 		Code:           "23505",
 		Message:        pgUniqueViolationMessage,
 		Detail:         pgUniqueViolationDetail,
@@ -257,8 +259,8 @@ func (pgErrorSessionIssuer) Issue(context.Context, uuid.UUID, string, string) (s
 func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 	t.Parallel()
 
-	q := newTestQueries(t)
-	_, err := auth.NewService(testLogger(), config.Config{}, q)
+	pool := newTestPool(t)
+	_, err := auth.NewService(testLogger(), config.Config{}, pool)
 	if err == nil {
 		t.Fatal("NewService() error = nil, want error for a config with no PublicOrigin")
 	}
@@ -266,10 +268,10 @@ func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 
 // ---- shared login identity resolution ------------------------------------
 
-// TestResolveLoginIdentity_NewThenExisting_AcrossProviders checks new and
-// existing identity outcomes for each provider. Row counts distinguish reuse
-// from a failed duplicate insert.
-func TestResolveLoginIdentity_NewThenExisting_AcrossProviders(t *testing.T) {
+// TestResolveReturningProvider_NewThenExisting_AcrossProviders checks the
+// transactional resolver's new-then-existing outcomes for each provider. Row
+// counts distinguish reuse from a failed duplicate insert.
+func TestResolveReturningProvider_NewThenExisting_AcrossProviders(t *testing.T) {
 	t.Parallel()
 
 	providers := []auth.Provider{auth.ProviderGoogle, auth.ProviderGitHub, auth.ProviderLinkedIn}
@@ -278,42 +280,63 @@ func TestResolveLoginIdentity_NewThenExisting_AcrossProviders(t *testing.T) {
 		t.Run(string(provider), func(t *testing.T) {
 			t.Parallel()
 
-			q := newTestQueries(t)
+			pool := newTestPool(t)
+			q := store.New(pool)
 			svc, err := auth.NewServiceForTest(testLogger(), config.Config{
 				PublicOrigin:         testPublicOrigin,
 				GoogleClientID:       oidctest.DefaultClientID,
 				GoogleClientSecret:   "test-google-client-secret",
 				LinkedInClientID:     oidctest.DefaultClientID,
 				LinkedInClientSecret: "test-linkedin-client-secret",
-			}, q, "", "", "")
+			}, pool, "", "", "")
 			if err != nil {
 				t.Fatalf("NewServiceForTest() error = %v", err)
 			}
 
 			providerUserID := uuid.NewString()
 			email := uniqueEmail(t)
+			subject := auth.ProviderSubject{Provider: provider, Subject: providerUserID}
+			account := auth.NewProviderAccount{Subject: subject, VerifiedEmail: email, Name: "Test User"}
 			ctx := context.Background()
 
-			first, err := auth.ResolveLoginIdentityForTest(ctx, svc, provider, providerUserID, email, "Test User")
+			// First login: the subject is absent, so the account is created.
+			var first store.User
+			err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+				qtx := q.WithTx(tx)
+				usr, createErr := auth.CreateProviderAccountTxForTest(ctx, svc, qtx, account)
+				if createErr != nil {
+					return createErr
+				}
+				first = usr
+				return nil
+			})
 			if err != nil {
-				t.Fatalf("resolveLoginIdentity() (first login) error = %v", err)
+				t.Fatalf("createProviderAccountTx() (first login) error = %v", err)
 			}
-			if first.Kind != auth.LoginResultNewUserForTest {
-				t.Fatalf("first login Kind = %d, want LoginResultNewUserForTest (%d)", first.Kind, auth.LoginResultNewUserForTest)
-			}
-			if first.User.Email != email {
-				t.Errorf("first login User.Email = %q, want %q", first.User.Email, email)
+			if first.Email != email {
+				t.Errorf("first login User.Email = %q, want %q", first.Email, email)
 			}
 
-			second, err := auth.ResolveLoginIdentityForTest(ctx, svc, provider, providerUserID, email, "Test User")
+			// Second login: the subject resolves to the same locked user.
+			var second store.User
+			var found bool
+			err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+				qtx := q.WithTx(tx)
+				usr, ok, resolveErr := auth.ResolveReturningProviderTxForTest(ctx, svc, qtx, subject)
+				if resolveErr != nil {
+					return resolveErr
+				}
+				second, found = usr, ok
+				return nil
+			})
 			if err != nil {
-				t.Fatalf("resolveLoginIdentity() (second login) error = %v", err)
+				t.Fatalf("resolveReturningProviderTx() (second login) error = %v", err)
 			}
-			if second.Kind != auth.LoginResultExistingIdentityForTest {
-				t.Fatalf("second login Kind = %d, want LoginResultExistingIdentityForTest (%d)", second.Kind, auth.LoginResultExistingIdentityForTest)
+			if !found {
+				t.Fatalf("second login found = false, want true (the identity now exists)")
 			}
-			if second.User.ID != first.User.ID {
-				t.Errorf("second login User.ID = %v, want %v (the SAME user, not a new one)", second.User.ID, first.User.ID)
+			if second.ID != first.ID {
+				t.Errorf("second login User.ID = %v, want %v (the SAME user, not a new one)", second.ID, first.ID)
 			}
 
 			inspector := newRowInspectorPool(t)
@@ -346,13 +369,13 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	q := newTestQueries(t)
+	pool := newTestPool(t)
 	cfg := config.Config{
 		PublicOrigin:       testPublicOrigin,
 		GoogleClientID:     oidctest.DefaultClientID,
 		GoogleClientSecret: "test-google-client-secret",
 	}
-	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, p.URL, "", "")
+	svc, err := auth.NewServiceForTest(testLogger(), cfg, pool, p.URL, "", "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
@@ -838,12 +861,13 @@ func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *te
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	q := newTestQueries(t)
+	pool := newTestPool(t)
+	q := store.New(pool)
 	svc, err := auth.NewServiceForTest(testLogger(), config.Config{
 		PublicOrigin:       testPublicOrigin,
 		GoogleClientID:     oidctest.DefaultClientID,
 		GoogleClientSecret: "test-google-client-secret",
-	}, q, p.URL, "", "")
+	}, pool, p.URL, "", "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}

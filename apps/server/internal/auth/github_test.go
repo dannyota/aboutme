@@ -123,6 +123,18 @@ type gitHubStub struct {
 
 	mu  sync.Mutex
 	cfg gitHubStubConfig
+
+	// emailsRequests counts GET /user/emails hits; a returning subject must
+	// never reach that endpoint.
+	emailsRequests int
+}
+
+// emailsRequestCount returns how many GET /user/emails requests this stub has
+// served.
+func (gh *gitHubStub) emailsRequestCount() int {
+	gh.mu.Lock()
+	defer gh.mu.Unlock()
+	return gh.emailsRequests
 }
 
 // newGitHubStub starts an in-process GitHub-shaped test server and
@@ -296,6 +308,7 @@ func (gh *gitHubStub) serveEmails(w http.ResponseWriter, r *http.Request) {
 
 	gh.mu.Lock()
 	cfg := gh.cfg
+	gh.emailsRequests++
 	gh.mu.Unlock()
 
 	if cfg.emailsAPIMalformedJSON {

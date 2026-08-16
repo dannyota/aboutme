@@ -350,8 +350,9 @@ func TestDeleteSession_RevokingCurrentSession_ClearsCookie(t *testing.T) {
 // not the predecessor's.
 func TestRequireSession_RotatedRequest_CarriesSuccessorCookie(t *testing.T) {
 	t.Parallel()
-	q := newTestQueries(t)
-	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, q)
+	pool := newTestPool(t)
+	q := store.New(pool)
+	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, pool)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

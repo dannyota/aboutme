@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,26 @@ import (
 // NewSessionManagerForTest builds a manager with an injected clock.
 func NewSessionManagerForTest(q *store.Queries, now func() time.Time) *SessionManager {
 	return &SessionManager{q: q, now: now}
+}
+
+// NewSessionManagerWithPoolForTest builds a pool-backed manager with an
+// injected clock, for the deterministic user-lock fence tests.
+func NewSessionManagerWithPoolForTest(pool *store.Pool, now func() time.Time) *SessionManager {
+	return &SessionManager{q: store.New(pool), pool: pool, now: now}
+}
+
+// SetSessionLockProbeForTest installs a probe that runs after Issue acquires
+// the user row lock. It is nil in production and exists only for deterministic
+// fence tests.
+func SetSessionLockProbeForTest(m *SessionManager, probe func()) {
+	m.lockProbe = probe
+}
+
+// SetSessionRotationProbeForTest installs a probe that runs after rotation's
+// admission update commits and before the successor transaction. It is nil in
+// production and exists only for deterministic fence tests.
+func SetSessionRotationProbeForTest(m *SessionManager, probe func()) {
+	m.rotationProbe = probe
 }
 
 // OIDCProviderEndpointForTest drives runtime provider discovery without
@@ -76,8 +97,9 @@ func defaultTestOverride(v string) string {
 
 // NewServiceForTest builds a Service whose provider endpoints are local test
 // doubles or the unroutable sentinel. The seam exists only in test builds.
-func NewServiceForTest(logger *slog.Logger, cfg config.Config, q *store.Queries, googleIssuer, githubEndpoint, linkedinIssuer string) (*Service, error) {
-	svc, err := NewService(logger, cfg, q)
+// pool may be nil for tests that never drive a login callback.
+func NewServiceForTest(logger *slog.Logger, cfg config.Config, pool *store.Pool, googleIssuer, githubEndpoint, linkedinIssuer string) (*Service, error) {
+	svc, err := NewService(logger, cfg, pool)
 	if err != nil {
 		return nil, err
 	}
@@ -108,25 +130,23 @@ func GoogleProviderCacheTryLockForTest(svc *Service) (unlock func(), ok bool) {
 	return svc.google.cache.mu.Unlock, true
 }
 
-// ResolveLoginIdentityForTest exposes shared identity resolution to black-box
-// tests without provider protocol setup.
-func ResolveLoginIdentityForTest(ctx context.Context, svc *Service, provider Provider, providerUserID, email, name string) (LoginResultForTest, error) {
-	result, err := svc.resolveLoginIdentity(ctx, provider, providerUserID, email, name)
-	return LoginResultForTest{Kind: int(result.Kind), User: result.User}, err
+// ResolveReturningProviderTxForTest exposes the transactional returning-subject
+// resolver to black-box tests. The caller supplies an already-open transaction.
+func ResolveReturningProviderTxForTest(ctx context.Context, svc *Service, qtx *store.Queries, subject ProviderSubject) (store.User, bool, error) {
+	return svc.resolveReturningProviderTx(ctx, qtx, subject)
 }
 
-// LoginResultForTest mirrors the result fields needed by black-box tests.
-type LoginResultForTest struct {
-	Kind int
-	User store.User
+// CreateProviderAccountTxForTest exposes the transactional new-account creator
+// to black-box tests. The caller supplies an already-open transaction.
+func CreateProviderAccountTxForTest(ctx context.Context, svc *Service, qtx *store.Queries, account NewProviderAccount) (store.User, error) {
+	return svc.createProviderAccountTx(ctx, qtx, account)
 }
 
-// These values mirror loginResultKind in declaration order.
-const (
-	LoginResultNewUserForTest int = iota
-	LoginResultExistingIdentityForTest
-	LoginResultEmailCollisionForTest
-)
+// IsEmailAlreadyRegisteredForTest reports whether err is the closed
+// email-already-registered outcome.
+func IsEmailAlreadyRegisteredForTest(err error) bool {
+	return errors.Is(err, errEmailAlreadyRegistered)
+}
 
 // SetSessionIssuerForTest injects deterministic issuance failures.
 func SetSessionIssuerForTest(svc *Service, si sessionIssuer) {

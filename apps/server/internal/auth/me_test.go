@@ -26,8 +26,9 @@ import (
 func newSessionAPITestService(t *testing.T) (http.Handler, *store.Queries) {
 	t.Helper()
 
-	q := newTestQueries(t)
-	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, q)
+	pool := newTestPool(t)
+	q := store.New(pool)
+	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, pool)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -384,8 +385,9 @@ func TestGetMe_WrongMethod_Returns405(t *testing.T) {
 // chain, not SessionManager directly (session_test.go/
 // session_adversarial_test.go already cover the algorithm itself).
 func TestGetMe_RotatesSessionOnAuthenticate_SetsNewCookie(t *testing.T) {
-	q := newTestQueries(t)
-	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, q)
+	pool := newTestPool(t)
+	q := store.New(pool)
+	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, pool)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

@@ -26,7 +26,7 @@ func TestMeIdentityOrderAdversarial(t *testing.T) {
 	t.Cleanup(func() { pool.Close(context.Background()) })
 
 	q := store.New(pool)
-	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, q)
+	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, pool)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

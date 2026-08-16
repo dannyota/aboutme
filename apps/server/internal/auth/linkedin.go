@@ -12,11 +12,10 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 
+	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
 	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 // linkedinIssuer is LinkedIn's OIDC discovery issuer. Tests override only the
@@ -197,38 +196,49 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Only a new identity requires a present, true email_verified claim.
+	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: IssueTx tolerates an empty ip
+	ua := r.UserAgent()
+
+	rawSession, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
+		Provider: ProviderLinkedIn,
+		Subject:  idToken.Subject,
+	}, ua, clientIP)
+	if err != nil {
+		s.writeInternalError(w, r, ProviderLinkedIn, "resolve_provider_login", err)
+		return
+	}
+	if found {
+		SetSessionCookie(w, rawSession)
+		ClearOAuthTxCookie(w)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		return
+	}
+
+	// Only a new identity requires a present, true, canonical email.
 	// Existing identities do not re-evaluate email. See docs/design/security.md.
-	if _, identityErr := s.q.GetIdentityByProviderSubject(ctx, store.GetIdentityByProviderSubjectParams{
-		Provider:       string(ProviderLinkedIn),
-		ProviderUserID: idToken.Subject,
-	}); identityErr != nil {
-		if !errors.Is(identityErr, pgx.ErrNoRows) {
-			s.writeInternalError(w, r, ProviderLinkedIn, "check_existing_identity", identityErr)
-			return
-		}
-		// A new identity requires a present, true email_verified claim.
-		if claims.Email == "" || claims.EmailVerified == nil || !*claims.EmailVerified {
-			s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, emailNotVerifiedErrorCode,
-				reasonLinkedInRegistrationEmailUnverified)
-			return
-		}
-	}
-
-	result, err := s.resolveLoginIdentity(ctx, ProviderLinkedIn, idToken.Subject, claims.Email, claims.Name)
-	if err != nil {
-		s.writeInternalError(w, r, ProviderLinkedIn, "resolve_login_identity", err)
+	if claims.Email == "" || claims.EmailVerified == nil || !*claims.EmailVerified {
+		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, emailNotVerifiedErrorCode,
+			reasonLinkedInRegistrationEmailUnverified)
 		return
 	}
-	if result.Kind == loginResultEmailCollision {
-		s.redirectEmailAlreadyRegistered(w, r, ProviderLinkedIn)
+	canonicalEmail, err := accountemail.Canonicalize(claims.Email)
+	if err != nil {
+		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, emailNotVerifiedErrorCode,
+			reasonLinkedInRegistrationEmailUnverified)
 		return
 	}
 
-	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: Issue tolerates an empty ip
-	rawSession, _, err := s.sessions.Issue(ctx, result.User.ID, r.UserAgent(), clientIP)
+	rawSession, err = s.createProviderLogin(ctx, NewProviderAccount{
+		Subject:       ProviderSubject{Provider: ProviderLinkedIn, Subject: idToken.Subject},
+		VerifiedEmail: canonicalEmail,
+		Name:          claims.Name,
+	}, ua, clientIP)
 	if err != nil {
-		s.writeInternalError(w, r, ProviderLinkedIn, "issue_session", err)
+		if errors.Is(err, errEmailAlreadyRegistered) {
+			s.redirectEmailAlreadyRegistered(w, r, ProviderLinkedIn)
+			return
+		}
+		s.writeInternalError(w, r, ProviderLinkedIn, "create_provider_login", err)
 		return
 	}
 

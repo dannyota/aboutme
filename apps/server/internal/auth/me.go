@@ -5,7 +5,10 @@ package auth
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -13,10 +16,11 @@ import (
 
 // meUser is the public user shape returned by GET /me.
 type meUser struct {
-	ID        string  `json:"id"`
-	Email     string  `json:"email"`
-	Name      string  `json:"name"`
-	AvatarKey *string `json:"avatarKey"`
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	Name        string  `json:"name"`
+	AvatarKey   *string `json:"avatarKey"`
+	HasPassword bool    `json:"hasPassword"`
 }
 
 // meIdentity exposes the provider but never its internal subject.
@@ -48,6 +52,15 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// hasPassword is a single existence probe, never the credential itself.
+	hasPassword := false
+	if _, err := s.q.GetPasswordCredential(ctx, sess.UserID); err == nil {
+		hasPassword = true
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		s.writeSessionAPIInternalError(w, r, "get_password_credential", err)
+		return
+	}
+
 	identityRows, err := s.q.ListIdentitiesByUserID(ctx, usr.ID)
 	if err != nil {
 		s.writeSessionAPIInternalError(w, r, "list_identities", err)
@@ -61,10 +74,11 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 
 	api.WriteData(w, http.StatusOK, meResponse{
 		User: meUser{
-			ID:        usr.ID.String(),
-			Email:     usr.Email,
-			Name:      usr.Name,
-			AvatarKey: usr.AvatarKey,
+			ID:          usr.ID.String(),
+			Email:       usr.Email,
+			Name:        usr.Name,
+			AvatarKey:   usr.AvatarKey,
+			HasPassword: hasPassword,
 		},
 		CSRFToken:  csrfTokenForSession(sess),
 		Identities: identities,

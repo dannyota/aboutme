@@ -44,35 +44,67 @@ var ErrReauthRequired = errors.New("auth: recent reauthentication required")
 // SessionManager issues and authenticates database-backed sessions, including
 // expiry, activity throttling, and compare-and-swap rotation.
 type SessionManager struct {
-	q   *store.Queries
-	now func() time.Time
+	q *store.Queries
+	// pool is the transaction beginner every session issuer and rotation
+	// successor insert serializes on. It is nil for query-only managers
+	// (authentication, revocation, resumeapi middleware, and existing
+	// non-fence tests); production issuance and rotation always set it so the
+	// user-row lock fence in D4 is enforced. See Issue and tryRotate.
+	pool *store.Pool
+	now  func() time.Time
+
+	// lockProbe and rotationProbe are nil in production. Deterministic fence
+	// tests set them to observe (and pause) the exact moments Issue acquires
+	// the user lock and rotation commits its admission update, so the reset
+	// interleavings below are proven without a timing race.
+	lockProbe     func()
+	rotationProbe func()
 }
 
-// NewSessionManager builds a SessionManager backed by q, using the real
-// wall clock.
+// NewSessionManager builds a query-only SessionManager backed by q, using the
+// real wall clock. It can authenticate, revoke, and (for compatibility) issue
+// sessions directly, but it holds no transaction beginner, so it never applies
+// the user-row lock fence. Production callers that issue sessions use
+// NewSessionManagerWithPool.
 func NewSessionManager(q *store.Queries) *SessionManager {
 	return &SessionManager{q: q, now: time.Now}
 }
 
-// Issue always creates a new session to prevent fixation. It returns the raw
-// token but stores only its SHA-256 hash.
-func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error) {
+// NewSessionManagerWithPool builds a SessionManager backed by pool, deriving
+// its queries from the same pool. This is the production constructor: Issue and
+// rotation serialize on the user row lock.
+func NewSessionManagerWithPool(pool *store.Pool) *SessionManager {
+	return &SessionManager{q: store.New(pool), pool: pool, now: time.Now}
+}
+
+// SessionIssue carries a newly minted session and the raw bearer token that
+// must reach the client. Only the token's SHA-256 hash is stored.
+type SessionIssue struct {
+	RawToken string
+	Session  store.Session
+}
+
+// IssueTx is the only primitive that constructs a fresh login session. Its
+// caller must already hold the exact user row lock via GetUserForUpdate in the
+// same transaction; IssueTx never opens or commits a transaction of its own.
+// It inserts the existing opaque session format with rotated_from = NULL.
+func (m *SessionManager) IssueTx(ctx context.Context, qtx *store.Queries, user store.User, ua, ip string) (SessionIssue, error) {
 	raw, err := randomSessionToken()
 	if err != nil {
-		return "", store.Session{}, fmt.Errorf("auth: issue session: %w", err)
+		return SessionIssue{}, fmt.Errorf("auth: issue session: %w", err)
 	}
 	csrfSecret, err := randomCSRFSecret()
 	if err != nil {
-		return "", store.Session{}, fmt.Errorf("auth: issue session: %w", err)
+		return SessionIssue{}, fmt.Errorf("auth: issue session: %w", err)
 	}
 	ipParam, err := parseSessionIP(ip)
 	if err != nil {
-		return "", store.Session{}, fmt.Errorf("auth: issue session: %w", err)
+		return SessionIssue{}, fmt.Errorf("auth: issue session: %w", err)
 	}
 
 	now := m.now()
-	sess, err = m.q.CreateSession(ctx, store.CreateSessionParams{
-		UserID:            userID,
+	sess, err := qtx.CreateSession(ctx, store.CreateSessionParams{
+		UserID:            user.ID,
 		TokenHash:         hashSessionToken(raw),
 		CSRFSecret:        csrfSecret,
 		CreatedAt:         now,
@@ -86,9 +118,44 @@ func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip str
 		// insert (below) for the one call site that sets it.
 	})
 	if err != nil {
-		return "", store.Session{}, fmt.Errorf("auth: issue session: %w", err)
+		return SessionIssue{}, fmt.Errorf("auth: issue session: %w", err)
 	}
-	return raw, sess, nil
+	return SessionIssue{RawToken: raw, Session: sess}, nil
+}
+
+// Issue is the compatibility wrapper around IssueTx. When the manager holds a
+// transaction beginner it opens a transaction, locks the user row, calls
+// IssueTx, and commits. A query-only manager (nil pool) issues directly, which
+// preserves the historic calling convention for tests and middleware that never
+// mint sessions in production. It always creates a new session to prevent
+// fixation; it returns the raw token but stores only its SHA-256 hash.
+func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error) {
+	if m.pool == nil {
+		issued, err := m.IssueTx(ctx, m.q, store.User{ID: userID}, ua, ip)
+		if err != nil {
+			return "", store.Session{}, err
+		}
+		return issued.RawToken, issued.Session, nil
+	}
+
+	var issued SessionIssue
+	err = pgx.BeginFunc(ctx, m.pool, func(tx pgx.Tx) error {
+		qtx := m.q.WithTx(tx)
+		user, lockErr := qtx.GetUserForUpdate(ctx, userID)
+		if lockErr != nil {
+			return fmt.Errorf("auth: issue session: lock user: %w", lockErr)
+		}
+		if m.lockProbe != nil {
+			m.lockProbe()
+		}
+		var issueErr error
+		issued, issueErr = m.IssueTx(ctx, qtx, user, ua, ip)
+		return issueErr
+	})
+	if err != nil {
+		return "", store.Session{}, err
+	}
+	return issued.RawToken, issued.Session, nil
 }
 
 // Authenticate returns the governing session and a raw successor token only to
@@ -136,10 +203,21 @@ func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (ses
 	return sess, "", nil
 }
 
+// errRotationPredecessorRevoked marks a successor insert aborted because the
+// predecessor was revoked after its admission update committed -- the reset
+// fence in D4. It is a closed, non-error outcome for the rotation loser.
+var errRotationPredecessorRevoked = errors.New("auth: rotation predecessor revoked")
+
 // tryRotate admits at most one rotation winner. The admission update and
 // successor insert are separate statements: a lost insert leaves the
 // predecessor usable only to its parked deadline, while a lost response leaves
 // an unreachable successor. See docs/adr/0015-session-rotation-delivery.md.
+//
+// A pool-backed manager inserts the successor in a short transaction that locks
+// the user row and re-reads the predecessor as live, so a reset that already
+// revoked the predecessor (RevokeAllSessions under the same user lock) cannot
+// mint a successor past that fence. A query-only manager (nil pool) keeps the
+// historic direct insert.
 func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Session, now time.Time) (successor store.Session, raw string, won bool, err error) {
 	graceUntil := now.Add(rotationAge)
 	if graceUntil.After(predecessor.AbsoluteExpiresAt) {
@@ -156,16 +234,56 @@ func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Sessio
 		return store.Session{}, "", false, fmt.Errorf("auth: authenticate: begin rotation: %w", err)
 	}
 
+	if m.pool == nil {
+		successor, raw, err = m.createRotationSuccessor(ctx, m.q, predecessor, now)
+		if err != nil {
+			return store.Session{}, "", false, err
+		}
+		return successor, raw, true, nil
+	}
+
+	if m.rotationProbe != nil {
+		m.rotationProbe()
+	}
+
+	err = pgx.BeginFunc(ctx, m.pool, func(tx pgx.Tx) error {
+		qtx := m.q.WithTx(tx)
+		if _, lockErr := qtx.GetUserForUpdate(ctx, predecessor.UserID); lockErr != nil {
+			return fmt.Errorf("auth: rotate session: lock user: %w", lockErr)
+		}
+		live, readErr := qtx.GetSessionByIDForUpdate(ctx, predecessor.ID)
+		if readErr != nil {
+			return fmt.Errorf("auth: rotate session: re-read predecessor: %w", readErr)
+		}
+		if live.RevokedAt != nil {
+			return errRotationPredecessorRevoked
+		}
+		successor, raw, err = m.createRotationSuccessor(ctx, qtx, predecessor, now)
+		return err
+	})
+	if err != nil {
+		if errors.Is(err, errRotationPredecessorRevoked) {
+			return store.Session{}, "", false, nil
+		}
+		return store.Session{}, "", false, err
+	}
+	return successor, raw, true, nil
+}
+
+// createRotationSuccessor mints the successor row, inheriting identity,
+// absolute expiry, reauth time, user agent, and IP from the predecessor while
+// setting the database-enforced lineage link. Rotation extends none of them.
+func (m *SessionManager) createRotationSuccessor(ctx context.Context, qtx *store.Queries, predecessor store.Session, now time.Time) (successor store.Session, raw string, err error) {
 	raw, err = randomSessionToken()
 	if err != nil {
-		return store.Session{}, "", false, fmt.Errorf("auth: rotate session: %w", err)
+		return store.Session{}, "", fmt.Errorf("auth: rotate session: %w", err)
 	}
 	csrfSecret, err := randomCSRFSecret()
 	if err != nil {
-		return store.Session{}, "", false, fmt.Errorf("auth: rotate session: %w", err)
+		return store.Session{}, "", fmt.Errorf("auth: rotate session: %w", err)
 	}
 
-	successor, err = m.q.CreateSession(ctx, store.CreateSessionParams{
+	successor, err = qtx.CreateSession(ctx, store.CreateSessionParams{
 		UserID:            predecessor.UserID,
 		TokenHash:         hashSessionToken(raw),
 		CSRFSecret:        csrfSecret,
@@ -180,9 +298,9 @@ func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Sessio
 		RotatedFrom: &predecessor.ID,
 	})
 	if err != nil {
-		return store.Session{}, "", false, fmt.Errorf("auth: rotate session: create successor: %w", err)
+		return store.Session{}, "", fmt.Errorf("auth: rotate session: create successor: %w", err)
 	}
-	return successor, raw, true, nil
+	return successor, raw, nil
 }
 
 // startPredecessorGrace shortens the parked deadline on a successor's first

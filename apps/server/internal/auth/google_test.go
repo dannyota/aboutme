@@ -237,7 +237,7 @@ func TestGoogleCallback_NewUser_NameFallsBackToEmailLocalPart_NotFullEmail(t *te
 
 // newServiceWithOrigin lets start and callback use different origins while
 // sharing one database.
-func newServiceWithOrigin(t *testing.T, q *store.Queries, issuer, origin string) http.Handler {
+func newServiceWithOrigin(t *testing.T, pool *store.Pool, issuer, origin string) http.Handler {
 	t.Helper()
 
 	cfg := config.Config{
@@ -245,7 +245,7 @@ func newServiceWithOrigin(t *testing.T, q *store.Queries, issuer, origin string)
 		GoogleClientID:     oidctest.DefaultClientID,
 		GoogleClientSecret: "test-google-client-secret",
 	}
-	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, issuer, "", "")
+	svc, err := auth.NewServiceForTest(testLogger(), cfg, pool, issuer, "", "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
@@ -259,14 +259,14 @@ func TestGoogleCallback_UsesStoredRedirectURI_NotCurrentPublicOrigin(t *testing.
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	q := newTestQueries(t)
+	pool := newTestPool(t)
 
 	const (
 		beginOrigin    = "https://begin.aboutme.example"
 		callbackOrigin = "https://callback.aboutme.example"
 	)
-	beginHandler := newServiceWithOrigin(t, q, p.URL, beginOrigin)
-	callbackHandler := newServiceWithOrigin(t, q, p.URL, callbackOrigin)
+	beginHandler := newServiceWithOrigin(t, pool, p.URL, beginOrigin)
+	callbackHandler := newServiceWithOrigin(t, pool, p.URL, callbackOrigin)
 
 	startResp := doGet(t, beginHandler, auth.GoogleStartPath) //nolint:bodyclose // doGet closes the body itself before returning.
 	if startResp.StatusCode != http.StatusFound {

@@ -15,8 +15,8 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-// newTestQueries opens a fresh pool after idempotently applying migrations.
-func newTestQueries(t *testing.T) *store.Queries {
+// newTestPool opens a fresh pool after idempotently applying migrations.
+func newTestPool(t *testing.T) *store.Pool {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
 
@@ -29,7 +29,14 @@ func newTestQueries(t *testing.T) *store.Queries {
 	}
 	t.Cleanup(func() { pool.Close(context.Background()) })
 
-	return store.New(pool)
+	return pool
+}
+
+// newTestQueries opens a fresh pool after idempotently applying migrations and
+// returns its query surface.
+func newTestQueries(t *testing.T) *store.Queries {
+	t.Helper()
+	return store.New(newTestPool(t))
 }
 
 // createTestUser returns a valid foreign-key target for linking transactions.

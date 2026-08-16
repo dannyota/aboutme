@@ -596,7 +596,8 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 	t.Parallel()
 
 	p := oidctest.NewProvider(t)
-	q := newTestQueries(t)
+	svcPool := newTestPool(t)
+	q := store.New(svcPool)
 	pool := newRowInspectorPool(t)
 	ctx := context.Background()
 
@@ -605,7 +606,7 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 		GoogleClientID:     oidctest.DefaultClientID,
 		GoogleClientSecret: "test-google-client-secret",
 	}
-	svc, err := auth.NewServiceForTest(testLogger(), cfg, q, p.URL, "", "")
+	svc, err := auth.NewServiceForTest(testLogger(), cfg, svcPool, p.URL, "", "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)
 	}
