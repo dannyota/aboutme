@@ -29,6 +29,7 @@ export interface AuthUser {
   email: string;
   name: string | null;
   avatarKey: string | null;
+  hasPassword: boolean;
 }
 
 interface MeEnvelope {
@@ -40,7 +41,7 @@ interface MeEnvelope {
 }
 
 export interface MutateOptions {
-  method: 'POST' | 'DELETE';
+  method: 'POST' | 'PUT' | 'DELETE';
   body?: Record<string, unknown>;
   query?: Record<string, string>;
 }

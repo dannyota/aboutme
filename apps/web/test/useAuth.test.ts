@@ -38,6 +38,7 @@ const meData = {
     email: 'demo@example.com',
     name: 'Demo User',
     avatarKey: null,
+    hasPassword: true,
   },
   csrfToken: 'test-csrf-token',
   identities: [{ provider: 'google' }],
@@ -92,6 +93,19 @@ const Probe = defineComponent({
           },
         },
         'mutate JSON',
+      ),
+      h(
+        'button',
+        {
+          'data-testid': 'password-put-button',
+          'onClick': () => {
+            this.mutate('/api/v1/me/password', {
+              method: 'PUT',
+              body: { password: 'secret' },
+            }).catch(() => {});
+          },
+        },
+        'mutate PUT password',
       ),
     ]);
   },
@@ -150,6 +164,88 @@ describe('useAuth', () => {
 
     expect(receivedContentType).toBe('application/json');
     expect(receivedBody).toBe('{"enabled":true}');
+  });
+
+  it('exposes hasPassword from the /me user', async () => {
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="user"]').text()).toContain(
+      '"hasPassword":true',
+    );
+  });
+
+  it('sends an authenticated PUT with JSON and CSRF', async () => {
+    let receivedMethod: string | undefined;
+    let receivedHeader: string | undefined;
+    let receivedContentType: string | undefined;
+    let receivedBody: string | undefined;
+    registerEndpoint('/api/v1/me/password', {
+      method: 'PUT',
+      handler: async (event) => {
+        receivedMethod = event.method;
+        receivedHeader = requestHeader(event, 'x-csrf-token');
+        receivedContentType = requestHeader(event, 'content-type');
+        receivedBody = await readRawBody(event);
+        setResponseStatus(event, 204);
+        return null;
+      },
+    });
+
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="password-put-button"]').trigger('click');
+    await flushPromises();
+
+    expect(receivedMethod).toBe('PUT');
+    expect(receivedHeader).toBe('test-csrf-token');
+    expect(receivedContentType).toBe('application/json');
+    expect(receivedBody).toBe('{"password":"secret"}');
+  });
+
+  it('PUT retries once on csrf_rejected, then surfaces', async () => {
+    let putCalls = 0;
+    registerEndpoint('/api/v1/me/password', {
+      method: 'PUT',
+      handler: (event) => {
+        putCalls += 1;
+        setResponseStatus(event, 403);
+        return { error: { code: 'csrf_rejected', message: 'x' } };
+      },
+    });
+
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="password-put-button"]').trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    // The CSRF×rotation self-heal applies to PUT too: refresh once and
+    // retry, then surface a second genuine rejection rather than looping.
+    expect(putCalls).toBe(2);
+  });
+
+  it('PUT does not retry a non-csrf 403 (e.g. reauth_required)', async () => {
+    let putCalls = 0;
+    registerEndpoint('/api/v1/me/password', {
+      method: 'PUT',
+      handler: (event) => {
+        putCalls += 1;
+        setResponseStatus(event, 403);
+        return { error: { code: 'reauth_required', message: 'x' } };
+      },
+    });
+
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="password-put-button"]').trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    expect(putCalls).toBe(1);
   });
 
   it('logout() navigates to /login once the session is destroyed', async () => {
