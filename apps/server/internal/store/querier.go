@@ -53,8 +53,10 @@ type Querier interface {
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
-	// New jobs always start pending with attempts 0 (DEFAULT). The caller has
-	// already encrypted the payload and computed the exact expiry before commit.
+	// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
+	// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
+	// id; the caller has already encrypted the payload and computed the exact expiry
+	// before commit.
 	CreateAuthEmailJob(ctx context.Context, arg CreateAuthEmailJobParams) (AuthEmailJob, error)
 	// Returns PostgreSQL's normalized jsonb representation of the stored body
 	// and approved headers plus the exact stored byte count, so the first

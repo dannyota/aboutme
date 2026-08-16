@@ -645,13 +645,15 @@ DELETE FROM password_reset_tokens WHERE id = $1;
 SELECT * FROM sessions WHERE id = $1 FOR UPDATE;
 
 -- name: CreateAuthEmailJob :one
--- New jobs always start pending with attempts 0 (DEFAULT). The caller has
--- already encrypted the payload and computed the exact expiry before commit.
+-- New jobs always start pending with attempts 0 (DEFAULT). The caller provides
+-- the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
+-- id; the caller has already encrypted the payload and computed the exact expiry
+-- before commit.
 INSERT INTO auth_email_jobs (
-    kind, state, registration_id, reset_token_id, user_id, token_digest,
+    id, kind, state, registration_id, reset_token_id, user_id, token_digest,
     key_id, nonce, ciphertext, created_at, expires_at, next_attempt_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 ) RETURNING *;
 
 -- name: ListLiveAuthEmailJobKeyIDs :many

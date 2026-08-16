@@ -65,6 +65,7 @@ func newPendingVerifyJob(ctx context.Context, t *testing.T, q *store.Queries, re
 	now := time.Now().UTC()
 	keyID := "k-test"
 	job, err := q.CreateAuthEmailJob(ctx, store.CreateAuthEmailJobParams{
+		ID:             uuid.New(),
 		Kind:           "verify",
 		State:          "pending",
 		RegistrationID: &regID,
@@ -144,6 +145,7 @@ func TestPasswordAuthUserDeleteCascades(t *testing.T) {
 	keyID := "k-test"
 	next := now.Add(time.Minute)
 	if _, err := q.CreateAuthEmailJob(ctx, store.CreateAuthEmailJobParams{
+		ID:            uuid.New(),
 		Kind:          "password_changed",
 		State:         "pending",
 		UserID:        &userID,
@@ -316,6 +318,7 @@ func TestPasswordAuthListLiveKeyIDs(t *testing.T) {
 	mk := func(regID uuid.UUID, keyID string) {
 		now := time.Now().UTC()
 		if _, err := q.CreateAuthEmailJob(ctx, store.CreateAuthEmailJobParams{
+			ID:             uuid.New(),
 			Kind:           "verify",
 			State:          "pending",
 			RegistrationID: &regID,
