@@ -238,7 +238,7 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 			fmt.Fprintln(os.Stderr, "p5a-native-fixture: close database:", closeErr)
 		}
 	}()
-	if err := db.PingContext(ctx); err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
 
@@ -247,7 +247,7 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 		return err
 	}
 
-	if _, err := db.ExecContext(ctx,
+	if _, err = db.ExecContext(ctx,
 		`INSERT INTO users (id, email, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
 		plan.OwnerID, plan.OwnerEmail, plan.OwnerName); err != nil {
 		return fmt.Errorf("insert owner: %w", err)
@@ -255,7 +255,7 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 
 	for _, r := range plan.Resumes {
 		var exists bool
-		if err := db.QueryRowContext(ctx,
+		if err = db.QueryRowContext(ctx,
 			`SELECT EXISTS(SELECT 1 FROM resumes WHERE id = $1)`, r.ID).Scan(&exists); err != nil {
 			return fmt.Errorf("check resume %s: %w", r.Slug, err)
 		}
@@ -272,7 +272,7 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 				return fmt.Errorf("resume %s: %w", r.Slug, err)
 			}
 		}
-		if _, err := db.ExecContext(ctx, `
+		if _, err = db.ExecContext(ctx, `
 			INSERT INTO resumes
 			    (id, user_id, title, slug, live, download_enabled,
 			     seo_geo_enabled, schema_version, revision,
@@ -284,14 +284,14 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 		}
 	}
 
-	if _, err := db.ExecContext(ctx,
+	if _, err = db.ExecContext(ctx,
 		`INSERT INTO slug_tombstones (id, slug, released_by_user_id, released_at)
 		 VALUES ($1, $2, $3, $4) ON CONFLICT (slug) DO NOTHING`,
 		fixtureTombstoneID, plan.TombstoneSlug, plan.OwnerID, plan.TombstoneReleasedAt); err != nil {
 		return fmt.Errorf("insert tombstone: %w", err)
 	}
 
-	if _, err := db.ExecContext(ctx,
+	if _, err = db.ExecContext(ctx,
 		`UPDATE public_state SET discovery_generation = $1 WHERE singleton = true`,
 		plan.Generation); err != nil {
 		return fmt.Errorf("set discovery generation: %w", err)
@@ -312,7 +312,7 @@ func runCleanup(ctx context.Context, cfg Config, plan seedPlan) error {
 			fmt.Fprintln(os.Stderr, "p5a-native-fixture: close database:", closeErr)
 		}
 	}()
-	if err := db.PingContext(ctx); err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
 
@@ -323,19 +323,19 @@ func runCleanup(ctx context.Context, cfg Config, plan seedPlan) error {
 
 	// media_deletion_jobs has no foreign key to resumes, so it must be
 	// removed before its referenced rows disappear.
-	if _, err := db.ExecContext(ctx,
+	if _, err = db.ExecContext(ctx,
 		`DELETE FROM media_deletion_jobs WHERE resume_id = ANY($1)`, resumeIDs); err != nil {
 		return fmt.Errorf("delete media jobs: %w", err)
 	}
-	if _, err := db.ExecContext(ctx,
+	if _, err = db.ExecContext(ctx,
 		`DELETE FROM slug_tombstones WHERE slug = $1`, plan.TombstoneSlug); err != nil {
 		return fmt.Errorf("delete tombstone: %w", err)
 	}
-	if _, err := db.ExecContext(ctx,
+	if _, err = db.ExecContext(ctx,
 		`DELETE FROM resumes WHERE id = ANY($1)`, resumeIDs); err != nil {
 		return fmt.Errorf("delete resumes: %w", err)
 	}
-	if _, err := db.ExecContext(ctx,
+	if _, err = db.ExecContext(ctx,
 		`DELETE FROM users WHERE id = $1`, plan.OwnerID); err != nil {
 		return fmt.Errorf("delete owner: %w", err)
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
-func TestPublicStateStartsAtOne(t *testing.T) {
+func TestPublicStateSeedIsSingletonAndPositive(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
 
@@ -25,8 +25,11 @@ func TestPublicStateStartsAtOne(t *testing.T) {
 	if !singleton {
 		t.Fatal("public_state.singleton = false, want true")
 	}
-	if generation != 1 {
-		t.Fatalf("public_state.discovery_generation = %d, want 1", generation)
+	// The exact seed value (1) is asserted only after a fresh migration in
+	// TestPublicStateMigrationDownUp; against the shared database the
+	// generation has legitimately advanced, so assert only positivity here.
+	if generation < 1 {
+		t.Fatalf("public_state.discovery_generation = %d, want positive", generation)
 	}
 }
 
@@ -86,7 +89,14 @@ func TestPublicStateGenerationAdvancesMonotonically(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
 
-	for want := int64(2); want <= 3; want++ {
+	var start int64
+	if err := tx.QueryRow(ctx, `
+		SELECT discovery_generation FROM public_state WHERE singleton = true
+	`).Scan(&start); err != nil {
+		t.Fatalf("read current public generation: %v", err)
+	}
+	for i := int64(1); i <= 2; i++ {
+		want := start + i
 		var got int64
 		if err := tx.QueryRow(ctx, `
 			UPDATE public_state
