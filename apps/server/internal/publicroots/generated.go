@@ -18,11 +18,12 @@ type Route struct {
 	Dispatch Dispatch
 }
 
-// Routes is the immutable version-4 public-root registry.
+// Routes is the immutable version-5 public-root registry.
 var Routes = [...]Route{
 	{Root: "admin", Dispatch: DispatchReserved},
 	{Root: "api", Dispatch: DispatchGo},
 	{Root: "app", Dispatch: DispatchNuxt},
+	{Root: "forgot-password", Dispatch: DispatchNuxt},
 	{Root: "healthz", Dispatch: DispatchGo},
 	{Root: "_nuxt", Dispatch: DispatchNuxt},
 	{Root: "internal-render", Dispatch: DispatchDeny},
@@ -31,15 +32,19 @@ var Routes = [...]Route{
 	{Root: "people", Dispatch: DispatchReserved},
 	{Root: "print", Dispatch: DispatchDeny},
 	{Root: "readyz", Dispatch: DispatchGo},
+	{Root: "register", Dispatch: DispatchNuxt},
+	{Root: "reset-password", Dispatch: DispatchNuxt},
 	{Root: "robots.txt", Dispatch: DispatchGo},
 	{Root: "sitemap.xml", Dispatch: DispatchGo},
 	{Root: "u", Dispatch: DispatchReserved},
+	{Root: "verify-email", Dispatch: DispatchNuxt},
 }
 
 var reserved = map[string]struct{}{
 	"admin":           {},
 	"api":             {},
 	"app":             {},
+	"forgot-password": {},
 	"healthz":         {},
 	"_nuxt":           {},
 	"internal-render": {},
@@ -48,9 +53,12 @@ var reserved = map[string]struct{}{
 	"people":          {},
 	"print":           {},
 	"readyz":          {},
+	"register":        {},
+	"reset-password":  {},
 	"robots.txt":      {},
 	"sitemap.xml":     {},
 	"u":               {},
+	"verify-email":    {},
 }
 
 // Reserved reports whether root is unavailable as a public resume slug.

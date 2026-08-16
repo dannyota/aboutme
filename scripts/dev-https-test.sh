@@ -139,9 +139,9 @@ set -Eeuo pipefail
 [ "$#" -eq 2 ]
 [[ $1 == */scripts/generate-public-roots.mjs ]]
 [ "$2" = --check ]
-[ -f "$PWD/packages/publicroots/public-roots.v4.json" ]
+[ -f "$PWD/packages/publicroots/public-roots.v5.json" ]
 [ -f "$PWD/deploy/caddy/public-roots.generated.caddy" ]
-[ "$(sha256sum "$PWD/packages/publicroots/public-roots.v4.json" | awk '{print $1}')" = "$FAKE_REGISTRY_SHA256" ]
+[ "$(sha256sum "$PWD/packages/publicroots/public-roots.v5.json" | awk '{print $1}')" = "$FAKE_REGISTRY_SHA256" ]
 [ "$(sha256sum "$PWD/deploy/caddy/public-roots.generated.caddy" | awk '{print $1}')" = "$FAKE_FRAGMENT_SHA256" ]
 printf '%s\n' \
   'APP_BUILD_DIGEST=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
@@ -276,7 +276,7 @@ new_fixture() {
   cp "$SOURCE_ROOT/scripts/generate-public-roots.mjs" "$fixture/repo/scripts/generate-public-roots.mjs"
   cp "$SOURCE_ROOT/deploy/caddy/Caddyfile" "$fixture/repo/deploy/caddy/Caddyfile"
   cp "$SOURCE_ROOT/deploy/caddy/public-roots.generated.caddy" "$fixture/repo/deploy/caddy/public-roots.generated.caddy"
-  cp "$SOURCE_ROOT/packages/publicroots/public-roots.v4.json" "$fixture/repo/packages/publicroots/public-roots.v4.json"
+  cp "$SOURCE_ROOT/packages/publicroots/public-roots.v5.json" "$fixture/repo/packages/publicroots/public-roots.v5.json"
   cat >"$fixture/repo/Makefile" <<'EOF'
 .PHONY: tools-check test-db-up
 tools-check:
@@ -306,7 +306,7 @@ fixture_env() {
   export FAKE_PODMAN_PS=$fixture/podman-ps
   export DEV_HTTPS_PID_AUDIT_FILE=$fixture/all-pids
   export FAKE_GO_FAIL_MARKER=$fixture/go-fail-marker
-  export FAKE_REGISTRY_SHA256=$(sha256sum "$fixture/repo/packages/publicroots/public-roots.v4.json" | awk '{print $1}')
+  export FAKE_REGISTRY_SHA256=$(sha256sum "$fixture/repo/packages/publicroots/public-roots.v5.json" | awk '{print $1}')
   export FAKE_FRAGMENT_SHA256=$(sha256sum "$fixture/repo/deploy/caddy/public-roots.generated.caddy" | awk '{print $1}')
   export DEV_HTTPS_STOP_TERM_ATTEMPTS=5
   export DEV_HTTPS_STOP_KILL_ATTEMPTS=20

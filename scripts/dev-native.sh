@@ -61,7 +61,7 @@ readonly MEDIA_DIR
 readonly CADDYFILE_SRC=$ROOT/deploy/caddy/Caddyfile
 readonly CADDYFILE_GEN=$DEV_DIR/Caddyfile
 readonly CADDY_HASHES=$DEV_DIR/caddy-hashes
-readonly PUBLIC_ROOTS_REGISTRY=$ROOT/packages/publicroots/public-roots.v4.json
+readonly PUBLIC_ROOTS_REGISTRY=$ROOT/packages/publicroots/public-roots.v5.json
 readonly PUBLIC_ROOTS_FRAGMENT=$ROOT/deploy/caddy/public-roots.generated.caddy
 readonly PUBLIC_ROOTS_MARKER=$'\t# ABOUTME_PUBLIC_ROOTS_GENERATED\n\timport /etc/caddy/generated/public-roots.generated.caddy'
 readonly SERVICES=(server web caddy)

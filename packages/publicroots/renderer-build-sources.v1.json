@@ -7,6 +7,6 @@
     { "path": "apps/web/package.json", "kind": "file" },
     { "path": "apps/web/public", "kind": "recursive" },
     { "path": "apps/web/server", "kind": "recursive" },
-    { "path": "packages/publicroots/public-roots.v4.json", "kind": "file" }
+    { "path": "packages/publicroots/public-roots.v5.json", "kind": "file" }
   ]
 }

@@ -11,6 +11,7 @@ export const publicRootRoutes = [
   { root: 'admin', dispatch: 'reserved' },
   { root: 'api', dispatch: 'go' },
   { root: 'app', dispatch: 'nuxt' },
+  { root: 'forgot-password', dispatch: 'nuxt' },
   { root: 'healthz', dispatch: 'go' },
   { root: '_nuxt', dispatch: 'nuxt' },
   { root: 'internal-render', dispatch: 'deny' },
@@ -19,9 +20,12 @@ export const publicRootRoutes = [
   { root: 'people', dispatch: 'reserved' },
   { root: 'print', dispatch: 'deny' },
   { root: 'readyz', dispatch: 'go' },
+  { root: 'register', dispatch: 'nuxt' },
+  { root: 'reset-password', dispatch: 'nuxt' },
   { root: 'robots.txt', dispatch: 'go' },
   { root: 'sitemap.xml', dispatch: 'go' },
   { root: 'u', dispatch: 'reserved' },
+  { root: 'verify-email', dispatch: 'nuxt' },
 ] as const satisfies readonly PublicRootRoute[];
 
 const reservedPublicRoots: ReadonlySet<string> = new Set(
