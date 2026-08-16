@@ -13,6 +13,11 @@ import (
 
 // env builds a lookup function for config.Load from a map, so tests never
 // touch real process environment variables.
+
+// testBase64URL32 is the unpadded base64url spelling of 32 zero bytes, a valid
+// value for every 32-byte secret.
+const testBase64URL32 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
 func env(vars map[string]string) func(string) string {
 	return func(key string) string {
 		if value, ok := vars[key]; ok {
@@ -33,6 +38,24 @@ func env(vars map[string]string) func(string) string {
 			return "fs"
 		case "MEDIA_FS_DIR":
 			return "/tmp/aboutme-config-test-media"
+		// Password-mail config defaults to a valid SES mode so every existing
+		// Load test (dev, staging, and prod) has a complete, valid config; the
+		// auth-email tests override these keys, including with an empty value
+		// when proving a missing-variable failure.
+		case "PASSWORD_RATE_HMAC_KEY":
+			return testBase64URL32
+		case "AUTH_EMAIL_ACTIVE_KEY_ID":
+			return "k1"
+		case "AUTH_EMAIL_ACTIVE_KEY":
+			return testBase64URL32
+		case "AUTH_EMAIL_MODE":
+			return "ses"
+		case "SES_FROM_ADDRESS":
+			return "noreply@example.com"
+		case "SES_CONFIGURATION_SET":
+			return "aboutme"
+		case "AWS_REGION":
+			return "ap-southeast-1"
 		}
 		return vars[key]
 	}

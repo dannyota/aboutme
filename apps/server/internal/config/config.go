@@ -116,6 +116,9 @@ type Config struct {
 	// MediaForcePathStyle must be true with a custom endpoint and absent in
 	// AWS mode.
 	MediaForcePathStyle bool
+	// AuthEmail is the validated password-mail configuration (rate HMAC key,
+	// key ring, mode, and sender). See AuthEmailConfig.
+	AuthEmail AuthEmailConfig
 }
 
 const (
@@ -216,6 +219,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	authEmail, err := loadAuthEmailConfig(getenv, env)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port:                      port,
 		ListenHost:                listenHost,
@@ -246,6 +254,7 @@ func Load(getenv func(string) string) (Config, error) {
 		MediaAccessKeyID:          mediaCfg.accessKeyID,
 		MediaSecretAccessKey:      mediaCfg.secretAccessKey,
 		MediaForcePathStyle:       mediaCfg.forcePathStyle,
+		AuthEmail:                 authEmail,
 	}, nil
 }
 

@@ -120,6 +120,9 @@ if [ "$name" = migrate ]; then
   printf 'migrate:db=%s\n' "$DATABASE_URL" >>"$FAKE_EFFECTS"
   exit 0
 fi
+if [ "$name" = mail-capture ]; then
+  printf 'mail-capture-args:%s\n' "$*" >>"$FAKE_EFFECTS"
+fi
 exec fake-service "$name"
 INNER
   chmod 0700 "$out"
@@ -208,6 +211,7 @@ case $port in
 20441) name=server ;;
 20442) name=mock-oauth ;;
 20443) name=caddy ;;
+20444) name=mail-capture ;;
 *) exit 0 ;;
 esac
 pidfile="$PWD/.dev/native-https/run/$name.pid"
@@ -332,6 +336,27 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   assert_log_line "$FAKE_EFFECTS" 'npm:run dev -- --port 20440 --host 127.0.0.1'
   assert_log_line "$FAKE_EFFECTS" 'caddy-config-validated'
+  assert_log_line "$FAKE_MUTATIONS" 'go-build:mail-capture:./cmd/mail-capture'
+  assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'
+  grep -F 'mail-capture-args:' "$FAKE_EFFECTS" | grep -Fq -- '--addr 127.0.0.1:20444' || \
+    fail 'mail-capture was not started with the exact capture address'
+  grep -F 'mail-capture-args:' "$FAKE_EFFECTS" | grep -Fq -- 'secrets/auth-email-capture-bearer' || \
+    fail 'mail-capture was not started with the harness capture secret file'
+
+  [ "$(stat -c '%a' .dev/native-https/secrets)" = 700 ] || fail 'secrets directory is not mode 700'
+  for secret_name in password-rate-hmac-key auth-email-active-key auth-email-capture-bearer; do
+    secret_file=".dev/native-https/secrets/$secret_name"
+    [ -f "$secret_file" ] || fail "missing secret file $secret_file"
+    [ "$(stat -c '%a' "$secret_file")" = 600 ] || fail "$secret_file mode is $(stat -c '%a' "$secret_file"), want 600"
+    [ "$(stat -c '%s' "$secret_file")" = 32 ] || fail "$secret_file size is $(stat -c '%s' "$secret_file"), want 32"
+  done
+  server_env=$(<.dev/native-https/run/server.env)
+  assert_contains "$server_env" 'PASSWORD_RATE_HMAC_KEY='
+  assert_contains "$server_env" 'AUTH_EMAIL_ACTIVE_KEY_ID=dev-active'
+  assert_contains "$server_env" 'AUTH_EMAIL_ACTIVE_KEY='
+  assert_contains "$server_env" 'AUTH_EMAIL_MODE=capture'
+  assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_URL=http://127.0.0.1:20444'
+  assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_BEARER='
 
   [ -f .dev/native-https/input/caddy-root.crt ] || fail "exported Caddy root is missing"
   mode=$(stat -c '%a' .dev/native-https/input/caddy-root.crt)
@@ -353,8 +378,11 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$manifest" 'generated_route_sha256='
   assert_contains "$manifest" 'server_expected_executable='
   assert_contains "$manifest" 'server_expected_cmdline_sha256='
+  assert_contains "$manifest" 'mail_capture_port=20444'
+  assert_contains "$manifest" 'mail_capture_binary_sha256='
+  assert_contains "$manifest" 'mail_secrets_sha256='
   assert_not_contains "$manifest" 'not-a-secret-local-google'
-  for service in mock-oauth server web caddy; do
+  for service in mock-oauth mail-capture server web caddy; do
     mode=$(stat -c '%a' ".dev/native-https/run/$service.identity")
     [ "$mode" = 600 ] || fail "$service identity mode is $mode, want 600"
     mode=$(stat -c '%a' ".dev/native-https/run/$service.launch")
@@ -365,7 +393,9 @@ run_happy_path_and_lifecycle_checks() (
 
   output=$(bash scripts/dev-https.sh status 2>&1) || fail "status failed: $output"
   assert_contains "$output" 'mock-oauth'
+  assert_contains "$output" 'mail-capture'
   assert_contains "$output" '20443'
+  assert_contains "$output" '20444'
   grep -F 'curl:' "$FAKE_EFFECTS" | grep -F -- '--cacert' | grep -Fq 'https://localhost:20443/healthz' || \
     fail "status did not probe public HTTPS with the exported CA"
 
@@ -451,9 +481,16 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$output" 'harmless-upper=ok'
   assert_contains "$output" '"status":"ok2"'
 
+  capture_bearer=$(sed -n 's/^AUTH_EMAIL_CAPTURE_BEARER=//p' .dev/native-https/run/server.env)
+  [ -n "$capture_bearer" ] || fail 'capture bearer is missing from the server environment'
+  printf 'capture_bearer=%s\n' "$capture_bearer" >>.dev/native-https/log/server.log
+  output=$(bash scripts/dev-https.sh logs server 2>&1) || fail "secret redaction logs failed: $output"
+  assert_not_contains "$output" "$capture_bearer"
+  assert_contains "$output" '[REDACTED]'
+
   output=$(bash scripts/dev-https.sh down 2>&1) || fail "down failed: $output"
   mapfile -t stops <"$FAKE_STOP_LOG"
-  [ "${stops[*]}" = 'stop:caddy stop:web stop:server stop:mock-oauth' ] || \
+  [ "${stops[*]}" = 'stop:caddy stop:web stop:server stop:mail-capture stop:mock-oauth' ] || \
     fail "stop order was: ${stops[*]}"
   before=$(wc -l <"$FAKE_STOP_LOG")
   bash scripts/dev-https.sh down >/dev/null 2>&1 || fail "absent-state down was not idempotent"
@@ -956,6 +993,128 @@ run_failed_build_retry_check() (
   output=$(bash scripts/dev-https.sh down 2>&1) || fail "down after build retry failed: $output"
 )
 
+run_mail_capture_failure_rollback_check() (
+  local fixture output pidfile pid
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_EXIT_SERVICE=mail-capture
+  cd "$fixture/repo"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted mail-capture startup failure'
+  fi
+  assert_contains "$output" 'startup failed'
+  assert_log_line "$FAKE_MUTATIONS" 'start:mock-oauth'
+  assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'
+  for pidfile in .dev/native-https/run/*.pid; do
+    [ -e "$pidfile" ] || continue
+    pid=$(<"$pidfile")
+    ! kill -0 "$pid" 2>/dev/null || fail "mail-capture rollback left pid $pid alive"
+  done
+  [ ! -s "$FAKE_FORBIDDEN" ] || fail 'mail-capture rollback invoked a forbidden command'
+)
+
+run_server_after_capture_rollback_check() (
+  local fixture output pidfile pid
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_EXIT_SERVICE=server
+  cd "$fixture/repo"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted server failure after mail-capture start'
+  fi
+  assert_contains "$output" 'startup failed'
+  assert_log_line "$FAKE_MUTATIONS" 'start:mail-capture'
+  assert_log_line "$FAKE_MUTATIONS" 'start:server'
+  for pidfile in .dev/native-https/run/*.pid; do
+    [ -e "$pidfile" ] || continue
+    pid=$(<"$pidfile")
+    ! kill -0 "$pid" 2>/dev/null || fail "server-after-capture rollback left pid $pid alive"
+  done
+  [ ! -s "$FAKE_FORBIDDEN" ] || fail 'server-after-capture rollback invoked a forbidden command'
+)
+
+run_mail_capture_binary_drift_check() (
+  local fixture output binary
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "mail-capture binary-drift setup failed: $output"
+  binary=.dev/native-https/bin/mail-capture
+  printf '\n# drift\n' >>"$binary"
+  if output=$(bash scripts/dev-https.sh status 2>&1); then
+    fail 'status accepted mail-capture binary drift'
+  fi
+  assert_contains "$output" 'effective config'
+  bash scripts/dev-https.sh down >/dev/null 2>&1 || fail 'mail-capture binary drift prevented safe down'
+)
+
+run_mail_capture_foreign_listener_check() (
+  local fixture output
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  printf '20444\n' >"$FAKE_FOREIGN_PORTS"
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a foreign listener on the mail-capture port'
+  fi
+  assert_contains "$output" '20444'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'mail-capture foreign-listener rejection performed a mutation'
+)
+
+run_mail_capture_group_drain_check() (
+  local fixture output pid member
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  export FAKE_LEADER_EXITS_CHILD_IGNORES=mail-capture
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "mail-capture group-drain setup failed: $output"
+  pid=$(<.dev/native-https/run/mail-capture.pid)
+  output=$(bash scripts/dev-https.sh down 2>&1) || fail "mail-capture group-drain down failed: $output"
+  while IFS= read -r member; do
+    [ -n "$member" ] || continue
+    fail "down left process $member in mail-capture process group $pid"
+  done < <(ps -eo pid=,pgid= | awk -v pgid="$pid" '$2 == pgid { print $1 }')
+  [ ! -e .dev/native-https/run/mail-capture.pid ] || fail 'down retained mail-capture PID after group drained'
+  [ ! -e .dev/native-https/run/mail-capture.identity ] || fail 'down retained mail-capture identity after group drained'
+)
+
+run_secret_reuse_check() (
+  local fixture output before_secrets after_secrets
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "secret-reuse up failed: $output"
+  before_secrets=$(sha256sum .dev/native-https/secrets/* | sha256sum | awk '{print $1}')
+  output=$(bash scripts/dev-https.sh down 2>&1) || fail "secret-reuse down failed: $output"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "secret-reuse re-up failed: $output"
+  after_secrets=$(sha256sum .dev/native-https/secrets/* | sha256sum | awk '{print $1}')
+  [ "$before_secrets" = "$after_secrets" ] || fail 'down/up rotated the mail secret keyring'
+  output=$(bash scripts/dev-https.sh down 2>&1) || fail "secret-reuse final down failed: $output"
+)
+
+run_secret_mode_check() (
+  local fixture output
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  install -d -m 0755 .dev
+  install -d -m 0700 .dev/native-https .dev/native-https/secrets
+  head -c 32 /dev/urandom >.dev/native-https/secrets/password-rate-hmac-key
+  chmod 0644 .dev/native-https/secrets/password-rate-hmac-key
+  if output=$(bash scripts/dev-https.sh up 2>&1); then
+    fail 'up accepted a world-readable mail secret'
+  fi
+  assert_contains "$output" 'state path'
+  [ ! -s "$FAKE_MUTATIONS" ] || fail 'unsafe secret mode performed a mutation'
+)
+
 run_missing_tool_check() (
   local fixture output
   fixture=$(new_fixture)
@@ -990,6 +1149,13 @@ main() {
   absent-completed-launch) run_absent_completed_launch_cleanup_check; return ;;
   path-integrity) run_state_path_integrity_checks; return ;;
   build-retry) run_failed_build_retry_check; return ;;
+  mail-capture-rollback) run_mail_capture_failure_rollback_check; return ;;
+  server-after-capture) run_server_after_capture_rollback_check; return ;;
+  mail-capture-drift) run_mail_capture_binary_drift_check; return ;;
+  mail-capture-foreign) run_mail_capture_foreign_listener_check; return ;;
+  mail-capture-group-drain) run_mail_capture_group_drain_check; return ;;
+  secret-reuse) run_secret_reuse_check; return ;;
+  secret-mode) run_secret_mode_check; return ;;
   '') ;;
   *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
   esac
@@ -1014,6 +1180,13 @@ main() {
   run_absent_completed_launch_cleanup_check
   run_state_path_integrity_checks
   run_failed_build_retry_check
+  run_mail_capture_failure_rollback_check
+  run_server_after_capture_rollback_check
+  run_mail_capture_binary_drift_check
+  run_mail_capture_foreign_listener_check
+  run_mail_capture_group_drain_check
+  run_secret_reuse_check
+  run_secret_mode_check
   run_missing_tool_check
   printf '%s\n' 'dev-https static tests: PASS'
 }

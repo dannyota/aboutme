@@ -10,6 +10,10 @@ readonly WEB_PORT=20440
 readonly SERVER_PORT=20441
 readonly MOCK_PORT=20442
 readonly CADDY_PORT=20443
+readonly MAIL_CAPTURE_PORT=20444
+readonly MAIL_CAPTURE_ADDR="127.0.0.1:${MAIL_CAPTURE_PORT}"
+readonly MAIL_CAPTURE_URL="http://${MAIL_CAPTURE_ADDR}"
+readonly ACTIVE_KEY_ID=dev-active
 readonly PUBLIC_ORIGIN="https://localhost:${CADDY_PORT}"
 readonly PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20440
 readonly GOOGLE_CLIENT_ID=aboutme-local-google
@@ -26,6 +30,7 @@ readonly BIN_DIR=$STATE_DIR/bin
 readonly MEDIA_DIR=$STATE_DIR/media
 readonly CADDY_DIR=$STATE_DIR/caddy
 readonly INPUT_DIR=$STATE_DIR/input
+readonly SECRETS_DIR=$STATE_DIR/secrets
 readonly CADDYFILE_SRC=$ROOT/deploy/caddy/Caddyfile
 readonly CADDYFILE_GEN=$STATE_DIR/Caddyfile
 readonly PUBLIC_ROOTS_REGISTRY=$ROOT/packages/publicroots/public-roots.v5.json
@@ -35,8 +40,8 @@ readonly CADDY_ROOT=$CADDY_DIR/data/caddy/pki/authorities/local/root.crt
 readonly EXPORTED_ROOT=$INPUT_DIR/caddy-root.crt
 readonly EFFECTIVE_CONFIG=$STATE_DIR/effective-config
 readonly DB_CONTAINER=aboutme-test-db
-readonly SERVICES=(mock-oauth server web caddy)
-readonly STOP_ORDER=(caddy web server mock-oauth)
+readonly SERVICES=(mock-oauth mail-capture server web caddy)
+readonly STOP_ORDER=(caddy web server mail-capture mock-oauth)
 readonly NORMAL_NATIVE_PORTS=(20030 20080 20081)
 readonly STOP_TERM_ATTEMPTS=${DEV_HTTPS_STOP_TERM_ATTEMPTS:-100}
 readonly STOP_KILL_ATTEMPTS=${DEV_HTTPS_STOP_KILL_ATTEMPTS:-50}
@@ -57,6 +62,9 @@ STARTUP_ARMED=0
 declare -a STARTED_SERVICES=()
 APP_BUILD_DIGEST=
 PUBLIC_RENDERER_BUILD_DIGEST=
+PASSWORD_RATE_HMAC_KEY_B64=
+AUTH_EMAIL_ACTIVE_KEY_B64=
+AUTH_EMAIL_CAPTURE_BEARER_B64=
 
 info() { printf '%s\n' "$*"; }
 warn() { printf 'dev-https: %s\n' "$*" >&2; }
@@ -151,7 +159,7 @@ prepare_state_directories() {
   fi
   validate_existing_state_node "$STATE_DIR" directory
   for path in "$RUN_DIR" "$LOG_DIR" "$BIN_DIR" "$MEDIA_DIR" "$CADDY_DIR" \
-    "$CADDY_DIR/config" "$CADDY_DIR/data" "$INPUT_DIR"; do
+    "$CADDY_DIR/config" "$CADDY_DIR/data" "$INPUT_DIR" "$SECRETS_DIR"; do
     if [ ! -e "$path" ]; then
       install -d -m 0700 -- "$path"
     fi
@@ -164,6 +172,7 @@ prepare_state_directories() {
 port_of() {
   case $1 in
   mock-oauth) printf '%s' "$MOCK_PORT" ;;
+  mail-capture) printf '%s' "$MAIL_CAPTURE_PORT" ;;
   server) printf '%s' "$SERVER_PORT" ;;
   web) printf '%s' "$WEB_PORT" ;;
   caddy) printf '%s' "$CADDY_PORT" ;;
@@ -208,6 +217,10 @@ expected_service_cmdline_hash() {
   mock-oauth)
     workdir=$ROOT/apps/server
     hash_argv "$BASH_BIN" -c "$SUPERVISOR_CODE" "dev-https-$name" "$file" "$workdir" "$environment" "$BIN_DIR/mock-oauth"
+    ;;
+  mail-capture)
+    workdir=$ROOT/apps/server
+    hash_argv "$BASH_BIN" -c "$SUPERVISOR_CODE" "dev-https-$name" "$file" "$workdir" "$environment" "$BIN_DIR/mail-capture" --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr "$MAIL_CAPTURE_ADDR"
     ;;
   server)
     workdir=$ROOT/apps/server
@@ -537,7 +550,7 @@ generate_caddyfile() {
 
 require_tools() {
   local tool
-  for tool in podman go npm node caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv find; do
+  for tool in podman go npm node caddy curl ss setsid make sha256sum readlink ps awk grep stat install sed tail chmod mv find base64 tr head; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
   done
 }
@@ -558,6 +571,64 @@ load_source_digests() {
   [[ $APP_BUILD_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] || die "APP_BUILD_DIGEST is invalid"
   [[ $PUBLIC_RENDERER_BUILD_DIGEST =~ ^sha256:[0-9a-f]{64}$ ]] ||
     die "PUBLIC_RENDERER_BUILD_DIGEST is invalid"
+}
+
+# base64url_of encodes a raw 32-byte secret file as unpadded base64url, the
+# exact form internal/config decodes. The value is returned, never logged.
+base64url_of() {
+  base64 -w0 -- "$1" | tr '+/' '-_' | tr -d '='
+}
+
+validate_secret_file() {
+  local file=$1 mode size canonical owner
+  [ ! -L "$file" ] || die "state secret is a symlink: $file"
+  [ -f "$file" ] || die "state secret is not a regular file: $file"
+  canonical=$(readlink -f -- "$file" 2>/dev/null) || die "state secret cannot be resolved: $file"
+  [ "$canonical" = "$file" ] || die "state secret is noncanonical: $file"
+  owner=$(stat -c '%u' -- "$file" 2>/dev/null) || die "state secret ownership cannot be read: $file"
+  [ "$owner" = "$EUID" ] || die "state secret is not owned by uid $EUID: $file"
+  mode=$(stat -c '%a' -- "$file" 2>/dev/null) || die "state secret mode cannot be read: $file"
+  [ "$mode" = 600 ] || die "state secret must have mode 600: $file"
+  size=$(stat -c '%s' -- "$file" 2>/dev/null) || die "state secret size cannot be read: $file"
+  [ "$size" = 32 ] || die "state secret must be 32 bytes: $file"
+}
+
+# ensure_secrets creates the mode-0600 random rate/mail/capture secrets once,
+# then reuses them across down/up. It never rotates implicitly and never prints
+# a value.
+ensure_secrets() {
+  local name file
+  mkdir -p -- "$SECRETS_DIR"
+  chmod 0700 -- "$SECRETS_DIR"
+  for name in password-rate-hmac-key auth-email-active-key auth-email-capture-bearer; do
+    file="$SECRETS_DIR/$name"
+    if [ ! -e "$file" ] && [ ! -L "$file" ]; then
+      umask 077
+      head -c 32 /dev/urandom >"$file" || die "could not generate state secret $file"
+      chmod 0600 -- "$file"
+    fi
+    validate_secret_file "$file"
+  done
+  PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
+  AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
+  AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
+}
+
+# load_secrets sets the derived secret values from existing state without
+# creating anything, so read-only commands (logs) never mutate state.
+load_secrets() {
+  PASSWORD_RATE_HMAC_KEY_B64=
+  AUTH_EMAIL_ACTIVE_KEY_B64=
+  AUTH_EMAIL_CAPTURE_BEARER_B64=
+  [ -f "$SECRETS_DIR/password-rate-hmac-key" ] || return 0
+  PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
+  AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
+  AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
+}
+
+mail_secrets_sha256() {
+  sha256sum "$SECRETS_DIR/password-rate-hmac-key" "$SECRETS_DIR/auth-email-active-key" "$SECRETS_DIR/auth-email-capture-bearer" \
+    | sha256sum | awk '{print $1}'
 }
 
 normal_native_active() {
@@ -721,10 +792,12 @@ write_service_env() {
       127.0.0.1 "$MOCK_PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" >"$file"
     ;;
   server)
-    printf 'PORT=%q\nLISTEN_HOST=%q\nDATABASE_URL=%q\nENV=%q\nPUBLIC_ORIGIN=%q\nPUBLIC_RENDER_ORIGIN=%q\nAPP_BUILD_DIGEST=%q\nPUBLIC_RENDERER_BUILD_DIGEST=%q\nTRUSTED_PROXY_CIDRS=%q\nLOG_LEVEL=%q\nMEDIA_BACKEND=%q\nMEDIA_FS_DIR=%q\nGOOGLE_CLIENT_ID=%q\nGOOGLE_CLIENT_SECRET=%q\nGOOGLE_OIDC_ISSUER_URL=%q\n' \
+    printf 'PORT=%q\nLISTEN_HOST=%q\nDATABASE_URL=%q\nENV=%q\nPUBLIC_ORIGIN=%q\nPUBLIC_RENDER_ORIGIN=%q\nAPP_BUILD_DIGEST=%q\nPUBLIC_RENDERER_BUILD_DIGEST=%q\nTRUSTED_PROXY_CIDRS=%q\nLOG_LEVEL=%q\nMEDIA_BACKEND=%q\nMEDIA_FS_DIR=%q\nGOOGLE_CLIENT_ID=%q\nGOOGLE_CLIENT_SECRET=%q\nGOOGLE_OIDC_ISSUER_URL=%q\nPASSWORD_RATE_HMAC_KEY=%q\nAUTH_EMAIL_ACTIVE_KEY_ID=%q\nAUTH_EMAIL_ACTIVE_KEY=%q\nAUTH_EMAIL_MODE=%q\nAUTH_EMAIL_CAPTURE_URL=%q\nAUTH_EMAIL_CAPTURE_BEARER=%q\n' \
       "$SERVER_PORT" 127.0.0.1 "$DATABASE_URL" dev "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" 127.0.0.1/32 "$LOG_LEVEL" fs "$MEDIA_DIR" \
-      "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_ISSUER_URL" >"$file"
+      "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_ISSUER_URL" \
+      "$PASSWORD_RATE_HMAC_KEY_B64" "$ACTIVE_KEY_ID" "$AUTH_EMAIL_ACTIVE_KEY_B64" capture "$MAIL_CAPTURE_URL" "$AUTH_EMAIL_CAPTURE_BEARER_B64" >"$file"
     ;;
+  mail-capture) : >"$file" ;;
   web) : >"$file" ;;
   caddy)
     printf 'XDG_CONFIG_HOME=%q\nXDG_DATA_HOME=%q\n' "$CADDY_DIR/config" "$CADDY_DIR/data" >"$file"
@@ -906,6 +979,8 @@ build_and_migrate() {
     chmod 0755 -- "$BIN_DIR/migrate"
     go build -o "$BIN_DIR/mock-oauth" ./cmd/mock-oauth
     chmod 0755 -- "$BIN_DIR/mock-oauth"
+    go build -o "$BIN_DIR/mail-capture" ./cmd/mail-capture
+    chmod 0755 -- "$BIN_DIR/mail-capture"
     go build -o "$BIN_DIR/server" ./cmd/server
     chmod 0755 -- "$BIN_DIR/server"
     env DATABASE_URL="$DATABASE_URL" "$BIN_DIR/migrate"
@@ -915,6 +990,32 @@ build_and_migrate() {
 start_mock() {
   start_service mock-oauth "$ROOT/apps/server" "$BIN_DIR/mock-oauth"
   wait_http mock-oauth "$GOOGLE_ISSUER_URL/.well-known/openid-configuration" 30
+}
+
+# wait_mail_capture treats a bound loopback listener as readiness: the capture
+# server authenticates every route, so an HTTP probe cannot be used without
+# putting the bearer secret on a command line.
+wait_mail_capture() {
+  local name=$1 port=$2 timeout=$3 pid deadline status
+  pid=$(service_pid "$name") || return 1
+  deadline=$((SECONDS + timeout))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    validate_service_identity "$name" 1 || return 1
+    if port_listening "$port"; then
+      return 0
+    else
+      status=$?
+      [ "$status" -eq 1 ] || return 1
+    fi
+    sleep 0.3
+  done
+  return 1
+}
+
+start_mail_capture() {
+  start_service mail-capture "$ROOT/apps/server" "$BIN_DIR/mail-capture" \
+    --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr "$MAIL_CAPTURE_ADDR"
+  wait_mail_capture mail-capture "$MAIL_CAPTURE_PORT" 30
 }
 
 start_server() {
@@ -966,8 +1067,8 @@ render_effective_config() {
   printf 'public_renderer_build_digest=%s\n' "$PUBLIC_RENDERER_BUILD_DIGEST"
   printf 'google_client_id=%s\n' "$GOOGLE_CLIENT_ID"
   printf 'google_issuer_url=%s\n' "$GOOGLE_ISSUER_URL"
-  printf 'web_port=%s\nserver_port=%s\nmock_port=%s\ncaddy_port=%s\n' \
-    "$WEB_PORT" "$SERVER_PORT" "$MOCK_PORT" "$CADDY_PORT"
+  printf 'web_port=%s\nserver_port=%s\nmock_port=%s\ncaddy_port=%s\nmail_capture_port=%s\n' \
+    "$WEB_PORT" "$SERVER_PORT" "$MOCK_PORT" "$CADDY_PORT" "$MAIL_CAPTURE_PORT"
   printf 'stop_term_attempts=%s\nstop_kill_attempts=%s\n' "$STOP_TERM_ATTEMPTS" "$STOP_KILL_ATTEMPTS"
   printf 'lifecycle_source_sha256=%s\n' "$(sha256_file "$ROOT/scripts/dev-https.sh")"
   printf 'deployed_route_source_sha256=%s\n' "$(sha256_file "$CADDYFILE_SRC")"
@@ -976,8 +1077,10 @@ render_effective_config() {
   printf 'generated_route_sha256=%s\n' "$(printf '%s' "$generated_route" | sha256sum | awk '{print $1}')"
   printf 'effective_caddyfile_sha256=%s\n' "$(sha256_file "$CADDYFILE_GEN")"
   printf 'web_source_sha256=%s\n' "$(web_source_hash)"
+  printf 'mail_secrets_sha256=%s\n' "$(mail_secrets_sha256)"
   printf 'migrate_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/migrate")"
   printf 'mock_oauth_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/mock-oauth")"
+  printf 'mail_capture_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/mail-capture")"
   printf 'server_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/server")"
   printf 'caddy_tool_sha256=%s\n' "$(sha256_file "$caddy_bin")"
   printf 'npm_tool_sha256=%s\n' "$(sha256_file "$npm_bin")"
@@ -1022,7 +1125,9 @@ start_stack() {
   make -C "$ROOT" --no-print-directory tools-check ARGS=dev
   make -C "$ROOT" --no-print-directory test-db-up
   build_and_migrate
+  ensure_secrets
   start_mock
+  start_mail_capture
   start_server
   start_web
   start_caddy
@@ -1140,6 +1245,10 @@ cmd_status() {
 }
 
 redact_logs() {
+  local -a secret_rules=()
+  [ -z "${PASSWORD_RATE_HMAC_KEY_B64-}" ] || secret_rules+=(-e "s/${PASSWORD_RATE_HMAC_KEY_B64}/[REDACTED]/g")
+  [ -z "${AUTH_EMAIL_ACTIVE_KEY_B64-}" ] || secret_rules+=(-e "s/${AUTH_EMAIL_ACTIVE_KEY_B64}/[REDACTED]/g")
+  [ -z "${AUTH_EMAIL_CAPTURE_BEARER_B64-}" ] || secret_rules+=(-e "s/${AUTH_EMAIL_CAPTURE_BEARER_B64}/[REDACTED]/g")
   sed -E \
     -e 's/(GOOGLE_CLIENT_SECRET[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/g' \
     -e 's/(__Host-(session|oauth-tx)=)[^;[:space:]]+/\1[REDACTED]/gI' \
@@ -1149,17 +1258,19 @@ redact_logs() {
     -e 's/(Authorization[[:space:]]*[=:][[:space:]]*Bearer[[:space:]]+)[^,;&[:space:]]+/\1[REDACTED]/gI' \
     -e 's/([?&](code|state)=)[^&#[:space:]]+/\1[REDACTED]/g' \
     -e 's/((authorization_code|access_token|id_token|refresh_token|csrf_token|csrfToken|session_cookie)[[:space:]]*[=:][[:space:]]*)[^,;&[:space:]]+/\1[REDACTED]/gI' \
-    -e "s/${GOOGLE_CLIENT_SECRET//\//\\\/}/[REDACTED]/g"
+    -e "s/${GOOGLE_CLIENT_SECRET//\//\\\/}/[REDACTED]/g" \
+    "${secret_rules[@]}"
 }
 
 cmd_logs() {
   local follow=0 arg name
   local -a names=() files=()
   validate_state_path_integrity
+  load_secrets
   for arg in "$@"; do
     case $arg in
     -f | --follow) follow=1 ;;
-    mock-oauth | server | web | caddy) names+=("$arg") ;;
+    mock-oauth | mail-capture | server | web | caddy) names+=("$arg") ;;
     *) die "logs: unknown argument '$arg'" ;;
     esac
   done
@@ -1180,9 +1291,9 @@ usage() {
 usage: scripts/dev-https.sh <up|down|status|logs> [args]
 
   up      start or verify the native HTTPS harness at $PUBLIC_ORIGIN
-  down    stop caddy, web, server, then mock-oauth when ownership is proved
+  down    stop caddy, web, server, mail-capture, then mock-oauth when ownership is proved
   status  show bounded liveness, listener, CA, and public readiness checks
-  logs    [-f] [mock-oauth|server|web|caddy]  show only harness-owned logs
+  logs    [-f] [mock-oauth|mail-capture|server|web|caddy]  show only harness-owned logs
 EOF
 }
 

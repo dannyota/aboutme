@@ -27,6 +27,10 @@ die() {
 readonly CADDY_PORT=20080
 readonly SERVER_PORT=20081
 readonly WEB_PORT=20030
+readonly MAIL_CAPTURE_PORT=20091
+readonly MAIL_CAPTURE_ADDR="127.0.0.1:${MAIL_CAPTURE_PORT}"
+readonly MAIL_CAPTURE_URL="http://${MAIL_CAPTURE_ADDR}"
+readonly ACTIVE_KEY_ID=dev-active
 readonly PUBLIC_ORIGIN="http://localhost:${CADDY_PORT}"
 readonly PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20030
 
@@ -64,11 +68,15 @@ readonly CADDY_HASHES=$DEV_DIR/caddy-hashes
 readonly PUBLIC_ROOTS_REGISTRY=$ROOT/packages/publicroots/public-roots.v5.json
 readonly PUBLIC_ROOTS_FRAGMENT=$ROOT/deploy/caddy/public-roots.generated.caddy
 readonly PUBLIC_ROOTS_MARKER=$'\t# ABOUTME_PUBLIC_ROOTS_GENERATED\n\timport /etc/caddy/generated/public-roots.generated.caddy'
-readonly SERVICES=(server web caddy)
+readonly SERVICES=(mail-capture server web caddy)
 readonly DB_CONTAINER=aboutme-test-db
+readonly SECRETS_DIR=$DEV_DIR/secrets
 
 APP_BUILD_DIGEST=
 PUBLIC_RENDERER_BUILD_DIGEST=
+PASSWORD_RATE_HMAC_KEY_B64=
+AUTH_EMAIL_ACTIVE_KEY_B64=
+AUTH_EMAIL_CAPTURE_BEARER_B64=
 
 # --------------------------------------------------------------------------
 # output helpers
@@ -88,6 +96,7 @@ logfile() { printf '%s/%s.log' "$DEV_DIR" "$1"; }
 
 port_of() {
   case $1 in
+  mail-capture) printf '%s' "$MAIL_CAPTURE_PORT" ;;
   server) printf '%s' "$SERVER_PORT" ;;
   web) printf '%s' "$WEB_PORT" ;;
   caddy) printf '%s' "$CADDY_PORT" ;;
@@ -134,6 +143,45 @@ db_container_running() {
   local names
   names=$(podman ps --format '{{.Names}}' 2>/dev/null || true)
   grep -qx "$DB_CONTAINER" <<<"$names"
+}
+
+# base64url_of encodes a raw 32-byte secret file as unpadded base64url, the
+# exact form internal/config decodes. The value is returned, never logged.
+base64url_of() {
+  base64 -w0 -- "$1" | tr '+/' '-_' | tr -d '='
+}
+
+validate_secret_file() {
+  local file=$1 mode size canonical
+  [ ! -L "$file" ] || die "state secret is a symlink: $file"
+  [ -f "$file" ] || die "state secret is not a regular file: $file"
+  canonical=$(realpath -m -- "$file" 2>/dev/null) || die "state secret cannot be resolved: $file"
+  [ "$canonical" = "$file" ] || die "state secret is noncanonical: $file"
+  mode=$(stat -c '%a' -- "$file" 2>/dev/null) || die "state secret mode cannot be read: $file"
+  [ "$mode" = 600 ] || die "state secret must have mode 600: $file"
+  size=$(stat -c '%s' -- "$file" 2>/dev/null) || die "state secret size cannot be read: $file"
+  [ "$size" = 32 ] || die "state secret must be 32 bytes: $file"
+}
+
+# ensure_secrets creates the mode-0600 random rate/mail/capture secrets once,
+# then reuses them across down/up. It never rotates implicitly and never prints
+# a value.
+ensure_secrets() {
+  local name file
+  mkdir -p "$SECRETS_DIR"
+  chmod 0700 "$SECRETS_DIR"
+  for name in password-rate-hmac-key auth-email-active-key auth-email-capture-bearer; do
+    file="$SECRETS_DIR/$name"
+    if [ ! -e "$file" ] && [ ! -L "$file" ]; then
+      umask 077
+      head -c 32 /dev/urandom >"$file" || die "could not generate state secret $file"
+      chmod 0600 "$file"
+    fi
+    validate_secret_file "$file"
+  done
+  PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
+  AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
+  AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
 }
 
 start_service() {
@@ -208,6 +256,27 @@ wait_http() {
   die "$name did not answer $url within ${timeout}s; full log: $(logfile "$name")"
 }
 
+# wait_capture treats a bound loopback listener as readiness: the capture
+# server authenticates every route, so an HTTP probe cannot be used without
+# putting the bearer secret on a command line.
+wait_capture() {
+  local name=$1 port=$2 timeout=$3 pid deadline
+  pid=$(service_pid "$name") || die "$name exited before it began serving; see $(logfile "$name")"
+  deadline=$((SECONDS + timeout))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if ! is_ours "$pid"; then
+      tail -n 30 "$(logfile "$name")" >&2 || true
+      die "$name (pid $pid) exited during startup; full log: $(logfile "$name")"
+    fi
+    if port_listening "$port"; then
+      return 0
+    fi
+    sleep 0.3
+  done
+  tail -n 30 "$(logfile "$name")" >&2 || true
+  die "$name did not start listening on port $port within ${timeout}s; full log: $(logfile "$name")"
+}
+
 # --------------------------------------------------------------------------
 # Caddy config
 #
@@ -279,7 +348,7 @@ generate_caddyfile() {
 
 require_tools() {
   local t
-  for t in podman go npm node caddy curl ss setsid realpath sha256sum awk; do
+  for t in podman go npm node caddy curl ss setsid realpath sha256sum awk base64 tr head stat; do
     command -v "$t" >/dev/null 2>&1 || die "$t is not on PATH"
   done
   make -C "$ROOT" --no-print-directory tools-check ARGS=dev
@@ -328,6 +397,23 @@ port_blocked_by_stranger() {
   return 0
 }
 
+start_mail_capture() {
+  if service_pid mail-capture >/dev/null 2>&1; then
+    info "mail-capture already running (pid $(service_pid mail-capture))"
+    return 0
+  fi
+  ! port_blocked_by_stranger mail-capture || die "port $MAIL_CAPTURE_PORT is already in use by a process this script did not start"
+  info "--- mail-capture (:$MAIL_CAPTURE_PORT)"
+  (
+    cd "$ROOT/apps/server"
+    go build -o "$BIN_DIR/mail-capture" ./cmd/mail-capture
+  )
+  start_service mail-capture "$ROOT/apps/server" \
+    "$BIN_DIR/mail-capture" --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr "$MAIL_CAPTURE_ADDR"
+  wait_capture mail-capture "$MAIL_CAPTURE_PORT" 30
+  info "mail-capture ready on $MAIL_CAPTURE_URL"
+}
+
 start_server() {
   if service_pid server >/dev/null 2>&1; then
     info "server already running (pid $(service_pid server))"
@@ -353,6 +439,12 @@ start_server() {
     LOG_LEVEL="$DEV_LOG_LEVEL" \
     MEDIA_BACKEND=fs \
     MEDIA_FS_DIR="$MEDIA_DIR" \
+    PASSWORD_RATE_HMAC_KEY="$PASSWORD_RATE_HMAC_KEY_B64" \
+    AUTH_EMAIL_ACTIVE_KEY_ID="$ACTIVE_KEY_ID" \
+    AUTH_EMAIL_ACTIVE_KEY="$AUTH_EMAIL_ACTIVE_KEY_B64" \
+    AUTH_EMAIL_MODE=capture \
+    AUTH_EMAIL_CAPTURE_URL="$MAIL_CAPTURE_URL" \
+    AUTH_EMAIL_CAPTURE_BEARER="$AUTH_EMAIL_CAPTURE_BEARER_B64" \
     "$BIN_DIR/server"
   wait_http server "http://127.0.0.1:$SERVER_PORT/healthz" 30
   info "server ready on http://127.0.0.1:$SERVER_PORT"
@@ -411,6 +503,8 @@ cmd_up() {
   mkdir -p "$DEV_DIR" "$BIN_DIR" "$MEDIA_DIR"
   ensure_database
   run_migrations
+  ensure_secrets
+  start_mail_capture
   start_server
   start_web
   start_caddy
@@ -422,7 +516,7 @@ cmd_up() {
 cmd_down() {
   local name
   # Caddy first: stop accepting traffic before the upstreams disappear.
-  for name in caddy web server; do
+  for name in caddy web server mail-capture; do
     stop_service "$name"
   done
   info "native dev stack is down (the shared $DB_CONTAINER container is left running)"
@@ -479,8 +573,8 @@ cmd_logs() {
   for arg in "$@"; do
     case $arg in
     -f | --follow) follow=1 ;;
-    server | web | caddy) names+=("$arg") ;;
-    *) die "logs: unknown argument '$arg' (expected -f, server, web, or caddy)" ;;
+    mail-capture | server | web | caddy) names+=("$arg") ;;
+    *) die "logs: unknown argument '$arg' (expected -f, mail-capture, server, web, or caddy)" ;;
     esac
   done
   [ ${#names[@]} -gt 0 ] || names=("${SERVICES[@]}")
@@ -507,7 +601,7 @@ usage: scripts/dev-native.sh <up|down|status|logs> [args]
   up      start the native dev stack (idempotent); serves $PUBLIC_ORIGIN
   down    stop exactly the processes up started; never touches the database container
   status  print liveness and ports; exits non-zero if anything is not up
-  logs    [-f] [server|web|caddy]  tail per-process logs
+  logs    [-f] [mail-capture|server|web|caddy]  tail per-process logs
 EOF
 }
 
