@@ -38,6 +38,7 @@ const meData = {
     email: 'demo@example.com',
     name: 'Demo User',
     avatarKey: null,
+    hasPassword: false,
   },
   csrfToken: 'test-csrf-token',
   identities: [{ provider: 'google' }],
@@ -511,4 +512,145 @@ describe('sessions.vue', () => {
       ).toBe(false);
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });
+
+  describe('password settings integration', () => {
+    it('refreshes /me and the session list after a successful add',
+      async () => {
+        let meCalls = 0;
+        registerEndpoint('/api/v1/me', {
+          handler: () => {
+            meCalls += 1;
+            return { data: meData };
+          },
+        });
+        let sessionsGetCalls = 0;
+        registerEndpoint('/api/v1/sessions', {
+          method: 'GET',
+          handler: () => {
+            sessionsGetCalls += 1;
+            return { data: sessionsData };
+          },
+        });
+        registerEndpoint('/api/v1/me/password', {
+          method: 'PUT',
+          handler: (event) => {
+            setResponseStatus(event, 204);
+            return null;
+          },
+        });
+
+        const wrapper = await mountSuspended(SessionsPage);
+        await flushPromises();
+
+        expect(wrapper.get('[data-testid="password-status"]').text()).toBe(
+          'No password set.',
+        );
+
+        const meCallsAtMount = meCalls;
+        const sessionsCallsAtMount = sessionsGetCalls;
+
+        await wrapper.get('[data-testid="password-action"]').trigger('click');
+        await flushPromises();
+        await wrapper.get('#password-new').setValue('new-secret');
+        await wrapper.get('#password-new-confirm').setValue('new-secret');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+        await flushPromises();
+
+        // The parent's `updated` handler refetches /me and the device list
+        // (a successful add/change replaces the current session).
+        expect(meCalls).toBeGreaterThan(meCallsAtMount);
+        expect(sessionsGetCalls).toBeGreaterThan(sessionsCallsAtMount);
+      });
+
+    it('sets a password through an authenticated PUT with JSON and CSRF',
+      async () => {
+        let receivedMethod: string | undefined;
+        let receivedHeader: string | undefined;
+        let receivedContentType: string | undefined;
+        let receivedBody: string | undefined;
+        registerEndpoint('/api/v1/me/password', {
+          method: 'PUT',
+          handler: async (event) => {
+            receivedMethod = event.method;
+            receivedHeader = requestHeader(event, 'x-csrf-token');
+            receivedContentType = requestHeader(event, 'content-type');
+            receivedBody = await readRawBody(event);
+            setResponseStatus(event, 204);
+            return null;
+          },
+        });
+
+        const wrapper = await mountSuspended(SessionsPage);
+        await flushPromises();
+
+        await wrapper.get('[data-testid="password-action"]').trigger('click');
+        await flushPromises();
+        await wrapper.get('#password-new').setValue('new-secret');
+        await wrapper.get('#password-new-confirm').setValue('new-secret');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+
+        expect(receivedMethod).toBe('PUT');
+        expect(receivedHeader).toBe('test-csrf-token');
+        expect(receivedContentType).toBe('application/json');
+        expect(receivedBody).toBe('{"password":"new-secret"}');
+      });
+
+    it('starts a provider reauth round trip when an add needs reauth',
+      async () => {
+        registerEndpoint('/api/v1/me/password', {
+          method: 'PUT',
+          handler: (event) => {
+            setResponseStatus(event, 403);
+            return { error: { code: 'reauth_required', message: 'x' } };
+          },
+        });
+        let receivedMethod: string | undefined;
+        registerEndpoint('/api/v1/auth/google/start', {
+          method: 'POST',
+          handler: (event) => {
+            receivedMethod = event.method;
+            return {
+              data: {
+                authorizeUrl:
+                'https://accounts.google.com/o/oauth2/v2/auth?state=test',
+              },
+            };
+          },
+        });
+
+        const wrapper = await mountSuspended(SessionsPage);
+        await flushPromises();
+
+        await wrapper.get('[data-testid="password-action"]').trigger('click');
+        await flushPromises();
+        await wrapper.get('#password-new').setValue('new-secret');
+        await wrapper.get('#password-new-confirm').setValue('new-secret');
+        await wrapper.get('form').trigger('submit');
+        await flushPromises();
+
+        // The linked provider is offered; no email is shown.
+        expect(
+          wrapper.find('[data-testid="password-provider-reauth-google"]')
+            .exists(),
+        ).toBe(true);
+        expect(
+          wrapper.find('[data-testid="password-provider-reauth-google"]')
+            .text(),
+        ).toBe('Continue with Google');
+
+        await wrapper
+          .get('[data-testid="password-provider-reauth-google"]')
+          .trigger('click');
+        await flushPromises();
+        await flushPromises();
+
+        expect(receivedMethod).toBe('POST');
+        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+          'https://accounts.google.com/o/oauth2/v2/auth?state=test',
+          { external: true },
+        );
+      });
+  });
 });

@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import type { AuthProvider } from '../../../composables/useAuth';
+import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
+import {
+  type PasswordSettingsActions,
+  PasswordSettingsActionsKey,
+  mapReauthError,
+  mapReauthStartError,
+  mapSetPasswordError,
+} from '../../../composables/passwordSettings';
 
 interface SessionInfo {
   id: string;
@@ -27,6 +35,7 @@ const route = useRoute();
 const {
   csrfToken,
   identities,
+  user,
   logout,
   mutate,
   refresh: refreshMe,
@@ -224,6 +233,58 @@ async function startOAuth(
   }
 }
 
+// The password-settings actions stay closed: each performs one operation and
+// rejects with a PasswordSettingsFailure rather than a raw server body. The
+// provider round trip reuses the same authorizeURL validation as linking.
+const passwordProviders = computed(
+  () => identities.value.map((identity) => identity.provider),
+);
+
+const passwordActions: PasswordSettingsActions = {
+  async reauthenticate(password) {
+    try {
+      await mutate('/api/v1/auth/password/reauth', {
+        method: 'POST',
+        body: { password },
+      });
+    } catch (error) {
+      throw mapReauthError(error);
+    }
+  },
+  async setPassword(password) {
+    try {
+      await mutate('/api/v1/me/password', {
+        method: 'PUT',
+        body: { password },
+      });
+    } catch (error) {
+      throw mapSetPasswordError(error);
+    }
+  },
+  async startProviderReauth(provider) {
+    try {
+      const response = await mutate<AuthStartEnvelope>(
+        `/api/v1/auth/${provider}/start`,
+        { method: 'POST', query: { purpose: 'reauth' } },
+      );
+      const url = authorizeURL(provider, response?.data?.authorizeUrl);
+      if (!url) throw new Error('invalid OAuth authorize URL');
+      await navigateTo(url, { external: true });
+    } catch (error) {
+      throw mapReauthStartError(error);
+    }
+  },
+};
+
+provide(PasswordSettingsActionsKey, passwordActions);
+
+async function onPasswordUpdated(): Promise<void> {
+  // A successful add/change replaces the current session: refetch /me (to
+  // flip hasPassword) and the device list (every other session is gone).
+  await refreshMe();
+  await refreshSessions();
+}
+
 // OAuthCallbackErrorCode in OpenAPI is the closed callback vocabulary.
 const linkErrorMessages: Record<string, string> = {
   auth_failed: 'Something went wrong. Please try again.',
@@ -351,5 +412,11 @@ const linkErrorMessage = computed(() => {
         </li>
       </ul>
     </section>
+
+    <PasswordSettings
+      :has-password="user?.hasPassword ?? false"
+      :providers="passwordProviders"
+      @updated="onPasswordUpdated"
+    />
   </section>
 </template>
