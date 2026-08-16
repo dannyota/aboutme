@@ -8,9 +8,9 @@ code work.
 
 `CanonicalizeAccountEmail` accepts 5–254 ASCII bytes and returns lowercase
 ASCII. It rejects surrounding space, controls, non-ASCII, quoted local parts,
-comments, domain literals, empty labels, underscore, a leading/trailing dot,
-consecutive local dots, a leading/trailing domain hyphen, and labels over 63
-bytes. The local part is 1–64 bytes from this exact set:
+comments, domain literals, empty labels, underscore in a domain label, a
+leading/trailing dot, consecutive local dots, a leading/trailing domain hyphen,
+and labels over 63 bytes. The local part is 1–64 bytes from this exact set:
 
 ```text
 A-Z a-z 0-9 ! # $ % & ' * + - / = ? ^ _ ` { | } ~ .
