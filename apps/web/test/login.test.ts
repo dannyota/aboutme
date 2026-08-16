@@ -1,6 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { mountSuspended } from '@nuxt/test-utils/runtime';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  mockNuxtImport,
+  mountSuspended,
+  registerEndpoint,
+} from '@nuxt/test-utils/runtime';
+import { flushPromises } from '@vue/test-utils';
+import { nextTick } from 'vue';
+import { setResponseStatus } from 'h3';
 import LoginPage from '../app/pages/login.vue';
+
+// login() navigates to /app/resumes on success — stub it so tests can assert
+// the target without a real page transition tearing the mounted wrapper down.
+mockNuxtImport('navigateTo', () => vi.fn());
 
 describe('login.vue', () => {
   it('renders a real top-level link for each OAuth provider', async () => {
@@ -90,4 +101,140 @@ describe('login.vue', () => {
       const banner = wrapper.get('[data-testid="login-error"]');
       expect(banner.text()).toContain('Something went wrong');
     });
+});
+
+describe('login.vue password form', () => {
+  beforeEach(() => {
+    vi.mocked(navigateTo).mockClear();
+  });
+
+  it('adds email and current-password fields alongside the provider anchors',
+    async () => {
+      const wrapper = await mountSuspended(LoginPage);
+      expect(wrapper.get('input[autocomplete="email"]').exists()).toBe(true);
+      expect(wrapper.get('input[autocomplete="current-password"]').exists())
+        .toBe(true);
+      // Provider anchors remain real top-level navigation links.
+      expect(wrapper.get('a[href="/api/v1/auth/google/start"]').exists())
+        .toBe(true);
+      expect(wrapper.get('a[href="/api/v1/auth/github/start"]').exists())
+        .toBe(true);
+      expect(wrapper.get('a[href="/api/v1/auth/linkedin/start"]').exists())
+        .toBe(true);
+    });
+
+  it('links to the forgot-password and register pages', async () => {
+    const wrapper = await mountSuspended(LoginPage);
+    const hrefs = wrapper.findAll('a').map((a) => a.attributes('href'));
+    expect(hrefs).toContain('/forgot-password');
+    expect(hrefs).toContain('/register');
+  });
+
+  it('navigates to /app/resumes after a successful login', async () => {
+    registerEndpoint('/api/v1/auth/password/login', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, 204);
+        return null;
+      },
+    });
+    const wrapper = await mountSuspended(LoginPage);
+    await wrapper.get('input[autocomplete="email"]')
+      .setValue('ada@example.com');
+    await wrapper.get('input[autocomplete="current-password"]')
+      .setValue('correct horse battery staple');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/app/resumes');
+  });
+
+  it('shows closed copy and does not navigate on authentication-failed',
+    async () => {
+      registerEndpoint('/api/v1/auth/password/login', {
+        method: 'POST',
+        handler: (event) => {
+          setResponseStatus(event, 401);
+          return { error: { code: 'authentication_failed', message: 'x' } };
+        },
+      });
+      const wrapper = await mountSuspended(LoginPage);
+      await wrapper.get('input[autocomplete="email"]')
+        .setValue('ada@example.com');
+      await wrapper.get('input[autocomplete="current-password"]')
+        .setValue('wrong');
+      await wrapper.get('form').trigger('submit');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="login-form-error"]').text())
+        .toContain('Invalid email or password');
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    });
+
+  it('shows closed copy when the service is unavailable', async () => {
+    registerEndpoint('/api/v1/auth/password/login', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, 503);
+        return {
+          error: { code: 'authentication_unavailable', message: 'x' },
+        };
+      },
+    });
+    const wrapper = await mountSuspended(LoginPage);
+    await wrapper.get('input[autocomplete="email"]')
+      .setValue('ada@example.com');
+    await wrapper.get('input[autocomplete="current-password"]')
+      .setValue('x');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="login-form-error"]').text())
+      .toContain('Something went wrong');
+  });
+
+  it('disables submit and shows pending text while the request is in flight',
+    async () => {
+      let resolveRequest: () => void = () => {};
+      registerEndpoint('/api/v1/auth/password/login', {
+        method: 'POST',
+        handler: (event) => new Promise<void>((resolve) => {
+          resolveRequest = () => {
+            setResponseStatus(event, 204);
+            resolve();
+          };
+        }),
+      });
+      const wrapper = await mountSuspended(LoginPage);
+      await wrapper.get('input[autocomplete="email"]')
+        .setValue('ada@example.com');
+      await wrapper.get('input[autocomplete="current-password"]')
+        .setValue('correct horse battery staple');
+      await wrapper.get('form').trigger('submit');
+      await flushPromises();
+      const button = wrapper.get('button[type="submit"]');
+      expect(button.attributes('disabled')).toBeDefined();
+      expect(button.text()).toContain('Signing in');
+      resolveRequest();
+      await flushPromises();
+    });
+
+  it('does not retain the password after a successful login', async () => {
+    registerEndpoint('/api/v1/auth/password/login', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, 204);
+        return null;
+      },
+    });
+    const wrapper = await mountSuspended(LoginPage);
+    const passwordInput = wrapper.get(
+      'input[autocomplete="current-password"]',
+    );
+    await wrapper.get('input[autocomplete="email"]')
+      .setValue('ada@example.com');
+    await passwordInput.setValue('correct horse battery staple');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    await nextTick();
+    expect((passwordInput.element as HTMLInputElement).value).toBe('');
+    expect(wrapper.html()).not.toContain('correct horse battery staple');
+  });
 });
