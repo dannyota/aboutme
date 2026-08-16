@@ -23,7 +23,7 @@ keep everything runnable on the laptop until the whole product works there.
 | P2B server lane               | Complete                        | None                                            |
 | P4 authenticated editor       | Complete                        | None                                            |
 | P5A publish and public SSR    | Complete                        | None                                            |
-| PA password authentication    | Active                          | T00 authorities, budgets, and public roots      |
+| PA password authentication    | Complete                        | None                                            |
 | P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
 | PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
 
@@ -67,7 +67,8 @@ may continue in parallel between them.
 
 After both lanes close their phase review and exit checklist:
 
-1. PA password authentication, including local encrypted mail/capture UAT.
+1. PA password authentication — complete (local encrypted mail/capture UAT
+   proven).
 2. P5B publish UX and P6 realtime.
 3. P7 print and images and P8 privacy lifecycle.
 4. P9 local UAT over the complete product, then human cloud authorization, PI

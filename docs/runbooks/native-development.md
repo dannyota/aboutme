@@ -43,10 +43,9 @@ make dev-native
 
 The command is idempotent. It starts or reuses `aboutme-test-db`, creates the
 `aboutme_dev` database if needed, applies goose migrations, builds the Go
-binary, then starts the authentication-mail-capture server, Go, Nuxt, and
-Caddy. The mail-capture bearer, rate-HMAC, and mail-encryption secrets are
-created once under `.dev/secrets/` and reused across restarts; they are never
-printed.
+binary, then starts the authentication-mail-capture server, Go, Nuxt, and Caddy.
+The mail-capture bearer, rate-HMAC, and mail-encryption secrets are created once
+under `.dev/secrets/` and reused across restarts; they are never printed.
 
 Open only `http://localhost:20080` in a browser. Direct upstream ports are for
 diagnostics.
@@ -68,9 +67,12 @@ development database.
 The development browser harness runs on a separate trusted stack at
 `https://localhost:20443` with a deterministic local Google account and a pinned
 headless Chromium: `make dev-https-auth-check`, `dev-https-transport-check`,
-`dev-https-editor-check`, and `dev-https-public-check`. The native public HTTP
-capture is `make p5a-native-http-check`. These are proof targets, not daily
-drivers; run them only when their surface changes.
+`dev-https-editor-check`, `dev-https-public-check`, and
+`dev-https-password-check`. The native public HTTP capture is
+`make p5a-native-http-check`. These are proof targets, not daily drivers; run
+them only when their surface changes. The password proof additionally seeds and
+cleans three deterministic accounts and reads authentication mail from the
+loopback capture server.
 
 ## Inspect logs
 
