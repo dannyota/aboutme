@@ -6,7 +6,7 @@ without publishing an account profile.
 
 ## Core journeys
 
-1. Sign in with Google, GitHub, or LinkedIn.
+1. Sign in with Google, GitHub, LinkedIn, or email and password.
 2. Create up to three resumes and edit incomplete drafts without save-time
    completeness errors.
 3. Preview the same layout used by the public page and PDF.
@@ -21,7 +21,7 @@ without publishing an account profile.
 | Resume editor       | Eight section types; rich text; one- or two-column layout; fonts, colors, spacing, headings, and presets |
 | Resume count        | At most three per account, enforced in PostgreSQL                                                        |
 | Public identity     | One globally unique slug per resume; no username or account profile                                      |
-| Authentication      | Google, GitHub, and LinkedIn; no password database                                                       |
+| Authentication      | Google, GitHub, LinkedIn, and email/password; zero or one password credential per account                |
 | Preview and publish | Instant local preview, granular autosave, public SSR page, and live refresh                              |
 | Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in    |
 | Export              | Owner PDF; optional public PDF                                                                           |
@@ -42,13 +42,14 @@ no separate handwritten exceptions. A fixed root is added to the registry before
 any route may claim it, and drift between the registry, OpenAPI root paths, the
 Nuxt page manifest, or generated dispatch fails the build.
 
-Draft v4 starts with this exact registry:
+The v5 registry starts with these exact roots:
 
 | Root              | Source and dispatch                                                              |
 | ----------------- | -------------------------------------------------------------------------------- |
 | `admin`           | Protected future namespace from ADR 0004; reserved-only, with no current handler |
 | `api`             | OpenAPI server root and Caddy `/api/v1/*`; Go                                    |
 | `app`             | Current Nuxt `/app/settings/sessions` page tree; Nuxt                            |
+| `forgot-password` | Nuxt `/forgot-password` page; Nuxt                                               |
 | `healthz`         | OpenAPI and Caddy `/healthz`; Go                                                 |
 | `_nuxt`           | Nuxt build-asset namespace; Nuxt                                                 |
 | `internal-render` | Direct Go-to-Nuxt renderer; Caddy denies every viewer request                    |
@@ -57,9 +58,12 @@ Draft v4 starts with this exact registry:
 | `people`          | Protected future namespace from ADR 0004; reserved-only, with no current handler |
 | `print`           | Caddy `/print` and `/print/*`; denied externally and capability-gated internally |
 | `readyz`          | OpenAPI and Caddy `/readyz`; Go                                                  |
+| `register`        | Nuxt `/register` page; Nuxt                                                      |
+| `reset-password`  | Nuxt `/reset-password` page; Nuxt                                                |
 | `robots.txt`      | Caddy `/robots.txt`; Go                                                          |
 | `sitemap.xml`     | Caddy `/sitemap.xml`; Go                                                         |
 | `u`               | Protected future namespace from ADR 0004; reserved-only, with no current handler |
+| `verify-email`    | Nuxt `/verify-email` page; Nuxt                                                  |
 
 The root `/` has no first segment. Dynamic `/{slug}` and `/{slug}.md` routes do
 not add literal entries. The dotted and underscore-prefixed roots cannot pass

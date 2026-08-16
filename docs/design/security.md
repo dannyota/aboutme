@@ -1,8 +1,11 @@
 # Authentication and security
 
-Authentication uses external providers, opaque server-side sessions, one exact
-web origin, and a fail-closed request boundary. The service stores no passwords
-or provider refresh tokens.
+Authentication uses external providers plus an optional application-owned
+password credential, opaque server-side sessions, one exact web origin, and a
+fail-closed request boundary. The service stores no plaintext passwords and no
+provider refresh tokens. A password exists only as an Argon2id hash, a
+verification or reset token only as a SHA-256 digest, and an email job only as
+encrypted payload bytes.
 
 ## Provider identity
 
@@ -22,6 +25,32 @@ account-email-change endpoint.
 settings UI uses that stable first identity as its default reauthentication
 provider. Equal timestamps must not make that choice depend on a PostgreSQL scan
 plan.
+
+## Password authentication
+
+An account holds zero or one password credential alongside its linked provider
+identities. A provider-only account has no credential; adding a password never
+removes a provider identity, and a provider identity cannot move between
+accounts.
+[ADR 0025](../adr/0025-password-authentication-and-identity-linking.md) records
+why authentication authority stays in the application.
+
+One canonical email parser is shared by provider account creation, password
+registration, login lookup, database writes, and rate-limit keys. It accepts a
+bounded ASCII addr-spec with no display name, comments, controls, surrounding
+space, or internationalized spelling, and stores the whole address in lowercase.
+Accounts are never merged by email, and a provider email is never synchronized
+into the account email.
+
+Registration verifies the email before creating a user or session. A pending
+credential and an encrypted verification-mail job are committed; the single-use
+token creates the account and credential atomically, or yields to a concurrent
+provider signup on the unique email. Login verifies the Argon2id hash outside a
+transaction, then locks and rechecks the credential and account before creating
+the same opaque session as a provider login. Password add or change requires
+recent reauthentication and atomically creates one fresh non-lineage current
+session while revoking every old session. Reset revokes every session and never
+logs in. Password removal and account-email change are out of scope.
 
 ## OAuth transaction
 
@@ -63,20 +92,21 @@ SHA-256 hash. The cookie is
 `__Host-session; Secure; HttpOnly; SameSite=Lax; Path=/` with no `Domain`
 attribute.
 
-| Control           | Rule                                                                                                           |
-| ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                          |
-| Absolute expiry   | 90 days                                                                                                        |
-| Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                  |
-| Rotation delivery | Successor use sets the predecessor deadline to `min(existing deadline, now + 60 seconds)`; it never extends it |
-| Recent reauth     | 15 minutes                                                                                                     |
-| Sensitive actions | Provider link, account deletion, slug release, per-session revoke, and logout-everywhere require recent reauth |
-| Visibility        | Account settings list sessions and permit per-session revoke                                                   |
+| Control           | Rule                                                                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                                               |
+| Absolute expiry   | 90 days                                                                                                                             |
+| Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                                       |
+| Rotation delivery | Successor use sets the predecessor deadline to `min(existing deadline, now + 60 seconds)`; it never extends it                      |
+| Recent reauth     | 15 minutes                                                                                                                          |
+| Sensitive actions | Provider link, password add/change, account deletion, slug release, per-session revoke, and logout-everywhere require recent reauth |
+| Visibility        | Account settings list sessions and permit per-session revoke                                                                        |
 
 Logout revokes the session, expires the cookie, and sends `Clear-Site-Data`.
-Logout-everywhere revokes all sessions.
-[ADR 0015](../adr/0015-session-rotation-delivery.md) defines rotation
-convergence and the lost-response case.
+Logout-everywhere revokes all sessions. Password reset revokes every session and
+creates none; password add/change revokes every session and creates one fresh
+current session. [ADR 0015](../adr/0015-session-rotation-delivery.md) defines
+rotation convergence and the lost-response case.
 
 ## CSRF and canonical origin
 
@@ -127,6 +157,12 @@ provider-link and reauthentication starts are separately limited to 30 per
 minute per `(account, client IP)` pair. Each start deletes only a bounded batch
 of expired OAuth transactions before inserting one row, so unauthenticated
 traffic cannot turn cleanup into unbounded request work.
+
+Password routes add their own bounded policies: login admission and a per-email
+failure budget, registration/forgot per-email and per-IP, verification/reset
+token consumption, and `(account, client IP)` for add/change/reauthentication.
+Exact values live in [the numeric budgets](../plans/budgets.md). Unknown,
+provider-only, and wrong-password states stay byte-identical.
 
 ## Public artifact revocation
 
