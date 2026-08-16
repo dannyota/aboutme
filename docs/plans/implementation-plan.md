@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 17, active** (2026-08-15).
+Status: **Revision 18, active** (2026-08-16).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior; it is approved at v4. This
@@ -21,8 +21,8 @@ keep everything runnable on the laptop until the whole product works there.
 | P2A resume domain and store   | Complete                        | None                                            |
 | P3 renderer lane              | Complete                        | None                                            |
 | P2B server lane               | Complete                        | None                                            |
-| P4 authenticated editor       | Implemented                      | Phase review, then `make ci` and connected `make scan`; mark AC-EDITOR PROVEN |
-| P5A publish and public SSR    | Implemented                      | T12 native public capture; phase review; `make ci`/`make scan`; mark AC-PUB PROVEN |
+| P4 authenticated editor       | Complete                        | None                                            |
+| P5A publish and public SSR    | Complete                        | None                                            |
 | PA password authentication    | Approved, queued                | Start after P4 and P5A integrate                |
 | P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
 | PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
@@ -32,9 +32,8 @@ and reauthentication. P1.1's contract, tests, browser proof, and gates agree.
 
 ## Delivery order
 
-P3 and P2B are complete. P4 and P5A are implemented: their task code is landed,
-and only P5A T12 (native public capture) plus the fresh phase review and
-definitive exit gates remain before either is marked complete:
+P3, P2B, P4, and P5A are complete. The two lanes below closed their phase
+reviews and definitive exit gates:
 
 | Lane        | Phase | Work                                                        |
 | ----------- | ----- | ----------------------------------------------------------- |
