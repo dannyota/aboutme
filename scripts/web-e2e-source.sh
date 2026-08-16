@@ -140,7 +140,8 @@ while IFS= read -r path; do
       fail "manifest path is not canonical: $path"
   done
   case $path in
-    package.json | package-lock.json | apps/web/* | packages/schema/*) ;;
+    package.json | package-lock.json | apps/web/* | packages/schema/* | \
+      docs/api/openapi.yaml) ;;
     *) fail "manifest path is outside the closed source roots: $path" ;;
   esac
   is_secret_like "$path" && fail "secret-like manifest path is forbidden: $path"
