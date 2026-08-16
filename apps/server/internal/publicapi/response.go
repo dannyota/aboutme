@@ -90,7 +90,13 @@ func serveConditionalError(w http.ResponseWriter, request *http.Request) {
 func writeHeader(w http.ResponseWriter, header http.Header) {
 	for key, values := range header {
 		for _, value := range values {
-			w.Header().Add(key, value)
+			// Set, not Add: a public response's headers are authoritative and
+			// must replace any baseline security-header middleware already
+			// wrote (e.g. the handler's specific Content-Security-Policy has
+			// to overwrite the middleware's default-src 'none', not coexist
+			// with it, or the browser applies both and blocks the page's own
+			// subresource fetches).
+			w.Header().Set(key, value)
 		}
 	}
 }
