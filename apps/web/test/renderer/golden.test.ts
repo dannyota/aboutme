@@ -129,7 +129,7 @@ describe('golden matrix contract', () => {
     ).toThrow('must be ignored by Git');
     expect(() =>
       assertSafeOutputDirectory(
-        resolve(workspaceRoot, '.dev/golden-task-9-output'),
+        resolve(workspaceRoot, '.output/golden-task-9-output'),
       ),
     ).not.toThrow();
   });

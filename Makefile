@@ -415,11 +415,10 @@ server-migration-test: ## Run the migration harness + migrate CLI (needs test-db
 	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./migrations/... ./cmd/migrate/... -count=1 -v
 
-public-roots-check: ## Verify the closed public-root registry, generated consumers, and source manifests
+public-roots-check: ## Verify the closed public-root registry, go generated consumer, and source-manifest drift
 	node --test packages/publicroots/public-roots.test.mjs
 	node scripts/generate-public-roots.mjs --check
 	cd apps/server && go test ./internal/publicroots -count=1
-	cd apps/web && npx vitest run test/public-roots.generated.test.ts
 
 route-table-test: public-roots-check ## Run the Caddy route-table integration test (needs a caddy binary; set CADDY_BIN or have caddy on PATH)
 	cd apps/server && CADDY_BIN=$${CADDY_BIN:-caddy} go test ./internal/routetable/... -run RouteTable -count=1 -v

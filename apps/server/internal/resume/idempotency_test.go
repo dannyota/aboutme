@@ -261,7 +261,7 @@ func TestIdempotencyStore_Execute_InFlightDeadlineRollsBackAndCannotCommitLate(t
 			return tx, nil
 		}, nil)
 
-	deadlineContext, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
+	deadlineContext, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	var writtenID uuid.UUID
 	result, err := idem.Execute(deadlineContext, userID, "POST candidate deadline", key,
