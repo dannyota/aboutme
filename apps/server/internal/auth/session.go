@@ -131,9 +131,9 @@ func (m *SessionManager) IssueTx(ctx context.Context, qtx *store.Queries, user s
 // fixation; it returns the raw token but stores only its SHA-256 hash.
 func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error) {
 	if m.pool == nil {
-		issued, err := m.IssueTx(ctx, m.q, store.User{ID: userID}, ua, ip)
-		if err != nil {
-			return "", store.Session{}, err
+		issued, issueErr := m.IssueTx(ctx, m.q, store.User{ID: userID}, ua, ip)
+		if issueErr != nil {
+			return "", store.Session{}, issueErr
 		}
 		return issued.RawToken, issued.Session, nil
 	}

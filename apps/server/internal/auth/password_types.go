@@ -164,8 +164,8 @@ func decodeStrictStringObject(body []byte, fields map[string]*string) error {
 
 	seen := make(map[string]bool, len(fields))
 	for dec.More() {
-		keyTok, err := dec.Token()
-		if err != nil {
+		keyTok, keyErr := dec.Token()
+		if keyErr != nil {
 			return errPasswordStrictJSON
 		}
 		key, ok := keyTok.(string)
@@ -183,7 +183,7 @@ func decodeStrictStringObject(body []byte, fields map[string]*string) error {
 		}
 
 		var raw json.RawMessage
-		if err := dec.Decode(&raw); err != nil {
+		if decodeErr := dec.Decode(&raw); decodeErr != nil {
 			return errPasswordStrictJSON
 		}
 		// A JSON string always begins with '"'; null, numbers, booleans,
@@ -191,7 +191,7 @@ func decodeStrictStringObject(body []byte, fields map[string]*string) error {
 		if len(raw) == 0 || raw[0] != '"' {
 			return errPasswordStrictJSON
 		}
-		if err := json.Unmarshal(raw, target); err != nil {
+		if unmarshalErr := json.Unmarshal(raw, target); unmarshalErr != nil {
 			return errPasswordStrictJSON
 		}
 	}

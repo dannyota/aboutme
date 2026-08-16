@@ -248,6 +248,8 @@ func newAdmissionLimiter(requests int, window time.Duration) admissionLimiter {
 	}
 }
 
+// Admit forwards the key's admission decision through the bounded store,
+// collapsing the returned retry duration into a RateDecision.
 func (b *boundedAdmission) Admit(now time.Time, key string) RateDecision {
 	allowed, retry := b.inner.Admit(now, key)
 	if allowed {

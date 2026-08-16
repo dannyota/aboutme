@@ -187,8 +187,12 @@ func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 	newPendingVerifyJob(ctx, t, seed, reg1)
 	newPendingVerifyJob(ctx, t, seed, reg2)
 	t.Cleanup(func() {
-		_, _ = seed.DeletePasswordRegistration(context.Background(), reg1)
-		_, _ = seed.DeletePasswordRegistration(context.Background(), reg2)
+		if _, err := seed.DeletePasswordRegistration(context.Background(), reg1); err != nil {
+			t.Errorf("cleanup delete registration: %v", err)
+		}
+		if _, err := seed.DeletePasswordRegistration(context.Background(), reg2); err != nil {
+			t.Errorf("cleanup delete registration: %v", err)
+		}
 	})
 
 	now := time.Now().UTC()
@@ -196,12 +200,20 @@ func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Begin tx1: %v", err)
 	}
-	defer func() { _ = tx1.Rollback(context.Background()) }()
+	defer func() {
+		if rollbackErr := tx1.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("Rollback() error: %v", rollbackErr)
+		}
+	}()
 	tx2, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("Begin tx2: %v", err)
 	}
-	defer func() { _ = tx2.Rollback(context.Background()) }()
+	defer func() {
+		if rollbackErr := tx2.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("Rollback() error: %v", rollbackErr)
+		}
+	}()
 
 	claimed1, err := store.New(tx1).ClaimAuthEmailJobs(ctx, store.ClaimAuthEmailJobsParams{
 		LeaseOwner:     "worker-1",
@@ -250,11 +262,11 @@ func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
 		t.Fatalf("claimed = %+v, want exactly one leased job with attempts 1", claimed)
 	}
 
-	if _, err := tx.Exec(ctx,
+	if _, execErr := tx.Exec(ctx,
 		`UPDATE auth_email_jobs SET lease_expires_at = $2 WHERE id = $1`,
 		claimed[0].ID, now.Add(-time.Second),
-	); err != nil {
-		t.Fatalf("expire lease: %v", err)
+	); execErr != nil {
+		t.Fatalf("expire lease: %v", execErr)
 	}
 	requeued, err := q.RequeueExpiredAuthEmailLeases(ctx, store.RequeueExpiredAuthEmailLeasesParams{
 		Now:       now,

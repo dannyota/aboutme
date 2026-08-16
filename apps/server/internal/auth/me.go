@@ -54,10 +54,10 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 
 	// hasPassword is a single existence probe, never the credential itself.
 	hasPassword := false
-	if _, err := s.q.GetPasswordCredential(ctx, sess.UserID); err == nil {
+	if _, credErr := s.q.GetPasswordCredential(ctx, sess.UserID); credErr == nil {
 		hasPassword = true
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		s.writeSessionAPIInternalError(w, r, "get_password_credential", err)
+	} else if !errors.Is(credErr, pgx.ErrNoRows) {
+		s.writeSessionAPIInternalError(w, r, "get_password_credential", credErr)
 		return
 	}
 

@@ -3271,7 +3271,7 @@ components:
               code: reauth_failed
               message: reauthentication failed
     PasswordAuthenticationRequired:
-      description: '`authentication_required`: no live session is present.'
+      description: "`authentication_required`: no live session is present."
       content:
         application/json:
           schema:
@@ -3306,7 +3306,7 @@ components:
               code: reauth_required
               message: recent reauthentication required
     PasswordBodyTooLarge:
-      description: '`body_too_large`: the request exceeded its 4,096-byte cap.'
+      description: "`body_too_large`: the request exceeded its 4,096-byte cap."
       content:
         application/json:
           schema:

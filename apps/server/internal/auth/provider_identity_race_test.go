@@ -34,8 +34,8 @@ func TestCreateProviderAccountTx_EmailCollisionReturnsClosedError(t *testing.T) 
 	ctx := context.Background()
 
 	email := uniqueEmail(t)
-	if _, err := q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: "Owner"}); err != nil {
-		t.Fatalf("CreateUser() error = %v", err)
+	if _, createErr := q.CreateUser(ctx, store.CreateUserParams{Email: email, Name: "Owner"}); createErr != nil {
+		t.Fatalf("CreateUser() error = %v", createErr)
 	}
 
 	subject := auth.ProviderSubject{Provider: auth.ProviderGoogle, Subject: uniqueSubject(t)}
@@ -77,12 +77,12 @@ func TestCreateProviderAccountTx_SubjectCollisionRollsBackUser(t *testing.T) {
 		t.Fatalf("CreateUser(winner) error = %v", err)
 	}
 	subject := uniqueSubject(t)
-	if _, err := q.CreateIdentity(ctx, store.CreateIdentityParams{
+	if _, createErr := q.CreateIdentity(ctx, store.CreateIdentityParams{
 		UserID:         winner.ID,
 		Provider:       string(auth.ProviderGoogle),
 		ProviderUserID: subject,
-	}); err != nil {
-		t.Fatalf("CreateIdentity(winner) error = %v", err)
+	}); createErr != nil {
+		t.Fatalf("CreateIdentity(winner) error = %v", createErr)
 	}
 
 	// The loser tries the same subject under a different email.

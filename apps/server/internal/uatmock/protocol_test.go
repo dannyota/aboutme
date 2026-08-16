@@ -98,8 +98,8 @@ func TestGoogleFlowIssuesSelectedAccountClaims(t *testing.T) {
 	var token struct {
 		IDToken string `json:"id_token"`
 	}
-	if err := json.Unmarshal(exchange.Body.Bytes(), &token); err != nil {
-		t.Fatalf("decode token response: %v", err)
+	if unmarshalErr := json.Unmarshal(exchange.Body.Bytes(), &token); unmarshalErr != nil {
+		t.Fatalf("decode token response: %v", unmarshalErr)
 	}
 	parts := strings.Split(token.IDToken, ".")
 	if len(parts) != 3 {

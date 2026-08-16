@@ -23,6 +23,7 @@ type Message struct {
 // duplicate delivery, which token single-use makes harmless.
 type SendOutcome uint8
 
+// SendOutcome values a Sender returns to classify one attempt.
 const (
 	SendAccepted SendOutcome = iota
 	SendTemporaryFailure

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
@@ -105,7 +106,11 @@ func TestPasswordLogin_ResetFence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("begin reset tx: %v", err)
 		}
-		defer func() { _ = tx.Rollback(context.Background()) }()
+		defer func() {
+			if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+				t.Errorf("Rollback() error: %v", err)
+			}
+		}()
 		qtx := e.q.WithTx(tx)
 		if _, err := qtx.GetUserForUpdate(context.Background(), userID); err != nil {
 			t.Fatalf("reset lock user: %v", err)

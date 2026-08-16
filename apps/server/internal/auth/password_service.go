@@ -411,12 +411,12 @@ func (s *PasswordService) login(ctx context.Context, email, rawPassword, ua, cli
 		case verr == nil:
 			matched, needsRehash = res.Match, res.NeedsRehash
 		case errors.Is(verr, password.ErrHashInvalid):
-			_ = s.hasher.VerifyDummy(ctx, normalized) // corrupt hash: pay the cost, no oracle
+			_ = s.hasher.VerifyDummy(ctx, normalized) //nolint:errcheck // corrupt hash: pay the cost so no account oracle opens, and the dummy's own error is irrelevant
 		default:
 			return "", errPasswordUnavailable
 		}
 	} else {
-		_ = s.hasher.VerifyDummy(ctx, normalized)
+		_ = s.hasher.VerifyDummy(ctx, normalized) //nolint:errcheck // unknown account: pay the same verify cost and ignore the dummy's error to avoid an oracle
 	}
 	if !matched {
 		return s.recordLoginFailure(now, canonicalEmail)
@@ -742,7 +742,7 @@ func (s *PasswordService) reauth(ctx context.Context, sess store.Session, rawPas
 	cred, err := s.q.GetPasswordCredential(ctx, sess.UserID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			_ = s.hasher.VerifyDummy(ctx, normalized)
+			_ = s.hasher.VerifyDummy(ctx, normalized) //nolint:errcheck // no credential: pay the same verify cost and ignore the dummy's error to avoid an oracle
 			return errPasswordReauthFailed
 		}
 		return errPasswordUnavailable

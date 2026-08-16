@@ -35,7 +35,7 @@ func TestPasswordVerify_ExpiredRegistration(t *testing.T) {
 	token, _ := e.createRegistration(t, newEmail(), "Ada", testPassword)
 
 	e.clk.Advance(25 * time.Hour)
-	resp, body := e.request(t, http.MethodPost, auth.PasswordVerifyPath, jsonBody(t, map[string]string{"token": token.Raw}))
+	resp, body := e.request(t, http.MethodPost, auth.PasswordVerifyPath, jsonBody(t, map[string]string{"token": token.Raw})) //nolint:bodyclose // request closes the body itself before returning.
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (body=%s)", resp.StatusCode, body)
 	}
@@ -49,7 +49,7 @@ func TestPasswordReset_ExpiredToken(t *testing.T) {
 	token := e.createResetToken(t, userID)
 
 	e.clk.Advance(31 * time.Minute)
-	resp, body := e.request(t, http.MethodPost, auth.PasswordResetPath, jsonBody(t, map[string]string{
+	resp, body := e.request(t, http.MethodPost, auth.PasswordResetPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"token": token.Raw, "password": "a fresh password 123",
 	}))
 	if resp.StatusCode != http.StatusBadRequest {
@@ -63,7 +63,7 @@ func TestPasswordRegister_ReplacesPriorRegistration(t *testing.T) {
 	email := newEmail()
 
 	for i := 0; i < 2; i++ {
-		resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, jsonBody(t, map[string]string{
+		resp, body := e.request(t, http.MethodPost, auth.PasswordRegisterPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 			"name": "Ada", "email": email, "password": testPassword,
 		}))
 		if resp.StatusCode != http.StatusAccepted {
@@ -96,7 +96,7 @@ func TestPasswordForgot_ReplacesPriorResetToken(t *testing.T) {
 	email := e.userEmail(t, userID)
 
 	for i := 0; i < 2; i++ {
-		resp, _ := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": email}))
+		resp, _ := e.request(t, http.MethodPost, auth.PasswordForgotPath, jsonBody(t, map[string]string{"email": email})) //nolint:bodyclose // request closes the body itself before returning.
 		if resp.StatusCode != http.StatusAccepted {
 			t.Fatalf("forgot #%d status = %d, want 202", i, resp.StatusCode)
 		}
@@ -128,15 +128,15 @@ func TestPasswordLogin_RehashCAS(t *testing.T) {
 		t.Fatalf("weak hash: %v", err)
 	}
 	now := e.clk.Now()
-	if _, err := e.q.UpsertPasswordCredential(context.Background(), store.UpsertPasswordCredentialParams{
+	if _, upsertErr := e.q.UpsertPasswordCredential(context.Background(), store.UpsertPasswordCredentialParams{
 		UserID: userID, EncodedHash: []byte(weakEnc), CreatedAt: now, ChangedAt: now,
-	}); err != nil {
-		t.Fatalf("upsert weak credential: %v", err)
+	}); upsertErr != nil {
+		t.Fatalf("upsert weak credential: %v", upsertErr)
 	}
 
 	email := e.userEmail(t, userID)
-	if _, err := e.svc.LoginForTest(context.Background(), email, testPassword, "ua", raceIP); err != nil {
-		t.Fatalf("login error = %v", err)
+	if _, loginErr := e.svc.LoginForTest(context.Background(), email, testPassword, "ua", raceIP); loginErr != nil {
+		t.Fatalf("login error = %v", loginErr)
 	}
 
 	cred, err := e.q.GetPasswordCredential(context.Background(), userID)
@@ -163,7 +163,7 @@ func TestPasswordLogin_CorruptHash_NoOracle(t *testing.T) {
 	}
 
 	email := e.userEmail(t, userID)
-	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{
+	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"email": email, "password": testPassword,
 	}))
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -190,7 +190,7 @@ func TestPasswordRegister_HIBPUnavailable(t *testing.T) {
 	}
 	handler := api.New(testLogger(), noopPinger{}, api.Options{Clock: clk.Now}, nil, svc.RegisterRoutes)
 
-	req := httptest.NewRequest(http.MethodPost, auth.PasswordRegisterPath, strings.NewReader(jsonBody(t, map[string]string{
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, auth.PasswordRegisterPath, strings.NewReader(jsonBody(t, map[string]string{
 		"name": "Ada", "email": newEmail(), "password": testPassword,
 	})))
 	req.Header.Set("Content-Type", "application/json")
@@ -202,7 +202,9 @@ func TestPasswordRegister_HIBPUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("close body: %v", err)
+	}
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503 (body=%s)", resp.StatusCode, raw)
 	}
@@ -233,7 +235,7 @@ func TestPasswordLogin_FailureLimiter429(t *testing.T) {
 
 	// Failures 1..9 return the identical 401; the tenth returns 429.
 	for i := 0; i < 9; i++ {
-		resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{
+		resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 			"email": email, "password": testPassword,
 		}))
 		if resp.StatusCode != http.StatusUnauthorized {
@@ -241,7 +243,7 @@ func TestPasswordLogin_FailureLimiter429(t *testing.T) {
 		}
 		assertErrorCode(t, body, "authentication_failed")
 	}
-	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{
+	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"email": email, "password": testPassword,
 	}))
 	if resp.StatusCode != http.StatusTooManyRequests {
@@ -258,7 +260,7 @@ func TestPasswordSecretLeak_AbsentFromResponses(t *testing.T) {
 	email := newEmail()
 	secretPassword := "a very secret password"
 
-	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{
+	resp, body := e.request(t, http.MethodPost, auth.PasswordLoginPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"email": email, "password": secretPassword,
 	}))
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -270,7 +272,7 @@ func TestPasswordSecretLeak_AbsentFromResponses(t *testing.T) {
 		}
 	}
 
-	_, regBody := e.request(t, http.MethodPost, auth.PasswordRegisterPath, jsonBody(t, map[string]string{
+	_, regBody := e.request(t, http.MethodPost, auth.PasswordRegisterPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
 		"name": "Ada", "email": email, "password": secretPassword,
 	}))
 	for _, sentinel := range []string{email, secretPassword} {

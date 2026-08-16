@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -92,12 +93,12 @@ type providerIdentity struct {
 
 // fixtureAccount is one deterministic account the seed writes.
 type fixtureAccount struct {
-	ID        uuid.UUID
+	ID         uuid.UUID
 	IdentityID uuid.UUID
-	Email     string
-	Name      string
-	Provider  *providerIdentity
-	Password  string // raw password; hashed at seed time when non-empty
+	Email      string
+	Name       string
+	Provider   *providerIdentity
+	Password   string // raw password; hashed at seed time when non-empty
 }
 
 // Frozen fixture accounts. The fixed UUIDs can never collide with real
@@ -144,7 +145,9 @@ func open(ctx context.Context, cfg Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			fmt.Fprintln(os.Stderr, "password-auth-fixture: close database:", closeErr)
+		}
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 	return db, nil
@@ -157,7 +160,11 @@ func runSeed(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			fmt.Fprintln(os.Stderr, "password-auth-fixture: close database:", closeErr)
+		}
+	}()
 
 	hasher, err := password.NewHasher(
 		password.DefaultHashPolicy(), rand.Reader, password.NewAdmission())
@@ -220,7 +227,11 @@ func runCleanup(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			fmt.Fprintln(os.Stderr, "password-auth-fixture: close database:", closeErr)
+		}
+	}()
 
 	ids := make([]uuid.UUID, 0, len(fixtureAccounts))
 	for _, acct := range fixtureAccounts {
