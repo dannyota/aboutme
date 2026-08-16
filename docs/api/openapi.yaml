@@ -880,6 +880,7 @@ paths:
                     email: ada@example.com
                     name: Ada Lovelace
                     avatarKey: null
+                    hasPassword: false
                   csrfToken: kQ2f9Z3sV1n8LhTt7v0wYb-example
                   identities:
                     - provider: google
@@ -2215,6 +2216,243 @@ paths:
         - $ref: "#/components/parameters/PublicSlug"
         - $ref: "#/components/parameters/IfNoneMatch"
       responses: *publicPhotoResponses
+  /auth/password/register:
+    post:
+      operationId: postAuthPasswordRegister
+      tags: [auth]
+      security: []
+      summary: Queue email verification for a new password account
+      description: >-
+        Validates name, email, and password, then queues a verification email
+        for an unowned email. Owned and unowned emails return the same `202`
+        and reveal no account state; a provider-only user must sign in through
+        the provider and add a password in settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordRegisterRequest"
+      responses:
+        "202":
+          $ref: "#/components/responses/PasswordAccepted"
+        "400":
+          $ref: "#/components/responses/PasswordRequestInvalid"
+        "403":
+          $ref: "#/components/responses/PasswordCsrfRejected"
+        "413":
+          $ref: "#/components/responses/PasswordBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "422":
+          $ref: "#/components/responses/PasswordPolicyInvalid"
+        "429":
+          $ref: "#/components/responses/PasswordRateLimited"
+        "503":
+          $ref: "#/components/responses/PasswordUnavailable"
+  /auth/password/verify:
+    post:
+      operationId: postAuthPasswordVerify
+      tags: [auth]
+      security: []
+      summary: Consume a verification token and create the account
+      description: >-
+        Consumes a single-use verification token and creates the account and
+        credential. Creates no session; success redirects to login. A
+        concurrent provider signup that won the email race returns the same
+        success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordVerifyRequest"
+      responses:
+        "204":
+          description: Email verified. No body — the page redirects to login.
+        "400":
+          $ref: "#/components/responses/PasswordTokenBadRequest"
+        "403":
+          $ref: "#/components/responses/PasswordCsrfRejected"
+        "413":
+          $ref: "#/components/responses/PasswordBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "429":
+          $ref: "#/components/responses/PasswordRateLimited"
+        "503":
+          $ref: "#/components/responses/PasswordUnavailable"
+  /auth/password/login:
+    post:
+      operationId: postAuthPasswordLogin
+      tags: [auth]
+      security: []
+      summary: Create an opaque session from email and password
+      description: >-
+        Verifies the email and password, then creates the same opaque
+        `__Host-session` cookie as a provider login. Unknown email,
+        provider-only account, and wrong password are indistinguishable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordLoginRequest"
+      responses:
+        "204":
+          description: >-
+            Authenticated. No body; the session is set on the
+            `__Host-session` cookie.
+        "400":
+          $ref: "#/components/responses/PasswordRequestInvalid"
+        "401":
+          $ref: "#/components/responses/PasswordAuthenticationFailed"
+        "403":
+          $ref: "#/components/responses/PasswordCsrfRejected"
+        "413":
+          $ref: "#/components/responses/PasswordBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "429":
+          $ref: "#/components/responses/PasswordRateLimited"
+        "503":
+          $ref: "#/components/responses/PasswordUnavailable"
+  /auth/password/forgot:
+    post:
+      operationId: postAuthPasswordForgot
+      tags: [auth]
+      security: []
+      summary: Queue a password reset when eligible
+      description: >-
+        Accepts an email and always returns the generic `202`. Only an
+        existing account with a password gets a reset email; unknown and
+        provider-only emails create neither.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordForgotRequest"
+      responses:
+        "202":
+          $ref: "#/components/responses/PasswordAccepted"
+        "400":
+          $ref: "#/components/responses/PasswordRequestInvalid"
+        "403":
+          $ref: "#/components/responses/PasswordCsrfRejected"
+        "413":
+          $ref: "#/components/responses/PasswordBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "429":
+          $ref: "#/components/responses/PasswordRateLimited"
+        "503":
+          $ref: "#/components/responses/PasswordUnavailable"
+  /auth/password/reset:
+    post:
+      operationId: postAuthPasswordReset
+      tags: [auth]
+      security: []
+      summary: Consume a reset token and replace the credential
+      description: >-
+        Consumes a single-use reset token, replaces the credential, and
+        revokes every session. Never logs in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "204":
+          description: Password reset. No body — the page redirects to login.
+        "400":
+          $ref: "#/components/responses/PasswordTokenBadRequest"
+        "403":
+          $ref: "#/components/responses/PasswordCsrfRejected"
+        "413":
+          $ref: "#/components/responses/PasswordBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "422":
+          $ref: "#/components/responses/PasswordPolicyInvalid"
+        "429":
+          $ref: "#/components/responses/PasswordRateLimited"
+        "503":
+          $ref: "#/components/responses/PasswordUnavailable"
+  /auth/password/reauth:
+    post:
+      operationId: postAuthPasswordReauth
+      tags: [auth]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Refresh recent reauthentication with the current password
+      description: >-
+        Verifies the current password and refreshes the completing session's
+        recent-reauthentication time. Requires a live session and CSRF.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordReauthRequest"
+      responses:
+        "204":
+          description: Reauthenticated. No body.
+        "400":
+          $ref: "#/components/responses/PasswordRequestInvalid"
+        "401":
+          $ref: "#/components/responses/PasswordReauthUnauthorized"
+        "403":
+          $ref: "#/components/responses/PasswordCsrfRejected"
+        "413":
+          $ref: "#/components/responses/PasswordBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "429":
+          $ref: "#/components/responses/PasswordRateLimited"
+        "503":
+          $ref: "#/components/responses/PasswordUnavailable"
+  /me/password:
+    put:
+      operationId: putMePassword
+      tags: [auth]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Add or replace the account password credential
+      description: >-
+        Adds a credential to a provider-only account or replaces the current
+        one. Requires a live session, CSRF, and a recent reauthentication.
+        Creates a fresh current session and revokes all old sessions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordSetRequest"
+      responses:
+        "204":
+          description: >-
+            Credential updated. No body; a fresh session is set on the
+            `__Host-session` cookie.
+        "400":
+          $ref: "#/components/responses/PasswordRequestInvalid"
+        "401":
+          $ref: "#/components/responses/PasswordAuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/PasswordSetForbidden"
+        "413":
+          $ref: "#/components/responses/PasswordBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+        "422":
+          $ref: "#/components/responses/PasswordPolicyInvalid"
+        "429":
+          $ref: "#/components/responses/PasswordRateLimited"
+        "503":
+          $ref: "#/components/responses/PasswordUnavailable"
 
 components:
   responses:
@@ -2932,6 +3170,208 @@ components:
             error:
               code: method_not_allowed
               message: method not allowed
+    PasswordAccepted:
+      description: >-
+        The generic `202` acceptance used by registration and
+        forgot-password. Byte-identical for every account state and reveals
+        no email ownership.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PasswordAccepted"
+          example:
+            data:
+              accepted: true
+    PasswordRequestInvalid:
+      description: >-
+        `request_invalid`: malformed JSON, an unknown or repeated field, a
+        wrong-typed field, an envelope shape error, or a malformed token
+        shape.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: request_invalid
+              message: request is malformed
+    PasswordCredentialTokenInvalid:
+      description: >-
+        `credential_token_invalid`: a well-shaped token that is absent,
+        expired, consumed, or replaced.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: credential_token_invalid
+              message: credential token is invalid
+    PasswordTokenBadRequest:
+      description: >-
+        `request_invalid` for malformed JSON, an unknown or repeated field, a
+        wrong-typed field, or a malformed token shape; or
+        `credential_token_invalid` for a well-shaped token that is absent,
+        expired, consumed, or replaced.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: credential_token_invalid
+              message: credential token is invalid
+    PasswordReauthUnauthorized:
+      description: >-
+        `authentication_required` when no live session is present, or
+        `reauth_failed` when the supplied password is not the current
+        credential.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: reauth_failed
+              message: reauthentication failed
+    PasswordSetForbidden:
+      description: >-
+        `csrf_rejected` when the Origin/Referer or synchronizer-token check
+        fails, or `reauth_required` when the recent-reauthentication window
+        is not satisfied.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: reauth_required
+              message: recent reauthentication required
+    PasswordAuthenticationFailed:
+      description: >-
+        `authentication_failed`: unknown email, a provider-only account, or a
+        wrong password. All three are indistinguishable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: authentication_failed
+              message: authentication failed
+    PasswordReauthFailed:
+      description: >-
+        `reauth_failed`: the supplied password is not the current credential.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: reauth_failed
+              message: reauthentication failed
+    PasswordAuthenticationRequired:
+      description: '`authentication_required`: no live session is present.'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: authentication_required
+              message: authentication required
+    PasswordCsrfRejected:
+      description: >-
+        `csrf_rejected`: the exact Origin/Referer check failed (every
+        password route) or the synchronizer token failed (authenticated
+        routes).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: csrf_rejected
+              message: CSRF validation failed
+    PasswordReauthRequired:
+      description: >-
+        `reauth_required`: the recent-reauthentication window is not
+        satisfied for an add/change.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: reauth_required
+              message: recent reauthentication required
+    PasswordBodyTooLarge:
+      description: '`body_too_large`: the request exceeded its 4,096-byte cap.'
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: body_too_large
+              message: request body is too large
+    PasswordMediaTypeUnsupported:
+      description: >-
+        `media_type_unsupported`: the request Content-Type is not exactly
+        `application/json`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: media_type_unsupported
+              message: Content-Type must be application/json
+    PasswordPolicyInvalid:
+      description: >-
+        `password_invalid`: a closed password-policy issue. `details.issue`
+        is one of `length`, `common`, or `breached`; the rejected value is
+        never returned.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: password_invalid
+              message: password does not meet policy
+              details:
+                issue: length
+    PasswordRateLimited:
+      description: >-
+        `rate_limited`: a bounded password limiter rejected the attempt.
+        Carries `Retry-After` in whole seconds.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+          description: Whole seconds to wait before retrying.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: rate_limited
+              message: too many requests; retry later
+    PasswordUnavailable:
+      description: >-
+        `authentication_unavailable`: a required hash, breach, database,
+        encryption, or queue dependency is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: authentication_unavailable
+              message: authentication is temporarily unavailable
   headers:
     ParentETag:
       description: The owning resume's revision as a strong entity tag,
@@ -3083,6 +3523,8 @@ components:
                     - orientation
                     - trailing_data
                     - normalization_failed
+                issue:
+                  $ref: "#/components/schemas/PasswordPolicyIssue"
     Revision:
       type: string
       pattern: "^[0-9]+$"
@@ -3103,6 +3545,7 @@ components:
         - email
         - name
         - avatarKey
+        - hasPassword
       properties:
         id:
           type: string
@@ -3116,11 +3559,16 @@ components:
           type: [string, "null"]
           description: Object-storage key for the user's avatar image, or
             `null` if none has been set.
+        hasPassword:
+          type: boolean
+          description: Whether the account has a password credential. A
+            provider-only account is `false` until a password is added.
       example:
         id: 018f5b6a-9a3e-7c21-8b1e-000000000001
         email: ada@example.com
         name: Ada Lovelace
         avatarKey: null
+        hasPassword: false
     Identity:
       type: object
       description: One linked OAuth provider identity. `GET /me` exposes
@@ -4338,6 +4786,112 @@ components:
           y: 0.05
           width: 0.8
           height: 0.8
+    PasswordEmail:
+      type: string
+      maxLength: 254
+      description: >-
+        The account email in its canonical lowercase ASCII addr-spec form
+        (5–254 bytes, no display name, comments, controls, surrounding
+        space, or internationalized spelling).
+      example: ada@example.com
+    PasswordValue:
+      type: string
+      maxLength: 1024
+      description: >-
+        A password value. The raw JSON-decoded string is capped again by the
+        server at 1,024 UTF-8 bytes before any normalization; the API never
+        receives a confirmation value.
+      example: correct horse battery staple
+    PasswordToken:
+      type: string
+      minLength: 43
+      maxLength: 43
+      description: >-
+        A single-use verification or reset token: exactly 43 unpadded
+        base64url characters encoding 32 random bytes.
+      example: 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg
+    PasswordPolicyIssue:
+      type: string
+      enum: [length, common, breached]
+      description: >-
+        Closed reason code carried in a `password_invalid` rejection's
+        `details.issue`. Never the rejected value.
+    PasswordAccepted:
+      type: object
+      description: >-
+        The fixed `202` success body shared by registration and
+        forgot-password. Byte-identical for every account state and reveals
+        no email ownership.
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [accepted]
+          properties:
+            accepted:
+              type: boolean
+      example:
+        data:
+          accepted: true
+    PasswordRegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          maxLength: 400
+          description: Registration name (1–100 code points after NFC).
+        email:
+          $ref: "#/components/schemas/PasswordEmail"
+        password:
+          $ref: "#/components/schemas/PasswordValue"
+    PasswordVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          $ref: "#/components/schemas/PasswordToken"
+    PasswordLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          $ref: "#/components/schemas/PasswordEmail"
+        password:
+          $ref: "#/components/schemas/PasswordValue"
+    PasswordForgotRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          $ref: "#/components/schemas/PasswordEmail"
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token:
+          $ref: "#/components/schemas/PasswordToken"
+        password:
+          $ref: "#/components/schemas/PasswordValue"
+    PasswordReauthRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          $ref: "#/components/schemas/PasswordValue"
+    PasswordSetRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          $ref: "#/components/schemas/PasswordValue"
 
   parameters:
     AuthPurpose:

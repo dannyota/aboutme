@@ -678,6 +678,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/password/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue email verification for a new password account
+         * @description Validates name, email, and password, then queues a verification email for an unowned email. Owned and unowned emails return the same `202` and reveal no account state; a provider-only user must sign in through the provider and add a password in settings.
+         */
+        post: operations["postAuthPasswordRegister"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume a verification token and create the account
+         * @description Consumes a single-use verification token and creates the account and credential. Creates no session; success redirects to login. A concurrent provider signup that won the email race returns the same success.
+         */
+        post: operations["postAuthPasswordVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create an opaque session from email and password
+         * @description Verifies the email and password, then creates the same opaque `__Host-session` cookie as a provider login. Unknown email, provider-only account, and wrong password are indistinguishable.
+         */
+        post: operations["postAuthPasswordLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue a password reset when eligible
+         * @description Accepts an email and always returns the generic `202`. Only an existing account with a password gets a reset email; unknown and provider-only emails create neither.
+         */
+        post: operations["postAuthPasswordForgot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume a reset token and replace the credential
+         * @description Consumes a single-use reset token, replaces the credential, and revokes every session. Never logs in.
+         */
+        post: operations["postAuthPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password/reauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh recent reauthentication with the current password
+         * @description Verifies the current password and refreshes the completing session's recent-reauthentication time. Requires a live session and CSRF.
+         */
+        post: operations["postAuthPasswordReauth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Add or replace the account password credential
+         * @description Adds a credential to a provider-only account or replaces the current one. Requires a live session, CSRF, and a recent reauthentication. Creates a fresh current session and revokes all old sessions.
+         */
+        put: operations["putMePassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -732,6 +872,7 @@ export interface components {
                      * @enum {string}
                      */
                     reason?: "malformed" | "animated" | "dimensions" | "orientation" | "trailing_data" | "normalization_failed";
+                    issue?: components["schemas"]["PasswordPolicyIssue"];
                 };
             };
         };
@@ -746,7 +887,8 @@ export interface components {
          *       "id": "018f5b6a-9a3e-7c21-8b1e-000000000001",
          *       "email": "ada@example.com",
          *       "name": "Ada Lovelace",
-         *       "avatarKey": null
+         *       "avatarKey": null,
+         *       "hasPassword": false
          *     }
          */
         User: {
@@ -757,6 +899,8 @@ export interface components {
             name: string;
             /** @description Object-storage key for the user's avatar image, or `null` if none has been set. */
             avatarKey: string | null;
+            /** @description Whether the account has a password credential. A provider-only account is `false` until a password is added. */
+            hasPassword: boolean;
         };
         /**
          * @description One linked OAuth provider identity. `GET /me` exposes only the provider itself — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client.
@@ -1289,6 +1433,65 @@ export interface components {
                 width: number;
                 height: number;
             } | null;
+        };
+        /**
+         * @description The account email in its canonical lowercase ASCII addr-spec form (5–254 bytes, no display name, comments, controls, surrounding space, or internationalized spelling).
+         * @example ada@example.com
+         */
+        PasswordEmail: string;
+        /**
+         * @description A password value. The raw JSON-decoded string is capped again by the server at 1,024 UTF-8 bytes before any normalization; the API never receives a confirmation value.
+         * @example correct horse battery staple
+         */
+        PasswordValue: string;
+        /**
+         * @description A single-use verification or reset token: exactly 43 unpadded base64url characters encoding 32 random bytes.
+         * @example 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg
+         */
+        PasswordToken: string;
+        /**
+         * @description Closed reason code carried in a `password_invalid` rejection's `details.issue`. Never the rejected value.
+         * @enum {string}
+         */
+        PasswordPolicyIssue: "length" | "common" | "breached";
+        /**
+         * @description The fixed `202` success body shared by registration and forgot-password. Byte-identical for every account state and reveals no email ownership.
+         * @example {
+         *       "data": {
+         *         "accepted": true
+         *       }
+         *     }
+         */
+        PasswordAccepted: {
+            data: {
+                accepted: boolean;
+            };
+        };
+        PasswordRegisterRequest: {
+            /** @description Registration name (1–100 code points after NFC). */
+            name: string;
+            email: components["schemas"]["PasswordEmail"];
+            password: components["schemas"]["PasswordValue"];
+        };
+        PasswordVerifyRequest: {
+            token: components["schemas"]["PasswordToken"];
+        };
+        PasswordLoginRequest: {
+            email: components["schemas"]["PasswordEmail"];
+            password: components["schemas"]["PasswordValue"];
+        };
+        PasswordForgotRequest: {
+            email: components["schemas"]["PasswordEmail"];
+        };
+        PasswordResetRequest: {
+            token: components["schemas"]["PasswordToken"];
+            password: components["schemas"]["PasswordValue"];
+        };
+        PasswordReauthRequest: {
+            password: components["schemas"]["PasswordValue"];
+        };
+        PasswordSetRequest: {
+            password: components["schemas"]["PasswordValue"];
         };
     };
     responses: {
@@ -2149,6 +2352,282 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The generic `202` acceptance used by registration and forgot-password. Byte-identical for every account state and reveals no email ownership. */
+        PasswordAccepted: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "data": {
+                 *         "accepted": true
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["PasswordAccepted"];
+            };
+        };
+        /** @description `request_invalid`: malformed JSON, an unknown or repeated field, a wrong-typed field, an envelope shape error, or a malformed token shape. */
+        PasswordRequestInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "request is malformed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `credential_token_invalid`: a well-shaped token that is absent, expired, consumed, or replaced. */
+        PasswordCredentialTokenInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "credential_token_invalid",
+                 *         "message": "credential token is invalid"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `request_invalid` for malformed JSON, an unknown or repeated field, a wrong-typed field, or a malformed token shape; or `credential_token_invalid` for a well-shaped token that is absent, expired, consumed, or replaced. */
+        PasswordTokenBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "credential_token_invalid",
+                 *         "message": "credential token is invalid"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `authentication_required` when no live session is present, or `reauth_failed` when the supplied password is not the current credential. */
+        PasswordReauthUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "reauth_failed",
+                 *         "message": "reauthentication failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `csrf_rejected` when the Origin/Referer or synchronizer-token check fails, or `reauth_required` when the recent-reauthentication window is not satisfied. */
+        PasswordSetForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "reauth_required",
+                 *         "message": "recent reauthentication required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `authentication_failed`: unknown email, a provider-only account, or a wrong password. All three are indistinguishable. */
+        PasswordAuthenticationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "authentication_failed",
+                 *         "message": "authentication failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `reauth_failed`: the supplied password is not the current credential. */
+        PasswordReauthFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "reauth_failed",
+                 *         "message": "reauthentication failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `authentication_required`: no live session is present. */
+        PasswordAuthenticationRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "authentication_required",
+                 *         "message": "authentication required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `csrf_rejected`: the exact Origin/Referer check failed (every password route) or the synchronizer token failed (authenticated routes). */
+        PasswordCsrfRejected: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "csrf_rejected",
+                 *         "message": "CSRF validation failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `reauth_required`: the recent-reauthentication window is not satisfied for an add/change. */
+        PasswordReauthRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "reauth_required",
+                 *         "message": "recent reauthentication required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `body_too_large`: the request exceeded its 4,096-byte cap. */
+        PasswordBodyTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "body_too_large",
+                 *         "message": "request body is too large"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `media_type_unsupported`: the request Content-Type is not exactly `application/json`. */
+        PasswordMediaTypeUnsupported: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "media_type_unsupported",
+                 *         "message": "Content-Type must be application/json"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `password_invalid`: a closed password-policy issue. `details.issue` is one of `length`, `common`, or `breached`; the rejected value is never returned. */
+        PasswordPolicyInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "password_invalid",
+                 *         "message": "password does not meet policy",
+                 *         "details": {
+                 *           "issue": "length"
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: a bounded password limiter rejected the attempt. Carries `Retry-After` in whole seconds. */
+        PasswordRateLimited: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `authentication_unavailable`: a required hash, breach, database, encryption, or queue dependency is unavailable. */
+        PasswordUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "authentication_unavailable",
+                 *         "message": "authentication is temporarily unavailable"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /**
@@ -2954,7 +3433,8 @@ export interface operations {
                      *           "id": "018f5b6a-9a3e-7c21-8b1e-000000000001",
                      *           "email": "ada@example.com",
                      *           "name": "Ada Lovelace",
-                     *           "avatarKey": null
+                     *           "avatarKey": null,
+                     *           "hasPassword": false
                      *         },
                      *         "csrfToken": "kQ2f9Z3sV1n8LhTt7v0wYb-example",
                      *         "identities": [
@@ -4365,6 +4845,196 @@ export interface operations {
             404: components["responses"]["PublicNotFound"];
             405: components["responses"]["PublicMethodNotAllowed"];
             503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    postAuthPasswordRegister: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordRegisterRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["PasswordAccepted"];
+            400: components["responses"]["PasswordRequestInvalid"];
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            422: components["responses"]["PasswordPolicyInvalid"];
+            429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postAuthPasswordVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Email verified. No body — the page redirects to login. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PasswordTokenBadRequest"];
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postAuthPasswordLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticated. No body; the session is set on the `__Host-session` cookie. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            401: components["responses"]["PasswordAuthenticationFailed"];
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postAuthPasswordForgot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordForgotRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["PasswordAccepted"];
+            400: components["responses"]["PasswordRequestInvalid"];
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postAuthPasswordReset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Password reset. No body — the page redirects to login. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PasswordTokenBadRequest"];
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            422: components["responses"]["PasswordPolicyInvalid"];
+            429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postAuthPasswordReauth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordReauthRequest"];
+            };
+        };
+        responses: {
+            /** @description Reauthenticated. No body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            401: components["responses"]["PasswordReauthUnauthorized"];
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    putMePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordSetRequest"];
+            };
+        };
+        responses: {
+            /** @description Credential updated. No body; a fresh session is set on the `__Host-session` cookie. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            403: components["responses"]["PasswordSetForbidden"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            422: components["responses"]["PasswordPolicyInvalid"];
+            429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
         };
     };
 }
