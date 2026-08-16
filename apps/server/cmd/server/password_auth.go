@@ -50,6 +50,21 @@ func newPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 	if err != nil {
 		return nil, err
 	}
+	// Startup readiness: every key ID referenced by a live (pending/leased)
+	// job must be present in the ring, or the worker cannot decrypt it later.
+	liveKeyIDs, err := queries.ListLiveAuthEmailJobKeyIDs(ctx, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("list live mail key ids: %w", err)
+	}
+	knownKeys := map[string]bool{cfg.AuthEmail.ActiveKeyID: true}
+	if cfg.AuthEmail.HasPrevious {
+		knownKeys[cfg.AuthEmail.PreviousKeyID] = true
+	}
+	for _, id := range liveKeyIDs {
+		if !knownKeys[id] {
+			return nil, fmt.Errorf("mail key ring is missing key %q referenced by a live job", id)
+		}
+	}
 	outbox, err := authmail.NewOutbox(ring, time.Now)
 	if err != nil {
 		return nil, fmt.Errorf("create mail outbox: %w", err)
