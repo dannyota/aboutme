@@ -9,6 +9,7 @@ import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
+  isExpectedNegativeHTTPConsole,
 } from './network-policy';
 
 // Node-only capture endpoint. The browser's page/context firewall never sees
@@ -76,7 +77,7 @@ async function waitForLink(
   throw new Error(`no ${kind} message for ${to} within 30s`);
 }
 
-// fragmentTokenFor builds a local verification/reset URL from a raw token,
+// fragmentURLFor builds a local verification/reset URL from a raw token,
 // re-pointing the production link origin at the trusted local origin.
 function verifyURL(token: string): string {
   return `${ORIGIN}/verify-email#token=${token}`;
@@ -94,6 +95,13 @@ async function meStatus(page: Page): Promise<number> {
     });
     return response.status;
   });
+}
+
+// gotoHydrated navigates and then waits for the Nuxt app to hydrate, so a
+// Vue-bound form is interactive rather than a stale SSR shell.
+async function gotoHydrated(page: Page, url: string): Promise<void> {
+  await page.goto(url);
+  await page.waitForLoadState('networkidle');
 }
 
 // signInWithGoogle completes a provider login: it follows the login anchor to
@@ -126,7 +134,15 @@ test('proves password authentication over native HTTPS', async ({
 
   const attachPageDiagnostics = (openedPage: Page): void => {
     openedPage.on('console', (message) => {
-      if (message.type() === 'error') consoleErrors += 1;
+      if (
+        message.type() === 'error'
+        && !isExpectedNegativeHTTPConsole(
+          message.text(),
+          message.location().url,
+        )
+      ) {
+        consoleErrors += 1;
+      }
     });
     openedPage.on('pageerror', () => {
       pageErrors += 1;
@@ -164,11 +180,11 @@ test('proves password authentication over native HTTPS', async ({
   const newPassword = secret();
 
   // 1. Register and prove the fixed, account-neutral accepted copy.
-  await page.goto('/register');
+  await gotoHydrated(page, '/register');
   await page.getByLabel('Name').fill('Proof User');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByLabel('Confirm password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.getByLabel('Confirm password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByTestId('register-success')).toContainText(
     'Check your email',
@@ -176,7 +192,7 @@ test('proves password authentication over native HTTPS', async ({
 
   // 2. Verify through the captured link, with no session created.
   const verifyToken = await waitForLink(capture, 'verify', email);
-  await page.goto(verifyURL(verifyToken));
+  await gotoHydrated(page, verifyURL(verifyToken));
   await expect(page.getByTestId('verify-success')).toContainText(
     'Email verified',
   );
@@ -184,15 +200,15 @@ test('proves password authentication over native HTTPS', async ({
   expect(await meStatus(page)).toBe(401);
 
   // 3. Password login and an authenticated /me with a password credential.
-  await page.goto('/login');
+  await gotoHydrated(page, '/login');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/app/resumes');
   expect(await meStatus(page)).toBe(200);
 
   // 4. Link a provider whose verified email differs from the account email.
-  await page.goto('/app/settings/sessions');
+  await gotoHydrated(page, '/app/settings/sessions');
   await page.getByTestId('add-provider-button').click();
   await Promise.all([
     page.waitForURL((url) =>
@@ -224,12 +240,17 @@ test('proves password authentication over native HTTPS', async ({
     await route.continue();
   });
   await providerPage.goto('/login');
-  await signInWithGoogle(providerPage, 'Development User — developer@example.invalid');
-  await providerPage.goto('/app/settings/sessions');
+  await signInWithGoogle(
+    providerPage,
+    'Provider Only — pa-provider-only@example.invalid',
+  );
+  await gotoHydrated(providerPage, '/app/settings/sessions');
   const providerPassword = secret();
   await providerPage.getByTestId('password-action').click();
-  await providerPage.getByLabel('New password').fill(providerPassword);
-  await providerPage.getByLabel('Confirm password').fill(providerPassword);
+  await providerPage.getByLabel('New password', { exact: true })
+    .fill(providerPassword);
+  await providerPage.getByLabel('Confirm password', { exact: true })
+    .fill(providerPassword);
   await providerPage.getByTestId('password-set-submit').click();
   await expect(providerPage.getByTestId('password-success')).toContainText(
     'Password added.',
@@ -248,22 +269,22 @@ test('proves password authentication over native HTTPS', async ({
     }
     await route.continue();
   });
-  await secondPage.goto('/login');
+  await gotoHydrated(secondPage, '/login');
   await secondPage.getByLabel('Email').fill(email);
-  await secondPage.getByLabel('Password').fill(password);
+  await secondPage.getByLabel('Password', { exact: true }).fill(password);
   await secondPage.getByRole('button', { name: 'Sign in' }).click();
   await secondPage.waitForURL('/app/resumes');
   expect(await meStatus(secondPage)).toBe(200);
 
   // 7. Forgot password and reset through the captured link (no auto-login).
-  await page.goto('/forgot-password');
+  await gotoHydrated(page, '/forgot-password');
   await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByTestId('forgot-success')).toBeVisible();
   const resetToken = await waitForLink(capture, 'reset', email);
-  await page.goto(resetURL(resetToken));
-  await page.getByLabel('New password').fill(newPassword);
-  await page.getByLabel('Confirm password').fill(newPassword);
+  await gotoHydrated(page, resetURL(resetToken));
+  await page.getByLabel('New password', { exact: true }).fill(newPassword);
+  await page.getByLabel('Confirm password', { exact: true }).fill(newPassword);
   await page.getByRole('button', { name: 'Reset password' }).click();
   await expect(page.getByTestId('reset-success')).toContainText(
     'Password reset',
@@ -272,22 +293,25 @@ test('proves password authentication over native HTTPS', async ({
   // 8. Every old session is revoked; the old password is rejected.
   expect(await meStatus(page)).toBe(401);
   expect(await meStatus(secondPage)).toBe(401);
-  await page.goto('/login');
+  await gotoHydrated(page, '/login');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByTestId('login-form-error')).toContainText(
     'Invalid email or password',
   );
 
   // 9. The reset token is single-use: replay is rejected.
-  await page.goto(resetURL(resetToken));
+  await gotoHydrated(page, resetURL(resetToken));
+  await page.getByLabel('New password', { exact: true }).fill(newPassword);
+  await page.getByLabel('Confirm password', { exact: true }).fill(newPassword);
+  await page.getByRole('button', { name: 'Reset password' }).click();
   await expect(page.getByTestId('reset-error')).toContainText('invalid');
 
   // 10. The new password signs in.
-  await page.goto('/login');
+  await gotoHydrated(page, '/login');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(newPassword);
+  await page.getByLabel('Password', { exact: true }).fill(newPassword);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/app/resumes');
   expect(await meStatus(page)).toBe(200);

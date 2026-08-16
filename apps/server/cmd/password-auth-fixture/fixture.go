@@ -109,7 +109,7 @@ var fixtureAccounts = []fixtureAccount{
 		IdentityID: uuid.MustParse("52000000-0000-4000-8000-000000000011"),
 		Email:      "pa-provider-only@example.invalid",
 		Name:       "PA Provider Only",
-		Provider:   &providerIdentity{Provider: "google", ProviderUserID: "uat-google-001"},
+		Provider:   &providerIdentity{Provider: "google", ProviderUserID: "uat-google-004"},
 	},
 	{
 		ID:         uuid.MustParse("52000000-0000-4000-8000-000000000002"),

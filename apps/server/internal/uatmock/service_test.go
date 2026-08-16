@@ -63,7 +63,7 @@ func TestAuthorizationGETRendersAccessibleAccountForm(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html;") {
 		t.Fatalf("Content-Type = %q", got)
 	}
-	for _, want := range []string{"<form", `method="post"`, `action="` + authorizePath + `"`, "Development User", "developer@example.invalid", "Alice Local", "alice@example.invalid", "Bob Local", "bob@example.invalid", "Continue with Google"} {
+	for _, want := range []string{"<form", `method="post"`, `action="` + authorizePath + `"`, "Development User", "developer@example.invalid", "Alice Local", "alice@example.invalid", "Bob Local", "bob@example.invalid", "Provider Only", "pa-provider-only@example.invalid", "Continue with Google"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("body missing %q", want)
 		}
