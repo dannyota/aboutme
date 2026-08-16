@@ -63,7 +63,7 @@ func TestAuthorizationGETRendersAccessibleAccountForm(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html;") {
 		t.Fatalf("Content-Type = %q", got)
 	}
-	for _, want := range []string{"<form", `method="post"`, `action="` + authorizePath + `"`, "Development User", "developer@example.invalid", "Continue with Google"} {
+	for _, want := range []string{"<form", `method="post"`, `action="` + authorizePath + `"`, "Development User", "developer@example.invalid", "Alice Local", "alice@example.invalid", "Bob Local", "bob@example.invalid", "Continue with Google"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("body missing %q", want)
 		}
@@ -145,6 +145,21 @@ func TestAuthorizationRejectsInvalidAndOversizedFields(t *testing.T) {
 				t.Fatal("error response echoed rejected field")
 			}
 		})
+	}
+}
+
+func TestAuthorizationRejectsUnknownAccount(t *testing.T) {
+	t.Parallel()
+
+	svc := newTestService(t)
+	form := validAuthorizeQuery()
+	form.Set("account", "uat-google-999")
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	svc.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 
