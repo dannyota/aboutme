@@ -356,7 +356,7 @@ export default withNuxt(
     // are meaningless on output nobody edits, and `--fix` would rewrite it
     // into permanent drift against the generator. `make api-check`, not
     // eslint, is what keeps this directory honest.
-    ignores: ['app/api/generated/**'],
+    ignores: ['app/api/generated/**', '.dev/**'],
   },
   {
     rules: googleStyleRules,

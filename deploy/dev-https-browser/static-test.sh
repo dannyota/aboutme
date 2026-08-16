@@ -262,13 +262,13 @@ for source in "$SOURCE"/*.sh "$SOURCE"/*.ts "$SOURCE"/Dockerfile; do
     fail "trailing whitespace in ${source#$ROOT/}"
   fi
 done
-if rg -n --glob '!static-test.sh' \
-  -- '(ignore-certificate|ignoreHTTPSErrors|no-sandbox|disable-setuid-sandbox|update-snapshot|updateSnapshots: .(all|changed)|trace: .(on|retain)|video: .(on|retain))' \
+if grep -rnE --exclude='static-test.sh' --exclude-dir='node_modules' \
+  '(ignore-certificate|ignoreHTTPSErrors|no-sandbox|disable-setuid-sandbox|update-snapshot|updateSnapshots: .(all|changed)|trace: .(on|retain)|video: .(on|retain))' \
   "$SOURCE"; then
   fail 'TLS, sandbox, update, trace, or video bypass found'
 fi
-if rg -n --glob '!static-test.sh' \
-  -- '(not-a-secret-local-google|uat-google-access-token|BEGIN (RSA )?PRIVATE KEY|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)' \
+if grep -rnE --exclude='static-test.sh' --exclude-dir='node_modules' \
+  '(not-a-secret-local-google|uat-google-access-token|BEGIN (RSA )?PRIVATE KEY|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)' \
   "$SOURCE"; then
   fail 'secret-like literal found'
 fi
@@ -281,8 +281,8 @@ grep -Fq '/uat-input/caddy-root.crt' "$SOURCE/run.sh" ||
   fail 'runner does not use the closed CA path'
 grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
-grep -Fqx "const timeout = mode === 'editor' ? 120_000 : 30_000;" \
-  "$SOURCE/playwright.config.ts" || fail 'editor timeout is not explicitly bounded'
+grep -Fqx "const timeout = mode === 'editor' || mode === 'public' ? 120_000 : 30_000;" \
+  "$SOURCE/playwright.config.ts" || fail 'editor/public timeout is not explicitly bounded'
 grep -Fq '  timeout,' "$SOURCE/playwright.config.ts" ||
   fail 'Playwright does not use the bounded mode timeout'
 
