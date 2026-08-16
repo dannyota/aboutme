@@ -17,6 +17,7 @@ var googleAccounts = []account{
 	{Subject: "uat-google-001", Email: "developer@example.invalid", Name: "Development User"},
 	{Subject: "uat-google-002", Email: "alice@example.invalid", Name: "Alice Local"},
 	{Subject: "uat-google-003", Email: "bob@example.invalid", Name: "Bob Local"},
+	{Subject: "uat-google-004", Email: "pa-provider-only@example.invalid", Name: "Provider Only"},
 }
 
 // googleSubject is the first (default) account subject, retained for the

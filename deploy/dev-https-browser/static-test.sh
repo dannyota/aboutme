@@ -361,6 +361,14 @@ const cases = [
     'https://localhost:20443/api/v1/me?unexpected=1',
   ), false],
   [isExpectedNegativeHTTPConsole(
+    'Failed to load resource: the server responded with a status of 401 ()',
+    'https://localhost:20443/api/v1/auth/password/login',
+  ), true],
+  [isExpectedNegativeHTTPConsole(
+    'Failed to load resource: the server responded with a status of 400 ()',
+    'https://localhost:20443/api/v1/auth/password/reset',
+  ), true],
+  [isExpectedNegativeHTTPConsole(
     'Failed to load resource: the server responded with a status of 403 ()',
     'https://example.invalid/api/v1/auth/google/start?purpose=reauth',
   ), false],

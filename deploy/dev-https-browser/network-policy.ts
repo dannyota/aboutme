@@ -37,7 +37,13 @@ export function isExpectedNegativeHTTPConsole(
   if (
     message === 'Failed to load resource: the server responded with a status of 401 ()'
   ) {
-    return url.pathname === '/api/v1/me' && url.search === '';
+    return (url.pathname === '/api/v1/me' && url.search === '')
+      || (url.pathname === '/api/v1/auth/password/login' && url.search === '');
+  }
+  if (
+    message === 'Failed to load resource: the server responded with a status of 400 ()'
+  ) {
+    return url.pathname === '/api/v1/auth/password/reset' && url.search === '';
   }
   return false;
 }
