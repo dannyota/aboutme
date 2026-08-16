@@ -12,10 +12,12 @@ container.
 | `20080` | Browser origin through Caddy |
 | `20081` | Go server                    |
 | `20030` | Nuxt development server      |
+| `20091` | Authentication mail capture  |
 
 Tests use the `aboutme` database. Native development uses `aboutme_dev`, so a
-test suite cannot truncate development data. Logs, process IDs, binaries, and a
-generated Caddyfile stay under the ignored `.dev/` directory.
+test suite cannot truncate development data. Logs, process IDs, binaries, a
+generated Caddyfile, and the mode-0600 password-mail secrets stay under the
+ignored `.dev/` directory.
 
 ## Prerequisites
 
@@ -41,7 +43,10 @@ make dev-native
 
 The command is idempotent. It starts or reuses `aboutme-test-db`, creates the
 `aboutme_dev` database if needed, applies goose migrations, builds the Go
-binary, then starts Go, Nuxt, and Caddy.
+binary, then starts the authentication-mail-capture server, Go, Nuxt, and
+Caddy. The mail-capture bearer, rate-HMAC, and mail-encryption secrets are
+created once under `.dev/secrets/` and reused across restarts; they are never
+printed.
 
 Open only `http://localhost:20080` in a browser. Direct upstream ports are for
 diagnostics.
