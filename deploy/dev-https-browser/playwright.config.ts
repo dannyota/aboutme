@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const baseURL = 'https://localhost:20443';
-const browserModes = ['auth', 'transport', 'editor'] as const;
+const browserModes = ['auth', 'transport', 'editor', 'public'] as const;
 type BrowserMode = typeof browserModes[number];
 const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
 
@@ -10,7 +10,7 @@ if (!browserModes.includes(requestedMode as BrowserMode)) {
 }
 
 const mode = requestedMode as BrowserMode;
-const timeout = mode === 'editor' ? 120_000 : 30_000;
+const timeout = mode === 'editor' || mode === 'public' ? 120_000 : 30_000;
 
 for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   if (Object.hasOwn(process.env, name)) {

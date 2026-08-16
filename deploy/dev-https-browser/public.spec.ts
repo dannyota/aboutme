@@ -47,6 +47,47 @@ test('proves a published resume hydrates in a real browser', async ({
     createdID = created.metadata.id;
     publishedSlug = `public-${crypto.randomUUID().slice(0, 8)}`;
 
+    // Publish requires at least a full name; fill it and wait for the autosave.
+    await page
+      .getByRole('navigation', { name: 'Resume outline' })
+      .getByRole('button', { name: 'Personal details', exact: true })
+      .press('Enter');
+    await page.getByLabel('Full name').fill('Public proof resume');
+    await page.getByLabel('Full name').press('Tab');
+    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+
+    // Add one work section and entry, so the resume meets the publish
+    // completeness minimum (a full name plus at least one visible entry).
+    await page.getByRole('button', { name: 'Structure' }).press('Enter');
+    await page.getByLabel('Section type').selectOption('work');
+    await page.locator('[data-action="create"]').press('Enter');
+    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+    await page.getByRole('button', { name: 'Document' }).press('Enter');
+    await page
+      .getByRole('navigation', { name: 'Resume outline' })
+      .getByRole('button', { name: 'Experience' })
+      .press('Enter');
+    await page.getByRole('button', { name: 'Add entry' }).press('Enter');
+    await page.locator('[data-entry-id]').first().getByLabel('Job title').fill('Engineer');
+    await page.locator('[data-entry-id]').first().getByLabel('Job title').press('Tab');
+    await page.locator('[data-entry-id]').first().getByLabel('Employer', { exact: true }).fill('Example Corp');
+    await page.locator('[data-entry-id]').first().getByLabel('Employer', { exact: true }).press('Tab');
+    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+
+    // The autosave advanced the revision; read the current one for If-Match.
+    const currentRevision = await page.evaluate(async (id) => {
+      const response = await fetch(`/api/v1/resumes/${id}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const body = await response.json() as { data?: { revision?: unknown } };
+      const revision = body.data?.revision;
+      if (response.status !== 200 || typeof revision !== 'string') {
+        throw new Error('resume read failed');
+      }
+      return revision;
+    }, createdID);
+
     // Publish: the resume must already hold a live slug before any public
     // route will serve it.
     const csrf = await freshCSRF(page);
@@ -59,7 +100,7 @@ test('proves a published resume hydrates in a real browser', async ({
           'Idempotency-Key': crypto.randomUUID(),
           'If-Match': `"r${input.revision}"`,
           'X-CSRF-Token': input.csrf,
-          'X-Resume-Schema-Version': SCHEMA_VERSION,
+          'X-Resume-Schema-Version': input.schemaVersion,
         },
         body: JSON.stringify({
           slug: input.slug,
@@ -68,9 +109,10 @@ test('proves a published resume hydrates in a real browser', async ({
           seoGeoEnabled: true,
         }),
       });
-      return response.status;
-    }, { id: createdID, revision: created.revision, csrf, slug: publishedSlug });
-    expect(publishStatus).toBe(200);
+      const body = await response.json().catch(() => null);
+      return { status: response.status, body };
+    }, { id: createdID, revision: currentRevision, csrf, slug: publishedSlug, schemaVersion: SCHEMA_VERSION });
+    expect(publishStatus.status, JSON.stringify(publishStatus.body)).toBe(200);
 
     // Prove the page in a fresh context with no session cookies.
     const publicContext = await browser.newContext();
@@ -119,11 +161,11 @@ test('proves a published resume hydrates in a real browser', async ({
   expect(pageErrors).toEqual([]);
   expect(externalRequests).toEqual([]);
 
-  await writeFile(EVIDENCE_PATH, JSON.stringify({
-    scenario: 'public-resume-hydration',
+  await writeFile(EVIDENCE_PATH, `${JSON.stringify({
     schemaVersion: 1,
+    scenario: 'public-resume-hydration',
     origin: ORIGIN,
     errors: { console: consoleErrors.length, externalRequest: externalRequests.length, page: pageErrors.length },
     steps: { published: true, ssr: true, hydrated: true },
-  }));
+  })}\n`, { flag: 'wx', mode: 0o600 });
 });
