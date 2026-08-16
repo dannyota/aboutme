@@ -318,14 +318,15 @@ func (q *Queries) CountResumesForUser(ctx context.Context, userID uuid.UUID) (in
 
 const createAuthEmailJob = `-- name: CreateAuthEmailJob :one
 INSERT INTO auth_email_jobs (
-    kind, state, registration_id, reset_token_id, user_id, token_digest,
+    id, kind, state, registration_id, reset_token_id, user_id, token_digest,
     key_id, nonce, ciphertext, created_at, expires_at, next_attempt_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 ) RETURNING id, kind, state, registration_id, reset_token_id, user_id, token_digest, key_id, nonce, ciphertext, attempts, created_at, expires_at, next_attempt_at, lease_owner, lease_expires_at, sent_at, terminal_at
 `
 
 type CreateAuthEmailJobParams struct {
+	ID             uuid.UUID
 	Kind           string
 	State          string
 	RegistrationID *uuid.UUID
@@ -340,10 +341,13 @@ type CreateAuthEmailJobParams struct {
 	NextAttemptAt  *time.Time
 }
 
-// New jobs always start pending with attempts 0 (DEFAULT). The caller has
-// already encrypted the payload and computed the exact expiry before commit.
+// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
+// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
+// id; the caller has already encrypted the payload and computed the exact expiry
+// before commit.
 func (q *Queries) CreateAuthEmailJob(ctx context.Context, arg CreateAuthEmailJobParams) (AuthEmailJob, error) {
 	row := q.db.QueryRow(ctx, createAuthEmailJob,
+		arg.ID,
 		arg.Kind,
 		arg.State,
 		arg.RegistrationID,
