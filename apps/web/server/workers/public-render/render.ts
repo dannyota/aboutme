@@ -25,6 +25,9 @@ const jsonString = (value: string): string => {
   return `${result}"`;
 };
 
+// HTML-escapes plain text for a text context (<title>). It is complete for
+// RCDATA text but does not escape single quotes, so never reuse it for an HTML
+// attribute value.
 const escapeText = (value: string): string => value
   .replaceAll('&', '&amp;')
   .replaceAll('<', '&lt;')

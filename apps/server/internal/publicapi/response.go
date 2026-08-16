@@ -89,6 +89,9 @@ func serveConditionalError(w http.ResponseWriter, request *http.Request) {
 
 func writeHeader(w http.ResponseWriter, header http.Header) {
 	for key, values := range header {
+		// Every public-response header is single-valued by contract (CSP,
+		// X-Robots-Tag, ETag), so Set-once is correct; a multi-valued header
+		// would silently collapse to its final value.
 		for _, value := range values {
 			// Set, not Add: a public response's headers are authoritative and
 			// must replace any baseline security-header middleware already

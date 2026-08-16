@@ -30,21 +30,6 @@ readonly DB_CONTAINER=aboutme-test-db
 normal_was_up=0
 run_id=
 
-resolve_rooted_path() {
-  local raw=$1 label=$2 candidate lexical resolved
-  [ -n "$raw" ] || die "$label must not be empty"
-  if [[ $raw = /* ]]; then candidate=$raw; else candidate=$ROOT/$raw; fi
-  lexical=$(realpath -ms -- "$candidate") || die "$label could not be resolved"
-  resolved=$(realpath -m -- "$candidate") || die "$label could not be resolved"
-  [ "$resolved" = "$lexical" ] || die "$label must not traverse a symlink"
-  case $resolved in
-  / | "$ROOT") die "$label must name a directory below the repository root" ;;
-  "$ROOT"/*) ;;
-  *) die "$label must stay below the repository root" ;;
-  esac
-  printf '%s' "$resolved"
-}
-
 cleanup() {
   local status=$?
   set +e
@@ -139,6 +124,17 @@ fetch "$PUBLIC_ORIGIN/api/v1/public/resumes/p5a-live-photo" json-live
 expect_status json-live 200
 no_set_cookie json-live
 grep -qi '^etag:' "$run_id/json-live.headers" || die 'json-live: missing ETag'
+
+# Conditional re-fetch proves the strict 304 path live (the "demonstrated live"
+# slice of AC-OPS-012b): the exact body-digest ETag must round-trip to an empty
+# 304, not a second 200.
+json_live_etag=$(sed -n 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//p' "$run_id/json-live.headers" | tr -d '\r')
+[ -n "$json_live_etag" ] || die 'json-live: empty ETag'
+cond_status=$(curl -sS -o "$run_id/json-live-304.body" -D "$run_id/json-live-304.headers" \
+  -w '%{http_code}' --max-time 15 -H "If-None-Match: $json_live_etag" \
+  "$PUBLIC_ORIGIN/api/v1/public/resumes/p5a-live-photo")
+[ "$cond_status" = "304" ] || die "json-live: expected HTTP 304 for If-None-Match, got $cond_status"
+[ ! -s "$run_id/json-live-304.body" ] || die 'json-live: 304 response must have an empty body'
 
 # JSON, private -> uniform 404
 fetch "$PUBLIC_ORIGIN/api/v1/public/resumes/p5a-private" json-private
