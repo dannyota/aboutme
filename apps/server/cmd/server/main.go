@@ -89,6 +89,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
 	}
+	passwordAuth, err := newPasswordAuth(ctx, logger, cfg, pool, queries)
+	if err != nil {
+		return fmt.Errorf("create password auth: %w", err)
+	}
 	blobs, err := newMediaBackend(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("create media backend: %w", err)
@@ -139,7 +143,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes)
+	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -148,8 +152,24 @@ func run() error {
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
 
+	// The mail worker runs for the life of the server: SIGINT/SIGTERM cancels
+	// workerCtx (via ctx), and Run joins its in-flight sends before returning.
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		if runErr := passwordAuth.worker.Run(workerCtx); runErr != nil {
+			// Run returns nil on cancellation; a non-nil return is unexpected.
+			logger.Error("authmail worker stopped unexpectedly", "err", "worker stopped")
+		}
+	}()
+
 	logger.Info("starting", "env", cfg.Env)
-	return serve(ctx, logger, ln, handler)
+	err = serve(ctx, logger, ln, handler)
+	cancelWorker()
+	<-workerDone
+	return err
 }
 
 func parsePublicRuntime(publicOrigin, renderOrigin, environment, appDigest, rendererDigest string) (publicRuntime, error) {

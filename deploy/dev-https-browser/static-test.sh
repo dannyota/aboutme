@@ -305,6 +305,8 @@ const cases = [
   [isAllowedHTTPURL(`${ALLOWED_ORIGIN}/internal-render/public`), true],
   [isAllowedHTTPURL('http://localhost:20443/login'), false],
   [isAllowedHTTPURL('https://localhost:20444/login'), false],
+  [isAllowedHTTPURL('http://127.0.0.1:20444/capture'), false],
+  [isAllowedHTTPURL('http://127.0.0.1:20091/capture'), false],
   [DIRECT_RENDER_ORIGIN, 'http://127.0.0.1:20440'],
   [isAllowedHTTPURL(`${DIRECT_RENDER_ORIGIN}/internal-render/public`), false],
   [isAllowedHTTPURL('https://127.0.0.1:20443/login'), false],
@@ -313,6 +315,7 @@ const cases = [
   [isAllowedWebSocketURL('wss://localhost:20443/socket'), true],
   [isAllowedWebSocketURL('ws://localhost:20443/socket'), false],
   [isAllowedWebSocketURL('wss://localhost:20444/socket'), false],
+  [isAllowedWebSocketURL('ws://127.0.0.1:20444/socket'), false],
   [isAllowedWebSocketURL('wss://127.0.0.1:20443/socket'), false],
   [isAllowedWebSocketURL('wss://user:pass@localhost:20443/socket'), false],
   [isExpectedNegativeHTTPConsole(
