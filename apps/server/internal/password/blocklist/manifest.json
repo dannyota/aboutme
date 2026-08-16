@@ -1,0 +1,16 @@
+{
+  "magic": "ABMEBL01",
+  "format": "sha256-digests-v1",
+  "algorithm": "SHA-256",
+  "normalization": "NFC",
+  "source": {
+    "repository": "https://github.com/danielmiessler/SecLists",
+    "commit": "eedc5117b3f506d874d033c18786a218e7cec34c",
+    "path": "Passwords/Common-Credentials/100k-most-used-passwords-NCSC.txt",
+    "sha256": "c2e5696882c603b76bb67a47ee970897e5a76fc4c3f5547abe3d0ca340c576e0",
+    "lines": 99840,
+    "license": "MIT"
+  },
+  "digests": 99839,
+  "digests_sha256": "f37d2658a394310b8f4dbf051fe0f18044ea10ec62e8f3522b836a57ad14ba79"
+}
