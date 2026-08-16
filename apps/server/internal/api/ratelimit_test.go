@@ -1618,3 +1618,78 @@ func TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep(t *testing.T) {
 			"suppress a due eviction sweep and starve a new key of a reclaimable slot", got, http.StatusOK)
 	}
 }
+
+// TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver proves the
+// exported ADR 0018 admission store used by the password rate policies maps
+// an allowed admission to (true, 0) and a rejected one to (false, >= 1), with
+// no phantom debt after rejection.
+func TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver(t *testing.T) {
+	t.Parallel()
+
+	l := api.NewBoundedRateLimiter(api.RateLimiterConfig{
+		Requests: 2,
+		Window:   time.Minute,
+	})
+	now := testutil.Epoch
+
+	for i := 0; i < 2; i++ {
+		allowed, retry := l.Admit(now, "203.0.113.5")
+		if !allowed || retry != 0 {
+			t.Fatalf("request %d: (allowed=%v, retry=%d), want (true, 0)", i, allowed, retry)
+		}
+	}
+	allowed, retry := l.Admit(now, "203.0.113.5")
+	if allowed || retry < 1 {
+		t.Fatalf("over-budget: (allowed=%v, retry=%d), want (false, >= 1)", allowed, retry)
+	}
+
+	// A full Window later the budget is refilled exactly; rejected requests
+	// left no debt.
+	l2 := api.NewBoundedRateLimiter(api.RateLimiterConfig{Requests: 1, Window: time.Minute})
+	if allowed, _ := l2.Admit(now, "k"); !allowed {
+		t.Fatal("initial admission denied")
+	}
+	if allowed, _ := l2.Admit(now, "k"); allowed {
+		t.Fatal("over-budget admission allowed")
+	}
+	if allowed, _ := l2.Admit(now.Add(time.Minute), "k"); !allowed {
+		t.Fatal("admission after a full Window denied; a rejected request must not owe a token")
+	}
+}
+
+// TestPasswordRateBoundedLimiter_DefaultsToTenThousandKeys proves the exported
+// store's default MaxKeys is the documented 10,000 active keys plus one shared
+// overflow bucket: the 10,001st distinct key shares the single overflow token
+// and the second overflow key is rejected, while a tracked key keeps its own
+// budget untouched.
+func TestPasswordRateBoundedLimiter_DefaultsToTenThousandKeys(t *testing.T) {
+	t.Parallel()
+
+	l := api.NewBoundedRateLimiter(api.RateLimiterConfig{
+		Requests: 1,
+		Window:   time.Minute,
+	})
+	now := testutil.Epoch
+
+	for i := 0; i < 10000; i++ {
+		if allowed, _ := l.Admit(now, "k:"+strconv.Itoa(i)); !allowed {
+			t.Fatalf("distinct key %d denied while the store had room", i)
+		}
+	}
+
+	// Store is now full of active (just-admitted, not yet refilled) entries.
+	// A new distinct key shares the single overflow token.
+	if allowed, retry := l.Admit(now, "overflow-1"); !allowed {
+		t.Fatalf("first overflow key denied (allowed=%v, retry=%d); want one shared overflow grant", allowed, retry)
+	}
+	if allowed, retry := l.Admit(now, "overflow-2"); allowed {
+		t.Fatal("second overflow key allowed via the already-spent overflow bucket")
+	} else if retry < 1 {
+		t.Fatalf("rejected overflow admission retry = %d, want >= 1", retry)
+	}
+
+	// A tracked key's own budget is undisturbed by the flood.
+	if allowed, _ := l.Admit(now, "k:0"); allowed {
+		t.Fatal("k:0 admitted again after its single token was spent")
+	}
+}
