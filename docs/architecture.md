@@ -49,6 +49,8 @@ implemented surface includes:
 
 - `GET` and `HEAD` health and readiness probes;
 - Google and LinkedIn OpenID Connect plus GitHub OAuth login;
+- email-and-password registration, verification, login, reauthentication,
+  add/change, and reset;
 - authenticated, CSRF-protected provider link and reauthentication starts;
 - current-user lookup, logout, session listing, per-session revoke, and
   logout-everywhere;
@@ -61,6 +63,13 @@ implemented surface includes:
   state, SEO/GEO, and download flags;
 - JSON envelopes, request IDs, body bounds, security and cache headers,
   trusted-proxy client-IP handling, and rate limiting.
+
+Password credentials are one Argon2id hash per user; verification and reset
+tokens are stored only as digests. Transactional authentication mail is sealed
+into an encrypted outbox and delivered by a bounded worker through SES
+(production) or a loopback-only, secret-authenticated capture server
+(development). Every password login and credential mutation serializes on the
+user lock and fences session issuance and reset.
 
 The committed TypeScript API types are generated from OpenAPI. The web client
 uses those types through `openapi-fetch`, and `make api-check` detects drift.
