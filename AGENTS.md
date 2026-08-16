@@ -199,11 +199,13 @@ Run the narrowest relevant checks:
 | Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`                                                                        |
 | Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                        |
 | Authenticated UI                | `make dev-https-auth-check dev-https-editor-check` (scripted headless Playwright); full P9 port-443 UAT overlay pending |
+| Public surface                  | `make p5a-native-http-check` and `make dev-https-public-check`                                                          |
 | Phase gate or security work     | `make scan` with `SEMGREP_APP_TOKEN` (connected SAST, SCA, secrets, full-history gitleaks)                              |
 
 Reusable browser automation is scripted headless Playwright, committed and run
 through `make web-e2e`, `make dev-https-auth-check`,
-`make dev-https-transport-check`, and `make dev-https-editor-check`. To author
+`make dev-https-transport-check`, `make dev-https-editor-check`, and
+`make dev-https-public-check`. To author
 those tests, use the Playwright MCP server to drive a live browser — inspect
 real selectors, requests, and page state — then write what you observed as
 headless `@playwright/test` specs. MCP is an authoring aid only; it never runs

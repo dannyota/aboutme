@@ -1,7 +1,7 @@
 # Current-state architecture
 
 This document describes the current integration candidate, verified on
-2026-08-14. The [design](design/README.md) owns intended behavior. The
+2026-08-16. The [design](design/README.md) owns intended behavior. The
 [roadmap](plans/implementation-plan.md) owns delivery state and gates.
 
 ## Running system
@@ -16,13 +16,13 @@ graph LR
     G --> M[Private filesystem or S3 media]
 ```
 
-| Component  | Implemented responsibility                                                                    |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go         |
-| Go server  | Health, authentication, sessions, users, resume HTTP, private media, and request policy       |
-| Nuxt       | Landing/login/session UI, typed API transport, fonts, presets, and the pure resume renderer   |
-| PostgreSQL | Auth records, sessions, users, resume aggregates, idempotency records, and media cleanup jobs |
-| Media      | Private create-only filesystem or S3 objects behind validated server-owned keys               |
+| Component  | Implemented responsibility                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go                         |
+| Go server  | Health, authentication, sessions, users, resume HTTP, private media, publish, public read, and request policy |
+| Nuxt       | Landing/login/session UI, typed API transport, fonts, presets, the authenticated editor, and public SSR       |
+| PostgreSQL | Auth records, sessions, users, resume aggregates, public state, idempotency records, and media cleanup jobs   |
+| Media      | Private create-only filesystem or S3 objects behind validated server-owned keys                               |
 
 Daily development runs Go, Nuxt, and Caddy as native processes at
 `http://localhost:20080`. They use the `aboutme_dev` database in the one shared
@@ -56,6 +56,9 @@ implemented surface includes:
 - owner-only personal-details, entry, section, structure, and customization
   mutations;
 - owner-only photo upload, read, crop, and delete over private media;
+- owner-only publish, unpublish, rename, and slug delete, with public JSON,
+  photo, HTML, Markdown, sitemap, robots, and llms.txt reads gated by publish
+  state, SEO/GEO, and download flags;
 - JSON envelopes, request IDs, body bounds, security and cache headers,
   trusted-proxy client-IP handling, and rate limiting.
 
@@ -130,6 +133,35 @@ candidate; unknown object-write or database outcomes remain private for later
 reconciliation. P8-priv owns the deletion worker, 24-hour target, and 48-hour
 orphan reconciliation.
 
+## Implemented authenticated editor
+
+The web app carries a full optimistic-save editor behind a per-resume mutation
+queue. User actions become typed commands that capture target/base/intended/
+context before replay, coalesce only adjacent same-target value edits, and
+dispatch after one second of inactivity. A revision CAS reconciles stale writes,
+offers one safe rebase per conflict, and surfaces dedicated field, entry,
+reorder, structure, crop/photo, and destructive reconfirmation actions.
+Templates apply against optimistic state, preserve content, and emit a
+deterministic placement delta with exact partial recovery and guarded undo.
+Photos upload as raw bytes and are never previewed or decoded on the client;
+owner reads bind an in-memory data URL to the accepted photo key. The preview
+imports the pure Phase 3 renderer and never derives a photo URL from an object
+key. Session loss retains in-memory work for reauthentication; no browser
+storage or unload beacon holds resume data.
+
+## Implemented public publish and SSR
+
+Publish state is one row per resume holding the live flag, slug, discovery
+generation, and a 180-day tombstone for released slugs. Public reads project a
+closed, privacy-safe document that omits every account/owner/storage/private/
+hidden value and re-sanitizes retained rich text. Discoverable JSON, photo,
+HTML, Markdown, sitemap, robots, and llms.txt all derive from that projection
+and respect the SEO/GEO and download flags; nondiscoverable and private states
+return the uniform public `404`. Nuxt renders public HTML through an isolated
+worker with a five-second deadline, exact request/origin bounds, deterministic
+JSON-LD, a single matching CSP hash, and external hydration that replaces only a
+mismatched revision.
+
 ## Known delivery gaps
 
 - The current Compose route serves HTTP. P9 requires the complete image-based
@@ -139,6 +171,6 @@ orphan reconciliation.
 
 ## Not implemented
 
-The editor, public publishing, Server-Sent Events, production PDF and image
-rendering, privacy workers, production infrastructure, staging, production
-deployment, and Flutter remain planned.
+Server-Sent Events, production PDF and image rendering, privacy workers,
+production infrastructure, staging, production deployment, and Flutter remain
+planned.

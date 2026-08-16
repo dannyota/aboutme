@@ -58,6 +58,15 @@ curl --fail http://localhost:20080/readyz
 listening. The readiness probe also proves the application can reach the
 development database.
 
+## Automated checks
+
+The development browser harness runs on a separate trusted stack at
+`https://localhost:20443` with a deterministic local Google account and a pinned
+headless Chromium: `make dev-https-auth-check`, `dev-https-transport-check`,
+`dev-https-editor-check`, and `dev-https-public-check`. The native public HTTP
+capture is `make p5a-native-http-check`. These are proof targets, not daily
+drivers; run them only when their surface changes.
+
 ## Inspect logs
 
 ```sh
