@@ -98,6 +98,151 @@ func (q *Queries) BeginSessionRotation(ctx context.Context, arg BeginSessionRota
 	return id, err
 }
 
+const claimAuthEmailJobs = `-- name: ClaimAuthEmailJobs :many
+UPDATE auth_email_jobs
+SET state = 'leased',
+    attempts = attempts + 1,
+    next_attempt_at = NULL,
+    lease_owner = $1::text,
+    lease_expires_at = $2::timestamptz
+WHERE id IN (
+    SELECT id FROM auth_email_jobs
+    WHERE state = 'pending'
+      AND next_attempt_at <= $3::timestamptz
+    ORDER BY next_attempt_at, created_at, id
+    LIMIT $4::int
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING id, kind, state, registration_id, reset_token_id, user_id, token_digest, key_id, nonce, ciphertext, attempts, created_at, expires_at, next_attempt_at, lease_owner, lease_expires_at, sent_at, terminal_at
+`
+
+type ClaimAuthEmailJobsParams struct {
+	LeaseOwner     string
+	LeaseExpiresAt time.Time
+	Now            time.Time
+	LimitRows      int32
+}
+
+// Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
+// jobs to leased, increments attempts, stamps the lease pair, and returns the
+// leased rows. Two concurrent claimers are disjoint because each claims a
+// distinct row under FOR UPDATE SKIP LOCKED.
+func (q *Queries) ClaimAuthEmailJobs(ctx context.Context, arg ClaimAuthEmailJobsParams) ([]AuthEmailJob, error) {
+	rows, err := q.db.Query(ctx, claimAuthEmailJobs,
+		arg.LeaseOwner,
+		arg.LeaseExpiresAt,
+		arg.Now,
+		arg.LimitRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthEmailJob
+	for rows.Next() {
+		var i AuthEmailJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.State,
+			&i.RegistrationID,
+			&i.ResetTokenID,
+			&i.UserID,
+			&i.TokenDigest,
+			&i.KeyID,
+			&i.Nonce,
+			&i.Ciphertext,
+			&i.Attempts,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.NextAttemptAt,
+			&i.LeaseOwner,
+			&i.LeaseExpiresAt,
+			&i.SentAt,
+			&i.TerminalAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const cleanupExpiredPasswordRegistrations = `-- name: CleanupExpiredPasswordRegistrations :execrows
+DELETE FROM password_registrations
+WHERE id IN (
+    SELECT id FROM password_registrations
+    WHERE expires_at <= $1::timestamptz
+    ORDER BY expires_at, id
+    LIMIT $2::int
+)
+`
+
+type CleanupExpiredPasswordRegistrationsParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+func (q *Queries) CleanupExpiredPasswordRegistrations(ctx context.Context, arg CleanupExpiredPasswordRegistrationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cleanupExpiredPasswordRegistrations, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const cleanupExpiredPasswordResetTokens = `-- name: CleanupExpiredPasswordResetTokens :execrows
+DELETE FROM password_reset_tokens
+WHERE id IN (
+    SELECT id FROM password_reset_tokens
+    WHERE expires_at <= $1::timestamptz
+    ORDER BY expires_at, id
+    LIMIT $2::int
+)
+`
+
+type CleanupExpiredPasswordResetTokensParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+func (q *Queries) CleanupExpiredPasswordResetTokens(ctx context.Context, arg CleanupExpiredPasswordResetTokensParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cleanupExpiredPasswordResetTokens, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const cleanupFinishedAuthEmailJobs = `-- name: CleanupFinishedAuthEmailJobs :execrows
+DELETE FROM auth_email_jobs
+WHERE id IN (
+    SELECT id FROM auth_email_jobs
+    WHERE state IN ('sent', 'terminal')
+      AND COALESCE(sent_at, terminal_at) <= $1::timestamptz
+    ORDER BY COALESCE(sent_at, terminal_at), id
+    LIMIT $2::int
+)
+`
+
+type CleanupFinishedAuthEmailJobsParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+// Sent/terminal jobs are retained for seven days of audit, then removed in a
+// bounded page, oldest outcome first.
+func (q *Queries) CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cleanupFinishedAuthEmailJobs, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const consumeExpiredSlugTombstone = `-- name: ConsumeExpiredSlugTombstone :one
 DELETE FROM slug_tombstones
 WHERE slug = $1::text
@@ -169,6 +314,71 @@ func (q *Queries) CountResumesForUser(ctx context.Context, userID uuid.UUID) (in
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createAuthEmailJob = `-- name: CreateAuthEmailJob :one
+INSERT INTO auth_email_jobs (
+    kind, state, registration_id, reset_token_id, user_id, token_digest,
+    key_id, nonce, ciphertext, created_at, expires_at, next_attempt_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+) RETURNING id, kind, state, registration_id, reset_token_id, user_id, token_digest, key_id, nonce, ciphertext, attempts, created_at, expires_at, next_attempt_at, lease_owner, lease_expires_at, sent_at, terminal_at
+`
+
+type CreateAuthEmailJobParams struct {
+	Kind           string
+	State          string
+	RegistrationID *uuid.UUID
+	ResetTokenID   *uuid.UUID
+	UserID         *uuid.UUID
+	TokenDigest    []byte
+	KeyID          *string
+	Nonce          []byte
+	Ciphertext     []byte
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	NextAttemptAt  *time.Time
+}
+
+// New jobs always start pending with attempts 0 (DEFAULT). The caller has
+// already encrypted the payload and computed the exact expiry before commit.
+func (q *Queries) CreateAuthEmailJob(ctx context.Context, arg CreateAuthEmailJobParams) (AuthEmailJob, error) {
+	row := q.db.QueryRow(ctx, createAuthEmailJob,
+		arg.Kind,
+		arg.State,
+		arg.RegistrationID,
+		arg.ResetTokenID,
+		arg.UserID,
+		arg.TokenDigest,
+		arg.KeyID,
+		arg.Nonce,
+		arg.Ciphertext,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+		arg.NextAttemptAt,
+	)
+	var i AuthEmailJob
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.State,
+		&i.RegistrationID,
+		&i.ResetTokenID,
+		&i.UserID,
+		&i.TokenDigest,
+		&i.KeyID,
+		&i.Nonce,
+		&i.Ciphertext,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.NextAttemptAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.SentAt,
+		&i.TerminalAt,
+	)
+	return i, err
 }
 
 const createIdempotencyRecord = `-- name: CreateIdempotencyRecord :one
@@ -289,6 +499,72 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const createPasswordRegistration = `-- name: CreatePasswordRegistration :one
+INSERT INTO password_registrations (email, name, encoded_hash, token_digest, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, name, encoded_hash, token_digest, created_at, expires_at
+`
+
+type CreatePasswordRegistrationParams struct {
+	Email       string
+	Name        string
+	EncodedHash []byte
+	TokenDigest []byte
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+}
+
+func (q *Queries) CreatePasswordRegistration(ctx context.Context, arg CreatePasswordRegistrationParams) (PasswordRegistration, error) {
+	row := q.db.QueryRow(ctx, createPasswordRegistration,
+		arg.Email,
+		arg.Name,
+		arg.EncodedHash,
+		arg.TokenDigest,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	var i PasswordRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.EncodedHash,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const createPasswordResetToken = `-- name: CreatePasswordResetToken :one
+INSERT INTO password_reset_tokens (user_id, token_digest, created_at, expires_at)
+VALUES ($1, $2, $3, $4) RETURNING id, user_id, token_digest, created_at, expires_at
+`
+
+type CreatePasswordResetTokenParams struct {
+	UserID      uuid.UUID
+	TokenDigest []byte
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+}
+
+func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, createPasswordResetToken,
+		arg.UserID,
+		arg.TokenDigest,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	var i PasswordResetToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -608,6 +884,30 @@ func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, arg Delete
 	return result.RowsAffected(), nil
 }
 
+const deletePasswordRegistration = `-- name: DeletePasswordRegistration :execrows
+DELETE FROM password_registrations WHERE id = $1
+`
+
+func (q *Queries) DeletePasswordRegistration(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePasswordRegistration, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deletePasswordResetToken = `-- name: DeletePasswordResetToken :execrows
+DELETE FROM password_reset_tokens WHERE id = $1
+`
+
+func (q *Queries) DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deletePasswordResetToken, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteResumeForUser = `-- name: DeleteResumeForUser :execrows
 DELETE FROM resumes WHERE id = $1 AND user_id = $2
 `
@@ -842,6 +1142,47 @@ func (q *Queries) GetIdentityByProviderSubject(ctx context.Context, arg GetIdent
 	return i, err
 }
 
+const getLeasedAuthEmailJobForUpdate = `-- name: GetLeasedAuthEmailJobForUpdate :one
+SELECT id, kind, state, registration_id, reset_token_id, user_id, token_digest, key_id, nonce, ciphertext, attempts, created_at, expires_at, next_attempt_at, lease_owner, lease_expires_at, sent_at, terminal_at FROM auth_email_jobs
+WHERE id = $1::uuid
+  AND state = 'leased'
+  AND lease_owner = $2::text
+FOR UPDATE
+`
+
+type GetLeasedAuthEmailJobForUpdateParams struct {
+	ID         uuid.UUID
+	LeaseOwner string
+}
+
+// Re-locks the exact leased job by its owner before the bounded send handoff,
+// so a token replacement that already committed cannot race this delivery.
+func (q *Queries) GetLeasedAuthEmailJobForUpdate(ctx context.Context, arg GetLeasedAuthEmailJobForUpdateParams) (AuthEmailJob, error) {
+	row := q.db.QueryRow(ctx, getLeasedAuthEmailJobForUpdate, arg.ID, arg.LeaseOwner)
+	var i AuthEmailJob
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.State,
+		&i.RegistrationID,
+		&i.ResetTokenID,
+		&i.UserID,
+		&i.TokenDigest,
+		&i.KeyID,
+		&i.Nonce,
+		&i.Ciphertext,
+		&i.Attempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.NextAttemptAt,
+		&i.LeaseOwner,
+		&i.LeaseExpiresAt,
+		&i.SentAt,
+		&i.TerminalAt,
+	)
+	return i, err
+}
+
 const getMediaDeletionJobByObjectKey = `-- name: GetMediaDeletionJobByObjectKey :one
 SELECT id, resume_id, object_key, enqueued_at, next_attempt_at, attempt_count
 FROM media_deletion_jobs
@@ -886,6 +1227,146 @@ func (q *Queries) GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, user
 	row := q.db.QueryRow(ctx, getOrCreateIdempotencyUsageForUpdate, userID)
 	var i IdempotencyUsage
 	err := row.Scan(&i.UserID, &i.RetainedRecords, &i.StoredBytes)
+	return i, err
+}
+
+const getPasswordCredential = `-- name: GetPasswordCredential :one
+SELECT user_id, encoded_hash, created_at, changed_at FROM password_credentials WHERE user_id = $1
+`
+
+func (q *Queries) GetPasswordCredential(ctx context.Context, userID uuid.UUID) (PasswordCredential, error) {
+	row := q.db.QueryRow(ctx, getPasswordCredential, userID)
+	var i PasswordCredential
+	err := row.Scan(
+		&i.UserID,
+		&i.EncodedHash,
+		&i.CreatedAt,
+		&i.ChangedAt,
+	)
+	return i, err
+}
+
+const getPasswordCredentialForUpdate = `-- name: GetPasswordCredentialForUpdate :one
+SELECT user_id, encoded_hash, created_at, changed_at FROM password_credentials WHERE user_id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPasswordCredentialForUpdate(ctx context.Context, userID uuid.UUID) (PasswordCredential, error) {
+	row := q.db.QueryRow(ctx, getPasswordCredentialForUpdate, userID)
+	var i PasswordCredential
+	err := row.Scan(
+		&i.UserID,
+		&i.EncodedHash,
+		&i.CreatedAt,
+		&i.ChangedAt,
+	)
+	return i, err
+}
+
+const getPasswordRegistrationByDigest = `-- name: GetPasswordRegistrationByDigest :one
+SELECT id, email, name, encoded_hash, token_digest, created_at, expires_at FROM password_registrations WHERE token_digest = $1
+`
+
+func (q *Queries) GetPasswordRegistrationByDigest(ctx context.Context, tokenDigest []byte) (PasswordRegistration, error) {
+	row := q.db.QueryRow(ctx, getPasswordRegistrationByDigest, tokenDigest)
+	var i PasswordRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.EncodedHash,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getPasswordRegistrationByEmailForUpdate = `-- name: GetPasswordRegistrationByEmailForUpdate :one
+SELECT id, email, name, encoded_hash, token_digest, created_at, expires_at FROM password_registrations WHERE email = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPasswordRegistrationByEmailForUpdate(ctx context.Context, email string) (PasswordRegistration, error) {
+	row := q.db.QueryRow(ctx, getPasswordRegistrationByEmailForUpdate, email)
+	var i PasswordRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.EncodedHash,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getPasswordRegistrationForUpdate = `-- name: GetPasswordRegistrationForUpdate :one
+SELECT id, email, name, encoded_hash, token_digest, created_at, expires_at FROM password_registrations WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPasswordRegistrationForUpdate(ctx context.Context, id uuid.UUID) (PasswordRegistration, error) {
+	row := q.db.QueryRow(ctx, getPasswordRegistrationForUpdate, id)
+	var i PasswordRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.EncodedHash,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getPasswordResetTokenByDigest = `-- name: GetPasswordResetTokenByDigest :one
+SELECT id, user_id, token_digest, created_at, expires_at FROM password_reset_tokens WHERE token_digest = $1
+`
+
+func (q *Queries) GetPasswordResetTokenByDigest(ctx context.Context, tokenDigest []byte) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, getPasswordResetTokenByDigest, tokenDigest)
+	var i PasswordResetToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getPasswordResetTokenByUserForUpdate = `-- name: GetPasswordResetTokenByUserForUpdate :one
+SELECT id, user_id, token_digest, created_at, expires_at FROM password_reset_tokens WHERE user_id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPasswordResetTokenByUserForUpdate(ctx context.Context, userID uuid.UUID) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, getPasswordResetTokenByUserForUpdate, userID)
+	var i PasswordResetToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getPasswordResetTokenForUpdate = `-- name: GetPasswordResetTokenForUpdate :one
+SELECT id, user_id, token_digest, created_at, expires_at FROM password_reset_tokens WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetPasswordResetTokenForUpdate(ctx context.Context, id uuid.UUID) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, getPasswordResetTokenForUpdate, id)
+	var i PasswordResetToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenDigest,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
 	return i, err
 }
 
@@ -1087,6 +1568,33 @@ func (q *Queries) GetSessionByID(ctx context.Context, id uuid.UUID) (Session, er
 	return i, err
 }
 
+const getSessionByIDForUpdate = `-- name: GetSessionByIDForUpdate :one
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE id = $1 FOR UPDATE
+`
+
+// Session-row lock for password add/change, which revokes the current session
+// and every sibling atomically.
+func (q *Queries) GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Session, error) {
+	row := q.db.QueryRow(ctx, getSessionByIDForUpdate, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.CSRFSecret,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.ReauthenticatedAt,
+		&i.AbsoluteExpiresAt,
+		&i.RotationGraceUntil,
+		&i.RevokedAt,
+		&i.UA,
+		&i.IP,
+		&i.RotatedFrom,
+	)
+	return i, err
+}
+
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
 SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE token_hash = $1
 `
@@ -1139,6 +1647,27 @@ func (q *Queries) GetSlugTombstoneForUpdate(ctx context.Context, slug string) (S
 	return i, err
 }
 
+const getUserByCanonicalEmail = `-- name: GetUserByCanonicalEmail :one
+SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE email = $1
+`
+
+// Ownership read before a new-account insert. The caller passes the canonical
+// lowercase form; users.email is citext so the comparison is already
+// case-insensitive, and the unique constraint arbitrates the actual insert.
+func (q *Queries) GetUserByCanonicalEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByCanonicalEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE email = $1
 `
@@ -1163,6 +1692,31 @@ SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE id =
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserForUpdate = `-- name: GetUserForUpdate :one
+
+SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+`
+
+// ---------------------------------------------------------------------------
+// Phase PA: password credentials, registrations, reset tokens, and email jobs.
+// Lock order (D4) is user -> credential -> reset token -> sessions. These
+// queries expose exactly the row locks that order needs and no others.
+// ---------------------------------------------------------------------------
+// The user-row lock every session issuer and password mutation serializes on.
+func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserForUpdate, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -1257,6 +1811,37 @@ func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) 
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveAuthEmailJobKeyIDs = `-- name: ListLiveAuthEmailJobKeyIDs :many
+SELECT DISTINCT COALESCE(key_id, '')::text AS key_id
+FROM auth_email_jobs
+WHERE state IN ('pending', 'leased')
+  AND key_id IS NOT NULL
+  AND expires_at > $1::timestamptz
+ORDER BY key_id
+`
+
+// Startup readiness: the distinct key IDs every pending/leased (non-terminal,
+// non-expired) job references. The key ring must decrypt all of them.
+func (q *Queries) ListLiveAuthEmailJobKeyIDs(ctx context.Context, now time.Time) ([]string, error) {
+	rows, err := q.db.Query(ctx, listLiveAuthEmailJobKeyIDs, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var key_id string
+		if err := rows.Scan(&key_id); err != nil {
+			return nil, err
+		}
+		items = append(items, key_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1437,6 +2022,52 @@ func (q *Queries) LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uui
 	return id_2, err
 }
 
+const markAuthEmailJobSent = `-- name: MarkAuthEmailJobSent :execrows
+UPDATE auth_email_jobs
+SET state = 'sent', key_id = NULL, nonce = NULL, ciphertext = NULL,
+    next_attempt_at = NULL, lease_owner = NULL, lease_expires_at = NULL,
+    sent_at = $1::timestamptz
+WHERE id = $2::uuid AND state = 'leased'
+`
+
+type MarkAuthEmailJobSentParams struct {
+	SentAt time.Time
+	ID     uuid.UUID
+}
+
+// SES accepted: clears every encryption and lease field and records sent_at.
+func (q *Queries) MarkAuthEmailJobSent(ctx context.Context, arg MarkAuthEmailJobSentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markAuthEmailJobSent, arg.SentAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markAuthEmailJobTerminal = `-- name: MarkAuthEmailJobTerminal :execrows
+UPDATE auth_email_jobs
+SET state = 'terminal', key_id = NULL, nonce = NULL, ciphertext = NULL,
+    next_attempt_at = NULL, lease_owner = NULL, lease_expires_at = NULL,
+    terminal_at = $1::timestamptz
+WHERE id = $2::uuid AND state IN ('pending', 'leased')
+`
+
+type MarkAuthEmailJobTerminalParams struct {
+	TerminalAt time.Time
+	ID         uuid.UUID
+}
+
+// Permanent failure, expiry, or the eighth attempt: clears every encryption and
+// lease field and records terminal_at. A stale pending job may terminate
+// without ever being leased (attempts stays 0).
+func (q *Queries) MarkAuthEmailJobTerminal(ctx context.Context, arg MarkAuthEmailJobTerminalParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markAuthEmailJobTerminal, arg.TerminalAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const normalizeIdempotencyResponse = `-- name: NormalizeIdempotencyResponse :one
 SELECT $1::jsonb AS response_body,
        $2::jsonb AS response_headers,
@@ -1554,6 +2185,63 @@ type ReleaseIdempotencyUsageParams struct {
 // non-negative checks.
 func (q *Queries) ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, releaseIdempotencyUsage, arg.UserID, arg.Records, arg.ReleasedBytes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const requeueAuthEmailJob = `-- name: RequeueAuthEmailJob :execrows
+UPDATE auth_email_jobs
+SET state = 'pending',
+    next_attempt_at = $1::timestamptz,
+    lease_owner = NULL, lease_expires_at = NULL
+WHERE id = $2::uuid AND state = 'leased'
+`
+
+type RequeueAuthEmailJobParams struct {
+	NextAttemptAt time.Time
+	ID            uuid.UUID
+}
+
+// A temporary failure releases the lease back to pending with the next attempt
+// time, retaining ciphertext and the already-incremented attempt count. The
+// caller never requeues at attempts = 8 (that path marks terminal instead).
+func (q *Queries) RequeueAuthEmailJob(ctx context.Context, arg RequeueAuthEmailJobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, requeueAuthEmailJob, arg.NextAttemptAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const requeueExpiredAuthEmailLeases = `-- name: RequeueExpiredAuthEmailLeases :execrows
+UPDATE auth_email_jobs
+SET state = 'pending',
+    attempts = attempts - 1,
+    next_attempt_at = $1::timestamptz,
+    lease_owner = NULL, lease_expires_at = NULL
+WHERE id IN (
+    SELECT id FROM auth_email_jobs
+    WHERE state = 'leased'
+      AND lease_expires_at <= $1::timestamptz
+    ORDER BY lease_expires_at, id
+    LIMIT $2::int
+    FOR UPDATE SKIP LOCKED
+)
+`
+
+type RequeueExpiredAuthEmailLeasesParams struct {
+	Now       time.Time
+	LimitRows int32
+}
+
+// Bounded stale-lease recovery: a lease that expired without a completed send
+// returns to pending, rolling back the claim's attempt increment (the send
+// never happened) and re-dueing immediately. Ordered so repeated calls make
+// monotonic progress.
+func (q *Queries) RequeueExpiredAuthEmailLeases(ctx context.Context, arg RequeueExpiredAuthEmailLeasesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, requeueExpiredAuthEmailLeases, arg.Now, arg.LimitRows)
 	if err != nil {
 		return 0, err
 	}
@@ -1854,4 +2542,40 @@ func (q *Queries) UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitl
 	var revision int64
 	err := row.Scan(&revision)
 	return revision, err
+}
+
+const upsertPasswordCredential = `-- name: UpsertPasswordCredential :one
+INSERT INTO password_credentials (user_id, encoded_hash, created_at, changed_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id) DO UPDATE
+SET encoded_hash = EXCLUDED.encoded_hash,
+    changed_at = EXCLUDED.changed_at
+RETURNING user_id, encoded_hash, created_at, changed_at
+`
+
+type UpsertPasswordCredentialParams struct {
+	UserID      uuid.UUID
+	EncodedHash []byte
+	CreatedAt   time.Time
+	ChangedAt   time.Time
+}
+
+// Insert-or-replace the single credential under the row lock the caller
+// already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
+// bumping changed_at on the conflict arm.
+func (q *Queries) UpsertPasswordCredential(ctx context.Context, arg UpsertPasswordCredentialParams) (PasswordCredential, error) {
+	row := q.db.QueryRow(ctx, upsertPasswordCredential,
+		arg.UserID,
+		arg.EncodedHash,
+		arg.CreatedAt,
+		arg.ChangedAt,
+	)
+	var i PasswordCredential
+	err := row.Scan(
+		&i.UserID,
+		&i.EncodedHash,
+		&i.CreatedAt,
+		&i.ChangedAt,
+	)
+	return i, err
 }

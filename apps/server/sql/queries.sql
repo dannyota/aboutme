@@ -573,3 +573,200 @@ WHERE id = sqlc.arg(id)::uuid
   AND user_id = sqlc.arg(user_id)::uuid
   AND revision = sqlc.arg(expected_revision)::bigint
 RETURNING *;
+
+-- ---------------------------------------------------------------------------
+-- Phase PA: password credentials, registrations, reset tokens, and email jobs.
+-- Lock order (D4) is user -> credential -> reset token -> sessions. These
+-- queries expose exactly the row locks that order needs and no others.
+-- ---------------------------------------------------------------------------
+
+-- name: GetUserForUpdate :one
+-- The user-row lock every session issuer and password mutation serializes on.
+SELECT * FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: GetUserByCanonicalEmail :one
+-- Ownership read before a new-account insert. The caller passes the canonical
+-- lowercase form; users.email is citext so the comparison is already
+-- case-insensitive, and the unique constraint arbitrates the actual insert.
+SELECT * FROM users WHERE email = $1;
+
+-- name: GetPasswordCredential :one
+SELECT * FROM password_credentials WHERE user_id = $1;
+
+-- name: GetPasswordCredentialForUpdate :one
+SELECT * FROM password_credentials WHERE user_id = $1 FOR UPDATE;
+
+-- name: UpsertPasswordCredential :one
+-- Insert-or-replace the single credential under the row lock the caller
+-- already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
+-- bumping changed_at on the conflict arm.
+INSERT INTO password_credentials (user_id, encoded_hash, created_at, changed_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id) DO UPDATE
+SET encoded_hash = EXCLUDED.encoded_hash,
+    changed_at = EXCLUDED.changed_at
+RETURNING *;
+
+-- name: GetPasswordRegistrationByEmailForUpdate :one
+SELECT * FROM password_registrations WHERE email = $1 FOR UPDATE;
+
+-- name: GetPasswordRegistrationByDigest :one
+SELECT * FROM password_registrations WHERE token_digest = $1;
+
+-- name: GetPasswordRegistrationForUpdate :one
+SELECT * FROM password_registrations WHERE id = $1 FOR UPDATE;
+
+-- name: CreatePasswordRegistration :one
+INSERT INTO password_registrations (email, name, encoded_hash, token_digest, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
+
+-- name: DeletePasswordRegistration :execrows
+DELETE FROM password_registrations WHERE id = $1;
+
+-- name: GetPasswordResetTokenByUserForUpdate :one
+SELECT * FROM password_reset_tokens WHERE user_id = $1 FOR UPDATE;
+
+-- name: GetPasswordResetTokenByDigest :one
+SELECT * FROM password_reset_tokens WHERE token_digest = $1;
+
+-- name: GetPasswordResetTokenForUpdate :one
+SELECT * FROM password_reset_tokens WHERE id = $1 FOR UPDATE;
+
+-- name: CreatePasswordResetToken :one
+INSERT INTO password_reset_tokens (user_id, token_digest, created_at, expires_at)
+VALUES ($1, $2, $3, $4) RETURNING *;
+
+-- name: DeletePasswordResetToken :execrows
+DELETE FROM password_reset_tokens WHERE id = $1;
+
+-- name: GetSessionByIDForUpdate :one
+-- Session-row lock for password add/change, which revokes the current session
+-- and every sibling atomically.
+SELECT * FROM sessions WHERE id = $1 FOR UPDATE;
+
+-- name: CreateAuthEmailJob :one
+-- New jobs always start pending with attempts 0 (DEFAULT). The caller has
+-- already encrypted the payload and computed the exact expiry before commit.
+INSERT INTO auth_email_jobs (
+    kind, state, registration_id, reset_token_id, user_id, token_digest,
+    key_id, nonce, ciphertext, created_at, expires_at, next_attempt_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+) RETURNING *;
+
+-- name: ListLiveAuthEmailJobKeyIDs :many
+-- Startup readiness: the distinct key IDs every pending/leased (non-terminal,
+-- non-expired) job references. The key ring must decrypt all of them.
+SELECT DISTINCT COALESCE(key_id, '')::text AS key_id
+FROM auth_email_jobs
+WHERE state IN ('pending', 'leased')
+  AND key_id IS NOT NULL
+  AND expires_at > sqlc.arg(now)::timestamptz
+ORDER BY key_id;
+
+-- name: ClaimAuthEmailJobs :many
+-- Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
+-- jobs to leased, increments attempts, stamps the lease pair, and returns the
+-- leased rows. Two concurrent claimers are disjoint because each claims a
+-- distinct row under FOR UPDATE SKIP LOCKED.
+UPDATE auth_email_jobs
+SET state = 'leased',
+    attempts = attempts + 1,
+    next_attempt_at = NULL,
+    lease_owner = sqlc.arg(lease_owner)::text,
+    lease_expires_at = sqlc.arg(lease_expires_at)::timestamptz
+WHERE id IN (
+    SELECT id FROM auth_email_jobs
+    WHERE state = 'pending'
+      AND next_attempt_at <= sqlc.arg(now)::timestamptz
+    ORDER BY next_attempt_at, created_at, id
+    LIMIT sqlc.arg(limit_rows)::int
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING *;
+
+-- name: GetLeasedAuthEmailJobForUpdate :one
+-- Re-locks the exact leased job by its owner before the bounded send handoff,
+-- so a token replacement that already committed cannot race this delivery.
+SELECT * FROM auth_email_jobs
+WHERE id = sqlc.arg(id)::uuid
+  AND state = 'leased'
+  AND lease_owner = sqlc.arg(lease_owner)::text
+FOR UPDATE;
+
+-- name: MarkAuthEmailJobSent :execrows
+-- SES accepted: clears every encryption and lease field and records sent_at.
+UPDATE auth_email_jobs
+SET state = 'sent', key_id = NULL, nonce = NULL, ciphertext = NULL,
+    next_attempt_at = NULL, lease_owner = NULL, lease_expires_at = NULL,
+    sent_at = sqlc.arg(sent_at)::timestamptz
+WHERE id = sqlc.arg(id)::uuid AND state = 'leased';
+
+-- name: MarkAuthEmailJobTerminal :execrows
+-- Permanent failure, expiry, or the eighth attempt: clears every encryption and
+-- lease field and records terminal_at. A stale pending job may terminate
+-- without ever being leased (attempts stays 0).
+UPDATE auth_email_jobs
+SET state = 'terminal', key_id = NULL, nonce = NULL, ciphertext = NULL,
+    next_attempt_at = NULL, lease_owner = NULL, lease_expires_at = NULL,
+    terminal_at = sqlc.arg(terminal_at)::timestamptz
+WHERE id = sqlc.arg(id)::uuid AND state IN ('pending', 'leased');
+
+-- name: RequeueAuthEmailJob :execrows
+-- A temporary failure releases the lease back to pending with the next attempt
+-- time, retaining ciphertext and the already-incremented attempt count. The
+-- caller never requeues at attempts = 8 (that path marks terminal instead).
+UPDATE auth_email_jobs
+SET state = 'pending',
+    next_attempt_at = sqlc.arg(next_attempt_at)::timestamptz,
+    lease_owner = NULL, lease_expires_at = NULL
+WHERE id = sqlc.arg(id)::uuid AND state = 'leased';
+
+-- name: RequeueExpiredAuthEmailLeases :execrows
+-- Bounded stale-lease recovery: a lease that expired without a completed send
+-- returns to pending, rolling back the claim's attempt increment (the send
+-- never happened) and re-dueing immediately. Ordered so repeated calls make
+-- monotonic progress.
+UPDATE auth_email_jobs
+SET state = 'pending',
+    attempts = attempts - 1,
+    next_attempt_at = sqlc.arg(now)::timestamptz,
+    lease_owner = NULL, lease_expires_at = NULL
+WHERE id IN (
+    SELECT id FROM auth_email_jobs
+    WHERE state = 'leased'
+      AND lease_expires_at <= sqlc.arg(now)::timestamptz
+    ORDER BY lease_expires_at, id
+    LIMIT sqlc.arg(limit_rows)::int
+    FOR UPDATE SKIP LOCKED
+);
+
+-- name: CleanupExpiredPasswordRegistrations :execrows
+DELETE FROM password_registrations
+WHERE id IN (
+    SELECT id FROM password_registrations
+    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY expires_at, id
+    LIMIT sqlc.arg(limit_rows)::int
+);
+
+-- name: CleanupExpiredPasswordResetTokens :execrows
+DELETE FROM password_reset_tokens
+WHERE id IN (
+    SELECT id FROM password_reset_tokens
+    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY expires_at, id
+    LIMIT sqlc.arg(limit_rows)::int
+);
+
+-- name: CleanupFinishedAuthEmailJobs :execrows
+-- Sent/terminal jobs are retained for seven days of audit, then removed in a
+-- bounded page, oldest outcome first.
+DELETE FROM auth_email_jobs
+WHERE id IN (
+    SELECT id FROM auth_email_jobs
+    WHERE state IN ('sent', 'terminal')
+      AND COALESCE(sent_at, terminal_at) <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY COALESCE(sent_at, terminal_at), id
+    LIMIT sqlc.arg(limit_rows)::int
+);

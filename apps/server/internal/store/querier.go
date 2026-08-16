@@ -6,6 +6,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -29,6 +30,16 @@ type Querier interface {
 	// pgx.ErrNoRows -- that caller lost the race and must not mint a second
 	// successor (see internal/auth.SessionManager.Authenticate).
 	BeginSessionRotation(ctx context.Context, arg BeginSessionRotationParams) (uuid.UUID, error)
+	// Bounded SKIP LOCKED claim: atomically transitions at most limit due pending
+	// jobs to leased, increments attempts, stamps the lease pair, and returns the
+	// leased rows. Two concurrent claimers are disjoint because each claims a
+	// distinct row under FOR UPDATE SKIP LOCKED.
+	ClaimAuthEmailJobs(ctx context.Context, arg ClaimAuthEmailJobsParams) ([]AuthEmailJob, error)
+	CleanupExpiredPasswordRegistrations(ctx context.Context, arg CleanupExpiredPasswordRegistrationsParams) (int64, error)
+	CleanupExpiredPasswordResetTokens(ctx context.Context, arg CleanupExpiredPasswordResetTokensParams) (int64, error)
+	// Sent/terminal jobs are retained for seven days of audit, then removed in a
+	// bounded page, oldest outcome first.
+	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
 	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
 	// Atomically claims a transaction: only a row that is unexpired and not yet
 	// consumed (as of now, $2) is updated and returned. A handle that is
@@ -42,6 +53,9 @@ type Querier interface {
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// New jobs always start pending with attempts 0 (DEFAULT). The caller has
+	// already encrypted the payload and computed the exact expiry before commit.
+	CreateAuthEmailJob(ctx context.Context, arg CreateAuthEmailJobParams) (AuthEmailJob, error)
 	// Returns PostgreSQL's normalized jsonb representation of the stored body
 	// and approved headers plus the exact stored byte count, so the first
 	// response and every replay use identical bytes and no caller recomputes
@@ -51,6 +65,8 @@ type Querier interface {
 	// database uniqueness constraint remains the concurrency backstop.
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
+	CreatePasswordRegistration(ctx context.Context, arg CreatePasswordRegistrationParams) (PasswordRegistration, error)
+	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error)
 	// Always inserts a brand-new row -- used both by Issue (fixation defense: a
 	// login never reuses an existing session row) and by the >24h rotation
@@ -97,6 +113,8 @@ type Querier interface {
 	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
+	DeletePasswordRegistration(ctx context.Context, id uuid.UUID) (int64, error)
+	DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
 	// Revision-CAS delete returning the deleted row, so the caller can
 	// validate the stored photo key and enqueue media cleanup in the same
@@ -125,6 +143,9 @@ type Querier interface {
 	GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error)
 	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
+	// Re-locks the exact leased job by its owner before the bounded send handoff,
+	// so a token replacement that already committed cannot race this delivery.
+	GetLeasedAuthEmailJobForUpdate(ctx context.Context, arg GetLeasedAuthEmailJobForUpdateParams) (AuthEmailJob, error)
 	// Ambiguous-delete recovery proves the exact immutable cleanup job without
 	// scanning or exposing unrelated object keys.
 	GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error)
@@ -133,6 +154,14 @@ type Querier interface {
 	// arm take the row lock and return the existing row; user_id itself never
 	// appears in a SET clause.
 	GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, userID uuid.UUID) (IdempotencyUsage, error)
+	GetPasswordCredential(ctx context.Context, userID uuid.UUID) (PasswordCredential, error)
+	GetPasswordCredentialForUpdate(ctx context.Context, userID uuid.UUID) (PasswordCredential, error)
+	GetPasswordRegistrationByDigest(ctx context.Context, tokenDigest []byte) (PasswordRegistration, error)
+	GetPasswordRegistrationByEmailForUpdate(ctx context.Context, email string) (PasswordRegistration, error)
+	GetPasswordRegistrationForUpdate(ctx context.Context, id uuid.UUID) (PasswordRegistration, error)
+	GetPasswordResetTokenByDigest(ctx context.Context, tokenDigest []byte) (PasswordResetToken, error)
+	GetPasswordResetTokenByUserForUpdate(ctx context.Context, userID uuid.UUID) (PasswordResetToken, error)
+	GetPasswordResetTokenForUpdate(ctx context.Context, id uuid.UUID) (PasswordResetToken, error)
 	// The generation and eligible slug set are selected by one PostgreSQL
 	// statement so aggregate discovery admission cannot pair different commits.
 	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
@@ -150,11 +179,25 @@ type Querier interface {
 	// RevokeSessionForUser returns only a row count, and the target need not be the
 	// caller's current session, so the lineage values require this read.
 	GetSessionByID(ctx context.Context, id uuid.UUID) (Session, error)
+	// Session-row lock for password add/change, which revokes the current session
+	// and every sibling atomically.
+	GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error)
 	GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error)
+	// Ownership read before a new-account insert. The caller passes the canonical
+	// lowercase form; users.email is citext so the comparison is already
+	// case-insensitive, and the unique constraint arbitrates the actual insert.
+	GetUserByCanonicalEmail(ctx context.Context, email string) (User, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// ---------------------------------------------------------------------------
+	// Phase PA: password credentials, registrations, reset tokens, and email jobs.
+	// Lock order (D4) is user -> credential -> reset token -> sessions. These
+	// queries expose exactly the row locks that order needs and no others.
+	// ---------------------------------------------------------------------------
+	// The user-row lock every session issuer and password mutation serializes on.
+	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
 	// Discovery bytes contain only eligible slugs in raw byte order. The
 	// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
@@ -162,6 +205,9 @@ type Querier interface {
 	ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
 	// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
+	// Startup readiness: the distinct key IDs every pending/leased (non-terminal,
+	// non-expired) job references. The key ring must decrypt all of them.
+	ListLiveAuthEmailJobKeyIDs(ctx context.Context, now time.Time) ([]string, error)
 	// Lists sessions that internal/auth also considers live:
 	//
 	//   - not explicitly revoked (revoked_at IS NULL);
@@ -186,6 +232,12 @@ type Querier interface {
 	LockPublicState(ctx context.Context) (PublicState, error)
 	LockSlugClaim(ctx context.Context, slug string) error
 	LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// SES accepted: clears every encryption and lease field and records sent_at.
+	MarkAuthEmailJobSent(ctx context.Context, arg MarkAuthEmailJobSentParams) (int64, error)
+	// Permanent failure, expiry, or the eighth attempt: clears every encryption and
+	// lease field and records terminal_at. A stale pending job may terminate
+	// without ever being leased (attempts stays 0).
+	MarkAuthEmailJobTerminal(ctx context.Context, arg MarkAuthEmailJobTerminalParams) (int64, error)
 	// Normalizes a candidate response through the same jsonb representation an
 	// insert would store and reports the exact byte count the usage
 	// reservation must account for — the one canonical byte expression shared
@@ -197,6 +249,15 @@ type Querier interface {
 	// plus transactional maintenance guarantee this can never underflow the
 	// non-negative checks.
 	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
+	// A temporary failure releases the lease back to pending with the next attempt
+	// time, retaining ciphertext and the already-incremented attempt count. The
+	// caller never requeues at attempts = 8 (that path marks terminal instead).
+	RequeueAuthEmailJob(ctx context.Context, arg RequeueAuthEmailJobParams) (int64, error)
+	// Bounded stale-lease recovery: a lease that expired without a completed send
+	// returns to pending, rolling back the claim's attempt increment (the send
+	// never happened) and re-dueing immediately. Ordered so repeated calls make
+	// monotonic progress.
+	RequeueExpiredAuthEmailLeases(ctx context.Context, arg RequeueExpiredAuthEmailLeasesParams) (int64, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
@@ -259,6 +320,10 @@ type Querier interface {
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into
 	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
+	// Insert-or-replace the single credential under the row lock the caller
+	// already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
+	// bumping changed_at on the conflict arm.
+	UpsertPasswordCredential(ctx context.Context, arg UpsertPasswordCredentialParams) (PasswordCredential, error)
 }
 
 var _ Querier = (*Queries)(nil)

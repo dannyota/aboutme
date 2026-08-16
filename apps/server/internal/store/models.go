@@ -12,6 +12,27 @@ import (
 	"github.com/google/uuid"
 )
 
+type AuthEmailJob struct {
+	ID             uuid.UUID
+	Kind           string
+	State          string
+	RegistrationID *uuid.UUID
+	ResetTokenID   *uuid.UUID
+	UserID         *uuid.UUID
+	TokenDigest    []byte
+	KeyID          *string
+	Nonce          []byte
+	Ciphertext     []byte
+	Attempts       int32
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	NextAttemptAt  *time.Time
+	LeaseOwner     *string
+	LeaseExpiresAt *time.Time
+	SentAt         *time.Time
+	TerminalAt     *time.Time
+}
+
 type IdempotencyRecord struct {
 	ID              uuid.UUID
 	UserID          uuid.UUID
@@ -61,6 +82,31 @@ type OAuthTransaction struct {
 	CreatedAt     time.Time
 	ExpiresAt     time.Time
 	ConsumedAt    *time.Time
+}
+
+type PasswordCredential struct {
+	UserID      uuid.UUID
+	EncodedHash []byte
+	CreatedAt   time.Time
+	ChangedAt   time.Time
+}
+
+type PasswordRegistration struct {
+	ID          uuid.UUID
+	Email       string
+	Name        string
+	EncodedHash []byte
+	TokenDigest []byte
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+}
+
+type PasswordResetToken struct {
+	ID          uuid.UUID
+	UserID      uuid.UUID
+	TokenDigest []byte
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
 }
 
 type PublicState struct {
