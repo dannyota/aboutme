@@ -20,7 +20,15 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            deploy/dev-https-browser/package-lock.json
       - run: npm ci
+      # `make operational-test` compiles and lists the trusted-browser specs
+      # through the pinned @playwright/test in this directory; the list-only
+      # check needs the runner, not downloaded browser binaries.
+      - run: npm ci
+        working-directory: deploy/dev-https-browser
       - run: make docs-lint
       - run: make operational-test
 
