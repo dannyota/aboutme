@@ -18,8 +18,13 @@ const normalNuxtRoot = resolve(webRoot, '.nuxt');
 const harnessNuxtRoot = resolve(webRoot, '.nuxt', 'harness');
 const normalTestNuxtRoot = resolve(webRoot, '.nuxt', 'normal-test');
 const normalTestOutputRoot = resolve(outputRoot, 'normal-test');
+const nuxtLock = resolve(webRoot, '.nuxt', 'nuxt.lock');
 
 function build(harness: boolean): void {
+  // Nuxt does not reliably remove its build lock on exit; clear any stale lock
+  // so the second build here does not trip the concurrency guard.
+  rmSync(nuxtLock, { force: true });
+
   const env = { ...process.env };
   env.NUXT_BUILD_TEST = '1';
   if (harness) env.NUXT_HARNESS = '1';
