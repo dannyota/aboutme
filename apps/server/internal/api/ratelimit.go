@@ -323,6 +323,43 @@ func newRateLimiter(cfg RateLimiterConfig) *rateLimiter {
 	}
 }
 
+// BoundedRateLimiter is an exported, key-bounded admission store built on the
+// same ADR 0018 store that RateLimit's middleware uses: at most cfg.MaxKeys
+// active keys plus one shared overflow bucket, expired-key reclamation, and
+// monotonic-clock fail-closed behavior. It exists so a non-HTTP caller (the
+// password rate policies in internal/auth) can enforce a per-key admission
+// budget by calling Admit directly instead of going through HTTP middleware.
+//
+// The caller supplies the wall-clock instant explicitly rather than through a
+// Clock callback, so the same instance can be driven deterministically in
+// tests and by a caller that already holds a validated timestamp. The store
+// still clamps internally so a backward clock step cannot expire an active
+// entry early.
+type BoundedRateLimiter struct {
+	inner *rateLimiter
+}
+
+// NewBoundedRateLimiter returns a bounded admission store for cfg. Requests,
+// Window, and MaxKeys come from cfg (defaults from RateLimiterConfig apply);
+// the Clock/Key/Logger fields are irrelevant to direct Admit calls.
+func NewBoundedRateLimiter(cfg RateLimiterConfig) *BoundedRateLimiter {
+	cfg = cfg.withDefaults()
+	return &BoundedRateLimiter{inner: newRateLimiter(cfg)}
+}
+
+// Admit reports whether key may be admitted at time now and, if not, how many
+// whole seconds the caller should wait before retrying (always at least 1). An
+// allowed admission consumes one token; a rejected admission consumes no state
+// and leaves no debt (see admitNow). The returned seconds are already
+// ceiling-rounded, so a caller can set Retry-After directly.
+func (b *BoundedRateLimiter) Admit(now time.Time, key string) (allowed bool, retrySeconds int) {
+	allowed, wait := b.inner.allow(key, now)
+	if allowed {
+		return true, 0
+	}
+	return false, retryAfterSeconds(wait)
+}
+
 // allow reports whether the request for key is allowed at time now, and if
 // not, how long the caller should wait before retrying. See the rateLimiter
 // doc comment for why lookup, the expiry decision, and the first admission
