@@ -10,7 +10,7 @@ in [`../architecture.md`](../architecture.md). Delivery state lives in the
 [`../plans/implementation-plan.md`](../plans/implementation-plan.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. Every ADR
-through 0024 is accepted and integrated here. If a page disagrees with an
+through 0025 is accepted and integrated here. If a page disagrees with an
 accepted ADR, the ADR controls that decision until this text is corrected.
 
 ## Sections

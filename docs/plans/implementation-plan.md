@@ -23,7 +23,7 @@ keep everything runnable on the laptop until the whole product works there.
 | P2B server lane               | Complete                        | None                                            |
 | P4 authenticated editor       | Complete                        | None                                            |
 | P5A publish and public SSR    | Complete                        | None                                            |
-| PA password authentication    | Approved, queued                | Start after P4 and P5A integrate                |
+| PA password authentication    | Active                          | T00 authorities, budgets, and public roots      |
 | P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
 | PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
 

@@ -6,15 +6,22 @@ produces the same document everywhere.
 
 ## Application surfaces
 
-| Surface            | Route class   | Rendering model                                              |
-| ------------------ | ------------- | ------------------------------------------------------------ |
-| Landing and login  | `/`, `/login` | Nuxt SSR                                                     |
-| Account and editor | `/app/**`     | Client application; authenticated requests never run in SSR  |
-| Public resume      | `/{slug}`     | Nuxt SSR followed by client hydration and live refetch       |
-| Print              | `/print/**`   | Internal Nuxt route gated by one Go-issued render capability |
+| Surface            | Route class                                                                        | Rendering model                                              |
+| ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Landing and auth   | `/`, `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password` | Nuxt SSR                                                     |
+| Account and editor | `/app/**`                                                                          | Client application; authenticated requests never run in SSR  |
+| Public resume      | `/{slug}`                                                                          | Nuxt SSR followed by client hydration and live refetch       |
+| Print              | `/print/**`                                                                        | Internal Nuxt route gated by one Go-issued render capability |
 
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.
+
+The login page keeps Google, GitHub, and LinkedIn and adds an email/password
+form. Registration, verification, forgot-password, and reset-password are
+separate Nuxt pages. Verification and reset strip the `#token=` fragment before
+any network call and load no third-party resource. Account settings show whether
+a password is set and allow add/change after recent reauthentication; provider
+emails are never shown as a linkage decision.
 
 ## Pure renderer
 

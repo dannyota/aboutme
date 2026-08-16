@@ -158,6 +158,18 @@ Only normalized JPEG or PNG bytes enter object storage. Photo normalization and
 Chromium rendering share one task-wide heavy-work permit before P7 combines
 those workloads, so their memory peaks cannot overlap.
 
+## Authentication email
+
+Verification, reset, and security-notification email is committed through a
+bounded encrypted outbox and delivered by a worker. Production uses the AWS SDK
+for Go v2 SES client in `ap-southeast-1` with a verified sending domain, a
+configuration set, and delivery/bounce/complaint alarms. AWS credentials use the
+standard runtime credential chain and never enter repository files.
+
+Native development starts a loopback-only mail-capture command that retains a
+bounded number of messages and never initializes AWS. Real SES and DNS changes
+remain gated on local UAT and explicit owner authorization.
+
 ## Database and releases
 
 RDS PostgreSQL uses Graviton-compatible instances, gp3 storage, automated

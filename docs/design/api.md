@@ -41,6 +41,10 @@ behavior that future contract changes must implement.
 | `GET /auth/{provider}/start`, `GET /auth/{provider}/callback`      | Login start and callback                                     |
 | `POST /auth/{provider}/start`                                      | Authenticated provider link or recent reauthentication start |
 | `POST /auth/logout`, `GET /me`                                     | Logout and current identity/CSRF state                       |
+| `POST /auth/password/register`, `POST /auth/password/verify`       | Email-and-password registration and single-use verification  |
+| `POST /auth/password/login`, `POST /auth/password/reauth`          | Password login and recent reauthentication                   |
+| `POST /auth/password/forgot`, `POST /auth/password/reset`          | Password reset request and single-use token consumption      |
+| `PUT /me/password`                                                 | Add or replace the account password credential               |
 | `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions`       | Device list, per-session revoke, and logout-everywhere       |
 | `GET/POST /resumes`, `GET/PATCH/DELETE /resumes/{id}`              | Resume list, create, read, metadata update, and delete       |
 | `PATCH /resumes/{id}/entries/{sectionKey}`, `DELETE .../{entryId}` | Entry upsert and delete                                      |
@@ -54,6 +58,15 @@ behavior that future contract changes must implement.
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`   | Live-gated public document and photo                         |
 | `GET /public/resumes/{slug}/pdf`                                   | Live and download-gated public PDF                           |
 | `GET /me/export`, `DELETE /me`                                     | Data export and recent-reauthenticated account deletion      |
+
+Password routes use strict JSON with a 4,096-byte body cap and the exact
+`application/json` media type. Registration and forgot-password return an
+identical `202`; login, verification, reset, reauthentication, and add/change
+succeed with `204`. A well-shaped but absent, expired, consumed, or replaced
+token is `400 credential_token_invalid`. The public error vocabulary is closed
+and never discloses account state, provider, token, or hash detail. `GET /me`
+adds the non-null Boolean `hasPassword`; provider emails are not exposed through
+linked identities.
 
 ### Photo intake
 

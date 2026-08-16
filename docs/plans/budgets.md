@@ -4,59 +4,86 @@ Each owning phase enforces its rows. P9A repeats production-shaped latency and
 resource measurements. A hard-budget breach fails the gate; changing a number
 requires a reviewed change with evidence.
 
-| Budget                                    | Target                                | Where enforced                            |
-| ----------------------------------------- | ------------------------------------- | ----------------------------------------- |
-| API p95 latency (read, warm)              | ≤ 150 ms                              | P9A synthetic                             |
-| API p95 latency (granular PATCH)          | ≤ 250 ms                              | P9A synthetic                             |
-| Public SSR page p95 (origin, uncached)    | ≤ 400 ms                              | P9A synthetic                             |
-| PDF render wall time                      | ≤ 20 s hard timeout, p95 ≤ 8 s        | P7A                                       |
-| Concurrent renders                        | 1 (v1)                                | P7A                                       |
-| Render queue depth                        | ≤ 8, then 503 + readiness unhealthy   | P7A                                       |
-| Whole server task memory (Go + Chromium)  | ≤ 512 MiB cgroup                      | P7A, P9A                                  |
-| pgx pool size                             | ≤ 20, below Postgres max_connections  | P0B config                                |
-| SSE concurrent connections per task       | ≤ 2000                                | P6A stress                                |
-| SSE file descriptors headroom             | ≥ 25% below ulimit                    | P6A stress                                |
-| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)      | P6A, P9A                                  |
-| Request body                              | ≤ 256 KB                              | P0B middleware                            |
-| Global API requests per client IP         | ≤ 300/min                             | P0B middleware                            |
-| In-memory rate-limiter keys per instance  | ≤ 10,000                              | P0B/P1/P2B middleware                     |
-| Anonymous login starts per client IP      | ≤ 30/min                              | P1 auth                                   |
-| Privileged OAuth starts/account and IP    | ≤ 30/min                              | P1 auth                                   |
-| Public revocation drain                   | ≤ 5 s hard, then fail before mutation | P5A                                       |
-| Public render `canonicalOrigin`           | ≤ 512 ASCII bytes                     | P5A Go and Nuxt boundary                  |
-| Internal public-render JSON               | ≤ 532,480 bytes                       | P5A Go and Nuxt boundary                  |
-| Internal public-render HTML               | ≤ 2,097,152 bytes; provisional gate   | P5A renderer corpus                       |
-| Direct public-render wall time            | ≤ 5 s hard; cancel and join           | P5A Go direct-render client               |
-| Slug claim/rename attempts                | ≤ 30/account/hour                     | P5A middleware                            |
-| OAuth cleanup batch                       | ≤ 200 rows/start                      | P1 auth                                   |
-| Resume photo multipart body               | ≤ 2,162,688 bytes                     | P2B route                                 |
-| Resume photo file / normalized object     | ≤ 2,097,152 bytes                     | P2B media                                 |
-| Resume photo source edge / pixels         | ≤ 8,192 px / 16,777,216 pixels        | P2B media                                 |
-| Resume photo normalized edge              | ≤ 2,048 px opaque / 1,024 px alpha    | P2B media                                 |
-| Concurrent photo intake                   | 1 per server task; wait ≤ 1 s         | P2B media                                 |
-| Photo body read / object write            | ≤ 60 s / 5 s hard deadline            | P2B media                                 |
-| Photo candidate create-to-commit lifetime | ≤ 5 min hard deadline                 | P2B media                                 |
-| Photo normalization                       | ≤ 5 s; synchronous                    | P2B controlled-host gate; P9A launch gate |
-| Photo normalization peak RSS delta        | ≤ 192 MiB                             | P2B controlled-host gate; P9A launch gate |
-| Resume document total                     | ≤ 512 KB                              | P2A store                                 |
-| Resume title length                       | ≤ 160 characters                      | P2A DB + store                            |
-| `lng` tag length                          | ≤ 35 characters                       | P2A DB                                    |
-| Idempotency record TTL                    | 24 h                                  | P2A store                                 |
-| Idempotency cleanup batch                 | ≤ 200 rows/mutation                   | P2B store                                 |
-| Retained idempotency records/account      | ≤ 50,000 after new-key insert         | P2B store                                 |
-| Retained idempotency stored bytes/account | ≤ 1 GiB after new-key insert          | P2B store                                 |
-| Global idempotency expiry sweep           | hourly; 1,000/page; 10,000/run        | P8 privacy                                |
-| Resume reads per account and IP           | ≤ 600/min                             | P2B middleware                            |
-| Resume writes per account and IP          | ≤ 240/min                             | P2B middleware                            |
-| Photo uploads per account and IP          | ≤ 20/h                                | P2B middleware                            |
-| Structure commands per request            | ≤ 100                                 | P2B handler                               |
-| Customization deltas per request          | ≤ 100                                 | P2B handler                               |
-| Media orphan minimum age                  | ≥ 48 h                                | P8-priv job                               |
-| Media orphan sweep page / run             | 1,000 / 10,000 objects                | P8-priv job                               |
-| Media orphan delete concurrency           | ≤ 4                                   | P8-priv job                               |
-| Media deletion physical-removal target    | ≤ 24 h from reference revocation      | P8-priv job                               |
-| Media deletion queue page / run           | 200 / 2,000 jobs                      | P8-priv job                               |
-| Media deletion retry / concurrency        | 1/run, ≤ 6 h backoff / ≤ 4            | P8-priv job                               |
+| Budget                                    | Target                                              | Where enforced                            |
+| ----------------------------------------- | --------------------------------------------------- | ----------------------------------------- |
+| API p95 latency (read, warm)              | ≤ 150 ms                                            | P9A synthetic                             |
+| API p95 latency (granular PATCH)          | ≤ 250 ms                                            | P9A synthetic                             |
+| Public SSR page p95 (origin, uncached)    | ≤ 400 ms                                            | P9A synthetic                             |
+| PDF render wall time                      | ≤ 20 s hard timeout, p95 ≤ 8 s                      | P7A                                       |
+| Concurrent renders                        | 1 (v1)                                              | P7A                                       |
+| Render queue depth                        | ≤ 8, then 503 + readiness unhealthy                 | P7A                                       |
+| Whole server task memory (Go + Chromium)  | ≤ 512 MiB cgroup                                    | P7A, P9A                                  |
+| pgx pool size                             | ≤ 20, below Postgres max_connections                | P0B config                                |
+| SSE concurrent connections per task       | ≤ 2000                                              | P6A stress                                |
+| SSE file descriptors headroom             | ≥ 25% below ulimit                                  | P6A stress                                |
+| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)                    | P6A, P9A                                  |
+| Request body                              | ≤ 256 KB                                            | P0B middleware                            |
+| Global API requests per client IP         | ≤ 300/min                                           | P0B middleware                            |
+| In-memory rate-limiter keys per instance  | ≤ 10,000                                            | P0B/P1/P2B middleware                     |
+| Anonymous login starts per client IP      | ≤ 30/min                                            | P1 auth                                   |
+| Privileged OAuth starts/account and IP    | ≤ 30/min                                            | P1 auth                                   |
+| Public revocation drain                   | ≤ 5 s hard, then fail before mutation               | P5A                                       |
+| Public render `canonicalOrigin`           | ≤ 512 ASCII bytes                                   | P5A Go and Nuxt boundary                  |
+| Internal public-render JSON               | ≤ 532,480 bytes                                     | P5A Go and Nuxt boundary                  |
+| Internal public-render HTML               | ≤ 2,097,152 bytes; provisional gate                 | P5A renderer corpus                       |
+| Direct public-render wall time            | ≤ 5 s hard; cancel and join                         | P5A Go direct-render client               |
+| Slug claim/rename attempts                | ≤ 30/account/hour                                   | P5A middleware                            |
+| OAuth cleanup batch                       | ≤ 200 rows/start                                    | P1 auth                                   |
+| Resume photo multipart body               | ≤ 2,162,688 bytes                                   | P2B route                                 |
+| Resume photo file / normalized object     | ≤ 2,097,152 bytes                                   | P2B media                                 |
+| Resume photo source edge / pixels         | ≤ 8,192 px / 16,777,216 pixels                      | P2B media                                 |
+| Resume photo normalized edge              | ≤ 2,048 px opaque / 1,024 px alpha                  | P2B media                                 |
+| Concurrent photo intake                   | 1 per server task; wait ≤ 1 s                       | P2B media                                 |
+| Photo body read / object write            | ≤ 60 s / 5 s hard deadline                          | P2B media                                 |
+| Photo candidate create-to-commit lifetime | ≤ 5 min hard deadline                               | P2B media                                 |
+| Photo normalization                       | ≤ 5 s; synchronous                                  | P2B controlled-host gate; P9A launch gate |
+| Photo normalization peak RSS delta        | ≤ 192 MiB                                           | P2B controlled-host gate; P9A launch gate |
+| Resume document total                     | ≤ 512 KB                                            | P2A store                                 |
+| Resume title length                       | ≤ 160 characters                                    | P2A DB + store                            |
+| `lng` tag length                          | ≤ 35 characters                                     | P2A DB                                    |
+| Idempotency record TTL                    | 24 h                                                | P2A store                                 |
+| Idempotency cleanup batch                 | ≤ 200 rows/mutation                                 | P2B store                                 |
+| Retained idempotency records/account      | ≤ 50,000 after new-key insert                       | P2B store                                 |
+| Retained idempotency stored bytes/account | ≤ 1 GiB after new-key insert                        | P2B store                                 |
+| Global idempotency expiry sweep           | hourly; 1,000/page; 10,000/run                      | P8 privacy                                |
+| Resume reads per account and IP           | ≤ 600/min                                           | P2B middleware                            |
+| Resume writes per account and IP          | ≤ 240/min                                           | P2B middleware                            |
+| Photo uploads per account and IP          | ≤ 20/h                                              | P2B middleware                            |
+| Structure commands per request            | ≤ 100                                               | P2B handler                               |
+| Customization deltas per request          | ≤ 100                                               | P2B handler                               |
+| Media orphan minimum age                  | ≥ 48 h                                              | P8-priv job                               |
+| Media orphan sweep page / run             | 1,000 / 10,000 objects                              | P8-priv job                               |
+| Media orphan delete concurrency           | ≤ 4                                                 | P8-priv job                               |
+| Media deletion physical-removal target    | ≤ 24 h from reference revocation                    | P8-priv job                               |
+| Media deletion queue page / run           | 200 / 2,000 jobs                                    | P8-priv job                               |
+| Media deletion retry / concurrency        | 1/run, ≤ 6 h backoff / ≤ 4                          | P8-priv job                               |
+| Password route body                       | ≤ 4,096 bytes                                       | PA route                                  |
+| Canonical account email                   | 5–254 ASCII bytes, stored lowercase                 | PA accountemail                           |
+| Registration name                         | 1–100 code points after NFC; ≤ 400 raw UTF-8 bytes  | PA accountemail                           |
+| Password input                            | ≤ 1,024 UTF-8 bytes; 15–128 code points after NFC   | PA password policy                        |
+| Argon2id cost                             | 64 MiB, 3 iterations, parallelism 1                 | PA password hash                          |
+| Argon2id encoding                         | 16 B salt, 32 B result, PHC ≤ 192 ASCII bytes       | PA password hash                          |
+| Hash admission                            | 2 running, 16 queued                                | PA password hash                          |
+| Bundled blocklist                         | 99,840 lines; pinned commit and SHA-256             | PA password blocklist                     |
+| HIBP range lookup                         | 5 s deadline, 128 KiB response cap                  | PA password HIBP                          |
+| HIBP prefix cache                         | 256 prefixes, 16 MiB entries, 24 h                  | PA password HIBP                          |
+| Bearer token                              | 32 random bytes → 43-char base64url; 32-byte digest | PA password token                         |
+| Registration token expiry                 | 24 h                                                | PA store                                  |
+| Reset token expiry                        | 30 min                                              | PA store                                  |
+| Encoded password hash                     | 1–192 bytes                                         | PA store                                  |
+| Outbox plaintext / ciphertext             | ≤ 4,096 / ≤ 4,112 bytes                             | PA authmail                               |
+| Outbox key ring                           | 1 active + ≤ 1 previous 32-byte key                 | PA authmail                               |
+| Mail claim batch / concurrency            | ≤ 10 / ≤ 2 sends                                    | PA authmail worker                        |
+| Mail lease / send deadline                | 30 s / 10 s                                         | PA authmail worker                        |
+| Mail retry backoff                        | min(30 s × 2^(n−1), 1 h); terminal at attempt 8     | PA authmail worker                        |
+| Expired auth cleanup                      | ≤ 200 rows/tick                                     | PA authmail worker                        |
+| Login admission                           | 30/min/IP                                           | PA rate                                   |
+| Login failures                            | 10/15 min per email HMAC                            | PA rate                                   |
+| Register/forgot                           | 5/h per email, 20/h per IP                          | PA rate                                   |
+| Verify/reset token consumption            | 10/h per IP                                         | PA rate                                   |
+| Add/change/reauth                         | 10/h per (account, IP)                              | PA rate                                   |
+| Local mail capture                        | ≤ 50 messages, ≤ 256 KiB total, ≤ 16 KiB/message    | PA mailcapture                            |
+| Capture ports                             | 127.0.0.1:20091 native; 127.0.0.1:20444 HTTPS       | PA mailcapture                            |
 
 **P2A rationale.** The [data design](../design/data.md#bounds-and-invariants)
 owns the 512 KiB document limit. Title length is enforced in both PostgreSQL and
@@ -142,6 +169,33 @@ It makes one delete attempt per due job per run and doubles retry delay up to
 six hours. Already-absent objects complete successfully. Jobs older than 24
 hours alert and remain queued. The weekly sweep reconciles objects against both
 live references and outstanding jobs; it is not the normal deletion path.
+
+**Provenance of the PA rows.** The password route body is 4,096 bytes so strict
+JSON, token, and hash inputs all fit with headroom. The canonical email accepts
+5–254 ASCII bytes and stores lowercase; the migration preflight proves every
+existing row already matches. A password is rejected above 1,024 UTF-8 bytes
+before normalization, then must be 15–128 code points after NFC. Argon2id uses
+64 MiB, 3 iterations, and parallelism 1 at or above the OWASP minimum; the
+release gate benchmarks it on the deployment CPU. Two hashes run and sixteen
+wait; the seventeenth waiter fails closed, and unknown/provider-only login uses
+the same admitted dummy verification.
+
+The bundled blocklist is the pinned NCSC 100k list normalized to sorted SHA-256
+digests; runtime lookup compares digests only. HIBP sends the first five hex
+characters of the SHA-1 digest with padding, caches at most 256 prefixes and 16
+MiB of entries for 24 hours, and fails closed when needed but unavailable.
+Tokens are 32 random bytes stored only as SHA-256 digests; registration expires
+in 24 hours and reset in 30 minutes.
+
+The outbox plaintext is at most 4,096 bytes and encrypts to at most 4,112 bytes
+with AES-256-GCM under a one-active-plus-one-previous key ring. The worker polls
+once per second, claims at most 10 jobs, sends at most two at once with a
+10-second deadline, leases for 30 seconds, retries temporary failures with
+jittered exponential backoff, and marks terminal on expiry or the eighth failed
+attempt. The local capture retains at most 50 messages and 256 KiB total,
+rejects a message over 16 KiB, and binds loopback on the fixed native and HTTPS
+ports. Password rate policies share the 10,000-key bounded store and add the
+login, failure, register/forgot, token, and account-mutation budgets.
 
 ## Benchmark protocol
 
