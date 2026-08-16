@@ -74,6 +74,7 @@ onBeforeUnmount(() => stopObserving?.());
     <div
       ref="previewRoot"
       class="editor-preview__canvas"
+      tabindex="0"
     >
       <p
         v-if="!canRender"
