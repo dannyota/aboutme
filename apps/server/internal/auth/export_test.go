@@ -184,3 +184,56 @@ func SetStartRateLimitForTest(svc *Service, requests int, window time.Duration) 
 	svc.startRateLimitRequests = requests
 	svc.startRateLimitWindow = window
 }
+
+// SetPasswordUserLockProbeForTest installs a probe that runs after a password
+// mutation transaction (login/verify/reset/change) acquires the user row lock.
+// It is nil in production and exists only for deterministic fence tests.
+func SetPasswordUserLockProbeForTest(svc *PasswordService, probe func()) {
+	svc.userLockProbe = probe
+}
+
+// SetPasswordLoginPreTxProbeForTest installs a probe that runs after login's
+// snapshot verify and before its session-issue transaction. It is nil in
+// production and exists only for the change-snapshot-retry race test.
+func SetPasswordLoginPreTxProbeForTest(svc *PasswordService, probe func()) {
+	svc.loginPreTxProbe = probe
+}
+
+// SetPasswordVerifyRegistrationLockProbeForTest installs a probe that runs after
+// verify locks the registration and before it checks email ownership. It is nil
+// in production and exists only for the provider-signup race test.
+func SetPasswordVerifyRegistrationLockProbeForTest(svc *PasswordService, probe func()) {
+	svc.verifyRegistrationLockProbe = probe
+}
+
+// The *ForTest operation wrappers expose the unexported service operations to
+// black-box race/adversarial tests so they can drive deterministic transaction
+// orderings directly (the probes above), without the HTTP chain.
+
+func (s *PasswordService) RegisterForTest(ctx context.Context, name, email, password, ip string) error {
+	return s.register(ctx, name, email, password, ip)
+}
+
+func (s *PasswordService) VerifyForTest(ctx context.Context, token, ip string) error {
+	return s.verify(ctx, token, ip)
+}
+
+func (s *PasswordService) LoginForTest(ctx context.Context, email, password, ua, ip string) (string, error) {
+	return s.login(ctx, email, password, ua, ip)
+}
+
+func (s *PasswordService) ForgotForTest(ctx context.Context, email, ip string) error {
+	return s.forgot(ctx, email, ip)
+}
+
+func (s *PasswordService) ResetForTest(ctx context.Context, token, password, ip string) error {
+	return s.reset(ctx, token, password, ip)
+}
+
+func (s *PasswordService) ReauthForTest(ctx context.Context, sess store.Session, password, ip string) error {
+	return s.reauth(ctx, sess, password, ip)
+}
+
+func (s *PasswordService) ChangeForTest(ctx context.Context, sess store.Session, password, ip string) (string, error) {
+	return s.change(ctx, sess, password, ip)
+}
