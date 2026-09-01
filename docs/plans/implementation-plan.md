@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 18, active** (2026-08-16).
+Status: **Revision 19, active** (2026-09-01).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior; it is approved at v4. This
@@ -9,6 +9,21 @@ design.
 
 We work agile and local-first: build a working slice, review it, improve it, and
 keep everything runnable on the laptop until the whole product works there.
+
+## v1 release scope
+
+Decided 2026-09-01 by the human owner:
+
+- **v1 authentication is password-only.** Provider (OAuth) login stays in the
+  code base behind a configuration flag and is disabled for v1. Phase PF owns
+  the flag and UI gating; the P1 provider code and tests remain so providers can
+  return without a new phase.
+- **MCP agent access ships in v1.** Users bring their own agents, which build
+  resumes through an authenticated MCP server over the resume API. Phase PM owns
+  it and blocks P9 local UAT.
+
+A plan cannot redefine the design: each phase's T00 amends the Approved v4 text
+and records the decision as an ADR, following the PA/ADR 0025 pattern.
 
 ## Current baseline
 
@@ -24,6 +39,8 @@ keep everything runnable on the laptop until the whole product works there.
 | P4 authenticated editor       | Complete                        | None                                            |
 | P5A publish and public SSR    | Complete                        | None                                            |
 | PA password authentication    | Complete                        | None                                            |
+| PF provider-login flag        | Not started                     | ADR, design amendment, config flag, UI gating   |
+| PM MCP agent access           | Not started                     | ADR, design amendment, MCP server, agent tokens |
 | P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
 | PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
 
@@ -69,9 +86,14 @@ After both lanes close their phase review and exit checklist:
 
 1. PA password authentication — complete (local encrypted mail/capture UAT
    proven).
-2. P5B publish UX and P6 realtime.
-3. P7 print and images and P8 privacy lifecycle.
-4. P9 local UAT over the complete product, then human cloud authorization, PI
+2. PF provider-login flag — small; its ADR and design amendment land first, and
+   the flag may land any time before P9.
+3. P5B publish UX and P6 realtime.
+4. PM MCP agent access — design pass (ADR, agent credential model, tool surface,
+   rate bounds) before task planning; implementation runs as its own lane beside
+   P5B/P6/P7/P8.
+5. P7 print and images and P8 privacy lifecycle.
+6. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
 
 ## Remaining gates
@@ -105,6 +127,10 @@ graph TD
     P3 --> P5A
     P4 --> PA[PA password authentication]
     P5A --> PA
+    P11 --> PF[PF provider-login flag]
+    PA --> PF
+    P2B --> PM[PM MCP agent access]
+    PA --> PM
     P4 --> P5B[P5B publish UX]
     P5A --> P5B
     P2A --> P6A[P6A SSE transport]
@@ -121,6 +147,8 @@ graph TD
     P7B --> P9
     P8P --> P9
     PA --> P9
+    PF --> P9
+    PM --> P9
     P9H --> P9
     PI[PI local IaC] --> P9
     P9 --> AUTH{Human authorizes cloud resources}
@@ -181,6 +209,8 @@ human approval.
 | P4    | [Authenticated editor](phase-4/README.md)                                     |
 | P5A   | [Publish and public SSR](phase-5a/README.md)                                  |
 | PA    | [Password authentication](phase-pa/README.md)                                 |
+| PF    | Provider-login flag — directory created at dispatch                           |
+| PM    | MCP agent access — directory created at dispatch                              |
 | PI    | [Infrastructure](phase-pi/README.md)                                          |
 | P9    | [HTTPS overlay and local UAT](phase-9/README.md)                              |
 
