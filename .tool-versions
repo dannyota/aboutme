@@ -1,8 +1,8 @@
-nodejs 24.19.0
-golang 1.26.6
+nodejs 24.20.0
+golang 1.27.0
 sqlc 1.31.1
-semgrep 1.172.0
+semgrep 1.175.0
 gitleaks 8.30.1
-golangci-lint 2.12.2
-govulncheck 1.6.0
+golangci-lint 2.13.2
+govulncheck 1.7.0
 caddy 2.11.4

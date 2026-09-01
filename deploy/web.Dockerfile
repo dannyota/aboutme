@@ -8,8 +8,8 @@
 # Task C2.
 
 # ---- build ----
-# Node 24.19.0: pinned exactly to apps/web/.nvmrc.
-FROM docker.io/library/node:24.19.0-alpine3.24 AS build
+# Node 24.20.0: pinned exactly to apps/web/.nvmrc.
+FROM docker.io/library/node:24.20.0-alpine3.24 AS build
 
 WORKDIR /src
 
@@ -36,7 +36,7 @@ RUN npm --prefix apps/web run build
 # ---- runtime ----
 # Nitro's node-server preset (Nuxt's default) bundles its own dependencies
 # into .output/, so the runtime stage needs no node_modules install.
-FROM docker.io/library/node:24.19.0-alpine3.24 AS runtime
+FROM docker.io/library/node:24.20.0-alpine3.24 AS runtime
 
 WORKDIR /app
 
