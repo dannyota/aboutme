@@ -23,20 +23,20 @@
 
 ## TDD cycle
 
-- [ ] Write component REDs: list rendering incl. hostile-name escaping, empty
+- [x] Write component REDs: list rendering incl. hostile-name escaping, empty
       state, revoke confirmation flow, exact DELETE call, list refresh after
       revoke, closed error mapping, keyboard operation.
-- [ ] Write composable REDs: shaping, refresh semantics, no retry on 4xx.
-- [ ] Write a settings-integration RED: the block appears on the settings page
+- [x] Write composable REDs: shaping, refresh semantics, no retry on 4xx.
+- [x] Write a settings-integration RED: the block appears on the settings page
       without disturbing the session-list or password-settings specs (their
       existing tests stay GREEN).
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   cd apps/web && npx vitest run test/connected-agents.test.ts test/agentGrants.test.ts
   ```
 
-- [ ] Implement; rerun to GREEN plus the neighboring settings suites, then
+- [x] Implement; rerun to GREEN plus the neighboring settings suites, then
       `make web-lint web-typecheck web-test`.
 
 ## Adversarial checklist
