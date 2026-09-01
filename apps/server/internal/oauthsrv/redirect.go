@@ -24,9 +24,13 @@ const (
 	redirectURIMaxBytes = 512
 	// clientNameMaxCodePoints is the M1 name ceiling, counted after NFC.
 	clientNameMaxCodePoints = 64
-	// clientNameMaxRawBytes bounds the input before normalization runs, at
-	// four bytes per allowed code point.
-	clientNameMaxRawBytes = 4 * clientNameMaxCodePoints
+	// clientNameMaxRawBytes bounds the input before normalization runs. M1
+	// counts code points after NFC, and NFC composition can collapse several
+	// code points into one, so a conforming name may arrive far longer than
+	// its normalized width. The gate is therefore the M1 registration body
+	// cap: no name a conforming body can carry is rejected here, and
+	// unbounded input still never reaches NFC.
+	clientNameMaxRawBytes = 4096
 )
 
 // loopbackRedirectHosts is the closed set of hosts M1 allows over plain http.
@@ -79,9 +83,10 @@ func ValidateRedirectURI(raw string) error {
 
 // ValidateClientName enforces the M1 client-name bounds and returns the NFC
 // canonical form: valid UTF-8, 1 to 64 Unicode code points after NFC, and no
-// control characters. The name is not trimmed, collapsed, or case-folded, and
-// input longer than four bytes per allowed code point is rejected before
-// normalization runs.
+// control characters. The name is not trimmed, collapsed, or case-folded. The
+// bound is on code points after NFC, so a decomposed spelling that composes
+// within the bound is accepted; only input past the M1 registration body cap
+// is rejected before normalization runs.
 func ValidateClientName(raw string) (canonical string, err error) {
 	if len(raw) == 0 || len(raw) > clientNameMaxRawBytes {
 		return "", ErrClientNameInvalid

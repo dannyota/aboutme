@@ -237,26 +237,44 @@ func TestValidateClientNameCodePointBounds(t *testing.T) {
 	}
 }
 
-func TestValidateClientNameRawByteCap(t *testing.T) {
+func TestValidateClientNamePreNormalizationGate(t *testing.T) {
 	t.Parallel()
 
-	// The raw byte cap is the O(1) gate in front of normalization: 4 bytes
-	// per allowed code point. A decomposed Hangul name normalizes to 64 code
-	// points but arrives as 576 bytes, so it is rejected before NFC runs;
-	// the same name in composed form (the usual wire form) is accepted.
+	// M1 bounds code points *after* NFC, so a conforming name can arrive in a
+	// decomposed form far longer than 64 code points: 64 decomposed Hangul
+	// syllables are 192 code points in 576 bytes and compose to exactly 64
+	// code points. Both that form and the composed wire form must be
+	// accepted, and both must canonicalize to the same stored name.
 	decomposed := strings.Repeat("\u1100\u1161\u11a8", 64)
 	composed := strings.Repeat("\uac01", 64)
 	if len(decomposed) != 576 || len(composed) != 192 {
 		t.Fatalf("fixtures hold %d and %d bytes, want 576 and 192", len(decomposed), len(composed))
 	}
-	if _, err := ValidateClientName(decomposed); !errors.Is(err, ErrClientNameInvalid) {
-		t.Errorf("ValidateClientName(576 raw bytes) error = %v, want ErrClientNameInvalid", err)
+	if utf8.RuneCountInString(decomposed) != 192 {
+		t.Fatalf("decomposed fixture holds %d code points, want 192", utf8.RuneCountInString(decomposed))
 	}
-	if got, err := ValidateClientName(composed); err != nil || got != composed {
-		t.Errorf("ValidateClientName(composed Hangul) = %q, %v; want the input unchanged and nil", got, err)
+	got, err := ValidateClientName(decomposed)
+	if err != nil {
+		t.Fatalf("ValidateClientName(decomposed Hangul, 576 bytes) error = %v, want nil", err)
 	}
-	if _, err := ValidateClientName(strings.Repeat("a", 257)); !errors.Is(err, ErrClientNameInvalid) {
-		t.Errorf("ValidateClientName(257 raw bytes) error = %v, want ErrClientNameInvalid", err)
+	if got != composed {
+		t.Error("ValidateClientName did not canonicalize the decomposed name to its composed form")
+	}
+	if n := utf8.RuneCountInString(got); n != 64 {
+		t.Errorf("canonical name holds %d code points, want 64", n)
+	}
+	if gotComposed, err := ValidateClientName(composed); err != nil || gotComposed != composed {
+		t.Errorf("ValidateClientName(composed Hangul) = %q, %v; want the input unchanged and nil", gotComposed, err)
+	}
+
+	// The gate itself sits at the M1 registration body cap, so it can never
+	// reject a name a conforming body could carry. Input at or beyond it is
+	// rejected: at the cap by the code-point bound, beyond it before
+	// normalization runs.
+	for _, n := range []int{4096, 4097, 100_000} {
+		if _, err := ValidateClientName(strings.Repeat("a", n)); !errors.Is(err, ErrClientNameInvalid) {
+			t.Errorf("ValidateClientName(%d raw bytes) error = %v, want ErrClientNameInvalid", n, err)
+		}
 	}
 }
 
