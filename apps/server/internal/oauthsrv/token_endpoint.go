@@ -40,6 +40,19 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		writeOAuthError(w, http.StatusUnsupportedMediaType)
 		return
 	}
+	var admissionTime time.Time
+	if s.tokenAdmission != nil {
+		admissionTime = s.clock()
+		allowed, retryAfter := s.tokenAdmission.AdmitToken(admissionTime, r)
+		if !allowed {
+			if retryAfter < 1 {
+				retryAfter = 1
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			writeOAuthError(w, http.StatusTooManyRequests)
+			return
+		}
+	}
 	form, err := decodeOAuthForm(r, map[string]bool{
 		"grant_type": true, "code": true, "redirect_uri": true, "client_id": true,
 		"code_verifier": true, "refresh_token": true,
@@ -47,6 +60,23 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeOAuthError(w, http.StatusBadRequest)
 		return
+	}
+	clientID, hasClientID := s.grantRateClientID(r.Context(), form)
+	var attempt grantAttempt
+	attemptResult := grantAttemptRelease
+	if hasClientID && s.tokenAdmission != nil {
+		var allowed bool
+		var retryAfter int
+		attempt, allowed, retryAfter = s.tokenAdmission.AdmitGrant(clientID, admissionTime)
+		if !allowed {
+			if retryAfter < 1 {
+				retryAfter = 1
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			writeOAuthError(w, http.StatusTooManyRequests)
+			return
+		}
+		defer func() { s.tokenAdmission.FinishGrant(attempt, attemptResult) }()
 	}
 	var response tokenResponse
 	switch form.Get("grant_type") {
@@ -67,6 +97,9 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		if errors.Is(err, errOAuthInvalidGrant) {
+			attemptResult = grantAttemptFailure
+		}
 		switch {
 		case errors.Is(err, errOAuthInvalidClient):
 			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_client", "The request is invalid.")
@@ -77,10 +110,31 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	attemptResult = grantAttemptSuccess
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"access_token":"` + response.AccessToken + `","token_type":"Bearer","expires_in":` + strconv.FormatInt(response.ExpiresIn, 10) + `,"refresh_token":"` + response.RefreshToken + `","scope":"` + response.Scope + `"}`))
+}
+
+func (s *Service) grantRateClientID(ctx context.Context, form url.Values) (uuid.UUID, bool) {
+	switch form.Get("grant_type") {
+	case "authorization_code":
+		clientID, err := uuid.Parse(form.Get("client_id"))
+		return clientID, err == nil && clientID != uuid.Nil
+	case "refresh_token":
+		kind, digest, err := ParseToken(form.Get("refresh_token"))
+		if err != nil || kind != TokenKindRefresh || isNilDependency(s.queries) {
+			return uuid.Nil, false
+		}
+		authority, err := s.queries.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
+		if err != nil || authority.OAuthToken.ClientID == uuid.Nil {
+			return uuid.Nil, false
+		}
+		return authority.OAuthToken.ClientID, true
+	default:
+		return uuid.Nil, false
+	}
 }
 
 var (

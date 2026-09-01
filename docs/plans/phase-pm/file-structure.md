@@ -72,9 +72,22 @@ the integration owner and are serialized.
 
 - New `apps/server/internal/oauthsrv/rate.go` and
   `apps/server/internal/mcpapi/rate.go` with tests.
+- Integration edits to `oauthsrv/{clients,consent,token_endpoint}.go` and tests
+  for configured caps, failed-grant reservations, and the session adapter.
+- `mcpapi/{server,errors}.go` and tests for route-owned body, rate, and
+  concurrency admission.
+- New `apps/server/internal/oauthsrv/session_http.go` and tests for the OpenAPI
+  consent and connected-agent session routes omitted from T05's service-only
+  ownership.
+- `apps/server/internal/auth/{handlers,csrf}.go` and tests for optional
+  authorize sessions and the consent route's exact JSON media-type response.
+- `apps/server/internal/api/router.go` and tests for the route-owned MCP body
+  limit.
+- `apps/server/internal/mcpapi/bearer_test.go` test-fixture transaction
+  isolation required by the multi-package live-DB gate.
 - `apps/server/internal/config/config.go` and tests.
 - `apps/server/cmd/server/main.go` and `cmd/server` tests.
-- `.env.example` (names only).
+- `.env.example`, `deploy/compose.yml`, and the focused Compose contract test.
 
 ## T10 — Consent page
 

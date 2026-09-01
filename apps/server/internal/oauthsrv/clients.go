@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -34,6 +36,26 @@ type registerAdmission interface {
 	AdmitRegister(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
 }
 
+type tokenAdmission interface {
+	AdmitToken(time.Time, *http.Request) (allowed bool, retryAfterSeconds int)
+	AdmitGrant(uuid.UUID, time.Time) (grantAttempt, bool, int)
+	FinishGrant(grantAttempt, grantAttemptResult)
+}
+
+type grantAttempt struct {
+	clientID uuid.UUID
+	leaseID  uint64
+	overflow bool
+}
+
+type grantAttemptResult uint8
+
+const (
+	grantAttemptRelease grantAttemptResult = iota
+	grantAttemptFailure
+	grantAttemptSuccess
+)
+
 // ServiceDependencies are the shared OAuth service dependencies. T05 and T06
 // extend Service on this stable surface without re-plumbing their handlers.
 type ServiceDependencies struct {
@@ -43,6 +65,8 @@ type ServiceDependencies struct {
 	Entropy           io.Reader
 	PublicOrigin      string
 	RegisterAdmission registerAdmission
+	TokenAdmission    tokenAdmission
+	LiveGrantLimit    int
 }
 
 // Service is the OAuth authorization-server service shared by Phase PM tasks.
@@ -53,6 +77,8 @@ type Service struct {
 	entropy           io.Reader
 	publicOrigin      string
 	registerAdmission registerAdmission
+	tokenAdmission    tokenAdmission
+	liveGrantLimit    int
 }
 
 // NewService validates its fixed dependencies and performs the startup M1
@@ -71,6 +97,10 @@ func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service
 		return nil, errors.New("oauth service: noncanonical public origin")
 	case isNilDependency(dependencies.RegisterAdmission):
 		return nil, errors.New("oauth service: nil register admission")
+	case isNilDependency(dependencies.TokenAdmission):
+		return nil, errors.New("oauth service: nil token admission")
+	case dependencies.LiveGrantLimit <= 0:
+		return nil, errors.New("oauth service: invalid live grant limit")
 	}
 
 	s := &Service{
@@ -80,6 +110,8 @@ func NewService(ctx context.Context, dependencies ServiceDependencies) (*Service
 		entropy:           dependencies.Entropy,
 		publicOrigin:      dependencies.PublicOrigin,
 		registerAdmission: dependencies.RegisterAdmission,
+		tokenAdmission:    dependencies.TokenAdmission,
+		liveGrantLimit:    dependencies.LiveGrantLimit,
 	}
 	if err := s.CollectIdleClients(ctx); err != nil {
 		return nil, fmt.Errorf("oauth service: startup idle-client GC: %w", err)

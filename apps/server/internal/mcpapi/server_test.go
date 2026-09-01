@@ -32,6 +32,8 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
+const maxMCPRequestBytes = 4 << 20
+
 type recordingAgentExecutor struct {
 	mu        sync.Mutex
 	calls     []resumeapi.AgentCall
@@ -89,6 +91,15 @@ func connectMCPClient(t *testing.T, endpoint, token, cookie string) *mcp.ClientS
 	return session
 }
 
+func mustTestMCPRates(t *testing.T) *RatePolicies {
+	t.Helper()
+	rates, err := NewRatePolicies(testMCPRateConfig())
+	if err != nil {
+		t.Fatalf("NewRatePolicies: %v", err)
+	}
+	return rates
+}
+
 func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
@@ -98,7 +109,7 @@ func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
 			Body: []byte(`{"data":[{"id":"01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f","revision":"1"}]}`),
 		},
 	}}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -142,7 +153,7 @@ func TestServer_WriteScopeDeniedBeforeResumeStateAndCookieCannotAuthenticate(t *
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	executor := &recordingAgentExecutor{}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -216,7 +227,7 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 			Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: h.clock.Now,
 			Coordinator: coordinator, RecoveryPool: h.pool,
 		})
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: resumes})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: resumes, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -484,7 +495,7 @@ func decodeStructuredState(t *testing.T, result *mcp.CallToolResult) map[string]
 func TestServer_RejectsBatchAndEnforcesFourMiBBoundary(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -535,7 +546,7 @@ func TestServer_JSONOnlyAcceptAndUnknownToolAreRejectedWithoutExecution(t *testi
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	executor := &recordingAgentExecutor{}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -574,7 +585,7 @@ func TestServer_UploadPhotoRejectsDecodedBytesOverExistingCeiling(t *testing.T) 
 	h := newBearerHarness(t, "resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
 	executor := &recordingAgentExecutor{}
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -599,7 +610,7 @@ func TestServer_UploadPhotoRejectsDecodedBytesOverExistingCeiling(t *testing.T) 
 func TestServer_SchemaFailuresUseClosedValidationError(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}})
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -613,6 +624,42 @@ func TestServer_SchemaFailuresUseClosedValidationError(t *testing.T) {
 		})
 		if err != nil || !result.IsError || toolErrorText(result) != "validation_failed" {
 			t.Fatalf("schema failure for %#v = %#v, error = %v", arguments, result, err)
+		}
+	}
+}
+
+func TestServer_ToolCallRateLimitReturnsClosedHTTPError(t *testing.T) {
+	h := newBearerHarness(t, "resumes:read")
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	cfg := testMCPRateConfig()
+	cfg.TokenRequests = 1
+	cfg.UserRequests = 10
+	rates, err := NewRatePolicies(cfg)
+	if err != nil {
+		t.Fatalf("NewRatePolicies: %v", err)
+	}
+	handler, err := NewServer(ServerDependencies{
+		Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: rates,
+		MaxRequestBodyBytes: maxMCPRequestBytes,
+	})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_resumes","arguments":{}}}`
+	for i := 1; i <= 2; i++ {
+		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer "+raw)
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Accept", "application/json, text/event-stream")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		if i == 1 && recorder.Code != http.StatusOK {
+			t.Fatalf("first tool call status = %d body=%s", recorder.Code, recorder.Body.String())
+		}
+		if i == 2 {
+			if recorder.Code != http.StatusTooManyRequests || recorder.Header().Get("Retry-After") != "60" || recorder.Body.String() != `{"error":"rate_limited"}` {
+				t.Fatalf("tool limit+1 = %d Retry-After %q body %q", recorder.Code, recorder.Header().Get("Retry-After"), recorder.Body.String())
+			}
 		}
 	}
 }

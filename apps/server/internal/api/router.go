@@ -148,9 +148,12 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	// may serve a stale result instead of checking live.
 	healthChain := NoStoreCache()(BodyLimit(HealthBodyLimitBytes)(mux))
 
-	// Every other route: NoStoreCache (outermost — see below), then
+	// Ordinary routes: NoStoreCache (outermost — see below), then
 	// RateLimit (so an over-limit client is rejected before the server
 	// spends any I/O reading its body), then BodyLimit, then the mux.
+	// Exact /mcp and photo-upload routes use routeOwnedBodyChain because their
+	// handlers enforce distinct 4 MiB and streaming multipart limits. Escaped
+	// and other near matches remain on the ordinary bounded chain.
 	//
 	// NoStoreCache is the DEFAULT cache policy here, not an incidental
 	// side effect of where it happens to sit: it is outermost specifically
@@ -167,7 +170,7 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	otherChain := NoStoreCache()(
 		RateLimit(RateLimiterConfig{TrustedProxies: opts.TrustedProxies, Clock: opts.Clock})(
 			BodyLimit(opts.BodyLimitBytes)(mux)))
-	photoUploadChain := NoStoreCache()(
+	routeOwnedBodyChain := NoStoreCache()(
 		RateLimit(RateLimiterConfig{TrustedProxies: opts.TrustedProxies, Clock: opts.Clock})(mux))
 
 	// Middleware order (outer -> inner): RequestID, SecurityHeaders,
@@ -200,8 +203,8 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 			public.ServeHTTP(w, r)
 			return
 		}
-		if isPhotoUploadPath(r.Method, r.URL.EscapedPath()) {
-			photoUploadChain.ServeHTTP(w, r)
+		if isPhotoUploadPath(r.Method, r.URL.EscapedPath()) || r.URL.EscapedPath() == "/mcp" {
+			routeOwnedBodyChain.ServeHTTP(w, r)
 			return
 		}
 		otherChain.ServeHTTP(w, r)

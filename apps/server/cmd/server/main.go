@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,10 +23,13 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
+	"github.com/dannyota/aboutme/apps/server/internal/mcpapi"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
 	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
@@ -122,6 +126,7 @@ func run() error {
 			return renderer.Probe(probeCtx, readinessRenderRequest(runtime.PublicOrigin))
 		},
 	})
+	sessionManager := auth.NewSessionManagerWithPool(pool)
 	resumeService := resumeapi.New(
 		resume.NewStore(pool, projector),
 		resume.NewIdempotencyStore(pool),
@@ -129,13 +134,17 @@ func run() error {
 		blobs,
 		resumeapi.Options{
 			Logger:         logger,
-			SessionManager: auth.NewSessionManager(store.New(pool)),
+			SessionManager: sessionManager,
 			PublicOrigin:   cfg.PublicOrigin,
 			TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
 			Coordinator:    coordinator,
 			RecoveryPool:   pool,
 		},
 	)
+	agentRoutes, err := newAgentAccessRoutes(ctx, cfg, pool, queries, resumeService, sessionManager)
+	if err != nil {
+		return fmt.Errorf("create agent access: %w", err)
+	}
 
 	handler := api.New(logger, readiness, api.Options{
 		// TrustedProxyCIDRs is validated by internal/config (required and
@@ -143,7 +152,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes)
+	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -170,6 +179,112 @@ func run() error {
 	cancelWorker()
 	<-workerDone
 	return err
+}
+
+type agentRouteHandlers struct {
+	AuthorizationMetadata http.Handler
+	ProtectedMetadata     http.Handler
+	Register              http.Handler
+	Authorize             http.Handler
+	Token                 http.Handler
+	Revoke                http.Handler
+	MCP                   http.Handler
+	Consent               http.Handler
+	AgentGrants           http.Handler
+	AgentGrant            http.Handler
+}
+
+func newAgentRouteRegistrar(enabled bool, registry []publicroots.Route, handlers agentRouteHandlers) (func(*http.ServeMux), error) {
+	if !enabled {
+		return func(*http.ServeMux) {}, nil
+	}
+	goRoots := make(map[string]bool, len(registry))
+	for _, route := range registry {
+		goRoots[route.Root] = route.Dispatch == publicroots.DispatchGo
+	}
+	for _, root := range []string{".well-known", "oauth", "mcp", "api"} {
+		if !goRoots[root] {
+			return nil, fmt.Errorf("agent access: public root %q is not dispatched to Go", root)
+		}
+	}
+	if handlers.AuthorizationMetadata == nil || handlers.ProtectedMetadata == nil || handlers.Register == nil ||
+		handlers.Authorize == nil || handlers.Token == nil || handlers.Revoke == nil || handlers.MCP == nil ||
+		handlers.Consent == nil || handlers.AgentGrants == nil || handlers.AgentGrant == nil {
+		return nil, errors.New("agent access: partial route handlers")
+	}
+	return func(mux *http.ServeMux) {
+		mux.Handle("/.well-known/oauth-authorization-server", handlers.AuthorizationMetadata)
+		mux.Handle("/.well-known/oauth-protected-resource", handlers.ProtectedMetadata)
+		mux.Handle("/oauth/register", handlers.Register)
+		mux.Handle("/oauth/authorize", handlers.Authorize)
+		mux.Handle("/oauth/token", handlers.Token)
+		mux.Handle("/oauth/revoke", handlers.Revoke)
+		mux.Handle("/mcp", handlers.MCP)
+		mux.Handle("/api/v1/oauth/consent", handlers.Consent)
+		mux.Handle("/api/v1/me/agents", handlers.AgentGrants)
+		mux.Handle("/api/v1/me/agents/{grantId}", handlers.AgentGrant)
+	}, nil
+}
+
+func newAgentAccessRoutes(ctx context.Context, cfg config.Config, pool *store.Pool, queries store.OAuthQueries,
+	resumes mcpapi.AgentExecutor, sessions *auth.SessionManager,
+) (func(*http.ServeMux), error) {
+	if err := cfg.ValidateAgentAccess(); err != nil {
+		return nil, err
+	}
+	if !cfg.AgentAccess.Enabled {
+		return newAgentRouteRegistrar(false, publicroots.Routes[:], agentRouteHandlers{})
+	}
+	a := cfg.AgentAccess
+	oauthRates, err := oauthsrv.NewRatePolicies(oauthsrv.RateConfig{
+		TrustedProxies:   api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		RegisterRequests: a.OAuthRegisterRequests, RegisterWindow: a.OAuthRegisterWindow,
+		TokenRequests: a.OAuthTokenRequests, TokenWindow: a.OAuthTokenWindow,
+		FailedGrantLimit: a.OAuthFailedGrantLimit, FailedGrantWindow: a.OAuthFailedGrantWindow,
+		MaxKeys: a.MaxRateKeys,
+	})
+	if err != nil {
+		return nil, err
+	}
+	oauthService, err := oauthsrv.NewService(ctx, oauthsrv.ServiceDependencies{
+		Pool: pool, Queries: queries, Clock: time.Now, Entropy: rand.Reader,
+		PublicOrigin: cfg.PublicOrigin, RegisterAdmission: oauthRates, TokenAdmission: oauthRates,
+		LiveGrantLimit: a.OAuthLiveGrantLimit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	bearer, err := mcpapi.NewBearer(mcpapi.BearerDependencies{Queries: queries, Clock: time.Now, PublicOrigin: cfg.PublicOrigin})
+	if err != nil {
+		return nil, err
+	}
+	mcpRates, err := mcpapi.NewRatePolicies(mcpapi.RateConfig{
+		TokenRequests: a.MCPTokenRequests, TokenWindow: a.MCPTokenWindow,
+		UserRequests: a.MCPUserRequests, UserWindow: a.MCPUserWindow,
+		ConcurrentPerUser: a.MCPConcurrentPerUser, MaxKeys: a.MaxRateKeys, Clock: time.Now,
+	})
+	if err != nil {
+		return nil, err
+	}
+	mcpHandler, err := mcpapi.NewServer(mcpapi.ServerDependencies{
+		Bearer: bearer, Resumes: resumes, Rates: mcpRates, MaxRequestBodyBytes: a.MCPBodyLimitBytes,
+	})
+	if err != nil {
+		return nil, err
+	}
+	authorize := auth.OptionalSession(sessions)(http.HandlerFunc(oauthService.HandleAuthorize))
+	return newAgentRouteRegistrar(true, publicroots.Routes[:], agentRouteHandlers{
+		AuthorizationMetadata: http.HandlerFunc(oauthService.HandleMetadata),
+		ProtectedMetadata:     http.HandlerFunc(oauthService.HandleProtectedResourceMetadata),
+		Register:              http.HandlerFunc(oauthService.HandleRegister),
+		Authorize:             authorize,
+		Token:                 http.HandlerFunc(oauthService.HandleToken),
+		Revoke:                http.HandlerFunc(oauthService.HandleRevoke),
+		MCP:                   mcpHandler,
+		Consent:               oauthService.ConsentHTTPHandler(sessions),
+		AgentGrants:           oauthService.AgentGrantsHTTPHandler(sessions),
+		AgentGrant:            oauthService.AgentGrantHTTPHandler(sessions),
+	})
 }
 
 func parsePublicRuntime(publicOrigin, renderOrigin, environment, appDigest, rendererDigest string) (publicRuntime, error) {

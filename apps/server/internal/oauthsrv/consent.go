@@ -21,6 +21,10 @@ var (
 	// ErrConsentInvalid is the closed failure for a malformed, forged, or stale
 	// stateless consent request. It never contains request material.
 	ErrConsentInvalid = errors.New("oauth consent invalid")
+	// ErrConsentNotFound is the session API's no-oracle client or redirect
+	// miss. It remains an ErrConsentInvalid for protocol callers that need one
+	// closed authorization failure.
+	ErrConsentNotFound = fmt.Errorf("%w: authorization client not found", ErrConsentInvalid)
 	// ErrGrantLimit is the closed M5 failure when a user would receive an
 	// eleventh live agent grant.
 	ErrGrantLimit = errors.New("oauth live grant limit")
@@ -57,7 +61,16 @@ type ConsentDecision struct {
 // name and canonical requested scopes for rendering.
 func (s *Service) ConsentContext(ctx context.Context, _ uuid.UUID, q ConsentQuery) (ConsentView, error) {
 	client, err := s.queries.GetOAuthClient(ctx, q.ClientID)
-	if err != nil || !registeredRedirect(client, q.RedirectURI) || validateConsentQuery(q) != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ConsentView{}, ErrConsentNotFound
+	}
+	if err != nil {
+		return ConsentView{}, fmt.Errorf("get OAuth consent client: %w", err)
+	}
+	if !registeredRedirect(client, q.RedirectURI) {
+		return ConsentView{}, ErrConsentNotFound
+	}
+	if validateConsentQuery(q) != nil {
 		return ConsentView{}, ErrConsentInvalid
 	}
 	scopes, _ := q.parsedScopes()
@@ -90,7 +103,16 @@ func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (string
 		}
 	}()
 	client, err := store.New(tx).GetOAuthClientForUpdate(ctx, request.ClientID)
-	if err != nil || !registeredRedirect(client, request.RedirectURI) || validateConsentQuery(request) != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrConsentNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("lock consent client: %w", err)
+	}
+	if !registeredRedirect(client, request.RedirectURI) {
+		return "", ErrConsentNotFound
+	}
+	if validateConsentQuery(request) != nil {
 		return "", ErrConsentInvalid
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -147,7 +169,16 @@ func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request 
 	}()
 	qtx := store.New(tx)
 	client, err := qtx.GetOAuthClientForUpdate(ctx, request.ClientID)
-	if err != nil || !registeredRedirect(client, request.RedirectURI) || validateConsentQuery(request) != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrConsentNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("lock consent client: %w", err)
+	}
+	if !registeredRedirect(client, request.RedirectURI) {
+		return "", ErrConsentNotFound
+	}
+	if validateConsentQuery(request) != nil {
 		return "", ErrConsentInvalid
 	}
 	if _, err := qtx.GetUserForUpdate(ctx, userID); err != nil {
@@ -162,7 +193,7 @@ func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request 
 		if countErr != nil {
 			return "", fmt.Errorf("count live OAuth grants: %w", countErr)
 		}
-		if count >= 10 {
+		if count >= int64(s.liveGrantLimit) {
 			return "", ErrGrantLimit
 		}
 	}

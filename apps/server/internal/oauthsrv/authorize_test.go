@@ -42,10 +42,11 @@ func newAuthorizeHarness(t *testing.T) (*Service, *store.Queries, store.OAuthCli
 		_, _ = q.DeleteOAuthClient(context.Background(), client.ID)
 		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID)
 	})
+	admission := &registrationAdmissionFake{allowed: true}
 	s, err := NewService(ctx, ServiceDependencies{
 		Pool: pool, Queries: q, Clock: func() time.Time { return now },
 		Entropy: testEntropy(32 * 32), PublicOrigin: "https://aboutme.example",
-		RegisterAdmission: &registrationAdmissionFake{allowed: true},
+		RegisterAdmission: admission, TokenAdmission: admission, LiveGrantLimit: 10,
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)

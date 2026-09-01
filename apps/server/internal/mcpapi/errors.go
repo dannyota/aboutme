@@ -16,6 +16,7 @@ func (e *mcpError) Error() string { return e.code }
 var (
 	errScopeDenied            = &mcpError{status: http.StatusForbidden, code: "scope_denied"}
 	errPayloadTooLarge        = &mcpError{status: http.StatusRequestEntityTooLarge, code: "payload_too_large"}
+	errRateLimited            = &mcpError{status: http.StatusTooManyRequests, code: "rate_limited"}
 	errInvalidRequest         = &mcpError{status: http.StatusBadRequest, code: "invalid_request"}
 	errAgentAccessUnavailable = &mcpError{status: http.StatusServiceUnavailable, code: "agent_access_unavailable"}
 	errInternal               = &mcpError{status: http.StatusInternalServerError, code: "internal_error"}

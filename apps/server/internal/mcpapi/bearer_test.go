@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -43,13 +44,24 @@ func newBearerHarness(t *testing.T, scopes string) *bearerHarness {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	client, err := q.CreateOAuthClient(ctx, store.CreateOAuthClientParams{ClientName: "Bearer agent", RedirectURIs: json.RawMessage(`["https://agent.example/callback"]`), CreatedAt: clock.Now()})
+	var client store.OAuthClient
+	var grant store.OAuthGrant
+	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		qtx := store.New(tx)
+		var createErr error
+		client, createErr = qtx.CreateOAuthClient(ctx, store.CreateOAuthClientParams{
+			ClientName: "Bearer agent", RedirectURIs: json.RawMessage(`["https://agent.example/callback"]`), CreatedAt: clock.Now(),
+		})
+		if createErr != nil {
+			return createErr
+		}
+		grant, createErr = qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{
+			UserID: user.ID, ClientID: client.ID, Scopes: scopes, CreatedAt: clock.Now(),
+		})
+		return createErr
+	})
 	if err != nil {
-		t.Fatalf("CreateOAuthClient: %v", err)
-	}
-	grant, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: scopes, CreatedAt: clock.Now()})
-	if err != nil {
-		t.Fatalf("UpsertOAuthGrant: %v", err)
+		t.Fatalf("create bearer authority: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = q.DeleteOAuthClient(context.Background(), client.ID)
