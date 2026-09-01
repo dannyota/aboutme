@@ -372,6 +372,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/oauth/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the pending agent consent request
+         * @description Re-validates the complete authorization request against the registered client and returns only its display name and requested scope list. `state` is echoed by the decision operation, but is never logged or returned as a separate response field. This read is safe and does not require CSRF.
+         */
+        get: operations["getOAuthConsent"];
+        put?: never;
+        /**
+         * Approve or deny agent consent
+         * @description Re-validates every authorization request field against the registered client before acting. Approval records the account-wide grant and redirects to the exact registered redirect URI with the authorization result; denial redirects there with `error=access_denied`. The redirect carries the submitted `state` when present. No token or code is returned as a response field.
+         */
+        post: operations["postOAuthConsentDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List connected agent grants
+         * @description Lists every live agent grant for the authenticated account. The response contains display metadata and timestamps only; it never contains token, authorization-code, or other credential material.
+         */
+        get: operations["listAgentGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/agents/{grantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A connected agent grant's id (`oauth_grants.id`, `uuidv7`).
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000030
+                 */
+                grantId: components["parameters"]["GrantID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a connected agent grant
+         * @description Revokes the live grant and its token family. Unknown, already revoked, or foreign grant IDs all return the same 404 response and are not distinguishable.
+         */
+        delete: operations["revokeAgentGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/resumes": {
         parameters: {
             query?: never;
@@ -835,6 +905,62 @@ export interface components {
                  * @example https://accounts.google.com/o/oauth2/v2/auth?...
                  */
                 authorizeUrl: string;
+            };
+        };
+        /**
+         * @description Account-wide permission granted to a connected agent.
+         * @enum {string}
+         */
+        OAuthConsentScope: "resumes:read" | "resumes:write";
+        /** @description Strict JSON representation of the validated authorization request and the user's decision. Unknown and duplicate fields are rejected. */
+        OAuthConsentDecisionRequest: {
+            /** Format: uuid */
+            client_id: string;
+            /**
+             * Format: uri
+             * @description Must exactly match one redirect URI registered by the client.
+             */
+            redirect_uri: string;
+            /** @constant */
+            response_type: "code";
+            /** @enum {string} */
+            scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write";
+            /** @description Opaque client state, echoed on redirect when present. */
+            state?: string;
+            code_challenge: string;
+            /** @constant */
+            code_challenge_method: "S256";
+            /** @enum {string} */
+            decision: "approve" | "deny";
+        };
+        OAuthConsentResponse: {
+            data: {
+                clientName: string;
+                scopes: components["schemas"]["OAuthConsentScope"][];
+            };
+        };
+        OAuthConsentDecisionResponse: {
+            data: {
+                /**
+                 * Format: uri-reference
+                 * @description Redirect URL on the exact registered redirect URI only. It carries the authorization result and optional client state; it is never an arbitrary caller-selected destination.
+                 */
+                redirectTo: string;
+            };
+        };
+        OAuthAgentGrant: {
+            /** Format: uuid */
+            id: string;
+            clientName: string;
+            scopes: components["schemas"]["OAuthConsentScope"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+        };
+        OAuthAgentGrantsResponse: {
+            data: {
+                grants: components["schemas"]["OAuthAgentGrant"][];
             };
         };
         /** @description Failure response wrapper. */
@@ -2689,6 +2815,11 @@ export interface components {
          */
         SessionID: string;
         /**
+         * @description A connected agent grant's id (`oauth_grants.id`, `uuidv7`).
+         * @example 018f5b6a-9a3e-7c21-8b1e-000000000030
+         */
+        GrantID: string;
+        /**
          * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
          */
@@ -3660,6 +3791,347 @@ export interface operations {
                      *       "error": {
                      *         "code": "not_found",
                      *         "message": "no such session"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getOAuthConsent: {
+        parameters: {
+            query: {
+                client_id: string;
+                /** @description Must exactly match one redirect URI registered by the client. */
+                redirect_uri: string;
+                response_type: "code";
+                /** @description One or both account-wide scopes. This is a closed list, not free text. Multiple scopes use OAuth's canonical space-delimited form. */
+                scope: "resumes:read" | "resumes:write" | "resumes:read resumes:write";
+                /** @description Opaque client state, bounded to 512 bytes and echoed on redirect. */
+                state?: string;
+                /** @description RFC 7636 S256 challenge (43 base64url characters). */
+                code_challenge: string;
+                code_challenge_method: "S256";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered client name and requested scopes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "clientName": "Resume assistant",
+                     *         "scopes": [
+                     *           "resumes:read"
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OAuthConsentResponse"];
+                };
+            };
+            /** @description The authorization request is malformed or invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "request_invalid",
+                     *         "message": "authorization request is invalid"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid session cookie. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "session_required",
+                     *         "message": "a valid session is required"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The client or registered redirect URI was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "no such authorization client"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postOAuthConsentDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Strict JSON request, no unknown or duplicate fields, ≤ 4,096 bytes. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthConsentDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Redirect destination for the consent result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "redirectTo": "https://agent.example/callback?state=opaque"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OAuthConsentDecisionResponse"];
+                };
+            };
+            /** @description The authorization request or decision body is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "request_invalid",
+                     *         "message": "authorization request is invalid"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Missing or invalid session cookie. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "session_required",
+                     *         "message": "a valid session is required"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description CSRF or exact-Origin validation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "csrf_rejected",
+                     *         "message": "CSRF validation failed"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The client or registered redirect URI was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "no such authorization client"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Request body exceeds 4,096 bytes. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "body_too_large",
+                     *         "message": "request body is too large"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+        };
+    };
+    listAgentGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's live connected-agent grants. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "grants": [
+                     *           {
+                     *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000030",
+                     *             "clientName": "Resume assistant",
+                     *             "scopes": [
+                     *               "resumes:read",
+                     *               "resumes:write"
+                     *             ],
+                     *             "createdAt": "2026-09-01T09:00:00Z",
+                     *             "lastUsedAt": null
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["OAuthAgentGrantsResponse"];
+                };
+            };
+            /** @description Missing or invalid session cookie. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "session_required",
+                     *         "message": "a valid session is required"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeAgentGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A connected agent grant's id (`oauth_grants.id`, `uuidv7`).
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000030
+                 */
+                grantId: components["parameters"]["GrantID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Grant revoked. No response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid session cookie. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "session_required",
+                     *         "message": "a valid session is required"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description CSRF or exact-Origin validation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "csrf_rejected",
+                     *         "message": "CSRF validation failed"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No live grant with this ID belongs to the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "no such agent grant"
                      *       }
                      *     }
                      */
