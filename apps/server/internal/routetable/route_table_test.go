@@ -390,6 +390,22 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "readyz", method: http.MethodGet, path: "/readyz", want: wantGo},
 		{name: "healthz_subpath", method: http.MethodGet, path: "/healthz/nope", want: wantGo},
 		{name: "healthz_markdown", method: http.MethodGet, path: "/healthz.md", want: wantGo},
+		// v6 agent-access roots. `/oauth` and `/oauth.md` also satisfy the
+		// public-slug grammar, so their fixed-root precedence is not
+		// observable from the backend alone; `/authorize` below is the case
+		// that distinguishes a fixed Nuxt root from a Go-served slug.
+		{name: "well_known_exact", method: http.MethodGet, path: "/.well-known", want: wantGo},
+		{name: "well_known_authorization_server", method: http.MethodGet, path: "/.well-known/oauth-authorization-server", want: wantGo},
+		{name: "well_known_protected_resource", method: http.MethodGet, path: "/.well-known/oauth-protected-resource", want: wantGo},
+		{name: "oauth_root", method: http.MethodGet, path: "/oauth", want: wantGo},
+		{name: "oauth_authorize", method: http.MethodGet, path: "/oauth/authorize", want: wantGo},
+		{name: "oauth_token", method: http.MethodPost, path: "/oauth/token", want: wantGo},
+		{name: "oauth_register", method: http.MethodPost, path: "/oauth/register", want: wantGo},
+		{name: "oauth_revoke", method: http.MethodPost, path: "/oauth/revoke", want: wantGo},
+		{name: "oauth_markdown", method: http.MethodGet, path: "/oauth.md", want: wantGo},
+		{name: "mcp_endpoint", method: http.MethodPost, path: "/mcp", want: wantGo},
+		{name: "mcp_subpath", method: http.MethodPost, path: "/mcp/anything", want: wantGo},
+
 		{name: "minimum_slug", method: http.MethodGet, path: "/a1-b", want: wantGo},
 		{name: "maximum_slug", method: http.MethodGet, path: "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", want: wantGo},
 		{name: "minimum_markdown_slug", method: http.MethodGet, path: "/a1-b.md", want: wantGo},
@@ -407,6 +423,12 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "nuxt_assets", method: http.MethodGet, path: "/_nuxt/app.js", want: wantWeb},
 		{name: "login", method: http.MethodGet, path: "/login", want: wantWeb},
 		{name: "login_markdown", method: http.MethodGet, path: "/login.md", want: wantWeb},
+		// The consent page is a fixed Nuxt root whose name also satisfies
+		// the public-slug grammar; without its registry row it would be
+		// proxied to Go as a resume slug instead.
+		{name: "authorize_consent_page", method: http.MethodGet, path: "/authorize", want: wantWeb},
+		{name: "authorize_query", method: http.MethodGet, path: "/authorize?client_id=x", want: wantWeb},
+		{name: "authorize_markdown", method: http.MethodGet, path: "/authorize.md", want: wantWeb},
 		{name: "unmatched_editor_route", method: http.MethodGet, path: "/resume/editor/summary", want: wantWeb},
 		{name: "nested_md_does_not_match_go", method: http.MethodGet, path: "/nested/path.md", want: wantWeb},
 		{name: "too_short_slug", method: http.MethodGet, path: "/abc", want: wantWeb},
