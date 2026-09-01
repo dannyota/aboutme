@@ -111,11 +111,13 @@ export interface SignInWithGoogleOptions {
   readonly fromLoginPage?: boolean;
   /** Activate the login link and authorize button by keyboard, not click. */
   readonly keyboard?: boolean;
+  /** Expected same-origin callback path (default: /app/resumes). */
+  readonly returnPath?: string;
 }
 
 // signInWithGoogle completes a provider login: it follows the login anchor to
 // the same-origin authorize page, resolves the named local account, and
-// returns after the callback lands on the home page. The local provider
+// returns after the callback lands on the expected path. The local provider
 // pre-selects only the development user, so that label is proven pre-checked
 // while any other account is selected explicitly.
 export async function signInWithGoogle(
@@ -144,8 +146,11 @@ export async function signInWithGoogle(
   } else {
     await account.check();
   }
+  const returnPath = options.returnPath ?? '/app/resumes';
   await Promise.all([
-    page.waitForURL((url) => url.origin === ALLOWED_ORIGIN && url.pathname === '/'),
+    page.waitForURL((url) =>
+      url.origin === ALLOWED_ORIGIN && url.pathname === returnPath
+    ),
     activate(page.getByRole('button', { name: 'Continue with Google' })),
   ]);
 }

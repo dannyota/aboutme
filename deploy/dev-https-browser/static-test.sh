@@ -13,7 +13,18 @@ fail() {
   exit 1
 }
 
-readonly -a SPEC_FILES=(playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts harness-lib.ts)
+readonly -a SPEC_FILES=(
+  playwright.config.ts
+  auth.spec.ts
+  transport.spec.ts
+  editor.spec.ts
+  public.spec.ts
+  password-auth.spec.ts
+  mcp.spec.ts
+  editor-fixtures.ts
+  network-policy.ts
+  harness-lib.ts
+)
 for file in Dockerfile package.json package-lock.json run.sh "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
@@ -139,7 +150,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public | password-auth)
+  transport | editor | public | password-auth | mcp)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -280,6 +291,17 @@ image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
 [ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = editor ] ||
   fail 'editor mode was not passed after the verified image ID'
 
+readonly MCP_EVIDENCE=$WORK/mcp-evidence
+install -d -m 0700 "$MCP_EVIDENCE"
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_EVIDENCE" mcp
+tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
+grep -Fxq mcp "$READABLE_LOG" || fail 'mcp mode did not reach the image'
+image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
+[ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = mcp ] ||
+  fail 'mcp mode was not passed after the verified image ID'
+
 readonly PASSWORD_INPUT=$WORK/password-input
 readonly PASSWORD_EVIDENCE=$WORK/password-evidence
 install -d -m 0700 "$PASSWORD_INPUT" "$PASSWORD_EVIDENCE"
@@ -311,7 +333,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, or password-auth' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, or mcp' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -341,6 +363,8 @@ grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
 grep -Fqx "const timeout = mode === 'editor' || mode === 'public' || mode === 'password-auth'" \
   "$SOURCE/playwright.config.ts" || fail 'editor/public/password timeout is not explicitly bounded'
+grep -Eq "\|\| mode === ['\"]mcp['\"]" "$SOURCE/playwright.config.ts" ||
+  fail 'mcp timeout is not explicitly bounded'
 grep -Fq '  timeout,' "$SOURCE/playwright.config.ts" ||
   fail 'Playwright does not use the bounded mode timeout'
 
@@ -495,6 +519,14 @@ if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
   <<<"$PASSWORD_LIST_OUTPUT"; then
   fail 'password-auth mode listed the auth proof'
 fi
+readonly MCP_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=mcp \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
+grep -Fq 'proves MCP agent access over trusted HTTPS' \
+  <<<"$MCP_LIST_OUTPUT" || fail 'Playwright could not compile and list the MCP proof'
+if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
+  <<<"$MCP_LIST_OUTPUT"; then
+  fail 'mcp mode listed the auth proof'
+fi
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
@@ -599,11 +631,18 @@ editor-fail)
   printf '%s\n' 'editor-stage:photo-session'
   exit 1
   ;;
+mcp-fail)
+  printf '%s\n' 'browser-secret-must-not-escape'
+  printf '%s\n' 'mcp-stage:exchange-token'
+  printf '%s\n' 'mcp-stage:list-tools'
+  exit 1
+  ;;
 malformed)
   case " $* " in
   *' editor.spec.ts '*) evidence=editor-proof.json ;;
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
   *' password-auth.spec.ts '*) evidence=password-proof.json ;;
+  *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -613,6 +652,7 @@ oversized)
   *' editor.spec.ts '*) evidence=editor-proof.json ;;
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
   *' password-auth.spec.ts '*) evidence=password-proof.json ;;
+  *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -649,6 +689,17 @@ JSON
   "scenario": "password-authentication",
   "schemaVersion": 1,
   "steps": {"differentEmailLink": true, "newPasswordLogin": true, "oldPasswordRejected": true, "oldSessionsRevoked": true, "passwordAdded": true, "passwordLogin": true, "providerOnlyLogin": true, "registerAccepted": true, "reset": true, "resetReplayRejected": true, "verifiedWithoutSession": true}
+}
+JSON
+    ;;
+  *' mcp.spec.ts '*)
+    cat >"$FAKE_INSIDE_EVIDENCE/mcp-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "mcp-agent-access",
+  "schemaVersion": 1,
+  "steps": {"clientRegistered": true, "authorizeRedirected": true, "consentApproved": true, "tokenExchanged": true, "toolsListed": true, "resumeCreated": true, "entryUpserted": true, "editorVisible": true, "grantRevoked": true, "revokedRejected": true}
 }
 JSON
     ;;
@@ -739,7 +790,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, or password-auth' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, or mcp' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -822,6 +873,17 @@ grep -Fxq 'dev-https-browser: editor-stage:photo-session' <<<"$output" ||
   fail 'editor failure did not expose its last bounded stage'
 if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
   fail 'editor failure leaked volatile output'
+fi
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=mcp-fail PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside mcp 2>&1); then
+  fail 'mcp browser failure was accepted'
+fi
+grep -Fxq 'dev-https-browser: mcp-stage:list-tools' <<<"$output" ||
+  fail 'mcp failure did not expose its last bounded stage'
+if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
+  fail 'mcp failure leaked volatile output'
 fi
 
 reset_inside
@@ -939,5 +1001,35 @@ fi
 grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
   fail 'malformed password-auth evidence returned the wrong diagnostic'
 rm -- "$INSIDE_INPUT/mail-capture-token"
+
+reset_inside
+readonly MCP_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside mcp)
+grep -Fq 'dev-https-browser MCP agent access proof: PASS' \
+  <<<"$MCP_INSIDE_OUTPUT" ||
+  fail 'inside-container mcp success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts mcp.spec.ts' "$BROWSER_LOG" ||
+  fail 'focused mcp invocation drifted'
+grep -Fxq 'MODE=mcp' "$BROWSER_LOG" ||
+  fail 'mcp mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/mcp-proof.json" ] ||
+  fail 'mcp evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/mcp-proof.json")" = 600 ] ||
+  fail 'mcp evidence mode drifted'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside mcp 2>&1); then
+  fail 'malformed mcp evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed mcp evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside mcp 2>&1); then
+  fail 'oversized mcp evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
+  fail 'oversized mcp evidence returned the wrong diagnostic'
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

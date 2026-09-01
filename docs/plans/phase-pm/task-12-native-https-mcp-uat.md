@@ -39,16 +39,23 @@ Harness integration follows the mounted-spec model: add `mcp.spec.ts` to
 fetches stay on the trusted origin inside the existing network firewall; use the
 Playwright MCP server only as an authoring aid.
 
+The HTTPS lifecycle must set `MCP_ENABLED=true` for its isolated server and pin
+that setting in `dev-https-test.sh`; no global or daily native default is
+changed. `playwright.config.ts` must accept the `mcp` mode. The existing auth
+spec and shared provider-login helper must expect `/app/resumes`, matching the
+approved provider-login default introduced before T10, before the required auth
+regression can pass.
+
 ## TDD cycle
 
-- [ ] Extend `static-test.sh` and `makefile-safety-test.sh` RED for the new
+- [x] Extend `static-test.sh` and `makefile-safety-test.sh` RED for the new
       mode, spec file, and evidence schema; run both to observe the exact
       failures.
-- [ ] Write `mcp.spec.ts` against the live harness using `harness-lib`
+- [x] Write `mcp.spec.ts` against the live harness using `harness-lib`
       (diagnostics, firewall, login, hydration waits); no fixed sleeps.
-- [ ] Land the check-script/run.sh/Makefile wiring; rerun both contract tests to
+- [x] Land the check-script/run.sh/Makefile wiring; rerun both contract tests to
       GREEN.
-- [ ] Live run:
+- [x] Live run:
 
   ```sh
   make dev-native-down && make dev-https
@@ -58,7 +65,7 @@ Playwright MCP server only as an authoring aid.
 
   All M9 steps true, all error counters zero, evidence mode 0600.
 
-- [ ] Rerun `make dev-https-auth-check` to prove the existing proofs still pass
+- [x] Rerun `make dev-https-auth-check` to prove the existing proofs still pass
       beside the new mode, then restore the native stack.
 
 ## Adversarial checklist

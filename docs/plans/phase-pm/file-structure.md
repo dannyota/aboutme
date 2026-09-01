@@ -110,9 +110,15 @@ the integration owner and are serialized.
 
 ## T12 — Native HTTPS MCP UAT (owner)
 
+- `scripts/dev-https.sh` and `scripts/dev-https-test.sh` (enable MCP in the
+  isolated HTTPS server environment and pin that lifecycle contract).
 - `scripts/dev-https-check.sh` (new `mcp` mode).
-- `deploy/dev-https-browser/run.sh` (spec list, evidence schema, mode map).
+- `deploy/dev-https-browser/run.sh` and `playwright.config.ts` (spec list,
+  evidence schema, mode map, and timeout).
 - New `deploy/dev-https-browser/mcp.spec.ts`.
+- `deploy/dev-https-browser/auth.spec.ts` and `harness-lib.ts` (retain the
+  provider-login proof after the approved default return path changed to
+  `/app/resumes`).
 - `deploy/dev-https-browser/static-test.sh` and
   `scripts/test/makefile-safety-test.sh` contract updates.
 - `Makefile` `dev-https-mcp-check` target and AGENTS.md check-table row.

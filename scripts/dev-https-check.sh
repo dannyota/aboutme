@@ -34,6 +34,7 @@ readonly -a SPEC_SOURCES=(
   editor.spec.ts
   public.spec.ts
   password-auth.spec.ts
+  mcp.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -58,9 +59,10 @@ password-auth)
   evidence_prefix=password
   TARGET=dev-https-password-check
   ;;
+mcp) evidence_prefix=mcp ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp'
   ;;
 esac
 
@@ -136,9 +138,14 @@ fi
 
 staging=
 password_input=
+mcp_fixture=
+mcp_seeded=0
 cleanup() {
   [ -z "$staging" ] || rm -rf -- "$staging"
   [ -z "$password_input" ] || rm -rf -- "$password_input"
+  if [ "$mcp_seeded" -eq 1 ] && [ -n "$mcp_fixture" ]; then
+    "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 
@@ -177,6 +184,15 @@ if [ "$MODE" = password-auth ]; then
   "$REPO/.dev/bin/password-auth-fixture" seed --database-url "$NATIVE_DSN"
   curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
     "http://127.0.0.1:20444/api/messages" >/dev/null
+elif [ "$MODE" = mcp ]; then
+  install -d -m 0700 "$REPO/.dev/bin"
+  mcp_fixture=$REPO/.dev/bin/mcp-uat-fixture
+  (cd "$REPO/apps/server" &&
+    go build -o "$mcp_fixture" ./cmd/mcp-uat-fixture) ||
+    fail 'MCP fixture build failed'
+  "$mcp_fixture" cleanup --database-url "$NATIVE_DSN"
+  mcp_seeded=1
+  "$mcp_fixture" seed --database-url "$NATIVE_DSN"
 fi
 
 evidence=$(mktemp -d "$EVIDENCE_ROOT/$evidence_prefix.XXXXXX")
@@ -190,6 +206,12 @@ status=0
 
 if [ "$MODE" = password-auth ]; then
   "$REPO/.dev/bin/password-auth-fixture" cleanup --database-url "$NATIVE_DSN"
+elif [ "$MODE" = mcp ]; then
+  if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN"; then
+    mcp_seeded=0
+  else
+    status=1
+  fi
 fi
 [ "$status" -eq 0 ] || fail 'browser proof failed'
 
