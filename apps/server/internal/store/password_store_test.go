@@ -93,7 +93,13 @@ func newPasswordStoreUser(ctx context.Context, t *testing.T, q *store.Queries) u
 // (next_attempt_at == now), so claim tests observe it without a timing race.
 func newPendingVerifyJob(ctx context.Context, t *testing.T, q *store.Queries, regID uuid.UUID) store.AuthEmailJob {
 	t.Helper()
-	now := time.Now().UTC()
+	return newPendingVerifyJobAt(ctx, t, q, regID, time.Now().UTC())
+}
+
+func newPendingVerifyJobAt(
+	ctx context.Context, t *testing.T, q *store.Queries, regID uuid.UUID, now time.Time,
+) store.AuthEmailJob {
+	t.Helper()
 	keyID := "k-test"
 	job, err := q.CreateAuthEmailJob(ctx, store.CreateAuthEmailJobParams{
 		ID:             uuid.New(),
@@ -214,11 +220,19 @@ func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 	lockExistingAuthEmailJobs(ctx, t, pool)
 	seed := store.New(pool) // committed so both claimers can see the jobs
 
+	unrelatedReg := newPasswordRegistration(ctx, t, seed)
+	newPendingVerifyJob(ctx, t, seed, unrelatedReg)
+	// Another package can commit a due job after the blocker takes its row-lock
+	// snapshot. Keep those rows ineligible under this test's simulated clock.
+	fixtureNow := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	reg1 := newPasswordRegistration(ctx, t, seed)
 	reg2 := newPasswordRegistration(ctx, t, seed)
-	fixture1 := newPendingVerifyJob(ctx, t, seed, reg1)
-	fixture2 := newPendingVerifyJob(ctx, t, seed, reg2)
+	fixture1 := newPendingVerifyJobAt(ctx, t, seed, reg1, fixtureNow)
+	fixture2 := newPendingVerifyJobAt(ctx, t, seed, reg2, fixtureNow)
 	t.Cleanup(func() {
+		if _, err := seed.DeletePasswordRegistration(context.Background(), unrelatedReg); err != nil {
+			t.Errorf("cleanup delete unrelated registration: %v", err)
+		}
 		if _, err := seed.DeletePasswordRegistration(context.Background(), reg1); err != nil {
 			t.Errorf("cleanup delete registration: %v", err)
 		}
@@ -227,7 +241,7 @@ func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 		}
 	})
 
-	now := time.Now().UTC()
+	now := fixtureNow
 	tx1, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("Begin tx1: %v", err)
