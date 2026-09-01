@@ -22,6 +22,8 @@ One Playwright process proves the M9 scenario over the trusted HTTPS harness at
 3. Node-side: exchange the code with the verifier → `tokenExchanged`; JSON-RPC
    `initialize` + `tools/list` over `/mcp` → `toolsListed` (exactly fifteen
    tools); `create_resume` + `upsert_entry` → `resumeCreated`, `entryUpserted`.
+   Every `/mcp` fetch sends `Accept: application/json, text/event-stream` — the
+   go-sdk stateless handler 400s without both values.
 4. Browser: open the editor and assert the agent-created content renders →
    `editorVisible`.
 5. Browser: revoke the grant in Connected agents → `grantRevoked`. Node-side:
@@ -70,6 +72,6 @@ Playwright MCP server only as an authoring aid.
 
 ## Handoff
 
-Report the eleven step booleans, error counters, evidence path/size, and
+Report the ten step booleans, error counters, evidence path/size, and
 contract-test GREEN lines. Suggested commit:
 `test(mcp): prove agent access over native HTTPS`.

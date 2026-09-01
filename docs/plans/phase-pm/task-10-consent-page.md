@@ -13,10 +13,14 @@
   and offers Approve/Deny. Both actions call `postOAuthConsentDecision` through
   the existing CSRF-protected mutation path and navigate the browser to the
   returned `redirectTo` value with a full-page navigation.
-- Unauthenticated visits rely on the existing auth middleware redirect to
-  `/login?next=…`; this task verifies the round trip preserves the full query
-  and reports (does not silently fix) any bounded gap in the login `next`
-  handling.
+- No auth middleware or login `next` support exists today (every current guard
+  is a bare `navigateTo('/login')`, and `login.vue` hardcodes `/app/resumes`
+  after login). This task builds both bounded pieces: the consent page's own
+  session guard redirects unauthenticated visitors to
+  `/login?next=<url-encoded full path+query>`, and `login.vue` honors a
+  validated `next` after any successful login (provider or password) —
+  same-origin relative path only per M8, fallback `/app/resumes`. Other bare
+  `navigateTo('/login')` call sites are out of scope and unchanged.
 - Error states are closed: invalid request → fixed error copy with no parameter
   echo; expired session mid-decision → login redirect preserving the query.
   Loading, keyboard operation, focus management, light/dark themes, and the
@@ -31,6 +35,10 @@
       exact body, navigation uses `redirectTo` verbatim, closed error mapping
       for each API failure.
 - [ ] Write composable REDs: request shaping, error taxonomy, no retry on 4xx.
+- [ ] Write login `next` REDs against `login.vue`: absent → `/app/resumes`;
+      valid relative path with query → honored verbatim; `//evil`,
+      `https://evil`, `javascript:`, over-length, and non-leading-slash values →
+      fallback. Provider and password login paths both honored.
 - [ ] Write a login-round-trip RED at the router level: visiting
       `/authorize?x=1` unauthenticated lands on login with `next` containing the
       full query; completing login returns to it.

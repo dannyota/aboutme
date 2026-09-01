@@ -120,8 +120,10 @@ enforcement authority afterwards.
 - `/oauth/authorize` (GET) validates the full request against the client row,
   then 302s an authenticated browser to `/authorize?<validated-query>`; an
   unauthenticated browser goes to `/login?next=<url-encoded authorize path>` and
-  returns with the query intact. `next` stays a same-origin relative path under
-  the existing login redirect rules.
+  returns with the query intact. The login page has no `next` support today —
+  T10 builds it: `next` is honored only as a same-origin relative path (leading
+  `/`, not `//`, no scheme, ≤ 2,048 bytes); anything else falls back to the
+  current `/app/resumes` destination.
 - The consent read operation re-validates the query server-side and returns only
   client name and scopes. The decision POST carries the exact request parameters
   plus `decision` (`approve`/`deny`); the server re-validates everything against

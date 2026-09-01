@@ -15,7 +15,8 @@ the integration owner and are serialized.
   consumers named by the current generator.
 - Runtime v6 references in `scripts/dev-native.sh`, `scripts/dev-https.sh`,
   `scripts/dev-https-test.sh`, and `deploy/dev-https-browser/static-test.sh`.
-- Route-table and public-root contract tests affected by the eight new roots.
+- Route-table and public-root contract tests affected by the four new root rows
+  (`.well-known`, `oauth`, `mcp`, `authorize`).
 
 ## T01 — OAuth storage
 
@@ -63,6 +64,9 @@ the integration owner and are serialized.
   including the go-sdk client integration test.
 - Shared-validation extraction inside `apps/server/internal/resumeapi`
   (`validate.go` split; REST behavior unchanged, proven by the existing suites).
+- `apps/server/internal/resumeapi/writesafety.go` and its tests: the
+  write-safety principal generalization (session or token authority re-fetched
+  inside the write transaction).
 
 ## T09 — Rate policies and composition (owner)
 
@@ -77,14 +81,14 @@ the integration owner and are serialized.
 - New `apps/web/app/pages/authorize.vue` and
   `apps/web/app/composables/useOAuthConsent.ts`.
 - New `apps/web/test/{authorize,useOAuthConsent}.test.ts`.
-- Login `next` preservation only if a bounded change is required; report
-  otherwise.
+- `apps/web/app/pages/login.vue`: bounded `next` query support (validated
+  same-origin relative path per M8; fallback `/app/resumes`).
 
 ## T11 — Connected agents settings
 
 - New `apps/web/app/components/settings/ConnectedAgents.vue` and
   `apps/web/app/composables/agentGrants.ts`.
-- `apps/web/app/pages/sessions.vue` (settings integration point).
+- `apps/web/app/pages/app/settings/sessions.vue` (settings integration point).
 - New `apps/web/test/{connected-agents,agentGrants}.test.ts`.
 
 ## T12 — Native HTTPS MCP UAT (owner)
