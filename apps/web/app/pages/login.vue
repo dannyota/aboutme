@@ -23,6 +23,29 @@ import {
 
 const route = useRoute();
 
+const FALLBACK_NEXT = '/app/resumes';
+
+/** Accept only a bounded, same-origin relative return path. */
+function validateLoginNext(value: unknown): string | null {
+  if (typeof value !== 'string' || value === '' || !value.startsWith('/')) {
+    return null;
+  }
+  if (value.startsWith('//') || /[\\\r\n]/.test(value)) return null;
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) return null;
+  if (/%(?![0-9A-Fa-f]{2})/.test(value)) return null;
+  if (new TextEncoder().encode(value).byteLength > 2048) return null;
+  try {
+    const parsed = new URL(value, 'https://aboutme.invalid');
+    if (parsed.origin !== 'https://aboutme.invalid') return null;
+  } catch {
+    return null;
+  }
+  return value;
+}
+
+const explicitNext = computed(() => validateLoginNext(route.query.next));
+const loginDestination = computed(() => explicitNext.value ?? FALLBACK_NEXT);
+
 const providers = [
   { id: 'google', label: 'Continue with Google' },
   { id: 'github', label: 'Continue with GitHub' },
@@ -89,7 +112,7 @@ async function onSubmit() {
       password: password.value,
     });
     password.value = '';
-    await navigateTo('/app/resumes');
+    await navigateTo(loginDestination.value);
   } catch (failure) {
     formError.value = copyFor(failure as PasswordAuthFailure);
   } finally {
@@ -169,7 +192,13 @@ async function onSubmit() {
           v-for="provider in providers"
           :key="provider.id"
         >
-          <a :href="`/api/v1/auth/${provider.id}/start`">
+          <a
+            :href="explicitNext
+              ? `/api/v1/auth/${provider.id}/start?next=${encodeURIComponent(
+                explicitNext,
+              )}`
+              : `/api/v1/auth/${provider.id}/start`"
+          >
             {{ provider.label }}
           </a>
         </li>
