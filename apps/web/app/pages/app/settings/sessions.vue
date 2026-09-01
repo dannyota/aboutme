@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuthProvider } from '../../../composables/useAuth';
 import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
+import ConnectedAgents from '../../../components/settings/ConnectedAgents.vue';
 import {
   type PasswordSettingsActions,
   PasswordSettingsActionsKey,
@@ -412,6 +413,8 @@ const linkErrorMessage = computed(() => {
         </li>
       </ul>
     </section>
+
+    <ConnectedAgents />
 
     <PasswordSettings
       :has-password="user?.hasPassword ?? false"
