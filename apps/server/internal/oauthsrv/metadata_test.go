@@ -1,6 +1,7 @@
 package oauthsrv
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,7 +31,7 @@ func TestMetadata_StableConfiguredDocuments(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, "https://attacker.example"+tc.path+"?substitution=1", nil)
+			request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "https://attacker.example"+tc.path+"?substitution=1", nil)
 			request.Host = "attacker.example"
 			request.Header.Set("X-Forwarded-Host", "attacker.example")
 			request.Header.Set("X-Forwarded-Proto", "http")
@@ -54,7 +55,7 @@ func TestMetadata_GetOnly(t *testing.T) {
 	for _, handler := range []http.HandlerFunc{s.HandleMetadata, s.HandleProtectedResourceMetadata} {
 		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
 			recorder := httptest.NewRecorder()
-			handler(recorder, httptest.NewRequest(method, "https://aboutme.example/.well-known/test", nil))
+			handler(recorder, httptest.NewRequestWithContext(context.Background(), method, "https://aboutme.example/.well-known/test", nil))
 			if recorder.Code != http.StatusMethodNotAllowed {
 				t.Fatalf("%s status = %d, want 405", method, recorder.Code)
 			}

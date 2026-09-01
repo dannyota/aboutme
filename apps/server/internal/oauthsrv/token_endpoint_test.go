@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -36,7 +37,7 @@ func TestToken_RejectsFormStrictnessWithClosedBody(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := httptest.NewRequest(tc.method, "https://aboutme.example/oauth/token", bytes.NewBufferString(tc.body))
+			r := httptest.NewRequestWithContext(context.Background(), tc.method, "https://aboutme.example/oauth/token", bytes.NewBufferString(tc.body))
 			r.Header.Set("Content-Type", tc.media)
 			w := httptest.NewRecorder()
 			s.HandleToken(w, r)
@@ -64,7 +65,7 @@ func TestToken_BodyLimitAndCookieIsolation(t *testing.T) {
 		{within, `{"error":"unsupported_grant_type","error_description":"The request is invalid."}`},
 		{over, `{"error":"invalid_request","error_description":"The request is invalid."}`},
 	} {
-		r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(tc.body))
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(tc.body))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()
 		s.HandleToken(w, r)
@@ -72,7 +73,7 @@ func TestToken_BodyLimitAndCookieIsolation(t *testing.T) {
 			t.Fatalf("limit response was not closed")
 		}
 	}
-	plain := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=unsupported"))
+	plain := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=unsupported"))
 	plain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	withCookie := plain.Clone(context.Background())
 	withCookie.Body = io.NopCloser(strings.NewReader("grant_type=unsupported"))
@@ -99,7 +100,7 @@ func validSessionCookie(t *testing.T, pool *store.Pool, userID uuid.UUID) *http.
 func TestToken_IgnoresValidHostSessionCookieByteIdentically(t *testing.T) {
 	f := newCodeFixture(t, time.Date(2026, 9, 1, 11, 0, 0, 0, time.UTC))
 	body := "grant_type=unsupported"
-	plain := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
+	plain := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
 	plain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	withCookie := plain.Clone(context.Background())
 	withCookie.Body = io.NopCloser(strings.NewReader(body))
@@ -143,8 +144,7 @@ func TestToken_CodeExchangeConsumesAndReplayRevokesFamily(t *testing.T) {
 		t.Fatalf("CreateOAuthClient: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id = $1", client.ID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID)
+		cleanupTokenTestClientAndUser(t, pool, client.ID, user.ID)
 	})
 	grant, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: now})
 	if err != nil {
@@ -162,7 +162,7 @@ func TestToken_CodeExchangeConsumesAndReplayRevokesFamily(t *testing.T) {
 	}
 	body := "grant_type=authorization_code&code=" + code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + client.ID.String() + "&code_verifier=" + verifier
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(body))
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	s.HandleToken(w, r)
 	if w.Code != http.StatusOK {
@@ -179,7 +179,7 @@ func TestToken_CodeExchangeConsumesAndReplayRevokesFamily(t *testing.T) {
 		t.Fatalf("response metadata = expires_in %d, scope %q", response.ExpiresIn, response.Scope)
 	}
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(body))
+	r = httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	s.HandleToken(w, r)
 	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
@@ -358,10 +358,9 @@ func TestToken_RejectsCodeWhenGrantScopesChangedAfterIssue(t *testing.T) {
 		t.Fatalf("CreateOAuthClient: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id = $1", client.ID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID)
+		cleanupTokenTestClientAndUser(t, pool, client.ID, user.ID)
 	})
-	if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read resumes:write", CreatedAt: now}); err != nil {
+	if _, err = q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read resumes:write", CreatedAt: now}); err != nil {
 		t.Fatalf("seed grant: %v", err)
 	}
 	verifier := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abcdefgh"
@@ -378,7 +377,7 @@ func TestToken_RejectsCodeWhenGrantScopesChangedAfterIssue(t *testing.T) {
 		t.Fatalf("narrow grant: %v", err)
 	}
 	body := "grant_type=authorization_code&code=" + code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + client.ID.String() + "&code_verifier=" + verifier
-	r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(body))
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/token", bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	s.HandleToken(w, r)
@@ -401,8 +400,7 @@ func TestToken_RefreshRotationChainAndSupersededReuseRevokesFamily(t *testing.T)
 		t.Fatalf("CreateOAuthClient: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id=$1", client.ID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id=$1", user.ID)
+		cleanupTokenTestClientAndUser(t, pool, client.ID, user.ID)
 	})
 	grant, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: now})
 	if err != nil {
@@ -417,7 +415,7 @@ func TestToken_RefreshRotationChainAndSupersededReuseRevokesFamily(t *testing.T)
 		t.Fatal(err)
 	}
 	rotate := func(input string) tokenResponse {
-		r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+input))
+		r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+input))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()
 		s.HandleToken(w, r)
@@ -433,7 +431,7 @@ func TestToken_RefreshRotationChainAndSupersededReuseRevokesFamily(t *testing.T)
 	first := rotate(raw)
 	second := rotate(first.RefreshToken)
 	_ = rotate(second.RefreshToken)
-	r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+raw))
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+raw))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	s.HandleToken(w, r)
@@ -474,8 +472,7 @@ func newCodeFixture(t *testing.T, now time.Time) codeFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id=$1", client.ID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id=$1", user.ID)
+		cleanupTokenTestClientAndUser(t, pool, client.ID, user.ID)
 	})
 	grant, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: now})
 	if err != nil {
@@ -497,7 +494,7 @@ func newCodeFixture(t *testing.T, now time.Time) codeFixture {
 func (f codeFixture) exchange(t *testing.T, clientID uuid.UUID, redirect, verifier string) *httptest.ResponseRecorder {
 	t.Helper()
 	body := "grant_type=authorization_code&code=" + f.code + "&redirect_uri=" + url.QueryEscape(redirect) + "&client_id=" + clientID.String() + "&code_verifier=" + verifier
-	r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	f.s.HandleToken(w, r)
@@ -566,6 +563,17 @@ func TestToken_CodeBindingAndExpiryMatrixDoesNotConsume(t *testing.T) {
 	})
 }
 
+func cleanupTokenTestClientAndUser(t *testing.T, pool *store.Pool, clientID, userID uuid.UUID) {
+	t.Helper()
+	cleanupCtx := context.Background()
+	if _, err := pool.Exec(cleanupCtx, "DELETE FROM oauth_clients WHERE id = $1", clientID); err != nil {
+		t.Errorf("cleanup OAuth client: %v", err)
+	}
+	if _, err := pool.Exec(cleanupCtx, "DELETE FROM users WHERE id = $1", userID); err != nil {
+		t.Errorf("cleanup user: %v", err)
+	}
+}
+
 func newTokenTestService(t *testing.T, now time.Time) (*Service, *store.Pool, *store.Queries) {
 	t.Helper()
 	pool, err := store.NewPool(context.Background(), testutil.RequireMigratedTestDatabaseURL(t))
@@ -611,8 +619,7 @@ func newRefreshFixture(t *testing.T, now, familyExpiresAt time.Time) refreshFixt
 		t.Fatalf("CreateOAuthClient: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id = $1", client.ID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID)
+		cleanupTokenTestClientAndUser(t, pool, client.ID, user.ID)
 	})
 	grant, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: now})
 	if err != nil {
@@ -631,7 +638,7 @@ func newRefreshFixture(t *testing.T, now, familyExpiresAt time.Time) refreshFixt
 
 func (f refreshFixture) rotate(t *testing.T, raw string) (*httptest.ResponseRecorder, tokenResponse) {
 	t.Helper()
-	r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+raw))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+raw))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	f.s.HandleToken(w, r)
@@ -818,15 +825,22 @@ func lockUserForRace(t *testing.T, f refreshFixture) (pgx.Tx, int32) {
 		t.Fatalf("begin race lock transaction: %v", err)
 	}
 	if _, err := tx.Exec(context.Background(), "SELECT id FROM users WHERE id = $1 FOR UPDATE", f.userID); err != nil {
-		_ = tx.Rollback(context.Background())
+		rollbackTestTx(t, tx)
 		t.Fatalf("lock user: %v", err)
 	}
 	var pid int32
 	if err := tx.QueryRow(context.Background(), "SELECT pg_backend_pid()").Scan(&pid); err != nil {
-		_ = tx.Rollback(context.Background())
+		rollbackTestTx(t, tx)
 		t.Fatalf("lock transaction pid: %v", err)
 	}
 	return tx, pid
+}
+
+func rollbackTestTx(t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		t.Errorf("rollback transaction: %v", err)
+	}
 }
 
 type tokenHandlerResult struct {
@@ -872,16 +886,16 @@ func TestToken_ConcurrentCodeExchangeHasOneSuccessAndRevokesReplayFamily(t *test
 	locked := true
 	defer func() {
 		if locked {
-			_ = lock.Rollback(context.Background())
+			rollbackTestTx(t, lock)
 		}
 	}()
 	if _, err := lock.Exec(context.Background(), "SELECT id FROM users WHERE id = $1 FOR UPDATE", f.userID); err != nil {
-		_ = lock.Rollback(context.Background())
+		rollbackTestTx(t, lock)
 		t.Fatalf("lock user: %v", err)
 	}
 	var pid int32
 	if err := lock.QueryRow(context.Background(), "SELECT pg_backend_pid()").Scan(&pid); err != nil {
-		_ = lock.Rollback(context.Background())
+		rollbackTestTx(t, lock)
 		t.Fatalf("lock pid: %v", err)
 	}
 	body := "grant_type=authorization_code&code=" + f.code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + f.clientID.String() + "&code_verifier=" + f.verifier

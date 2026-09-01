@@ -630,8 +630,8 @@ func TestOAuthGrantSingleLiveRowUnderConcurrentInserts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider() error: %v", err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatalf("Up() error: %v", err)
+	if _, upErr := provider.Up(ctx); upErr != nil {
+		t.Fatalf("Up() error: %v", upErr)
 	}
 
 	pool, err := pgxpool.New(ctx, dsn)
@@ -641,17 +641,17 @@ func TestOAuthGrantSingleLiveRowUnderConcurrentInserts(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	var userID, clientID uuid.UUID
-	if err := pool.QueryRow(ctx,
+	if insertUserErr := pool.QueryRow(ctx,
 		`INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id`,
 		uuid.NewString()+"@example.com", "OAuth Grant Race",
-	).Scan(&userID); err != nil {
-		t.Fatalf("insert user: %v", err)
+	).Scan(&userID); insertUserErr != nil {
+		t.Fatalf("insert user: %v", insertUserErr)
 	}
-	if err := pool.QueryRow(ctx, `
+	if insertClientErr := pool.QueryRow(ctx, `
 		INSERT INTO oauth_clients (client_name, redirect_uris, created_at, last_used_at)
 		VALUES ($1, $2, $3, $3) RETURNING id
-	`, "Racing Agent", `["`+oauthRedirectURI+`"]`, oauthNow).Scan(&clientID); err != nil {
-		t.Fatalf("insert client: %v", err)
+	`, "Racing Agent", `["`+oauthRedirectURI+`"]`, oauthNow).Scan(&clientID); insertClientErr != nil {
+		t.Fatalf("insert client: %v", insertClientErr)
 	}
 
 	txA, err := pool.Begin(ctx)

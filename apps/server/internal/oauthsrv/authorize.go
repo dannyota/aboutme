@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -50,7 +51,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	if err == nil && grantAllows(grant.Scopes, query.Scopes) {
 		redirectTo, issueErr := s.issueCode(r.Context(), session.UserID, query)
 		if issueErr == nil {
-			http.Redirect(w, r, redirectTo, http.StatusFound)
+			redirectIssuedCode(w, client, query, redirectTo)
 			return
 		}
 		if errors.Is(issueErr, ErrConsentInvalid) {
@@ -64,7 +65,7 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, consentPath+"?"+query.values().Encode(), http.StatusFound)
+	redirectInternal(w, consentPath+"?"+query.values().Encode())
 }
 
 func oauthErrorFor(err error) string {
@@ -96,8 +97,44 @@ func (s *Service) authorizeRequest(ctx context.Context, values url.Values) (Cons
 	if err := validateConsentQuery(query); err != nil {
 		return query, client, true, err
 	}
-	query.Scopes, _ = query.parsedScopes()
+	scopes, scopeErr := query.parsedScopes()
+	if scopeErr != nil {
+		return query, client, true, ErrConsentInvalid
+	}
+	query.Scopes = scopes
 	return query, client, true, nil
+}
+
+// redirectIssuedCode permits only the exact result constructed from a
+// registered redirect URI. It keeps the authorize handler's redirect sink
+// separate from request-derived values.
+func redirectIssuedCode(w http.ResponseWriter, client store.OAuthClient, request ConsentQuery, target string) {
+	targetURL, err := url.Parse(target)
+	if err != nil || !registeredRedirect(client, request.RedirectURI) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	values := targetURL.Query()
+	if target != oauthResultURL(request.RedirectURI, values.Get("code"), "", request.State) {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	writeFoundRedirect(w, target)
+}
+
+// redirectInternal only permits an absolute-path redirect on this origin.
+func redirectInternal(w http.ResponseWriter, target string) {
+	targetURL, err := url.ParseRequestURI(target)
+	if err != nil || !strings.HasPrefix(target, "/") || strings.HasPrefix(target, "//") || targetURL.IsAbs() || targetURL.Host != "" {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	writeFoundRedirect(w, target)
+}
+
+func writeFoundRedirect(w http.ResponseWriter, target string) {
+	w.Header().Set("Location", target)
+	w.WriteHeader(http.StatusFound)
 }
 
 func consentQueryFromValues(values url.Values) (ConsentQuery, error) {

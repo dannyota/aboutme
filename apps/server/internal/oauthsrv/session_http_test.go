@@ -45,7 +45,7 @@ func newOAuthSessionHTTPHarness(t *testing.T) oauthSessionHTTPHarness {
 }
 
 func (h oauthSessionHTTPHarness) request(method, target, body string, authenticated, csrf bool) *http.Request {
-	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), method, target, strings.NewReader(body))
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -226,7 +226,9 @@ func TestSessionAgentGrantHTTPHandlers_ListAndOwnerScopedRevoke(t *testing.T) {
 		t.Fatalf("seed foreign user: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = h.service.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", foreignUser.ID)
+		if _, cleanupErr := h.service.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", foreignUser.ID); cleanupErr != nil {
+			t.Errorf("Delete foreign user cleanup: %v", cleanupErr)
+		}
 	})
 	foreignGrant, err := h.queries.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{
 		UserID: foreignUser.ID, ClientID: h.client.ID, Scopes: "resumes:read", CreatedAt: now.Add(-time.Minute),
@@ -241,8 +243,8 @@ func TestSessionAgentGrantHTTPHandlers_ListAndOwnerScopedRevoke(t *testing.T) {
 	if foreign.Code != missing.Code || foreign.Body.String() != missing.Body.String() {
 		t.Fatalf("foreign revoke = %d %q, want byte-identical missing response %d %q", foreign.Code, foreign.Body.String(), missing.Code, missing.Body.String())
 	}
-	if _, err := h.queries.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: foreignUser.ID, ClientID: h.client.ID}); err != nil {
-		t.Fatalf("foreign grant changed: %v", err)
+	if _, grantErr := h.queries.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: foreignUser.ID, ClientID: h.client.ID}); grantErr != nil {
+		t.Fatalf("foreign grant changed: %v", grantErr)
 	}
 
 	revokeRequest := h.request(http.MethodDelete, "https://aboutme.example/api/v1/me/agents/"+grant.ID.String(), "", true, true)
@@ -252,8 +254,8 @@ func TestSessionAgentGrantHTTPHandlers_ListAndOwnerScopedRevoke(t *testing.T) {
 	if revoked.Code != http.StatusNoContent || revoked.Body.Len() != 0 {
 		t.Fatalf("revoke response = %d %q", revoked.Code, revoked.Body.String())
 	}
-	if _, err := h.queries.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: h.user.ID, ClientID: h.client.ID}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("grant remained live: %v", err)
+	if _, grantErr := h.queries.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: h.user.ID, ClientID: h.client.ID}); !errors.Is(grantErr, pgx.ErrNoRows) {
+		t.Fatalf("grant remained live: %v", grantErr)
 	}
 	authority, err := h.queries.GetOAuthTokenAuthorityByDigest(ctx, token.TokenDigest)
 	if err != nil || authority.OAuthToken.RevokedAt == nil {

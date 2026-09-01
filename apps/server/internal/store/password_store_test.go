@@ -54,8 +54,9 @@ func lockExistingAuthEmailJobs(ctx context.Context, t *testing.T, pool *pgxpool.
 	if err != nil {
 		t.Fatalf("Begin queue blocker: %v", err)
 	}
+	cleanupCtx := context.WithoutCancel(ctx)
 	t.Cleanup(func() {
-		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+		if rollbackErr := tx.Rollback(cleanupCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 			t.Errorf("Rollback queue blocker: %v", rollbackErr)
 		}
 	})

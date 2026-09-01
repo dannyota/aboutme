@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 // HandleRevoke implements the RFC 7009 no-oracle response contract. It never
@@ -43,7 +44,7 @@ func exactRevokeKeys(form url.Values) bool {
 	return true
 }
 
-func (s *Service) revokeToken(ctx context.Context, raw, hint string) error {
+func (s *Service) revokeToken(ctx context.Context, raw, hint string) (err error) {
 	kind, digest, err := ParseToken(raw)
 	if err != nil {
 		return nil
@@ -53,7 +54,11 @@ func (s *Service) revokeToken(ctx context.Context, raw, hint string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && err == nil {
+			err = rollbackErr
+		}
+	}()
 	q := store.New(tx)
 	authority, err := q.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -62,20 +67,20 @@ func (s *Service) revokeToken(ctx context.Context, raw, hint string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
+	if _, err = q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
 		return err
 	}
-	if _, err := q.GetUserForUpdate(ctx, authority.OAuthToken.UserID); err != nil {
+	if _, err = q.GetUserForUpdate(ctx, authority.OAuthToken.UserID); err != nil {
 		return err
 	}
-	if _, err := q.GetOAuthGrantForUpdate(ctx, authority.OAuthToken.GrantID); err != nil {
+	if _, err = q.GetOAuthGrantForUpdate(ctx, authority.OAuthToken.GrantID); err != nil {
 		return err
 	}
 	now := s.clock()
-	if _, err := q.RevokeOAuthGrant(ctx, store.RevokeOAuthGrantParams{ID: authority.OAuthToken.GrantID, RevokedAt: now}); err != nil {
+	if _, err = q.RevokeOAuthGrant(ctx, store.RevokeOAuthGrantParams{ID: authority.OAuthToken.GrantID, RevokedAt: now}); err != nil {
 		return err
 	}
-	if _, err := q.RevokeOAuthTokensForGrant(ctx, store.RevokeOAuthTokensForGrantParams{GrantID: authority.OAuthToken.GrantID, RevokedAt: now}); err != nil {
+	if _, err = q.RevokeOAuthTokensForGrant(ctx, store.RevokeOAuthTokensForGrantParams{GrantID: authority.OAuthToken.GrantID, RevokedAt: now}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

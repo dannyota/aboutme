@@ -118,12 +118,16 @@ func validateDatabaseURL(raw string) error {
 	return nil
 }
 
-func run(ctx context.Context, cmd string, cfg Config) error {
+func run(ctx context.Context, cmd string, cfg Config) (err error) {
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
-	defer func() { _ = db.Close() }()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close database: %w", closeErr))
+		}
+	}()
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
@@ -141,12 +145,16 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 	}
 }
 
-func seedFixture(ctx context.Context, db *sql.DB) error {
+func seedFixture(ctx context.Context, db *sql.DB) (err error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin seed: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			err = errors.Join(err, fmt.Errorf("roll back seed: %w", rollbackErr))
+		}
+	}()
 
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO users (id, email, name, avatar_key) VALUES ($1, $2, $3, NULL)`,
@@ -166,12 +174,16 @@ func seedFixture(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func cleanFixture(ctx context.Context, db *sql.DB, clientName string) error {
+func cleanFixture(ctx context.Context, db *sql.DB, clientName string) (err error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin cleanup: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			err = errors.Join(err, fmt.Errorf("roll back cleanup: %w", rollbackErr))
+		}
+	}()
 
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM oauth_clients

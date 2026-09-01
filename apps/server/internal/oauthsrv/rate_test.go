@@ -1,6 +1,7 @@
 package oauthsrv
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -27,7 +28,7 @@ func testOAuthRateConfig() RateConfig {
 }
 
 func rateRequest(path, contentType, body, viewerIP string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "https://aboutme.example"+path, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example"+path, strings.NewReader(body))
 	req.RemoteAddr = "127.0.0.1:443"
 	req.Header.Set(api.TrustedClientIPHeader, viewerIP)
 	req.Header.Set("Content-Type", contentType)
@@ -123,20 +124,20 @@ func TestRatePolicies_FailedGrantBudgetClearsOnlyOnSuccess(t *testing.T) {
 		}
 		policies.FinishGrant(attempt, grantAttemptFailure)
 	}
-	success, allowed, _ := policies.AdmitGrant(client, now)
-	if !allowed {
+	success, successAllowed, _ := policies.AdmitGrant(client, now)
+	if !successAllowed {
 		t.Fatal("success attempt was denied before the failure budget was full")
 	}
 	policies.FinishGrant(success, grantAttemptSuccess)
 	for i := 1; i <= 10; i++ {
-		attempt, allowed, _ := policies.AdmitGrant(client, now)
-		if !allowed {
+		attempt, attemptAllowed, _ := policies.AdmitGrant(client, now)
+		if !attemptAllowed {
 			t.Fatalf("post-success failed grant %d denied before the reset budget was consumed", i)
 		}
 		policies.FinishGrant(attempt, grantAttemptFailure)
 	}
-	if _, allowed, retry := policies.AdmitGrant(client, now); allowed || retry != 900 {
-		t.Fatalf("failed grant limit+1 = (%t,%d), want (false,900)", allowed, retry)
+	if _, limitAllowed, retry := policies.AdmitGrant(client, now); limitAllowed || retry != 900 {
+		t.Fatalf("failed grant limit+1 = (%t,%d), want (false,900)", limitAllowed, retry)
 	}
 
 	// Once the bounded store is full, new client IDs share one overflow
@@ -145,23 +146,23 @@ func TestRatePolicies_FailedGrantBudgetClearsOnlyOnSuccess(t *testing.T) {
 	overflowA := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000031")
 	overflowB := uuid.MustParse("018f5b6a-9a3e-7c21-8b1e-000000000032")
 	for i := 1; i <= 9; i++ {
-		attempt, allowed, _ := policies.AdmitGrant(overflowA, now)
-		if !allowed {
+		attempt, attemptAllowed, _ := policies.AdmitGrant(overflowA, now)
+		if !attemptAllowed {
 			t.Fatalf("overflow failure %d was denied", i)
 		}
 		policies.FinishGrant(attempt, grantAttemptFailure)
 	}
-	overflowSuccess, allowed, _ := policies.AdmitGrant(overflowB, now)
-	if !allowed {
+	overflowSuccess, overflowSuccessAllowed, _ := policies.AdmitGrant(overflowB, now)
+	if !overflowSuccessAllowed {
 		t.Fatal("overflow success reservation was denied")
 	}
 	policies.FinishGrant(overflowSuccess, grantAttemptSuccess)
-	overflowFailure, allowed, _ := policies.AdmitGrant(overflowA, now)
-	if !allowed {
+	overflowFailure, overflowFailureAllowed, _ := policies.AdmitGrant(overflowA, now)
+	if !overflowFailureAllowed {
 		t.Fatal("overflow success did not release its own reservation")
 	}
 	policies.FinishGrant(overflowFailure, grantAttemptFailure)
-	if _, allowed, _ := policies.AdmitGrant(overflowA, now); allowed {
+	if _, limitAllowed, _ := policies.AdmitGrant(overflowA, now); limitAllowed {
 		t.Fatal("overflow success cleared another client's shared failure debt")
 	}
 }

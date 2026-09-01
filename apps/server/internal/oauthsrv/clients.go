@@ -42,11 +42,14 @@ type tokenAdmission interface {
 	FinishGrant(grantAttempt, grantAttemptResult)
 }
 
-type grantAttempt struct {
+// GrantAttempt is an opaque failed-grant reservation.
+type GrantAttempt struct {
 	clientID uuid.UUID
 	leaseID  uint64
 	overflow bool
 }
+
+type grantAttempt = GrantAttempt
 
 type grantAttemptResult uint8
 
@@ -157,7 +160,7 @@ func canonicalOrigin(raw string) bool {
 		host = "[" + host + "]"
 	}
 	port := u.Port()
-	if port != "" && !(scheme == "http" && port == "80") && !(scheme == "https" && port == "443") {
+	if port != "" && (scheme != "http" || port != "80") && (scheme != "https" || port != "443") {
 		host += ":" + port
 	}
 	return raw == scheme+"://"+host
@@ -219,7 +222,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		writeOAuthServerError(w)
 		return
 	}
-	if err := s.CollectIdleClients(r.Context()); err != nil {
+	if gcErr := s.CollectIdleClients(r.Context()); gcErr != nil {
 		writeOAuthServerError(w)
 		return
 	}
@@ -245,7 +248,9 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write(response)
+	if _, err := w.Write(response); err != nil {
+		return
+	}
 }
 
 type registrationInput struct {
@@ -344,5 +349,7 @@ func writeOAuthServerError(w http.ResponseWriter) {
 func writeOAuthErrorBody(w http.ResponseWriter, status int, code, description string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = fmt.Fprintf(w, `{"error":%q,"error_description":%q}`, code, description)
+	if _, err := fmt.Fprintf(w, `{"error":%q,"error_description":%q}`, code, description); err != nil {
+		return
+	}
 }

@@ -62,7 +62,7 @@ func TestAgentRoutesFollowPublicRootRegistryAndDisableCleanly(t *testing.T) {
 		{"/api/v1/me/agents/018f5b6a-9a3e-7c21-8b1e-000000000030", "agent grant"},
 	} {
 		recorder := httptest.NewRecorder()
-		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, tc.path, nil))
+		mux.ServeHTTP(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, tc.path, nil))
 		if recorder.Code != http.StatusNoContent {
 			t.Fatalf("%s status = %d", tc.path, recorder.Code)
 		}
@@ -72,7 +72,7 @@ func TestAgentRoutesFollowPublicRootRegistryAndDisableCleanly(t *testing.T) {
 	}
 	for _, nearMatch := range []string{"/.well-known/other", "/oauth", "/oauth/other", "/mcp/other", "/api/v1/me/agents/extra/path"} {
 		recorder := httptest.NewRecorder()
-		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, nearMatch, nil))
+		mux.ServeHTTP(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, nearMatch, nil))
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("near-match %s status = %d, want 404", nearMatch, recorder.Code)
 		}
@@ -86,7 +86,7 @@ func TestAgentRoutesFollowPublicRootRegistryAndDisableCleanly(t *testing.T) {
 	disabled(disabledMux)
 	for _, path := range []string{"/mcp", "/api/v1/oauth/consent", "/api/v1/me/agents", "/api/v1/me/agents/018f5b6a-9a3e-7c21-8b1e-000000000030"} {
 		recorder := httptest.NewRecorder()
-		disabledMux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, nil))
+		disabledMux.ServeHTTP(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil))
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("disabled %s status = %d, want 404", path, recorder.Code)
 		}

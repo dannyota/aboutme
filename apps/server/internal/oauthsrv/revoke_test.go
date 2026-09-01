@@ -12,8 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/google/uuid"
+
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 // This catches an RFC 7009 existence oracle for malformed or unknown values.
@@ -25,7 +26,7 @@ func TestRevoke_StrictFormAndUnknownTokenNoop(t *testing.T) {
 		t.Fatalf("NewToken: %v", err)
 	}
 	for _, raw := range []string{"not-a-token", unknownRaw} {
-		unknown := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader("token="+raw))
+		unknown := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader("token="+raw))
 		unknown.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		w := httptest.NewRecorder()
 		f.s.HandleRevoke(w, unknown)
@@ -37,7 +38,7 @@ func TestRevoke_StrictFormAndUnknownTokenNoop(t *testing.T) {
 			t.Fatal("unknown revoke changed stored token state")
 		}
 	}
-	wrongMedia := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader("token=x"))
+	wrongMedia := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader("token=x"))
 	wrongMedia.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 	w := httptest.NewRecorder()
 	f.s.HandleRevoke(w, wrongMedia)
@@ -52,7 +53,7 @@ func TestRevoke_StrictFormAndUnknownTokenNoop(t *testing.T) {
 func TestRevoke_IgnoresHostSessionCookieByteIdentically(t *testing.T) {
 	now := time.Date(2026, 9, 3, 11, 0, 0, 0, time.UTC)
 	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
-	plain := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader("token=not-a-token"))
+	plain := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader("token=not-a-token"))
 	plain.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	withCookie := plain.Clone(context.Background())
 	withCookie.Body = io.NopCloser(strings.NewReader("token=not-a-token"))
@@ -69,7 +70,7 @@ func TestRevoke_ClosedErrorsNeverEchoToken(t *testing.T) {
 	now := time.Date(2026, 9, 3, 11, 30, 0, 0, time.UTC)
 	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
 	body := "token=" + f.raw + "&token=" + f.raw
-	r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader(body))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	f.s.HandleRevoke(w, r)
@@ -119,7 +120,7 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 			if err != nil {
 				t.Fatalf("NewCode: %v", err)
 			}
-			if _, err := f.q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, Scopes: "resumes:read", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]), RedirectURI: "http://127.0.0.1/callback", CreatedAt: now}); err != nil {
+			if _, err = f.q.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: codeDigest[:], ClientID: f.clientID, UserID: f.userID, Scopes: "resumes:read", CodeChallenge: base64.RawURLEncoding.EncodeToString(sum[:]), RedirectURI: "http://127.0.0.1/callback", CreatedAt: now}); err != nil {
 				t.Fatalf("CreateOAuthAuthorizationCode: %v", err)
 			}
 			raw := f.raw
@@ -130,7 +131,7 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 			if tc.hint != "" {
 				body += "&token_type_hint=" + tc.hint
 			}
-			r := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader(body))
+			r := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/revoke", strings.NewReader(body))
 			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
 			f.s.HandleRevoke(w, r)
@@ -138,7 +139,7 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 				t.Fatal("valid token revocation did not return empty 200")
 			}
 			var live int
-			if err := f.pool.QueryRow(ctx, "SELECT count(*) FROM oauth_tokens WHERE grant_id = $1 AND revoked_at IS NULL", f.grantID).Scan(&live); err != nil {
+			if err = f.pool.QueryRow(ctx, "SELECT count(*) FROM oauth_tokens WHERE grant_id = $1 AND revoked_at IS NULL", f.grantID).Scan(&live); err != nil {
 				t.Fatalf("live token count: %v", err)
 			}
 			if live != 0 {
@@ -151,7 +152,7 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 			if grant.RevokedAt == nil {
 				t.Fatal("grant remained live after token revocation")
 			}
-			codeRequest := httptest.NewRequest(http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=authorization_code&code="+code+"&redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback&client_id="+f.clientID.String()+"&code_verifier="+verifier))
+			codeRequest := httptest.NewRequestWithContext(ctx, http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=authorization_code&code="+code+"&redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback&client_id="+f.clientID.String()+"&code_verifier="+verifier))
 			codeRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			codeResponse := httptest.NewRecorder()
 			f.s.HandleToken(codeResponse, codeRequest)
@@ -202,7 +203,7 @@ func TestToken_ConcurrentRefreshRotationAndRevokeCannotResurrectGrant(t *testing
 		locked := true
 		defer func() {
 			if locked {
-				_ = blocker.Rollback(context.Background())
+				rollbackTestTx(t, blocker)
 			}
 		}()
 		rotation := runTokenRequest(f.s, "grant_type=refresh_token&refresh_token="+f.raw)
@@ -227,7 +228,7 @@ func TestToken_ConcurrentRefreshRotationAndRevokeCannotResurrectGrant(t *testing
 		locked := true
 		defer func() {
 			if locked {
-				_ = blocker.Rollback(context.Background())
+				rollbackTestTx(t, blocker)
 			}
 		}()
 		revocation := runRevokeRequest(f.s, f.raw, "")

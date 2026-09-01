@@ -114,7 +114,9 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{"access_token":"` + response.AccessToken + `","token_type":"Bearer","expires_in":` + strconv.FormatInt(response.ExpiresIn, 10) + `,"refresh_token":"` + response.RefreshToken + `","scope":"` + response.Scope + `"}`))
+	if _, writeErr := w.Write([]byte(`{"access_token":"` + response.AccessToken + `","token_type":"Bearer","expires_in":` + strconv.FormatInt(response.ExpiresIn, 10) + `,"refresh_token":"` + response.RefreshToken + `","scope":"` + response.Scope + `"}`)); writeErr != nil {
+		return
+	}
 }
 
 func (s *Service) grantRateClientID(ctx context.Context, form url.Values) (uuid.UUID, bool) {
@@ -175,7 +177,7 @@ func exactFormKeys(form url.Values, keys ...string) bool {
 	return true
 }
 
-func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values) (tokenResponse, error) {
+func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values) (response tokenResponse, err error) {
 	digest, err := ParseCode(form.Get("code"))
 	if err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
@@ -194,15 +196,20 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	if err != nil {
 		return tokenResponse{}, err
 	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && err == nil {
+			response = tokenResponse{}
+			err = rollbackErr
+		}
+	}()
 	q := store.New(tx)
-	if _, err := q.GetOAuthClientForUpdate(ctx, clientID); err != nil {
+	if _, err = q.GetOAuthClientForUpdate(ctx, clientID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return tokenResponse{}, errOAuthInvalidClient
 		}
 		return tokenResponse{}, err
 	}
-	if _, err := q.GetUserForUpdate(ctx, preCode.UserID); err != nil {
+	if _, err = q.GetUserForUpdate(ctx, preCode.UserID); err != nil {
 		return tokenResponse{}, err
 	}
 	grant, err := q.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: preCode.UserID, ClientID: preCode.ClientID})
@@ -223,11 +230,11 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	}
 	if code.ConsumedAt != nil {
 		if code.IssuedFamilyID != nil {
-			if _, err := q.RevokeOAuthTokenFamily(ctx, store.RevokeOAuthTokenFamilyParams{FamilyID: *code.IssuedFamilyID, RevokedAt: now}); err != nil {
+			if _, err = q.RevokeOAuthTokenFamily(ctx, store.RevokeOAuthTokenFamilyParams{FamilyID: *code.IssuedFamilyID, RevokedAt: now}); err != nil {
 				return tokenResponse{}, err
 			}
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err = tx.Commit(ctx); err != nil {
 			return tokenResponse{}, err
 		}
 		return tokenResponse{}, errOAuthInvalidGrant
@@ -236,7 +243,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	familyID := uuid.New()
-	if _, err := q.ConsumeOAuthAuthorizationCode(ctx, store.ConsumeOAuthAuthorizationCodeParams{CodeDigest: digest[:], ConsumedAt: now, IssuedFamilyID: familyID}); err != nil {
+	if _, err = q.ConsumeOAuthAuthorizationCode(ctx, store.ConsumeOAuthAuthorizationCodeParams{CodeDigest: digest[:], ConsumedAt: now, IssuedFamilyID: familyID}); err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	oauthEntropyMu.Lock()
@@ -258,17 +265,17 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 		kind    TokenKind
 		expires time.Time
 	}{{accessDigest, TokenKindAccess, now.Add(accessTokenTTL)}, {refreshDigest, TokenKindRefresh, familyExpiry}} {
-		if _, err := q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{TokenDigest: token.digest[:], Kind: string(token.kind), FamilyID: familyID, ClientID: code.ClientID, UserID: code.UserID, GrantID: grant.ID, CreatedAt: now, ExpiresAt: token.expires, FamilyExpiresAt: familyExpiry}); err != nil {
+		if _, err = q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{TokenDigest: token.digest[:], Kind: string(token.kind), FamilyID: familyID, ClientID: code.ClientID, UserID: code.UserID, GrantID: grant.ID, CreatedAt: now, ExpiresAt: token.expires, FamilyExpiresAt: familyExpiry}); err != nil {
 			return tokenResponse{}, err
 		}
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return tokenResponse{}, err
 	}
 	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(accessTokenTTL / time.Second), RefreshToken: refresh, Scope: code.Scopes}, nil
 }
 
-func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (tokenResponse, error) {
+func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (response tokenResponse, err error) {
 	kind, digest, err := ParseToken(raw)
 	if err != nil || kind != TokenKindRefresh {
 		return tokenResponse{}, errOAuthInvalidGrant
@@ -277,7 +284,12 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (tokenResp
 	if err != nil {
 		return tokenResponse{}, err
 	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	defer func() {
+		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && err == nil {
+			response = tokenResponse{}
+			err = rollbackErr
+		}
+	}()
 	q := store.New(tx)
 	authority, err := q.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
 	if err != nil {
@@ -286,10 +298,10 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (tokenResp
 		}
 		return tokenResponse{}, err
 	}
-	if _, err := q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
+	if _, err = q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
 		return tokenResponse{}, err
 	}
-	if _, err := q.GetUserForUpdate(ctx, authority.OAuthToken.UserID); err != nil {
+	if _, err = q.GetUserForUpdate(ctx, authority.OAuthToken.UserID); err != nil {
 		return tokenResponse{}, err
 	}
 	grant, err := q.GetOAuthGrantForUpdate(ctx, authority.OAuthToken.GrantID)
@@ -306,10 +318,10 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (tokenResp
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	if token.SupersededAt != nil {
-		if _, err := q.RevokeOAuthTokenFamily(ctx, store.RevokeOAuthTokenFamilyParams{FamilyID: token.FamilyID, RevokedAt: now}); err != nil {
+		if _, err = q.RevokeOAuthTokenFamily(ctx, store.RevokeOAuthTokenFamilyParams{FamilyID: token.FamilyID, RevokedAt: now}); err != nil {
 			return tokenResponse{}, err
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err = tx.Commit(ctx); err != nil {
 			return tokenResponse{}, err
 		}
 		return tokenResponse{}, errOAuthInvalidGrant
@@ -327,20 +339,20 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (tokenResp
 	if err != nil {
 		return tokenResponse{}, err
 	}
-	if _, err := q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{ID: token.ID, FamilyID: token.FamilyID, SupersededAt: now}); err != nil {
+	if _, err = q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{ID: token.ID, FamilyID: token.FamilyID, SupersededAt: now}); err != nil {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	if _, err := q.InsertRotatedOAuthToken(ctx, store.InsertRotatedOAuthTokenParams{TokenDigest: refreshDigest[:], Kind: string(TokenKindRefresh), CreatedAt: now, ExpiresAt: token.FamilyExpiresAt, RotatedFrom: token.ID}); err != nil {
+	if _, err = q.InsertRotatedOAuthToken(ctx, store.InsertRotatedOAuthTokenParams{TokenDigest: refreshDigest[:], Kind: string(TokenKindRefresh), CreatedAt: now, ExpiresAt: token.FamilyExpiresAt, RotatedFrom: token.ID}); err != nil {
 		return tokenResponse{}, err
 	}
 	accessExpiresAt := now.Add(accessTokenTTL)
 	if token.FamilyExpiresAt.Before(accessExpiresAt) {
 		accessExpiresAt = token.FamilyExpiresAt
 	}
-	if _, err := q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{TokenDigest: accessDigest[:], Kind: string(TokenKindAccess), FamilyID: token.FamilyID, ClientID: token.ClientID, UserID: token.UserID, GrantID: token.GrantID, CreatedAt: now, ExpiresAt: accessExpiresAt, FamilyExpiresAt: token.FamilyExpiresAt}); err != nil {
+	if _, err = q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{TokenDigest: accessDigest[:], Kind: string(TokenKindAccess), FamilyID: token.FamilyID, ClientID: token.ClientID, UserID: token.UserID, GrantID: token.GrantID, CreatedAt: now, ExpiresAt: accessExpiresAt, FamilyExpiresAt: token.FamilyExpiresAt}); err != nil {
 		return tokenResponse{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return tokenResponse{}, err
 	}
 	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now) / time.Second), RefreshToken: refresh, Scope: grant.Scopes}, nil

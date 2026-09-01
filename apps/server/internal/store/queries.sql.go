@@ -1073,14 +1073,16 @@ func (q *Queries) DeleteExpiredIdempotencyRecordsGlobal(ctx context.Context, arg
 }
 
 const deleteExpiredOAuthAuthorizationCodes = `-- name: DeleteExpiredOAuthAuthorizationCodes :execrows
-DELETE FROM oauth_authorization_codes
-WHERE id IN (
-    SELECT id FROM oauth_authorization_codes
-    WHERE expires_at <= $1::timestamptz
-    ORDER BY expires_at, id
+WITH candidates AS MATERIALIZED (
+    SELECT candidate.id FROM oauth_authorization_codes AS candidate
+    WHERE candidate.expires_at <= $1::timestamptz
+    ORDER BY candidate.expires_at, candidate.id
     LIMIT LEAST($2::int, 200)
     FOR UPDATE SKIP LOCKED
 )
+DELETE FROM oauth_authorization_codes AS target
+USING candidates
+WHERE target.id = candidates.id
 `
 
 type DeleteExpiredOAuthAuthorizationCodesParams struct {
@@ -1284,20 +1286,23 @@ func (q *Queries) DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePub
 }
 
 const deleteTerminalOAuthTokens = `-- name: DeleteTerminalOAuthTokens :execrows
-DELETE FROM oauth_tokens
-WHERE id IN (
-    SELECT id FROM oauth_tokens
+WITH candidates AS MATERIALIZED (
+    SELECT candidate.id FROM oauth_tokens AS candidate
     WHERE (
-        kind = 'access'
-        AND (expires_at <= $1::timestamptz
-             OR revoked_at <= $1::timestamptz)
+        candidate.kind = 'access'
+        AND (candidate.expires_at <= $1::timestamptz
+             OR candidate.revoked_at <= $1::timestamptz)
     ) OR (
-        kind = 'refresh' AND family_expires_at <= $1::timestamptz
+        candidate.kind = 'refresh'
+        AND candidate.family_expires_at <= $1::timestamptz
     )
-    ORDER BY expires_at, id
+    ORDER BY candidate.expires_at, candidate.id
     LIMIT LEAST($2::int, 200)
     FOR UPDATE SKIP LOCKED
 )
+DELETE FROM oauth_tokens AS target
+USING candidates
+WHERE target.id = candidates.id
 `
 
 type DeleteTerminalOAuthTokensParams struct {

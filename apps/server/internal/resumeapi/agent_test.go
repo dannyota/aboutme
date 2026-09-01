@@ -265,9 +265,9 @@ func TestExecuteAgent_DeletePublishedResumePreservesPublicRevocation(t *testing.
 	if err != nil {
 		t.Fatalf("get public state before delete: %v", err)
 	}
-	if _, err := h.pool.Exec(h.ctx,
-		`UPDATE sessions SET reauthenticated_at = now() - interval '16 minutes' WHERE id = $1`, h.session.ID); err != nil {
-		t.Fatalf("expire browser reauthentication: %v", err)
+	if _, execErr := h.pool.Exec(h.ctx,
+		`UPDATE sessions SET reauthenticated_at = now() - interval '16 minutes' WHERE id = $1`, h.session.ID); execErr != nil {
+		t.Fatalf("expire browser reauthentication: %v", execErr)
 	}
 
 	deleted := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
@@ -278,11 +278,11 @@ func TestExecuteAgent_DeletePublishedResumePreservesPublicRevocation(t *testing.
 	if deleted.Status != http.StatusNoContent || len(deleted.Body) != 0 {
 		t.Fatalf("delete published status = %d, body = %s", deleted.Status, deleted.Body)
 	}
-	if _, err := h.resumes.Get(h.ctx, h.userID, created.ID); !errors.Is(err, resume.ErrNotFound) {
-		t.Fatalf("deleted published resume remains accessible: %v", err)
+	if _, getErr := h.resumes.Get(h.ctx, h.userID, created.ID); !errors.Is(getErr, resume.ErrNotFound) {
+		t.Fatalf("deleted published resume remains accessible: %v", getErr)
 	}
-	if _, err := h.queries.GetSlugTombstoneForUpdate(h.ctx, slug); err != nil {
-		t.Fatalf("published delete omitted slug tombstone: %v", err)
+	if _, tombstoneErr := h.queries.GetSlugTombstoneForUpdate(h.ctx, slug); tombstoneErr != nil {
+		t.Fatalf("published delete omitted slug tombstone: %v", tombstoneErr)
 	}
 	after, err := h.queries.GetPublicState(h.ctx)
 	if err != nil {

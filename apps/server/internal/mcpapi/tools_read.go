@@ -77,18 +77,18 @@ func mapAgentResponseError(response resumeapi.AgentResponse) error {
 			Code string `json:"code"`
 		} `json:"error"`
 	}
-	_ = json.Unmarshal(response.Body, &envelope)
+	unmarshalErr := json.Unmarshal(response.Body, &envelope)
 	switch {
 	case response.Status == http.StatusNotFound:
 		return closedToolError("not_found")
-	case response.Status == http.StatusPreconditionFailed || envelope.Error.Code == "revision_mismatch":
+	case response.Status == http.StatusPreconditionFailed || (unmarshalErr == nil && envelope.Error.Code == "revision_mismatch"):
 		return closedToolError("revision_conflict")
 	case response.Status == http.StatusRequestEntityTooLarge:
 		return closedToolError("payload_too_large")
-	case response.Status == http.StatusTooManyRequests || envelope.Error.Code == "media_busy" ||
-		envelope.Error.Code == "public_state_busy":
+	case response.Status == http.StatusTooManyRequests || (unmarshalErr == nil && envelope.Error.Code == "media_busy") ||
+		(unmarshalErr == nil && envelope.Error.Code == "public_state_busy"):
 		return closedToolError("rate_limited")
-	case envelope.Error.Code == "agent_access_unavailable":
+	case unmarshalErr == nil && envelope.Error.Code == "agent_access_unavailable":
 		return closedToolError("agent_access_unavailable")
 	case response.Status == http.StatusBadRequest || response.Status == http.StatusUnsupportedMediaType ||
 		response.Status == http.StatusUnprocessableEntity:

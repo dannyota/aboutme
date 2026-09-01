@@ -33,5 +33,7 @@ func writeMCPError(w http.ResponseWriter, err error) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(mcpErr.status)
-	_, _ = w.Write([]byte(`{"error":"` + mcpErr.code + `"}`))
+	if _, writeErr := w.Write([]byte(`{"error":"` + mcpErr.code + `"}`)); writeErr != nil {
+		return
+	}
 }

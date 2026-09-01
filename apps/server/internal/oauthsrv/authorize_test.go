@@ -39,8 +39,12 @@ func newAuthorizeHarness(t *testing.T) (*Service, *store.Queries, store.OAuthCli
 		t.Fatalf("CreateOAuthClient: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = q.DeleteOAuthClient(context.Background(), client.ID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID)
+		if _, cleanupErr := q.DeleteOAuthClient(context.Background(), client.ID); cleanupErr != nil {
+			t.Errorf("DeleteOAuthClient cleanup: %v", cleanupErr)
+		}
+		if _, cleanupErr := pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID); cleanupErr != nil {
+			t.Errorf("Delete user cleanup: %v", cleanupErr)
+		}
 	})
 	admission := &registrationAdmissionFake{allowed: true}
 	s, err := NewService(ctx, ServiceDependencies{
@@ -81,7 +85,7 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 	t.Run("untrusted redirect is closed", func(t *testing.T) {
 		raw := strings.Replace(authorizeURL(client.ID, "resumes:read"), url.QueryEscape("https://agent.example/callback?fixed=yes"), url.QueryEscape("https://agent.example.evil/callback"), 1)
 		rec := httptest.NewRecorder()
-		s.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, raw, nil))
+		s.HandleAuthorize(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, raw, nil))
 		if rec.Code != http.StatusBadRequest || rec.Header().Get("Location") != "" {
 			t.Fatalf("response = %d location %q, want closed 400", rec.Code, rec.Header().Get("Location"))
 		}
@@ -90,7 +94,7 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 	t.Run("trusted invalid request redirects OAuth error", func(t *testing.T) {
 		raw := strings.Replace(authorizeURL(client.ID, "resumes:read"), "response_type=code", "response_type=token", 1)
 		rec := httptest.NewRecorder()
-		s.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, raw, nil))
+		s.HandleAuthorize(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, raw, nil))
 		if rec.Code != http.StatusFound {
 			t.Fatalf("status = %d, want 302", rec.Code)
 		}
@@ -106,7 +110,7 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 	t.Run("no session preserves validated request in login next", func(t *testing.T) {
 		raw := authorizeURL(client.ID, "resumes:read")
 		rec := httptest.NewRecorder()
-		s.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, raw, nil))
+		s.HandleAuthorize(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, raw, nil))
 		if rec.Code != http.StatusFound {
 			t.Fatalf("status = %d, want 302", rec.Code)
 		}
@@ -117,7 +121,7 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 	})
 
 	t.Run("session without grant goes to stateless consent", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
 		req = req.WithContext(auth.ContextWithSession(req.Context(), store.Session{UserID: user.ID}))
 		rec := httptest.NewRecorder()
 		s.HandleAuthorize(rec, req)
@@ -140,7 +144,7 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 			if _, err := q.UpsertOAuthGrant(context.Background(), store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: tc.grantScope, CreatedAt: time.Now().UTC()}); err != nil {
 				t.Fatalf("seed grant: %v", err)
 			}
-			req := httptest.NewRequest(http.MethodGet, authorizeURL(client.ID, tc.request), nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizeURL(client.ID, tc.request), nil)
 			req = req.WithContext(auth.ContextWithSession(req.Context(), store.Session{UserID: user.ID}))
 			rec := httptest.NewRecorder()
 			s.HandleAuthorize(rec, req)
@@ -171,6 +175,14 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 				t.Fatalf("revoke seeded grant: %v", err)
 			}
 		})
+	}
+}
+
+func TestAuthorizeInternalRedirectRejectsExternalTarget(t *testing.T) {
+	rec := httptest.NewRecorder()
+	redirectInternal(rec, "//evil.example")
+	if rec.Code != http.StatusInternalServerError || rec.Header().Get("Location") != "" {
+		t.Fatalf("response = %d location %q, want closed 500", rec.Code, rec.Header().Get("Location"))
 	}
 }
 
@@ -212,7 +224,7 @@ func TestAuthorize_TrustedAndUntrustedValidationMatrix(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			s.HandleAuthorize(rec, httptest.NewRequest(http.MethodGet, tc.raw, nil))
+			s.HandleAuthorize(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, tc.raw, nil))
 			if rec.Code != tc.status {
 				t.Fatalf("status = %d, want %d; body=%q", rec.Code, tc.status, rec.Body.String())
 			}
