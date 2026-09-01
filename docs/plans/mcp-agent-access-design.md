@@ -47,18 +47,16 @@ Two new internal packages:
   on the pinned official `modelcontextprotocol/go-sdk`, bearer-token middleware,
   scope checks, and the tool registry.
 
-New fixed public roots (registry v5 → v6):
+New fixed public roots (registry v5 → v6). The registry keys one row per
+top-level path segment, following the `/api` pattern; Go routers dispatch
+beneath each root:
 
-| Root                                      | Surface                              |
-| ----------------------------------------- | ------------------------------------ |
-| `/.well-known/oauth-authorization-server` | RFC 8414 metadata (GET)              |
-| `/.well-known/oauth-protected-resource`   | RFC 9728 metadata (GET)              |
-| `/oauth/authorize`                        | Authorize entry (GET, session-aware) |
-| `/oauth/token`                            | Token endpoint (POST, bearer world)  |
-| `/oauth/register`                         | Dynamic client registration (POST)   |
-| `/oauth/revoke`                           | RFC 7009 revocation (POST)           |
-| `/mcp`                                    | MCP Streamable HTTP endpoint         |
-| `/authorize`                              | Nuxt consent page (session)          |
+| Root           | Dispatch | Serves                                                                               |
+| -------------- | -------- | ------------------------------------------------------------------------------------ |
+| `/.well-known` | Go       | RFC 8414 and RFC 9728 metadata documents (GET)                                       |
+| `/oauth`       | Go       | `authorize` (GET, session-aware), `token`, `register`, `revoke` (POST, bearer world) |
+| `/mcp`         | Go       | MCP Streamable HTTP endpoint                                                         |
+| `/authorize`   | Nuxt     | Consent page (session)                                                               |
 
 The MCP handler runs in stateless JSON mode: each POST carries one JSON-RPC
 message and returns one JSON response. No SSE stream is opened and no server

@@ -25,17 +25,16 @@ Reconcile the authorities so no operative text contradicts the spec:
   values.
 - Create `docs/plans/traceability/ac-mcp.md` with AC-MCP-001…010 in state
   PLANNED and add the prefix to the traceability README index and phase table.
-- Regenerate public roots v5 → v6 adding exactly:
-  `/.well-known/oauth-authorization-server`,
-  `/.well-known/oauth-protected-resource`, `/oauth/authorize`, `/oauth/token`,
-  `/oauth/register`, `/oauth/revoke`, `/mcp`, and the Nuxt page root
-  `/authorize`. Update every generated consumer and the runtime v6 references
-  named in `file-structure.md`.
+- Regenerate public roots v5 → v6 adding exactly four registry rows, one per
+  top-level segment (the registry rejects duplicate roots, so the finer paths
+  dispatch inside the Go routers, following the `/api` pattern): `.well-known`
+  (Go), `oauth` (Go), `mcp` (Go), and `authorize` (Nuxt). Update every generated
+  consumer and the runtime v6 references named in `file-structure.md`.
 
 ## TDD cycle
 
-- [ ] Extend the public-roots generator/registry tests RED for the eight new
-      roots, v6 filename, and unchanged existing dispatch.
+- [ ] Extend the public-roots generator/registry tests RED for the four new root
+      rows, v6 filename, and unchanged existing dispatch.
 - [ ] Run the expected RED:
 
   ```sh

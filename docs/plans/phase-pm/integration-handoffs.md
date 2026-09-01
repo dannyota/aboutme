@@ -88,7 +88,8 @@ the strict JSON envelope.
 2. T01: migration 00009 + sqlc regeneration.
 3. T02: OpenAPI + generated client.
 4. W4 entry: `go get github.com/modelcontextprotocol/go-sdk@v1.7.0`; inspect
-   `go.mod`, `go.sum`, `go.work.sum`; no tidy unless generation proves it.
+   `go.mod`, `go.sum`, `go.work.sum`; then run `go mod tidy` (the hosted CI
+   tidy-is-a-no-op gate requires canonical files) and inspect that diff too.
 5. T09: config, `.env.example` names, `main.go` composition.
 6. T12: Makefile, harness scripts, contract tests, AGENTS.md check row.
 7. W8: records, review, exit gates.

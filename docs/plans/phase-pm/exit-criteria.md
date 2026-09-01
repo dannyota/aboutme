@@ -9,9 +9,10 @@ Failed or unsatisfiable items are corrected and rerun under ADR 0024.
       agree on OAuth/MCP behavior; the spec and design text do not disagree
       anywhere.
 - [ ] The v6 public-root source regenerates byte-identical Go/Nuxt/Caddy/test
-      consumers and adds exactly the two well-known documents, the four
-      `/oauth/*` roots, `/mcp`, and the `/authorize` page without changing
-      existing dispatch.
+      consumers and adds exactly four root rows — `.well-known`, `oauth`, and
+      `mcp` dispatched to Go and `authorize` dispatched to Nuxt — without
+      changing existing dispatch; the finer OAuth and well-known paths dispatch
+      inside the Go routers.
 - [ ] `github.com/modelcontextprotocol/go-sdk` v1.7.0 is a direct exact
       dependency; no unreviewed dependency or toolchain drift exists.
 - [ ] Migration 00009 passes fresh up/down, constraint, cleanup, lock-order, and
