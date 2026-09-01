@@ -1,6 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 import catalog from '../app/assets/fonts/catalog.json' with { type: 'json' };
+import { denyExternalRequests } from './support';
 
 interface CatalogEntry {
   readonly assets: readonly { readonly path: string }[];
@@ -11,25 +12,6 @@ interface CatalogEntry {
 
 const ENTRIES = catalog.entries as readonly CatalogEntry[];
 const BY_ID = new Map(ENTRIES.map((entry) => [entry.id, entry]));
-
-async function denyExternalRequests(page: Page): Promise<string[]> {
-  const attempted: string[] = [];
-  await page.route('**/*', async (route) => {
-    const url = new URL(route.request().url());
-    if (
-      (url.protocol === 'http:' || url.protocol === 'https:')
-      && url.hostname !== '127.0.0.1'
-      && url.hostname !== 'localhost'
-      && url.hostname !== '[::1]'
-    ) {
-      attempted.push(url.href);
-      await route.abort('blockedbyclient');
-      return;
-    }
-    await route.continue();
-  });
-  return attempted;
-}
 
 test.describe('offline font catalog', () => {
   expect(ENTRIES).toHaveLength(26);

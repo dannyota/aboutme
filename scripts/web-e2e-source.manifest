@@ -163,6 +163,7 @@ apps/web/e2e/print-baselines/print-sidebar-overflow-p1.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p2.png
 apps/web/e2e/print.spec.ts
 apps/web/e2e/screenshot.spec.ts
+apps/web/e2e/support.ts
 apps/web/nuxt.config.ts
 apps/web/package-lock.json
 apps/web/package.json

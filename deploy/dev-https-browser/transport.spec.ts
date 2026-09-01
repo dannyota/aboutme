@@ -1,5 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import {
+  newDiagnosticCounters,
+  pageDiagnosticsAttacher,
+  signInWithGoogle,
+} from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
@@ -46,10 +51,7 @@ test('proves authenticated transport preserves cache and precondition bytes', as
   context,
   page,
 }) => {
-  let certificateErrors = 0;
-  let consoleErrors = 0;
-  let externalRequests = 0;
-  let pageErrors = 0;
+  const counters = newDiagnosticCounters();
   let observedAcceptEncoding = '';
   let capturedIfMatch = '';
 
@@ -96,24 +98,13 @@ test('proves authenticated transport preserves cache and precondition bytes', as
   });
   await networkSession.send('Network.enable');
 
-  const attachPageDiagnostics = (openedPage: Page): void => {
-    openedPage.on('console', (message) => {
-      if (message.type() === 'error') consoleErrors += 1;
-    });
-    openedPage.on('pageerror', () => {
-      pageErrors += 1;
-    });
-    openedPage.on('requestfailed', (request) => {
-      if (/CERT/i.test(request.failure()?.errorText ?? ''))
-        certificateErrors += 1;
-    });
-  };
+  const attachPageDiagnostics = pageDiagnosticsAttacher(counters);
   attachPageDiagnostics(page);
   context.on('page', attachPageDiagnostics);
   await context.route('**/*', async (route) => {
     const request = route.request();
     if (!isAllowedHTTPURL(request.url())) {
-      externalRequests += 1;
+      counters.externalRequests += 1;
       await route.abort('blockedbyclient');
       return;
     }
@@ -128,7 +119,7 @@ test('proves authenticated transport preserves cache and precondition bytes', as
   });
   await context.routeWebSocket('**/*', async (webSocket) => {
     if (!isAllowedWebSocketURL(webSocket.url())) {
-      externalRequests += 1;
+      counters.externalRequests += 1;
       await webSocket.close({ code: 1008, reason: 'blocked' });
       return;
     }
@@ -138,22 +129,7 @@ test('proves authenticated transport preserves cache and precondition bytes', as
   const loginResponse = await page.goto('/login');
   expect(loginResponse?.status()).toBe(200);
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-  await Promise.all([
-    page.waitForURL(
-      (url) =>
-        url.origin === ORIGIN &&
-        url.pathname === '/__uat/oauth/google/authorize',
-    ),
-    page.getByRole('link', { name: 'Continue with Google' }).click(),
-  ]);
-  const developmentAccount = page.getByLabel(
-    'Development User — developer@example.invalid',
-  );
-  await expect(developmentAccount).toBeChecked();
-  await Promise.all([
-    page.waitForURL((url) => url.origin === ORIGIN && url.pathname === '/'),
-    page.getByRole('button', { name: 'Continue with Google' }).click(),
-  ]);
+  await signInWithGoogle(page);
 
   const result = await page.evaluate(
     async (schemaVersion): Promise<TransportResult> => {
@@ -323,6 +299,7 @@ test('proves authenticated transport preserves cache and precondition bytes', as
     ifMatch: true,
     teardown: true,
   });
+  const { certificateErrors, consoleErrors, externalRequests, pageErrors } = counters;
   expect({
     certificateErrors,
     consoleErrors,

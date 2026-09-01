@@ -8,6 +8,7 @@ import {
   loginAsDevelopmentUser,
   uniqueTitle,
 } from './editor-fixtures';
+import { waitForHydration } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
@@ -139,15 +140,7 @@ test('proves a published resume hydrates in a real browser', async ({
     await expect(publicPage).toHaveTitle(/Resume$/);
 
     // The client hydration mounts the Vue app on the SSR root.
-    await expect.poll(() =>
-      publicPage.evaluate(() =>
-        Boolean(
-          (document.getElementById('public-resume') as HTMLElement & {
-            __vue_app__?: unknown;
-          } | null)?.__vue_app__,
-        ),
-      ),
-    ).toBe(true);
+    await waitForHydration(publicPage, 'public-resume');
 
     await publicContext.close();
   } finally {

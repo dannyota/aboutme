@@ -1,5 +1,7 @@
 import { expect, type Page, type Response } from '@playwright/test';
 
+import { signInWithGoogle } from './harness-lib';
+
 export interface PersistenceCounts {
   readonly localStorage: number;
   readonly sessionStorage: number;
@@ -47,22 +49,7 @@ export function uniqueTitle(): string {
 }
 
 export async function loginAsDevelopmentUser(page: Page): Promise<void> {
-  const response = await page.goto('/login');
-  expect(response?.status()).toBe(200);
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-  await Promise.all([
-    page.waitForURL((url) =>
-      url.origin === ORIGIN
-      && url.pathname === '/__uat/oauth/google/authorize'
-    ),
-    page.getByRole('link', { name: 'Continue with Google' }).press('Enter'),
-  ]);
-  const account = page.getByLabel('Development User — developer@example.invalid');
-  await expect(account).toBeChecked();
-  await Promise.all([
-    page.waitForURL((url) => url.origin === ORIGIN && url.pathname === '/'),
-    page.getByRole('button', { name: 'Continue with Google' }).press('Enter'),
-  ]);
+  await signInWithGoogle(page, { fromLoginPage: true, keyboard: true });
 }
 
 export async function createBlankResume(
