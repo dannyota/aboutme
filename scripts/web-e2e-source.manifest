@@ -2,6 +2,7 @@ apps/web/app/api/client.ts
 apps/web/app/api/generated/openapi.ts
 apps/web/app/app.vue
 apps/web/app/assets/css/app.css
+apps/web/app/assets/css/auth.css
 apps/web/app/assets/css/editor.css
 apps/web/app/assets/css/fonts.css
 apps/web/app/assets/fonts/alegreya-400.woff2
@@ -37,6 +38,8 @@ apps/web/app/assets/fonts/spectral-400.woff2
 apps/web/app/assets/fonts/spectral-700.woff2
 apps/web/app/assets/fonts/work-sans-var.woff2
 apps/web/app/components/PlaceholderHero.vue
+apps/web/app/components/auth/PasswordField.vue
+apps/web/app/components/auth/PasswordSettings.vue
 apps/web/app/components/editor/ConflictPanel.vue
 apps/web/app/components/editor/EditorPreview.vue
 apps/web/app/components/editor/EditorShell.vue
@@ -109,7 +112,9 @@ apps/web/app/components/resume/sections/WorkSection.vue
 apps/web/app/components/resume/useResumeStyles.ts
 apps/web/app/components/ui/AccountControl.vue
 apps/web/app/components/ui/ThemeToggle.vue
+apps/web/app/composables/passwordSettings.ts
 apps/web/app/composables/useAuth.ts
+apps/web/app/composables/usePasswordAuth.ts
 apps/web/app/composables/useResumeEditor.ts
 apps/web/app/composables/useResumeList.ts
 apps/web/app/composables/useTheme.ts
@@ -137,8 +142,12 @@ apps/web/app/pages/_harness/render.vue
 apps/web/app/pages/app/resumes/[id].vue
 apps/web/app/pages/app/resumes/index.vue
 apps/web/app/pages/app/settings/sessions.vue
+apps/web/app/pages/forgot-password.vue
 apps/web/app/pages/index.vue
 apps/web/app/pages/login.vue
+apps/web/app/pages/register.vue
+apps/web/app/pages/reset-password.vue
+apps/web/app/pages/verify-email.vue
 apps/web/app/public-roots.generated.ts
 apps/web/app/public/public-resume.client.ts
 apps/web/app/stores/resumes.ts
