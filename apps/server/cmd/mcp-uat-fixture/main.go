@@ -3,8 +3,8 @@
 //
 // Usage:
 //
-//	mcp-uat-fixture seed    --database-url <dsn>
-//	mcp-uat-fixture cleanup --database-url <dsn>
+//	mcp-uat-fixture seed    --database-url <dsn> --client-name <run-name>
+//	mcp-uat-fixture cleanup --database-url <dsn> --client-name <run-name>
 package main
 
 import (
