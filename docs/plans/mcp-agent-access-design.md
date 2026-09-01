@@ -131,8 +131,8 @@ Fifteen tools map one-to-one onto existing editor operations:
 - Lifecycle: `create_resume`, `delete_resume`, `update_resume_metadata`.
 - Content: `upsert_entry`, `delete_entry`, `update_section`, `update_structure`,
   `update_personal_details`, `update_customization`.
-- Photo: `upload_photo` (base64, existing media type and size ceilings),
-  `update_photo_crop`, `delete_photo`.
+- Photo: `get_photo` (base64 with content type), `upload_photo` (base64,
+  existing media type and size ceilings), `update_photo_crop`, `delete_photo`.
 
 Each tool calls the same validation, sanitizer, bounds, and store chain as its
 REST handler; shared checks that currently live only in an HTTP handler are
