@@ -82,6 +82,12 @@ tags:
       Session endpoints do not use the resume `If-Match` and
       `Idempotency-Key` envelope. They carry no resume revision, and their
       mutations are independently retry-safe.
+  - name: OAuthAgentAccess
+    description: >-
+      Session-authenticated consent and connected-agent grant management.
+      The raw OAuth protocol endpoints and `/mcp` are agent-facing protocol
+      surfaces and deliberately remain outside this OpenAPI REST contract;
+      only these four browser/session operations are described here.
   - name: resumes
     description: >-
       The owner's resume surface: list, create, read, whole-resume metadata,
@@ -1118,6 +1124,282 @@ paths:
                 error:
                   code: not_found
                   message: no such session
+  # ---- Session-authenticated OAuth consent and grant management ----------
+  /oauth/consent:
+    get:
+      operationId: getOAuthConsent
+      tags: [OAuthAgentAccess]
+      security:
+        - sessionCookie: []
+      summary: Read the pending agent consent request
+      description: >-
+        Re-validates the complete authorization request against the registered
+        client and returns only its display name and requested scope list.
+        `state` is echoed by the decision operation, but is never logged or
+        returned as a separate response field. This read is safe and does not
+        require CSRF.
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: redirect_uri
+          in: query
+          required: true
+          description: Must exactly match one redirect URI registered by the client.
+          schema:
+            type: string
+            format: uri
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            const: code
+        - name: scope
+          in: query
+          required: true
+          description: >-
+            One or both account-wide scopes. This is a closed list, not free
+            text. Multiple scopes use OAuth's canonical space-delimited form.
+          style: form
+          schema:
+            type: string
+            enum:
+              - resumes:read
+              - resumes:write
+              - resumes:read resumes:write
+        - name: state
+          in: query
+          required: false
+          description: Opaque client state, bounded to 512 bytes and echoed on redirect.
+          schema:
+            type: string
+            maxLength: 512
+        - name: code_challenge
+          in: query
+          required: true
+          description: RFC 7636 S256 challenge (43 base64url characters).
+          schema:
+            type: string
+            minLength: 43
+            maxLength: 43
+            pattern: "^[A-Za-z0-9_-]{43}$"
+        - name: code_challenge_method
+          in: query
+          required: true
+          schema:
+            type: string
+            const: S256
+      responses:
+        "200":
+          description: Registered client name and requested scopes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthConsentResponse"
+              example:
+                data:
+                  clientName: Resume assistant
+                  scopes: [resumes:read]
+        "400":
+          description: The authorization request is malformed or invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: request_invalid
+                  message: authorization request is invalid
+        "401":
+          description: Missing or invalid session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "404":
+          description: The client or registered redirect URI was not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: not_found
+                  message: no such authorization client
+    post:
+      operationId: postOAuthConsentDecision
+      tags: [OAuthAgentAccess]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Approve or deny agent consent
+      description: >-
+        Re-validates every authorization request field against the registered
+        client before acting. Approval records the account-wide grant and
+        redirects to the exact registered redirect URI with the authorization
+        result; denial redirects there with `error=access_denied`. The
+        redirect carries the submitted `state` when present. No token or code
+        is returned as a response field.
+      requestBody:
+        required: true
+        description: Strict JSON request, no unknown or duplicate fields, ≤ 4,096 bytes.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthConsentDecisionRequest"
+      responses:
+        "200":
+          description: Redirect destination for the consent result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthConsentDecisionResponse"
+              example:
+                data:
+                  redirectTo: https://agent.example/callback?state=opaque
+        "400":
+          description: The authorization request or decision body is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: request_invalid
+                  message: authorization request is invalid
+        "401":
+          description: Missing or invalid session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: CSRF or exact-Origin validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: csrf_rejected
+                  message: CSRF validation failed
+        "404":
+          description: The client or registered redirect URI was not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: not_found
+                  message: no such authorization client
+        "413":
+          description: Request body exceeds 4,096 bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: body_too_large
+                  message: request body is too large
+        "415":
+          $ref: "#/components/responses/PasswordMediaTypeUnsupported"
+  /me/agents:
+    get:
+      operationId: listAgentGrants
+      tags: [OAuthAgentAccess]
+      security:
+        - sessionCookie: []
+      summary: List connected agent grants
+      description: >-
+        Lists every live agent grant for the authenticated account. The
+        response contains display metadata and timestamps only; it never
+        contains token, authorization-code, or other credential material.
+      responses:
+        "200":
+          description: The caller's live connected-agent grants.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthAgentGrantsResponse"
+              example:
+                data:
+                  grants:
+                    - id: 018f5b6a-9a3e-7c21-8b1e-000000000030
+                      clientName: Resume assistant
+                      scopes: [resumes:read, resumes:write]
+                      createdAt: "2026-09-01T09:00:00Z"
+                      lastUsedAt: null
+        "401":
+          description: Missing or invalid session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+  /me/agents/{grantId}:
+    parameters:
+      - $ref: "#/components/parameters/GrantID"
+    delete:
+      operationId: revokeAgentGrant
+      tags: [OAuthAgentAccess]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Revoke a connected agent grant
+      description: >-
+        Revokes the live grant and its token family. Unknown, already revoked,
+        or foreign grant IDs all return the same 404 response and are not
+        distinguishable.
+      responses:
+        "204":
+          description: Grant revoked. No response body.
+        "401":
+          description: Missing or invalid session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: CSRF or exact-Origin validation failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: csrf_rejected
+                  message: CSRF validation failed
+        "404":
+          description: No live grant with this ID belongs to the caller.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: not_found
+                  message: no such agent grant
   /resumes:
     get:
       operationId: listResumes
@@ -3452,6 +3734,132 @@ components:
                 is bound to the `__Host-oauth-tx` cookie set on the same
                 response, and both expire together after 10 minutes.
               example: https://accounts.google.com/o/oauth2/v2/auth?...
+    OAuthConsentScope:
+      type: string
+      description: Account-wide permission granted to a connected agent.
+      enum: [resumes:read, resumes:write]
+    OAuthConsentDecisionRequest:
+      type: object
+      description: >-
+        Strict JSON representation of the validated authorization request and
+        the user's decision. Unknown and duplicate fields are rejected.
+      additionalProperties: false
+      required:
+        - client_id
+        - redirect_uri
+        - response_type
+        - scope
+        - code_challenge
+        - code_challenge_method
+        - decision
+      properties:
+        client_id:
+          type: string
+          format: uuid
+        redirect_uri:
+          type: string
+          format: uri
+          description: Must exactly match one redirect URI registered by the client.
+        response_type:
+          type: string
+          const: code
+        scope:
+          type: string
+          enum:
+            - resumes:read
+            - resumes:write
+            - resumes:read resumes:write
+        state:
+          type: string
+          maxLength: 512
+          description: Opaque client state, echoed on redirect when present.
+        code_challenge:
+          type: string
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+        code_challenge_method:
+          type: string
+          const: S256
+        decision:
+          type: string
+          enum: [approve, deny]
+    OAuthConsentResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [clientName, scopes]
+          properties:
+            clientName:
+              type: string
+              maxLength: 64
+            scopes:
+              type: array
+              minItems: 1
+              maxItems: 2
+              uniqueItems: true
+              items:
+                $ref: "#/components/schemas/OAuthConsentScope"
+    OAuthConsentDecisionResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [redirectTo]
+          properties:
+            redirectTo:
+              type: string
+              format: uri-reference
+              description: >-
+                Redirect URL on the exact registered redirect URI only. It
+                carries the authorization result and optional client state;
+                it is never an arbitrary caller-selected destination.
+    OAuthAgentGrant:
+      type: object
+      additionalProperties: false
+      required: [id, clientName, scopes, createdAt, lastUsedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientName:
+          type: string
+          maxLength: 64
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/OAuthConsentScope"
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: [string, "null"]
+          format: date-time
+    OAuthAgentGrantsResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [grants]
+          properties:
+            grants:
+              type: array
+              maxItems: 10
+              items:
+                $ref: "#/components/schemas/OAuthAgentGrant"
     Error:
       type: object
       description: Failure response wrapper.
@@ -5004,6 +5412,15 @@ components:
         type: string
         format: uuid
       example: 018f5b6a-9a3e-7c21-8b1e-000000000002
+    GrantID:
+      name: grantId
+      in: path
+      required: true
+      description: A connected agent grant's id (`oauth_grants.id`, `uuidv7`).
+      schema:
+        type: string
+        format: uuid
+      example: 018f5b6a-9a3e-7c21-8b1e-000000000030
     ResumeID:
       name: id
       in: path
