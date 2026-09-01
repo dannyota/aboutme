@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 19, active** (2026-09-01).
+Status: **Revision 20, active** (2026-09-02).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior; it is approved at v4. This
@@ -27,22 +27,22 @@ and records the decision as an ADR, following the PA/ADR 0025 pattern.
 
 ## Current baseline
 
-| Slice                         | State                           | Remaining work                                    |
-| ----------------------------- | ------------------------------- | ------------------------------------------------- |
-| P0 foundations                | Complete                        | None                                              |
-| P0F TypeScript API client     | Complete                        | None                                              |
-| P1 authentication             | Complete                        | None                                              |
-| P1.1 authentication hardening | Complete                        | None                                              |
-| P2A resume domain and store   | Complete                        | None                                              |
-| P3 renderer lane              | Complete                        | None                                              |
-| P2B server lane               | Complete                        | None                                              |
-| P4 authenticated editor       | Complete                        | None                                              |
-| P5A publish and public SSR    | Complete                        | None                                              |
-| PA password authentication    | Complete                        | None                                              |
-| PF provider-login flag        | Not started                     | ADR, design amendment, config flag, UI gating     |
-| PM MCP agent access           | Planned                         | Plan approved; dispatch T00 (ADR, roots, budgets) |
-| P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later          |
-| PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation   |
+| Slice                         | State                           | Remaining work                                  |
+| ----------------------------- | ------------------------------- | ----------------------------------------------- |
+| P0 foundations                | Complete                        | None                                            |
+| P0F TypeScript API client     | Complete                        | None                                            |
+| P1 authentication             | Complete                        | None                                            |
+| P1.1 authentication hardening | Complete                        | None                                            |
+| P2A resume domain and store   | Complete                        | None                                            |
+| P3 renderer lane              | Complete                        | None                                            |
+| P2B server lane               | Complete                        | None                                            |
+| P4 authenticated editor       | Complete                        | None                                            |
+| P5A publish and public SSR    | Complete                        | None                                            |
+| PA password authentication    | Complete                        | None                                            |
+| PF provider-login flag        | Not started                     | ADR, design amendment, config flag, UI gating   |
+| PM MCP agent access           | Complete                        | None                                            |
+| P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
+| PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
 
 The settings page uses authenticated CSRF-protected POST for provider linking
 and reauthentication. P1.1's contract, tests, browser proof, and gates agree.
@@ -86,12 +86,11 @@ After both lanes close their phase review and exit checklist:
 
 1. PA password authentication — complete (local encrypted mail/capture UAT
    proven).
-2. PF provider-login flag — small; its ADR and design amendment land first, and
+2. PM MCP agent access — complete (OAuth, fifteen tools, connected-agent
+   revocation, and native HTTPS proof).
+3. PF provider-login flag — small; its ADR and design amendment land first, and
    the flag may land any time before P9.
-3. P5B publish UX and P6 realtime.
-4. PM MCP agent access — design pass (ADR, agent credential model, tool surface,
-   rate bounds) before task planning; implementation runs as its own lane beside
-   P5B/P6/P7/P8.
+4. P5B publish UX and P6 realtime.
 5. P7 print and images and P8 privacy lifecycle.
 6. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
@@ -105,7 +104,7 @@ After both lanes close their phase review and exit checklist:
 | Privacy and disclosure review     | Qualified privacy counsel and human owner | Before P10 production promotion            |
 
 No other approval blocks development. Design v4, the template contract v2, and
-ADRs 0001–0024 are accepted.
+ADRs 0001–0026 are accepted.
 
 ## Dependency graph
 
@@ -185,10 +184,10 @@ Daily work uses the native stack at `http://localhost:20080` and one shared
 PostgreSQL container. `make dev` stays HTTP-only for image and network smoke
 checks. Authenticated browser flows need Secure `__Host-` cookies. The landed
 native HTTPS harness serves trusted local checks at `https://localhost:20443`;
-P4 owns its editor scenario and must not bypass TLS or the external-request
-firewall. P5A's unauthenticated public SSR may use the native HTTP origin. The
-later P9 overlay still owns isolated port-443 whole-product UAT and is not a
-P4/P5A implementation prerequisite.
+P4 owns its editor scenario and PM owns its OAuth/MCP scenario. Neither may
+bypass TLS or the external-request firewall. P5A's unauthenticated public SSR
+may use the native HTTP origin. The later P9 overlay still owns isolated
+port-443 whole-product UAT and is not a P4/P5A implementation prerequisite.
 
 P9 validates complete user workflows locally and records browser, network,
 console, server, and database evidence. Only after it passes may the human owner

@@ -1,7 +1,7 @@
 # Current-state architecture
 
 This document describes the current integration candidate, verified on
-2026-08-16. The [design](design/README.md) owns intended behavior. The
+2026-09-02. The [design](design/README.md) owns intended behavior. The
 [roadmap](plans/implementation-plan.md) owns delivery state and gates.
 
 ## Running system
@@ -9,6 +9,7 @@ This document describes the current integration candidate, verified on
 ```mermaid
 graph LR
     B[Browser] --> C[Caddy]
+    A[User-authorized agent] -->|OAuth bearer over MCP| C
     C --> W[Nuxt SSR]
     C --> G[Go API]
     G --> P[(PostgreSQL)]
@@ -16,13 +17,13 @@ graph LR
     G --> M[Private filesystem or S3 media]
 ```
 
-| Component  | Implemented responsibility                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go                         |
-| Go server  | Health, authentication, sessions, users, resume HTTP, private media, publish, public read, and request policy |
-| Nuxt       | Landing/login/session UI, typed API transport, fonts, presets, the authenticated editor, and public SSR       |
-| PostgreSQL | Auth records, sessions, users, resume aggregates, public state, idempotency records, and media cleanup jobs   |
-| Media      | Private create-only filesystem or S3 objects behind validated server-owned keys                               |
+| Component  | Implemented responsibility                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go                                     |
+| Go server  | Health, user and agent authentication, sessions, resume HTTP/MCP, private media, publish, public read, and request policy |
+| Nuxt       | Landing/login/session/agent-consent UI, typed API transport, fonts, presets, the authenticated editor, and public SSR     |
+| PostgreSQL | Auth, OAuth client/grant/token, session, user, resume, public-state, idempotency, and media-cleanup records               |
+| Media      | Private create-only filesystem or S3 objects behind validated server-owned keys                                           |
 
 Daily development runs Go, Nuxt, and Caddy as native processes at
 `http://localhost:20080`. They use the `aboutme_dev` database in the one shared
@@ -44,14 +45,19 @@ contract.
 
 ## Implemented HTTP surface
 
-The [OpenAPI document](api/openapi.yaml) is the exact HTTP authority. The
-implemented surface includes:
+The [OpenAPI document](api/openapi.yaml) is the exact JSON API authority. OAuth
+protocol and MCP endpoints follow their protocol contracts and the accepted
+[agent-access ADR](adr/0026-mcp-agent-access.md). The implemented surface
+includes:
 
 - `GET` and `HEAD` health and readiness probes;
 - Google and LinkedIn OpenID Connect plus GitHub OAuth login;
 - email-and-password registration, verification, login, reauthentication,
   add/change, and reset;
 - authenticated, CSRF-protected provider link and reauthentication starts;
+- OAuth dynamic client registration, S256 authorization-code consent, token
+  exchange/rotation/revocation, discovery metadata, and bearer-authenticated
+  Streamable HTTP MCP;
 - current-user lookup, logout, session listing, per-session revoke, and
   logout-everywhere;
 - owner-only resume list, create, read, metadata update, and delete;
@@ -73,6 +79,28 @@ user lock and fences session issuance and reset.
 
 The committed TypeScript API types are generated from OpenAPI. The web client
 uses those types through `openapi-fetch`, and `make api-check` detects drift.
+
+## Implemented agent access
+
+Users authorize public agent clients with account-wide `resumes:read` and
+`resumes:write` scopes. Client redirect URIs are exact-match; codes are
+60-second, digest-only, single-use, and bound to S256 PKCE. Access and rotating
+refresh tokens are stored only as digests. Code replay, refresh-token replay,
+and connected-agent revocation invalidate the applicable token family.
+
+The `/mcp` bearer boundary never reads cookies. Its fifteen tools provide
+private editor parity for resume read/write and photo operations, including
+delete of private or published resumes, but expose no publish, unpublish, or
+public-read capability. Mutations share the REST ownership, validation,
+sanitizing, bounds, and revision compare-and-swap path. The settings page lists
+live grants and revokes them through the existing session, Origin, and CSRF
+chain.
+
+`make dev-https-mcp-check` proves registration, provider login, consent, token
+exchange, exact tool discovery, agent-created editor content, grant revocation,
+and the revoked token's closed 401 over the trusted local HTTPS origin. The
+proof writes only bounded boolean/error-count evidence and cleans its reserved
+user, resume, client, grant, code, and token rows.
 
 ## Implemented resume data layer
 

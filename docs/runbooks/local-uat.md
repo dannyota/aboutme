@@ -8,12 +8,12 @@ end-to-end UAT evidence.
 Do not mark a P9 criterion `PASS` against the current HTTP origin. Do not weaken
 Secure cookies or the HTTPS requirement to bypass the blocker.
 
-## Native HTTPS authentication check
+## Native HTTPS feature checks
 
-The available native harness proves the real Secure-cookie authentication flow
-at `https://localhost:20443`. It uses the one shared `aboutme-test-db` container
-and only its `aboutme_dev` database. It starts or reuses that container and
-leaves it running after teardown.
+The available native harness proves real Secure-cookie authentication and
+user-authorized MCP agent access at `https://localhost:20443`. It uses the one
+shared `aboutme-test-db` container and only its `aboutme_dev` database. It
+starts or reuses that container and leaves it running after teardown.
 
 Run the exact sequence from the repository root while no other native stack or
 heavy browser/build worker is active:
@@ -24,7 +24,9 @@ make dev-https
 make dev-https-status
 make dev-https-browser-image
 make dev-https-auth-check
+make dev-https-mcp-check
 make dev-https-down
+make dev-native
 ```
 
 The browser image imports only the root exported by this harness. It uses no TLS
@@ -39,6 +41,16 @@ sources are staged and mounted read-only per run by
 rerun the check directly. Rebuild the image (`make dev-https-browser-image`)
 only when `Dockerfile`, `run.sh`, or the package manifests change; the check
 fails closed with "browser image sources changed" when a rebuild is required.
+
+The MCP check enables MCP only in the isolated HTTPS server. It seeds one
+reserved provider identity, registers a public loopback client, completes S256
+consent, creates and edits a resume through MCP, renders that content in the
+editor, revokes the grant in Connected agents, and proves the next bearer call
+returns the closed 401. Browser teardown deletes the resume through the user
+session. Fixture teardown verifies that its user, identity, resume, client,
+authorization code, grant, and token rows are absent. Its retained verdict is
+`mcp-proof.json`, mode 0600 and at most 4,096 bytes; it contains only the ten M9
+step booleans and four error counters.
 
 For renderer specs, `make web-e2e-fast` iterates in the pinned browser against
 the working tree without the hermetic tar (`ARGS="print.spec.ts"` selects specs,
