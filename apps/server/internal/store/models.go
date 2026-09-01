@@ -69,6 +69,54 @@ type MediaDeletionJob struct {
 	AttemptCount  int32
 }
 
+type OAuthAuthorizationCode struct {
+	ID             uuid.UUID
+	CodeDigest     []byte
+	ClientID       uuid.UUID
+	UserID         uuid.UUID
+	Scopes         string
+	CodeChallenge  string
+	RedirectURI    string
+	CreatedAt      time.Time
+	ExpiresAt      time.Time
+	ConsumedAt     *time.Time
+	IssuedFamilyID *uuid.UUID
+}
+
+type OAuthClient struct {
+	ID           uuid.UUID
+	ClientName   string
+	RedirectURIs json.RawMessage
+	CreatedAt    time.Time
+	LastUsedAt   time.Time
+}
+
+type OAuthGrant struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	ClientID  uuid.UUID
+	Scopes    string
+	CreatedAt time.Time
+	RevokedAt *time.Time
+}
+
+type OAuthToken struct {
+	ID              uuid.UUID
+	TokenDigest     []byte
+	Kind            string
+	FamilyID        uuid.UUID
+	RotatedFrom     *uuid.UUID
+	ClientID        uuid.UUID
+	UserID          uuid.UUID
+	GrantID         uuid.UUID
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	FamilyExpiresAt time.Time
+	RevokedAt       *time.Time
+	SupersededAt    *time.Time
+	LastUsedAt      *time.Time
+}
+
 type OAuthTransaction struct {
 	ID            uuid.UUID
 	HandleHash    []byte

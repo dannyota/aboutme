@@ -263,6 +263,48 @@ func (q *Queries) ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeEx
 	return id, err
 }
 
+const consumeOAuthAuthorizationCode = `-- name: ConsumeOAuthAuthorizationCode :one
+UPDATE oauth_authorization_codes
+SET consumed_at = $1::timestamptz,
+    issued_family_id = $2::uuid
+WHERE code_digest = $3
+  AND consumed_at IS NULL
+  AND expires_at > $1::timestamptz
+RETURNING id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id
+`
+
+type ConsumeOAuthAuthorizationCodeParams struct {
+	ConsumedAt     time.Time
+	IssuedFamilyID uuid.UUID
+	CodeDigest     []byte
+}
+
+// Single-use consumption (M2). One conditional UPDATE both takes the row lock
+// and decides the winner: under two concurrent exchanges of the same code the
+// second blocks, re-evaluates the predicate after the first commits, matches
+// no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
+// codes therefore collapse to that one outcome, so no caller can branch on the
+// reason. issued_family_id records the token family this exchange creates,
+// which is what a later replay revokes.
+func (q *Queries) ConsumeOAuthAuthorizationCode(ctx context.Context, arg ConsumeOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error) {
+	row := q.db.QueryRow(ctx, consumeOAuthAuthorizationCode, arg.ConsumedAt, arg.IssuedFamilyID, arg.CodeDigest)
+	var i OAuthAuthorizationCode
+	err := row.Scan(
+		&i.ID,
+		&i.CodeDigest,
+		&i.ClientID,
+		&i.UserID,
+		&i.Scopes,
+		&i.CodeChallenge,
+		&i.RedirectURI,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.IssuedFamilyID,
+	)
+	return i, err
+}
+
 const consumeOAuthTransaction = `-- name: ConsumeOAuthTransaction :one
 UPDATE oauth_transactions
 SET consumed_at = $2
@@ -303,6 +345,20 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 		&i.ConsumedAt,
 	)
 	return i, err
+}
+
+const countLiveOAuthGrantsForUser = `-- name: CountLiveOAuthGrantsForUser :one
+SELECT count(*) FROM oauth_grants WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+// The M5 live-grant cap check. Callers serialize it with the user row lock
+// (GetUserForUpdate) so two concurrent approvals cannot both read the same
+// pre-cap count.
+func (q *Queries) CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveOAuthGrantsForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countResumesForUser = `-- name: CountResumesForUser :one
@@ -453,6 +509,167 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 		&i.Provider,
 		&i.ProviderUserID,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createOAuthAuthorizationCode = `-- name: CreateOAuthAuthorizationCode :one
+INSERT INTO oauth_authorization_codes (
+    code_digest, client_id, user_id, scopes, code_challenge, redirect_uri,
+    created_at, expires_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6,
+    $7::timestamptz,
+    $7::timestamptz + interval '60 seconds'
+)
+RETURNING id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id
+`
+
+type CreateOAuthAuthorizationCodeParams struct {
+	CodeDigest    []byte
+	ClientID      uuid.UUID
+	UserID        uuid.UUID
+	Scopes        string
+	CodeChallenge string
+	RedirectURI   string
+	CreatedAt     time.Time
+}
+
+// Code issue (M2). expires_at is computed here, not passed in, so the exact
+// 60-second TTL the table checks can never be missed by a caller. Only the
+// code's digest is stored; the raw code exists solely in the redirect the user
+// agent carries.
+func (q *Queries) CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error) {
+	row := q.db.QueryRow(ctx, createOAuthAuthorizationCode,
+		arg.CodeDigest,
+		arg.ClientID,
+		arg.UserID,
+		arg.Scopes,
+		arg.CodeChallenge,
+		arg.RedirectURI,
+		arg.CreatedAt,
+	)
+	var i OAuthAuthorizationCode
+	err := row.Scan(
+		&i.ID,
+		&i.CodeDigest,
+		&i.ClientID,
+		&i.UserID,
+		&i.Scopes,
+		&i.CodeChallenge,
+		&i.RedirectURI,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.IssuedFamilyID,
+	)
+	return i, err
+}
+
+const createOAuthClient = `-- name: CreateOAuthClient :one
+
+INSERT INTO oauth_clients (client_name, redirect_uris, created_at, last_used_at)
+VALUES (
+    $1,
+    $2,
+    $3::timestamptz,
+    $3::timestamptz
+)
+RETURNING id, client_name, redirect_uris, created_at, last_used_at
+`
+
+type CreateOAuthClientParams struct {
+	ClientName   string
+	RedirectURIs json.RawMessage
+	CreatedAt    time.Time
+}
+
+// ---------------------------------------------------------------------------
+// Phase PM: OAuth agent access — clients, authorization codes, grants, and
+// tokens. Storage is digest-only: no query here reads, writes, or returns raw
+// code or token material, and PKCE verifiers are never stored.
+//
+// Lock order is oauth_clients -> users -> oauth_grants ->
+// oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
+// family first locks its grant row (GetOAuthGrantForUpdate), and every path
+// that mutates a client's rows first locks the client row
+// (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
+// skip a client another transaction is consenting to.
+// ---------------------------------------------------------------------------
+// Dynamic client registration (M1). The primary key returned here IS the
+// public client_id; there is no secret. last_used_at starts at created_at so
+// the column is never NULL and the ordering check holds from the first row.
+func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error) {
+	row := q.db.QueryRow(ctx, createOAuthClient, arg.ClientName, arg.RedirectURIs, arg.CreatedAt)
+	var i OAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientName,
+		&i.RedirectURIs,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const createOAuthToken = `-- name: CreateOAuthToken :one
+INSERT INTO oauth_tokens (
+    token_digest, kind, family_id, client_id, user_id, grant_id,
+    created_at, expires_at, family_expires_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6,
+    $7::timestamptz,
+    LEAST($8::timestamptz, $9::timestamptz),
+    $9::timestamptz
+)
+RETURNING id, token_digest, kind, family_id, rotated_from, client_id, user_id, grant_id, created_at, expires_at, family_expires_at, revoked_at, superseded_at, last_used_at
+`
+
+type CreateOAuthTokenParams struct {
+	TokenDigest     []byte
+	Kind            string
+	FamilyID        uuid.UUID
+	ClientID        uuid.UUID
+	UserID          uuid.UUID
+	GrantID         uuid.UUID
+	CreatedAt       time.Time
+	ExpiresAt       time.Time
+	FamilyExpiresAt time.Time
+}
+
+// The first token of a family, issued by a code exchange (M3). expires_at is
+// clamped to the family's own death so no token can outlive the family it
+// belongs to; the table's ordering check is the backstop for raw SQL.
+func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error) {
+	row := q.db.QueryRow(ctx, createOAuthToken,
+		arg.TokenDigest,
+		arg.Kind,
+		arg.FamilyID,
+		arg.ClientID,
+		arg.UserID,
+		arg.GrantID,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+		arg.FamilyExpiresAt,
+	)
+	var i OAuthToken
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.Kind,
+		&i.FamilyID,
+		&i.RotatedFrom,
+		&i.ClientID,
+		&i.UserID,
+		&i.GrantID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.FamilyExpiresAt,
+		&i.RevokedAt,
+		&i.SupersededAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
@@ -851,6 +1068,34 @@ func (q *Queries) DeleteExpiredIdempotencyRecordsGlobal(ctx context.Context, arg
 	return items, nil
 }
 
+const deleteExpiredOAuthAuthorizationCodes = `-- name: DeleteExpiredOAuthAuthorizationCodes :execrows
+DELETE FROM oauth_authorization_codes
+WHERE id IN (
+    SELECT id FROM oauth_authorization_codes
+    WHERE expires_at <= $1::timestamptz
+    ORDER BY expires_at, id
+    LIMIT LEAST($2::int, 200)
+    FOR UPDATE SKIP LOCKED
+)
+`
+
+type DeleteExpiredOAuthAuthorizationCodesParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+// Bounded cleanup, oldest expiry first on oauth_authorization_codes_expires_at_idx.
+// expires_at alone is the predicate: a consumed code keeps its original expiry,
+// so consumed and abandoned rows leave on the same schedule, and a row is never
+// removed while ConsumeOAuthAuthorizationCode could still claim it.
+func (q *Queries) DeleteExpiredOAuthAuthorizationCodes(ctx context.Context, arg DeleteExpiredOAuthAuthorizationCodesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredOAuthAuthorizationCodes, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredOAuthTransactions = `-- name: DeleteExpiredOAuthTransactions :execrows
 DELETE FROM oauth_transactions
 WHERE id IN (
@@ -882,6 +1127,34 @@ type DeleteExpiredOAuthTransactionsParams struct {
 // expires_at > now).
 func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteExpiredOAuthTransactions, arg.Cutoff, arg.MaxRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOAuthClient = `-- name: DeleteOAuthClient :execrows
+DELETE FROM oauth_clients WHERE id = $1
+`
+
+// Removing a client cascades its codes, grants, and tokens: deregistering an
+// agent ends every authorization it holds.
+func (q *Queries) DeleteOAuthClient(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOAuthClient, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOAuthClients = `-- name: DeleteOAuthClients :execrows
+DELETE FROM oauth_clients WHERE id = ANY($1::uuid[])
+`
+
+// Deletes exactly the candidate set the caller just locked. The batch bound
+// lives in ListIdleOAuthClientCandidates; this statement never widens it.
+func (q *Queries) DeleteOAuthClients(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOAuthClients, ids)
 	if err != nil {
 		return 0, err
 	}
@@ -1004,6 +1277,42 @@ func (q *Queries) DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePub
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deleteTerminalOAuthTokens = `-- name: DeleteTerminalOAuthTokens :execrows
+DELETE FROM oauth_tokens
+WHERE id IN (
+    SELECT id FROM oauth_tokens
+    WHERE (
+        kind = 'access'
+        AND (expires_at <= $1::timestamptz
+             OR revoked_at <= $1::timestamptz)
+    ) OR (
+        kind = 'refresh' AND family_expires_at <= $1::timestamptz
+    )
+    ORDER BY expires_at, id
+    LIMIT LEAST($2::int, 200)
+    FOR UPDATE SKIP LOCKED
+)
+`
+
+type DeleteTerminalOAuthTokensParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+// Bounded token cleanup. An access token leaves as soon as it has expired or
+// been revoked: it carries no replay-detection role. A refresh token is kept
+// until its whole family has expired, because a superseded or revoked refresh
+// token that is presented again must still be recognized as a replay rather
+// than as an unknown token. rotated_from is ON DELETE SET NULL, so removing a
+// predecessor detaches its successor instead of cascading past the batch bound.
+func (q *Queries) DeleteTerminalOAuthTokens(ctx context.Context, arg DeleteTerminalOAuthTokensParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteTerminalOAuthTokens, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const enqueueMediaDeletionJob = `-- name: EnqueueMediaDeletionJob :execrows
@@ -1187,6 +1496,32 @@ func (q *Queries) GetLeasedAuthEmailJobForUpdate(ctx context.Context, arg GetLea
 	return i, err
 }
 
+const getLiveOAuthGrant = `-- name: GetLiveOAuthGrant :one
+SELECT id, user_id, client_id, scopes, created_at, revoked_at FROM oauth_grants
+WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL
+`
+
+type GetLiveOAuthGrantParams struct {
+	UserID   uuid.UUID
+	ClientID uuid.UUID
+}
+
+// The grant-skip read: a live grant with equal-or-wider scopes lets authorize
+// issue a code without a second consent.
+func (q *Queries) GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantParams) (OAuthGrant, error) {
+	row := q.db.QueryRow(ctx, getLiveOAuthGrant, arg.UserID, arg.ClientID)
+	var i OAuthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const getMediaDeletionJobByObjectKey = `-- name: GetMediaDeletionJobByObjectKey :one
 SELECT id, resume_id, object_key, enqueued_at, next_attempt_at, attempt_count
 FROM media_deletion_jobs
@@ -1211,6 +1546,166 @@ func (q *Queries) GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMed
 		&i.EnqueuedAt,
 		&i.NextAttemptAt,
 		&i.AttemptCount,
+	)
+	return i, err
+}
+
+const getOAuthAuthorizationCodeByDigest = `-- name: GetOAuthAuthorizationCodeByDigest :one
+SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id FROM oauth_authorization_codes WHERE code_digest = $1
+`
+
+// Replay lookup: returns the row whether or not it was consumed, so the caller
+// can see the family a consumed code issued and revoke exactly those tokens.
+func (q *Queries) GetOAuthAuthorizationCodeByDigest(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error) {
+	row := q.db.QueryRow(ctx, getOAuthAuthorizationCodeByDigest, codeDigest)
+	var i OAuthAuthorizationCode
+	err := row.Scan(
+		&i.ID,
+		&i.CodeDigest,
+		&i.ClientID,
+		&i.UserID,
+		&i.Scopes,
+		&i.CodeChallenge,
+		&i.RedirectURI,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.IssuedFamilyID,
+	)
+	return i, err
+}
+
+const getOAuthAuthorizationCodeByDigestForUpdate = `-- name: GetOAuthAuthorizationCodeByDigestForUpdate :one
+SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id FROM oauth_authorization_codes WHERE code_digest = $1 FOR UPDATE
+`
+
+// The locked replay lookup used before a consumed-code replay revokes the
+// family it issued, so the revocation and the row it read cannot interleave.
+func (q *Queries) GetOAuthAuthorizationCodeByDigestForUpdate(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error) {
+	row := q.db.QueryRow(ctx, getOAuthAuthorizationCodeByDigestForUpdate, codeDigest)
+	var i OAuthAuthorizationCode
+	err := row.Scan(
+		&i.ID,
+		&i.CodeDigest,
+		&i.ClientID,
+		&i.UserID,
+		&i.Scopes,
+		&i.CodeChallenge,
+		&i.RedirectURI,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.IssuedFamilyID,
+	)
+	return i, err
+}
+
+const getOAuthClient = `-- name: GetOAuthClient :one
+SELECT id, client_name, redirect_uris, created_at, last_used_at FROM oauth_clients WHERE id = $1
+`
+
+func (q *Queries) GetOAuthClient(ctx context.Context, id uuid.UUID) (OAuthClient, error) {
+	row := q.db.QueryRow(ctx, getOAuthClient, id)
+	var i OAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientName,
+		&i.RedirectURIs,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getOAuthClientForUpdate = `-- name: GetOAuthClientForUpdate :one
+SELECT id, client_name, redirect_uris, created_at, last_used_at FROM oauth_clients WHERE id = $1 FOR UPDATE
+`
+
+// The client-row lock the authorize, consent, and token paths take before
+// writing a grant, code, or token for that client. Holding it is what lets
+// ListIdleOAuthClientCandidates skip (rather than collect) a client that is
+// being consented to right now.
+func (q *Queries) GetOAuthClientForUpdate(ctx context.Context, id uuid.UUID) (OAuthClient, error) {
+	row := q.db.QueryRow(ctx, getOAuthClientForUpdate, id)
+	var i OAuthClient
+	err := row.Scan(
+		&i.ID,
+		&i.ClientName,
+		&i.RedirectURIs,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
+const getOAuthGrantForUpdate = `-- name: GetOAuthGrantForUpdate :one
+SELECT id, user_id, client_id, scopes, created_at, revoked_at FROM oauth_grants WHERE id = $1 FOR UPDATE
+`
+
+// The grant-row lock every token-family revocation takes first, so a rotation
+// committing concurrently cannot resurrect a family the revocation just killed.
+func (q *Queries) GetOAuthGrantForUpdate(ctx context.Context, id uuid.UUID) (OAuthGrant, error) {
+	row := q.db.QueryRow(ctx, getOAuthGrantForUpdate, id)
+	var i OAuthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const getOAuthTokenAuthorityByDigest = `-- name: GetOAuthTokenAuthorityByDigest :one
+SELECT token_row.id, token_row.token_digest, token_row.kind, token_row.family_id, token_row.rotated_from, token_row.client_id, token_row.user_id, token_row.grant_id, token_row.created_at, token_row.expires_at, token_row.family_expires_at, token_row.revoked_at, token_row.superseded_at, token_row.last_used_at, grant_row.id, grant_row.user_id, grant_row.client_id, grant_row.scopes, grant_row.created_at, grant_row.revoked_at, user_row.id, user_row.email, user_row.name, user_row.avatar_key, user_row.created_at, user_row.updated_at
+FROM oauth_tokens AS token_row
+JOIN oauth_grants AS grant_row ON grant_row.id = token_row.grant_id
+JOIN users AS user_row ON user_row.id = token_row.user_id
+WHERE token_row.token_digest = $1
+`
+
+type GetOAuthTokenAuthorityByDigestRow struct {
+	OAuthToken OAuthToken
+	OAuthGrant OAuthGrant
+	User       User
+}
+
+// The bearer boundary's single round trip (M7): token row, its grant, and its
+// account in one query. The caller applies expiry, revocation, supersession,
+// and kind checks to the returned row; every rejection class therefore reads
+// the same rows and produces the same closed response.
+func (q *Queries) GetOAuthTokenAuthorityByDigest(ctx context.Context, tokenDigest []byte) (GetOAuthTokenAuthorityByDigestRow, error) {
+	row := q.db.QueryRow(ctx, getOAuthTokenAuthorityByDigest, tokenDigest)
+	var i GetOAuthTokenAuthorityByDigestRow
+	err := row.Scan(
+		&i.OAuthToken.ID,
+		&i.OAuthToken.TokenDigest,
+		&i.OAuthToken.Kind,
+		&i.OAuthToken.FamilyID,
+		&i.OAuthToken.RotatedFrom,
+		&i.OAuthToken.ClientID,
+		&i.OAuthToken.UserID,
+		&i.OAuthToken.GrantID,
+		&i.OAuthToken.CreatedAt,
+		&i.OAuthToken.ExpiresAt,
+		&i.OAuthToken.FamilyExpiresAt,
+		&i.OAuthToken.RevokedAt,
+		&i.OAuthToken.SupersededAt,
+		&i.OAuthToken.LastUsedAt,
+		&i.OAuthGrant.ID,
+		&i.OAuthGrant.UserID,
+		&i.OAuthGrant.ClientID,
+		&i.OAuthGrant.Scopes,
+		&i.OAuthGrant.CreatedAt,
+		&i.OAuthGrant.RevokedAt,
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.Name,
+		&i.User.AvatarKey,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
 	)
 	return i, err
 }
@@ -1733,6 +2228,65 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, err
 	return i, err
 }
 
+const insertRotatedOAuthToken = `-- name: InsertRotatedOAuthToken :one
+INSERT INTO oauth_tokens (
+    token_digest, kind, family_id, rotated_from, client_id, user_id, grant_id,
+    created_at, expires_at, family_expires_at
+)
+SELECT
+    $1, $2, predecessor.family_id, predecessor.id,
+    predecessor.client_id, predecessor.user_id, predecessor.grant_id,
+    $3::timestamptz,
+    LEAST($4::timestamptz, predecessor.family_expires_at),
+    predecessor.family_expires_at
+FROM oauth_tokens AS predecessor
+WHERE predecessor.id = $5::uuid
+RETURNING id, token_digest, kind, family_id, rotated_from, client_id, user_id, grant_id, created_at, expires_at, family_expires_at, revoked_at, superseded_at, last_used_at
+`
+
+type InsertRotatedOAuthTokenParams struct {
+	TokenDigest []byte
+	Kind        string
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	RotatedFrom uuid.UUID
+}
+
+// Refresh rotation (M3). Every identity field -- family, client, user, grant,
+// and family expiry -- is read from the predecessor row rather than trusted
+// from the caller, so a rotated token structurally cannot join a different
+// family, client, user, or grant than the token it succeeds. A missing
+// predecessor selects no row and returns pgx.ErrNoRows instead of inserting an
+// orphan. The partial unique index on rotated_from means one predecessor can
+// mint at most one successor even under concurrent rotations.
+func (q *Queries) InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error) {
+	row := q.db.QueryRow(ctx, insertRotatedOAuthToken,
+		arg.TokenDigest,
+		arg.Kind,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+		arg.RotatedFrom,
+	)
+	var i OAuthToken
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.Kind,
+		&i.FamilyID,
+		&i.RotatedFrom,
+		&i.ClientID,
+		&i.UserID,
+		&i.GrantID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.FamilyExpiresAt,
+		&i.RevokedAt,
+		&i.SupersededAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
 const insertSlugTombstone = `-- name: InsertSlugTombstone :one
 INSERT INTO slug_tombstones (slug, released_by_user_id, released_at)
 VALUES (
@@ -1822,6 +2376,59 @@ func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) 
 	return items, nil
 }
 
+const listIdleOAuthClientCandidates = `-- name: ListIdleOAuthClientCandidates :many
+SELECT candidate.id FROM oauth_clients AS candidate
+WHERE candidate.created_at <= $1::timestamptz
+  AND NOT EXISTS (
+      SELECT 1 FROM oauth_grants AS live_grant
+      WHERE live_grant.client_id = candidate.id
+        AND live_grant.revoked_at IS NULL
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM oauth_tokens AS live_token
+      WHERE live_token.client_id = candidate.id
+        AND live_token.revoked_at IS NULL
+        AND live_token.superseded_at IS NULL
+        AND live_token.expires_at > $2::timestamptz
+  )
+ORDER BY candidate.created_at, candidate.id
+LIMIT LEAST($3::int, 200)
+FOR UPDATE SKIP LOCKED
+`
+
+type ListIdleOAuthClientCandidatesParams struct {
+	IdleBefore time.Time
+	Now        time.Time
+	LimitRows  int32
+}
+
+// The bounded idle-client sweep (M1/M5): clients registered before
+// idle_before that hold no live grant and no live token. FOR UPDATE SKIP
+// LOCKED both reserves the returned rows for the caller's transaction -- so a
+// concurrent grant insert blocks on the FK's key-share lock and then fails
+// rather than being cascaded away -- and skips any client another transaction
+// already locked. Ordered oldest-first on oauth_clients_created_at_idx so
+// repeated sweeps make monotonic progress.
+func (q *Queries) ListIdleOAuthClientCandidates(ctx context.Context, arg ListIdleOAuthClientCandidatesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listIdleOAuthClientCandidates, arg.IdleBefore, arg.Now, arg.LimitRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveAuthEmailJobKeyIDs = `-- name: ListLiveAuthEmailJobKeyIDs :many
 SELECT DISTINCT COALESCE(key_id, '')::text AS key_id
 FROM auth_email_jobs
@@ -1846,6 +2453,75 @@ func (q *Queries) ListLiveAuthEmailJobKeyIDs(ctx context.Context, now time.Time)
 			return nil, err
 		}
 		items = append(items, key_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveOAuthGrantsForUser = `-- name: ListLiveOAuthGrantsForUser :many
+SELECT grant_row.id, grant_row.client_id, client_row.client_name,
+       grant_row.scopes, grant_row.created_at,
+       (
+           SELECT token_row.last_used_at FROM oauth_tokens AS token_row
+           WHERE token_row.grant_id = grant_row.id
+             AND token_row.last_used_at IS NOT NULL
+           ORDER BY token_row.last_used_at DESC
+           LIMIT 1
+       ) AS last_used_at
+FROM oauth_grants AS grant_row
+JOIN oauth_clients AS client_row ON client_row.id = grant_row.client_id
+WHERE grant_row.user_id = $1
+  AND grant_row.revoked_at IS NULL
+ORDER BY grant_row.created_at DESC, grant_row.id DESC
+LIMIT $2::int
+`
+
+type ListLiveOAuthGrantsForUserParams struct {
+	UserID    uuid.UUID
+	LimitRows int32
+}
+
+type ListLiveOAuthGrantsForUserRow struct {
+	ID         uuid.UUID
+	ClientID   uuid.UUID
+	ClientName string
+	Scopes     string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+}
+
+// The connected-agents list: client name, scopes, and when the agent was
+// connected and last used. Last-used comes from the grant's tokens rather than
+// a duplicated column, so there is one source of truth for agent activity.
+// Bounded by limit_rows; ordered newest-first with id as a deterministic
+// tiebreaker.
+//
+// The correlated ORDER BY ... LIMIT 1 is deliberate where max() would read
+// more naturally: sqlc cannot type an aggregate expression and emits
+// interface{} for it, while a plain nullable column reference keeps the Go
+// type *time.Time — NULL for a grant whose tokens have never been used.
+func (q *Queries) ListLiveOAuthGrantsForUser(ctx context.Context, arg ListLiveOAuthGrantsForUserParams) ([]ListLiveOAuthGrantsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listLiveOAuthGrantsForUser, arg.UserID, arg.LimitRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLiveOAuthGrantsForUserRow
+	for rows.Next() {
+		var i ListLiveOAuthGrantsForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClientID,
+			&i.ClientName,
+			&i.Scopes,
+			&i.CreatedAt,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2271,6 +2947,99 @@ func (q *Queries) RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsPa
 	return result.RowsAffected(), nil
 }
 
+const revokeOAuthGrant = `-- name: RevokeOAuthGrant :execrows
+UPDATE oauth_grants
+SET revoked_at = $1::timestamptz
+WHERE id = $2 AND revoked_at IS NULL
+`
+
+type RevokeOAuthGrantParams struct {
+	RevokedAt time.Time
+	ID        uuid.UUID
+}
+
+// Internal revocation (RFC 7009 and consumed-code replay), where the grant id
+// came from a token row the caller already validated. Idempotent: revoking an
+// already-revoked grant affects zero rows.
+func (q *Queries) RevokeOAuthGrant(ctx context.Context, arg RevokeOAuthGrantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOAuthGrant, arg.RevokedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOAuthGrantForUser = `-- name: RevokeOAuthGrantForUser :one
+UPDATE oauth_grants
+SET revoked_at = $1::timestamptz
+WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL
+RETURNING id, user_id, client_id, scopes, created_at, revoked_at
+`
+
+type RevokeOAuthGrantForUserParams struct {
+	RevokedAt time.Time
+	ID        uuid.UUID
+	UserID    uuid.UUID
+}
+
+// The settings-page revocation. Ownership is part of the predicate, so a
+// missing, already-revoked, and differently owned grant all return
+// pgx.ErrNoRows and no existence oracle appears.
+func (q *Queries) RevokeOAuthGrantForUser(ctx context.Context, arg RevokeOAuthGrantForUserParams) (OAuthGrant, error) {
+	row := q.db.QueryRow(ctx, revokeOAuthGrantForUser, arg.RevokedAt, arg.ID, arg.UserID)
+	var i OAuthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const revokeOAuthTokenFamily = `-- name: RevokeOAuthTokenFamily :execrows
+UPDATE oauth_tokens
+SET revoked_at = $1::timestamptz
+WHERE family_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeOAuthTokenFamilyParams struct {
+	RevokedAt time.Time
+	FamilyID  uuid.UUID
+}
+
+// Superseded-token replay defense: every still-live member of one family dies
+// together, in the caller's transaction, under the grant row lock.
+func (q *Queries) RevokeOAuthTokenFamily(ctx context.Context, arg RevokeOAuthTokenFamilyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOAuthTokenFamily, arg.RevokedAt, arg.FamilyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOAuthTokensForGrant = `-- name: RevokeOAuthTokensForGrant :execrows
+UPDATE oauth_tokens
+SET revoked_at = $1::timestamptz
+WHERE grant_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeOAuthTokensForGrantParams struct {
+	RevokedAt time.Time
+	GrantID   uuid.UUID
+}
+
+// Grant revocation kills every family issued under it, not just the newest.
+func (q *Queries) RevokeOAuthTokensForGrant(ctx context.Context, arg RevokeOAuthTokensForGrantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOAuthTokensForGrant, arg.RevokedAt, arg.GrantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeSession = `-- name: RevokeSession :exec
 UPDATE sessions SET revoked_at = $2 WHERE id = $1 AND revoked_at IS NULL
 `
@@ -2364,6 +3133,49 @@ func (q *Queries) StartSessionRotationGrace(ctx context.Context, arg StartSessio
 	return err
 }
 
+const supersedeOAuthToken = `-- name: SupersedeOAuthToken :one
+UPDATE oauth_tokens
+SET superseded_at = $1::timestamptz
+WHERE id = $2
+  AND family_id = $3
+  AND superseded_at IS NULL
+  AND revoked_at IS NULL
+RETURNING id, token_digest, kind, family_id, rotated_from, client_id, user_id, grant_id, created_at, expires_at, family_expires_at, revoked_at, superseded_at, last_used_at
+`
+
+type SupersedeOAuthTokenParams struct {
+	SupersededAt time.Time
+	ID           uuid.UUID
+	FamilyID     uuid.UUID
+}
+
+// Marks the presented refresh token superseded as part of a rotation. family_id
+// is part of the predicate, so a caller holding one family's identifier can
+// never mark a token belonging to another family, and a second supersession of
+// the same row affects nothing (pgx.ErrNoRows) -- which is exactly the replay
+// the caller turns into a whole-family revocation.
+func (q *Queries) SupersedeOAuthToken(ctx context.Context, arg SupersedeOAuthTokenParams) (OAuthToken, error) {
+	row := q.db.QueryRow(ctx, supersedeOAuthToken, arg.SupersededAt, arg.ID, arg.FamilyID)
+	var i OAuthToken
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.Kind,
+		&i.FamilyID,
+		&i.RotatedFrom,
+		&i.ClientID,
+		&i.UserID,
+		&i.GrantID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.FamilyExpiresAt,
+		&i.RevokedAt,
+		&i.SupersededAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
 const touchLastSeenAt = `-- name: TouchLastSeenAt :exec
 UPDATE sessions SET last_seen_at = $2 WHERE id = $1
 `
@@ -2379,6 +3191,54 @@ type TouchLastSeenAtParams struct {
 func (q *Queries) TouchLastSeenAt(ctx context.Context, arg TouchLastSeenAtParams) error {
 	_, err := q.db.Exec(ctx, touchLastSeenAt, arg.ID, arg.LastSeenAt)
 	return err
+}
+
+const touchOAuthClientLastUsed = `-- name: TouchOAuthClientLastUsed :execrows
+UPDATE oauth_clients
+SET last_used_at = $1::timestamptz
+WHERE id = $2
+  AND last_used_at <= $3::timestamptz
+`
+
+type TouchOAuthClientLastUsedParams struct {
+	Now         time.Time
+	ID          uuid.UUID
+	TouchBefore time.Time
+}
+
+// Bounded activity record: at most one write per client per touch window. The
+// caller passes touch_before = now - window, so the throttle is enforced by
+// the predicate rather than by caller bookkeeping.
+func (q *Queries) TouchOAuthClientLastUsed(ctx context.Context, arg TouchOAuthClientLastUsedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, touchOAuthClientLastUsed, arg.Now, arg.ID, arg.TouchBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const touchOAuthTokenLastUsed = `-- name: TouchOAuthTokenLastUsed :execrows
+UPDATE oauth_tokens
+SET last_used_at = $1::timestamptz
+WHERE id = $2
+  AND revoked_at IS NULL
+  AND (last_used_at IS NULL OR last_used_at <= $3::timestamptz)
+`
+
+type TouchOAuthTokenLastUsedParams struct {
+	Now         time.Time
+	ID          uuid.UUID
+	TouchBefore time.Time
+}
+
+// Bounded activity record (M3): at most one write per token per touch window,
+// and never on a revoked token. The caller passes touch_before = now - window.
+func (q *Queries) TouchOAuthTokenLastUsed(ctx context.Context, arg TouchOAuthTokenLastUsedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, touchOAuthTokenLastUsed, arg.Now, arg.ID, arg.TouchBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const touchReauthenticatedAt = `-- name: TouchReauthenticatedAt :exec
@@ -2546,6 +3406,49 @@ func (q *Queries) UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitl
 	var revision int64
 	err := row.Scan(&revision)
 	return revision, err
+}
+
+const upsertOAuthGrant = `-- name: UpsertOAuthGrant :one
+INSERT INTO oauth_grants (user_id, client_id, scopes, created_at)
+VALUES (
+    $1, $2, $3,
+    $4::timestamptz
+)
+ON CONFLICT (user_id, client_id) WHERE revoked_at IS NULL
+DO UPDATE SET scopes = EXCLUDED.scopes
+RETURNING id, user_id, client_id, scopes, created_at, revoked_at
+`
+
+type UpsertOAuthGrantParams struct {
+	UserID    uuid.UUID
+	ClientID  uuid.UUID
+	Scopes    string
+	CreatedAt time.Time
+}
+
+// Consent approval (M8): records a new grant or refreshes the live one's
+// scopes. The conflict target names the partial unique index's predicate, so
+// the upsert arbitrates on exactly the "one live grant per (user, client)"
+// rule the database enforces. created_at is never rewritten -- the settings
+// list shows when the agent was first connected, not when it was last
+// re-approved.
+func (q *Queries) UpsertOAuthGrant(ctx context.Context, arg UpsertOAuthGrantParams) (OAuthGrant, error) {
+	row := q.db.QueryRow(ctx, upsertOAuthGrant,
+		arg.UserID,
+		arg.ClientID,
+		arg.Scopes,
+		arg.CreatedAt,
+	)
+	var i OAuthGrant
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ClientID,
+		&i.Scopes,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
 }
 
 const upsertPasswordCredential = `-- name: UpsertPasswordCredential :one

@@ -41,6 +41,14 @@ type Querier interface {
 	// bounded page, oldest outcome first.
 	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
 	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
+	// Single-use consumption (M2). One conditional UPDATE both takes the row lock
+	// and decides the winner: under two concurrent exchanges of the same code the
+	// second blocks, re-evaluates the predicate after the first commits, matches
+	// no row, and surfaces as pgx.ErrNoRows. Unknown, expired, and already-consumed
+	// codes therefore collapse to that one outcome, so no caller can branch on the
+	// reason. issued_family_id records the token family this exchange creates,
+	// which is what a later replay revokes.
+	ConsumeOAuthAuthorizationCode(ctx context.Context, arg ConsumeOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
 	// Atomically claims a transaction: only a row that is unexpired and not yet
 	// consumed (as of now, $2) is updated and returned. A handle that is
 	// unknown, expired, or already consumed matches no row, so the caller sees
@@ -52,6 +60,10 @@ type Querier interface {
 	// transaction just like any other outcome, so it can never be retried
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
+	// The M5 live-grant cap check. Callers serialize it with the user row lock
+	// (GetUserForUpdate) so two concurrent approvals cannot both read the same
+	// pre-cap count.
+	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
 	// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
@@ -66,6 +78,31 @@ type Querier interface {
 	// The caller checks the provider subject first for the common case. The
 	// database uniqueness constraint remains the concurrency backstop.
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (Identity, error)
+	// Code issue (M2). expires_at is computed here, not passed in, so the exact
+	// 60-second TTL the table checks can never be missed by a caller. Only the
+	// code's digest is stored; the raw code exists solely in the redirect the user
+	// agent carries.
+	CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOAuthAuthorizationCodeParams) (OAuthAuthorizationCode, error)
+	// ---------------------------------------------------------------------------
+	// Phase PM: OAuth agent access — clients, authorization codes, grants, and
+	// tokens. Storage is digest-only: no query here reads, writes, or returns raw
+	// code or token material, and PKCE verifiers are never stored.
+	//
+	// Lock order is oauth_clients -> users -> oauth_grants ->
+	// oauth_authorization_codes -> oauth_tokens. Every path that revokes a token
+	// family first locks its grant row (GetOAuthGrantForUpdate), and every path
+	// that mutates a client's rows first locks the client row
+	// (GetOAuthClientForUpdate) -- which is also what makes the idle-client sweep
+	// skip a client another transaction is consenting to.
+	// ---------------------------------------------------------------------------
+	// Dynamic client registration (M1). The primary key returned here IS the
+	// public client_id; there is no secret. last_used_at starts at created_at so
+	// the column is never NULL and the ordering check holds from the first row.
+	CreateOAuthClient(ctx context.Context, arg CreateOAuthClientParams) (OAuthClient, error)
+	// The first token of a family, issued by a code exchange (M3). expires_at is
+	// clamped to the family's own death so no token can outlive the family it
+	// belongs to; the table's ordering check is the backstop for raw SQL.
+	CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error)
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
 	CreatePasswordRegistration(ctx context.Context, arg CreatePasswordRegistrationParams) (PasswordRegistration, error)
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
@@ -100,6 +137,11 @@ type Querier interface {
 	// counters (once per returned user) before committing that cleanup
 	// transaction.
 	DeleteExpiredIdempotencyRecordsGlobal(ctx context.Context, arg DeleteExpiredIdempotencyRecordsGlobalParams) ([]DeleteExpiredIdempotencyRecordsGlobalRow, error)
+	// Bounded cleanup, oldest expiry first on oauth_authorization_codes_expires_at_idx.
+	// expires_at alone is the predicate: a consumed code keeps its original expiry,
+	// so consumed and abandoned rows leave on the same schedule, and a row is never
+	// removed while ConsumeOAuthAuthorizationCode could still claim it.
+	DeleteExpiredOAuthAuthorizationCodes(ctx context.Context, arg DeleteExpiredOAuthAuthorizationCodesParams) (int64, error)
 	// OAuth start is unauthenticated and writes one row per request. Each start
 	// therefore clears a bounded batch of expired rows before creating its own.
 	//
@@ -115,6 +157,12 @@ type Querier interface {
 	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
+	// Removing a client cascades its codes, grants, and tokens: deregistering an
+	// agent ends every authorization it holds.
+	DeleteOAuthClient(ctx context.Context, id uuid.UUID) (int64, error)
+	// Deletes exactly the candidate set the caller just locked. The batch bound
+	// lives in ListIdleOAuthClientCandidates; this statement never widens it.
+	DeleteOAuthClients(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeletePasswordRegistration(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
@@ -125,6 +173,13 @@ type Querier interface {
 	// from absence without creating an existence oracle.
 	DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error)
 	DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePublicCASParams) (Resume, error)
+	// Bounded token cleanup. An access token leaves as soon as it has expired or
+	// been revoked: it carries no replay-detection role. A refresh token is kept
+	// until its whole family has expired, because a superseded or revoked refresh
+	// token that is presented again must still be recognized as a replay rather
+	// than as an unknown token. rotated_from is ON DELETE SET NULL, so removing a
+	// predecessor detaches its successor instead of cascading past the batch bound.
+	DeleteTerminalOAuthTokens(ctx context.Context, arg DeleteTerminalOAuthTokensParams) (int64, error)
 	// Records exact-key cleanup work in the caller's transaction (ADR 0019).
 	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
 	// table's own check constraint rejects a malformed or cross-resume key.
@@ -148,9 +203,32 @@ type Querier interface {
 	// Re-locks the exact leased job by its owner before the bounded send handoff,
 	// so a token replacement that already committed cannot race this delivery.
 	GetLeasedAuthEmailJobForUpdate(ctx context.Context, arg GetLeasedAuthEmailJobForUpdateParams) (AuthEmailJob, error)
+	// The grant-skip read: a live grant with equal-or-wider scopes lets authorize
+	// issue a code without a second consent.
+	GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantParams) (OAuthGrant, error)
 	// Ambiguous-delete recovery proves the exact immutable cleanup job without
 	// scanning or exposing unrelated object keys.
 	GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error)
+	// Replay lookup: returns the row whether or not it was consumed, so the caller
+	// can see the family a consumed code issued and revoke exactly those tokens.
+	GetOAuthAuthorizationCodeByDigest(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error)
+	// The locked replay lookup used before a consumed-code replay revokes the
+	// family it issued, so the revocation and the row it read cannot interleave.
+	GetOAuthAuthorizationCodeByDigestForUpdate(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error)
+	GetOAuthClient(ctx context.Context, id uuid.UUID) (OAuthClient, error)
+	// The client-row lock the authorize, consent, and token paths take before
+	// writing a grant, code, or token for that client. Holding it is what lets
+	// ListIdleOAuthClientCandidates skip (rather than collect) a client that is
+	// being consented to right now.
+	GetOAuthClientForUpdate(ctx context.Context, id uuid.UUID) (OAuthClient, error)
+	// The grant-row lock every token-family revocation takes first, so a rotation
+	// committing concurrently cannot resurrect a family the revocation just killed.
+	GetOAuthGrantForUpdate(ctx context.Context, id uuid.UUID) (OAuthGrant, error)
+	// The bearer boundary's single round trip (M7): token row, its grant, and its
+	// account in one query. The caller applies expiry, revocation, supersession,
+	// and kind checks to the returned row; every rejection class therefore reads
+	// the same rows and produces the same closed response.
+	GetOAuthTokenAuthorityByDigest(ctx context.Context, tokenDigest []byte) (GetOAuthTokenAuthorityByDigestRow, error)
 	// Locks (creating if absent) the caller's usage row inside the current
 	// transaction. The no-op DO UPDATE assignment is what makes the conflict
 	// arm take the row lock and return the existing row; user_id itself never
@@ -200,6 +278,14 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// The user-row lock every session issuer and password mutation serializes on.
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
+	// Refresh rotation (M3). Every identity field -- family, client, user, grant,
+	// and family expiry -- is read from the predecessor row rather than trusted
+	// from the caller, so a rotated token structurally cannot join a different
+	// family, client, user, or grant than the token it succeeds. A missing
+	// predecessor selects no row and returns pgx.ErrNoRows instead of inserting an
+	// orphan. The partial unique index on rotated_from means one predecessor can
+	// mint at most one successor even under concurrent rotations.
+	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
 	// Discovery bytes contain only eligible slugs in raw byte order. The
 	// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
@@ -207,9 +293,28 @@ type Querier interface {
 	ListEligiblePublicSlugs(ctx context.Context) ([]string, error)
 	// Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 	ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) ([]Identity, error)
+	// The bounded idle-client sweep (M1/M5): clients registered before
+	// idle_before that hold no live grant and no live token. FOR UPDATE SKIP
+	// LOCKED both reserves the returned rows for the caller's transaction -- so a
+	// concurrent grant insert blocks on the FK's key-share lock and then fails
+	// rather than being cascaded away -- and skips any client another transaction
+	// already locked. Ordered oldest-first on oauth_clients_created_at_idx so
+	// repeated sweeps make monotonic progress.
+	ListIdleOAuthClientCandidates(ctx context.Context, arg ListIdleOAuthClientCandidatesParams) ([]uuid.UUID, error)
 	// Startup readiness: the distinct key IDs every pending/leased (non-terminal,
 	// non-expired) job references. The key ring must decrypt all of them.
 	ListLiveAuthEmailJobKeyIDs(ctx context.Context, now time.Time) ([]string, error)
+	// The connected-agents list: client name, scopes, and when the agent was
+	// connected and last used. Last-used comes from the grant's tokens rather than
+	// a duplicated column, so there is one source of truth for agent activity.
+	// Bounded by limit_rows; ordered newest-first with id as a deterministic
+	// tiebreaker.
+	//
+	// The correlated ORDER BY ... LIMIT 1 is deliberate where max() would read
+	// more naturally: sqlc cannot type an aggregate expression and emits
+	// interface{} for it, while a plain nullable column reference keeps the Go
+	// type *time.Time — NULL for a grant whose tokens have never been used.
+	ListLiveOAuthGrantsForUser(ctx context.Context, arg ListLiveOAuthGrantsForUserParams) ([]ListLiveOAuthGrantsForUserRow, error)
 	// Lists sessions that internal/auth also considers live:
 	//
 	//   - not explicitly revoked (revoked_at IS NULL);
@@ -263,6 +368,19 @@ type Querier interface {
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)
+	// Internal revocation (RFC 7009 and consumed-code replay), where the grant id
+	// came from a token row the caller already validated. Idempotent: revoking an
+	// already-revoked grant affects zero rows.
+	RevokeOAuthGrant(ctx context.Context, arg RevokeOAuthGrantParams) (int64, error)
+	// The settings-page revocation. Ownership is part of the predicate, so a
+	// missing, already-revoked, and differently owned grant all return
+	// pgx.ErrNoRows and no existence oracle appears.
+	RevokeOAuthGrantForUser(ctx context.Context, arg RevokeOAuthGrantForUserParams) (OAuthGrant, error)
+	// Superseded-token replay defense: every still-live member of one family dies
+	// together, in the caller's transaction, under the grant row lock.
+	RevokeOAuthTokenFamily(ctx context.Context, arg RevokeOAuthTokenFamilyParams) (int64, error)
+	// Grant revocation kills every family issued under it, not just the newest.
+	RevokeOAuthTokensForGrant(ctx context.Context, arg RevokeOAuthTokensForGrantParams) (int64, error)
 	// Idempotent: revoking an already-revoked (or nonexistent) session id
 	// affects zero rows rather than erroring, so logout/revoke can be retried
 	// safely. revoked_at is immediate and orthogonal to rotation_grace_until
@@ -293,10 +411,23 @@ type Querier interface {
 	// continued use of the successor, which would otherwise keep a superseded
 	// credential alive indefinitely.
 	StartSessionRotationGrace(ctx context.Context, arg StartSessionRotationGraceParams) error
+	// Marks the presented refresh token superseded as part of a rotation. family_id
+	// is part of the predicate, so a caller holding one family's identifier can
+	// never mark a token belonging to another family, and a second supersession of
+	// the same row affects nothing (pgx.ErrNoRows) -- which is exactly the replay
+	// the caller turns into a whole-family revocation.
+	SupersedeOAuthToken(ctx context.Context, arg SupersedeOAuthTokenParams) (OAuthToken, error)
 	// Unconditional: callers throttle to at most once per lastSeenThrottle
 	// themselves (internal/auth.SessionManager.Authenticate) before issuing
 	// this write, so it is not itself CAS-guarded.
 	TouchLastSeenAt(ctx context.Context, arg TouchLastSeenAtParams) error
+	// Bounded activity record: at most one write per client per touch window. The
+	// caller passes touch_before = now - window, so the throttle is enforced by
+	// the predicate rather than by caller bookkeeping.
+	TouchOAuthClientLastUsed(ctx context.Context, arg TouchOAuthClientLastUsedParams) (int64, error)
+	// Bounded activity record (M3): at most one write per token per touch window,
+	// and never on a revoked token. The caller passes touch_before = now - window.
+	TouchOAuthTokenLastUsed(ctx context.Context, arg TouchOAuthTokenLastUsedParams) (int64, error)
 	// Records that this session's lineage just completed a full OAuth login
 	// after a real reauthentication round trip, never by rotation.
 	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
@@ -322,6 +453,13 @@ type Querier interface {
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into
 	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
+	// Consent approval (M8): records a new grant or refreshes the live one's
+	// scopes. The conflict target names the partial unique index's predicate, so
+	// the upsert arbitrates on exactly the "one live grant per (user, client)"
+	// rule the database enforces. created_at is never rewritten -- the settings
+	// list shows when the agent was first connected, not when it was last
+	// re-approved.
+	UpsertOAuthGrant(ctx context.Context, arg UpsertOAuthGrantParams) (OAuthGrant, error)
 	// Insert-or-replace the single credential under the row lock the caller
 	// already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
 	// bumping changed_at on the conflict arm.
