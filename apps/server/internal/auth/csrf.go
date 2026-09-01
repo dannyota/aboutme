@@ -27,6 +27,14 @@ func RequireCSRF(allowedOrigin string) api.Middleware {
 	return requireCSRF(allowedOrigin, jsonContentTypeAllowed, rejectJSONMediaType, false)
 }
 
+// RequireExactJSONCSRF applies the same Origin and synchronizer-token checks
+// as RequireCSRF, but mutating requests with a body accept exactly one
+// application/json field value and map any other media type to the OpenAPI
+// 415 response used by OAuth consent.
+func RequireExactJSONCSRF(allowedOrigin string) api.Middleware {
+	return requireCSRF(allowedOrigin, exactJSONContentTypeAllowed, rejectExactJSONMediaType, false)
+}
+
 // RequireCSRFMultipart applies the same origin, session, and synchronizer
 // token checks as RequireCSRF, but accepts only one multipart/form-data media
 // type with a non-empty boundary. The resume photo POST is its sole caller.
@@ -78,6 +86,10 @@ func rejectMultipartMediaType(w http.ResponseWriter) {
 
 func rejectJSONMediaType(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusBadRequest, "request_invalid", "Content-Type must be one application/json value")
+}
+
+func rejectExactJSONMediaType(w http.ResponseWriter) {
+	api.WriteError(w, http.StatusUnsupportedMediaType, "media_type_unsupported", "Content-Type must be application/json")
 }
 
 // rejectCSRF preserves one response across all failure classes.
@@ -155,6 +167,11 @@ func jsonContentTypeAllowed(header http.Header) bool {
 	}
 	delete(params, "charset")
 	return len(params) == 0
+}
+
+func exactJSONContentTypeAllowed(header http.Header) bool {
+	values := header.Values("Content-Type")
+	return len(values) == 1 && values[0] == "application/json"
 }
 
 func multipartContentTypeAllowed(header http.Header) bool {

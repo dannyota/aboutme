@@ -80,7 +80,8 @@ func TestClientGC_BoundsProtectsLiveAuthorityAndIsIdempotent(t *testing.T) {
 		t.Fatalf("CreateOAuthToken: %v", err)
 	}
 
-	s, err := NewService(ctx, ServiceDependencies{Pool: pool, Queries: q, Clock: func() time.Time { return now }, Entropy: bytes.NewReader(make([]byte, 32)), PublicOrigin: "https://aboutme.example", RegisterAdmission: &registrationAdmissionFake{allowed: true}})
+	admission := &registrationAdmissionFake{allowed: true}
+	s, err := NewService(ctx, ServiceDependencies{Pool: pool, Queries: q, Clock: func() time.Time { return now }, Entropy: bytes.NewReader(make([]byte, 32)), PublicOrigin: "https://aboutme.example", RegisterAdmission: admission, TokenAdmission: admission, LiveGrantLimit: 10})
 	if err != nil {
 		t.Fatalf("NewService startup sweep: %v", err)
 	}

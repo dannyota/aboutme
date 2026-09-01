@@ -25,25 +25,38 @@
 - `main.go`: compose store contract → oauthsrv service → mcpapi bearer + server
   → routes, with the same shutdown join pattern the mail worker uses. Routes
   register only when the public-roots v6 registry says so.
+- Compose the session-authenticated OpenAPI adapters omitted from T05's
+  service-only task: `GET|POST /api/v1/oauth/consent`, `GET /api/v1/me/agents`,
+  and `DELETE /api/v1/me/agents/{grantId}`. GET routes require a session.
+  Mutations require a session, CSRF token, and exact Origin; grant revocation is
+  owner-scoped and revokes the grant's tokens in the established client → user →
+  grant lock order.
+- The top-level router leaves exact `/mcp` to its route-owned 4 MiB cap. Other
+  and escaped near matches retain the ordinary 256 KiB cap.
+- `deploy/compose.yml` passes `MCP_ENABLED` to the server so the validated flag
+  can enable the feature outside native development.
 
 ## TDD cycle
 
-- [ ] Write limiter REDs per route: exact numbers at limit/limit+1, bounded key
+- [x] Write limiter REDs per route: exact numbers at limit/limit+1, bounded key
       stores, overflow bucket behavior, `Retry-After` bytes, success clearing
       the failed-grant bucket.
-- [ ] Write concurrency REDs: 4 in-flight `/mcp` requests admit, the 5th
+- [x] Write concurrency REDs: 4 in-flight `/mcp` requests admit, the 5th
       closed-fails, completion releases exactly one slot.
-- [ ] Write config REDs: every new variable validated, partial configuration
+- [x] Write config REDs: every new variable validated, partial configuration
       fails startup readiness, no secret value in error text.
-- [ ] Write composition REDs in `cmd/server`: startup wires routes exactly per
+- [x] Write composition REDs in `cmd/server`: startup wires routes exactly per
       registry; shutdown joins cleanly under in-flight MCP requests.
-- [ ] Run the expected RED:
+- [x] Write session-route REDs for authentication, CSRF and exact-Origin, strict
+      4,096-byte consent JSON, safe consent metadata, bounded grant listing, and
+      owner-scoped grant-and-token revocation.
+- [x] Run the expected RED:
 
   ```sh
-  cd apps/server && go test ./internal/oauthsrv ./internal/mcpapi ./internal/config ./cmd/server -race -count=1
+  cd apps/server && go test ./internal/oauthsrv ./internal/mcpapi ./internal/auth ./internal/api ./internal/config ./cmd/server -race -count=1
   ```
 
-- [ ] Implement; rerun to GREEN, then
+- [x] Implement; rerun to GREEN, then
       `make server-build server-vet server-test`.
 
 ## Adversarial checklist
@@ -51,8 +64,11 @@
 - Limiter keys are token row IDs and user IDs, never token material.
 - A token-rate-limited agent cannot bypass via a second token beyond the
   per-user ceiling.
+- Failed-grant admission reserves the slot before token processing, so
+  concurrent invalid grants cannot overshoot the per-client ceiling.
 - The semaphore cannot leak slots on panic or client disconnect (cancellation
   test).
+- Missing, revoked, and foreign agent grants return byte-identical 404 bodies.
 
 ## Handoff
 

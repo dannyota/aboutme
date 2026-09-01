@@ -50,6 +50,16 @@ func (a *registrationAdmissionFake) AdmitRegister(_ time.Time, _ *http.Request) 
 	return a.allowed, a.retry
 }
 
+func (a *registrationAdmissionFake) AdmitToken(_ time.Time, _ *http.Request) (bool, int) {
+	return true, 0
+}
+
+func (a *registrationAdmissionFake) AdmitGrant(clientID uuid.UUID, _ time.Time) (grantAttempt, bool, int) {
+	return grantAttempt{clientID: clientID, leaseID: 1}, true, 0
+}
+
+func (a *registrationAdmissionFake) FinishGrant(grantAttempt, grantAttemptResult) {}
+
 func newRegistrationService(t *testing.T, q *registrationQueries, admission *registrationAdmissionFake) *Service {
 	t.Helper()
 	s, _ := newRegistrationServiceAndPool(t, q, admission)
@@ -73,6 +83,8 @@ func newRegistrationServiceAndPool(t *testing.T, q *registrationQueries, admissi
 		Entropy:           bytes.NewReader(make([]byte, 32)),
 		PublicOrigin:      "https://aboutme.example",
 		RegisterAdmission: admission,
+		TokenAdmission:    admission,
+		LiveGrantLimit:    10,
 	})
 	if err != nil {
 		t.Fatalf("NewService() error: %v", err)

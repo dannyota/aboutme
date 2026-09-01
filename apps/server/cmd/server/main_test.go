@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,7 +17,114 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
+	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 )
+
+func TestAgentRoutesFollowPublicRootRegistryAndDisableCleanly(t *testing.T) {
+	t.Parallel()
+
+	seen := make(chan string, 16)
+	mark := func(name string) http.HandlerFunc {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			seen <- name
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}
+	handlers := agentRouteHandlers{
+		AuthorizationMetadata: mark("authorization metadata"),
+		ProtectedMetadata:     mark("protected metadata"),
+		Register:              mark("register"),
+		Authorize:             mark("authorize"),
+		Token:                 mark("token"),
+		Revoke:                mark("revoke"),
+		MCP:                   mark("mcp"),
+		Consent:               mark("consent"),
+		AgentGrants:           mark("agent grants"),
+		AgentGrant:            mark("agent grant"),
+	}
+	register, err := newAgentRouteRegistrar(true, publicroots.Routes[:], handlers)
+	if err != nil {
+		t.Fatalf("newAgentRouteRegistrar: %v", err)
+	}
+	mux := http.NewServeMux()
+	register(mux)
+
+	for _, tc := range []struct{ path, want string }{
+		{"/.well-known/oauth-authorization-server", "authorization metadata"},
+		{"/.well-known/oauth-protected-resource", "protected metadata"},
+		{"/oauth/register", "register"},
+		{"/oauth/authorize", "authorize"},
+		{"/oauth/token", "token"},
+		{"/oauth/revoke", "revoke"},
+		{"/mcp", "mcp"},
+		{"/api/v1/oauth/consent", "consent"},
+		{"/api/v1/me/agents", "agent grants"},
+		{"/api/v1/me/agents/018f5b6a-9a3e-7c21-8b1e-000000000030", "agent grant"},
+	} {
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, tc.path, nil))
+		if recorder.Code != http.StatusNoContent {
+			t.Fatalf("%s status = %d", tc.path, recorder.Code)
+		}
+		if got := <-seen; got != tc.want {
+			t.Fatalf("%s reached %q, want %q", tc.path, got, tc.want)
+		}
+	}
+	for _, nearMatch := range []string{"/.well-known/other", "/oauth", "/oauth/other", "/mcp/other", "/api/v1/me/agents/extra/path"} {
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, nearMatch, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("near-match %s status = %d, want 404", nearMatch, recorder.Code)
+		}
+	}
+
+	disabled, err := newAgentRouteRegistrar(false, publicroots.Routes[:], handlers)
+	if err != nil {
+		t.Fatalf("disabled registrar: %v", err)
+	}
+	disabledMux := http.NewServeMux()
+	disabled(disabledMux)
+	for _, path := range []string{"/mcp", "/api/v1/oauth/consent", "/api/v1/me/agents", "/api/v1/me/agents/018f5b6a-9a3e-7c21-8b1e-000000000030"} {
+		recorder := httptest.NewRecorder()
+		disabledMux.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("disabled %s status = %d, want 404", path, recorder.Code)
+		}
+	}
+}
+
+func TestAgentRoutesFailClosedOnPartialRegistryOrHandlers(t *testing.T) {
+	t.Parallel()
+
+	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	complete := agentRouteHandlers{
+		AuthorizationMetadata: handler,
+		ProtectedMetadata:     handler,
+		Register:              handler,
+		Authorize:             handler,
+		Token:                 handler,
+		Revoke:                handler,
+		MCP:                   handler,
+		Consent:               handler,
+		AgentGrants:           handler,
+		AgentGrant:            handler,
+	}
+	registry := append([]publicroots.Route(nil), publicroots.Routes[:]...)
+	for i := range registry {
+		if registry[i].Root == "mcp" {
+			registry[i].Dispatch = publicroots.DispatchNuxt
+		}
+	}
+	if _, err := newAgentRouteRegistrar(true, registry, complete); err == nil {
+		t.Fatal("newAgentRouteRegistrar() accepted registry without Go-owned mcp root")
+	}
+
+	partial := complete
+	partial.Token = nil
+	if _, err := newAgentRouteRegistrar(true, publicroots.Routes[:], partial); err == nil {
+		t.Fatal("newAgentRouteRegistrar() accepted partial handlers")
+	}
+}
 
 func TestPublicRenderConfigRejectsSwappedOriginsAndUnsafeDigests(t *testing.T) {
 	t.Parallel()
@@ -117,12 +225,12 @@ func (f readinessRoundTrip) RoundTrip(request *http.Request) (*http.Response, er
 	return f(request)
 }
 
-// TestServe_DrainsInFlightRequestBeforeReturning is a regression test for
-// graceful shutdown: canceling the context must not cut off a request
+// TestServe_DrainsInFlightMCPRequestBeforeReturning is a regression test for
+// graceful shutdown: canceling the context must not cut off an MCP request
 // that's already being handled. serve must wait for it to finish (up to
 // shutdownTimeout) before returning, exactly like a SIGTERM during a real
 // deploy is supposed to drain in-flight work rather than abort it.
-func TestServe_DrainsInFlightRequestBeforeReturning(t *testing.T) {
+func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 	t.Parallel()
 
 	var lc net.ListenConfig
@@ -156,7 +264,7 @@ func TestServe_DrainsInFlightRequestBeforeReturning(t *testing.T) {
 		// request context, independent of the server's shutdown-trigger
 		// context above. Tying it to ctx would cancel the in-flight request
 		// the moment cancel() fires below, defeating the point of this test.
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+ln.Addr().String()+"/", nil)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, "http://"+ln.Addr().String()+"/mcp", nil)
 		if err != nil {
 			reqDone <- err
 			return

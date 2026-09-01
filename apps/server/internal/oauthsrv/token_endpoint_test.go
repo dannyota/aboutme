@@ -577,7 +577,8 @@ func newTokenTestService(t *testing.T, now time.Time) (*Service, *store.Pool, *s
 	for block := byte(1); block <= 16; block++ {
 		entropy = append(entropy, bytes.Repeat([]byte{block}, 32)...)
 	}
-	s, err := NewService(context.Background(), ServiceDependencies{Pool: pool, Queries: store.New(pool), Clock: func() time.Time { return now }, Entropy: bytes.NewReader(entropy), PublicOrigin: "https://aboutme.example", RegisterAdmission: &registrationAdmissionFake{allowed: true}})
+	admission := &registrationAdmissionFake{allowed: true}
+	s, err := NewService(context.Background(), ServiceDependencies{Pool: pool, Queries: store.New(pool), Clock: func() time.Time { return now }, Entropy: bytes.NewReader(entropy), PublicOrigin: "https://aboutme.example", RegisterAdmission: admission, TokenAdmission: admission, LiveGrantLimit: 10})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

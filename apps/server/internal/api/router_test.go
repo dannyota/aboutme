@@ -295,6 +295,40 @@ func TestRouter_PhotoUploadAloneBypassesBufferingBodyLimit(t *testing.T) {
 	}
 }
 
+// TestRouter_MCPAloneBypassesDefaultBodyLimit freezes the route-specific MCP
+// body boundary. The MCP handler owns its 4 MiB cap; the outer 256 KiB JSON
+// middleware must not reject a valid photo-bearing JSON-RPC request first.
+// Near matches retain the ordinary cap.
+func TestRouter_MCPAloneBypassesDefaultBodyLimit(t *testing.T) {
+	t.Parallel()
+
+	register := func(mux *http.ServeMux) {
+		mux.Handle("/mcp", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}))
+	}
+	handler := api.New(testLogger(), fakePinger{}, api.Options{BodyLimitBytes: 10}, nil, register)
+
+	for _, tc := range []struct {
+		name, path string
+		want       int
+	}{
+		{"exact MCP", "/mcp", http.StatusNoContent},
+		{"subpath", "/mcp/other", http.StatusRequestEntityTooLarge},
+		{"escaped root", "/%6dcp", http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, tc.path, bytes.NewReader(bytes.Repeat([]byte("a"), 20)))
+			req.ContentLength = 20
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, req)
+			if recorder.Code != tc.want {
+				t.Fatalf("status = %d, want %d", recorder.Code, tc.want)
+			}
+		})
+	}
+}
+
 // decodeErrorEnvelope unmarshals rec's body as {"error":{"code","message"}}
 // and fails the test if it isn't shaped that way — every non-2xx response
 // from this router must use the standard envelope, never a stdlib default

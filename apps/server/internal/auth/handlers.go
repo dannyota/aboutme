@@ -230,6 +230,38 @@ func RequireSession(m *SessionManager) api.Middleware {
 	}
 }
 
+// OptionalSession authenticates a browser session when one is present and
+// otherwise continues anonymously. It is used only by routes such as the OAuth
+// authorize endpoint that must preserve their own unauthenticated redirect
+// behavior. Invalid cookies are cleared and treated as absent; internal store
+// failures remain closed 500s.
+func OptionalSession(m *SessionManager) api.Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, err := r.Cookie(sessionCookieName); err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			sess, rotated, err := readAndAuthenticateSession(r, m)
+			if err != nil {
+				if errors.Is(err, ErrSessionInvalid) {
+					ClearSessionCookie(w)
+					next.ServeHTTP(w, r)
+					return
+				}
+				api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+				return
+			}
+			if rotated != "" {
+				SetSessionCookie(w, rotated)
+			}
+			ctx := ContextWithSession(r.Context(), sess)
+			ctx = api.WithAccountID(ctx, sess.UserID.String())
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // readAndAuthenticateSession lets public callbacks reuse session
 // authentication after learning the transaction purpose. It returns
 // ErrSessionInvalid unchanged so callers choose JSON or redirect handling.

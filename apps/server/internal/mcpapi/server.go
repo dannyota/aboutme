@@ -3,6 +3,7 @@ package mcpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -14,8 +15,6 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
 )
 
-const maxMCPRequestBytes = 4 << 20
-
 // AgentExecutor is the closed bridge to the resume validation and mutation
 // kernel.
 type AgentExecutor interface {
@@ -24,8 +23,10 @@ type AgentExecutor interface {
 
 // ServerDependencies are the authenticated resource server dependencies.
 type ServerDependencies struct {
-	Bearer  *Bearer
-	Resumes AgentExecutor
+	Bearer              *Bearer
+	Resumes             AgentExecutor
+	Rates               *RatePolicies
+	MaxRequestBodyBytes int64
 }
 
 type requestAuthority struct {
@@ -37,7 +38,7 @@ type requestAuthorityKey struct{}
 
 // NewServer returns the bearer-only, stateless Streamable HTTP MCP handler.
 func NewServer(dependencies ServerDependencies) (http.Handler, error) {
-	if dependencies.Bearer == nil || isNil(dependencies.Resumes) {
+	if dependencies.Bearer == nil || isNil(dependencies.Resumes) || dependencies.Rates == nil || dependencies.MaxRequestBodyBytes <= 0 {
 		return nil, errors.New("mcp server: invalid dependencies")
 	}
 	server := mcp.NewServer(&mcp.Implementation{Name: "aboutme", Version: "1"}, &mcp.ServerOptions{
@@ -53,7 +54,7 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless:           true,
 		JSONResponse:        true,
-		MaxRequestBodyBytes: maxMCPRequestBytes,
+		MaxRequestBodyBytes: dependencies.MaxRequestBodyBytes,
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, err := dependencies.Bearer.Authenticate(r)
@@ -71,26 +72,44 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 			writeMCPError(w, errInternal)
 			return
 		}
-		if r.Method == http.MethodPost {
-			body, readErr := io.ReadAll(io.LimitReader(r.Body, maxMCPRequestBytes+1))
-			if readErr != nil {
-				writeMCPError(w, errInternal)
-				return
+		dependencies.Rates.ServeRequest(principal, w, r, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				body, readErr := io.ReadAll(io.LimitReader(r.Body, dependencies.MaxRequestBodyBytes+1))
+				if readErr != nil {
+					writeMCPError(w, errInternal)
+					return
+				}
+				if int64(len(body)) > dependencies.MaxRequestBodyBytes {
+					writeMCPError(w, errPayloadTooLarge)
+					return
+				}
+				if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && trimmed[0] == '[' {
+					writeMCPError(w, errInvalidRequest)
+					return
+				}
+				if jsonRPCMethod(body) == "tools/call" {
+					if allowed, retry := dependencies.Rates.AdmitTool(principal); !allowed {
+						dependencies.Rates.writeToolRateError(w, retry)
+						return
+					}
+				}
+				r.Body = io.NopCloser(bytes.NewReader(body))
+				r.ContentLength = int64(len(body))
 			}
-			if len(body) > maxMCPRequestBytes {
-				writeMCPError(w, errPayloadTooLarge)
-				return
-			}
-			if trimmed := bytes.TrimSpace(body); len(trimmed) > 0 && trimmed[0] == '[' {
-				writeMCPError(w, errInvalidRequest)
-				return
-			}
-			r.Body = io.NopCloser(bytes.NewReader(body))
-			r.ContentLength = int64(len(body))
-		}
-		ctx := context.WithValue(r.Context(), requestAuthorityKey{}, requestAuthority{principal: principal, agent: agent})
-		streamable.ServeHTTP(w, r.WithContext(ctx))
+			ctx := context.WithValue(r.Context(), requestAuthorityKey{}, requestAuthority{principal: principal, agent: agent})
+			streamable.ServeHTTP(w, r.WithContext(ctx))
+		}))
 	}), nil
+}
+
+func jsonRPCMethod(body []byte) string {
+	var envelope struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return ""
+	}
+	return envelope.Method
 }
 
 func closeToolErrors(next mcp.MethodHandler) mcp.MethodHandler {

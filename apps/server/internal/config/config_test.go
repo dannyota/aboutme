@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 )
@@ -90,6 +91,76 @@ func validDevEnv() map[string]string {
 		"DATABASE_URL":  "postgres://user:pass@localhost:5432/aboutme",
 		"PUBLIC_ORIGIN": "https://localhost:20443",
 		"ENV":           "dev",
+	}
+}
+
+func TestLoad_MCPEnableFlagAndFrozenBudgets(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, raw string
+		enabled   bool
+	}{
+		{name: "absent is disabled", raw: "", enabled: false},
+		{name: "explicit false", raw: "false", enabled: false},
+		{name: "explicit true", raw: "true", enabled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			vars := validDevEnv()
+			vars["MCP_ENABLED"] = tc.raw
+			got, err := config.Load(env(vars))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if got.AgentAccess.Enabled != tc.enabled {
+				t.Fatalf("AgentAccess.Enabled = %t, want %t", got.AgentAccess.Enabled, tc.enabled)
+			}
+			want := config.AgentAccessConfig{
+				Enabled:                tc.enabled,
+				OAuthRegisterRequests:  5,
+				OAuthRegisterWindow:    time.Hour,
+				OAuthTokenRequests:     30,
+				OAuthTokenWindow:       time.Minute,
+				OAuthFailedGrantLimit:  10,
+				OAuthFailedGrantWindow: 15 * time.Minute,
+				MCPTokenRequests:       120,
+				MCPTokenWindow:         time.Minute,
+				MCPUserRequests:        240,
+				MCPUserWindow:          time.Minute,
+				MCPConcurrentPerUser:   4,
+				OAuthLiveGrantLimit:    10,
+				MCPBodyLimitBytes:      4_194_304,
+				MaxRateKeys:            10_000,
+			}
+			if got.AgentAccess != want {
+				t.Fatalf("AgentAccess = %#v, want %#v", got.AgentAccess, want)
+			}
+		})
+	}
+}
+
+func TestLoad_MCPEnableFlagRejectsInvalidValueWithoutEcho(t *testing.T) {
+	t.Parallel()
+	vars := validDevEnv()
+	vars["MCP_ENABLED"] = "true-secret-sentinel"
+	_, err := config.Load(env(vars))
+	if err == nil {
+		t.Fatal("Load() error = nil, want MCP_ENABLED rejection")
+	}
+	if !strings.Contains(err.Error(), "MCP_ENABLED") || strings.Contains(err.Error(), vars["MCP_ENABLED"]) {
+		t.Fatalf("Load() error = %q, want variable name without raw value", err)
+	}
+}
+
+func TestConfig_ValidateAgentAccessRejectsPartialEnabledConfiguration(t *testing.T) {
+	t.Parallel()
+	cfg := config.Config{
+		PublicOrigin: "https://aboutme.example",
+		AgentAccess:  config.AgentAccessConfig{Enabled: true},
+	}
+	if err := cfg.ValidateAgentAccess(); err == nil {
+		t.Fatal("ValidateAgentAccess() error = nil for partial enabled config")
 	}
 }
 
