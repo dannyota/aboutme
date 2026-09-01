@@ -3,14 +3,17 @@ import {
   test,
   type BrowserContext,
   type Cookie,
-  type Page,
 } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
+import {
+  isUnexpectedConsoleError,
+  newDiagnosticCounters,
+  pageDiagnosticsAttacher,
+} from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
-  isExpectedNegativeHTTPConsole,
 } from './network-policy';
 
 const ORIGIN = ALLOWED_ORIGIN;
@@ -58,35 +61,15 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
   context,
   page,
 }) => {
-  let certificateErrors = 0;
-  let consoleErrors = 0;
-  let externalRequests = 0;
-  let pageErrors = 0;
-
-  const attachPageDiagnostics = (openedPage: Page): void => {
-    openedPage.on('console', (message) => {
-      if (
-        message.type() === 'error'
-        && !isExpectedNegativeHTTPConsole(
-          message.text(),
-          message.location().url,
-        )
-      ) {
-        consoleErrors += 1;
-      }
-    });
-    openedPage.on('pageerror', () => {
-      pageErrors += 1;
-    });
-    openedPage.on('requestfailed', (request) => {
-      if (/CERT/i.test(request.failure()?.errorText ?? '')) certificateErrors += 1;
-    });
-  };
+  const counters = newDiagnosticCounters();
+  const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
+    countConsoleError: isUnexpectedConsoleError,
+  });
   attachPageDiagnostics(page);
   context.on('page', attachPageDiagnostics);
   await context.route('**/*', async (route) => {
     if (!isAllowedHTTPURL(route.request().url())) {
-      externalRequests += 1;
+      counters.externalRequests += 1;
       await route.abort('blockedbyclient');
       return;
     }
@@ -94,7 +77,7 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
   });
   await context.routeWebSocket('**/*', async (webSocket) => {
     if (!isAllowedWebSocketURL(webSocket.url())) {
-      externalRequests += 1;
+      counters.externalRequests += 1;
       await webSocket.close({ code: 1008, reason: 'blocked' });
       return;
     }
@@ -284,6 +267,7 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
   );
 
   // 10. Persist only bounded verdicts after all leak and isolation checks pass.
+  const { certificateErrors, consoleErrors, externalRequests, pageErrors } = counters;
   expect({ certificateErrors, consoleErrors, externalRequests, pageErrors }).toEqual({
     certificateErrors: 0,
     consoleErrors: 0,

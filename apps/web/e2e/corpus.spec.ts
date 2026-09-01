@@ -3,6 +3,7 @@ import { HOSTILE_CORPUS } from '@aboutme/schema/sanitizer';
 
 import { HTML_CSP } from '../app/utils/csp';
 import { NEUTRALIZATION_POLICY } from '../test/sanitizer/neutralization';
+import { denyExternalRequests } from './support';
 
 interface BrowserSignals {
   readonly consoleErrors: string[];
@@ -36,25 +37,6 @@ async function installSignals(page: Page): Promise<BrowserSignals> {
     });
   });
   return signals;
-}
-
-async function denyExternalRequests(page: Page): Promise<string[]> {
-  const attempted: string[] = [];
-  await page.route('**/*', async (route) => {
-    const url = new URL(route.request().url());
-    if (
-      (url.protocol === 'http:' || url.protocol === 'https:')
-      && url.hostname !== '127.0.0.1'
-      && url.hostname !== 'localhost'
-      && url.hostname !== '[::1]'
-    ) {
-      attempted.push(url.href);
-      await route.abort('blockedbyclient');
-      return;
-    }
-    await route.continue();
-  });
-  return attempted;
 }
 
 async function cspViolations(page: Page): Promise<unknown[]> {

@@ -6,11 +6,15 @@ import {
 import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import {
-  ALLOWED_ORIGIN,
-  isAllowedHTTPURL,
-  isAllowedWebSocketURL,
-  isExpectedNegativeHTTPConsole,
-} from './network-policy';
+  installExternalRequestFirewall,
+  installExternalWebSocketFirewall,
+  isUnexpectedConsoleError,
+  newDiagnosticCounters,
+  pageDiagnosticsAttacher,
+  signInWithGoogle,
+  waitForHydration,
+} from './harness-lib';
+import { ALLOWED_ORIGIN } from './network-policy';
 
 // Node-only capture endpoint. The browser's page/context firewall never sees
 // this: it is reached only by Playwright control code over loopback HTTP,
@@ -101,25 +105,7 @@ async function meStatus(page: Page): Promise<number> {
 // Vue-bound form is interactive rather than a stale SSR shell.
 async function gotoHydrated(page: Page, url: string): Promise<void> {
   await page.goto(url);
-  await page.waitForLoadState('networkidle');
-}
-
-// signInWithGoogle completes a provider login: it follows the login anchor to
-// the same-origin authorize page, selects the named local account, and returns
-// after the callback lands on the home page.
-async function signInWithGoogle(page: Page, accountLabel: string): Promise<void> {
-  await Promise.all([
-    page.waitForURL((url) =>
-      url.origin === ORIGIN
-      && url.pathname === '/__uat/oauth/google/authorize'
-    ),
-    page.getByRole('link', { name: 'Continue with Google' }).click(),
-  ]);
-  await page.getByLabel(accountLabel).check();
-  await Promise.all([
-    page.waitForURL((url) => url.origin === ORIGIN && url.pathname === '/'),
-    page.getByRole('button', { name: 'Continue with Google' }).click(),
-  ]);
+  await waitForHydration(page);
 }
 
 test('proves password authentication over native HTTPS', async ({
@@ -127,48 +113,14 @@ test('proves password authentication over native HTTPS', async ({
   context,
   page,
 }) => {
-  let certificateErrors = 0;
-  let consoleErrors = 0;
-  let externalRequests = 0;
-  let pageErrors = 0;
-
-  const attachPageDiagnostics = (openedPage: Page): void => {
-    openedPage.on('console', (message) => {
-      if (
-        message.type() === 'error'
-        && !isExpectedNegativeHTTPConsole(
-          message.text(),
-          message.location().url,
-        )
-      ) {
-        consoleErrors += 1;
-      }
-    });
-    openedPage.on('pageerror', () => {
-      pageErrors += 1;
-    });
-    openedPage.on('requestfailed', (request) => {
-      if (/CERT/i.test(request.failure()?.errorText ?? '')) certificateErrors += 1;
-    });
-  };
+  const counters = newDiagnosticCounters();
+  const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
+    countConsoleError: isUnexpectedConsoleError,
+  });
   attachPageDiagnostics(page);
   context.on('page', attachPageDiagnostics);
-  await context.route('**/*', async (route) => {
-    if (!isAllowedHTTPURL(route.request().url())) {
-      externalRequests += 1;
-      await route.abort('blockedbyclient');
-      return;
-    }
-    await route.continue();
-  });
-  await context.routeWebSocket('**/*', async (webSocket) => {
-    if (!isAllowedWebSocketURL(webSocket.url())) {
-      externalRequests += 1;
-      await webSocket.close({ code: 1008, reason: 'blocked' });
-      return;
-    }
-    webSocket.connectToServer();
-  });
+  await installExternalRequestFirewall(context, counters);
+  await installExternalWebSocketFirewall(context, counters);
 
   const capture = captureClient(
     (await readFile(CAPTURE_TOKEN_PATH, 'utf8')).trim(),
@@ -231,19 +183,11 @@ test('proves password authentication over native HTTPS', async ({
   const providerContext = await browser.newContext();
   const providerPage = await providerContext.newPage();
   attachPageDiagnostics(providerPage);
-  await providerContext.route('**/*', async (route) => {
-    if (!isAllowedHTTPURL(route.request().url())) {
-      externalRequests += 1;
-      await route.abort('blockedbyclient');
-      return;
-    }
-    await route.continue();
-  });
+  await installExternalRequestFirewall(providerContext, counters);
   await providerPage.goto('/login');
-  await signInWithGoogle(
-    providerPage,
-    'Provider Only — pa-provider-only@example.invalid',
-  );
+  await signInWithGoogle(providerPage, {
+    accountLabel: 'Provider Only — pa-provider-only@example.invalid',
+  });
   await gotoHydrated(providerPage, '/app/settings/sessions');
   const providerPassword = secret();
   await providerPage.getByTestId('password-action').click();
@@ -261,14 +205,7 @@ test('proves password authentication over native HTTPS', async ({
   const secondContext = await browser.newContext();
   const secondPage = await secondContext.newPage();
   attachPageDiagnostics(secondPage);
-  await secondContext.route('**/*', async (route) => {
-    if (!isAllowedHTTPURL(route.request().url())) {
-      externalRequests += 1;
-      await route.abort('blockedbyclient');
-      return;
-    }
-    await route.continue();
-  });
+  await installExternalRequestFirewall(secondContext, counters);
   await gotoHydrated(secondPage, '/login');
   await secondPage.getByLabel('Email').fill(email);
   await secondPage.getByLabel('Password', { exact: true }).fill(password);
@@ -318,6 +255,7 @@ test('proves password authentication over native HTTPS', async ({
 
   await secondContext.close();
 
+  const { certificateErrors, consoleErrors, externalRequests, pageErrors } = counters;
   expect({
     certificateErrors,
     consoleErrors,

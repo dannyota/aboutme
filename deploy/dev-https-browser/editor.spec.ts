@@ -24,6 +24,7 @@ import {
   type AcceptedResume,
   type BrowserPersistenceProbe,
 } from './editor-fixtures';
+import { newDiagnosticCounters, pageDiagnosticsAttacher } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
@@ -812,11 +813,9 @@ async function installDiagnostics(
   context: BrowserContext,
   page: Page,
 ): Promise<Diagnostics> {
-  let certificateErrors = 0;
-  let consoleErrors = 0;
+  const counters = newDiagnosticCounters();
   const consoleStatusCounts = new Map<number | 'other', number>();
   let downloads = 0;
-  let externalRequests = 0;
   let firstConsoleError = 'none';
   let firstConsoleStage = 'none';
   let firstOtherConsoleError = 'none';
@@ -826,7 +825,6 @@ async function installDiagnostics(
   let firstPageErrorLead = 'none';
   let firstPageErrorName = 'none';
   let firstPageStage = 'none';
-  let pageErrors = 0;
   let serviceWorkers = 0;
   let failPhotoRead = false;
   let failTemplateChildAt: number | undefined;
@@ -856,47 +854,40 @@ async function installDiagnostics(
     if (pending.length === 0) expectedConsoleFailures.delete(url);
     return true;
   };
-  const attachPageDiagnostics = (openedPage: Page): void => {
-    openedPage.on('console', (message) => {
-      const status = httpFailureStatus(message.text());
-      const expectedFailure = message.type() === 'error'
-        && consumeExpectedConsoleFailure(message.location().url, status);
-      if (
-        message.type() === 'error'
-        && !expectedFailure
-        && !isExpectedNegativeHTTPConsole(message.text(), message.location().url)
-      ) {
-        consoleErrors += 1;
-        const countedStatus = status ?? 'other';
-        consoleStatusCounts.set(
-          countedStatus,
-          (consoleStatusCounts.get(countedStatus) ?? 0) + 1,
-        );
-        if (countedStatus === 'other' && firstOtherConsoleError === 'none') {
-          firstOtherConsoleError = classifyDiagnosticText(message.text());
-          firstOtherConsoleLead = classifyDiagnosticLead(message.text());
-          firstOtherConsoleStage = editorDiagnosticStage;
-        }
-        if (firstConsoleError === 'none') {
-          firstConsoleError = classifyDiagnosticText(message.text());
-          firstConsoleStage = editorDiagnosticStage;
-        }
+  const attachCorePageDiagnostics = pageDiagnosticsAttacher(counters, {
+    countConsoleError: (message) => !consumeExpectedConsoleFailure(
+      message.location().url,
+      httpFailureStatus(message.text()),
+    ) && !isExpectedNegativeHTTPConsole(message.text(), message.location().url),
+    onCountedConsoleError: (message) => {
+      const countedStatus = httpFailureStatus(message.text()) ?? 'other';
+      consoleStatusCounts.set(
+        countedStatus,
+        (consoleStatusCounts.get(countedStatus) ?? 0) + 1,
+      );
+      if (countedStatus === 'other' && firstOtherConsoleError === 'none') {
+        firstOtherConsoleError = classifyDiagnosticText(message.text());
+        firstOtherConsoleLead = classifyDiagnosticLead(message.text());
+        firstOtherConsoleStage = editorDiagnosticStage;
       }
-    });
-    openedPage.on('download', () => {
-      downloads += 1;
-    });
-    openedPage.on('pageerror', (error) => {
-      pageErrors += 1;
+      if (firstConsoleError === 'none') {
+        firstConsoleError = classifyDiagnosticText(message.text());
+        firstConsoleStage = editorDiagnosticStage;
+      }
+    },
+    onPageError: (error) => {
       if (firstPageError === 'none') {
         firstPageError = classifyDiagnosticText(error.message);
         firstPageErrorLead = classifyDiagnosticLead(error.message);
         firstPageErrorName = classifyDiagnosticName(error.name);
         firstPageStage = editorDiagnosticStage;
       }
-    });
-    openedPage.on('requestfailed', (request) => {
-      if (/CERT/i.test(request.failure()?.errorText ?? '')) certificateErrors += 1;
+    },
+  });
+  const attachPageDiagnostics = (openedPage: Page): void => {
+    attachCorePageDiagnostics(openedPage);
+    openedPage.on('download', () => {
+      downloads += 1;
     });
   };
   attachPageDiagnostics(page);
@@ -907,7 +898,7 @@ async function installDiagnostics(
   await context.route('**/*', async (route) => {
     const request = route.request();
     if (!isAllowedHTTPURL(request.url())) {
-      externalRequests += 1;
+      counters.externalRequests += 1;
       await route.abort('blockedbyclient');
       return;
     }
@@ -977,7 +968,7 @@ async function installDiagnostics(
   });
   await context.routeWebSocket('**/*', async (webSocket) => {
     if (!isAllowedWebSocketURL(webSocket.url())) {
-      externalRequests += 1;
+      counters.externalRequests += 1;
       await webSocket.close({ code: 1008, reason: 'blocked' });
       return;
     }
@@ -1024,8 +1015,8 @@ async function installDiagnostics(
     assertClean: (): void => {
       editorDiagnosticStage = [
         'post-diagnostics',
-        `certificate-${certificateErrors}`,
-        `console-${consoleErrors}`,
+        `certificate-${counters.certificateErrors}`,
+        `console-${counters.consoleErrors}`,
         `consolekind-${firstConsoleError}`,
         `consolestage-${firstConsoleStage}`,
         `console401-${consoleStatusCounts.get(401) ?? 0}`,
@@ -1036,8 +1027,8 @@ async function installDiagnostics(
         `consoleotherkind-${firstOtherConsoleError}`,
         `consoleotherlead-${firstOtherConsoleLead}`,
         `consoleotherstage-${firstOtherConsoleStage}`,
-        `external-${externalRequests}`,
-        `page-${pageErrors}`,
+        `external-${counters.externalRequests}`,
+        `page-${counters.pageErrors}`,
         `pagekind-${firstPageError}`,
         `pagelead-${firstPageErrorLead}`,
         `pagename-${firstPageErrorName}`,
@@ -1046,10 +1037,10 @@ async function installDiagnostics(
         `worker-${serviceWorkers}`,
       ].join('-');
       expect({
-        certificate: certificateErrors,
-        console: consoleErrors,
-        externalRequest: externalRequests,
-        page: pageErrors,
+        certificate: counters.certificateErrors,
+        console: counters.consoleErrors,
+        externalRequest: counters.externalRequests,
+        page: counters.pageErrors,
       }).toEqual({ certificate: 0, console: 0, externalRequest: 0, page: 0 });
       expect(expectedRequestFailures).toEqual([]);
       expect([...expectedConsoleFailures.entries()]).toEqual([]);

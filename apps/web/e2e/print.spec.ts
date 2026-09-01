@@ -1,8 +1,10 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type TestInfo } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+
+import { denyExternalRequests, waitForImages } from './support';
 
 interface PrintCase {
   readonly end: string;
@@ -33,36 +35,6 @@ const CASES: readonly PrintCase[] = [
 ];
 
 const EXPECTED_PAGES = 2;
-
-async function denyExternalRequests(page: Page): Promise<string[]> {
-  const attempted: string[] = [];
-  await page.route('**/*', async (route) => {
-    const url = new URL(route.request().url());
-    if (
-      (url.protocol === 'http:' || url.protocol === 'https:')
-      && url.hostname !== '127.0.0.1'
-      && url.hostname !== 'localhost'
-      && url.hostname !== '[::1]'
-    ) {
-      attempted.push(url.href);
-      await route.abort('blockedbyclient');
-      return;
-    }
-    await route.continue();
-  });
-  return attempted;
-}
-
-async function waitForImages(page: Page): Promise<void> {
-  await page.locator('img').evaluateAll(async (images) => {
-    await Promise.all(images.map(async (image) => {
-      if (!image.complete || image.naturalWidth === 0) await image.decode();
-      if (!image.complete || image.naturalWidth === 0) {
-        throw new Error(`Image did not decode: ${image.currentSrc}`);
-      }
-    }));
-  });
-}
 
 async function compareRaster(
   actual: Buffer,
