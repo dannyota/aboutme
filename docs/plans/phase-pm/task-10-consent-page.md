@@ -43,25 +43,25 @@ semantics.
       provider callback preserves a valid path; invalid and oversized values
       bind `/app/resumes`. Recreate the pre-UAT test database after amending
       migration 00009 and rerun to GREEN.
-- [ ] Write component REDs: renders name/scopes as text for a hostile client
+- [x] Write component REDs: renders name/scopes as text for a hostile client
       name fixture (markup shows escaped), approve posts exact body, deny posts
       exact body, navigation uses `redirectTo` verbatim, closed error mapping
       for each API failure.
-- [ ] Write composable REDs: request shaping, error taxonomy, no retry on 4xx.
-- [ ] Write login `next` REDs against `login.vue`: absent → `/app/resumes`;
+- [x] Write composable REDs: request shaping, error taxonomy, no retry on 4xx.
+- [x] Write login `next` REDs against `login.vue`: absent → `/app/resumes`;
       valid relative path with query → honored verbatim; `//evil`,
       `https://evil`, `javascript:`, over-length, and non-leading-slash values →
       fallback. Provider and password login paths both honored.
-- [ ] Write a login-round-trip RED at the router level: visiting
+- [x] Write a login-round-trip RED at the router level: visiting
       `/authorize?x=1` unauthenticated lands on login with `next` containing the
       full query; completing login returns to it.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   cd apps/web && npx vitest run test/authorize.test.ts test/useOAuthConsent.test.ts
   ```
 
-- [ ] Implement page + composable; rerun to GREEN, then
+- [x] Implement page + composable; rerun to GREEN, then
       `make web-lint web-typecheck web-test`.
 
 ## Adversarial checklist
