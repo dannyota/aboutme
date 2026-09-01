@@ -901,14 +901,16 @@ RETURNING *;
 -- expires_at alone is the predicate: a consumed code keeps its original expiry,
 -- so consumed and abandoned rows leave on the same schedule, and a row is never
 -- removed while ConsumeOAuthAuthorizationCode could still claim it.
-DELETE FROM oauth_authorization_codes
-WHERE id IN (
-    SELECT id FROM oauth_authorization_codes
-    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
-    ORDER BY expires_at, id
+WITH candidates AS MATERIALIZED (
+    SELECT candidate.id FROM oauth_authorization_codes AS candidate
+    WHERE candidate.expires_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY candidate.expires_at, candidate.id
     LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
     FOR UPDATE SKIP LOCKED
-);
+)
+DELETE FROM oauth_authorization_codes AS target
+USING candidates
+WHERE target.id = candidates.id;
 
 -- name: UpsertOAuthGrant :one
 -- Consent approval (M8): records a new grant or refreshes the live one's
@@ -1079,17 +1081,20 @@ WHERE id = sqlc.arg(id)
 -- token that is presented again must still be recognized as a replay rather
 -- than as an unknown token. rotated_from is ON DELETE SET NULL, so removing a
 -- predecessor detaches its successor instead of cascading past the batch bound.
-DELETE FROM oauth_tokens
-WHERE id IN (
-    SELECT id FROM oauth_tokens
+WITH candidates AS MATERIALIZED (
+    SELECT candidate.id FROM oauth_tokens AS candidate
     WHERE (
-        kind = 'access'
-        AND (expires_at <= sqlc.arg(cutoff)::timestamptz
-             OR revoked_at <= sqlc.arg(cutoff)::timestamptz)
+        candidate.kind = 'access'
+        AND (candidate.expires_at <= sqlc.arg(cutoff)::timestamptz
+             OR candidate.revoked_at <= sqlc.arg(cutoff)::timestamptz)
     ) OR (
-        kind = 'refresh' AND family_expires_at <= sqlc.arg(cutoff)::timestamptz
+        candidate.kind = 'refresh'
+        AND candidate.family_expires_at <= sqlc.arg(cutoff)::timestamptz
     )
-    ORDER BY expires_at, id
+    ORDER BY candidate.expires_at, candidate.id
     LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
     FOR UPDATE SKIP LOCKED
-);
+)
+DELETE FROM oauth_tokens AS target
+USING candidates
+WHERE target.id = candidates.id;

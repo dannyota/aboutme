@@ -1,3 +1,4 @@
+// Package mcpapi exposes the bearer-authenticated Model Context Protocol boundary.
 package mcpapi
 
 import (
@@ -135,7 +136,7 @@ func canonicalOrigin(raw string) bool {
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"
 	}
-	if port := u.Port(); port != "" && !(scheme == "http" && port == "80") && !(scheme == "https" && port == "443") {
+	if port := u.Port(); port != "" && (scheme != "http" || port != "80") && (scheme != "https" || port != "443") {
 		host += ":" + port
 	}
 	return raw == scheme+"://"+host

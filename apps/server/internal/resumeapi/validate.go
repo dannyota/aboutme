@@ -57,21 +57,36 @@ func agentPrincipalFromContext(ctx context.Context) (AgentPrincipal, bool) {
 type AgentOperation string
 
 const (
-	AgentListResumes           AgentOperation = "list_resumes"
-	AgentGetResume             AgentOperation = "get_resume"
-	AgentCreateResume          AgentOperation = "create_resume"
-	AgentDeleteResume          AgentOperation = "delete_resume"
-	AgentUpdateResumeMetadata  AgentOperation = "update_resume_metadata"
-	AgentUpsertEntry           AgentOperation = "upsert_entry"
-	AgentDeleteEntry           AgentOperation = "delete_entry"
-	AgentUpdateSection         AgentOperation = "update_section"
-	AgentUpdateStructure       AgentOperation = "update_structure"
+	// AgentListResumes lists the authenticated agent's resumes.
+	AgentListResumes AgentOperation = "list_resumes"
+	// AgentGetResume retrieves one authenticated agent resume.
+	AgentGetResume AgentOperation = "get_resume"
+	// AgentCreateResume creates a resume for the authenticated agent.
+	AgentCreateResume AgentOperation = "create_resume"
+	// AgentDeleteResume deletes a resume for the authenticated agent.
+	AgentDeleteResume AgentOperation = "delete_resume"
+	// AgentUpdateResumeMetadata updates resume metadata for the authenticated agent.
+	AgentUpdateResumeMetadata AgentOperation = "update_resume_metadata"
+	// AgentUpsertEntry inserts or updates a resume entry for the authenticated agent.
+	AgentUpsertEntry AgentOperation = "upsert_entry"
+	// AgentDeleteEntry deletes a resume entry for the authenticated agent.
+	AgentDeleteEntry AgentOperation = "delete_entry"
+	// AgentUpdateSection updates a resume section for the authenticated agent.
+	AgentUpdateSection AgentOperation = "update_section"
+	// AgentUpdateStructure updates resume structure for the authenticated agent.
+	AgentUpdateStructure AgentOperation = "update_structure"
+	// AgentUpdatePersonalDetails updates resume personal details for the authenticated agent.
 	AgentUpdatePersonalDetails AgentOperation = "update_personal_details"
-	AgentUpdateCustomization   AgentOperation = "update_customization"
-	AgentGetPhoto              AgentOperation = "get_photo"
-	AgentUploadPhoto           AgentOperation = "upload_photo"
-	AgentUpdatePhotoCrop       AgentOperation = "update_photo_crop"
-	AgentDeletePhoto           AgentOperation = "delete_photo"
+	// AgentUpdateCustomization updates resume customization for the authenticated agent.
+	AgentUpdateCustomization AgentOperation = "update_customization"
+	// AgentGetPhoto retrieves a resume photo for the authenticated agent.
+	AgentGetPhoto AgentOperation = "get_photo"
+	// AgentUploadPhoto uploads a resume photo for the authenticated agent.
+	AgentUploadPhoto AgentOperation = "upload_photo"
+	// AgentUpdatePhotoCrop updates a resume photo crop for the authenticated agent.
+	AgentUpdatePhotoCrop AgentOperation = "update_photo_crop"
+	// AgentDeletePhoto deletes a resume photo for the authenticated agent.
+	AgentDeletePhoto AgentOperation = "delete_photo"
 )
 
 // AgentCall is the validated bridge from typed MCP inputs to the existing REST
@@ -99,8 +114,10 @@ type agentResponseWriter struct {
 	body   bytes.Buffer
 }
 
+// Header implements http.ResponseWriter.
 func (w *agentResponseWriter) Header() http.Header { return w.header }
 
+// WriteHeader implements http.ResponseWriter.
 func (w *agentResponseWriter) WriteHeader(status int) {
 	if w.status == 0 {
 		w.status = status
@@ -114,6 +131,7 @@ func (w *agentResponseWriter) Write(body []byte) (int, error) {
 	return w.body.Write(body)
 }
 
+// SetReadDeadline implements http.ResponseController's read-deadline hook.
 func (w *agentResponseWriter) SetReadDeadline(time.Time) error { return nil }
 
 // ExecuteAgent routes one closed agent operation through the same request

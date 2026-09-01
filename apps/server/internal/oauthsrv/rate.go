@@ -77,7 +77,7 @@ func (p *RatePolicies) admitIP(limiter *api.BoundedRateLimiter, now time.Time, r
 
 // AdmitGrant reserves one failed-grant budget slot before token processing, so
 // concurrent invalid grants cannot all pass an unchanged precheck.
-func (p *RatePolicies) AdmitGrant(clientID uuid.UUID, now time.Time) (grantAttempt, bool, int) {
+func (p *RatePolicies) AdmitGrant(clientID uuid.UUID, now time.Time) (GrantAttempt, bool, int) {
 	return p.grants.admit(clientID, now)
 }
 

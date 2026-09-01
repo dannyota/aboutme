@@ -16,15 +16,15 @@ const idleClientGCBatch = 200
 // CollectIdleClients deletes one bounded page of clients with no live grant or
 // token. Candidate selection and deletion share the transaction so the query's
 // FOR UPDATE SKIP LOCKED reservation remains effective through the delete.
-func (s *Service) CollectIdleClients(ctx context.Context) error {
+func (s *Service) CollectIdleClients(ctx context.Context) (returnErr error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin idle-client GC transaction: %w", err)
 	}
 	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			// The operation is already returning the primary failure or committed.
-			// There is no client-controlled material to report from a rollback.
+		rollbackErr := tx.Rollback(context.WithoutCancel(ctx))
+		if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && returnErr == nil {
+			returnErr = fmt.Errorf("rollback idle-client GC transaction: %w", rollbackErr)
 		}
 	}()
 

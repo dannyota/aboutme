@@ -64,8 +64,12 @@ func newBearerHarness(t *testing.T, scopes string) *bearerHarness {
 		t.Fatalf("create bearer authority: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = q.DeleteOAuthClient(context.Background(), client.ID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID)
+		if _, cleanupErr := q.DeleteOAuthClient(context.Background(), client.ID); cleanupErr != nil {
+			t.Errorf("delete OAuth client: %v", cleanupErr)
+		}
+		if _, cleanupErr := pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID); cleanupErr != nil {
+			t.Errorf("delete user: %v", cleanupErr)
+		}
 	})
 	bearer, err := NewBearer(BearerDependencies{Queries: q, Clock: clock.Now, PublicOrigin: bearerPublicOrigin})
 	if err != nil {
@@ -76,7 +80,7 @@ func newBearerHarness(t *testing.T, scopes string) *bearerHarness {
 
 func (h *bearerHarness) createToken(t *testing.T, kind oauthsrv.TokenKind) (string, store.OAuthToken) {
 	t.Helper()
-	raw, digest, err := oauthsrv.NewToken(kind, bytes.NewReader(bytes.Repeat([]byte{byte(kind[0])}, 32)))
+	raw, digest, err := oauthsrv.NewToken(kind, bytes.NewReader(bytes.Repeat([]byte{kind[0]}, 32)))
 	if err != nil {
 		t.Fatalf("NewToken: %v", err)
 	}
@@ -92,7 +96,7 @@ func (h *bearerHarness) createToken(t *testing.T, kind oauthsrv.TokenKind) (stri
 }
 
 func bearerRequest(headers ...string) *http.Request {
-	r := httptest.NewRequest(http.MethodPost, bearerPublicOrigin+"/mcp", nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, bearerPublicOrigin+"/mcp", nil)
 	for _, header := range headers {
 		r.Header.Add("Authorization", header)
 	}
@@ -166,7 +170,11 @@ func TestBearer_RejectsEveryInvalidAuthorityWithOneClosedResponse(t *testing.T) 
 			if err != nil {
 				t.Fatalf("CreateOAuthClient other: %v", err)
 			}
-			t.Cleanup(func() { _, _ = h.q.DeleteOAuthClient(context.Background(), other.ID) })
+			t.Cleanup(func() {
+				if _, cleanupErr := h.q.DeleteOAuthClient(context.Background(), other.ID); cleanupErr != nil {
+					t.Errorf("delete other OAuth client: %v", cleanupErr)
+				}
+			})
 			if _, err := h.pool.Exec(context.Background(), "UPDATE oauth_tokens SET client_id = $1 WHERE id = $2", other.ID, token.ID); err != nil {
 				t.Fatalf("make client authority inconsistent: %v", err)
 			}
@@ -237,7 +245,11 @@ func TestBearer_RejectsExpirationBoundariesAndInconsistentAuthority(t *testing.T
 				if err != nil {
 					t.Fatalf("CreateUser other: %v", err)
 				}
-				t.Cleanup(func() { _, _ = h.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", other.ID) })
+				t.Cleanup(func() {
+					if _, cleanupErr := h.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", other.ID); cleanupErr != nil {
+						t.Errorf("delete other user: %v", cleanupErr)
+					}
+				})
 				if _, err := h.pool.Exec(context.Background(), "UPDATE oauth_tokens SET user_id = $1 WHERE id = $2", other.ID, token.ID); err != nil {
 					t.Fatalf("make authority inconsistent: %v", err)
 				}

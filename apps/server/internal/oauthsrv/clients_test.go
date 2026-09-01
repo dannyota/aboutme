@@ -93,7 +93,7 @@ func newRegistrationServiceAndPool(t *testing.T, q *registrationQueries, admissi
 }
 
 func registerRequest(method, contentType, body string) *http.Request {
-	r := httptest.NewRequest(method, "https://aboutme.example/oauth/register", strings.NewReader(body))
+	r := httptest.NewRequestWithContext(context.Background(), method, "https://aboutme.example/oauth/register", strings.NewReader(body))
 	if contentType != "" {
 		r.Header.Set("Content-Type", contentType)
 	}
@@ -268,7 +268,11 @@ func TestRegister_SuccessSweepsBeforeCreatingClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateOAuthClient(stale): %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id = $1", stale.ID) })
+	t.Cleanup(func() {
+		if _, cleanupErr := pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id = $1", stale.ID); cleanupErr != nil {
+			t.Errorf("cleanup stale client: %v", cleanupErr)
+		}
+	})
 	q.beforeCreate = func() {
 		if _, err := store.New(pool).GetOAuthClient(ctx, stale.ID); !errors.Is(err, pgx.ErrNoRows) {
 			t.Errorf("stale client exists when CreateOAuthClient begins: %v", err)

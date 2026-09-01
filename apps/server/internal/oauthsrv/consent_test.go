@@ -79,7 +79,11 @@ func TestConsent_RefusesEleventhLiveGrant(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateOAuthClient(%d): %v", i, err)
 		}
-		t.Cleanup(func() { _, _ = q.DeleteOAuthClient(context.Background(), other.ID) })
+		t.Cleanup(func() {
+			if _, cleanupErr := q.DeleteOAuthClient(context.Background(), other.ID); cleanupErr != nil {
+				t.Errorf("DeleteOAuthClient cleanup: %v", cleanupErr)
+			}
+		})
 		if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: other.ID, Scopes: "resumes:read", CreatedAt: time.Now().UTC()}); err != nil {
 			t.Fatalf("UpsertOAuthGrant(%d): %v", i, err)
 		}
@@ -98,7 +102,11 @@ func TestConsent_AllowsTenthLiveGrant(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateOAuthClient(%d): %v", i, err)
 		}
-		t.Cleanup(func() { _, _ = q.DeleteOAuthClient(context.Background(), other.ID) })
+		t.Cleanup(func() {
+			if _, cleanupErr := q.DeleteOAuthClient(context.Background(), other.ID); cleanupErr != nil {
+				t.Errorf("DeleteOAuthClient cleanup: %v", cleanupErr)
+			}
+		})
 		if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: other.ID, Scopes: "resumes:read", CreatedAt: time.Now().UTC()}); err != nil {
 			t.Fatalf("UpsertOAuthGrant(%d): %v", i, err)
 		}
@@ -169,11 +177,11 @@ func TestConsent_QueuedRevocationWinsAfterInFlightApproval(t *testing.T) {
 		t.Fatalf("seed grant: %v", err)
 	}
 	tokenCreatedAt := time.Now().UTC()
-	if _, err := q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{
+	if _, tokenErr := q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{
 		TokenDigest: bytes32(91), Kind: "refresh", FamilyID: uuid.New(), ClientID: client.ID, UserID: user.ID, GrantID: grant.ID,
 		CreatedAt: tokenCreatedAt, ExpiresAt: tokenCreatedAt.Add(time.Hour), FamilyExpiresAt: tokenCreatedAt.Add(30*24*time.Hour - time.Nanosecond),
-	}); err != nil {
-		t.Fatalf("seed token: %v", err)
+	}); tokenErr != nil {
+		t.Fatalf("seed token: %v", tokenErr)
 	}
 	entropy := &blockingEntropy{started: make(chan struct{}), release: make(chan struct{})}
 	s.entropy = entropy
@@ -197,7 +205,11 @@ func TestConsent_QueuedRevocationWinsAfterInFlightApproval(t *testing.T) {
 			revokeDone <- beginErr
 			return
 		}
-		defer func() { _ = tx.Rollback(context.Background()) }()
+		defer func(rollbackCtx context.Context) {
+			if rollbackErr := tx.Rollback(rollbackCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				t.Errorf("rollback queued revocation transaction: %v", rollbackErr)
+			}
+		}(context.WithoutCancel(ctx))
 		var pid int32
 		if pidErr := tx.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid); pidErr != nil {
 			revokeDone <- pidErr

@@ -113,7 +113,7 @@ func (s *Service) handleConsentContext(w http.ResponseWriter, r *http.Request) {
 		writeConsentSessionError(w, err)
 		return
 	}
-	api.WriteData(w, http.StatusOK, consentViewData{ClientName: view.ClientName, Scopes: view.Scopes})
+	api.WriteData(w, http.StatusOK, consentViewData(view))
 }
 
 func (s *Service) handleConsentDecision(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +184,7 @@ func decodeConsentFields(raw []byte) (map[string]string, error) {
 			return nil, ErrConsentInvalid
 		}
 		var value string
-		if err := decoder.Decode(&value); err != nil {
+		if decodeErr := decoder.Decode(&value); decodeErr != nil {
 			return nil, ErrConsentInvalid
 		}
 		fields[name] = value
@@ -259,7 +259,7 @@ func (s *Service) handleRevokeAgentGrant(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Service) revokeAgentGrant(ctx context.Context, userID, grantID uuid.UUID) error {
+func (s *Service) revokeAgentGrant(ctx context.Context, userID, grantID uuid.UUID) (err error) {
 	rows, err := s.queries.ListLiveOAuthGrantsForUser(ctx, store.ListLiveOAuthGrantsForUserParams{
 		UserID: userID, LimitRows: agentGrantLimit,
 	})
@@ -281,13 +281,13 @@ func (s *Service) revokeAgentGrant(ctx context.Context, userID, grantID uuid.UUI
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	defer rollbackTransaction(context.WithoutCancel(ctx), tx, &err, "rollback agent grant revocation transaction")
 	q := store.New(tx)
-	if _, err := q.GetOAuthClientForUpdate(ctx, clientID); err != nil {
-		return err
+	if _, clientErr := q.GetOAuthClientForUpdate(ctx, clientID); clientErr != nil {
+		return clientErr
 	}
-	if _, err := q.GetUserForUpdate(ctx, userID); err != nil {
-		return err
+	if _, userErr := q.GetUserForUpdate(ctx, userID); userErr != nil {
+		return userErr
 	}
 	grant, err := q.GetOAuthGrantForUpdate(ctx, grantID)
 	if errors.Is(err, pgx.ErrNoRows) {

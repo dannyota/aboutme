@@ -42,7 +42,9 @@ func TestClientGC_BoundsProtectsLiveAuthorityAndIsIdempotent(t *testing.T) {
 		return client
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id = ANY($1)", created)
+		if _, cleanupErr := pool.Exec(context.Background(), "DELETE FROM oauth_clients WHERE id = ANY($1)", created); cleanupErr != nil {
+			t.Errorf("cleanup OAuth clients: %v", cleanupErr)
+		}
 	})
 
 	fresh := createClient(now.Add(-24*time.Hour + time.Second))
@@ -60,24 +62,26 @@ func TestClientGC_BoundsProtectsLiveAuthorityAndIsIdempotent(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID)
+		if _, cleanupErr := pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", user.ID); cleanupErr != nil {
+			t.Errorf("cleanup user: %v", cleanupErr)
+		}
 	})
-	if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: liveGrant.ID, Scopes: "resumes:read", CreatedAt: now.Add(-25 * time.Hour)}); err != nil {
-		t.Fatalf("UpsertOAuthGrant: %v", err)
+	if _, upsertErr := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: liveGrant.ID, Scopes: "resumes:read", CreatedAt: now.Add(-25 * time.Hour)}); upsertErr != nil {
+		t.Fatalf("UpsertOAuthGrant: %v", upsertErr)
 	}
 	tokenGrant, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: liveToken.ID, Scopes: "resumes:read", CreatedAt: now.Add(-25 * time.Hour)})
 	if err != nil {
 		t.Fatalf("UpsertOAuthGrant(token): %v", err)
 	}
-	if _, err := q.RevokeOAuthGrant(ctx, store.RevokeOAuthGrantParams{ID: tokenGrant.ID, RevokedAt: now}); err != nil {
-		t.Fatalf("RevokeOAuthGrant(token): %v", err)
+	if _, revokeErr := q.RevokeOAuthGrant(ctx, store.RevokeOAuthGrantParams{ID: tokenGrant.ID, RevokedAt: now}); revokeErr != nil {
+		t.Fatalf("RevokeOAuthGrant(token): %v", revokeErr)
 	}
 	tokenCreatedAt := now.Add(-25 * time.Hour)
-	if _, err := q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{
+	if _, tokenErr := q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{
 		TokenDigest: []byte(uuid.NewString() + uuid.NewString())[:32], Kind: "refresh", FamilyID: uuid.New(), ClientID: liveToken.ID, UserID: user.ID, GrantID: tokenGrant.ID,
 		CreatedAt: tokenCreatedAt, ExpiresAt: tokenCreatedAt.Add(30 * 24 * time.Hour), FamilyExpiresAt: tokenCreatedAt.Add(30 * 24 * time.Hour),
-	}); err != nil {
-		t.Fatalf("CreateOAuthToken: %v", err)
+	}); tokenErr != nil {
+		t.Fatalf("CreateOAuthToken: %v", tokenErr)
 	}
 
 	admission := &registrationAdmissionFake{allowed: true}

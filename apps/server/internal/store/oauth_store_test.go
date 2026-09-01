@@ -200,8 +200,8 @@ func TestOAuthCodeConsumeHasOneWinnerUnderConcurrentTransactions(t *testing.T) {
 	t.Cleanup(func() { rollbackOAuthStoreTx(t, txB) })
 
 	var pidB int32
-	if err := txB.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pidB); err != nil {
-		t.Fatalf("B backend PID: %v", err)
+	if backendErr := txB.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pidB); backendErr != nil {
+		t.Fatalf("B backend PID: %v", backendErr)
 	}
 
 	consumedAt := oauthStoreNow.Add(time.Second)
@@ -214,8 +214,8 @@ func TestOAuthCodeConsumeHasOneWinnerUnderConcurrentTransactions(t *testing.T) {
 	}
 
 	familyA, familyB := uuid.New(), uuid.New()
-	if _, err := consume(txA, familyA); err != nil {
-		t.Fatalf("A consume: %v", err)
+	if _, consumeErr := consume(txA, familyA); consumeErr != nil {
+		t.Fatalf("A consume: %v", consumeErr)
 	}
 
 	type outcome struct {
@@ -230,8 +230,8 @@ func TestOAuthCodeConsumeHasOneWinnerUnderConcurrentTransactions(t *testing.T) {
 
 	waitForBlockedBackend(ctx, t, pool, pidB)
 
-	if err := txA.Commit(ctx); err != nil {
-		t.Fatalf("A commit: %v", err)
+	if commitErr := txA.Commit(ctx); commitErr != nil {
+		t.Fatalf("A commit: %v", commitErr)
 	}
 	got := <-outcomeB
 	if !errors.Is(got.err, pgx.ErrNoRows) {
@@ -286,12 +286,12 @@ func TestOAuthCodeConsumeRejectsExpiredAndReplayedCodes(t *testing.T) {
 		t.Fatalf("consumed_at = %v, want %s", consumed.ConsumedAt, justInside)
 	}
 
-	if _, err := q.ConsumeOAuthAuthorizationCode(ctx, store.ConsumeOAuthAuthorizationCodeParams{
+	if _, replayErr := q.ConsumeOAuthAuthorizationCode(ctx, store.ConsumeOAuthAuthorizationCodeParams{
 		CodeDigest:     fresh.CodeDigest,
 		ConsumedAt:     justInside,
 		IssuedFamilyID: uuid.New(),
-	}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("replayed consume error = %v, want pgx.ErrNoRows", err)
+	}); !errors.Is(replayErr, pgx.ErrNoRows) {
+		t.Fatalf("replayed consume error = %v, want pgx.ErrNoRows", replayErr)
 	}
 
 	replay, err := q.GetOAuthAuthorizationCodeByDigestForUpdate(ctx, fresh.CodeDigest)
@@ -398,8 +398,8 @@ func TestOAuthGrantConcurrentUpsertLeavesOneLiveGrant(t *testing.T) {
 	t.Cleanup(func() { rollbackOAuthStoreTx(t, txB) })
 
 	var pidB int32
-	if err := txB.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pidB); err != nil {
-		t.Fatalf("B backend PID: %v", err)
+	if backendErr := txB.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pidB); backendErr != nil {
+		t.Fatalf("B backend PID: %v", backendErr)
 	}
 
 	upsert := func(tx pgx.Tx, scopes string) (store.OAuthGrant, error) {
@@ -589,19 +589,19 @@ func TestOAuthTokenRotationInheritsFamilyAndCannotCrossFamilies(t *testing.T) {
 
 	// Superseding under the wrong family matches no row, so a caller holding
 	// one family's identifier can never mark another family's token.
-	if _, err := q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{
+	if _, crossFamilyErr := q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{
 		ID:           first.ID,
 		FamilyID:     familyTwo,
 		SupersededAt: rotatedAt,
-	}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("cross-family supersede error = %v, want pgx.ErrNoRows", err)
+	}); !errors.Is(crossFamilyErr, pgx.ErrNoRows) {
+		t.Fatalf("cross-family supersede error = %v, want pgx.ErrNoRows", crossFamilyErr)
 	}
-	if _, err := q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{
+	if _, foreignTokenErr := q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{
 		ID:           foreign.ID,
 		FamilyID:     familyOne,
 		SupersededAt: rotatedAt,
-	}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("foreign-token supersede error = %v, want pgx.ErrNoRows", err)
+	}); !errors.Is(foreignTokenErr, pgx.ErrNoRows) {
+		t.Fatalf("foreign-token supersede error = %v, want pgx.ErrNoRows", foreignTokenErr)
 	}
 
 	superseded, err := q.SupersedeOAuthToken(ctx, store.SupersedeOAuthTokenParams{
@@ -646,8 +646,8 @@ func TestOAuthTokenFamilyRevocationRevokesEveryMemberOnlyInThatFamily(t *testing
 	survivor := newOAuthStoreToken(ctx, t, q, grant, "access", spared, oauthStoreNow)
 
 	// The grant row is the family-revocation serialization point.
-	if _, err := q.GetOAuthGrantForUpdate(ctx, grant.ID); err != nil {
-		t.Fatalf("GetOAuthGrantForUpdate: %v", err)
+	if _, lockErr := q.GetOAuthGrantForUpdate(ctx, grant.ID); lockErr != nil {
+		t.Fatalf("GetOAuthGrantForUpdate: %v", lockErr)
 	}
 
 	revokedAt := oauthStoreNow.Add(2 * time.Hour)
@@ -663,10 +663,10 @@ func TestOAuthTokenFamilyRevocationRevokesEveryMemberOnlyInThatFamily(t *testing
 	}
 
 	var live int
-	if err := tx.QueryRow(ctx,
+	if countErr := tx.QueryRow(ctx,
 		`SELECT count(*) FROM oauth_tokens WHERE family_id = $1 AND revoked_at IS NULL`, doomed,
-	).Scan(&live); err != nil {
-		t.Fatalf("count live family members: %v", err)
+	).Scan(&live); countErr != nil {
+		t.Fatalf("count live family members: %v", countErr)
 	}
 	if live != 0 {
 		t.Fatalf("live members of the revoked family = %d, want 0", live)
@@ -866,11 +866,11 @@ func TestOAuthIdleClientGCIsBoundedAndSkipsLiveClients(t *testing.T) {
 		t.Fatalf("UpsertOAuthGrant(token client): %v", err)
 	}
 	liveToken := newOAuthStoreToken(ctx, t, q, tokenGrant, "refresh", uuid.New(), oauthGCEpoch)
-	if _, err := q.RevokeOAuthGrant(ctx, store.RevokeOAuthGrantParams{
+	if _, revokeErr := q.RevokeOAuthGrant(ctx, store.RevokeOAuthGrantParams{
 		ID:        tokenGrant.ID,
 		RevokedAt: oauthGCEpoch.Add(time.Hour),
-	}); err != nil {
-		t.Fatalf("revoke token client's grant: %v", err)
+	}); revokeErr != nil {
+		t.Fatalf("revoke token client's grant: %v", revokeErr)
 	}
 	// The GC runs 25 hours after the epoch, so its idle cutoff (now - 24h)
 	// falls one hour after the epoch: every epoch-created client is idle, and
@@ -924,8 +924,8 @@ func TestOAuthIdleClientGCIsBoundedAndSkipsLiveClients(t *testing.T) {
 	if deleted != int64(len(idle)) {
 		t.Fatalf("DeleteOAuthClients removed %d rows, want %d", deleted, len(idle))
 	}
-	if _, err := q.GetOAuthClient(ctx, idle[0]); !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("deleted client lookup error = %v, want pgx.ErrNoRows", err)
+	if _, lookupErr := q.GetOAuthClient(ctx, idle[0]); !errors.Is(lookupErr, pgx.ErrNoRows) {
+		t.Fatalf("deleted client lookup error = %v, want pgx.ErrNoRows", lookupErr)
 	}
 
 	// Once the token's own family has expired, its client becomes collectable.
@@ -1021,8 +1021,8 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 	if deleted != 0 {
 		t.Fatalf("cleanup deleted %d live codes, want 0", deleted)
 	}
-	if _, err := q.GetOAuthAuthorizationCodeByDigest(ctx, live.CodeDigest); err != nil {
-		t.Fatalf("live code lookup after cleanup: %v", err)
+	if _, lookupErr := q.GetOAuthAuthorizationCodeByDigest(ctx, live.CodeDigest); lookupErr != nil {
+		t.Fatalf("live code lookup after cleanup: %v", lookupErr)
 	}
 
 	// Access tokens leave as soon as they expire; refresh tokens are retained
@@ -1053,8 +1053,8 @@ func TestOAuthCleanupQueriesRespectBatchBounds(t *testing.T) {
 	if deleted != 3 {
 		t.Fatalf("second token cleanup deleted %d rows, want the remaining 3 access tokens", deleted)
 	}
-	if _, err := q.GetOAuthTokenAuthorityByDigest(ctx, refresh.TokenDigest); err != nil {
-		t.Fatalf("refresh token was collected before its family expired: %v", err)
+	if _, lookupErr := q.GetOAuthTokenAuthorityByDigest(ctx, refresh.TokenDigest); lookupErr != nil {
+		t.Fatalf("refresh token was collected before its family expired: %v", lookupErr)
 	}
 
 	afterFamily := refresh.FamilyExpiresAt.Add(time.Second)

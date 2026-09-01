@@ -73,7 +73,10 @@ func (s *Service) ConsentContext(ctx context.Context, _ uuid.UUID, q ConsentQuer
 	if validateConsentQuery(q) != nil {
 		return ConsentView{}, ErrConsentInvalid
 	}
-	scopes, _ := q.parsedScopes()
+	scopes, scopeErr := q.parsedScopes()
+	if scopeErr != nil {
+		return ConsentView{}, ErrConsentInvalid
+	}
 	return ConsentView{ClientName: client.ClientName, Scopes: scopes}, nil
 }
 
@@ -93,15 +96,12 @@ func (s *Service) ConsentDecision(ctx context.Context, userID uuid.UUID, d Conse
 	return s.approveConsent(ctx, userID, d.ConsentQuery)
 }
 
-func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (string, error) {
+func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (redirectTo string, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin consent denial transaction: %w", err)
 	}
-	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-		}
-	}()
+	defer rollbackTransaction(context.WithoutCancel(ctx), tx, &err, "rollback consent denial transaction")
 	client, err := store.New(tx).GetOAuthClientForUpdate(ctx, request.ClientID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrConsentNotFound
@@ -162,11 +162,7 @@ func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request 
 	if err != nil {
 		return "", fmt.Errorf("begin consent transaction: %w", err)
 	}
-	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-			// The primary error is returned; rollback has no user-controlled output.
-		}
-	}()
+	defer rollbackTransaction(context.WithoutCancel(ctx), tx, &err, "rollback consent transaction")
 	qtx := store.New(tx)
 	client, err := qtx.GetOAuthClientForUpdate(ctx, request.ClientID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -181,7 +177,7 @@ func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request 
 	if validateConsentQuery(request) != nil {
 		return "", ErrConsentInvalid
 	}
-	if _, err := qtx.GetUserForUpdate(ctx, userID); err != nil {
+	if _, userErr := qtx.GetUserForUpdate(ctx, userID); userErr != nil {
 		return "", ErrConsentInvalid
 	}
 	grant, hasGrant, err := lockedLiveGrant(ctx, qtx, userID, request.ClientID)
@@ -239,28 +235,26 @@ func (s *Service) issueCode(ctx context.Context, userID uuid.UUID, request Conse
 	return s.approveExistingGrant(ctx, userID, request)
 }
 
-func (s *Service) approveExistingGrant(ctx context.Context, userID uuid.UUID, request ConsentQuery) (string, error) {
+func (s *Service) approveExistingGrant(ctx context.Context, userID uuid.UUID, request ConsentQuery) (redirectTo string, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin code transaction: %w", err)
 	}
-	defer func() {
-		if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-		}
-	}()
+	defer rollbackTransaction(context.WithoutCancel(ctx), tx, &err, "rollback authorization code transaction")
 	qtx := store.New(tx)
 	client, err := qtx.GetOAuthClientForUpdate(ctx, request.ClientID)
 	if err != nil || !registeredRedirect(client, request.RedirectURI) || validateConsentQuery(request) != nil {
 		return "", ErrConsentInvalid
 	}
-	if _, err := qtx.GetUserForUpdate(ctx, userID); err != nil {
+	if _, userErr := qtx.GetUserForUpdate(ctx, userID); userErr != nil {
 		return "", ErrConsentInvalid
 	}
 	grant, live, err := lockedLiveGrant(ctx, qtx, userID, request.ClientID)
 	if err != nil {
 		return "", err
 	}
-	if !live || !grantAllows(grant.Scopes, mustScopes(request)) {
+	requestedScopes, scopeErr := request.parsedScopes()
+	if scopeErr != nil || !live || !grantAllows(grant.Scopes, requestedScopes) {
 		return "", ErrConsentInvalid
 	}
 	rawCode, digest, err := s.newCode()
@@ -288,7 +282,9 @@ func (s *Service) newCode() (string, [32]byte, error) {
 	return NewCode(s.entropy)
 }
 
-func mustScopes(q ConsentQuery) Scopes {
-	scopes, _ := q.parsedScopes()
-	return scopes
+func rollbackTransaction(ctx context.Context, tx pgx.Tx, primary *error, action string) {
+	rollbackErr := tx.Rollback(ctx)
+	if rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) && *primary == nil {
+		*primary = fmt.Errorf("%s: %w", action, rollbackErr)
+	}
 }

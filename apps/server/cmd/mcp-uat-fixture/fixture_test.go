@@ -93,7 +93,11 @@ func TestCleanFixtureLeavesAnotherRunClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open test database: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close test database: %v", closeErr)
+		}
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
@@ -104,8 +108,13 @@ func TestCleanFixtureLeavesAnotherRunClient(t *testing.T) {
 	}
 	var targetID, otherID uuid.UUID
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(),
-			`DELETE FROM oauth_clients WHERE id IN ($1, $2)`, targetID, otherID)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cleanupCancel()
+		if _, cleanupErr := db.ExecContext(cleanupCtx,
+			`DELETE FROM oauth_clients WHERE id IN ($1, $2)`, targetID, otherID,
+		); cleanupErr != nil {
+			t.Errorf("clean test OAuth clients: %v", cleanupErr)
+		}
 	})
 	for name, id := range map[string]*uuid.UUID{
 		targetName: &targetID,

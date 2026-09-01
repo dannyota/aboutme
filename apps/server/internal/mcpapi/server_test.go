@@ -87,7 +87,11 @@ func connectMCPClient(t *testing.T, endpoint, token, cookie string) *mcp.ClientS
 	if err != nil {
 		t.Fatalf("connect MCP client: %v", err)
 	}
-	t.Cleanup(func() { _ = session.Close() })
+	t.Cleanup(func() {
+		if cleanupErr := session.Close(); cleanupErr != nil {
+			t.Errorf("close MCP session: %v", cleanupErr)
+		}
+	})
 	return session
 }
 
@@ -197,9 +201,12 @@ func TestServer_WriteScopeDeniedBeforeResumeStateAndCookieCannotAuthenticate(t *
 		t.Fatalf("cookie-only request: %v", err)
 	}
 	responseBody, readErr := io.ReadAll(response.Body)
-	_ = response.Body.Close()
+	closeErr := response.Body.Close()
 	if readErr != nil {
 		t.Fatalf("read cookie-only response: %v", readErr)
+	}
+	if closeErr != nil {
+		t.Fatalf("close cookie-only response: %v", closeErr)
 	}
 	if response.StatusCode != http.StatusUnauthorized || string(responseBody) != `{"error":"unauthorized"}` {
 		t.Fatalf("cookie-only response = %d %s", response.StatusCode, responseBody)
@@ -240,12 +247,12 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 		t.Fatalf("read minimal fixture: %v", err)
 	}
 	var document map[string]any
-	if err := json.Unmarshal(rawDocument, &document); err != nil {
-		t.Fatalf("decode minimal fixture: %v", err)
+	if unmarshalErr := json.Unmarshal(rawDocument, &document); unmarshalErr != nil {
+		t.Fatalf("decode minimal fixture: %v", unmarshalErr)
 	}
 	var otherDocument schema.Resume
-	if err := json.Unmarshal(rawDocument, &otherDocument); err != nil {
-		t.Fatalf("decode other-user document: %v", err)
+	if unmarshalErr := json.Unmarshal(rawDocument, &otherDocument); unmarshalErr != nil {
+		t.Fatalf("decode other-user document: %v", unmarshalErr)
 	}
 	otherUser, err := h.q.CreateUser(context.Background(), store.CreateUserParams{
 		Email: "other-" + uuid.NewString() + "@example.test", Name: "Other owner",
@@ -253,7 +260,11 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	if err != nil {
 		t.Fatalf("CreateUser other: %v", err)
 	}
-	t.Cleanup(func() { _, _ = h.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", otherUser.ID) })
+	t.Cleanup(func() {
+		if _, cleanupErr := h.pool.Exec(context.Background(), "DELETE FROM users WHERE id = $1", otherUser.ID); cleanupErr != nil {
+			t.Errorf("delete other user: %v", cleanupErr)
+		}
+	})
 	otherResume, err := resume.NewStore(h.pool, projector).Create(context.Background(), otherUser.ID, "Other resume", otherDocument)
 	if err != nil {
 		t.Fatalf("create other-user resume: %v", err)
@@ -273,9 +284,18 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	document["content"] = map[string]any{
 		"work": map[string]any{"sectionType": "work", "iconKey": "briefcase", "entries": []any{}},
 	}
-	customization := document["customization"].(map[string]any)
-	layout := customization["layout"].(map[string]any)
-	sections := layout["sections"].(map[string]any)
+	customization, ok := document["customization"].(map[string]any)
+	if !ok {
+		t.Fatal("minimal fixture customization is not an object")
+	}
+	layout, ok := customization["layout"].(map[string]any)
+	if !ok {
+		t.Fatal("minimal fixture customization layout is not an object")
+	}
+	sections, ok := layout["sections"].(map[string]any)
+	if !ok {
+		t.Fatal("minimal fixture customization layout sections is not an object")
+	}
 	sections["main"] = []any{"work"}
 
 	created, err := session.CallTool(context.Background(), &mcp.CallToolParams{
@@ -397,9 +417,9 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 		t.Fatalf("marshal photo output: %v", err)
 	}
 	var photoData photoOutput
-	if err := json.Unmarshal(photoRaw, &photoData); err != nil ||
+	if unmarshalErr := json.Unmarshal(photoRaw, &photoData); unmarshalErr != nil ||
 		!strings.HasPrefix(photoData.ContentType, "image/") || photoData.DataBase64 == "" {
-		t.Fatalf("photo output = %#v, error = %v", photoData, err)
+		t.Fatalf("photo output = %#v, error = %v", photoData, unmarshalErr)
 	}
 	cropped := callMutationTool(t, session, "update_photo_crop", map[string]any{
 		"resume_id": resumeID, "revision": "9",
@@ -448,8 +468,8 @@ func toolErrorText(result *mcp.CallToolResult) string {
 	if result == nil || len(result.Content) != 1 {
 		return ""
 	}
-	text, _ := result.Content[0].(*mcp.TextContent)
-	if text == nil {
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok || text == nil {
 		return ""
 	}
 	return text.Text
@@ -525,9 +545,12 @@ func TestServer_RejectsBatchAndEnforcesFourMiBBoundary(t *testing.T) {
 				t.Fatalf("perform request: %v", err)
 			}
 			body, readErr := io.ReadAll(response.Body)
-			_ = response.Body.Close()
+			closeErr := response.Body.Close()
 			if readErr != nil {
 				t.Fatalf("read response: %v", readErr)
+			}
+			if closeErr != nil {
+				t.Fatalf("close response: %v", closeErr)
 			}
 			if response.StatusCode != tc.wantStatus {
 				t.Fatalf("response = %d %s, want %d", response.StatusCode, body, tc.wantStatus)
@@ -565,8 +588,12 @@ func TestServer_JSONOnlyAcceptAndUnknownToolAreRejectedWithoutExecution(t *testi
 	if err != nil {
 		t.Fatalf("perform JSON-only request: %v", err)
 	}
-	_, _ = io.Copy(io.Discard, response.Body)
-	_ = response.Body.Close()
+	if _, copyErr := io.Copy(io.Discard, response.Body); copyErr != nil {
+		t.Fatalf("discard JSON-only response: %v", copyErr)
+	}
+	if closeErr := response.Body.Close(); closeErr != nil {
+		t.Fatalf("close JSON-only response: %v", closeErr)
+	}
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("JSON-only Accept status = %d, want 400", response.StatusCode)
 	}
@@ -647,7 +674,7 @@ func TestServer_ToolCallRateLimitReturnsClosedHTTPError(t *testing.T) {
 	}
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_resumes","arguments":{}}}`
 	for i := 1; i <= 2; i++ {
-		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(body))
+		request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer "+raw)
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Accept", "application/json, text/event-stream")

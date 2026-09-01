@@ -122,8 +122,12 @@ func TestRatePolicies_RequestGuardReleasesOnPanicAndCancellation(t *testing.T) {
 	)
 
 	func() {
-		defer func() { _ = recover() }()
-		policies.ServeRequest(principal, httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/mcp", nil),
+		defer func() {
+			if recovered := recover(); recovered == nil {
+				t.Fatal("panic sentinel did not propagate")
+			}
+		}()
+		policies.ServeRequest(principal, httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp", nil),
 			http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("sentinel") }))
 	}()
 	for i := 0; i < 4; i++ {
@@ -135,7 +139,7 @@ func TestRatePolicies_RequestGuardReleasesOnPanicAndCancellation(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	request := httptest.NewRequest(http.MethodPost, "/mcp", nil).WithContext(ctx)
+	request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp", nil)
 	started := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -151,7 +155,7 @@ func TestRatePolicies_RequestGuardReleasesOnPanicAndCancellation(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("cancelled request did not return")
+		t.Fatal("canceled request did not return")
 	}
 	for i := 0; i < 4; i++ {
 		release, allowed := policies.AcquireRequest(principal.UserID)
@@ -178,7 +182,7 @@ func TestRatePolicies_FifthConcurrentRequestReturnsClosedError(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			policies.ServeRequest(principal, httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/mcp", nil),
+			policies.ServeRequest(principal, httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp", nil),
 				http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 					started <- struct{}{}
 					<-release
@@ -190,7 +194,7 @@ func TestRatePolicies_FifthConcurrentRequestReturnsClosedError(t *testing.T) {
 	}
 
 	recorder := httptest.NewRecorder()
-	policies.ServeRequest(principal, recorder, httptest.NewRequest(http.MethodPost, "/mcp", nil), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	policies.ServeRequest(principal, recorder, httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/mcp", nil), http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("fifth request reached the inner handler")
 	}))
 	if recorder.Code != http.StatusTooManyRequests || recorder.Header().Get("Retry-After") != "1" || recorder.Body.String() != `{"error":"rate_limited"}` {
