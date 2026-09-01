@@ -46,8 +46,8 @@ func TestGoogleCallback_ReturningSubject_SkipsEmailRequirement(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("callback status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
-	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/" {
-		t.Errorf("callback Location = %q, want %q (a returning subject must log in without re-evaluating email)", got, testPublicOrigin+"/")
+	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
+		t.Errorf("callback Location = %q, want %q (a returning subject must log in without re-evaluating email)", got, testPublicOrigin+"/app/resumes")
 	}
 	if extractCookie(resp, auth.SessionCookieName) == nil {
 		t.Error("callback did not issue a session cookie for a returning subject")
@@ -85,8 +85,8 @@ func TestLinkedInCallback_ReturningSubject_SkipsEmailRequirement(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("callback status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
-	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/" {
-		t.Errorf("callback Location = %q, want %q (a returning subject must log in without re-evaluating email)", got, testPublicOrigin+"/")
+	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
+		t.Errorf("callback Location = %q, want %q (a returning subject must log in without re-evaluating email)", got, testPublicOrigin+"/app/resumes")
 	}
 	if extractCookie(resp, auth.SessionCookieName) == nil {
 		t.Error("callback did not issue a session cookie for a returning subject")
@@ -122,8 +122,8 @@ func TestGitHubCallback_ReturningSubject_SkipsEmailsAPI(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("callback status = %d, want %d", resp.StatusCode, http.StatusFound)
 	}
-	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/" {
-		t.Errorf("callback Location = %q, want %q (a returning subject must log in)", got, testPublicOrigin+"/")
+	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
+		t.Errorf("callback Location = %q, want %q (a returning subject must log in)", got, testPublicOrigin+"/app/resumes")
 	}
 	if extractCookie(resp, auth.SessionCookieName) == nil {
 		t.Error("callback did not issue a session cookie for a returning subject")

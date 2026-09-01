@@ -25,8 +25,8 @@ func assertLinkedInLoginAccepted(t *testing.T, resp *http.Response) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("callback status = %d, want %d (redirect on a successful login)", resp.StatusCode, http.StatusFound)
 	}
-	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/" {
-		t.Errorf("callback Location = %q, want %q (DD-C7: a successful callback redirects to the bare origin, never /login)", got, testPublicOrigin+"/")
+	if got := resp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
+		t.Errorf("callback Location = %q, want %q (a successful callback redirects to the resume list, never /login)", got, testPublicOrigin+"/app/resumes")
 	}
 
 	sessionCookie := extractCookie(resp, auth.SessionCookieName)

@@ -64,8 +64,10 @@ nonce and validate signature, issuer, audience, expiry, and nonce. GitHub has a
 distinct callback and no invented OIDC checks.
 
 The server stores transaction state, purpose, the opaque-handle hash, PKCE
-verifier, exact redirect URI, expiry, and OIDC nonce. The browser holds only the
-256-bit opaque `__Host-oauth-tx` handle. The database stores its SHA-256 hash. A
+verifier, exact provider redirect URI, bounded login return path, expiry, and
+OIDC nonce. The return path is one same-origin relative path of at most 2,048
+bytes; invalid input becomes `/app/resumes`. The browser holds only the 256-bit
+opaque `__Host-oauth-tx` handle. The database stores its SHA-256 hash. A
 transaction is consumed atomically once and expires after ten minutes.
 
 A privileged transaction binds the user who started it, not one concrete session

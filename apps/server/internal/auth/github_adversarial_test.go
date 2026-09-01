@@ -409,8 +409,8 @@ func TestGitHubCallback_NumericIDConvertsToStringProviderUserID(t *testing.T) {
 			if resp.StatusCode != http.StatusFound {
 				t.Fatalf("callback status = %d, want %d", resp.StatusCode, http.StatusFound)
 			}
-			if got := resp.Header.Get("Location"); got != testPublicOrigin+"/" {
-				t.Errorf("callback Location = %q, want %q (a successful login redirects to the bare origin, DD-C7)", got, testPublicOrigin+"/")
+			if got := resp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
+				t.Errorf("callback Location = %q, want %q (a successful login redirects to the resume list)", got, testPublicOrigin+"/app/resumes")
 			}
 			if extractCookie(resp, auth.SessionCookieName) == nil {
 				t.Fatal("callback missing __Host-session cookie")

@@ -161,9 +161,9 @@ SELECT * FROM sessions WHERE id = $1;
 
 -- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (
-    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, expires_at
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING *;
 
 -- name: ConsumeOAuthTransaction :one

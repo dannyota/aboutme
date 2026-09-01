@@ -271,7 +271,7 @@ func runMatrixCase(t *testing.T, c matrixCase) {
 	if attemptResp.StatusCode != http.StatusFound {
 		t.Fatalf("%s: attempt login status = %d, want %d (a different-email NewUser login must succeed, never be treated as a collision)", c.name, attemptResp.StatusCode, http.StatusFound)
 	}
-	assertRedirectPath(t, attemptResp.Header.Get("Location"), "/") // success path, not /login.
+	assertRedirectPath(t, attemptResp.Header.Get("Location"), "/app/resumes") // success path, not /login.
 	if extractCookie(attemptResp, auth.SessionCookieName) == nil {
 		t.Fatalf("%s: attempt login did not authenticate, want a real NewUser session", c.name)
 	}

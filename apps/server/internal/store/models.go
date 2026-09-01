@@ -130,6 +130,7 @@ type OAuthTransaction struct {
 	CreatedAt     time.Time
 	ExpiresAt     time.Time
 	ConsumedAt    *time.Time
+	ReturnPath    string
 }
 
 type PasswordCredential struct {

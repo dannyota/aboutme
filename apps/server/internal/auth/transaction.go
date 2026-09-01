@@ -45,6 +45,8 @@ const oauthTxTTL = 10 * time.Minute
 // randomTokenBytes gives handles, state, and nonces 256 bits of entropy.
 const randomTokenBytes = 32
 
+const defaultLoginReturnPath = "/app/resumes"
+
 // Transaction binds an authorization start to its callback.
 type Transaction struct {
 	Provider      Provider
@@ -54,6 +56,7 @@ type Transaction struct {
 	PKCEVerifier  string
 	Nonce         string // empty for ProviderGitHub
 	RedirectURI   string
+	ReturnPath    string
 }
 
 // ErrTransactionInvalid collapses unknown, expired, replayed, and wrong-provider
@@ -81,6 +84,13 @@ func NewTransactionStoreForTest(q *store.Queries, now func() time.Time) *Transac
 // Begin stores only the handle hash and returns the raw cookie handle. Handle,
 // state, and OIDC nonce are independent random values. GitHub has no nonce.
 func (s *TransactionStore) Begin(ctx context.Context, provider Provider, purpose Purpose, linkingUserID uuid.UUID, redirectURI string) (string, Transaction, error) {
+	return s.begin(ctx, provider, purpose, linkingUserID, redirectURI, defaultLoginReturnPath)
+}
+
+// begin stores a provider transaction with its server-validated login return
+// path. Direct callers use Begin's closed default; provider start handlers pass
+// the path they validated from the login page.
+func (s *TransactionStore) begin(ctx context.Context, provider Provider, purpose Purpose, linkingUserID uuid.UUID, redirectURI, returnPath string) (string, Transaction, error) {
 	handle, err := randomToken()
 	if err != nil {
 		return "", Transaction{}, fmt.Errorf("auth: begin oauth transaction: generate handle: %w", err)
@@ -117,6 +127,7 @@ func (s *TransactionStore) Begin(ctx context.Context, provider Provider, purpose
 		PKCEVerifier:  verifier,
 		Nonce:         nonceParam,
 		RedirectURI:   redirectURI,
+		ReturnPath:    returnPath,
 		ExpiresAt:     s.now().Add(oauthTxTTL),
 	})
 	if err != nil {
@@ -158,6 +169,7 @@ func transactionFromRow(row store.OAuthTransaction) Transaction {
 		State:        row.State,
 		PKCEVerifier: row.PKCEVerifier,
 		RedirectURI:  row.RedirectURI,
+		ReturnPath:   row.ReturnPath,
 	}
 	if row.LinkingUserID != nil {
 		tx.LinkingUserID = *row.LinkingUserID

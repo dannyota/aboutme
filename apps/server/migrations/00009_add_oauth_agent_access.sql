@@ -10,8 +10,21 @@
 -- family lifetimes, single live grant per (user, client), redirect-URI count)
 -- is enforced by the database, not by a Go pass that happens to agree with it.
 --
--- No preflight is needed: the migration creates four new tables and reads no
--- existing row.
+-- No preflight is needed: the bounded transaction column has a closed default
+-- for any existing row, and the four agent-access tables are new.
+
+-- Provider login must carry a validated, same-origin relative destination
+-- across the external provider round trip. The value stays bound to the
+-- existing opaque OAuth transaction instead of entering a second cookie or
+-- browser storage. Existing rows receive the closed default.
+ALTER TABLE "public"."oauth_transactions"
+  ADD COLUMN "return_path" text NOT NULL DEFAULT '/app/resumes',
+  ADD CONSTRAINT "oauth_transactions_return_path_check" CHECK (
+    octet_length(return_path) BETWEEN 1 AND 2048
+    AND left(return_path, 1) = '/'
+    AND left(return_path, 2) <> '//'
+    AND position(chr(92) in return_path) = 0
+  );
 
 -- create "oauth_clients" table
 -- The primary key IS the public client_id (M1: a UUID string, no secret), so
@@ -200,3 +213,7 @@ DROP TABLE "public"."oauth_authorization_codes";
 DROP INDEX "public"."oauth_clients_created_at_idx";
 -- reverse: create "oauth_clients" table
 DROP TABLE "public"."oauth_clients";
+-- reverse: provider-login return path
+ALTER TABLE "public"."oauth_transactions"
+  DROP CONSTRAINT "oauth_transactions_return_path_check",
+  DROP COLUMN "return_path";

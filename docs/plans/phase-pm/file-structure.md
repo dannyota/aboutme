@@ -91,6 +91,10 @@ the integration owner and are serialized.
 
 ## T10 — Consent page
 
+- Integration-owner correction for provider login return preservation:
+  `docs/api/openapi.yaml` and generated web types; migration 00009, OAuth
+  transaction sqlc sources/generated files, and migration tests; provider
+  start/callback implementation and tests under `apps/server/internal/auth/`.
 - New `apps/web/app/pages/authorize.vue` and
   `apps/web/app/composables/useOAuthConsent.ts`.
 - New `apps/web/test/{authorize,useOAuthConsent}.test.ts`.

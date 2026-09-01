@@ -264,6 +264,7 @@ paths:
         lookup, database write, or cookie is set.
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
+        - $ref: "#/components/parameters/AuthReturnPath"
       responses:
         "302":
           description: Success — a redirect to Google's own authorize endpoint.
@@ -479,6 +480,7 @@ paths:
         `Allow: POST` before any transaction is created.
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
+        - $ref: "#/components/parameters/AuthReturnPath"
       responses:
         "302":
           description: Success — a redirect to GitHub's own authorize endpoint.
@@ -659,6 +661,7 @@ paths:
         `Allow: POST` before any transaction is created.
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
+        - $ref: "#/components/parameters/AuthReturnPath"
       responses:
         "302":
           description: Success — a redirect to LinkedIn's own authorize endpoint.
@@ -5332,6 +5335,21 @@ components:
         enum: [login]
         default: login
       example: login
+    AuthReturnPath:
+      name: next
+      in: query
+      required: false
+      description: >-
+        Same-origin relative path to open after a successful provider login.
+        The server accepts at most 2,048 bytes, requires one leading `/`, and
+        rejects a leading `//`, any URI scheme, malformed URL syntax, or a
+        backslash. An absent or invalid value is bound as `/app/resumes` in the
+        OAuth transaction. Link and reauthentication callbacks ignore it.
+      schema:
+        type: string
+        maxLength: 2048
+        pattern: '^/(?!/)[^\\]*$'
+      example: /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
     AuthLinkPurpose:
       name: purpose
       in: query
