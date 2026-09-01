@@ -30,6 +30,13 @@ func ParseScopes(raw string) (Scopes, error)
 Closed errors: `ErrTokenInvalid`, `ErrCodeInvalid`, `ErrRedirectInvalid`,
 `ErrClientNameInvalid`, `ErrScopeInvalid`. Errors carry no input text.
 
+Digest convention (T03, frozen): the stored 32-byte digest is SHA-256 over
+the canonical raw spelling — prefix included for tokens (`amat_…`/`amrt_…`),
+bare 43 characters for codes — which domain-separates kinds. Consumers
+obtain digests only through `NewToken`/`ParseToken`/`NewCode`/`ParseCode`,
+never by hashing material themselves. A short entropy read surfaces the raw
+`io` error, which endpoint tasks map to `server_error`.
+
 ## Service surfaces (T04/T05/T06 → T09)
 
 ```go
