@@ -29,23 +29,23 @@
 
 ## TDD cycle
 
-- [ ] Write metadata REDs: exact document bytes for a fixed origin, header
+- [x] Write metadata REDs: exact document bytes for a fixed origin, header
       substitution attempts (Host, X-Forwarded-*), method matrix, cache header.
-- [ ] Write bearer REDs: absent/duplicated/malformed headers, wrong prefix,
+- [x] Write bearer REDs: absent/duplicated/malformed headers, wrong prefix,
       access-vs-refresh kind confusion, expired at 3,600 s ± 1 s, revoked,
       superseded, cross-user digest, and byte-identical 401 bodies across every
       failure class.
-- [ ] Write scope REDs: read token on mutating requirement → closed 403; write
+- [x] Write scope REDs: read token on mutating requirement → closed 403; write
       token passes both.
-- [ ] Write a last-used RED with injected clock: two calls 30 s apart touch
+- [x] Write a last-used RED with injected clock: two calls 30 s apart touch
       once; 61 s apart touch twice.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   cd apps/server && go test ./internal/oauthsrv ./internal/mcpapi -race -count=1 -run 'Metadata|Bearer|Scope'
   ```
 
-- [ ] Implement; rerun to GREEN, then `make server-build server-vet`.
+- [x] Implement; rerun to GREEN, then `make server-build server-vet`.
 
 ## Adversarial checklist
 

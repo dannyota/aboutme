@@ -30,22 +30,22 @@ revocation paths.
 
 ## TDD cycle
 
-- [ ] Write migration REDs: fresh up/down, every constraint boundary (name
+- [x] Write migration REDs: fresh up/down, every constraint boundary (name
       bytes, URI count, digest length, closed kinds/scopes, expiry ordering),
       cascade matrix, and partial-unique live-grant behavior under two
       concurrent inserts.
-- [ ] Write store REDs: code consume is single-success under two concurrent
+- [x] Write store REDs: code consume is single-success under two concurrent
       transactions; family revocation revokes every member; cleanup queries
       respect batch bounds; joined token lookup returns grant and user in one
       round trip.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   make sqlc-check
   make server-test-db server-test-integration server-migration-test
   ```
 
-- [ ] Land migration + queries, regenerate sqlc, implement the contract; rerun
+- [x] Land migration + queries, regenerate sqlc, implement the contract; rerun
       to GREEN with `-count=1`.
 
 ## Adversarial checklist

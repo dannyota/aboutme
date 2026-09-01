@@ -32,26 +32,26 @@ Implement M2/M3/M4 exchange semantics:
 
 ## TDD cycle
 
-- [ ] Write form-strictness REDs: media type, size, closed/duplicate params,
+- [x] Write form-strictness REDs: media type, size, closed/duplicate params,
       unknown grant types, byte-compared error bodies.
-- [ ] Write exchange REDs: happy path, wrong verifier, wrong client, wrong
+- [x] Write exchange REDs: happy path, wrong verifier, wrong client, wrong
       redirect URI, expired code (60 s ± 1 s), consumed-code replay revoking
       issued tokens.
-- [ ] Write rotation REDs with injected clock: rotate chain of three, superseded
+- [x] Write rotation REDs with injected clock: rotate chain of three, superseded
       reuse revokes family, access expiry 3,600 s boundary, family expiry 30 d
       boundary, cross-family `rotated_from` impossible.
-- [ ] Write live-DB race REDs: two concurrent exchanges of one code yield one
+- [x] Write live-DB race REDs: two concurrent exchanges of one code yield one
       success and one `invalid_grant`; concurrent rotate and revoke leave zero
       live tokens.
-- [ ] Write revocation REDs: grant + families die together; unknown token 200
+- [x] Write revocation REDs: grant + families die together; unknown token 200
       no-op; `/mcp`-visible effect is T07's test, cite the shared fixture.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   cd apps/server && go test ./internal/oauthsrv -race -count=1 -run 'Token|Revoke'
   ```
 
-- [ ] Implement; rerun to GREEN, then `make server-build server-vet`.
+- [x] Implement; rerun to GREEN, then `make server-build server-vet`.
 
 ## Adversarial checklist
 

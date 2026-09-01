@@ -40,7 +40,7 @@ and records the decision as an ADR, following the PA/ADR 0025 pattern.
 | P5A publish and public SSR    | Complete                        | None                                            |
 | PA password authentication    | Complete                        | None                                            |
 | PF provider-login flag        | Not started                     | ADR, design amendment, config flag, UI gating   |
-| PM MCP agent access           | Complete                        | None                                            |
+| PM MCP agent access           | Exit candidate                  | Review confirmation; phase gates                |
 | P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
 | PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
 

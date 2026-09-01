@@ -29,13 +29,13 @@ that ruling in the spec description text.
 
 ## TDD cycle
 
-- [ ] Write `docs/api/test/oauth-consent.test.ts` REDs: operation presence,
+- [x] Write `docs/api/test/oauth-consent.test.ts` REDs: operation presence,
       closed request/response schemas, required session/CSRF markers, no
       additionalProperties, and the four-operation exact count for the new tag.
-- [ ] Run the expected RED: `make api-check`.
-- [ ] Land the OpenAPI source, regenerate `openapi.ts`, and update the
+- [x] Run the expected RED: `make api-check`.
+- [x] Land the OpenAPI source, regenerate `openapi.ts`, and update the
       client-parity fixture.
-- [ ] GREEN: `make api-check` and `make web-typecheck`.
+- [x] GREEN: `make api-check` and `make web-typecheck`.
 
 ## Adversarial checklist
 

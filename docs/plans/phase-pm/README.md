@@ -1,7 +1,8 @@
 # Phase PM — MCP agent access implementation plan
 
-Status: **Complete** (2026-09-02). AC-MCP-001–010 are proven by focused suites,
-the M9 native HTTPS proof, fresh phase review, and unchanged-candidate gates.
+Status: **Exit candidate** (2026-09-02). AC-MCP-001–010 are proven by focused
+suites and the M9 native HTTPS proof. The phase review fixes await confirmation;
+the unchanged-candidate gates have not run.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
