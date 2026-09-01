@@ -6,6 +6,7 @@ readonly IMAGE_BASE='mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9
 readonly IMAGE_PLAYWRIGHT=1.62.1
 readonly IMAGE_NSS='2:3.98-1ubuntu0.2'
 readonly IMAGE_ENTRYPOINT='["/opt/aboutme-auth/run.sh","--inside"]'
+readonly MCP_CLIENT_NAME_RE='^aboutme MCP UAT [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
 
 # Spec sources are mounted read-only per run, never baked into the image.
 # Both sides validate this exact set; scripts/dev-https-check.sh stages it.
@@ -42,6 +43,18 @@ validate_spec_dir() {
 fail() {
   printf 'dev-https-browser: %s\n' "$*" >&2
   exit 1
+}
+
+validate_mcp_client_name_file() {
+  local path=$1 uid=$2
+  local -a lines=()
+  [ -f "$path" ] && [ ! -L "$path" ] ||
+    fail 'MCP client name is not a regular file'
+  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'MCP client name owner mismatch'
+  [ "$(stat -c %a "$path")" = 600 ] || fail 'MCP client name mode must be 0600'
+  mapfile -t lines <"$path"
+  [ "${#lines[@]}" -eq 1 ] && [[ ${lines[0]} =~ $MCP_CLIENT_NAME_RE ]] ||
+    fail 'MCP client name must contain a lowercase UUIDv4'
 }
 
 mount_has_option() {
@@ -109,6 +122,9 @@ inside_container() {
   if [ "$mode" = password-auth ]; then
     [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
       fail 'CA input must contain the Caddy root and the capture token'
+  elif [ "$mode" = mcp ]; then
+    [ "$input_entries" = $'caddy-root.crt\nmcp-client-name' ] ||
+      fail 'MCP input must contain the Caddy root and the run client name'
   else
     [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
   fi
@@ -125,6 +141,8 @@ inside_container() {
       fail 'capture token owner mismatch'
     [ "$(stat -c %a /uat-input/mail-capture-token)" = 600 ] ||
       fail 'capture token mode must be 0600'
+  elif [ "$mode" = mcp ]; then
+    validate_mcp_client_name_file /uat-input/mcp-client-name "$uid"
   fi
   evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
@@ -357,6 +375,9 @@ host_run() {
   if [ "$mode" = password-auth ]; then
     [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
       fail 'CA input must contain the Caddy root and the capture token'
+  elif [ "$mode" = mcp ]; then
+    [ "$input_entries" = $'caddy-root.crt\nmcp-client-name' ] ||
+      fail 'MCP input must contain the Caddy root and the run client name'
   else
     [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
   fi
@@ -373,6 +394,8 @@ host_run() {
       fail 'capture token owner mismatch'
     [ "$(stat -c %a "$input/mail-capture-token")" = 600 ] ||
       fail 'capture token mode must be 0600'
+  elif [ "$mode" = mcp ]; then
+    validate_mcp_client_name_file "$input/mcp-client-name" "$uid"
   fi
   evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'

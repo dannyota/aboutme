@@ -71,8 +71,9 @@ readonly FAKE_BIN=$WORK/bin
 readonly CALL_LOG=$WORK/podman.calls
 readonly IMAGE_META=$WORK/image.meta
 readonly INPUT=$WORK/input
+readonly MCP_INPUT=$WORK/mcp-input
 readonly EVIDENCE=$WORK/evidence
-install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$EVIDENCE"
+install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$MCP_INPUT" "$EVIDENCE"
 for file in Dockerfile package.json package-lock.json run.sh "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
@@ -85,6 +86,10 @@ done
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'static-test-only' \
   '-----END CERTIFICATE-----' >"$INPUT/caddy-root.crt"
 chmod 0600 "$INPUT/caddy-root.crt"
+cp -- "$INPUT/caddy-root.crt" "$MCP_INPUT/caddy-root.crt"
+printf '%s\n' 'aboutme MCP UAT 11111111-1111-4111-8111-111111111111' \
+  >"$MCP_INPUT/mcp-client-name"
+chmod 0600 "$MCP_INPUT"/*
 
 cat >"$FAKE_BIN/podman" <<'FAKE_PODMAN'
 #!/usr/bin/env bash
@@ -295,12 +300,35 @@ readonly MCP_EVIDENCE=$WORK/mcp-evidence
 install -d -m 0700 "$MCP_EVIDENCE"
 : >"$CALL_LOG"
 FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
-  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_EVIDENCE" mcp
+  "$IMAGE_ID" "$MCP_INPUT" "$SPEC_INPUT" "$MCP_EVIDENCE" mcp
 tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
 grep -Fxq mcp "$READABLE_LOG" || fail 'mcp mode did not reach the image'
 image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
 [ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = mcp ] ||
   fail 'mcp mode was not passed after the verified image ID'
+grep -Fxq -- "--mount=type=bind,src=$MCP_INPUT,dst=/uat-input,ro=true" \
+  "$READABLE_LOG" || fail 'closed MCP input mount is missing'
+
+readonly MCP_MISSING_INPUT_EVIDENCE=$WORK/mcp-missing-input-evidence
+install -d -m 0700 "$MCP_MISSING_INPUT_EVIDENCE"
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_MISSING_INPUT_EVIDENCE" mcp 2>&1); then
+  fail 'mcp accepted an input without a run-scoped client name'
+fi
+grep -Fq 'MCP input must contain the Caddy root and the run client name' \
+  <<<"$output" || fail 'mcp missing-client-name diagnostic drifted'
+
+printf '%s\n' 'aboutme MCP UAT' >"$MCP_INPUT/mcp-client-name"
+readonly MCP_INVALID_INPUT_EVIDENCE=$WORK/mcp-invalid-input-evidence
+install -d -m 0700 "$MCP_INVALID_INPUT_EVIDENCE"
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$MCP_INPUT" "$SPEC_INPUT" "$MCP_INVALID_INPUT_EVIDENCE" mcp 2>&1); then
+  fail 'mcp accepted an invalid run-scoped client name'
+fi
+grep -Fq 'MCP client name must contain a lowercase UUIDv4' <<<"$output" ||
+  fail 'mcp invalid-client-name diagnostic drifted'
+printf '%s\n' 'aboutme MCP UAT 11111111-1111-4111-8111-111111111111' \
+  >"$MCP_INPUT/mcp-client-name"
 
 readonly PASSWORD_INPUT=$WORK/password-input
 readonly PASSWORD_EVIDENCE=$WORK/password-evidence
@@ -876,6 +904,9 @@ if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
 fi
 
 reset_inside
+printf '%s\n' 'aboutme MCP UAT 11111111-1111-4111-8111-111111111111' \
+  >"$INSIDE_INPUT/mcp-client-name"
+chmod 0600 "$INSIDE_INPUT/mcp-client-name"
 if output=$(FAKE_BROWSER_MODE=mcp-fail PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside mcp 2>&1); then
   fail 'mcp browser failure was accepted'
@@ -885,6 +916,7 @@ grep -Fxq 'dev-https-browser: mcp-stage:list-tools' <<<"$output" ||
 if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
   fail 'mcp failure leaked volatile output'
 fi
+rm -- "$INSIDE_INPUT/mcp-client-name"
 
 reset_inside
 assert_inside_rejected malformed-evidence \
@@ -1003,6 +1035,9 @@ grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
 rm -- "$INSIDE_INPUT/mail-capture-token"
 
 reset_inside
+printf '%s\n' 'aboutme MCP UAT 11111111-1111-4111-8111-111111111111' \
+  >"$INSIDE_INPUT/mcp-client-name"
+chmod 0600 "$INSIDE_INPUT/mcp-client-name"
 readonly MCP_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside mcp)
 grep -Fq 'dev-https-browser MCP agent access proof: PASS' \
   <<<"$MCP_INSIDE_OUTPUT" ||
@@ -1031,5 +1066,6 @@ if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized mcp evidence returned the wrong diagnostic'
+rm -- "$INSIDE_INPUT/mcp-client-name"
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

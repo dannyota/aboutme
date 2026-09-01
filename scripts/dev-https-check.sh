@@ -138,13 +138,17 @@ fi
 
 staging=
 password_input=
+mcp_input=
 mcp_fixture=
+mcp_client_name=
 mcp_seeded=0
 cleanup() {
   [ -z "$staging" ] || rm -rf -- "$staging"
   [ -z "$password_input" ] || rm -rf -- "$password_input"
+  [ -z "$mcp_input" ] || rm -rf -- "$mcp_input"
   if [ "$mcp_seeded" -eq 1 ] && [ -n "$mcp_fixture" ]; then
-    "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" >/dev/null 2>&1 || true
+    "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
+      --client-name "$mcp_client_name" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -185,14 +189,27 @@ if [ "$MODE" = password-auth ]; then
   curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
     "http://127.0.0.1:20444/api/messages" >/dev/null
 elif [ "$MODE" = mcp ]; then
+  mcp_run_id=$(</proc/sys/kernel/random/uuid)
+  [[ $mcp_run_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
+    fail 'cannot create an MCP run identifier'
+  mcp_client_name="aboutme MCP UAT $mcp_run_id"
+  mcp_input=$(mktemp -d "$STATE/mcp-input.XXXXXX")
+  chmod 0700 "$mcp_input"
+  cp -- "$INPUT/caddy-root.crt" "$mcp_input/caddy-root.crt"
+  printf '%s\n' "$mcp_client_name" >"$mcp_input/mcp-client-name"
+  chmod 0600 "$mcp_input/caddy-root.crt" "$mcp_input/mcp-client-name"
+  run_input=$mcp_input
+
   install -d -m 0700 "$REPO/.dev/bin"
   mcp_fixture=$REPO/.dev/bin/mcp-uat-fixture
   (cd "$REPO/apps/server" &&
     go build -o "$mcp_fixture" ./cmd/mcp-uat-fixture) ||
     fail 'MCP fixture build failed'
-  "$mcp_fixture" cleanup --database-url "$NATIVE_DSN"
+  "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
+    --client-name "$mcp_client_name"
   mcp_seeded=1
-  "$mcp_fixture" seed --database-url "$NATIVE_DSN"
+  "$mcp_fixture" seed --database-url "$NATIVE_DSN" \
+    --client-name "$mcp_client_name"
 fi
 
 evidence=$(mktemp -d "$EVIDENCE_ROOT/$evidence_prefix.XXXXXX")
@@ -207,7 +224,8 @@ status=0
 if [ "$MODE" = password-auth ]; then
   "$REPO/.dev/bin/password-auth-fixture" cleanup --database-url "$NATIVE_DSN"
 elif [ "$MODE" = mcp ]; then
-  if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN"; then
+  if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
+    --client-name "$mcp_client_name"; then
     mcp_seeded=0
   else
     status=1

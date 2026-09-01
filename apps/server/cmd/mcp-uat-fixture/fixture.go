@@ -12,15 +12,16 @@ import (
 )
 
 const (
-	fixtureDatabase    = "aboutme_dev"
-	fixtureClientName  = "aboutme MCP UAT"
-	fixtureRedirectURI = "http://127.0.0.1:20090/callback"
+	fixtureDatabase         = "aboutme_dev"
+	fixtureClientNamePrefix = "aboutme MCP UAT "
+	fixtureRedirectURI      = "http://127.0.0.1:20090/callback"
 )
 
 var fixtureRedirectsJSON = `["` + fixtureRedirectURI + `"]`
 
 type Config struct {
 	DatabaseURL string
+	ClientName  string
 }
 
 type fixtureAccount struct {
@@ -50,7 +51,7 @@ func parseConfig(args []string) (string, Config, error) {
 		return "", Config{}, fmt.Errorf("unknown subcommand %q (want seed or cleanup)", cmd)
 	}
 
-	var databaseURL string
+	var databaseURL, clientName string
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--database-url":
@@ -59,6 +60,12 @@ func parseConfig(args []string) (string, Config, error) {
 				return "", Config{}, errors.New("--database-url requires a value")
 			}
 			databaseURL = args[i]
+		case "--client-name":
+			i++
+			if i >= len(args) {
+				return "", Config{}, errors.New("--client-name requires a value")
+			}
+			clientName = args[i]
 		default:
 			return "", Config{}, fmt.Errorf("unknown argument %q", args[i])
 		}
@@ -66,7 +73,25 @@ func parseConfig(args []string) (string, Config, error) {
 	if err := validateDatabaseURL(databaseURL); err != nil {
 		return "", Config{}, err
 	}
-	return cmd, Config{DatabaseURL: databaseURL}, nil
+	if err := validateClientName(clientName); err != nil {
+		return "", Config{}, err
+	}
+	return cmd, Config{DatabaseURL: databaseURL, ClientName: clientName}, nil
+}
+
+func validateClientName(name string) error {
+	if name == "" {
+		return errors.New("--client-name is required")
+	}
+	suffix, ok := strings.CutPrefix(name, fixtureClientNamePrefix)
+	if !ok {
+		return errors.New("--client-name must use the reserved prefix and a lowercase UUIDv4")
+	}
+	parsed, err := uuid.Parse(suffix)
+	if err != nil || parsed.String() != suffix || parsed.Version() != 4 || parsed.Variant() != uuid.RFC4122 {
+		return errors.New("--client-name must use the reserved prefix and a lowercase UUIDv4")
+	}
+	return nil
 }
 
 func validateDatabaseURL(raw string) error {
@@ -105,12 +130,12 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 
 	switch cmd {
 	case "seed":
-		if err := cleanFixture(ctx, db); err != nil {
+		if err := cleanFixture(ctx, db, cfg.ClientName); err != nil {
 			return err
 		}
 		return seedFixture(ctx, db)
 	case "cleanup":
-		return cleanFixture(ctx, db)
+		return cleanFixture(ctx, db, cfg.ClientName)
 	default:
 		return fmt.Errorf("unknown subcommand %q", cmd)
 	}
@@ -141,7 +166,7 @@ func seedFixture(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-func cleanFixture(ctx context.Context, db *sql.DB) error {
+func cleanFixture(ctx context.Context, db *sql.DB, clientName string) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin cleanup: %w", err)
@@ -151,7 +176,7 @@ func cleanFixture(ctx context.Context, db *sql.DB) error {
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM oauth_clients
 		 WHERE client_name = $1 AND redirect_uris = $2::jsonb`,
-		fixtureClientName, fixtureRedirectsJSON); err != nil {
+		clientName, fixtureRedirectsJSON); err != nil {
 		return fmt.Errorf("delete fixture clients: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -183,7 +208,7 @@ func cleanFixture(ctx context.Context, db *sql.DB) error {
 		{
 			name:  "fixture client",
 			query: `SELECT count(*) FROM oauth_clients WHERE client_name = $1 AND redirect_uris = $2::jsonb`,
-			args:  []any{fixtureClientName, fixtureRedirectsJSON},
+			args:  []any{clientName, fixtureRedirectsJSON},
 		},
 		{
 			name: "fixture OAuth rows",

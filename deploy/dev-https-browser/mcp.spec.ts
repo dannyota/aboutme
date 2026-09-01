@@ -17,7 +17,7 @@ import { ALLOWED_ORIGIN } from './network-policy';
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/mcp-proof.json';
 const CA_PATH = '/uat-input/caddy-root.crt';
-const CLIENT_NAME = 'aboutme MCP UAT';
+const CLIENT_NAME_PATH = '/uat-input/mcp-client-name';
 const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
 const UAT_ACCOUNT = 'Bob Local — bob@example.invalid';
 const ENTRY_TITLE = 'MCP UAT Entry';
@@ -255,13 +255,17 @@ test('proves MCP agent access over trusted HTTPS', async ({
   await installExternalWebSocketFirewall(context, counters);
 
   const ca = await readFile(CA_PATH);
+  const clientName = (await readFile(CLIENT_NAME_PATH, 'utf8')).trim();
+  expect(clientName).toMatch(
+    /^aboutme MCP UAT [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
   let resumeID: string | null = null;
   let teardownComplete = false;
 
   try {
     stage('register-client');
     const registrationBody = JSON.stringify({
-      client_name: CLIENT_NAME,
+      client_name: clientName,
       redirect_uris: [REDIRECT_URI],
       token_endpoint_auth_method: 'none',
     });
@@ -280,7 +284,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     expect(clientID).toMatch(/^[0-9a-f-]{36}$/i);
     expect(registered).toEqual({
       client_id: clientID,
-      client_name: CLIENT_NAME,
+      client_name: clientName,
       redirect_uris: [REDIRECT_URI],
       token_endpoint_auth_method: 'none',
     });
@@ -331,7 +335,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
       page.getByRole('heading', { name: 'Connect an agent' }),
     ).toBeVisible();
     await expect(page.getByTestId('consent-client-name')).toHaveText(
-      CLIENT_NAME,
+      clientName,
     );
     await expect(
       page.getByRole('list', { name: 'Requested permissions' }),
@@ -449,7 +453,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     ).toBeVisible();
     const grantRow = page
       .getByTestId('agent-row')
-      .filter({ hasText: CLIENT_NAME });
+      .filter({ hasText: clientName });
     await expect(grantRow).toHaveCount(1);
     const revoked = page.waitForResponse((response) => {
       const url = new URL(response.url());
