@@ -18,17 +18,21 @@ type Route struct {
 	Dispatch Dispatch
 }
 
-// Routes is the immutable version-5 public-root registry.
+// Routes is the immutable version-6 public-root registry.
 var Routes = [...]Route{
+	{Root: ".well-known", Dispatch: DispatchGo},
 	{Root: "admin", Dispatch: DispatchReserved},
 	{Root: "api", Dispatch: DispatchGo},
 	{Root: "app", Dispatch: DispatchNuxt},
+	{Root: "authorize", Dispatch: DispatchNuxt},
 	{Root: "forgot-password", Dispatch: DispatchNuxt},
 	{Root: "healthz", Dispatch: DispatchGo},
 	{Root: "_nuxt", Dispatch: DispatchNuxt},
 	{Root: "internal-render", Dispatch: DispatchDeny},
 	{Root: "llms.txt", Dispatch: DispatchGo},
 	{Root: "login", Dispatch: DispatchNuxt},
+	{Root: "mcp", Dispatch: DispatchGo},
+	{Root: "oauth", Dispatch: DispatchGo},
 	{Root: "people", Dispatch: DispatchReserved},
 	{Root: "print", Dispatch: DispatchDeny},
 	{Root: "readyz", Dispatch: DispatchGo},
@@ -41,15 +45,19 @@ var Routes = [...]Route{
 }
 
 var reserved = map[string]struct{}{
+	".well-known":     {},
 	"admin":           {},
 	"api":             {},
 	"app":             {},
+	"authorize":       {},
 	"forgot-password": {},
 	"healthz":         {},
 	"_nuxt":           {},
 	"internal-render": {},
 	"llms.txt":        {},
 	"login":           {},
+	"mcp":             {},
+	"oauth":           {},
 	"people":          {},
 	"print":           {},
 	"readyz":          {},

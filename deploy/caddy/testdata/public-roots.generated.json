@@ -1,6 +1,10 @@
 {
-  "version": 5,
+  "version": 6,
   "roots": [
+    {
+      "root": ".well-known",
+      "dispatch": "go"
+    },
     {
       "root": "admin",
       "dispatch": "reserved"
@@ -11,6 +15,10 @@
     },
     {
       "root": "app",
+      "dispatch": "nuxt"
+    },
+    {
+      "root": "authorize",
       "dispatch": "nuxt"
     },
     {
@@ -36,6 +44,14 @@
     {
       "root": "login",
       "dispatch": "nuxt"
+    },
+    {
+      "root": "mcp",
+      "dispatch": "go"
+    },
+    {
+      "root": "oauth",
+      "dispatch": "go"
     },
     {
       "root": "people",
