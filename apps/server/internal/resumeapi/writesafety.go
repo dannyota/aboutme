@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -60,6 +62,7 @@ type mutationContext struct {
 	UserID                      uuid.UUID
 	SessionID                   uuid.UUID
 	Session                     store.Session
+	Agent                       *AgentPrincipal
 	ExpectedDiscoveryGeneration *int64
 	ExpectedRevision            *int64
 	WireVersion                 int32
@@ -170,16 +173,21 @@ func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec m
 		precondition = strconv.FormatInt(*headers.ExpectedRevision, 10)
 	}
 	fingerprint := requestHash(headers.WireVersion, precondition, semanticInputs, input.Payload)
-	sess, ok := auth.SessionFromContext(r.Context())
-	if !ok {
+	sess, sessionOK := auth.SessionFromContext(r.Context())
+	agent, agentOK := agentPrincipalFromContext(r.Context())
+	if !sessionOK && !agentOK {
 		writeResumeError(w, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"})
 		return
+	}
+	userID := sess.UserID
+	if agentOK {
+		userID = agent.userID
 	}
 	if s.idempotency == nil {
 		writeResumeError(w, &clientError{Status: http.StatusInternalServerError, Code: "internal_error", Message: "an internal error occurred"})
 		return
 	}
-	stored, replayed, inspectErr := s.idempotency.Inspect(r.Context(), sess.UserID, operation, headers.Key, fingerprint)
+	stored, replayed, inspectErr := s.idempotency.Inspect(r.Context(), userID, operation, headers.Key, fingerprint)
 	inspection := idempotencyInspection{Operation: operation, RequestHash: fingerprint, Response: stored, Replayed: replayed}
 	if inspectErr != nil {
 		writeResumeError(w, mapMutationError(inspectErr))
@@ -198,8 +206,11 @@ func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec m
 		}
 	}
 	mutation := mutationContext{
-		UserID: sess.UserID, SessionID: sess.ID, Session: sess, ExpectedRevision: headers.ExpectedRevision,
+		UserID: userID, SessionID: sess.ID, Session: sess, ExpectedRevision: headers.ExpectedRevision,
 		WireVersion: headers.WireVersion, Operation: operation, RequestHash: fingerprint,
+	}
+	if agentOK {
+		mutation.Agent = &agent
 	}
 	if spec.Transition != nil {
 		transitionContext := context.WithValue(r.Context(), mutationRequestKeyContext{}, headers.Key)
@@ -235,7 +246,7 @@ func (s *Service) executeMutation(w http.ResponseWriter, r *http.Request, spec m
 	defer cancelExecute()
 	callback := boundMutation{service: s, ctx: executeContext, operation: spec.Run, mutation: mutation, prepared: prepared}
 	result, executeErr := s.idempotency.Execute(
-		executeContext, sess.UserID, operation, headers.Key, fingerprint, callback.run,
+		executeContext, userID, operation, headers.Key, fingerprint, callback.run,
 	)
 	if spec.Finalize != nil {
 		spec.Finalize(r.Context(), prepared, result, executeErr)
@@ -458,6 +469,31 @@ func (s *Service) transactionMutation(ctx context.Context, qtx *store.Queries, m
 	if qtx == nil {
 		return mutationContext{}, errors.New("resumeapi: mutation transaction is unavailable")
 	}
+	if mutation.Agent != nil {
+		authority, err := qtx.GetOAuthTokenAuthorityByDigest(ctx, mutation.Agent.tokenDigest[:])
+		s.recordTransactionOrder("token")
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return mutationContext{}, ErrAgentAccessUnavailable
+			}
+			return mutationContext{}, fmt.Errorf("resumeapi: read mutation token authority: %w", err)
+		}
+		now := time.Now()
+		if s.clock != nil {
+			now = s.clock()
+		}
+		token, grant := authority.OAuthToken, authority.OAuthGrant
+		scopes, scopeErr := oauthsrv.ParseScopes(grant.Scopes)
+		if scopeErr != nil || !scopes.Has(oauthsrv.ScopeResumesWrite) ||
+			subtle.ConstantTimeCompare(token.TokenDigest, mutation.Agent.tokenDigest[:]) != 1 ||
+			token.ID != mutation.Agent.tokenID || token.UserID != mutation.Agent.userID || token.GrantID != mutation.Agent.grantID ||
+			token.Kind != string(oauthsrv.TokenKindAccess) || token.UserID != authority.User.ID || token.UserID != grant.UserID ||
+			token.ClientID != grant.ClientID || token.GrantID != grant.ID || token.RevokedAt != nil || token.SupersededAt != nil ||
+			grant.RevokedAt != nil || !token.ExpiresAt.After(now) || !token.FamilyExpiresAt.After(now) {
+			return mutationContext{}, ErrAgentAccessUnavailable
+		}
+		return mutation, nil
+	}
 	session, err := qtx.GetSessionByID(ctx, mutation.SessionID)
 	s.recordTransactionOrder("session")
 	if err != nil {
@@ -578,12 +614,14 @@ func (s *Service) deleteTransition(ctx context.Context, current resume.Resume, p
 	if current.Slug == nil {
 		return mutationTransition{ResumeID: current.ID, Class: publicstate.NonDraining, Retire: true}, nil
 	}
-	session, ok := auth.SessionFromContext(ctx)
-	if !ok {
-		return mutationTransition{}, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"}
-	}
-	if err := auth.RequireRecentReauth(session, s.clock()); err != nil {
-		return mutationTransition{}, err
+	if _, agentOK := agentPrincipalFromContext(ctx); !agentOK {
+		session, ok := auth.SessionFromContext(ctx)
+		if !ok {
+			return mutationTransition{}, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"}
+		}
+		if err := auth.RequireRecentReauth(session, s.clock()); err != nil {
+			return mutationTransition{}, err
+		}
 	}
 	return mutationTransition{ResumeID: current.ID, Class: publicstate.Revoking, Global: true, Retire: true, Slugs: []string{*current.Slug}}, nil
 }

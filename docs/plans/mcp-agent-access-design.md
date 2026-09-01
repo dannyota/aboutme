@@ -132,13 +132,16 @@ Fifteen tools map one-to-one onto existing editor operations:
 - Photo: `get_photo` (base64 with content type), `upload_photo` (base64,
   existing media type and size ceilings), `update_photo_crop`, `delete_photo`.
 
-Each tool calls the same validation, sanitizer, bounds, and store chain as its
-REST handler; shared checks that currently live only in an HTTP handler are
-factored into functions both callers use. Every mutating tool takes the same
-revision validator the editor sends and returns the new one; a lost race returns
-the closed `revision_conflict` tool error instructing the agent to re-read.
-Responses return the canonical stored state after sanitizing, so an agent
-observes exactly what a hostile-markup strip did.
+Each tool dispatches through a closed in-process facade to the same handler as
+its REST counterpart, so both protocols execute one validation, sanitizer,
+bounds, and store chain. `create_resume` has no prior revision; existing-resume
+mutations take the editor's decimal-string revision validator. A lost race
+returns the closed `revision_conflict` tool error instructing the agent to
+re-read. Successful create and update operations return the complete canonical
+stored resume after sanitizing. Resume deletion returns the matched revision
+plus a closed deletion marker. A write grant may delete a published resume
+without browser recent reauth, using the existing public revocation fence,
+drain, tombstone, media cleanup, and rollback path.
 
 The tool error vocabulary is closed: `validation_failed`, `revision_conflict`,
 `not_found`, `payload_too_large`, `scope_denied`, `rate_limited`,

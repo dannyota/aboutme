@@ -98,9 +98,27 @@ enforcement authority afterwards.
 - Tool error vocabulary is closed: `validation_failed`, `revision_conflict`,
   `not_found`, `payload_too_large`, `scope_denied`, `rate_limited`,
   `agent_access_unavailable`.
-- Every mutating tool takes `revision` (the editor's validator) and returns the
-  new one plus the canonical stored state after sanitizing. `upload_photo` takes
-  base64 content bounded by the existing media ceilings after decode.
+- `create_resume` has no prior revision. Every mutation of an existing resume
+  takes `revision` as a decimal string. Successful create and update operations,
+  including entry and photo deletion, return `{ revision, state }` with the
+  complete canonical stored resume after sanitizing. `delete_resume` returns the
+  matched revision plus `{ id, deleted: true }` because no row remains.
+- MCP mutations have no client-supplied idempotency key or replay guarantee;
+  revision CAS is the concurrency contract. `upload_photo` takes base64 content
+  bounded by the existing media ceilings after decode.
+- `mcpapi` reaches resume state only through a closed in-process `resumeapi`
+  facade. The facade dispatches its fifteen operations to the existing handlers,
+  so REST and MCP share one validator, sanitizer, bounds, and store path.
+- A write grant delegates the user's delete authority. `delete_resume` may
+  delete a private or published resume without browser-session recent reauth. A
+  published deletion still uses the existing public revocation fence, drain,
+  slug tombstone, media cleanup, and atomic rollback path. There are no
+  standalone publish or unpublish tools.
+- Validation/document/media-shape failures map to `validation_failed`; stale CAS
+  maps to `revision_conflict`; missing and cross-user targets map to
+  `not_found`; transport or decoded-media overflow maps to `payload_too_large`;
+  admission exhaustion maps to `rate_limited`; and a failed in-transaction
+  bearer recheck maps to `agent_access_unavailable`.
 - Server instructions text describes the document shape, the read-modify-write
   loop, and the absence of publish tools.
 

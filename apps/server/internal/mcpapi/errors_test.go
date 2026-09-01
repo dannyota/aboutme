@@ -17,6 +17,9 @@ func TestMCPError_ClosedMappings(t *testing.T) {
 	}{
 		{"unauthorized", &mcpError{status: http.StatusUnauthorized, code: "unauthorized", challenge: bearerPublicOrigin}, http.StatusUnauthorized, `{"error":"unauthorized"}`, `Bearer resource_metadata="https://aboutme.example/.well-known/oauth-protected-resource"`},
 		{"scope denied", errScopeDenied, http.StatusForbidden, `{"error":"scope_denied"}`, ""},
+		{"payload too large", errPayloadTooLarge, http.StatusRequestEntityTooLarge, `{"error":"payload_too_large"}`, ""},
+		{"invalid request", errInvalidRequest, http.StatusBadRequest, `{"error":"invalid_request"}`, ""},
+		{"agent unavailable", errAgentAccessUnavailable, http.StatusServiceUnavailable, `{"error":"agent_access_unavailable"}`, ""},
 		{"unknown is internal", errors.New("untrusted detail"), http.StatusInternalServerError, `{"error":"internal_error"}`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -183,8 +183,10 @@ func (op deleteOperation) Run(ctx context.Context, qtx *store.Queries, mutation 
 		return mutationRunResult{}, err
 	}
 	if current.Slug != nil {
-		if reauthErr := auth.RequireRecentReauth(mutation.Session, op.service.clock()); reauthErr != nil {
-			return mutationRunResult{}, reauthErr
+		if mutation.Agent == nil {
+			if reauthErr := auth.RequireRecentReauth(mutation.Session, op.service.clock()); reauthErr != nil {
+				return mutationRunResult{}, reauthErr
+			}
 		}
 		releasedAt := input.ReleasedAt
 		if releasedAt.IsZero() {

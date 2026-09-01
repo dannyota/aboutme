@@ -14,7 +14,8 @@ import (
 
 var productionErrorVocabulary = map[string]struct{}{
 	"session_required": {}, "csrf_rejected": {},
-	"resume_not_found": {}, "resume_cap_exceeded": {},
+	"agent_access_unavailable": {},
+	"resume_not_found":         {}, "resume_cap_exceeded": {},
 	"idempotency_key_required": {}, "idempotency_key_invalid": {},
 	"idempotency_key_reuse": {}, "precondition_required": {},
 	"precondition_malformed": {}, "precondition_not_supported": {},
@@ -161,6 +162,9 @@ func mapMutationError(err error) *clientError {
 	}
 	if errors.Is(err, auth.ErrSessionInvalid) {
 		return &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"}
+	}
+	if errors.Is(err, ErrAgentAccessUnavailable) {
+		return &clientError{Status: http.StatusServiceUnavailable, Code: "agent_access_unavailable", Message: "agent access is unavailable"}
 	}
 	if errors.Is(err, auth.ErrReauthRequired) {
 		return &clientError{Status: http.StatusForbidden, Code: "reauth_required", Message: "recent reauthentication is required"}
