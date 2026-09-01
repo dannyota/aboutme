@@ -46,6 +46,36 @@ func newPasswordStoreTx(t *testing.T) (context.Context, *pgxpool.Pool, pgx.Tx, *
 	return ctx, pool, tx, store.New(tx)
 }
 
+// lockExistingAuthEmailJobs holds row locks on the shared queue until the
+// test finishes, so SKIP LOCKED claims only fixtures inserted afterward.
+func lockExistingAuthEmailJobs(ctx context.Context, t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("Begin queue blocker: %v", err)
+	}
+	t.Cleanup(func() {
+		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("Rollback queue blocker: %v", rollbackErr)
+		}
+	})
+
+	rows, err := tx.Query(ctx, `SELECT id FROM auth_email_jobs FOR UPDATE`)
+	if err != nil {
+		t.Fatalf("lock existing auth email jobs: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan existing auth email job: %v", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate existing auth email jobs: %v", err)
+	}
+}
+
 func newPasswordStoreUser(ctx context.Context, t *testing.T, q *store.Queries) uuid.UUID {
 	t.Helper()
 	u, err := q.CreateUser(ctx, store.CreateUserParams{
@@ -180,12 +210,13 @@ func TestPasswordAuthUserDeleteCascades(t *testing.T) {
 
 func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 	ctx, pool, _, _ := newPasswordStoreTx(t)
+	lockExistingAuthEmailJobs(ctx, t, pool)
 	seed := store.New(pool) // committed so both claimers can see the jobs
 
 	reg1 := newPasswordRegistration(ctx, t, seed)
 	reg2 := newPasswordRegistration(ctx, t, seed)
-	newPendingVerifyJob(ctx, t, seed, reg1)
-	newPendingVerifyJob(ctx, t, seed, reg2)
+	fixture1 := newPendingVerifyJob(ctx, t, seed, reg1)
+	fixture2 := newPendingVerifyJob(ctx, t, seed, reg2)
 	t.Cleanup(func() {
 		if _, err := seed.DeletePasswordRegistration(context.Background(), reg1); err != nil {
 			t.Errorf("cleanup delete registration: %v", err)
@@ -228,7 +259,7 @@ func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 		LeaseOwner:     "worker-2",
 		LeaseExpiresAt: now.Add(30 * time.Second),
 		Now:            now,
-		LimitRows:      10,
+		LimitRows:      1,
 	})
 	if err != nil {
 		t.Fatalf("ClaimAuthEmailJobs(tx2): %v", err)
@@ -240,10 +271,18 @@ func TestPasswordAuthClaimIsDisjointUnderSkipLocked(t *testing.T) {
 	if claimed1[0].ID == claimed2[0].ID {
 		t.Fatalf("both claimers returned the same job %s (SKIP LOCKED failed)", claimed1[0].ID)
 	}
+	fixtureIDs := map[uuid.UUID]struct{}{fixture1.ID: {}, fixture2.ID: {}}
+	if _, ok := fixtureIDs[claimed1[0].ID]; !ok {
+		t.Fatalf("tx1 claimed unrelated job %s, want one of the fixture jobs", claimed1[0].ID)
+	}
+	if _, ok := fixtureIDs[claimed2[0].ID]; !ok {
+		t.Fatalf("tx2 claimed unrelated job %s, want one of the fixture jobs", claimed2[0].ID)
+	}
 }
 
 func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
-	ctx, _, tx, q := newPasswordStoreTx(t)
+	ctx, pool, tx, q := newPasswordStoreTx(t)
+	lockExistingAuthEmailJobs(ctx, t, pool)
 
 	regID := newPasswordRegistration(ctx, t, q)
 	newPendingVerifyJob(ctx, t, q, regID)
@@ -253,7 +292,7 @@ func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
 		LeaseOwner:     "worker",
 		LeaseExpiresAt: now.Add(30 * time.Second),
 		Now:            now,
-		LimitRows:      10,
+		LimitRows:      1,
 	})
 	if err != nil {
 		t.Fatalf("ClaimAuthEmailJobs: %v", err)
@@ -270,7 +309,7 @@ func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
 	}
 	requeued, err := q.RequeueExpiredAuthEmailLeases(ctx, store.RequeueExpiredAuthEmailLeasesParams{
 		Now:       now,
-		LimitRows: 10,
+		LimitRows: 1,
 	})
 	if err != nil {
 		t.Fatalf("RequeueExpiredAuthEmailLeases: %v", err)
