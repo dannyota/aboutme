@@ -813,6 +813,38 @@ func TestOAuthTokenDigestColumnRejectsRawMaterial(t *testing.T) {
 // Bounded GC and cleanup.
 // ---------------------------------------------------------------------------
 
+func TestOAuthIdleClientGCExcludesExact24HourBoundary(t *testing.T) {
+	ctx, _, _, q := newOAuthStoreTx(t)
+	now := oauthGCEpoch.Add(25 * time.Hour)
+	idleBefore := now.Add(-24 * time.Hour)
+
+	older := newOAuthStoreClient(ctx, t, q, idleBefore.Add(-time.Second))
+	exact := newOAuthStoreClient(ctx, t, q, idleBefore)
+	newer := newOAuthStoreClient(ctx, t, q, idleBefore.Add(time.Second))
+
+	candidates, err := q.ListIdleOAuthClientCandidates(ctx, store.ListIdleOAuthClientCandidatesParams{
+		IdleBefore: idleBefore,
+		Now:        now,
+		LimitRows:  200,
+	})
+	if err != nil {
+		t.Fatalf("ListIdleOAuthClientCandidates: %v", err)
+	}
+	got := make(map[uuid.UUID]bool, len(candidates))
+	for _, id := range candidates {
+		got[id] = true
+	}
+	if !got[older.ID] {
+		t.Errorf("client created one second before 24-hour cutoff (%s) missing from GC candidates", older.ID)
+	}
+	if got[exact.ID] {
+		t.Errorf("client created exactly 24 hours before GC (%s) appeared as a candidate", exact.ID)
+	}
+	if got[newer.ID] {
+		t.Errorf("client created one second after 24-hour cutoff (%s) appeared as a candidate", newer.ID)
+	}
+}
+
 func TestOAuthIdleClientGCIsBoundedAndSkipsLiveClients(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)

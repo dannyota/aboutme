@@ -2378,7 +2378,7 @@ func (q *Queries) ListIdentitiesByUserID(ctx context.Context, userID uuid.UUID) 
 
 const listIdleOAuthClientCandidates = `-- name: ListIdleOAuthClientCandidates :many
 SELECT candidate.id FROM oauth_clients AS candidate
-WHERE candidate.created_at <= $1::timestamptz
+WHERE candidate.created_at < $1::timestamptz
   AND NOT EXISTS (
       SELECT 1 FROM oauth_grants AS live_grant
       WHERE live_grant.client_id = candidate.id
