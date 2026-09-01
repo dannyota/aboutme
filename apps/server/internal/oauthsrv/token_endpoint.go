@@ -164,7 +164,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	now := s.clock()
-	if code.ClientID != clientID || code.RedirectURI != form.Get("redirect_uri") || code.Scopes != grant.Scopes || !VerifyS256(code.CodeChallenge, form.Get("code_verifier")) || code.ExpiresAt.Compare(now) <= 0 {
+	if code.ClientID != clientID || code.RedirectURI != form.Get("redirect_uri") || !VerifyS256(code.CodeChallenge, form.Get("code_verifier")) {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	if code.ConsumedAt != nil {
@@ -176,6 +176,9 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 		if err := tx.Commit(ctx); err != nil {
 			return tokenResponse{}, err
 		}
+		return tokenResponse{}, errOAuthInvalidGrant
+	}
+	if code.Scopes != grant.Scopes || code.ExpiresAt.Compare(now) <= 0 {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	familyID := uuid.New()

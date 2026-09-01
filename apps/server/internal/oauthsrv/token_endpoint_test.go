@@ -200,6 +200,149 @@ func TestToken_CodeExchangeConsumesAndReplayRevokesFamily(t *testing.T) {
 	}
 }
 
+// A consumed code is replay evidence, not fresh authority. Once client,
+// redirect, and PKCE still bind it to this request, it must revoke the issued
+// family even when mutable grant scopes or the code TTL have changed.
+func TestToken_ConsumedReplayRevokesFamilyAfterScopeChangeOrExpiry(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 30, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name   string
+		mutate func(t *testing.T, f codeFixture)
+	}{
+		{
+			name: "live grant scopes changed",
+			mutate: func(t *testing.T, f codeFixture) {
+				t.Helper()
+				if _, err := f.q.UpsertOAuthGrant(context.Background(), store.UpsertOAuthGrantParams{UserID: f.userID, ClientID: f.clientID, Scopes: "resumes:read resumes:write", CreatedAt: f.now}); err != nil {
+					t.Fatalf("change grant scopes: %v", err)
+				}
+			},
+		},
+		{
+			name: "at code expiry",
+			mutate: func(t *testing.T, f codeFixture) {
+				t.Helper()
+				f.s.clock = func() time.Time { return f.now.Add(60 * time.Second) }
+			},
+		},
+		{
+			name: "after code expiry",
+			mutate: func(t *testing.T, f codeFixture) {
+				t.Helper()
+				f.s.clock = func() time.Time { return f.now.Add(60*time.Second + time.Nanosecond) }
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newCodeFixture(t, now)
+			first := f.exchange(t, f.clientID, "http://127.0.0.1:20090/callback", f.verifier)
+			if first.Code != http.StatusOK {
+				t.Fatalf("initial exchange status = %d, want 200", first.Code)
+			}
+			var issued tokenResponse
+			if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil {
+				t.Fatalf("decode initial response: %v", err)
+			}
+			_, refreshDigest, err := ParseToken(issued.RefreshToken)
+			if err != nil {
+				t.Fatalf("ParseToken: %v", err)
+			}
+			authority, err := f.q.GetOAuthTokenAuthorityByDigest(context.Background(), refreshDigest[:])
+			if err != nil {
+				t.Fatalf("GetOAuthTokenAuthorityByDigest: %v", err)
+			}
+			familyID := authority.OAuthToken.FamilyID
+			var initialLive int
+			if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE family_id = $1 AND revoked_at IS NULL", familyID).Scan(&initialLive); err != nil {
+				t.Fatalf("initial live family token count: %v", err)
+			}
+			if initialLive != 2 {
+				t.Fatal("initial exchange did not leave its family live")
+			}
+			tc.mutate(t, f)
+			replay := f.exchange(t, f.clientID, "http://127.0.0.1:20090/callback", f.verifier)
+			if replay.Code != http.StatusBadRequest || replay.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
+				t.Fatal("consumed replay did not return closed invalid_grant")
+			}
+			var live int
+			if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE family_id = $1 AND revoked_at IS NULL", familyID).Scan(&live); err != nil {
+				t.Fatalf("live family token count: %v", err)
+			}
+			if live != 0 {
+				t.Fatal("consumed replay left its issued family live")
+			}
+		})
+	}
+}
+
+// A mismatched replay is not evidence that the caller holds the original code
+// binding. It must remain a closed invalid_grant without becoming a family
+// revocation oracle.
+func TestToken_ConsumedReplayWrongBindingDoesNotRevokeFamily(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 45, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		exchange func(t *testing.T, f codeFixture) *httptest.ResponseRecorder
+	}{
+		{
+			name: "wrong verifier",
+			exchange: func(t *testing.T, f codeFixture) *httptest.ResponseRecorder {
+				t.Helper()
+				return f.exchange(t, f.clientID, "http://127.0.0.1:20090/callback", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~different")
+			},
+		},
+		{
+			name: "wrong redirect",
+			exchange: func(t *testing.T, f codeFixture) *httptest.ResponseRecorder {
+				t.Helper()
+				return f.exchange(t, f.clientID, "http://127.0.0.1:20090/other", f.verifier)
+			},
+		},
+		{
+			name: "wrong existing client",
+			exchange: func(t *testing.T, f codeFixture) *httptest.ResponseRecorder {
+				t.Helper()
+				other, err := f.q.CreateOAuthClient(context.Background(), store.CreateOAuthClientParams{ClientName: "Other replay client", RedirectURIs: json.RawMessage(`["http://127.0.0.1:20090/callback"]`), CreatedAt: f.now})
+				if err != nil {
+					t.Fatalf("CreateOAuthClient: %v", err)
+				}
+				return f.exchange(t, other.ID, "http://127.0.0.1:20090/callback", f.verifier)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newCodeFixture(t, now)
+			first := f.exchange(t, f.clientID, "http://127.0.0.1:20090/callback", f.verifier)
+			if first.Code != http.StatusOK {
+				t.Fatalf("initial exchange status = %d, want 200", first.Code)
+			}
+			var issued tokenResponse
+			if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil {
+				t.Fatalf("decode initial response: %v", err)
+			}
+			_, refreshDigest, err := ParseToken(issued.RefreshToken)
+			if err != nil {
+				t.Fatalf("ParseToken: %v", err)
+			}
+			authority, err := f.q.GetOAuthTokenAuthorityByDigest(context.Background(), refreshDigest[:])
+			if err != nil {
+				t.Fatalf("GetOAuthTokenAuthorityByDigest: %v", err)
+			}
+			replay := tc.exchange(t, f)
+			if replay.Code != http.StatusBadRequest || replay.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
+				t.Fatal("wrong-bound replay did not return closed invalid_grant")
+			}
+			var live int
+			if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE family_id = $1 AND revoked_at IS NULL", authority.OAuthToken.FamilyID).Scan(&live); err != nil {
+				t.Fatalf("live family token count: %v", err)
+			}
+			if live != 2 {
+				t.Fatal("wrong-bound replay revoked its issued family")
+			}
+		})
+	}
+}
+
 // This catches a grant that is narrowed after code issue being silently
 // replaced with the narrower grant while the old code still mints authority.
 func TestToken_RejectsCodeWhenGrantScopesChangedAfterIssue(t *testing.T) {
