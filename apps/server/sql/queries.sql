@@ -832,7 +832,7 @@ DELETE FROM oauth_clients WHERE id = $1;
 -- already locked. Ordered oldest-first on oauth_clients_created_at_idx so
 -- repeated sweeps make monotonic progress.
 SELECT candidate.id FROM oauth_clients AS candidate
-WHERE candidate.created_at <= sqlc.arg(idle_before)::timestamptz
+WHERE candidate.created_at < sqlc.arg(idle_before)::timestamptz
   AND NOT EXISTS (
       SELECT 1 FROM oauth_grants AS live_grant
       WHERE live_grant.client_id = candidate.id
