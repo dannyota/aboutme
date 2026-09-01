@@ -30,23 +30,23 @@ Implement M8 exactly:
 
 ## TDD cycle
 
-- [ ] Write authorize matrix REDs: every validation branch, trusted vs untrusted
+- [x] Write authorize matrix REDs: every validation branch, trusted vs untrusted
       redirect failure shape, login redirect `next` encoding, grant-skip (equal,
       narrower, wider → consent), and session detection.
-- [ ] Write consent REDs: context returns only name+scopes; decision
+- [x] Write consent REDs: context returns only name+scopes; decision
       re-validation catches a client row changed between fetch and post; deny
       shape; approve issues exactly one code bound to all five values; 11th live
       grant refused closed.
-- [ ] Write race REDs on a live database: two concurrent approvals for one
+- [x] Write race REDs on a live database: two concurrent approvals for one
       (user, client) yield one live grant and two valid codes; concurrent
       approve and revoke leave no live token path.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   cd apps/server && go test ./internal/oauthsrv -race -count=1 -run 'Authorize|Consent'
   ```
 
-- [ ] Implement service; rerun to GREEN, then `make server-build server-vet`.
+- [x] Implement service; rerun to GREEN, then `make server-build server-vet`.
 
 ## Adversarial checklist
 

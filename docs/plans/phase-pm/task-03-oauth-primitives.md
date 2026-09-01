@@ -35,25 +35,25 @@ var (
 
 ## TDD cycle
 
-- [ ] Write token/code REDs: entropy length, exact spelling, prefix/kind round
+- [x] Write token/code REDs: entropy length, exact spelling, prefix/kind round
       trip, malformed inputs (length ±1, padding, wrong alphabet, wrong prefix,
       empty), digest stability, and short-entropy failure.
-- [ ] Write PKCE REDs: RFC 7636 appendix vectors, verifier 42/43/128/129
+- [x] Write PKCE REDs: RFC 7636 appendix vectors, verifier 42/43/128/129
       lengths, alphabet violations, challenge non-base64url, and constant-time
       comparator use.
-- [ ] Write redirect REDs: every M1 scheme/host/port/path/fragment/userinfo and
+- [x] Write redirect REDs: every M1 scheme/host/port/path/fragment/userinfo and
       byte-bound boundary, IPv6 loopback, uppercase scheme/host handling, and
       5/6 URI counts at the caller.
-- [ ] Write name/scope REDs: NFC boundaries at 64/65 code points, control
+- [x] Write name/scope REDs: NFC boundaries at 64/65 code points, control
       rejection, scope set/order/duplicate handling.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   cd apps/server && go test ./internal/oauthsrv -race -count=1
   ```
 
-- [ ] Implement the smallest closed primitives; inject entropy and clock.
-- [ ] GREEN: rerun the suite, then `make server-build server-vet`.
+- [x] Implement the smallest closed primitives; inject entropy and clock.
+- [x] GREEN: rerun the suite, then `make server-build server-vet`.
 
 ## Adversarial checklist
 

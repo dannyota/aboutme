@@ -33,18 +33,18 @@ Reconcile the authorities so no operative text contradicts the spec:
 
 ## TDD cycle
 
-- [ ] Extend the public-roots generator/registry tests RED for the four new root
+- [x] Extend the public-roots generator/registry tests RED for the four new root
       rows, v6 filename, and unchanged existing dispatch.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   node scripts/generate-public-roots.mjs --check
   cd apps/server && go test ./internal/publicroots ./internal/routetable
   ```
 
-- [ ] Land registry v6 + regenerate consumers; rerun to GREEN.
-- [ ] Write the ADR, design amendments, budgets rows, and traceability rows.
-- [ ] Verify formatting and route contracts:
+- [x] Land registry v6 + regenerate consumers; rerun to GREEN.
+- [x] Write the ADR, design amendments, budgets rows, and traceability rows.
+- [x] Verify formatting and route contracts:
 
   ```sh
   make docs-fmt

@@ -26,20 +26,20 @@
 
 ## TDD cycle
 
-- [ ] Write route matrix REDs: method, media type, size 4096/4097, strict JSON
+- [x] Write route matrix REDs: method, media type, size 4096/4097, strict JSON
       (duplicate key, unknown field, wrong scalar), each M1 boundary through the
       handler, and closed error bodies byte-compared.
-- [ ] Write GC REDs with injected clock: 24 h ± 1 s boundaries, live-grant and
+- [x] Write GC REDs with injected clock: 24 h ± 1 s boundaries, live-grant and
       live-token protection, 200-row batch bound, and idempotent repeat.
-- [ ] Write a cookie-isolation RED: a request carrying a valid session cookie
+- [x] Write a cookie-isolation RED: a request carrying a valid session cookie
       behaves byte-identically to one without it.
-- [ ] Run the expected RED:
+- [x] Run the expected RED:
 
   ```sh
   cd apps/server && go test ./internal/oauthsrv -race -count=1 -run 'Register|ClientGC'
   ```
 
-- [ ] Implement handler and GC against the store contract; rerun to GREEN, then
+- [x] Implement handler and GC against the store contract; rerun to GREEN, then
       `make server-build server-vet`.
 
 ## Adversarial checklist
