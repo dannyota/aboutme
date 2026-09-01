@@ -1,8 +1,15 @@
 # AC-MCP traceability rows
 
-Ten acceptance-criterion rows use the `AC-MCP-` prefix. Phase PM owns them all;
-the design clause column cites
-[`../mcp-agent-access-design.md`](../mcp-agent-access-design.md). See
+Ten acceptance-criterion rows use the `AC-MCP-` prefix. Phase PM owns them all.
+The design clause column names the amended Approved v4 clause
+([product](../../design/product.md#agent-access),
+[API](../../design/api.md#agent-access-and-the-bearer-world),
+[security](../../design/security.md#agent-authorization-and-the-bearer-world),
+[data](../../design/data.md#relational-model),
+[web](../../design/web.md#agent-consent-and-connected-agents)) whose rationale
+is [ADR 0026](../../adr/0026-mcp-agent-access.md); the mechanism detail lives in
+[`../mcp-agent-access-design.md`](../mcp-agent-access-design.md) and the frozen
+numbers in [`../phase-pm/decisions.md`](../phase-pm/decisions.md). See
 [README.md](./README.md) for matrix rules and the full prefix index.
 
 | ID         | Design clause                      | Statement                                                                                                                                                         | Phase/task         | State   | Test / acceptance reference |

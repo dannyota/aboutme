@@ -13,6 +13,8 @@ without publishing an account profile.
 4. Publish a resume at `aboutme.vn/{slug}` with explicit download and discovery
    choices.
 5. Share, update, unpublish, rename, export, or delete the resume and account.
+6. Connect an agent the person already uses and let it read and edit their
+   resumes, then review and publish the result themselves.
 
 ## V1 scope
 
@@ -25,11 +27,30 @@ without publishing an account profile.
 | Preview and publish | Instant local preview, granular autosave, public SSR page, and live refresh                              |
 | Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in    |
 | Export              | Owner PDF; optional public PDF                                                                           |
+| Agent access        | Remote Model Context Protocol (MCP) endpoint; editor parity minus publish; account-wide consent scopes   |
 | Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                  |
 
-Out of v1: cover letters, a job tracker, AI writing tools, custom domains,
-teams, analytics, a multilingual application interface, and collaborative
-editing.
+Out of v1: cover letters, a job tracker, first-party AI writing features, custom
+domains, teams, analytics, a multilingual application interface, and
+collaborative editing.
+
+## Agent access
+
+A person may connect an agent they already use — the product hosts no model and
+ships no writing assistant of its own. The agent speaks MCP to one remote
+endpoint on the canonical origin and authenticates through the service's own
+OAuth 2.1 authorization server; it never holds a session cookie. Consent is
+explicit, names the client and the scopes it asked for, and grants account-wide
+`resumes:read` and `resumes:write`. The settings page lists every connected
+agent with its last-used time and revokes any of them.
+
+Agent tools reach the same validation, sanitizing, bounds, and concurrency
+boundary as the editor, so an agent cannot store a document a person could not.
+There is no publish, unpublish, or public-read tool: making a resume public
+stays a human decision in the web UI. Detailed behavior lives in
+[the API design](api.md#agent-access-and-the-bearer-world),
+[the security design](security.md#agent-authorization-and-the-bearer-world), and
+[ADR 0026](../adr/0026-mcp-agent-access.md).
 
 ## Public namespace
 
@@ -42,19 +63,25 @@ no separate handwritten exceptions. A fixed root is added to the registry before
 any route may claim it, and drift between the registry, OpenAPI root paths, the
 Nuxt page manifest, or generated dispatch fails the build.
 
-The v5 registry starts with these exact roots:
+The registry keys one row per literal top-level segment. Finer paths dispatch
+inside the owning router, so `/api/v1/resumes` and `/oauth/token` need no rows
+of their own. The v6 registry holds these exact roots:
 
 | Root              | Source and dispatch                                                              |
 | ----------------- | -------------------------------------------------------------------------------- |
+| `.well-known`     | RFC 8414 and RFC 9728 agent-authorization metadata; Go                           |
 | `admin`           | Protected future namespace from ADR 0004; reserved-only, with no current handler |
 | `api`             | OpenAPI server root and Caddy `/api/v1/*`; Go                                    |
 | `app`             | Current Nuxt `/app/settings/sessions` page tree; Nuxt                            |
+| `authorize`       | Nuxt agent-consent page; Nuxt                                                    |
 | `forgot-password` | Nuxt `/forgot-password` page; Nuxt                                               |
 | `healthz`         | OpenAPI and Caddy `/healthz`; Go                                                 |
 | `_nuxt`           | Nuxt build-asset namespace; Nuxt                                                 |
 | `internal-render` | Direct Go-to-Nuxt renderer; Caddy denies every viewer request                    |
 | `llms.txt`        | Caddy `/llms.txt`; Go                                                            |
 | `login`           | Current Nuxt `/login` page; Nuxt                                                 |
+| `mcp`             | Remote MCP Streamable HTTP endpoint; Go                                          |
+| `oauth`           | Agent authorization server: authorize, token, register, revoke; Go               |
 | `people`          | Protected future namespace from ADR 0004; reserved-only, with no current handler |
 | `print`           | Caddy `/print` and `/print/*`; denied externally and capability-gated internally |
 | `readyz`          | OpenAPI and Caddy `/readyz`; Go                                                  |
@@ -71,6 +98,10 @@ the slug grammar, but stay in the registry so route dispatch and reservation
 parity remain exhaustive. Framework-generated paths that are not fixed product
 or infrastructure routes remain outside this registry and fall through to Nuxt.
 
+`/authorize` is the Nuxt consent page and `/oauth/authorize` is the Go endpoint
+that validates a request before redirecting to it. They are different roots, so
+neither shadows the other.
+
 A slug claim validates both the grammar and exact registry membership. Reserved
 root segments cannot be claimed. A resume keeps its slug when unpublished.
 Rename or deletion releases the old slug into a 180-day tombstone so another
@@ -78,6 +109,9 @@ account cannot immediately take over an old link.
 [ADR 0004](../adr/0004-resume-slug-only-urls.md) records the rationale.
 
 ## Publish controls
+
+Publishing is a human action taken in the web UI. A connected agent has no
+publish, unpublish, or public-read capability.
 
 The publish dialog exposes three independent choices:
 
@@ -106,6 +140,8 @@ fence and its 60-second cache trade-off.
 - Drafts accept partial data. Publish applies a separate completeness policy.
 - Public pages disclose resume content, not account data or a list of the
   account's other resumes.
+- A connected agent acts only on resume content. It reaches no session, account,
+  or publish surface and cannot change a resume's public state.
 - Publishing explains that public content can be delivered through a global
   content-delivery network. The discovery option separately explains crawler and
   AI-engine access.

@@ -57,6 +57,8 @@ behavior that future contract changes must implement.
 | `GET /events`, `GET /live/{slug}`                                  | Authenticated and public SSE invalidation streams            |
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`   | Live-gated public document and photo                         |
 | `GET /public/resumes/{slug}/pdf`                                   | Live and download-gated public PDF                           |
+| `GET /oauth/consent`, `POST /oauth/consent`                        | Agent consent read and the approve/deny decision             |
+| `GET /me/agents`, `DELETE /me/agents/{grantId}`                    | Connected-agent list and grant revocation                    |
 | `GET /me/export`, `DELETE /me`                                     | Data export and recent-reauthenticated account deletion      |
 
 Password routes use strict JSON with a 4,096-byte body cap and the exact
@@ -95,6 +97,46 @@ resource and time limits live in [the numeric budgets](../plans/budgets.md).
 `PATCH /resumes/{id}/photo` changes only the optional normalized crop rectangle
 or clears it. It preserves the transaction-read server-owned object key and
 performs no object I/O.
+
+## Agent access and the bearer world
+
+Agent traffic uses fixed roots outside `/api/v1`. Only `/oauth/authorize` reads
+a session, and it is a redirecting `GET`; every other route below ignores
+cookies entirely, so no CSRF surface exists there.
+
+| Route                                     | Method | Contract                                                            |
+| ----------------------------------------- | ------ | ------------------------------------------------------------------- |
+| `/.well-known/oauth-authorization-server` | GET    | RFC 8414 metadata derived only from the canonical origin            |
+| `/.well-known/oauth-protected-resource`   | GET    | RFC 9728 metadata naming the authorization server                   |
+| `/oauth/register`                         | POST   | RFC 7591 dynamic client registration; strict JSON, bounded          |
+| `/oauth/authorize`                        | GET    | Session-aware; validates fully, then redirects to the consent page  |
+| `/oauth/token`                            | POST   | Exact `application/x-www-form-urlencoded`; closed parameter set     |
+| `/oauth/revoke`                           | POST   | RFC 7009 revocation of a grant and its token families               |
+| `/mcp`                                    | POST   | MCP Streamable HTTP in stateless JSON mode; one message per request |
+
+`/oauth/authorize` is the Go validator; `/authorize` is the Nuxt consent page it
+redirects to. The OAuth error vocabulary is closed and carries one fixed generic
+sentence, never dependency or input detail. The MCP tool error vocabulary is
+separately closed: `validation_failed`, `revision_conflict`, `not_found`,
+`payload_too_large`, `scope_denied`, `rate_limited`, and
+`agent_access_unavailable`.
+
+**These routes are not part of the OpenAPI contract.** They are agent-facing,
+use non-JSON or JSON-RPC media types, and are specified by the named RFCs and
+the MCP specification; describing them a second time in
+[`../api/openapi.yaml`](../api/openapi.yaml) would create a source that drifts
+from the RFC without adding a generated client. OpenAPI gains only the
+session-authenticated consent and connected-agent operations listed above, so
+code, Caddy, and OpenAPI continue to agree.
+
+Every tool dispatches into the same validation, sanitizer, bounds, and store
+chain as its REST counterpart; a shared check that lives only in an HTTP handler
+is factored into a function both callers use. Mutating tools take the same
+revision validator the editor sends and return the new one plus the canonical
+stored state after sanitizing, so an agent observes exactly what a
+hostile-markup strip did. A lost race returns `revision_conflict` and instructs
+the agent to re-read. There is no publish, unpublish, or public-read tool.
+[ADR 0026](../adr/0026-mcp-agent-access.md) records the protocol choice.
 
 ## Resume write safety
 

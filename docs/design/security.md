@@ -7,6 +7,11 @@ provider refresh tokens. A password exists only as an Argon2id hash, a
 verification or reset token only as a SHA-256 digest, and an email job only as
 encrypted payload bytes.
 
+People are authenticated by cookie sessions. Agents are authenticated by bearer
+tokens issued by the service's own OAuth 2.1 authorization server. The two
+worlds do not overlap: a cookie never authorizes an agent route, and a bearer
+token never reaches a cookie route.
+
 ## Provider identity
 
 | Provider | Protocol              | Identity and registration email rule                                       |
@@ -132,9 +137,49 @@ canonicalize internationalized domain names or equivalent IPv6 spellings.
 Operators must configure the exact browser-serialized origin; an equivalent-
 looking but differently serialized host fails the exact CSRF comparison.
 
-Bearer authentication for the deferred mobile client chooses auth mode once.
-CSRF is required when that mode is cookie; the presence of an arbitrary
-`Authorization` header never bypasses CSRF.
+A route chooses its authentication mode once. CSRF is required when that mode is
+cookie, and the presence of an arbitrary `Authorization` header never bypasses
+it. The agent token routes below choose bearer instead and never parse a cookie;
+the deferred mobile client will make the same one-time choice.
+
+## Agent authorization and the bearer world
+
+`internal/oauthsrv` is a first-party OAuth 2.1 authorization server. Agents are
+public clients that register dynamically, then obtain tokens through
+authorization code with PKCE. `code_challenge_method=S256` is required and
+`plain` is rejected. The authorize request is validated in full — `client_id`,
+exact registered `redirect_uri`, `response_type`, requested scopes, and the
+challenge — before any redirect or user interaction, so an open-redirect or
+`redirect_uri` substitution attempt fails closed.
+
+Authorization codes are single-use, expire in 60 seconds, and bind the client,
+user, scopes, challenge, and exact redirect URI. Replaying a consumed code
+revokes every token issued from it. Access and refresh tokens are opaque 256-bit
+random values with distinguishing prefixes, stored only as 32-byte SHA-256
+digests and compared in constant time after exact shape decoding. Refresh tokens
+rotate on every use inside one family; presenting a superseded refresh token
+revokes the whole family. An access token lives one hour and a refresh family
+has a 30-day absolute lifetime. Revocation through RFC 7009 or the settings UI
+kills the grant and its token families in one transaction. Exact rate, cap, and
+body bounds live in [the numeric budgets](../plans/budgets.md).
+
+Scopes are closed to `resumes:read` and `resumes:write` and are enforced inside
+the resource server, per tool, never by the client. A token grants no publish,
+public-read, session, or account surface. Missing scope returns a closed
+`403 scope_denied` without touching resume state, and absent, malformed,
+expired, revoked, superseded, and cross-user tokens produce byte-identical
+closed 401 responses naming the protected-resource metadata URL.
+
+Cookie isolation is explicit: `/mcp`, `/oauth/token`, `/oauth/register`, and
+`/oauth/revoke` never parse cookies, so no CSRF surface exists there. The
+authorize and consent surfaces keep the full session, CSRF, and exact-Origin
+chain. Client-supplied names are bounded, sanitized text rendered as text, never
+markup. Token material, code material, PKCE verifiers, and resume content never
+enter logs, traces, metrics labels, errors, or panic text; logs carry client ID,
+grant ID, token row ID, tool name, resume ID, and closed outcomes only. Existing
+per-user resume caps, sanitizer versioning, and media privacy bounds apply to
+agent writes unchanged. [ADR 0026](../adr/0026-mcp-agent-access.md) records this
+boundary.
 
 ## Client address and rate limits
 
@@ -163,6 +208,11 @@ failure budget, registration/forgot per-email and per-IP, verification/reset
 token consumption, and `(account, client IP)` for add/change/reauthentication.
 Exact values live in [the numeric budgets](../plans/budgets.md). Unknown,
 provider-only, and wrong-password states stay byte-identical.
+
+Agent routes add registration and token policies per client IP, a failed-grant
+budget per client, tool-call budgets per token and per user, a
+concurrent-request cap per user, and a live-grant cap per account. All compose
+the same bounded limiter and the canonical Caddy client address.
 
 ## Public artifact revocation
 
