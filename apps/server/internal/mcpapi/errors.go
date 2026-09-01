@@ -14,12 +14,14 @@ type mcpError struct {
 func (e *mcpError) Error() string { return e.code }
 
 var (
-	errScopeDenied = &mcpError{status: http.StatusForbidden, code: "scope_denied"}
-	errInternal    = &mcpError{status: http.StatusInternalServerError, code: "internal_error"}
+	errScopeDenied            = &mcpError{status: http.StatusForbidden, code: "scope_denied"}
+	errPayloadTooLarge        = &mcpError{status: http.StatusRequestEntityTooLarge, code: "payload_too_large"}
+	errInvalidRequest         = &mcpError{status: http.StatusBadRequest, code: "invalid_request"}
+	errAgentAccessUnavailable = &mcpError{status: http.StatusServiceUnavailable, code: "agent_access_unavailable"}
+	errInternal               = &mcpError{status: http.StatusInternalServerError, code: "internal_error"}
 )
 
-// writeMCPError writes the closed unauthenticated and scope-denied mappings.
-// Later MCP transport code uses the same mapping before any JSON-RPC work.
+// writeMCPError writes a closed HTTP-boundary error before any JSON-RPC work.
 func writeMCPError(w http.ResponseWriter, err error) {
 	var mcpErr *mcpError
 	if !errors.As(err, &mcpErr) {

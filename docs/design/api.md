@@ -129,14 +129,19 @@ from the RFC without adding a generated client. OpenAPI gains only the
 session-authenticated consent and connected-agent operations listed above, so
 code, Caddy, and OpenAPI continue to agree.
 
-Every tool dispatches into the same validation, sanitizer, bounds, and store
-chain as its REST counterpart; a shared check that lives only in an HTTP handler
-is factored into a function both callers use. Mutating tools take the same
-revision validator the editor sends and return the new one plus the canonical
-stored state after sanitizing, so an agent observes exactly what a
-hostile-markup strip did. A lost race returns `revision_conflict` and instructs
-the agent to re-read. There is no publish, unpublish, or public-read tool.
-[ADR 0026](../adr/0026-mcp-agent-access.md) records the protocol choice.
+Every tool dispatches through a closed in-process facade to the same handler as
+its REST counterpart. Both protocols therefore execute one validation,
+sanitizer, bounds, and store chain. `create_resume` has no prior revision.
+Existing-resume mutations take the editor's decimal-string revision validator.
+Successful create and update operations return the complete canonical stored
+resume after sanitizing, so an agent observes exactly what a hostile-markup
+strip did. Resume deletion returns the matched revision and a closed deletion
+marker because no row remains. A lost race returns `revision_conflict` and
+instructs the agent to re-read. A write grant delegates delete authority,
+including deletion of a published resume through the existing public revocation
+fence, drain, tombstone, and cleanup path. There is no standalone publish,
+unpublish, or public-read tool. [ADR 0026](../adr/0026-mcp-agent-access.md)
+records the protocol choice.
 
 ## Resume write safety
 

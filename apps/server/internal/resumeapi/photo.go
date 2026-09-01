@@ -20,7 +20,6 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -225,9 +224,9 @@ func (s *Service) handleGetResumePhoto(w http.ResponseWriter, r *http.Request) {
 		writeResumeError(w, matchErr)
 		return
 	}
-	sess, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		writeResumeError(w, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"})
+	userID, userErr := requestUserID(r)
+	if userErr != nil {
+		writeResumeError(w, userErr)
 		return
 	}
 	reader, ok := s.resumes.(resumePoolReader)
@@ -235,7 +234,7 @@ func (s *Service) handleGetResumePhoto(w http.ResponseWriter, r *http.Request) {
 		writeResumeError(w, internalClientError())
 		return
 	}
-	row, readErr := reader.Get(r.Context(), sess.UserID, id)
+	row, readErr := reader.Get(r.Context(), userID, id)
 	if readErr != nil {
 		writeResumeError(w, mapMutationError(readErr))
 		return

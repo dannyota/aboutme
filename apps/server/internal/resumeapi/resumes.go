@@ -341,9 +341,9 @@ func (s *Service) handleListResumes(w http.ResponseWriter, r *http.Request) {
 		writeResumeError(w, versionErr)
 		return
 	}
-	session, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		writeResumeError(w, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"})
+	userID, userErr := requestUserID(r)
+	if userErr != nil {
+		writeResumeError(w, userErr)
 		return
 	}
 	reader, ok := s.resumes.(resumePoolReader)
@@ -351,7 +351,7 @@ func (s *Service) handleListResumes(w http.ResponseWriter, r *http.Request) {
 		writeResumeError(w, internalClientError())
 		return
 	}
-	rows, err := reader.List(r.Context(), session.UserID)
+	rows, err := reader.List(r.Context(), userID)
 	if err != nil {
 		writeResumeError(w, mapMutationError(err))
 		return
@@ -445,9 +445,9 @@ func (s *Service) handleGetResume(w http.ResponseWriter, r *http.Request) {
 		writeResumeError(w, err)
 		return
 	}
-	session, ok := auth.SessionFromContext(r.Context())
-	if !ok {
-		writeResumeError(w, &clientError{Status: http.StatusUnauthorized, Code: "session_required", Message: "a valid session is required"})
+	userID, userErr := requestUserID(r)
+	if userErr != nil {
+		writeResumeError(w, userErr)
 		return
 	}
 	reader, ok := s.resumes.(resumePoolReader)
@@ -455,7 +455,7 @@ func (s *Service) handleGetResume(w http.ResponseWriter, r *http.Request) {
 		writeResumeError(w, internalClientError())
 		return
 	}
-	row, getErr := reader.Get(r.Context(), session.UserID, id)
+	row, getErr := reader.Get(r.Context(), userID, id)
 	if getErr != nil {
 		writeResumeError(w, mapMutationError(getErr))
 		return
