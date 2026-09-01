@@ -112,7 +112,9 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
 
   // 4. Complete callback and prove the transaction handle is gone.
   await Promise.all([
-    page.waitForURL((url) => url.origin === ORIGIN && url.pathname === '/'),
+    page.waitForURL((url) =>
+      url.origin === ORIGIN && url.pathname === '/app/resumes'
+    ),
     page.getByRole('button', { name: 'Continue with Google' }).click(),
   ]);
   expect((await context.cookies(ORIGIN)).map((cookie) => cookie.name)).not.toContain(

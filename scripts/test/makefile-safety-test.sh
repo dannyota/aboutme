@@ -105,11 +105,12 @@ HTTPS_CALLS=$WORK/https.calls
 HTTPS_ID=sha256:1111111111111111111111111111111111111111111111111111111111111111
 HTTPS_BASE='mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac'
 mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
+  "$HTTPS_REPO/apps/server" \
   "$HTTPS_REPO/.dev/native-https/input" "$HTTPS_BIN"
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,run.sh} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,run.sh} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
 cp "$ROOT/scripts/dev-https-check.sh" "$HTTPS_REPO/scripts/dev-https-check.sh"
 printf '%s\n' 'static test root' > \
@@ -157,6 +158,31 @@ run:*) ;;
 esac
 EOF
 chmod 0700 "$HTTPS_BIN/podman"
+
+cat >"$HTTPS_BIN/go" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[ "${1-}" = build ] || exit 64
+output=
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = -o ]; then
+    shift
+    output=${1-}
+    break
+  fi
+  shift
+done
+[ -n "$output" ] || exit 64
+cat >"$output" <<'FIXTURE'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+printf 'fixture\0' >>"$HTTPS_CALL_LOG"
+printf '%s\0' "$@" >>"$HTTPS_CALL_LOG"
+printf '\n' >>"$HTTPS_CALL_LOG"
+FIXTURE
+chmod 0700 "$output"
+EOF
+chmod 0700 "$HTTPS_BIN/go"
 
 run_https_make() {
   local target=${!#}
@@ -489,6 +515,51 @@ grep -Fxq -- '--read-only' "$HTTPS_EDITOR_LOG" || {
 }
 [ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_EDITOR_LOG")" -eq 3 ] || {
   printf 'makefile-safety-test: editor run has the wrong bind-mount count\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-mcp-check \
+  >"$WORK/https-mcp-preflight.out" 2>&1; then
+  printf 'makefile-safety-test: mcp check passed failed status\n' >&2
+  exit 1
+fi
+if read_https_calls | grep -Eq '^(podman|fixture)$'; then
+  printf 'makefile-safety-test: mcp check mutated after failed status\n' >&2
+  exit 1
+fi
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 3 ] || {
+  printf 'makefile-safety-test: failed mcp preflight created evidence\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+run_https_make dev-https-mcp-check >"$WORK/https-mcp.out" 2>&1 || {
+  sed -n '1,120p' "$WORK/https-mcp.out" >&2
+  printf 'makefile-safety-test: mcp check target failed\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 4 ] || {
+  printf 'makefile-safety-test: mcp check did not create separate evidence\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'mcp.*' | wc -l)" -eq 1 ] || {
+  printf 'makefile-safety-test: mcp evidence directory naming drifted\n' >&2
+  exit 1
+}
+HTTPS_MCP_LOG=$WORK/https-mcp-runtime.calls
+read_https_calls >"$HTTPS_MCP_LOG"
+grep -Fxq mcp "$HTTPS_MCP_LOG" || {
+  printf 'makefile-safety-test: mcp mode did not reach the runner\n' >&2
+  exit 1
+}
+[ "$(grep -c '^fixture$' "$HTTPS_MCP_LOG")" -eq 3 ] || {
+  printf 'makefile-safety-test: mcp fixture lifecycle drifted\n' >&2
+  exit 1
+}
+[ "$(grep -c '^cleanup$' "$HTTPS_MCP_LOG")" -eq 2 ] &&
+  [ "$(grep -c '^seed$' "$HTTPS_MCP_LOG")" -eq 1 ] || {
+  printf 'makefile-safety-test: mcp fixture seed/cleanup drifted\n' >&2
   exit 1
 }
 

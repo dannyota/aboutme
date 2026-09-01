@@ -357,6 +357,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$server_env" 'AUTH_EMAIL_MODE=capture'
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_URL=http://127.0.0.1:20444'
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_BEARER='
+  assert_contains "$server_env" 'MCP_ENABLED=true'
 
   [ -f .dev/native-https/input/caddy-root.crt ] || fail "exported Caddy root is missing"
   mode=$(stat -c '%a' .dev/native-https/input/caddy-root.crt)
@@ -369,6 +370,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$manifest" 'log_level=info'
   assert_contains "$manifest" 'google_client_id=aboutme-local-google'
   assert_contains "$manifest" 'google_issuer_url=http://127.0.0.1:20442/google'
+  assert_contains "$manifest" 'mcp_enabled=true'
   assert_contains "$manifest" 'public_render_origin=http://127.0.0.1:20440'
   assert_contains "$manifest" 'app_build_digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
   assert_contains "$manifest" 'public_renderer_build_digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
