@@ -84,6 +84,16 @@ requires a reviewed change with evidence.
 | Add/change/reauth                         | 10/h per (account, IP)                              | PA rate                                   |
 | Local mail capture                        | ≤ 50 messages, ≤ 256 KiB total, ≤ 16 KiB/message    | PA mailcapture                            |
 | Capture ports                             | 127.0.0.1:20091 native; 127.0.0.1:20444 HTTPS       | PA mailcapture                            |
+| `/oauth/register` per IP                  | ≤ 5/hour                                            | PM rate                                   |
+| `/oauth/token` per IP                     | ≤ 30/min                                            | PM rate                                   |
+| Failed grants per client                  | ≤ 10 per 15 min                                     | PM rate                                   |
+| `/mcp` tool calls per token               | ≤ 120/min                                           | PM rate                                   |
+| `/mcp` tool calls per user                | ≤ 240/min                                           | PM rate                                   |
+| Concurrent `/mcp` requests/user           | ≤ 4                                                 | PM rate                                   |
+| Live grants per user                      | ≤ 10 (11th consent refused)                         | PM consent                                |
+| `/mcp` request body                       | ≤ 4,194,304 bytes                                   | PM route                                  |
+| OAuth request bodies                      | ≤ 4,096 bytes                                       | PM route                                  |
+| Idle-client GC                            | 24 h idle; ≤ 200 rows/sweep                         | PM oauthsrv                               |
 
 **P2A rationale.** The [data design](../design/data.md#bounds-and-invariants)
 owns the 512 KiB document limit. Title length is enforced in both PostgreSQL and
@@ -196,6 +206,32 @@ attempt. The local capture retains at most 50 messages and 256 KiB total,
 rejects a message over 16 KiB, and binds loopback on the fixed native and HTTPS
 ports. Password rate policies share the 10,000-key bounded store and add the
 login, failure, register/forgot, token, and account-mutation budgets.
+
+**Provenance of the PM rows.** These values are the frozen M5 decisions in
+[the phase PM decisions](phase-pm/decisions.md#m5--rate-cap-and-concurrency-budgets);
+this table is the enforcement authority from T00 onward. Registration is
+unauthenticated, so five per hour per IP admits a genuine first connection while
+making bulk client creation useless; garbage collection then deletes any client
+that is 24 hours old with no live grant and no live token, at most 200 rows per
+sweep, so an abandoned registration cannot accumulate. Thirty token requests per
+minute per IP covers refresh rotation for several agents behind one address, and
+the separate ten-failed-grants-per-15-minutes bucket per client makes code and
+verifier guessing expensive without letting one hostile client throttle another.
+Tool calls are capped at 120 per minute per token and 240 per minute per user so
+a second agent cannot be starved by the first, with at most four concurrent
+`/mcp` requests per user bounding in-flight database and render work. Ten live
+grants per user is a visible, revocable ceiling; the eleventh consent is refused
+with a closed error rather than silently evicting an existing grant.
+
+The OAuth request bodies stay at 4,096 bytes so a strict registration JSON
+document with five 512-byte redirect URIs, and every form-encoded token or
+revocation request, fit with headroom. `/mcp` needs a larger cap than the global
+256 KiB ceiling because `upload_photo` carries base64 content: 4,194,304 bytes
+is the 2 MiB photo bound plus base64 expansion and JSON-RPC envelope, following
+the P2B photo-route precedent. The decoded image is still bounded by the
+unchanged P2B media limits. All rate policies compose the ADR 0018 bounded
+limiter, share its 10,000-key store, and key on the canonical Caddy client
+address, token, user, or client as stated.
 
 ## Benchmark protocol
 

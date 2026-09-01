@@ -9,22 +9,26 @@ three `jsonb` columns for storage and access control.
 The migration files are the exact schema authority. This table describes the
 intended model, not replacement DDL.
 
-| Table                    | Purpose and key rules                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ |
-| `users`                  | UUIDv7 identity, unique case-insensitive email, display name, provider avatar key, timestamps          |
-| `identities`             | Provider subject linked to one user; unique `(provider, provider_user_id)`; never merged by email      |
-| `oauth_transactions`     | One-use state, purpose, PKCE verifier, redirect URI, expiry, and OpenID Connect nonce                  |
-| `sessions`               | Hashed opaque token, CSRF secret, activity and expiry times, rotation lineage, and recent-reauth time  |
-| `password_credentials`   | Zero-or-one Argon2id hash per user, cascading foreign key, created and changed times                   |
-| `password_registrations` | Pending email verification: unique canonical email, name, hash, token digest, 24-hour expiry           |
-| `password_reset_tokens`  | Single-use reset token digest with 30-minute expiry; unique per user                                   |
-| `auth_email_jobs`        | Encrypted verification/reset/notification payload with bounded lease, retry, and terminal state        |
-| `resumes`                | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts   |
-| `slug_tombstones`        | Released slug and release time; the former owner becomes nullable on account deletion                  |
-| `idempotency_records`    | User, concrete operation identity, mutation key, semantic request fingerprint, stored response, expiry |
-| `idempotency_usage`      | One per-user retained-record and stored-response-byte counter maintained transactionally               |
-| `media_deletion_jobs`    | Exact immutable object key, due time, bounded retry state, terminal outcome, audit timestamps          |
-| `public_state`           | Singleton durable discovery generation advanced with public-membership mutations                       |
+| Table                       | Purpose and key rules                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `users`                     | UUIDv7 identity, unique case-insensitive email, display name, provider avatar key, timestamps                             |
+| `identities`                | Provider subject linked to one user; unique `(provider, provider_user_id)`; never merged by email                         |
+| `oauth_transactions`        | One-use state, purpose, PKCE verifier, redirect URI, expiry, and OpenID Connect nonce                                     |
+| `sessions`                  | Hashed opaque token, CSRF secret, activity and expiry times, rotation lineage, and recent-reauth time                     |
+| `password_credentials`      | Zero-or-one Argon2id hash per user, cascading foreign key, created and changed times                                      |
+| `password_registrations`    | Pending email verification: unique canonical email, name, hash, token digest, 24-hour expiry                              |
+| `password_reset_tokens`     | Single-use reset token digest with 30-minute expiry; unique per user                                                      |
+| `auth_email_jobs`           | Encrypted verification/reset/notification payload with bounded lease, retry, and terminal state                           |
+| `oauth_clients`             | Public agent client ID, bounded name, bounded redirect-URI list, created and last-used times                              |
+| `oauth_authorization_codes` | Unique code digest, client/user, scopes, S256 challenge, exact redirect URI, 60-second expiry, consumed time              |
+| `oauth_grants`              | Unique live (user, client) pair, granted scopes, created and revoked times                                                |
+| `oauth_tokens`              | Unique token digest, closed kind, family ID, rotated-from lineage, client/user/grant, expiry, revoked and last-used times |
+| `resumes`                   | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts                      |
+| `slug_tombstones`           | Released slug and release time; the former owner becomes nullable on account deletion                                     |
+| `idempotency_records`       | User, concrete operation identity, mutation key, semantic request fingerprint, stored response, expiry                    |
+| `idempotency_usage`         | One per-user retained-record and stored-response-byte counter maintained transactionally                                  |
+| `media_deletion_jobs`       | Exact immutable object key, due time, bounded retry state, terminal outcome, audit timestamps                             |
+| `public_state`              | Singleton durable discovery generation advanced with public-membership mutations                                          |
 
 Server-owned relational rows use PostgreSQL UUIDv7 defaults. Client-generated
 UUIDs occur only inside resume documents as entry identifiers.
@@ -33,6 +37,14 @@ UUIDs occur only inside resume documents as entry identifiers.
 removes a photo reference enqueues its validated exact key in the same commit.
 The document reference remains the sole ownership authority; the ledger only
 drives bounded physical deletion and records its outcome.
+
+The four `oauth_*` tables are agent-authorization state and hold no secret
+material. Code and token values exist only as 32-byte SHA-256 digests; PKCE
+verifiers are never stored at all. Database constraints enforce the closed kind
+and scope sets, expiry ordering, the single live grant per (user, client), and
+the bounded redirect-URI count. Account deletion cascades through grants, codes,
+and tokens. Expired codes and terminal tokens are removed in bounded batches,
+and an idle client with no live grant and no live token is garbage-collected.
 
 `public_state` has one checked singleton row and a positive monotonic
 `discovery_generation`. A transaction that changes a resume slug, live state,

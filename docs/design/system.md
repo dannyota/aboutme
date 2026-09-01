@@ -45,6 +45,10 @@ a new fixed root cannot be added only to Caddy, Go, or Nuxt.
 | `/healthz`, `/readyz`                                    | Go      | Unversioned infrastructure probes; both accept `GET` and `HEAD`       |
 | `/print/*`                                               | Nuxt    | One-use Go capability required; Caddy also denies viewer requests     |
 | `/internal-render/public`                                | Nuxt    | Direct bounded Go POST only; Caddy denies every viewer request        |
+| `/.well-known/oauth-*`                                   | Go      | RFC 8414 and RFC 9728 metadata; GET only, from the canonical origin   |
+| `/oauth/*`                                               | Go      | Agent authorization server; only `/oauth/authorize` reads a session   |
+| `/mcp`                                                   | Go      | Remote MCP endpoint; bearer only, cookies never parsed                |
+| `/authorize`                                             | Nuxt    | Agent consent page; session required, decision posted through CSRF    |
 | Everything else                                          | Nuxt    | Landing, account UI, and editor                                       |
 
 `/healthz` is liveness and never touches PostgreSQL. `/readyz` checks required

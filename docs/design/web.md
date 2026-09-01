@@ -9,6 +9,7 @@ produces the same document everywhere.
 | Surface            | Route class                                                                        | Rendering model                                              |
 | ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Landing and auth   | `/`, `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password` | Nuxt SSR                                                     |
+| Agent consent      | `/authorize`                                                                       | Nuxt page; session required, decision posted client-side     |
 | Account and editor | `/app/**`                                                                          | Client application; authenticated requests never run in SSR  |
 | Public resume      | `/{slug}`                                                                          | Nuxt SSR followed by client hydration and live refetch       |
 | Print              | `/print/**`                                                                        | Internal Nuxt route gated by one Go-issued render capability |
@@ -22,6 +23,24 @@ separate Nuxt pages. Verification and reset strip the `#token=` fragment before
 any network call and load no third-party resource. Account settings show whether
 a password is set and allow add/change after recent reauthentication; provider
 emails are never shown as a linkage decision.
+
+## Agent consent and connected agents
+
+`/authorize` is the agent-consent page. Go validates the authorize request
+first, then redirects the browser there with the validated query; the page
+re-reads that query through a session-authenticated request that returns only
+the client name and the requested scopes. An unauthenticated visitor is sent to
+`/login` with the pending authorize path and returns to it with the query
+intact; the login page honors that destination only as a same-origin relative
+path and otherwise falls back to the resume list. The approve and deny decision
+posts through the existing CSRF and exact-Origin chain, and the server
+re-validates every parameter against the client row before issuing a code. No
+pending-authorize state is stored server-side.
+
+Account settings add a "Connected agents" block listing each grant with client
+name, scopes, and created and last-used times, plus a revoke action wired like
+the sessions list. Client-supplied names render as text, never markup. The UI
+never displays token or code material.
 
 ## Pure renderer
 

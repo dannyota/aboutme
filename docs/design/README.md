@@ -10,7 +10,7 @@ in [`../architecture.md`](../architecture.md). Delivery state lives in the
 [`../plans/implementation-plan.md`](../plans/implementation-plan.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. Every ADR
-through 0025 is accepted and integrated here. If a page disagrees with an
+through 0026 is accepted and integrated here. If a page disagrees with an
 accepted ADR, the ADR controls that decision until this text is corrected.
 
 ## Sections
@@ -37,6 +37,7 @@ data, rendering tokens, and print behavior.
 ```mermaid
 graph LR
     B[Browser or crawler] --> C[CloudFront and Caddy]
+    A[Connected agent] --> C
     C --> N[Nuxt SSR and Vue renderer]
     C --> G[Go API]
     G --> P[(PostgreSQL)]
@@ -51,7 +52,8 @@ The design has five cross-cutting rules:
 2. One pure Vue renderer produces editor preview, public HTML, PDF, images, and
    template test output.
 3. Every resume write passes through one validated aggregate boundary with
-   optimistic concurrency and transactional idempotency.
+   optimistic concurrency and transactional idempotency, whether the caller is
+   the editor or a connected agent.
 4. Caddy is the sole client-IP trust boundary. Go accepts the canonical client
    address only from configured trusted proxies.
 5. Local verification precedes cloud work. No AWS or DNS mutation occurs before
