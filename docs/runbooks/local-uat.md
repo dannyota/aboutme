@@ -29,9 +29,22 @@ make dev-https-down
 
 The browser image imports only the root exported by this harness. It uses no TLS
 bypass and permits network traffic only to the fixed HTTPS origin. Each check
-writes a new bounded verdict under ignored `.dev/native-https/evidence/`; it
-never overwrites an earlier run. Use `make dev-https-logs` for redacted
+writes a new bounded verdict under ignored `.dev/native-https/evidence/` and
+keeps only the newest ten runs per check. Use `make dev-https-logs` for redacted
 diagnostics.
+
+The image bakes only the pinned browser, dependencies, and `run.sh`; spec
+sources are staged and mounted read-only per run by
+`scripts/dev-https-check.sh`. Editing a spec therefore needs no image rebuild —
+rerun the check directly. Rebuild the image (`make dev-https-browser-image`)
+only when `Dockerfile`, `run.sh`, or the package manifests change; the check
+fails closed with "browser image sources changed" when a rebuild is required.
+
+For renderer specs, `make web-e2e-fast` iterates in the pinned browser against
+the working tree without the hermetic tar (`ARGS="print.spec.ts"` selects specs,
+`PLAYWRIGHT_WORKERS=4` parallelizes files, `PLAYWRIGHT_SKIP_BUILD=1` reuses the
+last Nuxt build for spec-only edits). It is a development loop, not a gate; the
+hermetic `make web-e2e` remains the gate.
 
 This check supports authenticated feature development. It does not replace the
 complete image-based port-443 deployment, isolated resources, frozen scenario

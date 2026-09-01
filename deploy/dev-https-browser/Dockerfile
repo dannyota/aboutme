@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
 
-LABEL io.aboutme.dev-https-browser.contract="1" \
+LABEL io.aboutme.dev-https-browser.contract="2" \
       io.aboutme.dev-https-browser.base="mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac" \
       io.aboutme.dev-https-browser.playwright="1.62.1" \
       io.aboutme.dev-https-browser.libnss3-tools="2:3.98-1ubuntu0.2"
@@ -17,8 +17,10 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts \
     && npm cache clean --force
 
-COPY playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts run.sh ./
-RUN chmod 0444 package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts \
+# Spec sources are NOT baked in; they are mounted read-only at /uat-spec per
+# run and validated by run.sh, so a spec edit needs no image rebuild.
+COPY run.sh ./
+RUN chmod 0444 package.json package-lock.json \
     && chmod 0555 run.sh
 
 USER pwuser

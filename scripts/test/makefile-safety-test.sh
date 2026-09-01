@@ -109,8 +109,9 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,editor-fixtures.ts,network-policy.ts,run.sh} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,run.sh} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
+cp "$ROOT/scripts/dev-https-check.sh" "$HTTPS_REPO/scripts/dev-https-check.sh"
 printf '%s\n' 'static test root' > \
   "$HTTPS_REPO/.dev/native-https/input/caddy-root.crt"
 chmod 0600 "$HTTPS_REPO/.dev/native-https/input/caddy-root.crt"
@@ -145,7 +146,7 @@ build:*)
   ;;
 image:inspect)
   if [[ " $* " == *Config.Labels* ]]; then
-    printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|1|%s|1.62.1|2:3.98-1ubuntu0.2\n' \
+    printf '%s|pwuser|["/opt/aboutme-auth/run.sh","--inside"]|2|%s|1.62.1|2:3.98-1ubuntu0.2\n' \
       "${FAKE_HTTPS_IMAGE_ID#sha256:}" "$FAKE_HTTPS_BASE"
   else
     printf '%s\n' "${FAKE_HTTPS_IMAGE_ID#sha256:}"
@@ -252,37 +253,46 @@ read_https_calls | grep -Fxq -- 'deploy/dev-https-browser' || {
   exit 1
 }
 
+# Spec drift must NOT block a check: specs are staged per run, not baked
+# into the image, so an edited spec runs without an image rebuild.
 cp "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts" \
   "$WORK/transport.spec.ts.clean"
 printf '%s\n' '// source-drift' >> \
   "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts"
 : >"$HTTPS_CALLS"
-if run_https_make dev-https-auth-check >"$WORK/https-source-drift.out" 2>&1; then
-  printf 'makefile-safety-test: transport source drift was accepted\n' >&2
+run_https_make dev-https-auth-check >"$WORK/https-source-drift.out" 2>&1 || {
+  sed -n '1,40p' "$WORK/https-source-drift.out" >&2
+  printf 'makefile-safety-test: spec drift blocked the check\n' >&2
   exit 1
-fi
-if read_https_calls | grep -Fxq podman; then
-  printf 'makefile-safety-test: source drift reached the browser runtime\n' >&2
+}
+read_https_calls | grep -Fxq podman || {
+  printf 'makefile-safety-test: spec-drift check never reached the runtime\n' >&2
   exit 1
-fi
+}
 cp "$WORK/transport.spec.ts.clean" \
   "$HTTPS_REPO/deploy/dev-https-browser/transport.spec.ts"
 
-cp "$HTTPS_REPO/deploy/dev-https-browser/editor.spec.ts" \
-  "$WORK/editor.spec.ts.clean"
-printf '%s\n' '// editor-source-drift' >> \
-  "$HTTPS_REPO/deploy/dev-https-browser/editor.spec.ts"
+# Image-side drift must still block before any runtime call.
+cp "$HTTPS_REPO/deploy/dev-https-browser/run.sh" "$WORK/run.sh.clean"
+printf '%s\n' '# image-source-drift' >> \
+  "$HTTPS_REPO/deploy/dev-https-browser/run.sh"
 : >"$HTTPS_CALLS"
-if run_https_make dev-https-auth-check >"$WORK/https-editor-source-drift.out" 2>&1; then
-  printf 'makefile-safety-test: editor source drift was accepted\n' >&2
+if run_https_make dev-https-auth-check \
+  >"$WORK/https-image-source-drift.out" 2>&1; then
+  printf 'makefile-safety-test: image source drift was accepted\n' >&2
   exit 1
 fi
+grep -Fq 'browser image sources changed after image build' \
+  "$WORK/https-image-source-drift.out" || {
+  printf 'makefile-safety-test: image drift returned the wrong diagnostic\n' >&2
+  exit 1
+}
 if read_https_calls | grep -Fxq podman; then
-  printf 'makefile-safety-test: editor source drift reached the browser runtime\n' >&2
+  printf 'makefile-safety-test: image source drift reached the browser runtime\n' >&2
   exit 1
 fi
-cp "$WORK/editor.spec.ts.clean" \
-  "$HTTPS_REPO/deploy/dev-https-browser/editor.spec.ts"
+cp "$WORK/run.sh.clean" "$HTTPS_REPO/deploy/dev-https-browser/run.sh"
+chmod 0755 "$HTTPS_REPO/deploy/dev-https-browser/run.sh"
 rm -rf "$HTTPS_REPO/.dev/native-https/evidence"
 
 rm -f "$HTTPS_MANIFEST"
@@ -351,8 +361,12 @@ grep -Fxq -- "$HTTPS_ID" "$HTTPS_RUNTIME_LOG" || {
   printf 'makefile-safety-test: auth run did not use immutable image ID\n' >&2
   exit 1
 }
-[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_RUNTIME_LOG")" -eq 2 ] || {
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_RUNTIME_LOG")" -eq 3 ] || {
   printf 'makefile-safety-test: auth run has the wrong bind-mount count\n' >&2
+  exit 1
+}
+grep -Eq '^--mount=type=bind,src=.*,dst=/uat-spec,ro=true$' "$HTTPS_RUNTIME_LOG" || {
+  printf 'makefile-safety-test: auth run lacks the read-only spec mount\n' >&2
   exit 1
 }
 if grep -Eq '(/run/podman/podman\.sock|/var/run/docker\.sock|dst=/home|dst=/repo|dst=/workspace)' \
@@ -421,7 +435,7 @@ grep -Fxq -- '--read-only' "$HTTPS_TRANSPORT_LOG" || {
   printf 'makefile-safety-test: transport run lacks read-only root\n' >&2
   exit 1
 }
-[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_TRANSPORT_LOG")" -eq 2 ] || {
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_TRANSPORT_LOG")" -eq 3 ] || {
   printf 'makefile-safety-test: transport run has the wrong bind-mount count\n' >&2
   exit 1
 }
@@ -473,7 +487,7 @@ grep -Fxq -- '--read-only' "$HTTPS_EDITOR_LOG" || {
   printf 'makefile-safety-test: editor run lacks read-only root\n' >&2
   exit 1
 }
-[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_EDITOR_LOG")" -eq 2 ] || {
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$HTTPS_EDITOR_LOG")" -eq 3 ] || {
   printf 'makefile-safety-test: editor run has the wrong bind-mount count\n' >&2
   exit 1
 }

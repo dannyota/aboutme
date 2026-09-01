@@ -1,11 +1,42 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly IMAGE_CONTRACT=1
+readonly IMAGE_CONTRACT=2
 readonly IMAGE_BASE='mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac'
 readonly IMAGE_PLAYWRIGHT=1.62.1
 readonly IMAGE_NSS='2:3.98-1ubuntu0.2'
 readonly IMAGE_ENTRYPOINT='["/opt/aboutme-auth/run.sh","--inside"]'
+
+# Spec sources are mounted read-only per run, never baked into the image.
+# Both sides validate this exact set; scripts/dev-https-check.sh stages it.
+readonly -a SPEC_SOURCES=(
+  playwright.config.ts
+  auth.spec.ts
+  transport.spec.ts
+  editor.spec.ts
+  public.spec.ts
+  password-auth.spec.ts
+  editor-fixtures.ts
+  network-policy.ts
+  harness-lib.ts
+)
+
+validate_spec_dir() {
+  # validate_spec_dir <directory> <expected-owner-uid>
+  local dir=$1 uid=$2 entries expected path
+  [ -d "$dir" ] && [ ! -L "$dir" ] || fail 'spec input is not a real directory'
+  [ "$(stat -c %u "$dir")" = "$uid" ] || fail 'spec input owner mismatch'
+  [ "$(stat -c %a "$dir")" = 700 ] || fail 'spec input mode must be 0700'
+  entries=$(find "$dir" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+  expected=$(printf '%s\n' "${SPEC_SOURCES[@]}" | sort)
+  [ "$entries" = "$expected" ] || fail 'spec input must contain exactly the spec sources'
+  for path in "${SPEC_SOURCES[@]}"; do
+    [ -f "$dir/$path" ] && [ ! -L "$dir/$path" ] ||
+      fail 'spec source is not a regular file'
+    [ "$(stat -c %u "$dir/$path")" = "$uid" ] || fail 'spec source owner mismatch'
+    [ "$(stat -c %a "$dir/$path")" = 600 ] || fail 'spec source mode must be 0600'
+  done
+}
 
 fail() {
   printf 'dev-https-browser: %s\n' "$*" >&2
@@ -47,6 +78,15 @@ inside_container() {
   mount_has_option "$input_options" ro || fail 'CA input is not read-only'
   mount_has_option "$input_options" rw && fail 'CA input is writable'
 
+  local spec_target spec_options
+  spec_target=$(findmnt -n -o TARGET --target /uat-spec) ||
+    fail 'spec input is not mounted'
+  spec_options=$(findmnt -n -o OPTIONS --target /uat-spec) ||
+    fail 'cannot inspect spec input options'
+  [ "$spec_target" = /uat-spec ] || fail 'spec input is not a dedicated mount'
+  mount_has_option "$spec_options" ro || fail 'spec input is not read-only'
+  mount_has_option "$spec_options" rw && fail 'spec input is writable'
+
   evidence_target=$(findmnt -n -o TARGET --target /evidence) ||
     fail 'evidence output is not mounted'
   evidence_options=$(findmnt -n -o OPTIONS --target /evidence) ||
@@ -87,6 +127,8 @@ inside_container() {
   fi
   evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
+
+  validate_spec_dir /uat-spec "$uid"
 
   export HOME=/tmp/home
   export XDG_CACHE_HOME=$HOME/.cache
@@ -133,10 +175,25 @@ inside_container() {
     spec=password-auth.spec.ts
     ;;
   esac
+  # Stage the mounted specs beside a node_modules symlink so module
+  # resolution finds the image's pinned dependencies. The image package.json
+  # supplies "type": "module"; without it Node loads the specs as CJS and
+  # import.meta fails.
+  install -d -m 0700 /tmp/spec
+  local spec_file
+  for spec_file in "${SPEC_SOURCES[@]}"; do
+    cp -- "/uat-spec/$spec_file" "/tmp/spec/$spec_file"
+    chmod 0400 "/tmp/spec/$spec_file"
+  done
+  cp -- /opt/aboutme-auth/package.json /tmp/spec/package.json
+  chmod 0400 /tmp/spec/package.json
+  ln -s /opt/aboutme-auth/node_modules /tmp/spec/node_modules
+
   local log_file=/tmp/playwright-uat.log status=0
-  cd /opt/aboutme-auth
+  cd /tmp/spec
   ABOUTME_BROWSER_MODE=$mode \
-    ./node_modules/.bin/playwright test --config playwright.config.ts "$spec" \
+    /opt/aboutme-auth/node_modules/.bin/playwright test \
+    --config playwright.config.ts "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
     if [ "$mode" = editor ]; then
@@ -240,9 +297,9 @@ VERIFY_EVIDENCE
 }
 
 host_run() {
-  [ "$#" -ge 3 ] && [ "$#" -le 4 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth]'
-  local image=$1 input=$2 evidence=$3 mode=${4:-auth}
+  [ "$#" -ge 4 ] && [ "$#" -le 5 ] ||
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth]'
+  local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   case $mode in
   auth | transport | editor | public | password-auth) ;;
   *) fail 'mode must be auth, transport, editor, public, or password-auth' ;;
@@ -251,15 +308,18 @@ host_run() {
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
   [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] ||
     fail 'image must be an immutable sha256 ID'
-  for path in "$input" "$evidence"; do
+  for path in "$input" "$spec_input" "$evidence"; do
     [[ $path = /* ]] || fail 'mount paths must be absolute'
     [[ $path != *$'\n'* && $path != *$'\r'* && $path != *$'\t'* ]] ||
       fail 'mount paths contain control characters'
     [ -d "$path" ] && [ ! -L "$path" ] || fail 'mount path is not a real directory'
   done
   input=$(realpath -e -- "$input") || fail 'cannot resolve CA input directory'
+  spec_input=$(realpath -e -- "$spec_input") ||
+    fail 'cannot resolve spec input directory'
   evidence=$(realpath -e -- "$evidence") || fail 'cannot resolve evidence directory'
-  [ "$input" != "$evidence" ] || fail 'input and evidence directories must differ'
+  [ "$input" != "$evidence" ] && [ "$spec_input" != "$evidence" ] &&
+    [ "$spec_input" != "$input" ] || fail 'mount directories must differ'
 
   uid=$(id -u)
   gid=$(id -g)
@@ -293,6 +353,7 @@ host_run() {
   fi
   evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
+  validate_spec_dir "$spec_input" "$uid"
   command -v podman >/dev/null || fail 'podman is required'
 
   inspect=$(podman image inspect --format \
@@ -329,6 +390,7 @@ host_run() {
     --cap-add=SYS_CHROOT \
     --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
     --mount="type=bind,src=$input,dst=/uat-input,ro=true" \
+    --mount="type=bind,src=$spec_input,dst=/uat-spec,ro=true" \
     --mount="type=bind,src=$evidence,dst=/evidence,rw=true" \
     "$image" "${mode_args[@]}"
 }

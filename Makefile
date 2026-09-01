@@ -11,18 +11,12 @@ WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser
 DEV_HTTPS_BROWSER_TAG := localhost/aboutme-dev-https-browser:local
 DEV_HTTPS_BROWSER_MANIFEST := .dev/native-https/browser-image.manifest
+# Image-side sources only. Spec sources are staged per run by
+# scripts/dev-https-check.sh and never gate the image manifest.
 DEV_HTTPS_BROWSER_SOURCES := \
 	deploy/dev-https-browser/Dockerfile \
 	deploy/dev-https-browser/package.json \
 	deploy/dev-https-browser/package-lock.json \
-	deploy/dev-https-browser/playwright.config.ts \
-	deploy/dev-https-browser/auth.spec.ts \
-	deploy/dev-https-browser/transport.spec.ts \
-	deploy/dev-https-browser/editor.spec.ts \
-	deploy/dev-https-browser/public.spec.ts \
-	deploy/dev-https-browser/password-auth.spec.ts \
-	deploy/dev-https-browser/editor-fixtures.ts \
-	deploy/dev-https-browser/network-policy.ts \
 	deploy/dev-https-browser/run.sh
 
 help: ## List targets
@@ -195,6 +189,26 @@ web-e2e-update: ## Generate review-only renderer baseline candidates in the pinn
 	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
 	test -z "$$(git status --porcelain=v1 --untracked-files=all)"
 
+web-e2e-fast: ## Iterate renderer specs in the pinned browser against the working tree; not a gate (ARGS="corpus.spec.ts", PLAYWRIGHT_WORKERS=4, PLAYWRIGHT_SKIP_BUILD=1)
+	@set -Eeuo pipefail; \
+	if [[ -n "$${UPDATE_GOLDEN+x}" ]]; then echo 'UPDATE_GOLDEN must be absent' >&2; exit 64; fi; \
+	if [[ -n "$${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}" ]]; then echo 'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' >&2; exit 64; fi; \
+	test "$$(uname -m)" = x86_64 || { echo 'web-e2e-fast requires a native x86_64 host' >&2; exit 1; }; \
+	test -d apps/web/node_modules || { echo 'web-e2e-fast needs apps/web/node_modules (run npm ci first)' >&2; exit 1; }; \
+	results=.dev/web-e2e-fast; \
+	rm -rf -- "$$results"; \
+	install -d -m 0700 "$$results"; \
+	surface=$${PLAYWRIGHT_SURFACE-harness}; \
+	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \
+	  -v "$$PWD:/repo:rw" \
+	  -e TZ=UTC -e LANG=C.UTF-8 -e LC_ALL=C.UTF-8 \
+	  -e PLAYWRIGHT_RESULTS_DIR=/repo/.dev/web-e2e-fast \
+	  -e PLAYWRIGHT_SURFACE="$$surface" \
+	  -e PLAYWRIGHT_WORKERS="$${PLAYWRIGHT_WORKERS-4}" \
+	  -e PLAYWRIGHT_SKIP_BUILD="$${PLAYWRIGHT_SKIP_BUILD-0}" \
+	  -w /repo/apps/web '$(WEB_E2E_IMAGE)' \
+	  npx --no-install playwright test --config e2e/playwright.config.ts $(ARGS)
+
 dev: ## HTTP image/network smoke and self-hosting stack; not for daily development
 	@if ! running_containers="$$(podman ps --format '{{.Names}}')"; then \
 	  echo "make dev: cannot inspect running containers; refusing to start Compose." >&2; \
@@ -288,124 +302,19 @@ dev-https-browser-image: dev-https-status ## Build and record the pinned trusted
 	printf 'dev-https-browser-image: %s\n' "$$image_id"
 
 dev-https-auth-check: dev-https-status ## Run the trusted local Google auth proof and retain only bounded local evidence
+	@bash scripts/dev-https-check.sh auth
 
 dev-https-transport-check: dev-https-status ## Run the trusted authenticated transport proof and retain only bounded local evidence
+	@bash scripts/dev-https-check.sh transport
 
 dev-https-editor-check: dev-https-status ## Run the trusted authenticated editor proof and retain only bounded local evidence
+	@bash scripts/dev-https-check.sh editor
 
 dev-https-public-check: dev-https-status ## Run the trusted published-resume hydration proof and retain only bounded local evidence
-
-dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check:
-	@set -Eeuo pipefail; \
-	repo=$$(pwd -P); \
-	state="$$repo/.dev/native-https"; \
-	manifest="$$repo/$(DEV_HTTPS_BROWSER_MANIFEST)"; \
-	input="$$state/input"; \
-	evidence_root="$$state/evidence"; \
-	target='$@'; \
-	case "$$target" in \
-	dev-https-auth-check) mode=auth; evidence_prefix=google-auth ;; \
-	dev-https-transport-check) mode=transport; evidence_prefix=transport ;; \
-	dev-https-editor-check) mode=editor; evidence_prefix=editor ;; \
-	dev-https-public-check) mode=public; evidence_prefix=public ;; \
-	*) echo 'dev-https-browser-check: invalid target' >&2; exit 1 ;; \
-	esac; \
-	uid=$$(id -u); \
-	[ -d "$$state" ] && [ ! -L "$$state" ] && [ "$$(realpath -e -- "$$state")" = "$$state" ] || { echo "$$target: invalid state directory" >&2; exit 1; }; \
-	[ "$$(stat -c %u "$$state")" = "$$uid" ] && [ "$$(stat -c %a "$$state")" = 700 ] || { echo "$$target: state directory ownership or mode mismatch" >&2; exit 1; }; \
-	[ -f "$$manifest" ] && [ ! -L "$$manifest" ] && [ "$$(stat -c %u "$$manifest")" = "$$uid" ] && [ "$$(stat -c %a "$$manifest")" = 600 ] || { echo "$$target: invalid browser image manifest" >&2; exit 1; }; \
-	mapfile -t manifest_lines <"$$manifest"; \
-	[ "$${#manifest_lines[@]}" -eq 2 ] || { echo "$$target: malformed browser image manifest" >&2; exit 1; }; \
-	[[ $${manifest_lines[0]} =~ ^image_id=(sha256:[0-9a-f]{64})$$ ]] || { echo "$$target: malformed browser image ID" >&2; exit 1; }; \
-	image_id=$${BASH_REMATCH[1]}; \
-	[[ $${manifest_lines[1]} =~ ^source_sha256=([0-9a-f]{64})$$ ]] || { echo "$$target: malformed browser source hash" >&2; exit 1; }; \
-	recorded_source=$${BASH_REMATCH[1]}; \
-	current_source=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
-	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
-	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
-	done; } | sha256sum | awk '{print $$1}') || { echo "$$target: cannot hash browser sources" >&2; exit 1; }; \
-	[ "$$current_source" = "$$recorded_source" ] || { echo "$$target: browser sources changed after image build" >&2; exit 1; }; \
-	[ -d "$$input" ] && [ ! -L "$$input" ] && [ "$$(realpath -e -- "$$input")" = "$$input" ] || { echo "$$target: invalid CA input directory" >&2; exit 1; }; \
-	[ "$$(stat -c %u "$$input")" = "$$uid" ] && [ "$$(stat -c %a "$$input")" = 700 ] || { echo "$$target: CA input ownership or mode mismatch" >&2; exit 1; }; \
-	mapfile -t input_entries < <(find "$$input" -mindepth 1 -maxdepth 1 -printf '%f\n'); \
-	[ "$${#input_entries[@]}" -eq 1 ] && [ "$${input_entries[0]}" = caddy-root.crt ] || { echo "$$target: CA input must contain one root" >&2; exit 1; }; \
-	root="$$input/caddy-root.crt"; \
-	[ -f "$$root" ] && [ ! -L "$$root" ] && [ "$$(stat -c %u "$$root")" = "$$uid" ] && [ "$$(stat -c %a "$$root")" = 600 ] || { echo "$$target: invalid Caddy root" >&2; exit 1; }; \
-	if [[ -e "$$evidence_root" || -L "$$evidence_root" ]]; then \
-	  [ -d "$$evidence_root" ] && [ ! -L "$$evidence_root" ] && [ "$$(realpath -e -- "$$evidence_root")" = "$$evidence_root" ] || { echo "$$target: invalid evidence root" >&2; exit 1; }; \
-	  [ "$$(stat -c %u "$$evidence_root")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence_root")" = 700 ] || { echo "$$target: evidence root ownership or mode mismatch" >&2; exit 1; }; \
-	else \
-	  install -d -m 0700 "$$evidence_root"; \
-	fi; \
-	evidence=$$(mktemp -d "$$evidence_root/$$evidence_prefix.XXXXXX"); \
-	[ "$$(stat -c %u "$$evidence")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence")" = 700 ] || { echo "$$target: evidence directory ownership or mode mismatch" >&2; exit 1; }; \
-	if [ "$$mode" = auth ]; then \
-	  deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence"; \
-	else \
-	  deploy/dev-https-browser/run.sh "$$image_id" "$$input" "$$evidence" "$$mode"; \
-	fi; \
-	current_source_after=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
-	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
-	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
-	done; } | sha256sum | awk '{print $$1}') || { echo "$$target: cannot rehash browser sources" >&2; exit 1; }; \
-	[ "$$current_source_after" = "$$recorded_source" ] || { echo "$$target: browser sources changed during check" >&2; exit 1; }; \
-	printf '%s evidence: %s\n' "$$target" "$$evidence"
+	@bash scripts/dev-https-check.sh public
 
 dev-https-password-check: dev-https-status ## Prove password authentication over native HTTPS and retain only bounded local evidence
-	@set -Eeuo pipefail; \
-	repo=$$(pwd -P); \
-	state="$$repo/.dev/native-https"; \
-	manifest="$$repo/$(DEV_HTTPS_BROWSER_MANIFEST)"; \
-	input="$$state/input"; \
-	evidence_root="$$state/evidence"; \
-	uid=$$(id -u); \
-	[ -d "$$state" ] && [ ! -L "$$state" ] && [ "$$(realpath -e -- "$$state")" = "$$state" ] || { echo 'dev-https-password-check: invalid state directory' >&2; exit 1; }; \
-	[ "$$(stat -c %u "$$state")" = "$$uid" ] && [ "$$(stat -c %a "$$state")" = 700 ] || { echo 'dev-https-password-check: state directory ownership or mode mismatch' >&2; exit 1; }; \
-	[ -f "$$manifest" ] && [ ! -L "$$manifest" ] && [ "$$(stat -c %u "$$manifest")" = "$$uid" ] && [ "$$(stat -c %a "$$manifest")" = 600 ] || { echo 'dev-https-password-check: invalid browser image manifest' >&2; exit 1; }; \
-	mapfile -t manifest_lines <"$$manifest"; \
-	[ "$${#manifest_lines[@]}" -eq 2 ] || { echo 'dev-https-password-check: malformed browser image manifest' >&2; exit 1; }; \
-	[[ $${manifest_lines[0]} =~ ^image_id=(sha256:[0-9a-f]{64})$$ ]] || { echo 'dev-https-password-check: malformed browser image ID' >&2; exit 1; }; \
-	image_id=$${BASH_REMATCH[1]}; \
-	[[ $${manifest_lines[1]} =~ ^source_sha256=([0-9a-f]{64})$$ ]] || { echo 'dev-https-password-check: malformed browser source hash' >&2; exit 1; }; \
-	recorded_source=$${BASH_REMATCH[1]}; \
-	current_source=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
-	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
-	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
-	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-password-check: cannot hash browser sources' >&2; exit 1; }; \
-	[ "$$current_source" = "$$recorded_source" ] || { echo 'dev-https-password-check: browser sources changed after image build' >&2; exit 1; }; \
-	[ -f "$$state/secrets/auth-email-capture-bearer" ] && [ ! -L "$$state/secrets/auth-email-capture-bearer" ] && [ "$$(stat -c %u "$$state/secrets/auth-email-capture-bearer")" = "$$uid" ] || { echo 'dev-https-password-check: invalid capture secret' >&2; exit 1; }; \
-	[ -f "$$input/caddy-root.crt" ] && [ ! -L "$$input/caddy-root.crt" ] || { echo 'dev-https-password-check: invalid Caddy root' >&2; exit 1; }; \
-	password_input="$$state/password-input"; \
-	install -d -m 0700 "$$password_input"; \
-	cp -- "$$input/caddy-root.crt" "$$password_input/caddy-root.crt"; \
-	chmod 0600 "$$password_input/caddy-root.crt"; \
-	base64 -w0 -- "$$state/secrets/auth-email-capture-bearer" | tr '+/' '-_' | tr -d '=' >"$$password_input/mail-capture-token"; \
-	chmod 0600 "$$password_input/mail-capture-token"; \
-	if [[ -e "$$evidence_root" || -L "$$evidence_root" ]]; then \
-	  [ -d "$$evidence_root" ] && [ ! -L "$$evidence_root" ] && [ "$$(realpath -e -- "$$evidence_root")" = "$$evidence_root" ] || { echo 'dev-https-password-check: invalid evidence root' >&2; exit 1; }; \
-	  [ "$$(stat -c %u "$$evidence_root")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence_root")" = 700 ] || { echo 'dev-https-password-check: evidence root ownership or mode mismatch' >&2; exit 1; }; \
-	else \
-	  install -d -m 0700 "$$evidence_root"; \
-	fi; \
-	evidence=$$(mktemp -d "$$evidence_root/password.XXXXXX"); \
-	[ "$$(stat -c %u "$$evidence")" = "$$uid" ] && [ "$$(stat -c %a "$$evidence")" = 700 ] || { echo 'dev-https-password-check: evidence directory ownership or mode mismatch' >&2; exit 1; }; \
-	install -d -m 0700 "$$repo/.dev/bin"; \
-	(cd "$$repo/apps/server" && go build -o "$$repo/.dev/bin/password-auth-fixture" ./cmd/password-auth-fixture) || { echo 'dev-https-password-check: fixture build failed' >&2; exit 1; }; \
-	native_dsn='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'; \
-	"$$repo/.dev/bin/password-auth-fixture" cleanup --database-url "$$native_dsn"; \
-	"$$repo/.dev/bin/password-auth-fixture" seed --database-url "$$native_dsn"; \
-	capture_token=$$(base64 -w0 -- "$$state/secrets/auth-email-capture-bearer" | tr '+/' '-_' | tr -d '='); \
-	curl -fsS -X DELETE -H "Authorization: Bearer $$capture_token" "http://127.0.0.1:20444/api/messages"; \
-	deploy/dev-https-browser/run.sh "$$image_id" "$$password_input" "$$evidence" password-auth && status=0 || status=$$?; \
-	"$$repo/.dev/bin/password-auth-fixture" cleanup --database-url "$$native_dsn"; \
-	rm -rf -- "$$password_input"; \
-	[ "$$status" -eq 0 ] || { echo 'dev-https-password-check: password proof failed' >&2; exit "$$status"; }; \
-	current_source_after=$$({ for path in $(DEV_HTTPS_BROWSER_SOURCES); do \
-	  [ -f "$$path" ] && [ ! -L "$$path" ] || exit 1; \
-	  printf '%s\0' "$$path"; sha256sum -- "$$path"; \
-	done; } | sha256sum | awk '{print $$1}') || { echo 'dev-https-password-check: cannot rehash browser sources' >&2; exit 1; }; \
-	[ "$$current_source_after" = "$$recorded_source" ] || { echo 'dev-https-password-check: browser sources changed during check' >&2; exit 1; }; \
-	printf 'dev-https-password-check evidence: %s\n' "$$evidence"
+	@bash scripts/dev-https-check.sh password-auth
 
 p5a-native-http-check: ## Run the deterministic native public HTTP capture and retain only bounded local evidence
 	bash scripts/p5a-native-http-capture.sh

@@ -13,7 +13,8 @@ fail() {
   exit 1
 }
 
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
+readonly -a SPEC_FILES=(playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts harness-lib.ts)
+for file in Dockerfile package.json package-lock.json run.sh "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 for file in \
@@ -29,13 +30,23 @@ digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
   fail 'application source-manifest digest is missing'
 [[ $digest_output == *$'PUBLIC_RENDERER_BUILD_DIGEST=sha256:'* ]] ||
   fail 'renderer source-manifest digest is missing'
+# The image manifest gates only image-side sources; spec sources are staged
+# per run by scripts/dev-https-check.sh and must never re-enter the manifest.
 for file in \
-  deploy/dev-https-browser/editor.spec.ts \
-  deploy/dev-https-browser/public.spec.ts \
-  deploy/dev-https-browser/password-auth.spec.ts \
-  deploy/dev-https-browser/editor-fixtures.ts; do
+  deploy/dev-https-browser/Dockerfile \
+  deploy/dev-https-browser/package.json \
+  deploy/dev-https-browser/package-lock.json; do
   grep -Eq "^[[:blank:]]*${file//./\\.}[[:blank:]]+\\\\$" "$ROOT/Makefile" ||
-    fail "browser source hash does not include ${file##*/}"
+    fail "browser image hash does not include ${file##*/}"
+done
+grep -Eq '^[[:blank:]]*deploy/dev-https-browser/run\.sh$' "$ROOT/Makefile" ||
+  fail 'browser image hash does not include run.sh'
+for file in "${SPEC_FILES[@]}"; do
+  if grep -Eq "^[[:blank:]]*deploy/dev-https-browser/${file//./\\.}" "$ROOT/Makefile"; then
+    fail "spec source ${file} re-entered the image manifest hash"
+  fi
+  grep -Eq "^[[:blank:]]*${file//./\\.}$" "$ROOT/scripts/dev-https-check.sh" ||
+    fail "check script does not stage ${file}"
 done
 
 readonly WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-dev-https-browser.XXXXXX")
@@ -51,8 +62,14 @@ readonly IMAGE_META=$WORK/image.meta
 readonly INPUT=$WORK/input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json playwright.config.ts auth.spec.ts transport.spec.ts editor.spec.ts public.spec.ts password-auth.spec.ts editor-fixtures.ts network-policy.ts run.sh; do
+for file in Dockerfile package.json package-lock.json run.sh "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
+done
+readonly SPEC_INPUT=$WORK/spec-input
+install -d -m 0700 "$SPEC_INPUT"
+for file in "${SPEC_FILES[@]}"; do
+  cp -- "$SOURCE/$file" "$SPEC_INPUT/$file"
+  chmod 0600 "$SPEC_INPUT/$file"
 done
 printf '%s\n' '-----BEGIN CERTIFICATE-----' 'static-test-only' \
   '-----END CERTIFICATE-----' >"$INPUT/caddy-root.crt"
@@ -78,7 +95,7 @@ build)
   grep -Fqx 'USER pwuser' "$context/Dockerfile"
   grep -Fqx 'ENTRYPOINT ["/opt/aboutme-auth/run.sh", "--inside"]' \
     "$context/Dockerfile"
-  grep -Fq 'io.aboutme.dev-https-browser.contract="1"' "$context/Dockerfile"
+  grep -Fq 'io.aboutme.dev-https-browser.contract="2"' "$context/Dockerfile"
   grep -Fq "io.aboutme.dev-https-browser.base=\"$FAKE_EXPECTED_BASE\"" \
     "$context/Dockerfile"
   grep -Fq 'io.aboutme.dev-https-browser.playwright="1.62.1"' \
@@ -89,12 +106,9 @@ build)
   grep -Fq '"@playwright/test": "1.62.1"' "$context/package-lock.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
-  grep -Fq 'network-policy.ts' "$context/Dockerfile"
-  grep -Fq 'transport.spec.ts' "$context/Dockerfile"
-  grep -Fq 'editor.spec.ts' "$context/Dockerfile"
-  grep -Fq 'public.spec.ts' "$context/Dockerfile"
-  grep -Fq 'password-auth.spec.ts' "$context/Dockerfile"
-  grep -Fq 'editor-fixtures.ts' "$context/Dockerfile"
+  ! grep -Eq '\.spec\.ts|network-policy\.ts|editor-fixtures\.ts|harness-lib\.ts|playwright\.config\.ts' \
+    "$context/Dockerfile"
+  grep -Fq 'COPY run.sh' "$context/Dockerfile"
   printf '%s\n' built >"$FAKE_IMAGE_META"
   ;;
 image)
@@ -106,7 +120,7 @@ image)
     ;;
   *) image_id=${FAKE_EXPECTED_IMAGE_ID#sha256:} ;;
   esac
-  contract=1
+  contract=2
   base=$FAKE_EXPECTED_BASE
   playwright=1.62.1
   nss='2:3.98-1ubuntu0.2'
@@ -156,7 +170,7 @@ assert_runner_rejected() {
   install -d -m 0700 "$case_evidence"
   : >"$case_log"
   if output=$(FAKE_PODMAN_LOG=$case_log FAKE_INSPECT_MODE=$mode \
-    "$CONTEXT/run.sh" "$image" "$INPUT" "$case_evidence" 2>&1); then
+    "$CONTEXT/run.sh" "$image" "$INPUT" "$SPEC_INPUT" "$case_evidence" 2>&1); then
     status=0
   else
     status=$?
@@ -183,8 +197,24 @@ assert_runner_rejected wrong-image-user "$IMAGE_ID" wrong-user \
 assert_runner_rejected wrong-image-entrypoint "$IMAGE_ID" wrong-entrypoint \
   'browser image contract mismatch'
 
+printf '%s\n' extra >"$SPEC_INPUT/extra.ts"
+chmod 0600 "$SPEC_INPUT/extra.ts"
+readonly EXTRA_SPEC_EVIDENCE=$WORK/extra-spec-evidence
+install -d -m 0700 "$EXTRA_SPEC_EVIDENCE"
 : >"$CALL_LOG"
-FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" "$IMAGE_ID" "$INPUT" "$EVIDENCE"
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$EXTRA_SPEC_EVIDENCE" 2>&1); then
+  fail 'unexpected spec input file was accepted'
+fi
+grep -Fq 'spec input must contain exactly the spec sources' <<<"$output" ||
+  fail 'unexpected spec input returned the wrong diagnostic'
+if tr '\0' '\n' <"$CALL_LOG" | grep -Fxq run; then
+  fail 'unexpected spec input reached podman run'
+fi
+rm -- "$SPEC_INPUT/extra.ts"
+
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$EVIDENCE"
 
 readonly READABLE_LOG=$WORK/podman.calls.txt
 tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
@@ -213,9 +243,11 @@ grep -Fxq -- '--cap-add=SYS_CHROOT' "$READABLE_LOG" ||
   fail 'runtime has an extra added capability'
 grep -Fxq -- "--mount=type=bind,src=$INPUT,dst=/uat-input,ro=true" "$READABLE_LOG" ||
   fail 'closed CA input mount is missing'
+grep -Fxq -- "--mount=type=bind,src=$SPEC_INPUT,dst=/uat-spec,ro=true" "$READABLE_LOG" ||
+  fail 'closed read-only spec mount is missing'
 grep -Fxq -- "--mount=type=bind,src=$EVIDENCE,dst=/evidence,rw=true" "$READABLE_LOG" ||
   fail 'closed evidence mount is missing'
-[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$READABLE_LOG")" -eq 2 ] ||
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$READABLE_LOG")" -eq 3 ] ||
   fail 'runtime has an extra bind mount'
 if grep -Eq '(/var/run/docker\.sock|/run/podman/podman\.sock|dst=/home|dst=/workspace|dst=/repo)' \
   "$READABLE_LOG"; then
@@ -224,13 +256,13 @@ fi
 image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
 [ -n "$image_line" ] || fail 'auth run lacks the verified image ID'
 [ -z "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" ] ||
-  fail 'three-argument auth run gained a mode argument'
+  fail 'default auth run gained a mode argument'
 
 readonly TRANSPORT_EVIDENCE=$WORK/transport-evidence
 install -d -m 0700 "$TRANSPORT_EVIDENCE"
 : >"$CALL_LOG"
 FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
-  "$IMAGE_ID" "$INPUT" "$TRANSPORT_EVIDENCE" transport
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$TRANSPORT_EVIDENCE" transport
 tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
 grep -Fxq transport "$READABLE_LOG" || fail 'transport mode did not reach the image'
 image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
@@ -241,7 +273,7 @@ readonly EDITOR_EVIDENCE=$WORK/editor-evidence
 install -d -m 0700 "$EDITOR_EVIDENCE"
 : >"$CALL_LOG"
 FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
-  "$IMAGE_ID" "$INPUT" "$EDITOR_EVIDENCE" editor
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$EDITOR_EVIDENCE" editor
 tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
 grep -Fxq editor "$READABLE_LOG" || fail 'editor mode did not reach the image'
 image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
@@ -256,7 +288,7 @@ printf '%s\n' 'static-test-capture-token' >"$PASSWORD_INPUT/mail-capture-token"
 chmod 0600 "$PASSWORD_INPUT/mail-capture-token"
 : >"$CALL_LOG"
 FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
-  "$IMAGE_ID" "$PASSWORD_INPUT" "$PASSWORD_EVIDENCE" password-auth
+  "$IMAGE_ID" "$PASSWORD_INPUT" "$SPEC_INPUT" "$PASSWORD_EVIDENCE" password-auth
 tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
 grep -Fxq password-auth "$READABLE_LOG" ||
   fail 'password-auth mode did not reach the image'
@@ -265,7 +297,7 @@ image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
   fail 'password-auth mode was not passed after the verified image ID'
 
 if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
-  "$IMAGE_ID" "$INPUT" "$PASSWORD_EVIDENCE" password-auth 2>&1); then
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$PASSWORD_EVIDENCE" password-auth 2>&1); then
   fail 'password-auth accepted a single-file CA input'
 fi
 grep -Fq 'CA input must contain the Caddy root and the capture token' \
@@ -276,7 +308,7 @@ readonly INVALID_MODE_EVIDENCE=$WORK/invalid-mode-evidence
 install -d -m 0700 "$INVALID_MODE_EVIDENCE"
 : >"$CALL_LOG"
 if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
-  "$IMAGE_ID" "$INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
 grep -Fq 'mode must be auth, transport, editor, public, or password-auth' <<<"$output" ||
@@ -466,6 +498,7 @@ fi
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
+readonly INSIDE_SPEC=$INSIDE_ROOT/uat-spec
 readonly INSIDE_EVIDENCE=$INSIDE_ROOT/evidence
 readonly INSIDE_TMP=$INSIDE_ROOT/tmp
 readonly INSIDE_APP=$INSIDE_ROOT/opt/aboutme-auth
@@ -473,13 +506,20 @@ readonly INSIDE_BIN=$INSIDE_ROOT/bin
 readonly INSIDE_RUN=$INSIDE_ROOT/run.sh
 readonly CERT_LOG=$INSIDE_ROOT/certutil.calls
 readonly BROWSER_LOG=$INSIDE_ROOT/browser.calls
-install -d -m 0700 "$INSIDE_INPUT" "$INSIDE_EVIDENCE" "$INSIDE_TMP" \
-  "$INSIDE_APP/node_modules/.bin" "$INSIDE_BIN"
+install -d -m 0700 "$INSIDE_INPUT" "$INSIDE_SPEC" "$INSIDE_EVIDENCE" \
+  "$INSIDE_TMP" "$INSIDE_APP/node_modules/.bin" "$INSIDE_BIN"
+cp -- "$SOURCE/package.json" "$INSIDE_APP/package.json"
 cp -- "$INPUT/caddy-root.crt" "$INSIDE_INPUT/caddy-root.crt"
+for file in "${SPEC_FILES[@]}"; do
+  cp -- "$SOURCE/$file" "$INSIDE_SPEC/$file"
+  chmod 0600 "$INSIDE_SPEC/$file"
+done
 sed \
   -e "s#/uat-input#$INSIDE_INPUT#g" \
+  -e "s#/uat-spec#$INSIDE_SPEC#g" \
   -e "s#/evidence#$INSIDE_EVIDENCE#g" \
   -e "s#/tmp/home#$INSIDE_TMP/home#g" \
+  -e "s#/tmp/spec#$INSIDE_TMP/spec#g" \
   -e "s#/tmp/playwright-uat.log#$INSIDE_TMP/playwright-uat.log#g" \
   -e "s#/opt/aboutme-auth#$INSIDE_APP#g" \
   "$SOURCE/run.sh" >"$INSIDE_RUN"
@@ -501,6 +541,8 @@ case "$target:$field" in
 /:OPTIONS) printf '%s\n' "${FAKE_ROOT_OPTIONS:-ro,nosuid,nodev}" ;;
 "$FAKE_INSIDE_INPUT":TARGET) printf '%s\n' "${FAKE_INPUT_TARGET:-$FAKE_INSIDE_INPUT}" ;;
 "$FAKE_INSIDE_INPUT":OPTIONS) printf '%s\n' "${FAKE_INPUT_OPTIONS:-ro,nosuid,nodev}" ;;
+"$FAKE_INSIDE_SPEC":TARGET) printf '%s\n' "${FAKE_SPEC_TARGET:-$FAKE_INSIDE_SPEC}" ;;
+"$FAKE_INSIDE_SPEC":OPTIONS) printf '%s\n' "${FAKE_SPEC_OPTIONS:-ro,nosuid,nodev}" ;;
 "$FAKE_INSIDE_EVIDENCE":TARGET) printf '%s\n' "${FAKE_EVIDENCE_TARGET:-$FAKE_INSIDE_EVIDENCE}" ;;
 "$FAKE_INSIDE_EVIDENCE":OPTIONS) printf '%s\n' "${FAKE_EVIDENCE_OPTIONS:-rw,nosuid,nodev}" ;;
 *) exit 1 ;;
@@ -643,13 +685,14 @@ chmod 0700 "$INSIDE_BIN/findmnt" "$INSIDE_BIN/certutil" \
   "$INSIDE_APP/node_modules/.bin/playwright"
 
 export FAKE_INSIDE_INPUT=$INSIDE_INPUT
+export FAKE_INSIDE_SPEC=$INSIDE_SPEC
 export FAKE_INSIDE_EVIDENCE=$INSIDE_EVIDENCE
 export FAKE_INSIDE_TMP=$INSIDE_TMP
 export FAKE_CERT_LOG=$CERT_LOG
 export FAKE_BROWSER_LOG=$BROWSER_LOG
 
 reset_inside() {
-  rm -rf -- "$INSIDE_EVIDENCE" "$INSIDE_TMP/home" \
+  rm -rf -- "$INSIDE_EVIDENCE" "$INSIDE_TMP/home" "$INSIDE_TMP/spec" \
     "$INSIDE_TMP/playwright-uat.log" "$INSIDE_TMP/imported-ca"
   install -d -m 0700 "$INSIDE_EVIDENCE"
   : >"$CERT_LOG"
@@ -704,6 +747,20 @@ reset_inside
 FAKE_INPUT_OPTIONS=rw FAKE_BROWSER_MODE=good \
   assert_inside_rejected input-writable 'CA input is not read-only' >/dev/null
 [ ! -s "$BROWSER_LOG" ] || fail 'wrong input mount mode reached the browser'
+
+reset_inside
+FAKE_SPEC_OPTIONS=rw FAKE_BROWSER_MODE=good \
+  assert_inside_rejected spec-writable 'spec input is not read-only' >/dev/null
+[ ! -s "$BROWSER_LOG" ] || fail 'writable spec mount reached the browser'
+
+reset_inside
+printf '%s\n' extra >"$INSIDE_SPEC/extra.ts"
+chmod 0600 "$INSIDE_SPEC/extra.ts"
+assert_inside_rejected extra-spec \
+  'spec input must contain exactly the spec sources' \
+  FAKE_BROWSER_MODE=good >/dev/null
+rm -- "$INSIDE_SPEC/extra.ts"
+[ ! -s "$BROWSER_LOG" ] || fail 'unexpected spec input reached the browser'
 
 reset_inside
 FAKE_EVIDENCE_OPTIONS=ro FAKE_BROWSER_MODE=good \
