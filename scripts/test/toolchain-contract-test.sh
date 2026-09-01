@@ -20,23 +20,23 @@ mkdir -p "$BIN"
 
 cat >"$BIN/node" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' v24.19.0
+printf '%s\n' v24.20.0
 EOF
 
 cat >"$BIN/go" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = env ] && [ "${2:-}" = GOVERSION ]; then
-  printf '%s\n' go1.26.6
+  printf '%s\n' go1.27.0
   exit 0
 fi
 if [ "${1:-}" = version ] && [ "${2:-}" = -m ]; then
   case ${3##*/} in
-  golangci-lint) module=github.com/golangci/golangci-lint/v2 version=v2.12.2 ;;
-  govulncheck) module=golang.org/x/vuln version=v1.6.0 ;;
+  golangci-lint) module=github.com/golangci/golangci-lint/v2 version=v2.13.2 ;;
+  govulncheck) module=golang.org/x/vuln version=v1.7.0 ;;
   gitleaks) module=github.com/zricethezav/gitleaks/v8 version=v8.30.1 ;;
   *) exit 2 ;;
   esac
-  printf '%s\n' "$3: go1.26.6" "path fixture" "mod $module $version fixture"
+  printf '%s\n' "$3: go1.27.0" "path fixture" "mod $module $version fixture"
   exit 0
 fi
 exit 2
@@ -49,7 +49,7 @@ EOF
 
 cat >"$BIN/semgrep" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' 1.172.0
+printf '%s\n' 1.175.0
 EOF
 
 cat >"$BIN/caddy" <<'EOF'
@@ -80,16 +80,16 @@ fi
 grep -Fq 'sqlc: want v1.31.1, got v9.9.9' "$WORK/out" ||
   fail "CI tool check did not report the exact sqlc mismatch"
 
-grep -Fq 'node-version: 24.19.0' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin Node 24.19.0"
-grep -Fq 'go-version: "1.26.6"' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin Go 1.26.6"
-grep -Fq 'version: v2.12.2' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin golangci-lint v2.12.2"
-grep -Fq 'govulncheck@v1.6.0' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin govulncheck v1.6.0"
-grep -Fq 'semgrep==1.172.0' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin Semgrep 1.172.0"
+grep -Fq 'node-version: 24.20.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin Node 24.20.0"
+grep -Fq 'go-version: "1.27.0"' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin Go 1.27.0"
+grep -Fq 'version: v2.13.2' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin golangci-lint v2.13.2"
+grep -Fq 'govulncheck@v1.7.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin govulncheck v1.7.0"
+grep -Fq 'semgrep==1.175.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin Semgrep 1.175.0"
 grep -Fq 'sqlc@v1.31.1' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin sqlc v1.31.1"
 grep -Fq 'caddy@v2.11.4' "$ROOT/.github/workflows/ci.yml" ||
@@ -128,7 +128,7 @@ cp "$ROOT/deploy/web.Dockerfile" "$ROOT/deploy/server.Dockerfile" \
 awk '
   $1 == "node-version:" {
     count++
-    if (count == 2) sub("24.19.0", "99.0.0")
+    if (count == 2) sub("24.20.0", "99.0.0")
   }
   { print }
 ' "$CONTRACT/.github/workflows/ci.yml" >"$CONTRACT/.github/workflows/ci.yml.next"
@@ -138,7 +138,7 @@ if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
   >"$WORK/partial-drift.out" 2>&1; then
   fail "repository contract accepted one drifted Node job"
 fi
-grep -Fq 'node: .github/workflows/ci.yml has 99.0.0, want 24.19.0' \
+grep -Fq 'node: .github/workflows/ci.yml has 99.0.0, want 24.20.0' \
   "$WORK/partial-drift.out" ||
   fail "repository contract did not identify the drifted Node job"
 
