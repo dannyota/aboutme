@@ -309,7 +309,7 @@ const consumeOAuthTransaction = `-- name: ConsumeOAuthTransaction :one
 UPDATE oauth_transactions
 SET consumed_at = $2
 WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
-RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at
+RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path
 `
 
 type ConsumeOAuthTransactionParams struct {
@@ -343,6 +343,7 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+		&i.ReturnPath,
 	)
 	return i, err
 }
@@ -676,10 +677,10 @@ func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenPara
 
 const createOAuthTransaction = `-- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (
-    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, expires_at
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path
 `
 
 type CreateOAuthTransactionParams struct {
@@ -691,6 +692,7 @@ type CreateOAuthTransactionParams struct {
 	PKCEVerifier  string
 	Nonce         *string
 	RedirectURI   string
+	ReturnPath    string
 	ExpiresAt     time.Time
 }
 
@@ -704,6 +706,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		arg.PKCEVerifier,
 		arg.Nonce,
 		arg.RedirectURI,
+		arg.ReturnPath,
 		arg.ExpiresAt,
 	)
 	var i OAuthTransaction
@@ -720,6 +723,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+		&i.ReturnPath,
 	)
 	return i, err
 }

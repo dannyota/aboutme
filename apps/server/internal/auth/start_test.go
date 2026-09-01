@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -292,6 +293,57 @@ func TestStartGET_LoginUnaffected(t *testing.T) {
 			}
 			if extractCookie(resp, auth.OAuthTxCookieName) == nil {
 				t.Error("no __Host-oauth-tx cookie set on a successful login start")
+			}
+		})
+	}
+}
+
+// TestStartGET_LoginNextValidation proves hostile or oversized destinations
+// are replaced before the provider transaction is stored. It consumes the
+// transaction through the real store so the assertion covers the exact value
+// a later callback would use.
+func TestStartGET_LoginNextValidation(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+
+	cases := []struct {
+		name string
+		next string
+		want string
+	}{
+		{name: "absent", want: "/app/resumes"},
+		{name: "relative path", next: "/oauth/authorize?x=1", want: "/oauth/authorize?x=1"},
+		{name: "network path", next: "//evil.example", want: "/app/resumes"},
+		{name: "absolute URL", next: "https://evil.example", want: "/app/resumes"},
+		{name: "javascript scheme", next: "javascript:alert(1)", want: "/app/resumes"},
+		{name: "no leading slash", next: "oauth/authorize", want: "/app/resumes"},
+		{name: "backslash", next: `/\\evil.example`, want: "/app/resumes"},
+		{name: "2048 bytes", next: "/" + strings.Repeat("a", 2047), want: "/" + strings.Repeat("a", 2047)},
+		{name: "2049 bytes", next: "/" + strings.Repeat("a", 2048), want: "/app/resumes"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := auth.GoogleStartPath
+			if tc.next != "" {
+				path += "?next=" + url.QueryEscape(tc.next)
+			}
+			resp := doGet(t, handler, path) //nolint:bodyclose // doGet closes the body itself before returning.
+			if resp.StatusCode != http.StatusFound {
+				t.Fatalf("GET start status = %d, want %d", resp.StatusCode, http.StatusFound)
+			}
+			cookie := extractCookie(resp, auth.OAuthTxCookieName)
+			if cookie == nil {
+				t.Fatal("start response missing __Host-oauth-tx cookie")
+			}
+			tx, err := auth.NewTransactionStore(q).Consume(context.Background(), cookie.Value, auth.ProviderGoogle)
+			if err != nil {
+				t.Fatalf("Consume() error = %v", err)
+			}
+			if tx.ReturnPath != tc.want {
+				t.Errorf("ReturnPath = %q, want %q", tx.ReturnPath, tc.want)
 			}
 		})
 	}

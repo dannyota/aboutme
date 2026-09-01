@@ -7,6 +7,8 @@ package auth
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,7 +30,25 @@ const startReapBatch = 200
 
 // authorizeURLBuilder creates the provider-specific transaction and URL. op is
 // a fixed failure label and is empty on success.
-type authorizeURLBuilder func(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID) (handle, authURL, op string, err error)
+type authorizeURLBuilder func(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error)
+
+const maxLoginReturnPathBytes = 2048
+
+// validatedLoginReturnPath accepts only a same-origin relative URL. Invalid or
+// absent input becomes the fixed resume-list destination before any database
+// row or provider redirect is created.
+func validatedLoginReturnPath(raw string) string {
+	if raw == "" || len(raw) > maxLoginReturnPathBytes ||
+		!strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") ||
+		strings.ContainsAny(raw, "\\\r\n") {
+		return defaultLoginReturnPath
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || parsed.Opaque != "" {
+		return defaultLoginReturnPath
+	}
+	return raw
+}
 
 // startAuthorizeResponse lets the client open the provider as a top-level
 // navigation instead of following a fetch redirect.
@@ -94,7 +114,8 @@ func (s *Service) handleLoginStart(w http.ResponseWriter, r *http.Request, provi
 	ctx := withProviderHTTPClient(r.Context())
 	s.reapExpiredOAuthTransactions(ctx, r, provider)
 
-	handle, authURL, op, err := build(ctx, PurposeLogin, uuid.Nil)
+	returnPath := validatedLoginReturnPath(r.URL.Query().Get("next"))
+	handle, authURL, op, err := build(ctx, PurposeLogin, uuid.Nil, returnPath)
 	if err != nil {
 		s.writeInternalError(w, r, provider, op, err)
 		return
@@ -136,7 +157,7 @@ func (s *Service) handleLinkStart(w http.ResponseWriter, r *http.Request, provid
 	ctx := withProviderHTTPClient(r.Context())
 	s.reapExpiredOAuthTransactions(ctx, r, provider)
 
-	handle, authURL, op, err := build(ctx, purpose, sess.UserID)
+	handle, authURL, op, err := build(ctx, purpose, sess.UserID, defaultLoginReturnPath)
 	if err != nil {
 		s.writeInternalError(w, r, provider, op, err)
 		return

@@ -117,8 +117,8 @@ func TestLinkedInCallback_RegistrationEmailRule(t *testing.T) {
 			}
 
 			if tc.wantCreated {
-				if got := resp.Header.Get("Location"); got != testPublicOrigin+"/" {
-					t.Errorf("callback Location = %q, want %q (successful registration)", got, testPublicOrigin+"/")
+				if got := resp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
+					t.Errorf("callback Location = %q, want %q (successful registration)", got, testPublicOrigin+"/app/resumes")
 				}
 				if extractCookie(resp, auth.SessionCookieName) == nil {
 					t.Error("callback did not authenticate, want a __Host-session cookie")

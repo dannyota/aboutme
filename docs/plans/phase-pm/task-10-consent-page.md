@@ -2,7 +2,8 @@
 
 **Acceptance:** AC-MCP-002, AC-MCP-009 (web clauses).
 
-**Depends on:** T02 generated client; T05 service semantics.
+**Depends on:** T01 mutable pre-UAT migration; T02 generated client; T05 service
+semantics.
 
 **Owned paths:** T10 paths in `file-structure.md`.
 
@@ -21,6 +22,13 @@
   validated `next` after any successful login (provider or password) —
   same-origin relative path only per M8, fallback `/app/resumes`. Other bare
   `navigateTo('/login')` call sites are out of scope and unchanged.
+- Provider login accepts the same bounded `next` on each public GET start. Go
+  validates it before creating the provider transaction, stores it in
+  `oauth_transactions.return_path`, and uses the stored value after a successful
+  callback. Link and reauthentication callbacks remain fixed on the sessions
+  settings page. Migration, sqlc, OpenAPI, and provider callback paths are an
+  integration-owner correction because the original web-only file list could not
+  complete the required provider round trip.
 - Error states are closed: invalid request → fixed error copy with no parameter
   echo; expired session mid-decision → login redirect preserving the query.
   Loading, keyboard operation, focus management, light/dark themes, and the
@@ -30,6 +38,11 @@
 
 ## TDD cycle
 
+- [x] Write provider-flow REDs: the OpenAPI start contract exposes bounded
+      `next`; the database enforces the relative-path byte boundary; a real
+      provider callback preserves a valid path; invalid and oversized values
+      bind `/app/resumes`. Recreate the pre-UAT test database after amending
+      migration 00009 and rerun to GREEN.
 - [ ] Write component REDs: renders name/scopes as text for a hostile client
       name fixture (markup shows escaped), approve posts exact body, deny posts
       exact body, navigation uses `redirectTo` verbatim, closed error mapping

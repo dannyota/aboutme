@@ -141,7 +141,11 @@ enforcement authority afterwards.
   returns with the query intact. The login page has no `next` support today —
   T10 builds it: `next` is honored only as a same-origin relative path (leading
   `/`, not `//`, no scheme, ≤ 2,048 bytes); anything else falls back to the
-  current `/app/resumes` destination.
+  current `/app/resumes` destination. Password login navigates to that validated
+  path directly. Provider login carries it in the existing digest-bound,
+  single-use `oauth_transactions` row and consumes it on a successful callback;
+  browser storage, a second cookie, and a caller-controlled callback redirect
+  are forbidden.
 - The consent read operation re-validates the query server-side and returns only
   client name and scopes. The decision POST carries the exact request parameters
   plus `decision` (`approve`/`deny`); the server re-validates everything against
@@ -149,8 +153,9 @@ enforcement authority afterwards.
 - Approval records or refreshes the grant; a later request from the same client
   with equal-or-narrower scopes skips consent and issues a code directly. Denial
   redirects with `error=access_denied`.
-- No pending-authorize server state exists; replay safety comes from code
-  single-use and grant recording.
+- No pending agent-authorize server state exists; the provider transaction
+  carries only the login return path. Agent authorization replay safety comes
+  from code single-use and grant recording.
 
 ## M9 — Browser evidence
 

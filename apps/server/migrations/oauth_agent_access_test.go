@@ -163,6 +163,17 @@ func TestOAuthAgentAccessMigrationDownUp(t *testing.T) {
 	if _, err := provider.DownTo(ctx, 8); err != nil {
 		t.Fatalf("DownTo(8) error: %v", err)
 	}
+	var returnPathAfterDown int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'oauth_transactions'
+		  AND column_name = 'return_path'
+	`).Scan(&returnPathAfterDown); err != nil {
+		t.Fatalf("count return_path after down: %v", err)
+	}
+	if returnPathAfterDown != 0 {
+		t.Fatalf("return_path columns after down = %d, want 0", returnPathAfterDown)
+	}
 
 	for _, table := range oauthAgentAccessTables {
 		var relation *string
@@ -185,6 +196,63 @@ func TestOAuthAgentAccessMigrationDownUp(t *testing.T) {
 		if relation == nil {
 			t.Fatalf("%s relation after up = absent, want present", table)
 		}
+	}
+	var returnPathAfterUp string
+	if err := db.QueryRowContext(ctx, `
+		SELECT column_name FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'oauth_transactions'
+		  AND column_name = 'return_path'
+	`).Scan(&returnPathAfterUp); err != nil {
+		t.Fatalf("return_path after up: %v", err)
+	}
+	if returnPathAfterUp != "return_path" {
+		t.Fatalf("column after up = %q, want return_path", returnPathAfterUp)
+	}
+}
+
+func TestOAuthTransactionReturnPathConstraint(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+
+	insert := func(sp pgx.Tx, returnPath string) error {
+		_, err := sp.Exec(ctx, `
+			INSERT INTO oauth_transactions (
+				handle_hash, provider, purpose, state, pkce_verifier,
+				redirect_uri, return_path, expires_at
+			) VALUES ($1, 'google', 'login', $2, $3, $4, $5, $6)
+		`, validOAuthDigest(), uuid.NewString(), strings.Repeat("v", 43),
+			oauthRedirectURI, returnPath, oauthNow.Add(time.Minute))
+		return err
+	}
+
+	cases := []struct {
+		name       string
+		returnPath string
+		valid      bool
+	}{
+		{name: "single slash path", returnPath: "/app/resumes", valid: true},
+		{name: "path with query", returnPath: "/oauth/authorize?x=1", valid: true},
+		{name: "empty", returnPath: ""},
+		{name: "network path", returnPath: "//evil.example"},
+		{name: "absolute URL", returnPath: "https://evil.example"},
+		{name: "backslash", returnPath: `/\\evil.example`},
+		{name: "2048 bytes", returnPath: "/" + strings.Repeat("a", 2047), valid: true},
+		{name: "2049 bytes", returnPath: "/" + strings.Repeat("a", 2048)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
+				return insert(sp, tc.returnPath)
+			})
+			if tc.valid {
+				if err != nil {
+					t.Fatalf("insert error = %v, want success", err)
+				}
+				return
+			}
+			requirePGError(t, err, "oauth_transactions_return_path_check")
+		})
 	}
 }
 

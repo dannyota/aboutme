@@ -78,9 +78,9 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	if cbResp.StatusCode != 302 {
 		t.Fatalf("GET callback status = %d, want 302", cbResp.StatusCode)
 	}
-	// Success targets the app root; rejection targets login.
-	if got := cbResp.Header.Get("Location"); got != testPublicOrigin+"/" {
-		t.Errorf("successful callback Location = %q, want %q", got, testPublicOrigin+"/")
+	// Success targets the resume list; rejection targets login.
+	if got := cbResp.Header.Get("Location"); got != testPublicOrigin+"/app/resumes" {
+		t.Errorf("successful callback Location = %q, want %q", got, testPublicOrigin+"/app/resumes")
 	}
 
 	sessionCookie := extractCookie(cbResp, auth.SessionCookieName)
@@ -122,6 +122,45 @@ func TestGoogleCallback_NewUser_CreatesUserAndSession(t *testing.T) {
 	}
 	if identity.UserID != usr.ID {
 		t.Errorf("identity.UserID = %v, want %v (the same created user)", identity.UserID, usr.ID)
+	}
+}
+
+// TestGoogleCallback_LoginNextRoundTrip catches a provider login dropping the
+// validated consent return path between /start and /callback.
+func TestGoogleCallback_LoginNextRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL))
+	const next = "/oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001&scope=resumes%3Aread"
+
+	startResp := doGet(t, handler, auth.GoogleStartPath+"?next="+url.QueryEscape(next)) //nolint:bodyclose // doGet closes the body itself before returning.
+	if startResp.StatusCode != http.StatusFound {
+		t.Fatalf("GET start status = %d, want %d", startResp.StatusCode, http.StatusFound)
+	}
+	loc, err := url.Parse(startResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse start redirect Location: %v", err)
+	}
+	txCookie := extractCookie(startResp, auth.OAuthTxCookieName)
+	if txCookie == nil {
+		t.Fatal("start response missing __Host-oauth-tx cookie")
+	}
+
+	const code = "code-login-next-round-trip"
+	p.RegisterCode(code, oidctest.Claims{
+		Subject:       uniqueSubject(t),
+		Email:         uniqueEmail(t),
+		EmailVerified: ptrTrue(),
+		CodeChallenge: loc.Query().Get("code_challenge"),
+		Nonce:         loc.Query().Get("nonce"),
+	})
+	cbResp := doGet(t, handler, auth.GoogleCallbackPath+"?code="+code+"&state="+loc.Query().Get("state"), txCookie) //nolint:bodyclose // doGet closes the body itself before returning.
+	if cbResp.StatusCode != http.StatusFound {
+		t.Fatalf("GET callback status = %d, want %d", cbResp.StatusCode, http.StatusFound)
+	}
+	if got, want := cbResp.Header.Get("Location"), testPublicOrigin+next; got != want {
+		t.Errorf("callback Location = %q, want %q", got, want)
 	}
 }
 

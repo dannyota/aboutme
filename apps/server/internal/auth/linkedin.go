@@ -83,14 +83,14 @@ func (s *Service) linkedinRedirectURL() string {
 }
 
 // buildLinkedInAuthorizeURL binds PKCE S256 and an OIDC nonce.
-func (s *Service) buildLinkedInAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID) (handle, authURL, op string, err error) {
+func (s *Service) buildLinkedInAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error) {
 	provider, err := s.linkedinProvider(ctx)
 	if err != nil {
 		return "", "", "linkedin_provider_discovery", err
 	}
 
 	redirectURI := s.linkedinRedirectURL()
-	handle, tx, err := s.tx.Begin(ctx, ProviderLinkedIn, purpose, linkingUserID, redirectURI)
+	handle, tx, err := s.tx.begin(ctx, ProviderLinkedIn, purpose, linkingUserID, redirectURI, returnPath)
 	if err != nil {
 		return "", "", "begin_transaction", err
 	}
@@ -192,7 +192,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 		return
 	}
 
@@ -210,7 +210,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	if found {
 		SetSessionCookie(w, rawSession)
 		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 		return
 	}
 
@@ -244,5 +244,5 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 
 	SetSessionCookie(w, rawSession)
 	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+	http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 }

@@ -133,9 +133,9 @@ func githubDisplayName(user githubUser) string {
 }
 
 // buildGitHubAuthorizeURL binds PKCE S256 without OIDC discovery or nonce.
-func (s *Service) buildGitHubAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID) (handle, authURL, op string, err error) {
+func (s *Service) buildGitHubAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error) {
 	redirectURI := s.githubRedirectURL()
-	handle, tx, err := s.tx.Begin(ctx, ProviderGitHub, purpose, linkingUserID, redirectURI)
+	handle, tx, err := s.tx.begin(ctx, ProviderGitHub, purpose, linkingUserID, redirectURI, returnPath)
 	if err != nil {
 		return "", "", "begin_transaction", err
 	}
@@ -218,7 +218,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 		return
 	}
 
@@ -236,7 +236,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	if found {
 		SetSessionCookie(w, rawSession)
 		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 		return
 	}
 
@@ -273,5 +273,5 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	SetSessionCookie(w, rawSession)
 	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+	http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 }

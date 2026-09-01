@@ -2775,6 +2775,11 @@ export interface components {
          */
         AuthPurpose: "login";
         /**
+         * @description Same-origin relative path to open after a successful provider login. The server accepts at most 2,048 bytes, requires one leading `/`, and rejects a leading `//`, any URI scheme, malformed URL syntax, or a backslash. An absent or invalid value is bound as `/app/resumes` in the OAuth transaction. Link and reauthentication callbacks ignore it.
+         * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
+         */
+        AuthReturnPath: string;
+        /**
          * @description Which privileged flow `POST /auth/{provider}/start` is beginning for the caller's own already-authenticated account. Required, with no default: this route serves exactly these two, and substituting one would return an authorize URL for a flow the caller did not ask for.
          *
          *     - `link`: attach this provider identity to the caller's account.
@@ -3056,6 +3061,11 @@ export interface operations {
                  * @example login
                  */
                 purpose?: components["parameters"]["AuthPurpose"];
+                /**
+                 * @description Same-origin relative path to open after a successful provider login. The server accepts at most 2,048 bytes, requires one leading `/`, and rejects a leading `//`, any URI scheme, malformed URL syntax, or a backslash. An absent or invalid value is bound as `/app/resumes` in the OAuth transaction. Link and reauthentication callbacks ignore it.
+                 * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
+                 */
+                next?: components["parameters"]["AuthReturnPath"];
             };
             header?: never;
             path?: never;
@@ -3225,6 +3235,11 @@ export interface operations {
                  * @example login
                  */
                 purpose?: components["parameters"]["AuthPurpose"];
+                /**
+                 * @description Same-origin relative path to open after a successful provider login. The server accepts at most 2,048 bytes, requires one leading `/`, and rejects a leading `//`, any URI scheme, malformed URL syntax, or a backslash. An absent or invalid value is bound as `/app/resumes` in the OAuth transaction. Link and reauthentication callbacks ignore it.
+                 * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
+                 */
+                next?: components["parameters"]["AuthReturnPath"];
             };
             header?: never;
             path?: never;
@@ -3394,6 +3409,11 @@ export interface operations {
                  * @example login
                  */
                 purpose?: components["parameters"]["AuthPurpose"];
+                /**
+                 * @description Same-origin relative path to open after a successful provider login. The server accepts at most 2,048 bytes, requires one leading `/`, and rejects a leading `//`, any URI scheme, malformed URL syntax, or a backslash. An absent or invalid value is bound as `/app/resumes` in the OAuth transaction. Link and reauthentication callbacks ignore it.
+                 * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
+                 */
+                next?: components["parameters"]["AuthReturnPath"];
             };
             header?: never;
             path?: never;

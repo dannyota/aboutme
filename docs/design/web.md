@@ -35,7 +35,9 @@ intact; the login page honors that destination only as a same-origin relative
 path and otherwise falls back to the resume list. The approve and deny decision
 posts through the existing CSRF and exact-Origin chain, and the server
 re-validates every parameter against the client row before issuing a code. No
-pending-authorize state is stored server-side.
+pending agent-authorization state is stored server-side. Provider login binds
+the validated return path to its existing single-use OAuth transaction so an
+external provider round trip cannot lose or replace the destination.
 
 Account settings add a "Connected agents" block listing each grant with client
 name, scopes, and created and last-used times, plus a revoke action wired like

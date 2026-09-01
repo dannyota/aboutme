@@ -172,7 +172,7 @@ func TestProviderConcurrentFirstLogin_ReReadsSubject(t *testing.T) {
 		if resp.StatusCode != http.StatusFound {
 			t.Fatalf("attempt %d status = %d, want %d", i, resp.StatusCode, http.StatusFound)
 		}
-		if loc := resp.Header.Get("Location"); loc != testPublicOrigin+"/" {
+		if loc := resp.Header.Get("Location"); loc != testPublicOrigin+"/app/resumes" {
 			t.Fatalf("attempt %d Location = %q, want the success target (both same-subject logins must succeed)", i, loc)
 		}
 		if extractCookie(resp, auth.SessionCookieName) == nil {

@@ -89,6 +89,16 @@ describe("openapi contract", () => {
     expect(authPurpose.schema.enum).toEqual(["login"]);
     expect(authPurpose.description).toContain("not served by `GET`");
 
+    const authReturnPath = doc.components.parameters.AuthReturnPath;
+    expect(authReturnPath.in).toBe("query");
+    expect(authReturnPath.required).toBe(false);
+    expect(authReturnPath.description).toMatch(/2,048 bytes/);
+    expect(authReturnPath.schema).toEqual({
+      type: "string",
+      maxLength: 2048,
+      pattern: "^/(?!/)[^\\\\]*$",
+    });
+
     const authLinkPurpose = doc.components.parameters.AuthLinkPurpose;
     expect(authLinkPurpose.in).toBe("query");
     expect(authLinkPurpose.required).toBe(true);
@@ -105,6 +115,7 @@ describe("openapi contract", () => {
       expect(start.get.security, `${provider} login GET is public`).toEqual([]);
       expect(start.get.parameters).toEqual([
         { $ref: "#/components/parameters/AuthPurpose" },
+        { $ref: "#/components/parameters/AuthReturnPath" },
       ]);
       expect(
         start.get.responses["405"],

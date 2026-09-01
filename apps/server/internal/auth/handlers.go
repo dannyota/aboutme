@@ -304,14 +304,14 @@ func (s *Service) writeSessionAPIInternalError(w http.ResponseWriter, r *http.Re
 
 // buildGoogleAuthorizeURL binds PKCE S256 and an OIDC nonce to the stored
 // transaction. start.go owns the GET-versus-POST response policy.
-func (s *Service) buildGoogleAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID) (handle, authURL, op string, err error) {
+func (s *Service) buildGoogleAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error) {
 	provider, err := s.googleProvider(ctx)
 	if err != nil {
 		return "", "", "google_provider_discovery", err
 	}
 
 	redirectURI := s.googleRedirectURL()
-	handle, tx, err := s.tx.Begin(ctx, ProviderGoogle, purpose, linkingUserID, redirectURI)
+	handle, tx, err := s.tx.begin(ctx, ProviderGoogle, purpose, linkingUserID, redirectURI, returnPath)
 	if err != nil {
 		return "", "", "begin_transaction", err
 	}
@@ -417,7 +417,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 		return
 	}
 
@@ -435,7 +435,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if found {
 		SetSessionCookie(w, rawSession)
 		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 		return
 	}
 
@@ -466,7 +466,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	SetSessionCookie(w, rawSession)
 	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.callbackSuccessRedirect(tx.Purpose), http.StatusFound)
+	http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
 }
 
 // emailLocalPart returns the text before "@", or the input when absent.
@@ -512,11 +512,11 @@ func (s *Service) callbackErrorRedirectBase(purpose Purpose) string {
 }
 
 // callbackSuccessRedirect selects the purpose-specific success page.
-func (s *Service) callbackSuccessRedirect(purpose Purpose) string {
-	if purpose == PurposeLink || purpose == PurposeReauth {
+func (s *Service) callbackSuccessRedirect(tx Transaction) string {
+	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
 		return s.publicOrigin + settingsSessionsPath
 	}
-	return s.publicOrigin + "/"
+	return s.publicOrigin + validatedLoginReturnPath(tx.ReturnPath)
 }
 
 // writeInternalError clears any transaction cookie, logs fixed failure data,
