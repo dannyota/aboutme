@@ -16,6 +16,7 @@ closes its owned rows before its exit checklist.
 | P4    | [Authenticated editor](../phase-4/README.md)     | `AC-EDITOR-001`–`AC-EDITOR-017`                   |
 | P5A   | [Publish and public SSR](../phase-5a/README.md)  | `AC-PUB`; P5A slices of `AC-OPS` and `AC-SEC-001` |
 | PA    | [Password authentication](../phase-pa/README.md) | `AC-AUTH-008`–`016`; `AC-SEC-005`; `AC-OPS-020`   |
+| PM    | [MCP agent access](../phase-pm/README.md)        | `AC-MCP-001`–`AC-MCP-010`                         |
 
 ## Matrix index
 
@@ -39,5 +40,6 @@ rows are never split by number range.
 | `AC-REN`    | 9    | [ac-ren.md](./ac-ren.md)       |
 | `AC-FONT`   | 1    | [ac-font.md](./ac-font.md)     |
 | `AC-EDITOR` | 17   | [ac-editor.md](./ac-editor.md) |
+| `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
 
-Total: 114 rows across 15 prefixes.
+Total: 124 rows across 16 prefixes.

@@ -27,22 +27,22 @@ and records the decision as an ADR, following the PA/ADR 0025 pattern.
 
 ## Current baseline
 
-| Slice                         | State                           | Remaining work                                  |
-| ----------------------------- | ------------------------------- | ----------------------------------------------- |
-| P0 foundations                | Complete                        | None                                            |
-| P0F TypeScript API client     | Complete                        | None                                            |
-| P1 authentication             | Complete                        | None                                            |
-| P1.1 authentication hardening | Complete                        | None                                            |
-| P2A resume domain and store   | Complete                        | None                                            |
-| P3 renderer lane              | Complete                        | None                                            |
-| P2B server lane               | Complete                        | None                                            |
-| P4 authenticated editor       | Complete                        | None                                            |
-| P5A publish and public SSR    | Complete                        | None                                            |
-| PA password authentication    | Complete                        | None                                            |
-| PF provider-login flag        | Not started                     | ADR, design amendment, config flag, UI gating   |
-| PM MCP agent access           | Not started                     | ADR, design amendment, MCP server, agent tokens |
-| P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
-| PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
+| Slice                         | State                           | Remaining work                                    |
+| ----------------------------- | ------------------------------- | ------------------------------------------------- |
+| P0 foundations                | Complete                        | None                                              |
+| P0F TypeScript API client     | Complete                        | None                                              |
+| P1 authentication             | Complete                        | None                                              |
+| P1.1 authentication hardening | Complete                        | None                                              |
+| P2A resume domain and store   | Complete                        | None                                              |
+| P3 renderer lane              | Complete                        | None                                              |
+| P2B server lane               | Complete                        | None                                              |
+| P4 authenticated editor       | Complete                        | None                                              |
+| P5A publish and public SSR    | Complete                        | None                                              |
+| PA password authentication    | Complete                        | None                                              |
+| PF provider-login flag        | Not started                     | ADR, design amendment, config flag, UI gating     |
+| PM MCP agent access           | Planned                         | Plan approved; dispatch T00 (ADR, roots, budgets) |
+| P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later          |
+| PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation   |
 
 The settings page uses authenticated CSRF-protected POST for provider linking
 and reauthentication. P1.1's contract, tests, browser proof, and gates agree.
@@ -210,7 +210,7 @@ human approval.
 | P5A   | [Publish and public SSR](phase-5a/README.md)                                  |
 | PA    | [Password authentication](phase-pa/README.md)                                 |
 | PF    | Provider-login flag — directory created at dispatch                           |
-| PM    | MCP agent access — directory created at dispatch                              |
+| PM    | [MCP agent access](phase-pm/README.md)                                        |
 | PI    | [Infrastructure](phase-pi/README.md)                                          |
 | P9    | [HTTPS overlay and local UAT](phase-9/README.md)                              |
 
