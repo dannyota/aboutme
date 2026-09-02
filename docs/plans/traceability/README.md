@@ -11,10 +11,10 @@ closes its owned rows before its exit checklist.
 
 ## Ownership
 
-The `Phase/task` column names the phase and tasks that own a row. Phases PM and
-PF are active; see [PM](../phase-pm/README.md) and [PF](../phase-pf/README.md).
-A completed phase's plan is deleted at exit, so its task IDs are history that
-git keeps. The test and acceptance references in each row remain the evidence.
+The `Phase/task` column names the phase and tasks that own a row. Phase PM is
+active; see [PM](../phase-pm/README.md). A completed phase's plan is deleted at
+exit, so its task IDs are history that git keeps. The test and acceptance
+references in each row remain the evidence.
 
 ## Matrix index
 

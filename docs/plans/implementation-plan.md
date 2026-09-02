@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 21, active** (2026-09-02).
+Status: **Revision 22, active** (2026-09-02).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -21,7 +21,7 @@ is described by [the architecture](../architecture.md), the code, and the
 Decided 2026-09-01 by the human owner:
 
 - **v1 authentication is password-only.** Provider (OAuth) login stays in the
-  code base behind a configuration flag and is disabled for v1. Phase PF owns
+  code base behind a configuration flag and is disabled for v1. Phase PF added
   the flag and UI gating; the provider code and tests remain so providers can
   return without a new phase.
 - **MCP agent access ships in v1.** Users bring their own agents, which build
@@ -33,27 +33,25 @@ Decided 2026-09-01 by the human owner:
 Complete and pushed: foundations, the TypeScript API client, provider
 authentication and its hardening, the resume domain and store, the renderer
 lane, resume HTTP and media, the authenticated editor, publish and public SSR,
-password authentication, and the native HTTPS development harness.
+password authentication, the native HTTPS development harness, and the v1 entry
+experience.
 
-| Phase | Work                                        | State                                                       |
-| ----- | ------------------------------------------- | ----------------------------------------------------------- |
-| PM    | [MCP agent access](phase-pm/README.md)      | Exit candidate: review confirmation and phase gates         |
-| PF    | [v1 entry experience](phase-pf/README.md)   | Planned: flag, landing, seed, capabilities, no-operator ADR |
-| P5B   | Publish UX                                  | Not started                                                 |
-| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                                 |
-| P7    | Print worker, public PDF and images         | Not started                                                 |
-| P8    | Privacy lifecycle                           | Not started                                                 |
-| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains             |
-| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation                    |
+| Phase | Work                                        | State                                               |
+| ----- | ------------------------------------------- | --------------------------------------------------- |
+| PM    | [MCP agent access](phase-pm/README.md)      | Exit candidate: review confirmation and phase gates |
+| P5B   | Publish UX                                  | Not started                                         |
+| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                         |
+| P7    | Print worker, public PDF and images         | Not started                                         |
+| P8    | Privacy lifecycle                           | Not started                                         |
+| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains     |
+| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation            |
 
 ## Delivery order
 
 1. PM closes its phase review and gates.
-2. PF: its ADR and design amendment land first; the flag may land any time
-   before P9.
-3. P5B publish UX and P6 realtime.
-4. P7 print and images, and P8 privacy lifecycle.
-5. P9 local UAT over the complete product, then human cloud authorization, PI
+2. P5B publish UX and P6 realtime.
+3. P7 print and images, and P8 privacy lifecycle.
+4. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
 
 Security controls are delivered inside every route-owning phase and verified end
@@ -70,14 +68,13 @@ feeds internal print SSR.
 | Privacy and disclosure review     | Qualified privacy counsel and human owner | Before P10 production promotion            |
 
 No other approval blocks development. Design v4, the template contract v2, and
-ADRs 0001–0026 are accepted.
+ADRs 0001–0028 are accepted.
 
 ## Dependency graph
 
 ```mermaid
 graph TD
     PM[PM MCP agent access] --> P9[P9 local UAT]
-    PF[PF provider-login flag] --> P9
     P5B[P5B publish UX] --> P9
     P6A[P6A SSE transport] --> P6B[P6B refetch and unpublish]
     P6B --> P9
