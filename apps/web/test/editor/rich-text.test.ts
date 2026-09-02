@@ -275,7 +275,7 @@ describe('RichTextEditor', () => {
     await editor.trigger('blur', { relatedTarget: bold.element });
     expect(wrapper.emitted('update:modelValue')).toBeUndefined();
 
-    await editor.trigger('blur', { relatedTarget: document.body });
+    await bold.trigger('blur', { relatedTarget: document.body });
     expect(wrapper.emitted('update:modelValue')).toHaveLength(1);
     expect(latestEmission(wrapper)).toBe('<p>draft</p><p>a</p>');
     wrapper.unmount();

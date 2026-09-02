@@ -126,17 +126,12 @@ function revertEscape(event: KeyboardEvent): void {
 }
 
 function handleBlur(event: FocusEvent): void {
-  const target = event.target;
   if (
     event.currentTarget instanceof HTMLElement
     && event.relatedTarget instanceof Node
     && event.currentTarget.contains(event.relatedTarget)
   ) return;
-  if (
-    isEditorSurface(target)
-    && !(event.relatedTarget instanceof Node
-      && editorRoot.value?.contains(event.relatedTarget))
-  ) commitBlur();
+  commitBlur();
 }
 
 function run(command: Command): void {
