@@ -9,7 +9,9 @@ slice.
 ## Implemented surface
 
 - `GET` and `HEAD` liveness and readiness probes.
-- Google and LinkedIn OpenID Connect plus GitHub OAuth login.
+- Google and LinkedIn OpenID Connect plus GitHub OAuth login, and
+  email-and-password registration, verification, login, reset,
+  reauthentication, and add/change.
 - Authenticated provider linking and reauthentication starts.
 - Opaque PostgreSQL-backed sessions, rotation with bounded predecessor grace,
   CSRF, current-user lookup, logout, session listing, per-session revoke, and
@@ -19,10 +21,20 @@ slice.
 - Resume and idempotency tables, bounded document validation and codec,
   owner-scoped store operations, revision compare-and-swap, transactional
   idempotency, pure projection, and compare-and-swap backfill.
+- The private resume HTTP surface: resume, entry, section, structure,
+  customization, and photo operations over private filesystem or S3 media.
+- Publish, unpublish, rename, and slug delete, with public JSON, photo, HTML,
+  Markdown, sitemap, robots, and llms.txt reads gated by publish state.
+- First-party OAuth 2.1 (dynamic client registration, S256 consent, token
+  rotation and revocation, discovery) and a bearer-authenticated MCP server
+  with fifteen resume tools.
+- Encrypted transactional authentication mail delivered through SES or a
+  loopback capture server.
 
-Resume HTTP, media, publishing, realtime, and rendering are not implemented.
-Delivery status lives in the
-[implementation plan](../../docs/plans/implementation-plan.md).
+Server-Sent Events, print and image rendering, and the privacy lifecycle
+workers are not implemented. The
+[current-state architecture](../../docs/architecture.md) records the exact
+boundary.
 
 ## Data sources
 
