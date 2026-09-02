@@ -131,7 +131,13 @@ Everything under "Editor shell" in the retained hooks list, the eight
   `[data-photo-state]` contains `Photo is loading` / `Photo unavailable`. In
   `test/editor/accessibility.test.ts` keep every assertion; the `ErrorSummary`
   focus case now expects `document.activeElement` to be the banner
-  (`wrapper.element`), which is unchanged.
+  (`wrapper.element`), which is unchanged. In `test/editor/theme.test.ts`,
+  replace the obsolete requirement for the deleted
+  `.editor-view-switcher button[aria-pressed="true"]` rule with an assertion
+  that the legacy selector is absent; the shared `Button` variants now own that
+  state. In `test/editor/persistence-boundary.test.ts`, mount the shell on
+  `document.body` and find `data-action="resume-after-auth"` there because the
+  session-loss dialog is now teleported.
 
 - [ ] Run and watch the changed cases fail:
 
