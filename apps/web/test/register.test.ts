@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   mockNuxtImport,
@@ -16,9 +13,6 @@ import {
   type PasswordIssue,
   usePasswordAuth,
 } from '../app/composables/usePasswordAuth';
-
-const here = dirname(fileURLToPath(import.meta.url));
-const webRoot = join(here, '..');
 
 // The credentials test needs to observe the `credentials` option, which the
 // test runtime's `$fetch` swallows before the h3 mock server sees it. Route
@@ -408,15 +402,5 @@ describe('register.vue', () => {
     const summary = wrapper.get('[data-testid="register-error"]');
     expect(summary.attributes('tabindex')).toBe('-1');
     expect(document.activeElement).toBe(summary.element);
-  });
-});
-
-describe('auth.css cleanup', () => {
-  it('has no legacy authentication rules', () => {
-    const source = readFileSync(
-      join(webRoot, 'app/assets/css/auth.css'),
-      'utf8',
-    );
-    expect(source).toBe('');
   });
 });

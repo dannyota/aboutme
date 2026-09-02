@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { CURRENT_VERSION } from '@aboutme/schema/released';
 
 import { HTML_CSP } from '../app/utils/csp';
 import { denyExternalRequests } from './support';
@@ -40,7 +41,16 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
       }),
     });
   });
-  await page.route('**/login', async (route) => {
+  await page.route('**/api/v1/resumes', async (route) => {
+    await route.fulfill({
+      headers: {
+        'Cache-Control': 'no-store, no-transform',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: { data: [] },
+    });
+  });
+  await page.route('**/app/resumes', async (route) => {
     const upstream = await route.fetch({ maxRedirects: 0, maxRetries: 0 });
     await route.fulfill({
       response: upstream,
@@ -51,9 +61,9 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
     });
   });
 
-  const response = await page.goto('/login');
+  const response = await page.goto('/app/resumes');
   expect(response?.headers()['content-security-policy']).toBe(HTML_CSP);
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
   await expect.poll(() => page.evaluate(() =>
     Boolean((document.getElementById('__nuxt') as HTMLElement & {
       __vue_app__?: unknown;
@@ -62,6 +72,17 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
+
+  await page.getByTestId('account-menu').click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toBeHidden();
+
+  await page.getByTestId('create-resume').click();
+  await expect(
+    page.getByRole('dialog', { name: 'Create resume' }),
+  ).toBeVisible();
+
   const violations = await page.evaluate(() =>
     (window as Window & { __cspViolations?: unknown[] }).__cspViolations ?? [],
   );

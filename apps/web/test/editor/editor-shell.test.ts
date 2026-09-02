@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
 import { computed, type ComputedRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
@@ -13,12 +11,6 @@ import type {
 } from '../../app/editor/publishController';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
-
-const appCss = readFileSync(
-  resolve(process.cwd(), 'app/assets/css/app.css'),
-  'utf8',
-);
-const compact = (value: string): string => value.replaceAll(/\s+/g, '');
 
 describe('EditorShell', () => {
   it('renders the four-region editor with adjacent account and theme', () => {
@@ -80,28 +72,6 @@ describe('EditorShell', () => {
       expect.arrayContaining(['grid', 'grid-rows-[auto_minmax(0,1fr)]']),
     );
   });
-
-  it(
-    'excludes shared Button primitives from legacy editor button rules',
-    () => {
-      const scope
-        = '.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, '
-          + '.editor-outline, .editor-inspector)';
-      const hoverSelector
-        = `${scope} button:not([data-slot="button"]):hover:not(:disabled)`;
-      const normalizedAppCss = compact(appCss);
-
-      expect(normalizedAppCss).toContain(
-        compact(`${scope} button:not([data-slot="button"])`),
-      );
-      expect(normalizedAppCss).toContain(
-        compact(hoverSelector),
-      );
-      expect(normalizedAppCss).toContain(
-        compact(`${scope} button:not([data-slot="button"]):disabled`),
-      );
-    },
-  );
 
   it(
     'derives the outline order from layout and changes local focus only',

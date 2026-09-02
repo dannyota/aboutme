@@ -93,7 +93,6 @@ describe('stylesheet contract (decisions U2)', () => {
     expect(theme).toMatch(/:root\s*\{[^}]*--background:/);
     expect(theme).toMatch(/html\[data-theme='dark'\]\s*\{[^}]*--background:/);
     expect(theme).toContain('--color-background: var(--background);');
-    expect(css('app.css')).not.toContain('--background:');
   });
 
   it('lists only the layered entry in nuxt css', () => {

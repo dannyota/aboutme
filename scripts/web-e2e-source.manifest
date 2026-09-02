@@ -1,12 +1,8 @@
 apps/web/app/api/client.ts
 apps/web/app/api/generated/openapi.ts
 apps/web/app/app.vue
-apps/web/app/assets/css/app.css
-apps/web/app/assets/css/auth.css
 apps/web/app/assets/css/base.css
-apps/web/app/assets/css/editor.css
 apps/web/app/assets/css/fonts.css
-apps/web/app/assets/css/landing.css
 apps/web/app/assets/css/tailwind.css
 apps/web/app/assets/css/theme.css
 apps/web/app/assets/fonts/alegreya-400.woff2
@@ -73,7 +69,6 @@ apps/web/app/components/editor/customization/CustomizationPanel.vue
 apps/web/app/components/editor/customization/fields.ts
 apps/web/app/components/editor/forms/ContactList.vue
 apps/web/app/components/editor/forms/DateRangeField.vue
-apps/web/app/components/editor/forms/OptionalField.vue
 apps/web/app/components/editor/forms/PersonalDetailsPanel.vue
 apps/web/app/components/editor/forms/SectionPanel.vue
 apps/web/app/components/editor/forms/YearMonthField.vue

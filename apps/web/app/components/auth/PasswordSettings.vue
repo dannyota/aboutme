@@ -13,7 +13,6 @@
  * a new one. The confirmation field is component-local (via `PasswordField`)
  * and is never submitted; `setPassword` receives exactly one password.
  */
-import '~/assets/css/auth.css';
 import PasswordField from './PasswordField.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import { Button } from '../ui/button';
