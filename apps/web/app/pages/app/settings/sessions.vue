@@ -332,7 +332,7 @@ const linkErrorMessage = computed(() => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
+        <Table class="table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead>Device</TableHead>
@@ -350,10 +350,11 @@ const linkErrorMessage = computed(() => {
               :key="session.id"
               :data-testid="`session-row-${session.id}`"
             >
-              <TableCell>
-                <span class="text-muted-foreground">{{
-                  session.ua ?? "Unknown device"
-                }}</span>
+              <TableCell class="whitespace-normal">
+                <span
+                  class="text-muted-foreground break-words"
+                  data-testid="session-user-agent"
+                >{{ session.ua ?? "Unknown device" }}</span>
                 <Badge
                   v-if="session.current"
                   class="ml-2"

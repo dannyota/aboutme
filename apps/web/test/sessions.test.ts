@@ -105,6 +105,15 @@ describe('sessions.vue', () => {
     expect(current.element.tagName).toBe('TR');
     expect(current.text()).toContain('This device');
     expect(current.find('[data-testid="revoke-button"]').exists()).toBe(false);
+    expect(wrapper.get('[data-slot="table"]').classes()).toContain(
+      'table-fixed',
+    );
+    expect(current.get('[data-slot="table-cell"]').classes()).toContain(
+      'whitespace-normal',
+    );
+    expect(
+      current.get('[data-testid="session-user-agent"]').classes(),
+    ).toContain('break-words');
   });
 
   it('revokes another session, sending the CSRF header', async () => {
