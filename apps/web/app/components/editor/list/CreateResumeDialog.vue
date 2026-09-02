@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
+import FormDialog from '@/components/app/FormDialog.vue';
+import FormField from '@/components/app/FormField.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const props = defineProps<{
   open: boolean;
@@ -17,7 +23,6 @@ const emit = defineEmits<{
 const title = ref('');
 const languageMode = ref<'absent' | 'clear' | 'value'>('absent');
 const language = ref('');
-const titleInput = ref<HTMLInputElement | null>(null);
 const returnFocus = ref<HTMLElement | null>(null);
 
 watch(() => props.open, (open) => {
@@ -25,7 +30,6 @@ watch(() => props.open, (open) => {
     returnFocus.value = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    void nextTick(() => titleInput.value?.focus());
   } else if (returnFocus.value !== null) {
     const target = returnFocus.value;
     returnFocus.value = null;
@@ -33,8 +37,12 @@ watch(() => props.open, (open) => {
   }
 }, { immediate: true });
 
-function close(): void {
-  if (!props.busy) emit('close');
+function refresh(): void {
+  if (props.retained !== null) emit('refresh', props.retained.intent.id);
+}
+
+function abandon(): void {
+  if (props.retained !== null) emit('abandon', props.retained.intent.id);
 }
 
 function submit(): void {
@@ -46,91 +54,106 @@ function submit(): void {
 </script>
 
 <template>
-  <div
-    v-if="open"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="create-resume-title"
-    aria-describedby="create-resume-description"
-    @keydown.esc="close"
+  <FormDialog
+    :open="open"
+    title="Create resume"
+    description="Create a new private resume."
+    submit-label="Create"
+    :busy="busy"
+    @cancel="emit('close')"
+    @submit="submit"
   >
-    <h2 id="create-resume-title">
-      Create resume
-    </h2>
-    <p id="create-resume-description">
-      Create a new private resume.
-    </p>
     <template v-if="retained !== null">
       <p role="alert">
         We could not confirm whether this resume was created.
       </p>
-      <button
-        type="button"
+    </template>
+    <template v-else>
+      <FormField
+        label="Title"
+        name="title"
+        required
+      >
+        <template #default="{ id, describedBy, invalid }">
+          <Input
+            :id="id"
+            v-model="title"
+            :aria-describedby="describedBy"
+            :aria-invalid="invalid"
+            name="title"
+            required
+            :disabled="busy"
+          />
+        </template>
+      </FormField>
+      <FormField label="Language">
+        <template #default="{ id, describedBy }">
+          <RadioGroup
+            :id="id"
+            v-model="languageMode"
+            :aria-describedby="describedBy"
+            :disabled="busy"
+          >
+            <div class="flex items-center gap-2">
+              <RadioGroupItem
+                id="language-absent"
+                value="absent"
+              />
+              <Label for="language-absent">Leave unchanged</Label>
+            </div>
+            <div class="flex items-center gap-2">
+              <RadioGroupItem
+                id="language-clear"
+                value="clear"
+              />
+              <Label for="language-clear">Clear language</Label>
+            </div>
+            <div class="flex items-center gap-2">
+              <RadioGroupItem
+                id="language-value"
+                value="value"
+              />
+              <Label for="language-value">Set language</Label>
+            </div>
+          </RadioGroup>
+        </template>
+      </FormField>
+      <FormField
+        v-if="languageMode === 'value'"
+        label="Language value"
+        name="lng"
+      >
+        <template #default="{ id, describedBy, invalid }">
+          <Input
+            :id="id"
+            v-model="language"
+            :aria-describedby="describedBy"
+            :aria-invalid="invalid"
+            name="lng"
+            :disabled="busy"
+          />
+        </template>
+      </FormField>
+    </template>
+    <template
+      v-if="retained !== null"
+      #footer
+    >
+      <Button
         :disabled="busy"
-        @click="$emit('refresh', retained.intent.id)"
+        type="button"
+        variant="outline"
+        @click="refresh"
       >
         Refresh list
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
         :disabled="busy"
-        @click="$emit('abandon', retained.intent.id)"
+        type="button"
+        @click="abandon"
       >
         Abandon
-      </button>
+      </Button>
     </template>
-    <form
-      v-else
-      @submit.prevent="submit"
-    >
-      <label>
-        Title
-        <input
-          ref="titleInput"
-          v-model="title"
-          required
-          name="title"
-          :disabled="busy"
-        >
-      </label>
-      <fieldset :disabled="busy">
-        <legend>Language</legend>
-        <label><input
-          v-model="languageMode"
-          type="radio"
-          value="absent"
-        > Leave unchanged</label>
-        <label><input
-          v-model="languageMode"
-          type="radio"
-          value="clear"
-        > Clear language</label>
-        <label><input
-          v-model="languageMode"
-          type="radio"
-          value="value"
-        > Set language</label>
-        <label v-if="languageMode === 'value'">
-          Language value
-          <input
-            v-model="language"
-            name="lng"
-          >
-        </label>
-      </fieldset>
-      <button
-        type="submit"
-        :disabled="busy"
-      >
-        Create
-      </button>
-      <button
-        type="button"
-        :disabled="busy"
-        @click="close"
-      >
-        Cancel
-      </button>
-    </form>
-  </div>
+  </FormDialog>
 </template>
