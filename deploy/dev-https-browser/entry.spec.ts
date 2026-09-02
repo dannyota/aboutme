@@ -3,12 +3,14 @@ import { writeFile } from 'node:fs/promises';
 import {
   installExternalRequestFirewall,
   installExternalWebSocketFirewall,
-  isUnexpectedConsoleError,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
   waitForHydration,
 } from './harness-lib';
-import { ALLOWED_ORIGIN } from './network-policy';
+import {
+  ALLOWED_ORIGIN,
+  isExpectedAnonymousMeConsole,
+} from './network-policy';
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/entry-proof.json';
@@ -23,6 +25,7 @@ const steps = {
   providerLinks: false,
   resumeList: false,
   signIn: false,
+  signOut: false,
   signedInShell: false,
 };
 
@@ -43,7 +46,10 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
   await installExternalWebSocketFirewall(context, counters);
   const page = await context.newPage();
   pageDiagnosticsAttacher(counters, {
-    countConsoleError: isUnexpectedConsoleError,
+    countConsoleError: (message) => !isExpectedAnonymousMeConsole(
+      message.text(),
+      message.location().url,
+    ),
   })(page);
 
   try {
@@ -106,6 +112,8 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
       .first()
       .click();
     await expect(page).toHaveURL(`${ORIGIN}/login`);
+    await expectSignedOutShell(page);
+    steps.signOut = true;
   } finally {
     const evidence = {
       errors: {
