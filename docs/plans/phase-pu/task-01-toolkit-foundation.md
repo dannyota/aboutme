@@ -23,6 +23,8 @@ regenerates the lockfile, and runs the renderer suites.
 - The three existing files under `components/ui` move to `components/app`
   unchanged, and their importers follow.
 - `test/ui/toolkit.test.ts` pins the stylesheet contract.
+- The normal CSP proof stubs `/me` and capabilities because its isolated Nuxt
+  server has no Go API proxy.
 - The renderer suites pass with no baseline change.
 
 **Interfaces:**

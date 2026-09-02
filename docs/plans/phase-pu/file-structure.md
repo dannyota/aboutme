@@ -13,6 +13,7 @@ The integration owner serializes these exact edits:
 | T07         | T01             | `EditorShell.vue`: change moved shell imports and remove the legacy CSS import only                                            |
 | T03         | T01             | Shell/theme tests: update moved import paths only                                                                              |
 | T01         | T03             | `app/app.vue`: replace the moved `AppChrome` render with `AppShell` only                                                       |
+| T13         | T01             | `e2e/normal-csp.spec.ts`: add deterministic `/me` and capabilities fixtures only                                               |
 | T13         | T01/T04/T05/T07 | Legacy stylesheets: move tokens/imports, delete only named surface rules, then delete the files                                |
 
 No two windows on one row run together. The final owner rebuilds its file only
@@ -41,6 +42,7 @@ after every earlier window is integrated.
 - `test/ui/toolkit.test.ts`; contract updates in `test/fonts.test.ts` and
   `test/harness-absent.test.ts`
 - `scripts/web-e2e-source.manifest` (integration-owner source-path update)
+- `e2e/normal-csp.spec.ts` deterministic API-fixture window
 - Import-path updates in `app/app.vue`, `EditorShell.vue`,
   `test/app-chrome.test.ts`, `test/logout-state.test.ts`,
   `test/editor/theme.test.ts`
@@ -135,6 +137,7 @@ T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
   `tailwind.css` import lines removed
 - `app/components/editor/forms/OptionalField.vue` deleted
 - `test/ui/surface-boundary.test.ts`
+- `e2e/normal-csp.spec.ts`
 - `README.md` (UI conventions section)
 - `docs/architecture.md`, `docs/plans/implementation-plan.md`,
   `docs/plans/traceability/ac-ui.md`, `docs/runbooks/local-uat.md` if a proof
