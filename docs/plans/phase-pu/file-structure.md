@@ -68,8 +68,9 @@ after every earlier window is integrated.
 - T03 owner windows in the shared-path table for `EditorShell.vue` and
   `test/editor/editor-shell.test.ts`
 
-The integration owner narrows `app/components/editor/forms/fieldIntent.ts` after
-T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
+The integration owner narrows `app/components/editor/forms/fieldIntent.ts` in
+T13 after deleting the final legacy `OptionalField.vue` producer, then runs web
+typecheck before the T13 gates.
 
 ## T04 — Entry pages
 
@@ -144,6 +145,7 @@ T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
 - `app/assets/css/{app,editor,auth,landing}.css` deleted and their
   `tailwind.css` import lines removed
 - `app/components/editor/forms/OptionalField.vue` deleted
+- `app/components/editor/forms/fieldIntent.ts`
 - `test/ui/surface-boundary.test.ts`
 - `e2e/normal-csp.spec.ts`
 - `README.md` (UI conventions section)

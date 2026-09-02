@@ -13,8 +13,8 @@ under `app/components/app/`, each with `<script setup lang="ts">`, explicit
 primitive imports, no `<style>` block, and a `class` pass-through. Replace
 `AppChrome.vue` and `AccountControl.vue` with `AppShell.vue` and
 `AccountMenu.vue`; rebuild `ThemeToggle.vue` in place. Emit only `set | unset`;
-the integration owner narrows `fieldIntent.ts` after T08 and T09 remove the
-remaining legacy `clear` producers. Retarget the three shell tests.
+the integration owner narrows `fieldIntent.ts` in T13 when it deletes the final
+legacy `OptionalField.vue` producer. Retarget the three shell tests.
 
 **Interfaces:**
 
@@ -33,8 +33,8 @@ remaining legacy `clear` producers. Retarget the three shell tests.
 - [ ] **fieldIntent inventory.** Run `make web-typecheck`, inventory every
       current `clear` producer in the T08 and T09 paths, and record the list. Do
       not narrow the shared type yet; that would make this task and W3 fail
-      their typecheck boundary. After T08 and T09 land, the integration owner
-      changes it to:
+      their typecheck boundary. In T13, after deleting the final legacy
+      `OptionalField.vue` producer, the integration owner changes it to:
 
   ```ts
   export type FieldIntent<T> =
