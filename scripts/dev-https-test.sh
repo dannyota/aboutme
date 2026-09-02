@@ -358,6 +358,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_URL=http://127.0.0.1:20444'
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_BEARER='
   assert_contains "$server_env" 'MCP_ENABLED=true'
+  assert_contains "$server_env" 'PROVIDER_LOGIN_ENABLED=true'
 
   [ -f .dev/native-https/input/caddy-root.crt ] || fail "exported Caddy root is missing"
   mode=$(stat -c '%a' .dev/native-https/input/caddy-root.crt)

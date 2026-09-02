@@ -1,7 +1,15 @@
 import { defineConfig } from '@playwright/test';
 
 const baseURL = 'https://localhost:20443';
-const browserModes = ['auth', 'transport', 'editor', 'public', 'password-auth', 'mcp'] as const;
+const browserModes = [
+  'auth',
+  'transport',
+  'editor',
+  'public',
+  'password-auth',
+  'mcp',
+  'entry',
+] as const;
 type BrowserMode = typeof browserModes[number];
 const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
 

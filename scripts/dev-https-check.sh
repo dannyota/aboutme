@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 # One entry point for the trusted-browser proofs (auth, transport, editor,
-# public, password-auth). Stages an immutable per-run copy of the spec
+# public, password-auth, MCP, and entry). Stages an immutable per-run copy of
+# the spec
 # sources and mounts it into the pinned browser image, so editing a spec
 # never requires an image rebuild; the image manifest gates only the
 # image-side sources (Dockerfile, run.sh, package manifests).
@@ -35,6 +36,7 @@ readonly -a SPEC_SOURCES=(
   public.spec.ts
   password-auth.spec.ts
   mcp.spec.ts
+  entry.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -60,9 +62,10 @@ password-auth)
   TARGET=dev-https-password-check
   ;;
 mcp) evidence_prefix=mcp ;;
+entry) evidence_prefix=entry ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry'
   ;;
 esac
 
@@ -210,6 +213,12 @@ elif [ "$MODE" = mcp ]; then
   mcp_seeded=1
   "$mcp_fixture" seed --database-url "$NATIVE_DSN" \
     --client-name "$mcp_client_name"
+elif [ "$MODE" = entry ]; then
+  install -d -m 0700 "$REPO/.dev/bin"
+  (cd "$REPO/apps/server" &&
+    go build -o "$REPO/.dev/bin/dev-seed" ./cmd/dev-seed) ||
+    fail 'dev-seed build failed'
+  "$REPO/.dev/bin/dev-seed" seed --database-url "$NATIVE_DSN"
 fi
 
 evidence=$(mktemp -d "$EVIDENCE_ROOT/$evidence_prefix.XXXXXX")

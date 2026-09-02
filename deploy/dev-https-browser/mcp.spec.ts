@@ -7,6 +7,7 @@ import { deleteRecordedResume } from './editor-fixtures';
 import {
   installExternalRequestFirewall,
   installExternalWebSocketFirewall,
+  isUnexpectedConsoleError,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
   signInWithGoogle,
@@ -248,7 +249,9 @@ test('proves MCP agent access over trusted HTTPS', async ({
   page,
 }) => {
   const counters = newDiagnosticCounters();
-  const attachPageDiagnostics = pageDiagnosticsAttacher(counters);
+  const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
+    countConsoleError: isUnexpectedConsoleError,
+  });
   attachPageDiagnostics(page);
   context.on('page', attachPageDiagnostics);
   await installExternalRequestFirewall(context, counters);

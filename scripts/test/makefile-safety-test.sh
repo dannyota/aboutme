@@ -110,7 +110,7 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,run.sh} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,entry.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,run.sh} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
 cp "$ROOT/scripts/dev-https-check.sh" "$HTTPS_REPO/scripts/dev-https-check.sh"
 printf '%s\n' 'static test root' > \
@@ -560,6 +560,48 @@ grep -Fxq mcp "$HTTPS_MCP_LOG" || {
 [ "$(grep -c '^cleanup$' "$HTTPS_MCP_LOG")" -eq 2 ] &&
   [ "$(grep -c '^seed$' "$HTTPS_MCP_LOG")" -eq 1 ] || {
   printf 'makefile-safety-test: mcp fixture seed/cleanup drifted\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-entry-check \
+  >"$WORK/https-entry-preflight.out" 2>&1; then
+  printf 'makefile-safety-test: entry check passed failed status\n' >&2
+  exit 1
+fi
+if read_https_calls | grep -Eq '^(podman|fixture)$'; then
+  printf 'makefile-safety-test: entry check mutated after failed status\n' >&2
+  exit 1
+fi
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 4 ] || {
+  printf 'makefile-safety-test: failed entry preflight created evidence\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+run_https_make dev-https-entry-check >"$WORK/https-entry.out" 2>&1 || {
+  sed -n '1,120p' "$WORK/https-entry.out" >&2
+  printf 'makefile-safety-test: entry check target failed\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 5 ] || {
+  printf 'makefile-safety-test: entry check did not create separate evidence\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'entry.*' | wc -l)" -eq 1 ] || {
+  printf 'makefile-safety-test: entry evidence directory naming drifted\n' >&2
+  exit 1
+}
+HTTPS_ENTRY_LOG=$WORK/https-entry-runtime.calls
+read_https_calls >"$HTTPS_ENTRY_LOG"
+grep -Fxq entry "$HTTPS_ENTRY_LOG" || {
+  printf 'makefile-safety-test: entry mode did not reach the runner\n' >&2
+  exit 1
+}
+[ "$(grep -c '^fixture$' "$HTTPS_ENTRY_LOG")" -eq 1 ] &&
+  [ "$(grep -c '^seed$' "$HTTPS_ENTRY_LOG")" -eq 1 ] &&
+  [ "$(grep -c '^cleanup$' "$HTTPS_ENTRY_LOG")" -eq 0 ] || {
+  printf 'makefile-safety-test: entry seed lifecycle drifted\n' >&2
   exit 1
 }
 

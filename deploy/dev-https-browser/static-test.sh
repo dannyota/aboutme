@@ -21,6 +21,7 @@ readonly -a SPEC_FILES=(
   public.spec.ts
   password-auth.spec.ts
   mcp.spec.ts
+  entry.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -155,7 +156,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public | password-auth | mcp)
+  transport | editor | public | password-auth | mcp | entry)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -361,7 +362,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, or mcp' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -555,6 +556,14 @@ if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
   <<<"$MCP_LIST_OUTPUT"; then
   fail 'mcp mode listed the auth proof'
 fi
+readonly ENTRY_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=entry \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
+grep -Fq 'landing, sign-in, and the signed-in shell' \
+  <<<"$ENTRY_LIST_OUTPUT" || fail 'Playwright could not compile and list the entry proof'
+if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
+  <<<"$ENTRY_LIST_OUTPUT"; then
+  fail 'entry mode listed the auth proof'
+fi
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
@@ -671,6 +680,7 @@ malformed)
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
   *' password-auth.spec.ts '*) evidence=password-proof.json ;;
   *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
+  *' entry.spec.ts '*) evidence=entry-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -681,6 +691,7 @@ oversized)
   *' transport.spec.ts '*) evidence=transport-proof.json ;;
   *' password-auth.spec.ts '*) evidence=password-proof.json ;;
   *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
+  *' entry.spec.ts '*) evidence=entry-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -728,6 +739,17 @@ JSON
   "scenario": "mcp-agent-access",
   "schemaVersion": 1,
   "steps": {"clientRegistered": true, "authorizeRedirected": true, "consentApproved": true, "tokenExchanged": true, "toolsListed": true, "resumeCreated": true, "entryUpserted": true, "editorVisible": true, "grantRevoked": true, "revokedRejected": true}
+}
+JSON
+    ;;
+  *' entry.spec.ts '*)
+    cat >"$FAKE_INSIDE_EVIDENCE/entry-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "entry-flow",
+  "schemaVersion": 1,
+  "steps": {"landing": true, "providerLinks": true, "resumeList": true, "signIn": true, "signedInShell": true}
 }
 JSON
     ;;
@@ -818,7 +840,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, or mcp' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -1067,5 +1089,35 @@ fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized mcp evidence returned the wrong diagnostic'
 rm -- "$INSIDE_INPUT/mcp-client-name"
+
+reset_inside
+readonly ENTRY_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside entry)
+grep -Fq 'dev-https-browser entry flow proof: PASS' \
+  <<<"$ENTRY_INSIDE_OUTPUT" ||
+  fail 'inside-container entry success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts entry.spec.ts' \
+  "$BROWSER_LOG" || fail 'focused entry invocation drifted'
+grep -Fxq 'MODE=entry' "$BROWSER_LOG" ||
+  fail 'entry mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/entry-proof.json" ] ||
+  fail 'entry evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/entry-proof.json")" = 600 ] ||
+  fail 'entry evidence mode drifted'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside entry 2>&1); then
+  fail 'malformed entry evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed entry evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside entry 2>&1); then
+  fail 'oversized entry evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
+  fail 'oversized entry evidence returned the wrong diagnostic'
 
 printf '%s\n' 'dev-https-browser static tests: PASS'
