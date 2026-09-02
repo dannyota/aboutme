@@ -8,11 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/password"
 )
@@ -76,22 +76,20 @@ func validateDatabaseURL(raw string) error {
 	if strings.TrimSpace(raw) == "" {
 		return errors.New("--database-url is required")
 	}
-	u, err := url.Parse(raw)
+	connConfig, err := pgx.ParseConfig(raw)
 	if err != nil {
-		return fmt.Errorf("--database-url is not a valid URL: %w", err)
+		return errors.New("--database-url must be a valid postgres connection string")
 	}
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return fmt.Errorf("--database-url scheme must be postgres or postgresql, got %q", u.Scheme)
+	if connConfig.Host != "127.0.0.1" {
+		return fmt.Errorf("--database-url must target loopback 127.0.0.1, got %q", connConfig.Host)
 	}
-	if host := u.Hostname(); host != "127.0.0.1" {
-		return fmt.Errorf("--database-url must target loopback 127.0.0.1, got %q", host)
+	for _, fallback := range connConfig.Fallbacks {
+		if fallback.Host != "127.0.0.1" {
+			return fmt.Errorf("--database-url must target loopback 127.0.0.1, got %q", fallback.Host)
+		}
 	}
-	name := strings.Trim(u.Path, "/")
-	if name == "" {
-		return errors.New("--database-url must name a database")
-	}
-	if name != seedDatabase {
-		return fmt.Errorf("--database-url must target database %q (explicit opt-in), got %q", seedDatabase, name)
+	if connConfig.Database != seedDatabase {
+		return fmt.Errorf("--database-url must target database %q (explicit opt-in), got %q", seedDatabase, connConfig.Database)
 	}
 	return nil
 }
@@ -122,6 +120,28 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 // runSeedWithDB creates the user, credential, and resume when their fixed IDs
 // are absent. It never updates an existing row.
 func runSeedWithDB(ctx context.Context, db *sql.DB) error {
+	var existingEmail string
+	err := db.QueryRowContext(ctx,
+		`SELECT email::text FROM users WHERE id = $1`, seedUser.ID,
+	).Scan(&existingEmail)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("check seed user id: %w", err)
+	}
+	if err == nil && existingEmail != seedUser.Email {
+		return fmt.Errorf("seed fixed id exists under a different email; remove that account or change the seed")
+	}
+
+	var resumeOwnerID uuid.UUID
+	err = db.QueryRowContext(ctx,
+		`SELECT user_id FROM resumes WHERE id = $1`, seedResumeID,
+	).Scan(&resumeOwnerID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("check seed resume id: %w", err)
+	}
+	if err == nil && resumeOwnerID != seedUser.ID {
+		return errors.New("seed resume id is owned by a different user; remove that resume or change the seed")
+	}
+
 	var otherID uuid.NullUUID
 	if err := db.QueryRowContext(ctx,
 		`SELECT id FROM users WHERE email = $1::citext AND id <> $2`, seedUser.Email, seedUser.ID,
@@ -187,11 +207,48 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 // runCleanupWithDB deletes exactly the two seed rows by ID; sessions,
 // credentials, and idempotency records cascade from the user.
 func runCleanupWithDB(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `DELETE FROM resumes WHERE id = $1`, seedResumeID); err != nil {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin cleanup: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var lockedUserEmail string
+	err = tx.QueryRowContext(ctx, `SELECT email::text FROM users WHERE id = $1 FOR UPDATE`, seedUser.ID).Scan(&lockedUserEmail)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock seed user for cleanup: %w", err)
+	}
+	if err == nil && lockedUserEmail != seedUser.Email {
+		return errors.New("refusing cleanup: seed fixed id exists under a different email")
+	}
+
+	var resumeOwnerID uuid.UUID
+	err = tx.QueryRowContext(ctx, `SELECT user_id FROM resumes WHERE id = $1`, seedResumeID).Scan(&resumeOwnerID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("check seed resume owner for cleanup: %w", err)
+	}
+	if err == nil && resumeOwnerID != seedUser.ID {
+		return errors.New("refusing cleanup: seed resume id is owned by a different user")
+	}
+
+	var hasNonSeedResume bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM resumes WHERE user_id = $1 AND id <> $2)`, seedUser.ID, seedResumeID,
+	).Scan(&hasNonSeedResume); err != nil {
+		return fmt.Errorf("check non-seed resumes: %w", err)
+	}
+	if hasNonSeedResume {
+		return errors.New("refusing cleanup: seed user owns a non-seed resume")
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM resumes WHERE id = $1 AND user_id = $2`, seedResumeID, seedUser.ID); err != nil {
 		return fmt.Errorf("delete resume: %w", err)
 	}
-	if _, err := db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, seedUser.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = $1 AND email = $2::citext`, seedUser.ID, seedUser.Email); err != nil {
 		return fmt.Errorf("delete user: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit cleanup: %w", err)
 	}
 	return nil
 }
