@@ -18,6 +18,7 @@ readonly -a SPEC_SOURCES=(
   public.spec.ts
   password-auth.spec.ts
   mcp.spec.ts
+  entry.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -69,8 +70,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, or mcp' ;;
+  auth | transport | editor | public | password-auth | mcp | entry) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -199,6 +200,12 @@ inside_container() {
     proof_name='MCP agent access'
     spec=mcp.spec.ts
     ;;
+  entry)
+    evidence_name=entry-proof.json
+    evidence_limit=4096
+    proof_name='entry flow'
+    spec=entry.spec.ts
+    ;;
   esac
   # Stage the mounted specs beside a node_modules symlink so module
   # resolution finds the image's pinned dependencies. The image package.json
@@ -308,6 +315,17 @@ const expected = mode === 'auth' ? {
     grantRevoked: true,
     revokedRejected: true,
   },
+} : mode === 'entry' ? {
+  ...common,
+  scenario: 'entry-flow',
+  schemaVersion: 1,
+  steps: {
+    landing: true,
+    providerLinks: true,
+    resumeList: true,
+    signIn: true,
+    signedInShell: true,
+  },
 } : {
   schemaVersion: 1,
   scenario: 'authenticated-editor',
@@ -339,11 +357,11 @@ VERIFY_EVIDENCE
 
 host_run() {
   [ "$#" -ge 4 ] && [ "$#" -le 5 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp]'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry]'
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, or mcp' ;;
+  auth | transport | editor | public | password-auth | mcp | entry) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra

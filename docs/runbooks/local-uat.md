@@ -25,9 +25,13 @@ make dev-https-status
 make dev-https-browser-image
 make dev-https-auth-check
 make dev-https-mcp-check
+make dev-https-entry-check
 make dev-https-down
 make dev-native
 ```
+
+The entry check seeds the development account, proves the landing page, sign-in,
+and signed-in shell, and signs out; it deletes nothing.
 
 The browser image imports only the root exported by this harness. It uses no TLS
 bypass and permits network traffic only to the fixed HTTPS origin. Each check
