@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, useId, watch } from 'vue';
+import {
+  computed,
+  onBeforeMount,
+  ref,
+  useId,
+  watch,
+} from 'vue';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -35,6 +41,8 @@ const typed = ref('');
 const confirmId = `confirm-${useId()}`;
 const confirmButton = ref<{ $el?: HTMLElement } | null>(null);
 const cancelButton = ref<{ $el?: HTMLElement } | null>(null);
+const opener = ref<HTMLElement | null>(null);
+const restorePending = ref(false);
 const inputLabel = computed(
   () => props.confirmInputLabel ?? `Type ${props.confirmText ?? ''} to confirm`,
 );
@@ -43,11 +51,38 @@ const canConfirm = computed(
     !props.busy
     && (props.confirmText === undefined || typed.value === props.confirmText),
 );
+function captureOpener(): void {
+  if (typeof document === 'undefined') return;
+  const active = document.activeElement;
+  opener.value = active instanceof HTMLElement ? active : null;
+}
+function restoreOpener(): void {
+  const element = opener.value;
+  if (!element?.isConnected) {
+    restorePending.value = false;
+    return;
+  }
+  element.focus();
+  restorePending.value = document.activeElement !== element;
+}
+onBeforeMount(() => {
+  if (props.open) captureOpener();
+});
 watch(
   () => props.open,
-  (open) => {
+  (open, wasOpen) => {
+    if (open && !wasOpen) captureOpener();
     if (!open) typed.value = '';
   },
+);
+watch(
+  () => props.busy,
+  (busy, wasBusy) => {
+    if (!busy && wasBusy && !props.open && restorePending.value) {
+      restoreOpener();
+    }
+  },
+  { flush: 'post' },
 );
 function onOpenChange(open: boolean): void {
   if (!open && !props.busy) emit('cancel');
@@ -55,6 +90,10 @@ function onOpenChange(open: boolean): void {
 function onOpenAutoFocus(event: Event): void {
   event.preventDefault();
   (props.destructive ? cancelButton.value : confirmButton.value)?.$el?.focus();
+}
+function onCloseAutoFocus(event: Event): void {
+  event.preventDefault();
+  restoreOpener();
 }
 function onEscape(event: Event): void {
   if (props.busy) event.preventDefault();
@@ -69,6 +108,7 @@ function onEscape(event: Event): void {
     <AlertDialogContent
       :class="cn(props.class)"
       :aria-busy="busy || undefined"
+      @close-auto-focus="onCloseAutoFocus"
       @escape-key-down="onEscape"
       @open-auto-focus="onOpenAutoFocus"
     >

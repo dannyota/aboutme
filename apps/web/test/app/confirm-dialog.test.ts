@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
-import { describe, expect, it } from 'vitest';
+import { defineComponent, h, nextTick, ref } from 'vue';
+import { describe, expect, it, vi } from 'vitest';
 
 import ConfirmDialog from '../../app/components/app/ConfirmDialog.vue';
 
@@ -117,6 +117,91 @@ describe('ConfirmDialog', () => {
     wrapper.unmount();
     trigger.remove();
   });
+  it(
+    'restores the exact parent-controlled opener after each action',
+    async () => {
+      const Parent = defineComponent({
+        setup() {
+          const openState = ref(false);
+          const busy = ref(false);
+          const close = () => {
+            openState.value = false;
+          };
+          const confirm = () => {
+            busy.value = true;
+            openState.value = false;
+          };
+          const finish = () => {
+            busy.value = false;
+          };
+          return () => h('div', [
+            h(
+              'button',
+              {
+                'data-testid': 'opener',
+                'disabled': busy.value,
+                'onClick': () => {
+                  openState.value = true;
+                },
+              },
+              'Open',
+            ),
+            h(
+              'button',
+              { 'data-testid': 'finish', 'onClick': finish },
+              'Finish',
+            ),
+            h(ConfirmDialog, {
+              open: openState.value,
+              busy: busy.value,
+              title: 'Delete resume',
+              description: 'This cannot be undone.',
+              confirmLabel: 'Delete',
+              confirmAction: 'confirm-delete',
+              cancelAction: 'cancel-delete',
+              onCancel: close,
+              onConfirm: confirm,
+            }),
+          ]);
+        },
+      });
+      const wrapper = mount(Parent, { attachTo: document.body });
+      const dialog = wrapper.findComponent(ConfirmDialog);
+      const trigger = wrapper.get('[data-testid="opener"]');
+      (trigger.element as HTMLButtonElement).focus();
+      await trigger.trigger('click');
+      await nextTick();
+      await nextTick();
+      body()
+        .querySelector<HTMLButtonElement>('[data-action="cancel-delete"]')!
+        .click();
+      expect(dialog.emitted('cancel')).toHaveLength(1);
+      await vi.waitFor(() => {
+        expect(body().querySelector('[role="alertdialog"]')).toBeNull();
+      });
+      expect(document.activeElement).toBe(trigger.element);
+
+      (trigger.element as HTMLButtonElement).focus();
+      await trigger.trigger('click');
+      await nextTick();
+      await nextTick();
+      body()
+        .querySelector<HTMLButtonElement>('[data-action="confirm-delete"]')!
+        .click();
+      expect(dialog.emitted('confirm')).toHaveLength(1);
+      await vi.waitFor(() => {
+        expect(body().querySelector('[role="alertdialog"]')).toBeNull();
+      });
+      expect((trigger.element as HTMLButtonElement).disabled).toBe(true);
+      await wrapper.get('[data-testid="finish"]').trigger('click');
+      await nextTick();
+      expect((trigger.element as HTMLButtonElement).disabled).toBe(false);
+      expect(document.activeElement).toBe(trigger.element);
+
+      wrapper.unmount();
+      trigger.element.remove();
+    },
+  );
   it('ignores Escape while busy', async () => {
     const { wrapper } = open({ busy: true });
     await nextTick();
