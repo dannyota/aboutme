@@ -85,10 +85,11 @@
     )!;
     expect(confirm.disabled).toBe(true);
     const input = document.body.querySelector<HTMLInputElement>(
-      '[role="alertdialog"] input',
+      '[role="alertdialog"] [data-slot="input"]',
     )!;
     expect(
-      document.body.querySelector(`label[for="${input.id}"]`)!.textContent,
+      document.body.querySelector(`[data-slot="label"][for="${input.id}"]`)!
+        .textContent,
     ).toContain("Current title");
     input.value = "First";
     input.dispatchEvent(new Event("input"));
@@ -177,7 +178,8 @@
   `new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })`
   (this is chrome, not renderer, so `Intl` is allowed). If `ResumeSummary` has
   no `updatedAt`, drop the column and its test line and record it. The
-  removal-focus selector becomes `[data-testid="resume-row-${id}"] button`.
+  removal-focus selector becomes
+  `[data-testid="resume-row-${id}"] [aria-label^="Rename "]`.
 
 - [ ] **Page template:** `PageHeader` with the create `Button` in `#actions`
       (`data-testid="create-resume"`), then the state branches; the empty state

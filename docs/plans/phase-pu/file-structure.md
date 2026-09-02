@@ -74,7 +74,7 @@ T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
 ## T04 — Entry pages
 
 - `app/pages/{index,login,register,forgot-password,reset-password,verify-email,authorize}.vue`
-- `app/components/auth/PasswordField.vue`
+- `app/components/auth/{AuthCard,PasswordField}.vue`
 - `test/{landing,login,register,forgot-password,reset-password,verify-email,authorize}.test.ts`
 - Legacy rules deleted from `app/assets/css/{auth,landing}.css` (files stay
   until T13)
