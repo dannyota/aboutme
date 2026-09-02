@@ -240,7 +240,9 @@ async function startOAuth(
 // rejects with a PasswordSettingsFailure rather than a raw server body. The
 // provider round trip reuses the same authorizeURL validation as linking.
 const passwordProviders = computed(
-  () => identities.value.map((identity) => identity.provider),
+  () => providerLogin.value
+    ? identities.value.map((identity) => identity.provider)
+    : [],
 );
 
 const passwordActions: PasswordSettingsActions = {
@@ -333,7 +335,7 @@ const linkErrorMessage = computed(() => {
     </p>
 
     <p
-      v-if="reauthRequired && reauthProvider"
+      v-if="providerLogin && reauthRequired && reauthProvider"
       data-testid="reauth-prompt"
       role="alert"
     >

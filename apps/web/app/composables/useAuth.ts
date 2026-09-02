@@ -117,6 +117,7 @@ export function useAuth(): UseAuthReturn {
       return 'anonymous';
     }
     if (error.value) return 'error';
+    if (data.value === null || data.value === undefined) return 'anonymous';
     return data.value?.data?.user === undefined ? 'error' : 'authenticated';
   });
 
@@ -170,6 +171,7 @@ export function useAuth(): UseAuthReturn {
 
   async function logout(): Promise<void> {
     await mutate('/api/v1/auth/logout', { method: 'POST' });
+    data.value = undefined;
     // Logout destroys the current session server-side (and sends
     // Clear-Site-Data) — there is no session left to refetch. Leave this
     // now-signed-out page for the login screen instead.
