@@ -7,6 +7,7 @@
 #   scripts/dev-native.sh down    stop exactly what up started
 #   scripts/dev-native.sh status  liveness + ports; non-zero if anything is down
 #   scripts/dev-native.sh logs    per-process logs
+#   scripts/dev-native.sh seed    seed the development account and sample resume
 #
 # Open http://localhost:20080 — that is the only URL a browser should use;
 # it is PUBLIC_ORIGIN, so cookie scope, CSRF Origin checks, and OAuth
@@ -389,6 +390,16 @@ run_migrations() {
   )
 }
 
+seed_dev_account() {
+  info "--- seed (dev@aboutme.invalid)"
+  (
+    cd "$ROOT/apps/server"
+    go build -o "$BIN_DIR/dev-seed" ./cmd/dev-seed
+  )
+  "$BIN_DIR/dev-seed" seed --database-url "$DEV_DATABASE_URL"
+  info "dev account: dev@aboutme.invalid / aboutme-dev-password-1"
+}
+
 port_blocked_by_stranger() {
   local name=$1 port
   port=$(port_of "$name")
@@ -503,6 +514,7 @@ cmd_up() {
   mkdir -p "$DEV_DIR" "$BIN_DIR" "$MEDIA_DIR"
   ensure_database
   run_migrations
+  seed_dev_account
   ensure_secrets
   start_mail_capture
   start_server
@@ -511,6 +523,14 @@ cmd_up() {
   info ""
   info "native dev stack is up — open $PUBLIC_ORIGIN"
   cmd_status
+}
+
+cmd_seed() {
+  require_tools
+  mkdir -p "$DEV_DIR" "$BIN_DIR"
+  ensure_database
+  run_migrations
+  seed_dev_account
 }
 
 cmd_down() {
@@ -596,12 +616,13 @@ cmd_logs() {
 
 usage() {
   cat <<EOF
-usage: scripts/dev-native.sh <up|down|status|logs> [args]
+usage: scripts/dev-native.sh <up|down|status|logs|seed> [args]
 
   up      start the native dev stack (idempotent); serves $PUBLIC_ORIGIN
   down    stop exactly the processes up started; never touches the database container
   status  print liveness and ports; exits non-zero if anything is not up
   logs    [-f] [mail-capture|server|web|caddy]  tail per-process logs
+  seed    create or refresh the development account and sample resume; idempotent
 EOF
 }
 
@@ -613,6 +634,7 @@ main() {
   down) cmd_down "$@" ;;
   status) cmd_status "$@" ;;
   logs) cmd_logs "$@" ;;
+  seed) cmd_seed "$@" ;;
   -h | --help | help | '')
     usage
     [ -n "$cmd" ]

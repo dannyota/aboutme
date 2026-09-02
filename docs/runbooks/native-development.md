@@ -41,6 +41,10 @@ From the repository root:
 make dev-native
 ```
 
+The stack seeds one account, `dev@aboutme.invalid` with password
+`aboutme-dev-password-1`, and one private sample resume. `make dev-seed` repeats
+the seed on its own; it never overwrites edits you made to the sample resume.
+
 The command is idempotent. It starts or reuses `aboutme-test-db`, creates the
 `aboutme_dev` database if needed, applies goose migrations, builds the Go
 binary, then starts the authentication-mail-capture server, Go, Nuxt, and Caddy.
