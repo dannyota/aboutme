@@ -30,7 +30,7 @@ describe('EditorShell', () => {
       .get('.editor-account-actions')
       .findAll(':scope > *');
     expect(controls).toHaveLength(2);
-    expect(controls[0]?.classes()).toContain('account-control');
+    expect(controls[0]?.attributes('data-testid')).toBe('account-menu');
     expect(controls[1]?.classes()).toContain('theme-toggle');
     expect(wrapper.get('[data-action="publish"]').text()).toBe('Publish');
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);

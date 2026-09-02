@@ -14,7 +14,7 @@ import { computed, nextTick, ref } from 'vue';
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
 import type { SaveState } from '../../editor/types';
 import type { ResumeRecord } from '../../stores/resumes';
-import AccountControl from '../app/AccountControl.vue';
+import AccountMenu from '../app/AccountMenu.vue';
 import ThemeToggle from '../app/ThemeToggle.vue';
 import CustomizationPanel from './customization/CustomizationPanel.vue';
 import PersonalDetailsPanel from './forms/PersonalDetailsPanel.vue';
@@ -185,7 +185,7 @@ function sectionLabel(type: string): string {
         </button>
       </div>
       <div class="editor-account-actions">
-        <AccountControl />
+        <AccountMenu />
         <ThemeToggle />
       </div>
     </header>

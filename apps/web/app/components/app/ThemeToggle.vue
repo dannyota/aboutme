@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { Moon, Sun } from '@lucide/vue';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 const { theme, toggleTheme } = useTheme();
 const nextThemeLabel = computed(() =>
@@ -8,10 +10,12 @@ const nextThemeLabel = computed(() =>
 </script>
 
 <template>
-  <button
-    class="theme-toggle"
+  <Button
     type="button"
     :aria-label="`Switch to ${nextThemeLabel} theme`"
+    :class="cn('theme-toggle', $attrs.class)"
+    size="sm"
+    variant="ghost"
     @click="toggleTheme"
   >
     <Moon
@@ -24,6 +28,8 @@ const nextThemeLabel = computed(() =>
       :size="16"
       aria-hidden="true"
     />
-    <span>{{ theme === 'dark' ? 'Dark mode' : 'Light mode' }}</span>
-  </button>
+    <span class="hidden md:inline">
+      {{ theme === 'dark' ? 'Dark mode' : 'Light mode' }}
+    </span>
+  </Button>
 </template>
