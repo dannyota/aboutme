@@ -13,8 +13,6 @@ import {
   type Theme,
 } from '../../app/composables/useTheme';
 
-const appCss = resolve(process.cwd(), 'app/assets/css/app.css');
-const editorCss = resolve(process.cwd(), 'app/assets/css/editor.css');
 const themeCss = resolve(process.cwd(), 'app/assets/css/theme.css');
 const nuxtConfig = resolve(process.cwd(), 'nuxt.config.ts');
 const themeBootstrap = resolve(process.cwd(), 'public/theme-bootstrap.js');
@@ -147,26 +145,12 @@ describe('theme preference boundary', () => {
     },
   );
 
-  it(
-    'keeps app styling away from the renderer and scopes focus styling',
-    async () => {
-      const css = await readFile(appCss, 'utf8');
-      const tokens = await readFile(themeCss, 'utf8');
+  it('keeps the application tokens in the theme layer', async () => {
+    const tokens = await readFile(themeCss, 'utf8');
 
-      expect(css).not.toMatch(/\.resume-(document|page)\b/);
-      expect(css).toContain('.aboutme-app :focus-visible');
-      expect(css).not.toMatch(
-        /^(?:\.app-|\.theme-toggle|\.login|\.resume-list)/m,
-      );
-      expect(css).not.toContain('body.aboutme-app-body');
-      expect(css).toContain('.editor-topbar');
-      expect(css).not.toContain('.editor-chrome');
-      expect(css).not.toContain('--positive:');
-      expect(css).not.toContain('--chart-1:');
-      expect(tokens).toContain('--positive: oklch(0.508 0.118 165.612)');
-      expect(tokens).toContain('--chart-1: oklch(0.845 0.143 164.978)');
-    },
-  );
+    expect(tokens).toContain('--positive: oklch(0.508 0.118 165.612)');
+    expect(tokens).toContain('--chart-1: oklch(0.845 0.143 164.978)');
+  });
 
   it(
     'sets the document language without exposing the debug overlay',
@@ -177,15 +161,4 @@ describe('theme preference boundary', () => {
       expect(source).toContain('devtools: { enabled: false }');
     },
   );
-
-  it('uses Nova control states and readable inspector groups', async () => {
-    const css = await readFile(editorCss, 'utf8');
-
-    expect(css).not.toContain(
-      '.editor-view-switcher button[aria-pressed="true"]',
-    );
-    expect(css).toContain('.editor-inspector fieldset');
-    expect(css).toContain('.editor-inspector ol');
-    expect(css).toContain('.editor-inspector input[type="checkbox"]');
-  });
 });

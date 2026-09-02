@@ -4,10 +4,6 @@
 @import "./fonts.css" layer(theme);
 @import "./theme.css" layer(theme);
 @import "./base.css" layer(base);
-@import "./app.css" layer(legacy);
-@import "./editor.css" layer(legacy);
-@import "./auth.css" layer(legacy);
-@import "./landing.css" layer(legacy);
 @import "tailwindcss/utilities.css" layer(utilities) source("../../");
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
