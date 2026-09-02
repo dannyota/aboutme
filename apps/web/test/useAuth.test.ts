@@ -141,6 +141,7 @@ describe('useAuth', () => {
     expect(receivedMethod).toBe('POST');
     expect(receivedHeader).toBe('test-csrf-token');
     expect(receivedContentType).toBeUndefined();
+    clearNuxtData();
   });
 
   it('keeps application/json on mutations that have a JSON body', async () => {

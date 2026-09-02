@@ -690,6 +690,91 @@ describe('sessions.vue capability gating', () => {
     },
   );
 
+  it(
+    'does not expose provider reauth after a revoke requires reauth when '
+    + 'providerLogin is false',
+    async () => {
+      let providerStarts = 0;
+      registerCapabilities({ providerLogin: false, agentAccess: false });
+      registerEndpoint('/api/v1/sessions/sess-2', {
+        method: 'DELETE',
+        handler: (event) => {
+          setResponseStatus(event, 403);
+          return { error: { code: 'reauth_required', message: 'x' } };
+        },
+      });
+      registerEndpoint('/api/v1/auth/google/start', {
+        method: 'POST',
+        handler: () => {
+          providerStarts += 1;
+          return {
+            data: {
+              authorizeUrl:
+                'https://accounts.google.com/o/oauth2/v2/auth?state=test',
+            },
+          };
+        },
+      });
+
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+      await wrapper
+        .get('[data-testid="session-row-sess-2"] [data-testid="revoke-button"]')
+        .trigger('click');
+      await flushPromises();
+      await flushPromises();
+
+      expect(wrapper.find('[data-testid="reauth-prompt"]').exists())
+        .toBe(false);
+      expect(wrapper.text()).not.toContain('Sign in again');
+      expect(providerStarts).toBe(0);
+    },
+  );
+
+  it(
+    'does not expose provider password reauth when providerLogin is false',
+    async () => {
+      let providerStarts = 0;
+      registerCapabilities({ providerLogin: false, agentAccess: false });
+      registerEndpoint('/api/v1/me/password', {
+        method: 'PUT',
+        handler: (event) => {
+          setResponseStatus(event, 403);
+          return { error: { code: 'reauth_required', message: 'x' } };
+        },
+      });
+      registerEndpoint('/api/v1/auth/google/start', {
+        method: 'POST',
+        handler: () => {
+          providerStarts += 1;
+          return {
+            data: {
+              authorizeUrl:
+                'https://accounts.google.com/o/oauth2/v2/auth?state=test',
+            },
+          };
+        },
+      });
+
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+      await wrapper.get('[data-testid="password-action"]').trigger('click');
+      await flushPromises();
+      await wrapper.get('#password-new').setValue('new-password');
+      await wrapper.get('#password-new-confirm').setValue('new-password');
+      await wrapper.get('form').trigger('submit');
+      await flushPromises();
+      await flushPromises();
+
+      expect(
+        wrapper.find('[data-testid="password-provider-reauth-google"]')
+          .exists(),
+      ).toBe(false);
+      expect(wrapper.text()).not.toContain('Continue with Google');
+      expect(providerStarts).toBe(0);
+    },
+  );
+
   it('hides provider and agent blocks while capabilities are pending',
     async () => {
       let release!: (body: unknown) => void;
