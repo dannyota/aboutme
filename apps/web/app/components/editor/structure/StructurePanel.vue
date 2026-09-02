@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import type { Section } from '@aboutme/schema';
 import { computed, nextTick, ref, toRaw, watch } from 'vue';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import SelectField from '@/components/app/SelectField.vue';
+import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
+import FormField from '@/components/app/FormField.vue';
+import InspectorPanel from '../InspectorPanel.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type { ServerValidationIssue } from '../../../editor/attempt';
@@ -49,11 +57,8 @@ const newColumn = ref<Column>('main');
 const newDisplayName = ref('');
 const newIconKey = ref('');
 const newSectionType = ref<Section['sectionType']>('work');
-const confirmDeleteButton = ref<HTMLButtonElement | null>(null);
-const deleteDialog = ref<HTMLElement | null>(null);
-const deleteReturnFocus = ref<HTMLElement | null>(null);
 const pendingDelete = ref<DeleteTarget | null>(null);
-const root = ref<HTMLElement | null>(null);
+const root = ref<{ $el?: HTMLElement } | null>(null);
 const status = ref('');
 const record = computed(() => props.actions.record.value);
 const currentDocument = computed(() => record.value?.current.document);
@@ -206,10 +211,6 @@ function requestDelete(action: SectionAction): void {
   const currentPlacement = placement.value;
   const section = current?.content[action.key];
   if (section === undefined || currentPlacement === undefined) return;
-  deleteReturnFocus.value
-    = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
   pendingDelete.value = {
     ...action,
     placement: {
@@ -218,7 +219,6 @@ function requestDelete(action: SectionAction): void {
     },
     section: structuredClone(toRaw(section)),
   };
-  void nextTick(() => confirmDeleteButton.value?.focus());
 }
 
 function confirmDelete(): void {
@@ -239,31 +239,6 @@ function confirmDelete(): void {
 
 function closeDelete(): void {
   pendingDelete.value = null;
-  const target = deleteReturnFocus.value;
-  deleteReturnFocus.value = null;
-  void nextTick(() => target?.focus());
-}
-
-function onDeleteDialogKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    closeDelete();
-    return;
-  }
-  if (event.key !== 'Tab') return;
-  const buttons = deleteDialog.value?.querySelectorAll<HTMLButtonElement>(
-    'button:not(:disabled)',
-  );
-  if (buttons === undefined || buttons.length === 0) return;
-  const first = buttons[0]!;
-  const last = buttons[buttons.length - 1]!;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 function deleteTargetMatches(target: DeleteTarget): boolean {
@@ -307,7 +282,7 @@ async function reopen(conflict: ReopenConflict): Promise<void> {
       'Entry order cannot reopen because its section is no longer available.',
       'Create a new section or select another section.',
     ].join(' ');
-    root.value
+    root.value?.$el
       ?.querySelector<HTMLElement>('[data-action="section-type"]')
       ?.focus();
     return;
@@ -316,7 +291,7 @@ async function reopen(conflict: ReopenConflict): Promise<void> {
     = conflict.command.kind === 'entryReorder'
       ? `[data-entry-order="${conflict.command.sectionKey}"] button`
       : `[data-section="${structureKey(conflict.command)}"] button`;
-  const target = root.value?.querySelector<HTMLElement>(selector);
+  const target = root.value?.$el?.querySelector<HTMLElement>(selector);
   if (target !== null && target !== undefined) {
     target.focus();
     return;
@@ -326,7 +301,7 @@ async function reopen(conflict: ReopenConflict): Promise<void> {
       'This section is no longer available.',
       'Create a new section or select another section.',
     ].join(' ');
-    root.value
+    root.value?.$el
       ?.querySelector<HTMLElement>('[data-action="section-type"]')
       ?.focus();
   }
@@ -374,7 +349,7 @@ function focusIssue(issue: ServerValidationIssue): void {
       : match[2] === 'displayName' || match[2] === 'iconKey'
         ? `[data-section="${match[1]}"] [data-action="${match[2]}"]`
         : `[data-entry-order="${match[1]}"] button`;
-  root.value?.querySelector<HTMLElement>(selector)?.focus();
+  root.value?.$el?.querySelector<HTMLElement>(selector)?.focus();
 }
 
 function isStructureIssue(issue: ServerValidationIssue): boolean {
@@ -439,148 +414,156 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 </script>
 
 <template>
-  <section
+  <InspectorPanel
     ref="root"
-    aria-labelledby="structure-title"
+    title="Sections"
+    title-id="structure-title"
   >
-    <h2 id="structure-title">
-      Sections
-    </h2>
-    <form @submit.prevent="createSection">
-      <label>
-        Section type
-        <select
-          v-model="newSectionType"
-          data-action="section-type"
+    <Card>
+      <CardHeader><CardTitle>Add a section</CardTitle></CardHeader>
+      <CardContent>
+        <form
+          data-testid="section-create-form"
+          @submit.prevent="createSection"
         >
-          <option value="profile">Profile</option>
-          <option value="work">Work</option>
-          <option value="education">Education</option>
-          <option value="skill">Skill</option>
-          <option value="language">Language</option>
-          <option value="certificate">Certificate</option>
-          <option value="project">Project</option>
-          <option value="custom">Custom</option>
-        </select>
-      </label>
-      <label>
-        Column
-        <select v-model="newColumn">
-          <option value="main">Main</option>
-          <option value="sidebar">Sidebar</option>
-        </select>
-      </label>
-      <label>
-        Section name
-        <input v-model="newDisplayName">
-      </label>
-      <label>
-        Icon key
-        <input v-model="newIconKey">
-      </label>
-      <button
-        type="submit"
-        data-action="create"
-      >
-        Add section
-      </button>
-    </form>
-    <p
+          <SelectField
+            v-model="newSectionType"
+            label="Section type"
+            :options="[
+              { value: 'profile', label: 'Profile' },
+              { value: 'work', label: 'Work' },
+              { value: 'education', label: 'Education' },
+              { value: 'skill', label: 'Skill' },
+              { value: 'language', label: 'Language' },
+              { value: 'certificate', label: 'Certificate' },
+              { value: 'project', label: 'Project' },
+              { value: 'custom', label: 'Custom' },
+            ]"
+            :control-attrs="{ 'data-action': 'section-type' }"
+          />
+          <SelectField
+            v-model="newColumn"
+            label="Column"
+            name="column"
+            :options="[
+              { value: 'main', label: 'Main' },
+              { value: 'sidebar', label: 'Sidebar' },
+            ]"
+          />
+          <FormField
+            v-slot="{ id }"
+            label="Section name"
+            name="displayName"
+          >
+            <Input
+              :id="id"
+              v-model="newDisplayName"
+            />
+          </FormField>
+          <FormField
+            v-slot="{ id }"
+            label="Icon key"
+            name="iconKey"
+          >
+            <Input
+              :id="id"
+              v-model="newIconKey"
+            />
+          </FormField>
+          <Button
+            type="submit"
+            data-action="create"
+          >
+            Add section
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+    <StatusBanner
       v-if="status !== ''"
-      role="status"
+      kind="info"
     >
       {{ status }}
-    </p>
-    <p
+    </StatusBanner>
+    <StatusBanner
       v-if="structureIssues.length > 0"
-      role="status"
+      kind="error"
     >
       Review the highlighted section controls.
-    </p>
-    <div
+    </StatusBanner>
+    <Card
       v-for="item in sections"
       :key="item.key"
       :data-section="item.key"
     >
-      <SectionControls
-        :column="item.column"
-        :disabled="sectionDisabled(item.key, item.section)"
-        :index="item.index"
-        :section="item.section"
-        :section-count="columnKeys(item.column).length"
-        :section-key="item.key"
-        :sidebar-count="columnKeys('sidebar').length"
-        @delete="requestDelete"
-        @metadata="updateMetadata"
-        @move="move"
-        @reorder="reorder"
-      />
-      <EntryOrderControls
-        :disabled="sectionDisabled(item.key, item.section)"
-        :entries="item.section.entries"
-        :section-key="item.key"
-        :section-type="item.section.sectionType"
-        @reorder="reorderEntries"
-      />
-    </div>
-    <div
+      <CardContent>
+        <SectionControls
+          :column="item.column"
+          :disabled="sectionDisabled(item.key, item.section)"
+          :index="item.index"
+          :section="item.section"
+          :section-count="columnKeys(item.column).length"
+          :section-key="item.key"
+          :sidebar-count="columnKeys('sidebar').length"
+          @delete="requestDelete"
+          @metadata="updateMetadata"
+          @move="move"
+          @reorder="reorder"
+        />
+        <EntryOrderControls
+          :disabled="sectionDisabled(item.key, item.section)"
+          :entries="item.section.entries"
+          :section-key="item.key"
+          :section-type="item.section.sectionType"
+          @reorder="reorderEntries"
+        />
+      </CardContent>
+    </Card>
+    <ConfirmDialog
       v-if="pendingDelete !== null"
-      ref="deleteDialog"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="delete-section-title"
-      aria-describedby="delete-section-description"
-      @keydown="onDeleteDialogKeydown"
-    >
-      <h3 id="delete-section-title">
-        Delete section
-      </h3>
-      <p id="delete-section-description">
-        This permanently deletes {{ pendingDelete.key }} and its entries.
-      </p>
-      <button
-        ref="confirmDeleteButton"
-        type="button"
-        data-action="confirm-delete"
-        @click="confirmDelete"
-      >
-        Delete section
-      </button>
-      <button
-        type="button"
-        data-action="cancel-delete"
-        @click="closeDelete"
-      >
-        Cancel
-      </button>
-    </div>
-    <div
+      :open="true"
+      title="Delete section"
+      :description="
+        `This permanently deletes ${pendingDelete.key} and its entries.`
+      "
+      confirm-label="Delete section"
+      destructive
+      confirm-action="confirm-delete"
+      cancel-action="cancel-delete"
+      @confirm="confirmDelete"
+      @cancel="closeDelete"
+    />
+    <StatusBanner
       v-for="conflict in structureConflicts"
       :key="conflict.id"
-      role="status"
+      kind="info"
     >
-      <p>Section placement changed. Reopen placement.</p>
-      <button
+      Section placement changed. Reopen placement.
+      <Button
         type="button"
         data-action="reopen-placement"
+        size="sm"
+        variant="outline"
         @click="reopen(conflict)"
       >
         Reopen placement
-      </button>
-    </div>
-    <div
+      </Button>
+    </StatusBanner>
+    <StatusBanner
       v-for="conflict in entryOrderConflicts"
       :key="conflict.id"
-      role="status"
+      kind="info"
     >
-      <p>Entry order changed. Reopen order.</p>
-      <button
+      Entry order changed. Reopen order.
+      <Button
         type="button"
         data-action="reopen-entry-order"
+        size="sm"
+        variant="outline"
         @click="reopen(conflict)"
       >
         Reopen order
-      </button>
-    </div>
-  </section>
+      </Button>
+    </StatusBanner>
+  </InspectorPanel>
 </template>

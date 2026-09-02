@@ -1,18 +1,26 @@
 import { mount } from '@vue/test-utils';
 import { computed, nextTick, ref } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// eslint-disable-next-line max-len -- Vue structure-panel test import.
-import StructurePanel from '../../app/components/editor/structure/StructurePanel.vue';
-// eslint-disable-next-line max-len -- Vue entry-order-controls test import.
-import EntryOrderControls from '../../app/components/editor/structure/EntryOrderControls.vue';
-// eslint-disable-next-line max-len -- Vue section-controls test import.
-import SectionControls from '../../app/components/editor/structure/SectionControls.vue';
+import StructurePanel from
+  '../../app/components/editor/structure/StructurePanel.vue';
+import EntryOrderControls from
+  '../../app/components/editor/structure/EntryOrderControls.vue';
+import SectionControls from
+  '../../app/components/editor/structure/SectionControls.vue';
 import type {
   ResumeEditorActions,
 } from '../../app/composables/useResumeEditor';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+
+afterEach(() => {
+  document.body
+    .querySelectorAll(
+      '[data-slot="alert-dialog-content"], [data-slot="alert-dialog-overlay"]',
+    )
+    .forEach((element) => element.remove());
+});
 
 describe('StructurePanel', () => {
   it('captures a remove-then-insert move through edit', async () => {
@@ -46,9 +54,9 @@ describe('structure intent boundaries', () => {
       },
     });
 
-    await wrapper.get('select').setValue('custom');
+    await wrapper.get('[data-action="section-type"]').setValue('custom');
     await wrapper.get('form').trigger('submit');
-    await wrapper.get('select').setValue('education');
+    await wrapper.get('[data-action="section-type"]').setValue('education');
     await wrapper.get('form').trigger('submit');
 
     expect(edit.mock.calls.map(([intent]) => intent)).toEqual([
@@ -95,9 +103,9 @@ describe('structure intent boundaries', () => {
         },
       });
 
-      await duplicate.get('select').setValue('custom');
+      await duplicate.get('[data-action="section-type"]').setValue('custom');
       await duplicate.get('form').trigger('submit');
-      await invalid.get('select').setValue('custom');
+      await invalid.get('[data-action="section-type"]').setValue('custom');
       await invalid.get('form').trigger('submit');
 
       expect(duplicateKey).toHaveBeenCalledTimes(1);
@@ -118,6 +126,29 @@ describe('structure intent boundaries', () => {
 
     expect(edit).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('Cannot create a custom section');
+  });
+
+  it('creates a section from the card form and clears the drafts', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(StructurePanel, {
+      props: { actions: actionsFor(edit) },
+    });
+    await wrapper.get('[data-action="section-type"]').setValue('project');
+    await wrapper
+      .get('[data-field="displayName"] input')
+      .setValue('Side projects');
+    await wrapper.get('[data-testid="section-create-form"]').trigger('submit');
+    expect(edit).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'structure',
+      commands: [expect.objectContaining({
+        op: 'createSection',
+        key: 'project',
+        displayName: 'Side projects',
+      })],
+    }));
+    const displayName = wrapper.get('[data-field="displayName"] input')
+      .element as HTMLInputElement;
+    expect(displayName.value).toBe('');
   });
 
   it('sends complete section and entry permutations through their endpoints',
@@ -201,7 +232,7 @@ describe('structure intent boundaries', () => {
         .get('[data-section="work"] [data-action="delete"]')
         .trigger('click');
       expect(edit).not.toHaveBeenCalled();
-      await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+      await triggerBodyAction('confirm-delete');
 
       expect(edit).toHaveBeenCalledWith({
         kind: 'structure',
@@ -256,7 +287,9 @@ describe('structure intent boundaries', () => {
       });
 
       expect(
-        wrapper.get('[data-section="work"] fieldset').attributes('disabled'),
+        wrapper
+          .get('[data-section="work"] [data-action="displayName"]')
+          .attributes('disabled'),
       ).toBeDefined();
       await wrapper
         .get('[data-section="work"] [data-action="move-up"]')
@@ -302,7 +335,7 @@ describe('structure intent boundaries', () => {
     await deleteButton.trigger('click');
     await nextTick();
     expect(document.activeElement).toBe(
-      wrapper.get('[data-action="confirm-delete"]').element,
+      document.body.querySelector('[data-action="cancel-delete"]'),
     );
 
     state.value = structureRecord({
@@ -312,7 +345,7 @@ describe('structure intent boundaries', () => {
       }),
     });
     await nextTick();
-    await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+    await triggerBodyAction('confirm-delete');
     await nextTick();
 
     expect(edit).not.toHaveBeenCalled();
@@ -326,7 +359,7 @@ describe('structure intent boundaries', () => {
     await wrapper
       .get('[data-section="work"] [data-action="delete"]')
       .trigger('click');
-    await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+    await triggerBodyAction('confirm-delete');
 
     expect(edit).toHaveBeenCalledWith({
       kind: 'structure',
@@ -349,13 +382,13 @@ describe('structure intent boundaries', () => {
       current: placementRecord(['work', 'skill'], ['profile']),
     });
     await nextTick();
-    await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+    await triggerBodyAction('confirm-delete');
 
     expect(edit).not.toHaveBeenCalled();
     await wrapper
       .get('[data-section="work"] [data-action="delete"]')
       .trigger('click');
-    await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+    await triggerBodyAction('confirm-delete');
 
     expect(edit).toHaveBeenCalledWith({
       kind: 'structure',
@@ -377,26 +410,24 @@ describe('structure intent boundaries', () => {
       await deleteButton.trigger('click');
       await nextTick();
 
-      const dialog = wrapper.get('[role="alertdialog"]');
-      const confirm = wrapper.get('[data-action="confirm-delete"]');
-      const cancel = wrapper.get('[data-action="cancel-delete"]');
-      expect(dialog.attributes('aria-describedby')).toBe(
-        'delete-section-description',
+      const dialog = document.body.querySelector<HTMLElement>(
+        '[role="alertdialog"]',
+      )!;
+      expect(dialog.getAttribute('aria-describedby')).toMatch(
+        /^reka-dialog-description-/,
       );
-      expect(wrapper.get('#delete-section-description').text()).toContain(
+      expect(dialog.textContent).toContain(
         'permanently deletes',
       );
 
-      await confirm.trigger('keydown', { key: 'Tab', shiftKey: true });
-      expect(document.activeElement).toBe(cancel.element);
-      await cancel.trigger('keydown', { key: 'Tab' });
-      expect(document.activeElement).toBe(confirm.element);
-      await dialog.trigger('keydown', { key: 'Escape' });
+      dialog.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', bubbles: true,
+      }));
       await nextTick();
       expect(document.activeElement).toBe(deleteButton.element);
 
       await deleteButton.trigger('click');
-      await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+      await triggerBodyAction('confirm-delete');
       await nextTick();
       expect(document.activeElement).toBe(deleteButton.element);
       wrapper.unmount();
@@ -413,7 +444,7 @@ describe('structure intent boundaries', () => {
     (deleteButton.element as HTMLButtonElement).focus();
     await deleteButton.trigger('click');
     await nextTick();
-    await wrapper.get('[data-action="cancel-delete"]').trigger('click');
+    await triggerBodyAction('cancel-delete');
     await nextTick();
 
     expect(document.activeElement).toBe(deleteButton.element);
@@ -440,11 +471,11 @@ describe('structure intent boundaries', () => {
     await wrapper
       .get('[data-section="work"] [data-action="delete"]')
       .trigger('click');
-    await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+    await triggerBodyAction('confirm-delete');
 
-    expect(wrapper.get('[role="alertdialog"]').exists()).toBe(true);
+    expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
     expect(document.activeElement).toBe(
-      wrapper.get('[data-action="confirm-delete"]').element,
+      document.body.querySelector('[data-action="cancel-delete"]'),
     );
     wrapper.unmount();
   });
@@ -634,7 +665,7 @@ describe('structure intent boundaries', () => {
       '[data-section="profile"] [data-action="move-main"]',
     );
 
-    expect(workUp.attributes('type')).toBe('button');
+    expect((workUp.element as HTMLButtonElement).type).toBe('button');
     expect(
       wrapper
         .get('[data-section="skill"] [data-action="move-up"]')
@@ -693,6 +724,16 @@ function actionsFor(
     edit: (intent) => edit(intent) ?? { kind: 'enqueued' },
     acceptLatest,
   } as ResumeEditorActions;
+}
+
+async function triggerBodyAction(action: string): Promise<void> {
+  const elements = document.body.querySelectorAll<HTMLElement>(
+    `[data-action="${action}"]`,
+  );
+  const element = elements[elements.length - 1];
+  expect(element).not.toBeNull();
+  element?.click();
+  await nextTick();
 }
 
 function placementRecord(

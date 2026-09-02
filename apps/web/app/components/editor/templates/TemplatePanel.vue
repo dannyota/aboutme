@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { TEMPLATES, type TemplatePreset } from '@aboutme/schema/templates';
 import { computed, ref } from 'vue';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import InspectorPanel from '../InspectorPanel.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type {
@@ -86,42 +96,51 @@ function assertNever(value: never): never {
 </script>
 
 <template>
-  <section aria-labelledby="template-title">
-    <h2 id="template-title">
-      Templates
-    </h2>
-    <p
+  <InspectorPanel
+    title="Templates"
+    title-id="template-title"
+  >
+    <StatusBanner
       v-if="status() !== ''"
-      role="status"
+      kind="info"
     >
       {{ status() }}
-    </p>
+    </StatusBanner>
     <ul aria-label="Template presets">
       <li
         v-for="preset in TEMPLATES"
         :key="preset.id"
         :data-template="preset.id"
-        @click.self="apply(preset)"
       >
-        <h3>{{ preset.name }}</h3>
-        <p>{{ preset.description }}</p>
-        <ul aria-label="Template warnings">
-          <li v-if="hasFormatWarning(preset)">
-            Page or date format will change.
-          </li>
-          <li v-if="hasBaseSizeWarning(preset)">
-            This template uses a 10 pt base size.
-          </li>
-          <li v-if="hasMarginWarning(preset)">
-            This template sets margins below 5 mm.
-          </li>
-        </ul>
-        <button
-          type="button"
-          @click="apply(preset)"
-        >
-          Apply
-        </button>
+        <Card>
+          <CardHeader><CardTitle>{{ preset.name }}</CardTitle></CardHeader>
+          <CardContent>
+            <p>{{ preset.description }}</p>
+            <ul
+              aria-label="Template warnings"
+              class="text-xs text-muted-foreground"
+            >
+              <li v-if="hasFormatWarning(preset)">
+                Page or date format will change.
+              </li>
+              <li v-if="hasBaseSizeWarning(preset)">
+                This template uses a 10 pt base size.
+              </li>
+              <li v-if="hasMarginWarning(preset)">
+                This template sets margins below 5 mm.
+              </li>
+            </ul>
+          </CardContent>
+          <CardFooter>
+            <Button
+              size="sm"
+              type="button"
+              @click="apply(preset)"
+            >
+              Apply
+            </Button>
+          </CardFooter>
+        </Card>
       </li>
     </ul>
     <p
@@ -130,19 +149,19 @@ function assertNever(value: never): never {
     >
       Template changes are ready to save.
     </p>
-    <button
+    <Button
       v-if="canUndo && state?.kind === 'complete'"
       type="button"
       data-action="undo-template"
       @click="actions.undoTemplate()"
     >
       Undo template changes
-    </button>
+    </Button>
     <TemplatePartialDialog
       v-if="group !== undefined && state?.kind === 'partial'"
       :actions="actions"
       :group="group"
       :state="state"
     />
-  </section>
+  </InspectorPanel>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Section } from '@aboutme/schema';
+import IconButton from '@/components/app/IconButton.vue';
 
 const props = defineProps<{
   readonly disabled: boolean;
@@ -39,29 +40,24 @@ function move(entryId: string, direction: -1 | 1): void {
     :data-entry-order="sectionKey"
     aria-label="Entry order"
   >
-    <p>Entry order</p>
     <ol>
       <li
         v-for="(entry, index) in entries"
         :key="entry.id"
       >
-        <span>{{ entry.id }}</span>
-        <button
-          type="button"
+        <span class="text-xs text-muted-foreground">{{ entry.id }}</span>
+        <IconButton
+          label="Move entry up"
           data-action="entry-up"
           :disabled="disabled || index === 0"
           @click="move(entry.id, -1)"
-        >
-          Move entry up
-        </button>
-        <button
-          type="button"
+        />
+        <IconButton
+          label="Move entry down"
           data-action="entry-down"
           :disabled="disabled || index === entries.length - 1"
           @click="move(entry.id, 1)"
-        >
-          Move entry down
-        </button>
+        />
       </li>
     </ol>
   </div>

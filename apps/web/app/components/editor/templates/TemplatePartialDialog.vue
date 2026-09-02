@@ -1,5 +1,15 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from 'vue';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import StatusBanner from '@/components/app/StatusBanner.vue';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type {
@@ -15,33 +25,17 @@ const props = defineProps<{
   readonly state: Extract<TemplateGroupState, { kind: 'partial' }>;
 }>();
 
-const priorFocus = ref<HTMLElement | null>(null);
-const retryButton = ref<HTMLButtonElement | null>(null);
+const retryButton = ref<{ $el?: HTMLElement } | null>(null);
 const reason = ref('');
 
 onMounted(() => {
-  priorFocus.value
-    = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-  void nextTick(() => retryButton.value?.focus());
+  void nextTick(() => retryButton.value?.$el?.focus());
 });
 
 function recover(action: RecoveryAction): void {
   reason.value = '';
   const result = props.actions.recoverTemplate(action);
-  if (result.kind === 'keep-partial') close();
   if (result.kind === 'unavailable') reason.value = messageFor(result.reason);
-}
-
-function close(): void {
-  void nextTick(() => priorFocus.value?.focus());
-}
-
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key !== 'Escape') return;
-  event.preventDefault();
-  close();
 }
 
 function childStatus(
@@ -90,54 +84,50 @@ function assertNever(value: never): never {
 </script>
 
 <template>
-  <section
-    role="alertdialog"
-    aria-labelledby="template-partial-title"
-    aria-describedby="template-partial-description"
-    tabindex="-1"
-    @keydown="onKeydown"
-  >
-    <h2 id="template-partial-title">
-      Template changes need review
-    </h2>
-    <p id="template-partial-description">
-      {{ stateMessage() }}
-    </p>
-    <ul aria-label="Template change progress">
-      <li v-if="childStatus('structure') !== ''">
-        Placement change {{ childStatus('structure') }}.
-      </li>
-      <li v-if="childStatus('customization') !== ''">
-        Customization change {{ childStatus('customization') }}.
-      </li>
-    </ul>
-    <p
-      v-if="reason !== ''"
-      role="alert"
-    >
-      {{ reason }}
-    </p>
-    <button
-      ref="retryButton"
-      type="button"
-      data-action="retry-remaining"
-      @click="recover('retry-remaining')"
-    >
-      Retry remaining
-    </button>
-    <button
-      type="button"
-      data-action="restore-pre-apply"
-      @click="recover('restore-pre-apply')"
-    >
-      Restore pre-apply
-    </button>
-    <button
-      type="button"
-      data-action="keep-partial"
-      @click="recover('keep-partial')"
-    >
-      Keep partial
-    </button>
-  </section>
+  <AlertDialog :open="true">
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>Template changes need review</AlertDialogTitle>
+        <AlertDialogDescription>{{ stateMessage() }}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <ul aria-label="Template change progress">
+        <li v-if="childStatus('structure') !== ''">
+          Placement change {{ childStatus('structure') }}.
+        </li>
+        <li v-if="childStatus('customization') !== ''">
+          Customization change {{ childStatus('customization') }}.
+        </li>
+      </ul>
+      <StatusBanner
+        v-if="reason !== ''"
+        kind="error"
+      >
+        {{ reason }}
+      </StatusBanner>
+      <AlertDialogFooter>
+        <Button
+          ref="retryButton"
+          type="button"
+          data-action="retry-remaining"
+          @click="recover('retry-remaining')"
+        >
+          Retry remaining
+        </Button>
+        <Button
+          type="button"
+          data-action="restore-pre-apply"
+          @click="recover('restore-pre-apply')"
+        >
+          Restore pre-apply
+        </Button>
+        <Button
+          type="button"
+          data-action="keep-partial"
+          @click="recover('keep-partial')"
+        >
+          Keep partial
+        </Button>
+      </AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>
 </template>
