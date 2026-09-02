@@ -97,7 +97,7 @@ T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
 
 - `app/components/editor/{EditorShell,EditorPreview,SaveStatus,ErrorSummary,ConflictPanel,InspectorPanel,PreviewToolbar}.vue`
 - `app/pages/app/resumes/[id].vue`
-- `test/editor/{editor-shell,editor-preview,accessibility}.test.ts`
+- `test/editor/{editor-shell,editor-preview,accessibility,theme,persistence-boundary}.test.ts`
 - `.editor-shell`, `.editor-topbar`, `.editor-app-rail`, `.editor-outline`,
   `.editor-preview*`, `.editor-session-lost`, `.save-status`,
   `.editor-error-summary`, `.editor-conflicts` rules deleted from
