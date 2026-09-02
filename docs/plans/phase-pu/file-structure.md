@@ -40,6 +40,7 @@ after every earlier window is integrated.
 - `scripts/ui-add.sh`
 - `test/ui/toolkit.test.ts`; contract updates in `test/fonts.test.ts` and
   `test/harness-absent.test.ts`
+- `scripts/web-e2e-source.manifest` (integration-owner source-path update)
 - Import-path updates in `app/app.vue`, `EditorShell.vue`,
   `test/app-chrome.test.ts`, `test/logout-state.test.ts`,
   `test/editor/theme.test.ts`
