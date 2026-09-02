@@ -6,7 +6,8 @@ without publishing an account profile.
 
 ## Core journeys
 
-1. Sign in with Google, GitHub, LinkedIn, or email and password.
+1. Sign in with email and password. Provider sign-in (Google, GitHub, LinkedIn)
+   is implemented but disabled in v1.
 2. Create up to three resumes and edit incomplete drafts without save-time
    completeness errors.
 3. Preview the same layout used by the public page and PDF.
@@ -18,21 +19,29 @@ without publishing an account profile.
 
 ## V1 scope
 
-| Area                | V1 decision                                                                                              |
-| ------------------- | -------------------------------------------------------------------------------------------------------- |
-| Resume editor       | Eight section types; rich text; one- or two-column layout; fonts, colors, spacing, headings, and presets |
-| Resume count        | At most three per account, enforced in PostgreSQL                                                        |
-| Public identity     | One globally unique slug per resume; no username or account profile                                      |
-| Authentication      | Google, GitHub, LinkedIn, and email/password; zero or one password credential per account                |
-| Preview and publish | Instant local preview, granular autosave, public SSR page, and live refresh                              |
-| Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in    |
-| Export              | Owner PDF; optional public PDF                                                                           |
-| Agent access        | Remote Model Context Protocol (MCP) endpoint; editor parity minus publish; account-wide consent scopes   |
-| Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                  |
+| Area                | V1 decision                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Resume editor       | Eight section types; rich text; one- or two-column layout; fonts, colors, spacing, headings, and presets                 |
+| Resume count        | At most three per account, enforced in PostgreSQL                                                                        |
+| Public identity     | One globally unique slug per resume; no username or account profile                                                      |
+| Authentication      | Email/password; provider login implemented behind a server flag that is off; zero or one password credential per account |
+| Preview and publish | Instant local preview, granular autosave, public SSR page, and live refresh                                              |
+| Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in                    |
+| Export              | Owner PDF; optional public PDF                                                                                           |
+| Agent access        | Remote Model Context Protocol (MCP) endpoint; editor parity minus publish; account-wide consent scopes                   |
+| Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                                  |
 
 Out of v1: cover letters, a job tracker, first-party AI writing features, custom
 domains, teams, analytics, a multilingual application interface, and
 collaborative editing.
+
+## Landing and entry
+
+The home page introduces the product in a few lines and offers sign-in and
+registration. It is static server-rendered text with no data fetch and no
+application navigation for a visitor who is not signed in. Its copy names only
+shipped behavior. Registration is public and verifies the email before an
+account exists.
 
 ## Agent access
 
@@ -142,6 +151,9 @@ fence and its 60-second cache trade-off.
   account's other resumes.
 - A connected agent acts only on resume content. It reaches no session, account,
   or publish surface and cannot change a resume's public state.
+- The public application has no operator or platform-admin surface. Operator
+  actions run out of band with database credentials.
+  [ADR 0028](../adr/0028-no-operator-surface.md) owns this rule.
 - Publishing explains that public content can be delivered through a global
   content-delivery network. The discovery option separately explains crawler and
   AI-engine access.
