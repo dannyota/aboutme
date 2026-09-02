@@ -4,6 +4,20 @@ Each path has one task author. Shared and generated paths belong to the
 integration owner and are serialized. All paths are under `apps/web/` unless
 stated otherwise.
 
+Sequential migrations require narrow owner windows on a few final-owner paths.
+The integration owner serializes these exact edits:
+
+| Final owner | Earlier window  | Path and permitted edit                                                                                                        |
+| ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| T07         | T02             | `EditorPreview.vue` and its test: add the photo-less projection and temporary notice; `EditorShell.vue`: pass `photoRead` only |
+| T07         | T01             | `EditorShell.vue`: change moved shell imports and remove the legacy CSS import only                                            |
+| T03         | T01             | Shell/theme tests: update moved import paths only                                                                              |
+| T01         | T03             | `app/app.vue`: replace the moved `AppChrome` render with `AppShell` only                                                       |
+| T13         | T01/T04/T05/T07 | Legacy stylesheets: move tokens/imports, delete only named surface rules, then delete the files                                |
+
+No two windows on one row run together. The final owner rebuilds its file only
+after every earlier window is integrated.
+
 ## T00 — Authorities and records (owner)
 
 - `docs/adr/0029-application-ui-toolkit.md`
@@ -32,17 +46,21 @@ stated otherwise.
 ## T02 — Preview photo fallback
 
 - `apps/server/cmd/dev-seed/seed.go`, `apps/server/cmd/dev-seed/seed_test.go`
-- `app/components/editor/EditorPreview.vue`
-- `test/editor/editor-preview.test.ts`
+- `app/components/editor/previewProjection.ts`
+- `test/editor/preview-projection.test.ts`
+- T02 owner window in the shared-path table for `EditorPreview.vue`,
+  `EditorShell.vue`, and `test/editor/editor-preview.test.ts`
 
 ## T03 — Shared composites
 
 - `app/components/app/{AppShell,AccountMenu,ThemeToggle,PageHeader,FormField,TextField,SelectField,CheckboxField,SwitchField,ConfirmDialog,FormDialog,StatusBanner,EmptyState,IconButton,LoadingState}.vue`
 - `app/components/app/AppChrome.vue` and `AccountControl.vue` deleted
-- `app/components/editor/forms/fieldIntent.ts`
 - `test/app/{app-shell,form-field,text-field,confirm-dialog,form-dialog,status-banner}.test.ts`
 - `test/app-chrome.test.ts` and `test/logout-state.test.ts` (retargeted to
   `AppShell`), `test/editor/theme.test.ts`
+
+The integration owner narrows `app/components/editor/forms/fieldIntent.ts` after
+T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
 
 ## T04 — Entry pages
 
@@ -84,6 +102,7 @@ stated otherwise.
 
 ## T09 — Section panel and entries
 
+- `app/components/editor/EntryCard.vue`
 - `app/components/editor/forms/{SectionPanel,DateRangeField,YearMonthField}.vue`
 - `app/components/editor/forms/entries/*.vue`
 - `app/components/editor/richtext/RichTextEditor.vue` (template and toolbar

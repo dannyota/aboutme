@@ -169,7 +169,7 @@ labels.
 
   ```sh
   cd apps/web && npx vitest run test/editor/customization-controls.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist

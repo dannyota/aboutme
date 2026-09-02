@@ -37,11 +37,10 @@
   ];
   const EXEMPT = new Set([
     "app/pages/_harness/render.vue",
-    "app/components/editor/photo/PhotoPanel.vue", // native file inputs
     "app/components/editor/richtext/RichTextEditor.vue", // ProseMirror root
   ]);
   const RAW = /<(button|input|select|textarea)\b/g;
-  const DIALOG = /role="(dialog|alertdialog)"/g;
+  const DIALOG = /role=(["'])(?:dialog|alertdialog)\1/g;
 
   function vueFiles(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -67,13 +66,9 @@
       expect(source.match(DIALOG) ?? [], file).toEqual([]);
     });
 
-    it("exempts PhotoPanel only for the file inputs", () => {
-      const source = readFileSync(
-        "app/components/editor/photo/PhotoPanel.vue",
-        "utf8",
-      );
-      const raw = source.slice(source.indexOf("<template>")).match(RAW) ?? [];
-      expect(raw.every((tag) => tag === "<input")).toBe(true);
+    it("recognizes both quote styles on hand-written dialogs", () => {
+      expect('<div role="dialog">'.match(DIALOG)).toHaveLength(1);
+      expect("<div role='alertdialog'>".match(DIALOG)).toHaveLength(1);
     });
   });
   ```
@@ -95,8 +90,9 @@
 
   ```sh
   make web-lint web-typecheck web-test web-build
-  cd apps/web && npx vitest run test/renderer
-  make web-e2e
+  cd apps/web
+  npx vitest run test/renderer
+  make -C ../.. web-e2e
   ```
 
 - [ ] **Visual review.** With the native stack up (`make dev-native-status`),

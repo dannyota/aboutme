@@ -59,15 +59,41 @@ regenerates the lockfile, and runs the renderer suites.
   const RENDERER_GUARD =
     ":not(:where(.resume-document, .paged-resume, " +
     ".resume-document *, .paged-resume *))";
-  const APP_GUARD = "html[data-ui='app'] body";
+  const APP_GUARD = 'html[data-ui="app"] body';
+
+  function splitSelectorList(selector: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let start = 0;
+    for (let index = 0; index < selector.length; index += 1) {
+      const char = selector[index];
+      if (char === "(" || char === "[") depth += 1;
+      else if (char === ")" || char === "]") depth -= 1;
+      else if (char === "," && depth === 0) {
+        parts.push(selector.slice(start, index).trim());
+        start = index + 1;
+      }
+    }
+    parts.push(selector.slice(start).trim());
+    return parts;
+  }
 
   function selectors(source: string): string[] {
-    return source
-      .replaceAll(/\/\*[\s\S]*?\*\//g, "")
-      .split("}")
-      .map((block) => block.split("{")[0]?.trim() ?? "")
-      .filter((selector) => selector !== "" && !selector.startsWith("@"))
-      .flatMap((selector) => selector.split(",").map((part) => part.trim()));
+    const clean = source.replaceAll(/\/\*[\s\S]*?\*\//g, "");
+    const found: string[] = [];
+    let boundary = 0;
+    for (let index = 0; index < clean.length; index += 1) {
+      if (clean[index] === "{") {
+        const prelude = clean.slice(boundary, index).trim();
+        if (prelude !== "" && !prelude.startsWith("@")) {
+          found.push(...splitSelectorList(prelude));
+        }
+        boundary = index + 1;
+      } else if (clean[index] === "}") {
+        boundary = index + 1;
+      }
+    }
+    return found;
   }
 
   function walk(dir: string): string[] {
@@ -82,10 +108,10 @@ regenerates the lockfile, and runs the renderer suites.
     it("never loads Preflight", () => {
       expect(css("tailwind.css")).not.toMatch(/preflight/i);
       expect(css("tailwind.css")).toContain(
-        "@import 'tailwindcss/theme.css' layer(theme);",
+        '@import "tailwindcss/theme.css" layer(theme);',
       );
       expect(css("tailwind.css")).toContain(
-        "@import 'tailwindcss/utilities.css' layer(utilities)",
+        '@import "tailwindcss/utilities.css" layer(utilities)',
       );
     });
 
@@ -98,9 +124,10 @@ regenerates the lockfile, and runs the renderer suites.
 
     it("guards every chrome reset rule", () => {
       for (const selector of selectors(css("base.css"))) {
-        expect(selector, selector).toMatch(new RegExp(`^${APP_GUARD}`));
-        if (selector !== APP_GUARD) {
-          expect(selector, selector).toContain(RENDERER_GUARD);
+        const normalized = selector.replaceAll(/\s+/g, " ");
+        expect(normalized.startsWith(APP_GUARD), selector).toBe(true);
+        if (normalized !== APP_GUARD) {
+          expect(normalized, selector).toContain(RENDERER_GUARD);
         }
       }
     });
@@ -580,11 +607,12 @@ regenerates the lockfile, and runs the renderer suites.
 - [ ] **GREEN and gates:**
 
   ```sh
-  cd apps/web && npx vitest run test/ui/toolkit.test.ts
-  make web-lint web-typecheck web-test
-  cd apps/web && npx vitest run test/renderer
-  make web-build
-  make web-e2e
+  cd apps/web
+  npx vitest run test/ui/toolkit.test.ts
+  make -C ../.. web-lint web-typecheck web-test
+  npx vitest run test/renderer
+  make -C ../.. web-build
+  make -C ../.. web-e2e
   ```
 
   Expected: all pass; `make web-e2e` reports no screenshot diff. Then open

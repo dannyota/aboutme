@@ -19,9 +19,10 @@
      for non-error texts.
   3. The upload control: a `Label` styled as a dropzone
      (`flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed p-4 text-sm hover:bg-accent`)
-     wrapping the native `input type="file" accept="image/jpeg,image/png"` with
-     class `sr-only`, text `Upload photo` or `Replace photo` and the hint
-     `JPEG or PNG, up to 2 MB.`
+     wrapping the generated `Input` primitive with `type="file"`,
+     `accept="image/jpeg,image/png"`, `data-action="upload-photo-input"`, and
+     class `sr-only`; it keeps native file semantics, the text `Upload photo` or
+     `Replace photo`, and the hint `JPEG or PNG, up to 2 MB.`
   4. `Delete photo` as `Button variant="ghost" size="sm"`
      (`data-action="delete"`) opening `ConfirmDialog` (`title="Delete photo"`,
      `description="Delete the current photo?"`, `confirmLabel="Delete photo"`,
@@ -48,8 +49,8 @@
 
 - The delete confirmation is an `alertdialog` on `document.body`; the
   `role="alertdialog"` element inside the panel is gone.
-- `input[type="file"]` stays native and keeps its labels; it is visually hidden
-  (`sr-only`), not removed.
+- The file input keeps native file semantics and its labels through the
+  generated `Input` primitive; it is visually hidden (`sr-only`), not removed.
 
 ## Strings held
 
@@ -59,9 +60,8 @@ Everything under "Photo" in the retained hooks list.
 
 - [ ] **RED.** In `test/editor/photo-panel.test.ts` keep every assertion on
       `[data-photo-preview]`, `[data-photo-outcome]`, `data-action` buttons,
-      status texts, and `input[type="file"]` (`getByLabel` equivalents:
-      `wrapper.get('input[type="file"]')` still works because the input is in
-      the DOM). Rewrite the delete-dialog cases to `attachTo: document.body` +
+      status texts, and `[data-action="upload-photo-input"]`. Rewrite the
+      delete-dialog cases to `attachTo: document.body` +
       `document.body.querySelector('[role="alertdialog"]')` and keep the rebind
       case (`deleteStatus` text
       `This photo changed. Reopen deletion and confirm again.`). Add:
@@ -72,15 +72,8 @@ Everything under "Photo" in the retained hooks list.
       photoRead: { kind: "loading", binding: "k", generation: 1 },
     });
     const preview = wrapper.get("[data-photo-preview]");
-    expect(preview.find("img").exists()).toBe(false);
+    expect(preview.find("[data-photo-image]").exists()).toBe(false);
     expect(preview.text()).toContain("Photo preview is loading.");
-    expect(
-      wrapper
-        .find(
-          'button:not([data-slot="button"]):not([role="checkbox"]):not([role="switch"])',
-        )
-        .exists(),
-    ).toBe(false);
   });
   ```
 
@@ -102,19 +95,21 @@ Everything under "Photo" in the retained hooks list.
     <Upload aria-hidden="true" class="size-5 text-muted-foreground" />
     <span class="font-medium">{{ photo === undefined ? 'Upload photo' : 'Replace photo' }}</span>
     <span class="text-xs text-muted-foreground">JPEG or PNG, up to 2 MB.</span>
-    <input
+    <Input
       :id="uploadId"
       accept="image/jpeg,image/png"
       class="sr-only"
+      data-action="upload-photo-input"
       type="file"
       @change="upload"
-    >
+    />
   </Label>
   ```
 
   with `uploadId` computed as the string `photo-upload-` followed by `useId()`.
-  Because the file input is inside its label, `getByLabel` lookups for
-  `Upload photo` and `Replace photo` keep resolving in the browser proofs.
+  Import `Input` explicitly. Because the file input is inside its label,
+  `getByLabel` lookups for `Upload photo` and `Replace photo` keep resolving in
+  the browser proofs.
 
 - [ ] Rebuild the rest of `PhotoPanel.vue` and `CropEditor.vue` per the
       contract; delete `trapDeleteFocus`, `confirmDeleteButton`, `deleteOpener`,
@@ -124,7 +119,7 @@ Everything under "Photo" in the retained hooks list.
 
   ```sh
   cd apps/web && npx vitest run test/editor/photo-panel.test.ts test/editor/photo-controller.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist

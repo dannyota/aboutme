@@ -66,7 +66,8 @@ Owns ids and ARIA wiring for one control.
   `type?: 'text' | 'email' | 'url'` (default `text`), `multiline?: boolean`,
   `rows?: number` (default 3), `autocomplete?: string`, `inputmode?: string`,
   `placeholder?: string`, `hint?: string`, `error?: string`,
-  `required?: boolean`, `disabled?: boolean`.
+  `required?: boolean`, `disabled?: boolean`,
+  `controlAttrs?: Record<string, string>`.
 - Emits: `intent: [intent: FieldIntent<string>]` following
   [U4](decisions.md#u4--field-commit-rule) exactly.
 - Renders `FormField` around `Input` or `Textarea`. The control carries
@@ -81,7 +82,7 @@ Owns ids and ARIA wiring for one control.
 - Props: `label: string`, `modelValue: string | number`,
   `options: readonly { value: string | number; label: string }[]`,
   `id?: string`, `name?: string`, `hint?: string`, `error?: string`,
-  `disabled?: boolean`.
+  `disabled?: boolean`, `controlAttrs?: Record<string, string>`.
 - Emits: `update:modelValue: [value: string]` on `change`. The consumer casts
   numeric enumerations.
 - Renders `FormField` around `NativeSelect` with one `NativeSelectOption` per

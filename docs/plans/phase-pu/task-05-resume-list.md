@@ -67,7 +67,9 @@
     });
     const row = wrapper.get('[data-testid="resume-row-r1"]');
     expect(row.element.tagName).toBe("TR");
-    expect(row.get("a").attributes("href")).toBe("/app/resumes/r1");
+    expect(row.get('[href="/app/resumes/r1"]').attributes("href")).toBe(
+      "/app/resumes/r1",
+    );
     expect(row.get('[aria-label="Rename First"]').text()).toBe("Rename");
     expect(row.get('[aria-label="Delete First"]').text()).toBe("Delete");
   });
@@ -203,7 +205,7 @@
 
   ```sh
   cd apps/web && npx vitest run test/editor/resume-list.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist
