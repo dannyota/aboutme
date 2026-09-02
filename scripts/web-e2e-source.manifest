@@ -56,6 +56,7 @@ apps/web/app/components/app/StatusBanner.vue
 apps/web/app/components/app/SwitchField.vue
 apps/web/app/components/app/TextField.vue
 apps/web/app/components/app/ThemeToggle.vue
+apps/web/app/components/auth/AuthCard.vue
 apps/web/app/components/auth/PasswordField.vue
 apps/web/app/components/auth/PasswordSettings.vue
 apps/web/app/components/editor/ConflictPanel.vue
