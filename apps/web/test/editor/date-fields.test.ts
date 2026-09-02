@@ -7,6 +7,15 @@ import YearMonthField from
   '../../app/components/editor/forms/YearMonthField.vue';
 
 describe('YearMonthField', () => {
+  it('does not emit when a date is changed then restored', async () => {
+    const wrapper = mount(YearMonthField, {
+      props: { fieldId: 'date', label: 'Date', modelValue: { y: 2026, m: 1 } },
+    });
+    await wrapper.get('[data-part="month"]').setValue('2');
+    await wrapper.get('[data-part="month"]').setValue('1');
+    await wrapper.get('[data-part="month"]').trigger('blur');
+    expect(wrapper.emitted('intent')).toBeUndefined();
+  });
   it('preserves a month value while capturing an exact date', async () => {
     const wrapper = mount(YearMonthField, {
       props: { fieldId: 'date', label: 'Date', modelValue: undefined },
@@ -39,6 +48,20 @@ describe('YearMonthField', () => {
 });
 
 describe('DateRangeField', () => {
+  it('does not emit when a range is changed then restored', async () => {
+    const wrapper = mount(DateRangeField, {
+      props: {
+        fieldId: 'dates',
+        modelValue: {
+          start: { y: 2024, m: 1 }, end: { y: 2025, m: 1 }, present: false,
+        },
+      },
+    });
+    await wrapper.get('[data-part="end-month"]').setValue('2');
+    await wrapper.get('[data-part="end-month"]').setValue('1');
+    await wrapper.get('[data-part="end-month"]').trigger('blur');
+    expect(wrapper.emitted('intent')).toBeUndefined();
+  });
   it('captures present ranges with a null end', async () => {
     const wrapper = mount(DateRangeField, {
       props: { fieldId: 'work-dates', modelValue: undefined },

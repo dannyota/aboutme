@@ -122,6 +122,181 @@ describe('closed rich-text schema', () => {
 });
 
 describe('RichTextEditor', () => {
+  it('keeps a dirty draft when the external model changes', async () => {
+    const wrapper = mount(RichTextEditor, { props: { modelValue: '' } });
+    const editor = wrapper.get('[contenteditable="true"]');
+    const paste = new Event('paste', { cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: {
+        files: [],
+        getData: (kind: string) => kind === 'text/plain' ? 'user draft' : '',
+      },
+    });
+    editor.element.dispatchEvent(paste);
+    await wrapper.setProps({ modelValue: '<p>external</p>' });
+    expect(editor.html()).toContain('user draft');
+    expect(editor.html()).not.toContain('external');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    await editor.trigger('blur');
+    expect(latestEmission(wrapper)).toBe('<p>user draft</p>');
+  });
+  it(
+    'does not emit stale output after restoring the original document',
+    async () => {
+      const rect = {
+        bottom: 10,
+        height: 10,
+        left: 0,
+        right: 10,
+        top: 0,
+        width: 10,
+        x: 0,
+        y: 0,
+      } as DOMRect;
+      const textDescriptor = Object.getOwnPropertyDescriptor(
+        Text.prototype,
+        'getClientRects',
+      );
+      Object.defineProperty(Text.prototype, 'getClientRects', {
+        configurable: true,
+        value: () => [rect],
+      });
+      const rangeDescriptor = Object.getOwnPropertyDescriptor(
+        Range.prototype,
+        'getClientRects',
+      );
+      Object.defineProperty(Range.prototype, 'getClientRects', {
+        configurable: true,
+        value: () => [rect],
+      });
+      const scrollBy = vi
+        .spyOn(window, 'scrollBy')
+        .mockImplementation(() => {});
+      const wrapper = mount(RichTextEditor, {
+        attachTo: document.body,
+        props: { modelValue: '<p>a</p>' },
+      });
+      try {
+        const editor = wrapper.get('[contenteditable="true"]');
+        await selectEditorText(editor.element);
+        await wrapper.get('[aria-label="Bold"]').trigger('click');
+        expect(editor.html()).toContain('<strong>a</strong>');
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+        await selectEditorText(editor.element);
+        await wrapper.get('[aria-label="Bold"]').trigger('click');
+        expect(editor.html()).toContain('<p>a</p>');
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+        await editor.trigger('blur');
+        expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+      } finally {
+        wrapper.unmount();
+        scrollBy.mockRestore();
+        if (textDescriptor === undefined) {
+          delete (Text.prototype as { getClientRects?: unknown })
+            .getClientRects;
+        } else {
+          Object.defineProperty(
+            Text.prototype,
+            'getClientRects',
+            textDescriptor,
+          );
+        }
+        if (rangeDescriptor === undefined) {
+          delete (Range.prototype as { getClientRects?: unknown })
+            .getClientRects;
+        } else {
+          Object.defineProperty(
+            Range.prototype,
+            'getClientRects',
+            rangeDescriptor,
+          );
+        }
+      }
+    },
+  );
+
+  it('reverts a dirty draft on Escape without emitting', async () => {
+    const wrapper = mount(RichTextEditor, {
+      props: { modelValue: '<p>a</p>' },
+    });
+    const editor = wrapper.get('[contenteditable="true"]');
+    const paste = new Event('paste', { cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { files: [], getData: () => 'draft' },
+    });
+    editor.element.dispatchEvent(paste);
+    await wrapper.vm.$nextTick();
+    expect(editor.html()).toContain('draft');
+    await editor.trigger('keydown', { key: 'Escape' });
+    expect(editor.html()).toContain('a');
+    expect(editor.html()).not.toContain('draft');
+    await editor.trigger('blur');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  });
+
+  it('does not handle Escape from a toolbar control', async () => {
+    const wrapper = mount(RichTextEditor, {
+      props: { modelValue: '<p>a</p>' },
+    });
+    const editor = wrapper.get('[contenteditable="true"]');
+    const paste = new Event('paste', { cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { files: [], getData: () => 'draft' },
+    });
+    editor.element.dispatchEvent(paste);
+    await wrapper.vm.$nextTick();
+
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Escape',
+    });
+    wrapper.get('[aria-label="Bold"]').element.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(editor.html()).toContain('draft');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  });
+
+  it('does not commit when focus moves from editor to toolbar', async () => {
+    const wrapper = mount(RichTextEditor, {
+      attachTo: document.body,
+      props: { modelValue: '<p>a</p>' },
+    });
+    const editor = wrapper.get('[contenteditable="true"]');
+    const paste = new Event('paste', { cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { files: [], getData: () => 'draft' },
+    });
+    editor.element.dispatchEvent(paste);
+    await wrapper.vm.$nextTick();
+
+    const bold = wrapper.get('[aria-label="Bold"]');
+    await editor.trigger('blur', { relatedTarget: bold.element });
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+
+    await editor.trigger('blur', { relatedTarget: document.body });
+    expect(wrapper.emitted('update:modelValue')).toHaveLength(1);
+    expect(latestEmission(wrapper)).toBe('<p>draft</p><p>a</p>');
+    wrapper.unmount();
+  });
+
+  it('commits a changed document only when the editor blurs', async () => {
+    const wrapper = mount(RichTextEditor, { props: { modelValue: '' } });
+    const editor = wrapper.get('[contenteditable="true"]');
+    const paste = new Event('paste', { cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: {
+        files: [],
+        getData: (kind: string) => kind === 'text/plain' ? 'draft' : '',
+      },
+    });
+    editor.element.dispatchEvent(paste);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    await editor.trigger('blur');
+    expect(wrapper.emitted('update:modelValue')).toEqual([['<p>draft</p>']]);
+  });
   it('blocks file paste and drop without emitting', async () => {
     const wrapper = mount(RichTextEditor, { props: { modelValue: '' } });
     const editor = wrapper.get('[contenteditable="true"]');
@@ -161,6 +336,7 @@ describe('RichTextEditor', () => {
     await wrapper.vm.$nextTick();
 
     expect(paste.defaultPrevented).toBe(true);
+    await editor.trigger('blur');
     expect(wrapper.emitted('update:modelValue')).toEqual([
       ['<p>plain text</p>'],
     ]);
@@ -184,6 +360,8 @@ describe('RichTextEditor', () => {
     await wrapper.vm.$nextTick();
 
     expect(paste.defaultPrevented).toBe(true);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    await editor.trigger('blur');
     expect(latestEmission(wrapper)).toBe('<p>safe</p>');
   });
 
@@ -230,6 +408,8 @@ describe('RichTextEditor', () => {
 
     await editor.trigger('keydown', { key: 'Backspace' });
 
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    await editor.trigger('blur');
     expect(latestEmission(wrapper)).toBe('');
   });
 
@@ -335,6 +515,11 @@ describe('RichTextEditor', () => {
         } else {
           await editor.trigger('keydown', action.keyboard);
         }
+        expect(
+          latestEmission(wrapper),
+          `${action.button} by ${trigger}`,
+        ).toBeUndefined();
+        await editor.trigger('blur');
         expect(latestEmission(wrapper), `${action.button} by ${trigger}`).toBe(
           action.expected,
         );
