@@ -103,6 +103,8 @@ T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
   `.editor-error-summary`, `.editor-conflicts` rules deleted from
   `app/assets/css/editor.css`; the root `.editor-inspector` layout rule is also
   deleted while its descendant form rules remain for T08–T12
+- Legacy editor-scoped button selectors in `app/assets/css/app.css` narrowed to
+  exclude generated `[data-slot="button"]` controls; no other rule changes
 
 ## T08 — Personal details
 
