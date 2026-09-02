@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ResumeSummary } from '../../../editor/resumeApi';
+import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
 
 const props = defineProps<{
   item: ResumeSummary | null;
@@ -7,75 +8,29 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ close: []; submit: [id: string, title: string] }>();
-const title = ref('');
-const input = ref<HTMLInputElement | null>(null);
-const returnFocus = ref<HTMLElement | null>(null);
-
-watch(() => props.item, (item) => {
-  title.value = '';
-  if (item !== null) {
-    returnFocus.value = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    void nextTick(() => input.value?.focus());
-  } else if (returnFocus.value !== null) {
-    const target = returnFocus.value;
-    returnFocus.value = null;
-    void nextTick(() => target.focus());
-  }
-}, { immediate: true });
-
-function close(): void {
-  if (!props.busy) emit('close');
-}
 
 function submit(): void {
-  if (props.item !== null && title.value === props.item.title) {
-    emit('submit', props.item.id, title.value);
+  if (props.item !== null) {
+    emit('submit', props.item.id, props.item.title);
   }
 }
 </script>
 
 <template>
-  <div
-    v-if="item !== null"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="delete-resume-title"
-    aria-describedby="delete-resume-description"
-    @keydown.esc="close"
-  >
-    <h2 id="delete-resume-title">
-      Delete resume
-    </h2>
-    <p id="delete-resume-description">
-      This permanently deletes the resume. Type its title to confirm.
-    </p>
-    <form @submit.prevent="submit">
-      <label>Current title <input
-        ref="input"
-        v-model="title"
-        :disabled="busy"
-      ></label>
-      <p
-        v-if="title !== item.title"
-        role="status"
-      >
-        Enter the current title to enable deletion.
-      </p>
-      <button
-        type="submit"
-        :disabled="busy || title !== item.title"
-      >
-        Delete
-      </button>
-      <button
-        type="button"
-        :disabled="busy"
-        @click="close"
-      >
-        Cancel
-      </button>
-    </form>
-  </div>
+  <ConfirmDialog
+    :open="item !== null"
+    title="Delete resume"
+    :description="item === null
+      ? 'This permanently deletes the resume. Type its title to confirm.'
+      : `Delete ${item.title}? This permanently deletes the resume.`"
+    confirm-label="Delete"
+    confirm-input-label="Current title"
+    :confirm-text="item?.title"
+    confirm-action="confirm-delete"
+    cancel-action="cancel-delete"
+    destructive
+    :busy="busy"
+    @cancel="emit('close')"
+    @confirm="submit"
+  />
 </template>

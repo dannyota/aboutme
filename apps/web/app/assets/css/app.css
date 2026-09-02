@@ -22,8 +22,7 @@
 }
 
 .aboutme-app .app-brand,
-.aboutme-app .app-nav a,
-.aboutme-app .resume-list a {
+.aboutme-app .app-nav a {
   color: inherit;
   text-decoration: none;
 }
@@ -147,10 +146,7 @@
   max-inline-size: 32rem;
 }
 
-.aboutme-app .login,
-.aboutme-app .resume-list,
-.aboutme-app .resume-list-page > p,
-.aboutme-app .app-page [role='dialog'] {
+.aboutme-app .login {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
@@ -158,25 +154,20 @@
   box-shadow: 0 1px 2px oklch(0.141 0.005 285.823 / 5%);
 }
 
-.aboutme-app .login,
-.aboutme-app .resume-list {
+.aboutme-app .login {
   padding: clamp(1.25rem, 3vw, 2rem);
 }
 
-.aboutme-app .login h1,
-.aboutme-app .resume-list h1 {
+.aboutme-app .login h1 {
   margin: 0;
   letter-spacing: -0.04em;
 }
 
-.aboutme-app .login p,
-.aboutme-app .resume-list p,
-.aboutme-app .resume-list-page > p {
+.aboutme-app .login p {
   color: var(--muted-foreground);
 }
 
-.aboutme-app .login-providers,
-.aboutme-app .resume-list ul {
+.aboutme-app .login-providers {
   display: grid;
   gap: 0.625rem;
   margin: 1.5rem 0 0;
@@ -184,8 +175,7 @@
   list-style: none;
 }
 
-.aboutme-app .login-providers a,
-.aboutme-app .resume-list a {
+.aboutme-app .login-providers a {
   display: inline-flex;
   align-items: center;
   min-block-size: 2.5rem;
@@ -195,33 +185,8 @@
   color: var(--foreground);
 }
 
-.aboutme-app .login-providers a:hover,
-.aboutme-app .resume-list li:hover {
+.aboutme-app .login-providers a:hover {
   background: var(--accent);
-}
-
-.aboutme-app .resume-list > div,
-.aboutme-app .resume-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-}
-
-.aboutme-app .resume-list > div {
-  justify-content: space-between;
-}
-
-.aboutme-app .resume-list li {
-  flex-wrap: wrap;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) - 0.15rem);
-  padding: 0.5rem;
-}
-
-.aboutme-app .resume-list li a {
-  flex: 1 1 12rem;
-  border: 0;
-  padding-inline: 0.25rem;
 }
 
 .aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) :is(button, input, select, textarea) {
@@ -244,15 +209,6 @@
 .aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
-}
-
-.aboutme-app .app-page [role='dialog'] {
-  position: fixed;
-  z-index: 10;
-  inset: 50% auto auto 50%;
-  inline-size: min(calc(100vw - 2rem), 30rem);
-  transform: translate(-50%, -50%);
-  padding: 1.5rem;
 }
 
 .aboutme-app :is(.app-page, .editor-topbar, .editor-outline, .editor-inspector) :is(form, fieldset) {

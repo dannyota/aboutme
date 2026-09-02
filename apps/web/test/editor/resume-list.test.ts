@@ -20,7 +20,7 @@ import type {
   OpaqueCreateOutcome,
   ResumeMutationCoordinator,
 } from '../../app/editor/coordinator';
-import type { ResumeApi } from '../../app/editor/resumeApi';
+import type { ResumeApi, ResumeSummary } from '../../app/editor/resumeApi';
 import { parseRevision } from '../../app/editor/revision';
 import type { EditorRuntime } from '../../app/editor/types';
 import { useResumeStore } from '../../app/stores/resumes';
@@ -31,6 +31,30 @@ import {
 import { acceptedFixture } from './fixture';
 
 mockNuxtImport('navigateTo', () => vi.fn());
+
+function summary(overrides: Partial<ResumeSummary> = {}): ResumeSummary {
+  const fixture = acceptedFixture();
+  return {
+    ...fixture.metadata,
+    revision: fixture.revision,
+    ...overrides,
+  };
+}
+
+function opaqueOutcome(title = 'First'): OpaqueCreateOutcome {
+  return {
+    kind: 'create-cutoff',
+    intent: {
+      kind: 'resumeCreate',
+      id: 'intent-opaque',
+      ownerId: 'owner-1',
+      sequence: 0,
+      title,
+    },
+    attempt: {} as never,
+    refreshedItems: [],
+  };
+}
 
 describe('useResumeList', () => {
   it('waits for auth and preserves the server list order', async () => {
@@ -492,10 +516,12 @@ describe('useResumeList', () => {
     });
 
     const firstButton = wrapper.get(
-      `[data-testid="resume-row-${first.id}"] button`,
+      `[data-testid="resume-row-${first.id}"]`
+      + ` [aria-label="Rename ${first.title}"]`,
     );
     const secondButton = wrapper.get(
-      `[data-testid="resume-row-${second.id}"] button`,
+      `[data-testid="resume-row-${second.id}"]`
+      + ` [aria-label="Rename ${second.title}"]`,
     );
     expect(firstButton.attributes('disabled')).toBeDefined();
     expect(secondButton.attributes('disabled')).toBeUndefined();
@@ -532,6 +558,9 @@ describe('useResumeList', () => {
         },
         global: { stubs: { NuxtLink: true } },
       });
+      const create = document.createElement('button');
+      create.dataset.testid = 'create-resume';
+      document.body.append(create);
       await wrapper.setProps({
         items: [first, second, third].filter((item) => item.id !== removed),
         removalFocusId: nextId,
@@ -540,12 +569,220 @@ describe('useResumeList', () => {
       await nextTick();
       await nextTick();
       const target = nextId === null
-        ? wrapper.get('[data-testid="create-resume"]').element
-        : wrapper.get(`[data-testid="resume-row-${nextId}"] button`).element;
+        ? document.body.querySelector('[data-testid="create-resume"]')!
+        : wrapper.get(
+          `[data-testid="resume-row-${nextId}"] [aria-label^="Rename "]`,
+        ).element;
       expect(document.activeElement).toBe(target);
+      wrapper.unmount();
+      create.remove();
+    },
+  );
+
+  it('renders rows in a table with accessible actions', () => {
+    const wrapper = mount(ResumeList, {
+      props: {
+        items: [
+          summary({
+            id: 'r1',
+            title: 'First',
+            updatedAt: '2026-01-01T00:00:00Z',
+          }),
+        ],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+      },
+      global: {
+        stubs: {
+          NuxtLink: {
+            props: ['to'],
+            template: '<a :href="to"><slot /></a>',
+          },
+        },
+      },
+    });
+    const row = wrapper.get('[data-testid="resume-row-r1"]');
+    expect(row.element.tagName).toBe('TR');
+    expect(row.get('[href="/app/resumes/r1"]').attributes('href')).toBe(
+      '/app/resumes/r1',
+    );
+    expect(row.get('[aria-label="Rename First"]').text()).toBe('Rename');
+    expect(row.get('[aria-label="Delete First"]').text()).toBe('Delete');
+    wrapper.unmount();
+  });
+
+  it('gates deletion on the exact current title', async () => {
+    const wrapper = mount(DeleteResumeDialog, {
+      attachTo: document.body,
+      props: { item: { id: 'r1', title: 'First' }, busy: false },
+    });
+    await nextTick();
+    const confirm = document.body.querySelector<HTMLButtonElement>(
+      '[data-action="confirm-delete"]',
+    )!;
+    expect(confirm).not.toBeNull();
+    if (confirm === null) {
+      wrapper.unmount();
+      return;
+    }
+    expect(confirm.disabled).toBe(true);
+    const input = document.body.querySelector<HTMLInputElement>(
+      '[role="alertdialog"] [data-slot="input"]',
+    )!;
+    expect(input).not.toBeNull();
+    if (input === null) {
+      wrapper.unmount();
+      return;
+    }
+    const label = document.body.querySelector(
+      `[data-slot="label"][for="${input.id}"]`,
+    );
+    expect(label).not.toBeNull();
+    if (label === null) {
+      wrapper.unmount();
+      return;
+    }
+    expect(label.textContent).toContain('Current title');
+    input.value = 'First';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    expect(confirm.disabled).toBe(false);
+    confirm.click();
+    expect(wrapper.emitted('submit')).toEqual([['r1', 'First']]);
+    wrapper.unmount();
+  });
+
+  it.each(['first', 'First '])(
+    'keeps deletion disabled for a non-exact title %s', async (value) => {
+      const wrapper = mount(DeleteResumeDialog, {
+        attachTo: document.body,
+        props: { item: { id: 'r1', title: 'First' }, busy: false },
+      });
+      await nextTick();
+      const input = document.body.querySelector<HTMLInputElement>(
+        '[role="alertdialog"] [data-slot="input"]',
+      )!;
+      expect(input).not.toBeNull();
+      if (input === null) {
+        wrapper.unmount();
+        return;
+      }
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await nextTick();
+      const confirm = document.body.querySelector<HTMLButtonElement>(
+        '[data-action="confirm-delete"]',
+      );
+      expect(confirm).not.toBeNull();
+      if (confirm === null) {
+        wrapper.unmount();
+        return;
+      }
+      expect(confirm.disabled).toBe(true);
+      expect(wrapper.emitted('submit')).toBeUndefined();
       wrapper.unmount();
     },
   );
+
+  it('does not submit rename when the title is unchanged', async () => {
+    const wrapper = mount(RenameResumeDialog, {
+      attachTo: document.body,
+      props: { item: summary({ id: 'r1', title: 'First' }), busy: false },
+    });
+    await nextTick();
+    const form = document.body.querySelector<HTMLFormElement>(
+      '[role="dialog"] [novalidate]',
+    );
+    expect(form).not.toBeNull();
+    if (form === null) {
+      wrapper.unmount();
+      return;
+    }
+    form.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await nextTick();
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it(
+    'shows recovery actions without the form for an opaque create',
+    async () => {
+      const wrapper = mount(CreateResumeDialog, {
+        attachTo: document.body,
+        props: { open: true, busy: false, retained: opaqueOutcome() },
+      });
+      await nextTick();
+      expect(document.body.textContent).toContain(
+        'We could not confirm whether this resume was created.',
+      );
+      expect(document.body.textContent).toContain('Refresh list');
+      expect(document.body.textContent).toContain('Abandon');
+      expect(document.body.querySelector('[name="title"]')).toBeNull();
+      wrapper.unmount();
+    });
+
+  it('renders hostile titles as text in the row and dialogs', async () => {
+    const hostile = '<img src=x onerror=alert(1)>';
+    const item = summary({ id: 'hostile', title: hostile });
+    const rowWrapper = mount(ResumeList, {
+      props: {
+        items: [item],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+      },
+    });
+    expect(
+      document.body.querySelector(
+        `[data-testid="resume-row-${item.id}"] [onerror]`,
+      ),
+    ).toBeNull();
+    expect(
+      rowWrapper.get(`[data-testid="resume-row-${item.id}"]`).text(),
+    ).toContain(hostile);
+    rowWrapper.unmount();
+
+    const renameWrapper = mount(RenameResumeDialog, {
+      attachTo: document.body,
+      props: { item, busy: false },
+    });
+    await nextTick();
+    const renameInput = document.body.querySelector<HTMLInputElement>(
+      '[role="dialog"] [data-slot="input"]',
+    )!;
+    expect(renameInput).not.toBeNull();
+    if (renameInput === null) {
+      renameWrapper.unmount();
+      return;
+    }
+    expect(renameInput.value).toBe(hostile);
+    expect(
+      document.body.querySelector(
+        '[role="dialog"] [onerror]',
+      ),
+    ).toBeNull();
+    renameWrapper.unmount();
+
+    const deleteWrapper = mount(DeleteResumeDialog, {
+      attachTo: document.body,
+      props: { item, busy: false },
+    });
+    await nextTick();
+    const alertDialog = document.body.querySelector(
+      '[role="alertdialog"]',
+    );
+    expect(alertDialog).not.toBeNull();
+    if (alertDialog === null) {
+      deleteWrapper.unmount();
+      return;
+    }
+    expect(alertDialog.querySelector('[onerror]')).toBeNull();
+    expect(alertDialog.textContent).toContain(hostile);
+    deleteWrapper.unmount();
+  });
 
   it('returns focus after create cancel with dialog semantics', async () => {
     const trigger = document.createElement('button');
@@ -556,14 +793,41 @@ describe('useResumeList', () => {
       props: { open: true, busy: false, retained: null },
     });
     await nextTick();
-    const dialog = wrapper.get('[role="dialog"]');
-    expect(dialog.attributes()).toMatchObject({
-      'aria-labelledby': 'create-resume-title',
-      'aria-describedby': 'create-resume-description',
-    });
-    await wrapper.get('form').trigger('submit');
+    const dialog = document.body.querySelector(
+      '[role="dialog"]',
+    );
+    expect(dialog).not.toBeNull();
+    if (dialog === null) {
+      wrapper.unmount();
+      trigger.remove();
+      return;
+    }
+    expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
+    const form = document.body.querySelector<HTMLFormElement>(
+      '[role="dialog"] [novalidate]',
+    );
+    expect(form).not.toBeNull();
+    if (form === null) {
+      wrapper.unmount();
+      trigger.remove();
+      return;
+    }
+    form.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await nextTick();
     expect(wrapper.emitted('submit')).toEqual([['', undefined]]);
-    await wrapper.get('button[type="button"]').trigger('click');
+    const cancel = document.body.querySelector<HTMLButtonElement>(
+      '[role="dialog"] [data-slot="button"][type="button"]',
+    );
+    expect(cancel).not.toBeNull();
+    if (cancel === null) {
+      wrapper.unmount();
+      trigger.remove();
+      return;
+    }
+    cancel.click();
     await wrapper.setProps({ open: false });
     await nextTick();
     expect(document.activeElement).toBe(trigger);
@@ -584,9 +848,43 @@ describe('useResumeList', () => {
       props: { item, busy: false },
     });
     await nextTick();
-    await wrapper.get('form').trigger('submit');
-    expect(wrapper.emitted('submit')).toEqual([[item.id, item.title]]);
-    await wrapper.get('[role="dialog"]').trigger('keydown', { key: 'Escape' });
+    const form = document.body.querySelector<HTMLFormElement>(
+      '[role="dialog"] [novalidate]',
+    );
+    expect(form).not.toBeNull();
+    if (form === null) {
+      wrapper.unmount();
+      trigger.remove();
+      return;
+    }
+    const input = document.body.querySelector<HTMLInputElement>(
+      '[role="dialog"] [data-slot="input"]',
+    );
+    expect(input).not.toBeNull();
+    if (input === null) {
+      wrapper.unmount();
+      trigger.remove();
+      return;
+    }
+    input.value = 'Renamed';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    form.dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await nextTick();
+    expect(wrapper.emitted('submit')).toEqual([[item.id, 'Renamed']]);
+    const dialog = document.body.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    if (dialog === null) {
+      wrapper.unmount();
+      trigger.remove();
+      return;
+    }
+    dialog.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await nextTick();
     expect(wrapper.emitted('close')).toHaveLength(1);
     await wrapper.setProps({ item: null });
     await nextTick();
@@ -608,11 +906,25 @@ describe('useResumeList', () => {
       props: { item, busy: false },
     });
     await nextTick();
-    const input = wrapper.get('input');
-    await input.setValue(item.title);
-    await wrapper.get('form').trigger('submit');
+    const input = document.body.querySelector<HTMLInputElement>(
+      '[role="alertdialog"] [data-slot="input"]',
+    )!;
+    expect(input).not.toBeNull();
+    if (input === null) {
+      wrapper.unmount();
+      trigger.remove();
+      return;
+    }
+    input.value = item.title;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    document.body.querySelector<HTMLButtonElement>(
+      '[data-action="confirm-delete"]',
+    )!.click();
+    await nextTick();
     expect(wrapper.emitted('submit')).toEqual([[item.id, item.title]]);
     await wrapper.setProps({ item: null });
+    await nextTick();
     await nextTick();
     expect(document.activeElement).toBe(trigger);
     wrapper.unmount();

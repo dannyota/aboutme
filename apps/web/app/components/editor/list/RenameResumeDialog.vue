@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import type { ResumeSummary } from '../../../editor/resumeApi';
+import FormDialog from '@/components/app/FormDialog.vue';
+import FormField from '@/components/app/FormField.vue';
+import { Input } from '@/components/ui/input';
 
 const props = defineProps<{
   item: ResumeSummary | null;
@@ -8,7 +11,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: []; submit: [id: string, title: string] }>();
 const title = ref('');
-const input = ref<HTMLInputElement | null>(null);
 const returnFocus = ref<HTMLElement | null>(null);
 
 watch(() => props.item, (item) => {
@@ -17,7 +19,6 @@ watch(() => props.item, (item) => {
     returnFocus.value = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    void nextTick(() => input.value?.focus());
   } else if (returnFocus.value !== null) {
     const target = returnFocus.value;
     returnFocus.value = null;
@@ -25,50 +26,40 @@ watch(() => props.item, (item) => {
   }
 }, { immediate: true });
 
-function close(): void {
-  if (!props.busy) emit('close');
-}
-
 function submit(): void {
-  if (props.item !== null) emit('submit', props.item.id, title.value);
+  if (props.item !== null && title.value !== props.item.title) {
+    emit('submit', props.item.id, title.value);
+  }
 }
 </script>
 
 <template>
-  <div
-    v-if="item !== null"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="rename-resume-title"
-    aria-describedby="rename-resume-description"
-    @keydown.esc="close"
+  <FormDialog
+    :open="item !== null"
+    title="Rename resume"
+    description="Enter the new resume title."
+    submit-label="Save"
+    :submit-disabled="item === null || title === item.title"
+    :busy="busy"
+    @cancel="emit('close')"
+    @submit="submit"
   >
-    <h2 id="rename-resume-title">
-      Rename resume
-    </h2>
-    <p id="rename-resume-description">
-      Enter the new resume title.
-    </p>
-    <form @submit.prevent="submit">
-      <label>Title <input
-        ref="input"
-        v-model="title"
-        required
-        :disabled="busy"
-      ></label>
-      <button
-        type="submit"
-        :disabled="busy"
-      >
-        Save
-      </button>
-      <button
-        type="button"
-        :disabled="busy"
-        @click="close"
-      >
-        Cancel
-      </button>
-    </form>
-  </div>
+    <FormField
+      label="Title"
+      name="title"
+      required
+    >
+      <template #default="{ id, describedBy, invalid }">
+        <Input
+          :id="id"
+          v-model="title"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          name="title"
+          required
+          :disabled="busy"
+        />
+      </template>
+    </FormField>
+  </FormDialog>
 </template>

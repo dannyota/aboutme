@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import type { ResumeSummary } from '../../../editor/resumeApi';
 import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
+import EmptyState from '@/components/app/EmptyState.vue';
+import LoadingState from '@/components/app/LoadingState.vue';
+import PageHeader from '@/components/app/PageHeader.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
+import { Button } from '@/components/ui/button';
 import {
   createStatusMessage,
   useResumeList,
@@ -67,25 +72,49 @@ async function remove(id: string, title: string): Promise<void> {
 </script>
 
 <template>
-  <main class="app-page resume-list-page">
-    <p
+  <main class="app-page space-y-6">
+    <PageHeader
+      title="Resumes"
+      description="Up to three private resumes. Publishing is a separate step."
+    >
+      <template #actions>
+        <Button
+          data-testid="create-resume"
+          type="button"
+          @click="createOpen = true"
+        >
+          Create resume
+        </Button>
+      </template>
+    </PageHeader>
+    <LoadingState
       v-if="list.view.value.kind === 'waiting-auth'"
-      role="status"
-    >
-      Checking your session.
-    </p>
-    <p
+      label="Checking your session."
+    />
+    <LoadingState
       v-else-if="list.view.value.kind === 'loading'"
-      role="status"
-    >
-      Loading resumes.
-    </p>
-    <p
+      label="Loading resumes."
+    />
+    <StatusBanner
       v-else-if="list.view.value.kind === 'unavailable'"
-      role="alert"
+      kind="error"
     >
       Resumes are unavailable. Try again.
-    </p>
+    </StatusBanner>
+    <EmptyState
+      v-else-if="list.items.value.length === 0"
+      title="No resumes yet."
+      description="Create your first resume to start editing."
+    >
+      <template #action>
+        <Button
+          type="button"
+          @click="createOpen = true"
+        >
+          Create resume
+        </Button>
+      </template>
+    </EmptyState>
     <EditorListResumeList
       v-else
       :items="list.items.value"
@@ -117,11 +146,11 @@ async function remove(id: string, title: string): Promise<void> {
       @close="deleteItem = null"
       @submit="remove"
     />
-    <p
+    <StatusBanner
       v-if="createMessage !== null || list.actionMessage.value !== null"
-      role="status"
+      kind="info"
     >
       {{ createMessage ?? list.actionMessage.value }}
-    </p>
+    </StatusBanner>
   </main>
 </template>
