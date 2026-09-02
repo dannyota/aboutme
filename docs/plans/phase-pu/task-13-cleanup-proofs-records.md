@@ -9,8 +9,9 @@
 ## Contract
 
 - The four legacy stylesheets and their `tailwind.css` import lines are deleted,
-  along with `OptionalField.vue`. `tailwind.css` then matches decisions U2 minus
-  the legacy lines; the toolkit test still passes.
+  along with `OptionalField.vue`. `FieldIntent` is then narrowed to
+  `set | unset`. `tailwind.css` matches decisions U2 minus the legacy lines; the
+  toolkit test still passes.
 - `test/ui/surface-boundary.test.ts` proves no raw control or hand-written
   dialog exists in scope.
 - Every screen is reviewed in light and dark at 1440×1000 and 1024×768; the
@@ -82,6 +83,7 @@
 
 - [ ] Delete `app/assets/css/{app,editor,auth,landing}.css`, their import lines
       in `tailwind.css`, and `app/components/editor/forms/OptionalField.vue`.
+      Narrow `app/components/editor/forms/fieldIntent.ts` to `set | unset`.
       Confirm
       `grep -rn "editor.css\|auth.css\|landing.css\|app.css\|OptionalField" app test`
       prints nothing.

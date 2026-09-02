@@ -117,8 +117,10 @@ writes the same surface.
 | W5   | 10, 11, 12       | T07 committed                      | Three disjoint Vitest runs                     |
 | W6   | 13, review, exit | T00–T12 reports accepted           | Owner alone: build, browser proofs, then gates |
 
-After W4b, the integration owner narrows `FieldIntent` to `set | unset` and runs
-`make web-typecheck`. W5 does not start until that owner window is green.
+After W4b, the integration owner confirms that only the T13-owned legacy
+`OptionalField.vue` still emits `clear`, and W5 starts after the integrated web
+typecheck is green. T13 deletes that final producer, narrows `FieldIntent` to
+`set | unset`, and runs web typecheck before its gates.
 
 ## Dispatch and completion
 
