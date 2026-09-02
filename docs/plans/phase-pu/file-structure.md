@@ -61,8 +61,9 @@ after every earlier window is integrated.
 - `app/components/app/{AppShell,AccountMenu,ThemeToggle,PageHeader,FormField,TextField,SelectField,CheckboxField,SwitchField,ConfirmDialog,FormDialog,StatusBanner,EmptyState,IconButton,LoadingState}.vue`
 - `app/components/app/AppChrome.vue` and `AccountControl.vue` deleted
 - `test/app/{app-shell,form-field,text-field,confirm-dialog,form-dialog,status-banner}.test.ts`
-- `test/app-chrome.test.ts` and `test/logout-state.test.ts` (retargeted to
-  `AppShell`), `test/editor/theme.test.ts`
+- `test/app-chrome.test.ts` deleted after its cases move to
+  `test/app/app-shell.test.ts`; `test/logout-state.test.ts` retargeted to
+  `AppShell`; `test/editor/theme.test.ts` retargeted to the new shell hooks
 - T03 owner window in the shared-path table for `EditorShell.vue`
 
 The integration owner narrows `app/components/editor/forms/fieldIntent.ts` after
