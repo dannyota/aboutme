@@ -9,7 +9,7 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. Every ADR
-through 0028 is accepted and integrated here. If a page disagrees with an
+through 0029 is accepted and integrated here. If a page disagrees with an
 accepted ADR, the ADR controls that decision until this text is corrected.
 
 ## Sections
