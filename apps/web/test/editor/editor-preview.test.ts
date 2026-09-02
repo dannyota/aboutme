@@ -1,4 +1,5 @@
-import { shallowMount } from '@vue/test-utils';
+import { mount, shallowMount } from '@vue/test-utils';
+import { defineComponent, nextTick } from 'vue';
 import { describe, expect, it } from 'vitest';
 
 import EditorPreview from '../../app/components/editor/EditorPreview.vue';
@@ -22,22 +23,97 @@ describe('EditorPreview', () => {
     );
   });
 
-  it('suspends the complete preview while an accepted photo is unavailable',
-    () => {
+  it('renders without the photo while the read is pending', () => {
+    const accepted = acceptedFixture();
+    accepted.document.personalDetails.photo = {
+      key: 'resumes/resume-1/private-object.jpg',
+    };
+    const wrapper = shallowMount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: 'en',
+        photoRead: { kind: 'loading', binding: 'k', generation: 1 },
+      },
+    });
+
+    const renderer = wrapper.getComponent({ name: 'ResumeDocument' });
+    expect(renderer.props('document').personalDetails.photo).toBeUndefined();
+    expect(renderer.props('context')).toEqual({ lng: 'en', mode: 'paged' });
+    expect(wrapper.get('[role="status"]').text()).toContain('Photo is loading');
+    expect(wrapper.html()).not.toContain('private-object.jpg');
+  });
+
+  it('names the unavailable state and the photo panel', () => {
+    const accepted = acceptedFixture();
+    accepted.document.personalDetails.photo = { key: 'resumes/resume-1/p.jpg' };
+    const wrapper = shallowMount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: 'en',
+        photoRead: {
+          kind: 'suspended',
+          binding: 'k',
+          generation: 1,
+          reason: 'read-failed',
+        },
+      },
+    });
+
+    expect(wrapper.findComponent({ name: 'ResumeDocument' }).exists()).toBe(
+      true,
+    );
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      'Photo unavailable',
+    );
+  });
+
+  it(
+    'keeps the safe render notice when the fallback renderer fails',
+    async () => {
       const accepted = acceptedFixture();
       accepted.document.personalDetails.photo = {
-        key: 'resumes/resume-1/photo.jpg',
+        key: 'resumes/resume-1/private-object.jpg',
       };
-      const wrapper = shallowMount(EditorPreview, {
-        props: { document: accepted.document, lng: 'en' },
+      let projectedPhoto: unknown = 'not-observed';
+      const wrapper = mount(EditorPreview, {
+        props: {
+          document: accepted.document,
+          lng: 'en',
+          photoRead: { kind: 'loading', binding: 'k', generation: 1 },
+        },
+        global: {
+          stubs: {
+            ResumeDocument: defineComponent({
+              name: 'ResumeDocument',
+              props: { document: { type: Object, required: true } },
+              setup(props) {
+                projectedPhoto = (
+                  props.document as {
+                    personalDetails: { photo?: unknown };
+                  }
+                ).personalDetails.photo;
+                throw new Error('renderer failed');
+              },
+              template: '<div />',
+            }),
+          },
+        },
       });
+      await nextTick();
 
-      expect(wrapper.findComponent({ name: 'ResumeDocument' }).exists())
-        .toBe(false);
-      expect(wrapper.get('[role="status"]').text()).toContain(
-        'Preview is waiting for the authorized photo',
+      const status = wrapper
+        .findAll('[role="status"]')
+        .map((item) => item.text());
+      expect(projectedPhoto).toBeUndefined();
+      expect(status).toContain(
+        'Photo is loading. The preview is shown without it.',
       );
-    });
+      expect(status).toContain(
+        'Preview is temporarily unavailable. Your edits are still safe.',
+      );
+      expect(wrapper.html()).not.toContain('private-object.jpg');
+    },
+  );
 
   it('passes an authorized data URL without exposing the stored key', () => {
     const accepted = acceptedFixture();

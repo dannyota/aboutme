@@ -368,6 +368,7 @@ function sectionLabel(type: string): string {
         :document="document"
         :lng="record.current.metadata.lng"
         :photo-url="photoUrl"
+        :photo-read="record.photoRead"
       />
     </div>
 
