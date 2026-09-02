@@ -384,6 +384,7 @@ remaining legacy `clear` producers. Retarget the three shell tests.
     readonly name?: string;
     readonly hint?: string;
     readonly error?: string;
+    readonly errorAttrs?: Record<string, string>;
     readonly required?: boolean;
     readonly class?: string;
   }>();
@@ -414,6 +415,7 @@ remaining legacy `clear` producers. Retarget the three shell tests.
       </p>
       <p
         v-if="error"
+        v-bind="errorAttrs"
         :id="errorId"
         role="alert"
         :data-error-for="name"
@@ -450,6 +452,7 @@ remaining legacy `clear` producers. Retarget the three shell tests.
       readonly placeholder?: string;
       readonly hint?: string;
       readonly error?: string;
+      readonly errorAttrs?: Record<string, string>;
       readonly required?: boolean;
       readonly disabled?: boolean;
       readonly controlAttrs?: Record<string, string>;
@@ -509,6 +512,7 @@ remaining legacy `clear` producers. Retarget the three shell tests.
       :id="id"
       :class="props.class"
       :error="error"
+      :error-attrs="errorAttrs"
       :hint="hint"
       :label="label"
       :name="name"

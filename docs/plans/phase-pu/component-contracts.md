@@ -52,7 +52,8 @@ Owns ids and ARIA wiring for one control.
 
 - Props: `label: string`, `id?: string` (default from `useId()`),
   `hint?: string`, `error?: string`, `required?: boolean`, `name?: string`
-  (rendered as `data-field` on the wrapper).
+  (rendered as `data-field` on the wrapper),
+  `errorAttrs?: Record<string, string>` (applied to the error paragraph).
 - Slot `default` with slot props
   `{ id: string; describedBy: string | undefined; invalid: true | undefined }`.
 - Renders `Label :for="id"`, the slot,
@@ -66,15 +67,16 @@ Owns ids and ARIA wiring for one control.
   `type?: 'text' | 'email' | 'url'` (default `text`), `multiline?: boolean`,
   `rows?: number` (default 3), `autocomplete?: string`, `inputmode?: string`,
   `placeholder?: string`, `hint?: string`, `error?: string`,
-  `required?: boolean`, `disabled?: boolean`,
-  `controlAttrs?: Record<string, string>`.
+  `errorAttrs?: Record<string, string>`, `required?: boolean`,
+  `disabled?: boolean`, `controlAttrs?: Record<string, string>`.
 - Emits: `intent: [intent: FieldIntent<string>]` following
   [U4](decisions.md#u4--field-commit-rule) exactly.
 - Renders `FormField` around `Input` or `Textarea`. The control carries
   `data-field-input` plus every entry of the optional
   `controlAttrs?: Record<string, string>` prop (used for `data-detail-*` and
-  `data-part` hooks that tests read on the input). Other attributes fall through
-  to the root wrapper, so `data-entry-field` lands on the wrapper.
+  `data-part` hooks that tests read on the input). `errorAttrs` passes through
+  to the `FormField` error paragraph. Other attributes fall through to the root
+  wrapper, so `data-entry-field` lands on the wrapper.
 - Exposes `focus(): void`.
 
 ## SelectField.vue
@@ -180,12 +182,15 @@ Lives in `app/components/editor/`.
 - Emits: `toggleHidden: []`, `moveUp: []`, `moveDown: []`, `delete: []`,
   `update:open: [open: boolean]`.
 - Slot `default` (the fields).
-- Renders `Collapsible` in a `Card`. The header holds the title, a `Switch`
+- Renders `Collapsible` in a `Card`. The header holds the title, a dedicated
+  `CollapsibleTrigger` `IconButton` labelled `Collapse entry fields` or
+  `Expand entry fields` (`data-action="toggle-entry-fields"`), a `Switch`
   labelled `Hidden` (`button[role="switch"]`, `data-action="toggle-hidden"`,
-  `aria-checked` mirrors `hidden`), and `IconButton`s `Move entry up`
+  `aria-checked` mirrors `hidden`), and sibling `IconButton`s `Move entry up`
   (`data-action="entry-up"`, disabled at index 0), `Move entry down`
   (`data-action="entry-down"`, disabled at the last index), and `Delete entry`
-  (`data-action="delete-entry"`). The root carries `data-entry-id`.
+  (`data-action="delete-entry"`). The trigger never wraps those interactive
+  siblings. The root carries `data-entry-id`.
 
 ## PreviewToolbar.vue (editor)
 

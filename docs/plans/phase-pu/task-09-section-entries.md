@@ -57,6 +57,9 @@
 - `data-action="toggle-hidden"` is on a `button[role="switch"]` inside the card
   header; tests click it and read `aria-checked`.
 - New: `data-action="entry-up"` and `data-action="entry-down"` on the card.
+- New: the dedicated card `CollapsibleTrigger` has
+  `data-action="toggle-entry-fields"` and label `Collapse entry fields` or
+  `Expand entry fields`; it does not wrap the other header controls.
 - `[data-part="present"]` is a `button[role="checkbox"]`.
 
 ## Strings held

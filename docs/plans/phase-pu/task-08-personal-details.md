@@ -22,7 +22,8 @@
   (`controlAttrs: { 'data-detail-label': '' }`; `set` → `changeLabel`, `unset` →
   `unsetLabel`), `TextField` label `Value`
   (`controlAttrs: { 'data-detail-value': '' }`, `error` when `urlError` matches;
-  `set` → `changeValue`, `unset` → `changeValue(id, '')`), `CheckboxField` label
+  `errorAttrs: { 'data-error': 'contact-url' }` when it matches; `set` →
+  `changeValue`, `unset` → `changeValue(id, '')`), `CheckboxField` label
   `Hide this detail` (`data-detail-is-hidden` on the checkbox), and a
   right-aligned `IconButton` row: `Move up` (`data-action="move-detail-up"`),
   `Move down` (`data-action="move-detail-down"`), `Remove detail`
