@@ -24,6 +24,10 @@
   `data-action`), `AccountMenu`, `ThemeToggle`. It remains one row inside the
   fixed `4rem` shell row at the `max-[72rem]` breakpoint; no child creates an
   implicit second row.
+- The legacy editor-scoped button rules in `app/assets/css/app.css` exclude
+  generated `[data-slot="button"]` controls. Raw controls in panels awaiting
+  T08–T12 keep their temporary legacy styles, while the T07 `Button` variants
+  remain authoritative.
 - Rail: `IconButton`s with the existing `aria-label`s, `pressed` bound to the
   inspector kind, and `data-action="open-{kind}"` where kind is `document`,
   `structure`, `design`, `templates`, `photo`; the settings link is `NuxtLink`
@@ -215,7 +219,9 @@ Everything under "Editor shell" in the retained hooks list, the eight
 - [ ] Delete the rules listed for T07 from `app/assets/css/editor.css`. Also
       delete the root `.editor-inspector` layout rule, including its obsolete
       `grid-area: inspector`; retain the descendant inspector form rules until
-      their owning surface tasks replace them.
+      their owning surface tasks replace them. In `app/assets/css/app.css`, add
+      `:not([data-slot="button"])` to the legacy editor-scoped button base,
+      hover, and disabled selectors so they apply only to retained raw controls.
 
 - [ ] GREEN:
 
