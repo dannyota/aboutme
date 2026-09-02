@@ -4,14 +4,14 @@ import { HOSTILE_CORPUS } from '@aboutme/schema/sanitizer';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 
-// eslint-disable-next-line max-len -- relative component import.
-import RichTextEditor from '../../app/components/editor/richtext/RichTextEditor.vue';
+import RichTextEditor from
+  '../../app/components/editor/richtext/RichTextEditor.vue';
 import {
   parseRichTextHTML,
   richTextSchema,
 } from '../../app/components/editor/richtext/schema';
-// eslint-disable-next-line max-len -- relative serializer import.
-import { serializeRichText } from '../../app/components/editor/richtext/serialize';
+import { serializeRichText } from
+  '../../app/components/editor/richtext/serialize';
 
 const unsupportedWrapperCase
   = 'keeps only sanitizer-v1 elements and normalizes unsupported wrappers';

@@ -3,11 +3,11 @@ import type { CustomEntry } from '@aboutme/schema';
 
 import DateRangeField from '../DateRangeField.vue';
 import type { FieldIntent } from '../fieldIntent';
-import OptionalField from '../OptionalField.vue';
+import TextField from '@/components/app/TextField.vue';
 import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import EntryLinkField from './EntryLinkField.vue';
 
-const props = defineProps<{ readonly entry: CustomEntry }>();
+defineProps<{ readonly entry: CustomEntry }>();
 const emit = defineEmits<{
   field: [
     change: {
@@ -22,15 +22,13 @@ function updateDescription(value: string): void {
     path: 'description',
     intent: value !== ''
       ? { kind: 'set', value }
-      : props.entry.description === undefined
-        ? { kind: 'unset' }
-        : { kind: 'clear', value: '' },
+      : { kind: 'unset' },
   });
 }
 </script>
 
 <template>
-  <OptionalField
+  <TextField
     data-entry-field="title"
     label="Title"
     :model-value="entry.title"
@@ -42,13 +40,13 @@ function updateDescription(value: string): void {
     :model-value="entry.titleLink"
     @intent="emit('field', { path: 'titleLink', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="subtitle"
     label="Subtitle"
     :model-value="entry.subtitle"
     @intent="emit('field', { path: 'subtitle', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="city"
     label="City"
     :model-value="entry.city"

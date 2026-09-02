@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { DateRange, YearMonth } from '@aboutme/schema';
 import { ref, watch } from 'vue';
+import { Button } from '@/components/ui/button';
+import CheckboxField from '@/components/app/CheckboxField.vue';
+import FormField from '@/components/app/FormField.vue';
+import { Input } from '@/components/ui/input';
 
 import type { FieldIntent } from './fieldIntent';
 
@@ -126,66 +130,90 @@ function toText(value: number | undefined): string {
 </script>
 
 <template>
-  <fieldset :aria-describedby="error === '' ? undefined : `${fieldId}-error`">
-    <legend>Date range</legend>
-    <label>
-      Start year
-      <input
-        v-model="startYear"
-        data-part="start-year"
-        inputmode="numeric"
-        @input="capture"
-        @blur="commit"
-      >
-    </label>
-    <label>
-      Start month
-      <input
-        v-model="startMonth"
-        data-part="start-month"
-        inputmode="numeric"
-        @input="capture"
-        @blur="commit"
-      >
-    </label>
-    <label>
-      End year
-      <input
-        v-model="endYear"
-        data-part="end-year"
-        inputmode="numeric"
-        :disabled="present"
-        @input="capture"
-        @blur="commit"
-      >
-    </label>
-    <label>
-      End month
-      <input
-        v-model="endMonth"
-        data-part="end-month"
-        inputmode="numeric"
-        :disabled="present"
-        @input="capture"
-        @blur="commit"
-      >
-    </label>
-    <label>
-      <input
-        v-model="present"
-        type="checkbox"
-        data-part="present"
-        @change="changePresent"
-      >
-      Present
-    </label>
-    <button
+  <div
+    role="group"
+    :aria-labelledby="`${fieldId}-label`"
+    :aria-describedby="error === '' ? undefined : `${fieldId}-error`"
+  >
+    <div
+      :id="`${fieldId}-label`"
+      class="text-sm font-medium"
+    >
+      Date range
+    </div>
+    <FormField label="Start year">
+      <template #default="{ id, describedBy, invalid }">
+        <Input
+          :id="id"
+          v-model="startYear"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          data-part="start-year"
+          inputmode="numeric"
+          @input="capture"
+          @blur="commit"
+        />
+      </template>
+    </FormField>
+    <FormField label="Start month">
+      <template #default="{ id, describedBy, invalid }">
+        <Input
+          :id="id"
+          v-model="startMonth"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          data-part="start-month"
+          inputmode="numeric"
+          @input="capture"
+          @blur="commit"
+        />
+      </template>
+    </FormField>
+    <FormField label="End year">
+      <template #default="{ id, describedBy, invalid }">
+        <Input
+          :id="id"
+          v-model="endYear"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          data-part="end-year"
+          inputmode="numeric"
+          :disabled="present"
+          @input="capture"
+          @blur="commit"
+        />
+      </template>
+    </FormField>
+    <FormField label="End month">
+      <template #default="{ id, describedBy, invalid }">
+        <Input
+          :id="id"
+          v-model="endMonth"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          data-part="end-month"
+          inputmode="numeric"
+          :disabled="present"
+          @input="capture"
+          @blur="commit"
+        />
+      </template>
+    </FormField>
+    <CheckboxField
+      label="Present"
+      :model-value="present"
+      data-part="present"
+      @update:model-value="(value) => { present = value; changePresent(); }"
+    />
+    <Button
       type="button"
       data-action="unset"
+      size="sm"
+      variant="ghost"
       @click="unset"
     >
       Remove date range
-    </button>
+    </Button>
     <p
       v-if="error !== ''"
       :id="`${fieldId}-error`"
@@ -194,5 +222,5 @@ function toText(value: number | undefined): string {
     >
       {{ error }}
     </p>
-  </fieldset>
+  </div>
 </template>

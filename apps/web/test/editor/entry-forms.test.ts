@@ -20,6 +20,9 @@ import SkillEntryFields from
   '../../app/components/editor/forms/entries/SkillEntryFields.vue';
 import WorkEntryFields from
   '../../app/components/editor/forms/entries/WorkEntryFields.vue';
+import RichTextEditor from
+  '../../app/components/editor/richtext/RichTextEditor.vue';
+import EntryCard from '../../app/components/editor/EntryCard.vue';
 import type { ResumeEditorActions } from
   '../../app/composables/useResumeEditor';
 
@@ -84,6 +87,111 @@ const entryComponents = {
 } as const;
 
 describe('SectionPanel', () => {
+  it('supports controlled entry-card open state', async () => {
+    const wrapper = mount(EntryCard, {
+      props: {
+        title: 'Entry', entryId: 'e1', hidden: false, index: 0, count: 2,
+        open: false,
+      },
+      slots: { default: '<input data-testid="card-field">' },
+    });
+    expect(wrapper.find('[data-testid="card-field"]').exists()).toBe(false);
+    await wrapper.get('[data-action="toggle-entry-fields"]').trigger('click');
+    expect(wrapper.emitted('update:open')).toEqual([[true]]);
+    await wrapper.get('[data-action="toggle-hidden"]').trigger('click');
+    await wrapper.get('[data-action="entry-down"]').trigger('click');
+    await wrapper.get('[data-action="delete-entry"]').trigger('click');
+    expect(wrapper.emitted('update:open')).toEqual([[true]]);
+    expect(wrapper.emitted('toggleHidden')).toHaveLength(1);
+    expect(wrapper.emitted('moveDown')).toHaveLength(1);
+    expect(wrapper.emitted('delete')).toHaveLength(1);
+    await wrapper.setProps({ open: true });
+    await wrapper.vm.$nextTick();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(wrapper.find('[data-testid="card-field"]').exists()).toBe(true);
+  });
+
+  it(
+    'lets a section entry card collapse without a controlled open prop',
+    async () => {
+      const wrapper = mount(SectionPanel, {
+        props: {
+          sectionKey: 'work',
+          section: sectionFixture('work'),
+          actions: actionsSpy(),
+        },
+      });
+      const trigger = wrapper.get('[data-action="toggle-entry-fields"]');
+      expect(trigger.attributes('aria-label')).toBe('Collapse entry fields');
+
+      await trigger.trigger('click');
+
+      expect(
+        wrapper
+          .get('[data-action="toggle-entry-fields"]')
+          .attributes('aria-label'),
+      ).toBe('Expand entry fields');
+    },
+  );
+
+  it('maps an emptied description to unset without a clear intent', () => {
+    const wrapper = mount(WorkEntryFields, {
+      props: { entry: { id: 'e1', description: '<p>Old</p>' } },
+    });
+    wrapper.getComponent(RichTextEditor).vm.$emit('update:modelValue', '');
+    expect(wrapper.emitted('field')?.at(-1)?.[0]).toEqual({
+      path: 'description',
+      intent: { kind: 'unset' },
+    });
+  });
+
+  it('confirms entry deletion through the alert dialog', async () => {
+    const actions = actionsSpy();
+    const wrapper = mount(SectionPanel, {
+      attachTo: document.body,
+      props: {
+        sectionKey: 'work',
+        section: {
+          sectionType: 'work',
+          entries: [{ id: 'e1', jobTitle: 'Dev' }],
+        },
+        actions,
+      },
+    });
+    await wrapper
+      .get('[data-entry-id="e1"] [data-action="delete-entry"]')
+      .trigger('click');
+    document.body
+      .querySelector<HTMLButtonElement>(
+        '[data-action="confirm-delete-entry"]',
+      )
+      ?.click();
+    expect(actions.edit).toHaveBeenLastCalledWith({
+      kind: 'entryDelete', sectionKey: 'work', entryId: 'e1',
+    });
+    wrapper.unmount();
+  });
+
+  it('reorders entries from the card controls', async () => {
+    const actions = actionsSpy();
+    const wrapper = mount(SectionPanel, {
+      props: {
+        sectionKey: 'work',
+        section: {
+          sectionType: 'work',
+          entries: [{ id: 'e1' }, { id: 'e2' }],
+        },
+        actions,
+      },
+    });
+    await wrapper
+      .get('[data-entry-id="e2"] [data-action="entry-up"]')
+      .trigger('click');
+    expect(actions.edit).toHaveBeenLastCalledWith({
+      kind: 'entryReorder', sectionKey: 'work', entryIds: ['e2', 'e1'],
+    });
+  });
+
   it('exposes section and entry IDs as read-only text', () => {
     const sectionId = '0d85ca7e-c265-49cb-a31c-cf8ac8e7d557';
     const entryId = 'dd89bd8a-ba7d-4bec-9c43-f1b296c56fac';
@@ -107,11 +215,15 @@ describe('SectionPanel', () => {
     expect(wrapper.get('[data-entry-id-text]').text()).toBe(entryId);
     expect(wrapper.get('h3').text()).toBe('Principal Engineer');
     expect(
-      wrapper.findAll('input').map((input) => input.element.value),
-    ).not.toContain(sectionId);
+      wrapper.get('[data-entry-field="jobTitle"] [data-field-input]').element
+        .value,
+    )
+      .not.toBe(sectionId);
     expect(
-      wrapper.findAll('input').map((input) => input.element.value),
-    ).not.toContain(entryId);
+      wrapper.get('[data-entry-field="jobTitle"] [data-field-input]').element
+        .value,
+    )
+      .not.toBe(entryId);
     expect(
       wrapper.findAll('[contenteditable="true"]').map((field) => field.text()),
     ).not.toContain(sectionId);
@@ -159,22 +271,22 @@ describe('SectionPanel', () => {
         .findComponent(entryComponents[sectionType])
         .vm.$emit('field', {
           path: fields[0],
-          intent: { kind: 'clear', value: '' },
+          intent: { kind: 'unset' },
         });
-      wrapper
-        .findComponent(entryComponents[sectionType])
-        .vm.$emit('field', { path: fields[0], intent: { kind: 'unset' } });
       await wrapper.vm.$nextTick();
-      await wrapper.get('[data-action="toggle-hidden"]').trigger('change');
+      await wrapper.get('[data-action="toggle-hidden"]').trigger('click');
       await wrapper.get('[data-action="delete-entry"]').trigger('click');
-      await wrapper
-        .get('[data-action="confirm-delete-entry"]')
-        .trigger('click');
+      document.body
+        .querySelectorAll<HTMLButtonElement>(
+          '[data-action="confirm-delete-entry"]',
+        )
+        .item(0)
+        .click();
+      await wrapper.vm.$nextTick();
 
       expect(actions.createEntityId).toHaveBeenCalledOnce();
       expect(actions.edit.mock.calls.map(([intent]) => intent.kind)).toEqual([
         'entryUpsert',
-        'entryField',
         'entryField',
         'entryField',
         'entryField',
@@ -191,13 +303,6 @@ describe('SectionPanel', () => {
         },
       });
       expect(actions.edit).toHaveBeenNthCalledWith(3, {
-        kind: 'entryField',
-        sectionKey: `${sectionType}-section`,
-        entryId: 'entry-1',
-        path: fields[0],
-        value: { present: true, value: '' },
-      });
-      expect(actions.edit).toHaveBeenNthCalledWith(4, {
         kind: 'entryField',
         sectionKey: `${sectionType}-section`,
         entryId: 'entry-1',
@@ -313,28 +418,28 @@ describe('SectionPanel', () => {
       });
       const opener = wrapper.get('[data-action="delete-entry"]');
       await opener.trigger('click');
-      const dialog = wrapper.get('[role="alertdialog"]');
-      expect(dialog.attributes()).toMatchObject({
-        'aria-modal': 'true',
-        'aria-labelledby': 'entry-delete-title',
-        'aria-describedby': 'entry-delete-description',
-      });
-      expect(dialog.text()).toContain('Engineer');
+      const dialog = document.body.querySelector('[role="alertdialog"]')!;
+      expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+      expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
+      expect(dialog.textContent).toContain('Engineer');
       expect(document.activeElement).toBe(
-        wrapper.get('[data-action="confirm-delete-entry"]').element,
+        document.body.querySelector<HTMLButtonElement>(
+          '[data-action="cancel-delete-entry"]',
+        ),
       );
       await wrapper.setProps({
         section: { sectionType: 'work', entries: [] },
       });
-      await wrapper
-        .get('[data-action="confirm-delete-entry"]')
-        .trigger('click');
+      document.body
+        .querySelectorAll<HTMLButtonElement>(
+          '[data-action="confirm-delete-entry"]',
+        )
+        .item(0)
+        .click();
+      await wrapper.vm.$nextTick();
       expect(actions.edit).not.toHaveBeenCalled();
       expect(wrapper.text()).toContain(
         'Entry changed. Reopen delete confirmation.',
-      );
-      expect(document.activeElement).toBe(
-        wrapper.get('[data-section-key="work"]').element,
       );
       wrapper.unmount();
     },

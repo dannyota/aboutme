@@ -3,11 +3,11 @@ import type { WorkEntry } from '@aboutme/schema';
 
 import DateRangeField from '../DateRangeField.vue';
 import type { FieldIntent } from '../fieldIntent';
-import OptionalField from '../OptionalField.vue';
+import TextField from '@/components/app/TextField.vue';
 import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import EntryLinkField from './EntryLinkField.vue';
 
-const props = defineProps<{ readonly entry: WorkEntry }>();
+defineProps<{ readonly entry: WorkEntry }>();
 const emit = defineEmits<{
   field: [
     change: {
@@ -22,29 +22,24 @@ const emit = defineEmits<{
 function updateDescription(value: string): void {
   emit('field', {
     path: 'description',
-    intent: textIntent(props.entry.description, value),
+    intent: textIntent(value),
   });
 }
 
-function textIntent(
-  current: string | undefined,
-  value: string,
-): FieldIntent<string> {
+function textIntent(value: string): FieldIntent<string> {
   if (value !== '') return { kind: 'set', value };
-  return current === undefined
-    ? { kind: 'unset' }
-    : { kind: 'clear', value: '' };
+  return { kind: 'unset' };
 }
 </script>
 
 <template>
-  <OptionalField
+  <TextField
     data-entry-field="jobTitle"
     label="Job title"
     :model-value="entry.jobTitle"
     @intent="emit('field', { path: 'jobTitle', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="employer"
     label="Employer"
     :model-value="entry.employer"
@@ -56,13 +51,13 @@ function textIntent(
     :model-value="entry.employerLink"
     @intent="emit('field', { path: 'employerLink', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="city"
     label="City"
     :model-value="entry.city"
     @intent="emit('field', { path: 'city', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="country"
     label="Country"
     :model-value="entry.country"

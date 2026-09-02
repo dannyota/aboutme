@@ -2,7 +2,12 @@
 import type { LanguageEntry } from '@aboutme/schema';
 
 import type { FieldIntent } from '../fieldIntent';
-import OptionalField from '../OptionalField.vue';
+import TextField from '@/components/app/TextField.vue';
+import SelectField from '@/components/app/SelectField.vue';
+
+const levelOptions = [{ value: '', label: 'Not set' }, ...Array.from(
+  { length: 6 }, (_, value) => ({ value, label: String(value) }),
+)] as const;
 
 defineProps<{ readonly entry: LanguageEntry }>();
 const emit = defineEmits<{
@@ -13,8 +18,7 @@ const emit = defineEmits<{
     },
   ];
 }>();
-function updateLevel(event: Event): void {
-  const value = (event.target as HTMLSelectElement).value;
+function updateLevel(value: string): void {
   emit('field', {
     path: 'level',
     intent: value === ''
@@ -25,24 +29,17 @@ function updateLevel(event: Event): void {
 </script>
 
 <template>
-  <OptionalField
+  <TextField
     data-entry-field="name"
     label="Name"
     :model-value="entry.name"
     @intent="emit('field', { path: 'name', intent: $event })"
   />
-  <label data-entry-field="level">Level
-    <select
-      :value="entry.level ?? ''"
-      @change="updateLevel"
-    >
-      <option value="">Not set</option>
-      <option
-        v-for="level in 6"
-        :key="level - 1"
-        :value="level - 1"
-      >
-        {{ level - 1 }}
-      </option>
-    </select></label>
+  <SelectField
+    data-entry-field="level"
+    label="Level"
+    :model-value="entry.level ?? ''"
+    :options="levelOptions"
+    @update:model-value="updateLevel"
+  />
 </template>
