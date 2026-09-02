@@ -27,10 +27,11 @@
   `Font family`, `font.baseSizePx` `Base size (px)`, `spacing.sectionGap`
   `Section gap`, `spacing.entryGap` `Entry gap`, `spacing.lineHeight`
   `Line height`, `heading.style` `Heading style`, `heading.showRule`
-  `Show heading rule`, `layout.columns` `Columns`, `sectionDisplay.skill.style`
-  `Skill display`, `sectionDisplay.language.style` `Language display`,
-  `pageFormat` `Page format`, `dateFormat` `Date format`. Option labels stay the
-  raw enumeration values.
+  `Show heading rule`, `layout.columns` `Columns`, `layout.surfaceTarget`
+  `Surface target`, `sectionDisplay.skill.style` `Skill display`,
+  `sectionDisplay.language.style` `Language display`, `pageFormat`
+  `Page format`, `dateFormat` `Date format`. Option labels stay the raw
+  enumeration values.
 - `OptionalCustomizationField.vue` is deleted. Each optional group is a
   `SwitchField` (`label` `Page margins` / `Header`, `data-action="page-margin"`
   / `data-action="header"` on the switch) whose `update:modelValue` calls
