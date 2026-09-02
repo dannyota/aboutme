@@ -11,6 +11,7 @@ The integration owner serializes these exact edits:
 | ----------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | T07         | T02             | `EditorPreview.vue` and its test: add the photo-less projection and temporary notice; `EditorShell.vue`: pass `photoRead` only |
 | T07         | T01             | `EditorShell.vue`: change moved shell imports and remove the legacy CSS import only                                            |
+| T07         | T03             | `EditorShell.vue`: replace the `AccountControl` import and render with `AccountMenu` only                                      |
 | T03         | T01             | Shell/theme tests: update moved import paths only                                                                              |
 | T01         | T03             | `app/app.vue`: replace the moved `AppChrome` render with `AppShell` only                                                       |
 | T13         | T01             | `e2e/normal-csp.spec.ts`: add deterministic `/me` and capabilities fixtures only                                               |
@@ -62,6 +63,7 @@ after every earlier window is integrated.
 - `test/app/{app-shell,form-field,text-field,confirm-dialog,form-dialog,status-banner}.test.ts`
 - `test/app-chrome.test.ts` and `test/logout-state.test.ts` (retargeted to
   `AppShell`), `test/editor/theme.test.ts`
+- T03 owner window in the shared-path table for `EditorShell.vue`
 
 The integration owner narrows `app/components/editor/forms/fieldIntent.ts` after
 T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
