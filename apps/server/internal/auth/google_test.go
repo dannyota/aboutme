@@ -280,9 +280,10 @@ func newServiceWithOrigin(t *testing.T, pool *store.Pool, issuer, origin string)
 	t.Helper()
 
 	cfg := config.Config{
-		PublicOrigin:       origin,
-		GoogleClientID:     oidctest.DefaultClientID,
-		GoogleClientSecret: "test-google-client-secret",
+		PublicOrigin:         origin,
+		ProviderLoginEnabled: true,
+		GoogleClientID:       oidctest.DefaultClientID,
+		GoogleClientSecret:   "test-google-client-secret",
 	}
 	svc, err := auth.NewServiceForTest(testLogger(), cfg, pool, issuer, "", "")
 	if err != nil {

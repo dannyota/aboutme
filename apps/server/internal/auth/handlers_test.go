@@ -5,6 +5,7 @@ package auth_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -85,6 +86,7 @@ type testServiceConfig struct {
 	googleIssuer    string
 	githubEndpoint  string
 	linkedinIssuer  string
+	providerLogin   bool
 	logger          *slog.Logger
 	sessionIssuer   sessionIssuerForTest
 	startRateLimit  int
@@ -109,6 +111,11 @@ func withGitHubEndpoint(endpoint string) testServiceOption {
 // contact the real provider.
 func withLinkedInIssuer(issuer string) testServiceOption {
 	return func(c *testServiceConfig) { c.linkedinIssuer = issuer }
+}
+
+// withProviderLoginDisabled turns PROVIDER_LOGIN_ENABLED off for one test.
+func withProviderLoginDisabled() testServiceOption {
+	return func(c *testServiceConfig) { c.providerLogin = false }
 }
 
 // withLogger captures Service rejection and internal-error logs.
@@ -139,7 +146,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	pool := newTestPool(t)
 	q := store.New(pool)
 
-	var sc testServiceConfig
+	sc := testServiceConfig{providerLogin: true}
 	for _, opt := range opts {
 		opt(&sc)
 	}
@@ -150,7 +157,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 			"request to /start or /callback would perform live network I/O against the real provider")
 	}
 
-	cfg := config.Config{PublicOrigin: testPublicOrigin}
+	cfg := config.Config{PublicOrigin: testPublicOrigin, ProviderLoginEnabled: sc.providerLogin}
 	if sc.googleIssuer != "" {
 		cfg.GoogleClientID = oidctest.DefaultClientID
 		cfg.GoogleClientSecret = "test-google-client-secret"
@@ -371,9 +378,10 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	pool := newTestPool(t)
 	cfg := config.Config{
-		PublicOrigin:       testPublicOrigin,
-		GoogleClientID:     oidctest.DefaultClientID,
-		GoogleClientSecret: "test-google-client-secret",
+		PublicOrigin:         testPublicOrigin,
+		ProviderLoginEnabled: true,
+		GoogleClientID:       oidctest.DefaultClientID,
+		GoogleClientSecret:   "test-google-client-secret",
 	}
 	svc, err := auth.NewServiceForTest(testLogger(), cfg, pool, p.URL, "", "")
 	if err != nil {
@@ -469,6 +477,72 @@ func TestService_RegisterRoutes_GoogleStartAndCallback_RespondToGET(t *testing.T
 		t.Errorf("GET %s (no cookie) status = %d, want %d", auth.GoogleCallbackPath, cbResp.StatusCode, http.StatusFound)
 	}
 	assertRedirectPath(t, cbResp.Header.Get("Location"), "/login") // Rejected callbacks return to login.
+}
+
+func TestService_RegisterRoutes_ProviderLoginDisabled_ProviderPathsAre404(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withProviderLoginDisabled())
+
+	paths := []string{
+		auth.GoogleStartPath, auth.GoogleCallbackPath,
+		auth.GitHubStartPath, auth.GitHubCallbackPath,
+		auth.LinkedInStartPath, auth.LinkedInCallbackPath,
+	}
+	for _, path := range paths {
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodHead} {
+			req := httptest.NewRequest(method, path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("%s %s status = %d, want 404 with provider login disabled", method, path, rec.Code)
+			}
+		}
+	}
+
+	// Session routes are unaffected: an anonymous /me is 401, not 404.
+	req := httptest.NewRequest(http.MethodGet, auth.MePath, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET %s status = %d, want 401 (session routes stay registered)", auth.MePath, rec.Code)
+	}
+}
+
+func TestService_RegisterRoutes_ProviderLoginDisabled_NotFoundBodyIsUniform(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withProviderLoginDisabled())
+
+	notFound := func(path string) (int, string, string, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		var envelope errorEnvelopeBody
+		if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+			t.Fatalf("GET %s unmarshal error envelope: %v (body=%s)", path, err, rec.Body.String())
+		}
+		return rec.Code, rec.Header().Get("Content-Type"), envelope.Error.Code, strings.ReplaceAll(rec.Body.String(), path, "{path}")
+	}
+
+	providerStatus, providerType, providerCode, providerTemplate := notFound(auth.GoogleStartPath)
+	unknownStatus, unknownType, unknownCode, unknownTemplate := notFound("/api/v1/definitely-not-a-route")
+	if providerStatus != http.StatusNotFound || unknownStatus != http.StatusNotFound {
+		t.Fatalf("not-found statuses = %d, %d, want %d, %d", providerStatus, unknownStatus, http.StatusNotFound, http.StatusNotFound)
+	}
+	if providerType != unknownType || !strings.Contains(providerType, "application/json") {
+		t.Fatalf("not-found Content-Types = %q, %q, want the same JSON media type", providerType, unknownType)
+	}
+	if providerCode != "not_found" || unknownCode != "not_found" {
+		t.Fatalf("not-found error codes = %q, %q, want %q", providerCode, unknownCode, "not_found")
+	}
+	if providerTemplate != unknownTemplate {
+		t.Fatalf("disabled provider path template = %q, want uniform not-found template %q", providerTemplate, unknownTemplate)
+	}
 }
 
 // TestService_RegisterRoutes_WrongMethod_Returns405 pins exact methods. HEAD
@@ -864,9 +938,10 @@ func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *te
 	pool := newTestPool(t)
 	q := store.New(pool)
 	svc, err := auth.NewServiceForTest(testLogger(), config.Config{
-		PublicOrigin:       testPublicOrigin,
-		GoogleClientID:     oidctest.DefaultClientID,
-		GoogleClientSecret: "test-google-client-secret",
+		PublicOrigin:         testPublicOrigin,
+		ProviderLoginEnabled: true,
+		GoogleClientID:       oidctest.DefaultClientID,
+		GoogleClientSecret:   "test-google-client-secret",
 	}, pool, p.URL, "", "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)

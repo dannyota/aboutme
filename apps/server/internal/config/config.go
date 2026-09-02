@@ -124,6 +124,10 @@ type Config struct {
 	// values are the frozen budgets from docs/design/budgets.md; operators may
 	// enable or disable the feature but cannot silently widen those bounds.
 	AgentAccess AgentAccessConfig
+	// ProviderLoginEnabled registers the Google, GitHub, and LinkedIn login,
+	// callback, link, and reauthentication routes. It is off for v1 (ADR 0027);
+	// the provider code stays so the flag can turn on without a code change.
+	ProviderLoginEnabled bool
 }
 
 // AgentAccessConfig holds the frozen OAuth and MCP admission budgets. It is
@@ -270,6 +274,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	providerLogin, err := loadProviderLoginFlag(getenv("PROVIDER_LOGIN_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Port:                      port,
@@ -303,6 +311,7 @@ func Load(getenv func(string) string) (Config, error) {
 		MediaForcePathStyle:       mediaCfg.forcePathStyle,
 		AuthEmail:                 authEmail,
 		AgentAccess:               agentAccess,
+		ProviderLoginEnabled:      providerLogin,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return Config{}, err
@@ -336,6 +345,17 @@ func loadAgentAccessConfig(rawEnabled string) (AgentAccessConfig, error) {
 		MCPBodyLimitBytes:      mcpBodyLimitBytes,
 		MaxRateKeys:            agentRateMaxKeys,
 	}, nil
+}
+
+func loadProviderLoginFlag(raw string) (bool, error) {
+	switch strings.TrimSpace(raw) {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, errors.New("config: PROVIDER_LOGIN_ENABLED must be true or false")
+	}
 }
 
 // ValidateAgentAccess rejects a manually assembled, partially enabled
