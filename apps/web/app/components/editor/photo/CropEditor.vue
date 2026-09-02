@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { PhotoCrop } from '@aboutme/schema';
 import { computed, reactive, ref, watch } from 'vue';
+import FormField from '@/components/app/FormField.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 
@@ -157,11 +160,13 @@ function roundCrop(value: number): number {
     novalidate
     @submit.prevent="submitCrop"
   >
-    <fieldset>
+    <fieldset class="grid gap-4">
       <legend>Crop photo</legend>
       <div
         aria-label="Crop position"
         data-crop-stage
+        class="relative aspect-square max-w-64 overflow-hidden rounded-md border
+          bg-muted focus-visible:ring-2"
         role="application"
         tabindex="0"
         @keydown="moveWithKeyboard"
@@ -177,57 +182,84 @@ function roundCrop(value: number): number {
         <div
           aria-hidden="true"
           data-crop-rectangle
+          class="absolute border-2 border-positive bg-positive/10"
           :style="rectangleStyle"
         />
       </div>
-      <label>
-        X
-        <input
-          v-model="draft.x"
+      <div class="grid grid-cols-2 gap-2">
+        <FormField
+          label="X"
           name="x"
-          inputmode="decimal"
-          type="number"
-          min="0"
-          max="1"
-          step="0.01"
         >
-      </label>
-      <label>
-        Y
-        <input
-          v-model="draft.y"
+          <template #default="{ id, describedBy, invalid }">
+            <Input
+              :id="id"
+              v-model="draft.x"
+              name="x"
+              type="number"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              min="0"
+              max="1"
+              step="0.01"
+            />
+          </template>
+        </FormField>
+        <FormField
+          label="Y"
           name="y"
-          inputmode="decimal"
-          type="number"
-          min="0"
-          max="1"
-          step="0.01"
         >
-      </label>
-      <label>
-        Width
-        <input
-          v-model="draft.width"
+          <template #default="{ id, describedBy, invalid }">
+            <Input
+              :id="id"
+              v-model="draft.y"
+              name="y"
+              type="number"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              min="0"
+              max="1"
+              step="0.01"
+            />
+          </template>
+        </FormField>
+        <FormField
+          label="Width"
           name="width"
-          inputmode="decimal"
-          type="number"
-          min="0"
-          max="1"
-          step="0.01"
         >
-      </label>
-      <label>
-        Height
-        <input
-          v-model="draft.height"
+          <template #default="{ id, describedBy, invalid }">
+            <Input
+              :id="id"
+              v-model="draft.width"
+              name="width"
+              type="number"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              min="0"
+              max="1"
+              step="0.01"
+            />
+          </template>
+        </FormField>
+        <FormField
+          label="Height"
           name="height"
-          inputmode="decimal"
-          type="number"
-          min="0"
-          max="1"
-          step="0.01"
         >
-      </label>
+          <template #default="{ id, describedBy, invalid }">
+            <Input
+              :id="id"
+              v-model="draft.height"
+              name="height"
+              type="number"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              min="0"
+              max="1"
+              step="0.01"
+            />
+          </template>
+        </FormField>
+      </div>
     </fieldset>
     <p
       v-if="error !== ''"
@@ -235,15 +267,20 @@ function roundCrop(value: number): number {
     >
       {{ error }}
     </p>
-    <button type="submit">
+    <Button
+      type="submit"
+      size="sm"
+    >
       Save crop
-    </button>
-    <button
+    </Button>
+    <Button
       data-action="clear-crop"
+      size="sm"
       type="button"
+      variant="ghost"
       @click="clearCrop"
     >
       Clear crop
-    </button>
+    </Button>
   </form>
 </template>
