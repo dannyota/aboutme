@@ -250,7 +250,9 @@ paths:
       security: []
       summary: Begin "Sign in with Google"
       description: >-
-        Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Begins a fresh
+        OAuth2/OIDC login transaction (PKCE S256, an OIDC
         nonce) and redirects the browser to Google's own authorize
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
         handle, 10-minute TTL) that the matching `GET
@@ -293,7 +295,9 @@ paths:
           csrfToken: []
       summary: Begin a Google link or reauthentication
       description: >-
-        Begins an OAuth transaction for the CALLER's own already-
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Begins an OAuth
+        transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
         session's `reauthenticated_at` against an ALREADY-linked
@@ -384,7 +388,9 @@ paths:
       security: []
       summary: Complete "Sign in with Google"
       description: >-
-        Consumes the pending OAuth transaction (`__Host-oauth-tx`
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Consumes the
+        pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (PKCE), verifies the ID
         token (issuer/audience/signature/expiry, plus the OIDC nonce),
         and resolves or creates the local user or attaches the identity to
@@ -471,7 +477,9 @@ paths:
       security: []
       summary: Begin "Sign in with GitHub"
       description: >-
-        Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Begins a fresh
+        OAuth2 login transaction (PKCE S256; GitHub has no
         OIDC ID token, so no nonce) and redirects the browser to GitHub's
         own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque
         transaction handle, 10-minute TTL) that the matching `GET
@@ -509,7 +517,9 @@ paths:
           csrfToken: []
       summary: Begin a GitHub link or reauthentication
       description: >-
-        Begins an OAuth transaction for the CALLER's own already-
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Begins an OAuth
+        transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
         session's `reauthenticated_at` against an ALREADY-linked
@@ -600,7 +610,9 @@ paths:
       security: []
       summary: Complete "Sign in with GitHub"
       description: >-
-        Consumes the pending OAuth transaction (`__Host-oauth-tx`
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Consumes the
+        pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code, and — for
         `purpose=login` only — fetches the authenticated user's verified
         primary email from GitHub's REST API (AC-AUTH-003) — deliberately
@@ -652,7 +664,9 @@ paths:
       security: []
       summary: Begin "Sign in with LinkedIn"
       description: >-
-        Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Begins a fresh
+        OAuth2/OIDC login transaction (PKCE S256, an OIDC
         nonce) and redirects the browser to LinkedIn's own authorize
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
         handle, 10-minute TTL) that the matching `GET
@@ -690,7 +704,9 @@ paths:
           csrfToken: []
       summary: Begin a LinkedIn link or reauthentication
       description: >-
-        Begins an OAuth transaction for the CALLER's own already-
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Begins an OAuth
+        transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
         session's `reauthenticated_at` against an ALREADY-linked
@@ -781,7 +797,9 @@ paths:
       security: []
       summary: Complete "Sign in with LinkedIn"
       description: >-
-        Consumes the pending OAuth transaction (`__Host-oauth-tx`
+        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
+        path returns the uniform not-found response (ADR 0027). Consumes the
+        pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (PKCE), verifies the ID
         token (issuer/audience/signature/expiry, plus the OIDC nonce), and
         resolves the local user per `purpose`, exactly like `GET
@@ -903,6 +921,34 @@ paths:
                 error:
                   code: session_required
                   message: a valid session is required
+  /capabilities:
+    get:
+      operationId: getCapabilities
+      tags: [auth]
+      security: []
+      summary: Which optional sign-in and agent surfaces this deployment enables
+      description: >-
+        Unauthenticated read of the two configuration flags the web needs before
+        it renders a sign-in or settings page: `providerLogin`
+        (`PROVIDER_LOGIN_ENABLED`) and `agentAccess` (`MCP_ENABLED`). The response
+        is `Cache-Control: no-store` so a configuration change is visible on the
+        next request. It reveals no other configuration.
+      responses:
+        "200":
+          description: The enabled optional surfaces.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Capabilities"
+              example:
+                data:
+                  providerLogin: false
+                  agentAccess: false
   /auth/logout:
     post:
       operationId: postAuthLogout
@@ -3980,6 +4026,19 @@ components:
         name: Ada Lovelace
         avatarKey: null
         hasPassword: false
+    Capabilities:
+      type: object
+      additionalProperties: false
+      required: [providerLogin, agentAccess]
+      properties:
+        providerLogin:
+          type: boolean
+          description: Google, GitHub, and LinkedIn login and linking routes
+            are registered.
+        agentAccess:
+          type: boolean
+          description: The OAuth authorization server, `/mcp`, and
+            connected-agent settings are registered.
     Identity:
       type: object
       description: One linked OAuth provider identity. `GET /me` exposes

@@ -152,7 +152,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes)
+	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, capabilitiesRegistrar(cfg))
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -192,6 +192,18 @@ type agentRouteHandlers struct {
 	Consent               http.Handler
 	AgentGrants           http.Handler
 	AgentGrant            http.Handler
+}
+
+// capabilitiesRegistrar exposes the two optional-surface flags to the web
+// without a second source of truth (ADR 0027).
+func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
+	handler := api.CapabilitiesHandler(api.Capabilities{
+		ProviderLogin: cfg.ProviderLoginEnabled,
+		AgentAccess:   cfg.AgentAccess.Enabled,
+	})
+	return func(mux *http.ServeMux) {
+		mux.Handle("/api/v1/capabilities", handler)
+	}
 }
 
 func newAgentRouteRegistrar(enabled bool, registry []publicroots.Route, handlers agentRouteHandlers) (func(*http.ServeMux), error) {
