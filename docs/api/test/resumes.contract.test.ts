@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const doc = parse(readFileSync("docs/api/openapi.yaml", "utf8"));
 const redoclyConfig = parse(readFileSync("docs/api/redocly.yaml", "utf8"));
 
-// The P2B surface, exactly. Source: docs/plans/phase-2b/task-01-openapi-contract.md.
+// The private resume surface, exactly (docs/design/api.md, "Endpoint groups").
 // operationIds are frozen: ADR 0016's idempotency operation identity hashes the
 // exact OpenAPI operationId string, so renaming one silently changes every
 // stored replay record's identity.

@@ -1,10 +1,11 @@
 package auth
 
-// Password authentication HTTP surface (Phase PA). This file owns the route
-// paths, the closed request/response vocabulary, the password-only strict JSON
-// chain, registration-name normalization, and every wire response the seven
-// password operations emit. The D6/D9 numeric budgets and exact bytes live in
-// docs/plans/phase-pa/decisions.md and docs/api/openapi.yaml.
+// Password authentication HTTP surface. This file owns the route paths, the
+// closed request/response vocabulary, the password-only strict JSON chain,
+// registration-name normalization, and every wire response the seven password
+// operations emit. The numeric budgets live in docs/design/budgets.md; the
+// exact bytes live in docs/api/openapi.yaml and docs/design/security.md
+// ("Password authentication").
 
 import (
 	"bytes"

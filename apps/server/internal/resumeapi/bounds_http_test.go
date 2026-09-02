@@ -76,7 +76,7 @@ func TestBoundsHTTPMatrixCompleteness(t *testing.T) {
 
 func loadBoundsHTTPContract(t *testing.T) boundsHTTPContract {
 	t.Helper()
-	budgets, err := os.ReadFile("../../../../docs/plans/budgets.md")
+	budgets, err := os.ReadFile("../../../../docs/design/budgets.md")
 	if err != nil {
 		t.Fatalf("read bounds authority: %v", err)
 	}

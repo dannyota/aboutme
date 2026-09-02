@@ -1,7 +1,7 @@
 // Package media stores private resume media objects behind one Backend
 // contract with two implementations: a rooted filesystem store (native
 // development and unit tests) and an S3-compatible store (compose/UAT,
-// staging, production). See docs/plans/phase-2b/decisions.md D10/D11 and
+// staging, production). See docs/design/deployment.md ("Media") and
 // docs/adr/0019-private-media-delivery.md.
 //
 // Object creation is conditional and fails on an existing key: no overwrite
@@ -44,7 +44,7 @@ var ErrAlreadyExists = errors.New("media: object already exists")
 var ErrInvalidKey = errors.New("media: invalid object key")
 
 // MaxObjectBytes is the largest object either backend accepts: the resume
-// photo normalized-object budget from docs/plans/budgets.md ("Resume photo
+// photo normalized-object budget from docs/design/budgets.md ("Resume photo
 // file / normalized object", 2,097,152 bytes). Enforcing it here is defense
 // in depth below the HTTP intake path, and it also bounds the memory Put
 // buffers while proving the body's EOF sits exactly at size.

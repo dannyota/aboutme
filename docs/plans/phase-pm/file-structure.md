@@ -7,7 +7,7 @@ the integration owner and are serialized.
 
 - `docs/design/{README,product,security,data,api,web,decisions}.md`
 - `docs/adr/0026-mcp-agent-access.md`
-- `docs/plans/budgets.md`
+- `docs/design/budgets.md`
 - `docs/plans/traceability/{README,ac-mcp}.md`
 - `packages/publicroots/public-roots.v6.json` and removal of v5 after all
   consumers regenerate.

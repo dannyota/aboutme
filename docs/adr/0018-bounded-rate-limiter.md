@@ -37,7 +37,7 @@ budgets are:
 - Photo uploads: 20 requests per hour per `(account, client IP)` pair.
 
 The route-specific limiter is additional to the outer client-IP limiter. The
-numeric budget source remains [`../plans/budgets.md`](../plans/budgets.md).
+numeric budget source remains [`../design/budgets.md`](../design/budgets.md).
 
 ## Consequences
 

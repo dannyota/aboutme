@@ -6,8 +6,7 @@ review. Changed decisions from here on need a new ADR or a v5 revision.
 This directory defines the intended v1 product and architecture. Current
 behavior lives in code, deployment configuration, and
 [`../api/openapi.yaml`](../api/openapi.yaml). The current-state narrative lives
-in [`../architecture.md`](../architecture.md). Delivery state lives in the
-[`../plans/implementation-plan.md`](../plans/implementation-plan.md).
+in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. Every ADR
 through 0026 is accepted and integrated here. If a page disagrees with an
@@ -28,6 +27,7 @@ accepted ADR, the ADR controls that decision until this text is corrected.
 | 9       | [Operations](operations.md)            | Privacy lifecycle, monitoring, and launch evidence  |
 | 10      | [Decision status](decisions.md)        | Integrated ADRs, open gates, and approval rules     |
 | —       | [Font catalog](fonts.md)               | License gate, v2 choices, coverage, and provenance  |
+| —       | [Numeric budgets](budgets.md)          | Hard limits, rate policies, SLOs, and benchmarks    |
 
 The [template system](templates/README.md) is the detailed contract for preset
 data, rendering tokens, and print behavior.

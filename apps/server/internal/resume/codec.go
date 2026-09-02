@@ -20,7 +20,7 @@ import (
 )
 
 // MaxDocumentBytes is the store-layer size bound on the canonical assembled
-// document; see docs/plans/budgets.md. It measures AssembleCanonical's output,
+// document; see docs/design/budgets.md. It measures AssembleCanonical's output,
 // including schemaVersion, independent of jsonb's on-disk representation.
 const MaxDocumentBytes = 512 * 1024
 

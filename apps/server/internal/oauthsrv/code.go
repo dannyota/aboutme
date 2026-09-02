@@ -1,8 +1,9 @@
 // Package oauthsrv implements the first-party OAuth 2.1 authorization server
-// frozen in docs/plans/phase-pm/decisions.md. This file holds the M2
-// authorization-code primitives; the package's other files hold the M3 token
-// spellings, PKCE verification, the M1 registration grammar, and the closed
-// scope set.
+// described in docs/adr/0026-mcp-agent-access.md and docs/design/security.md
+// ("Agent authorization and the bearer world"). This file holds the
+// authorization-code primitives; the package's other files hold the token
+// spellings, PKCE verification, the client registration grammar, and the
+// closed scope set.
 package oauthsrv
 
 import (

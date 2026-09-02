@@ -100,7 +100,7 @@ mandatory, not advisory).
 | Privacy, retention, monitoring        | [Privacy lifecycle](../../design/operations.md#privacy-lifecycle), [resource budgets](../../design/operations.md#resource-and-performance-budgets), and [monitoring](../../design/operations.md#monitoring)           |
 | Approval gates and deferred scope     | [Decision status](../../design/decisions.md), including [open approval gates](../../design/decisions.md#open-approval-gates)                                                                                          |
 | Delivery order and review gates       | [Master plan](../implementation-plan.md), [ADR 0011](../../adr/0011-risk-tiered-delivery-gates.md), and [engineering standard](../../standards/engineering.md)                                                        |
-| Numeric limits and acceptance owners  | [Budgets](../budgets.md) and [traceability](../traceability/README.md)                                                                                                                                                |
+| Numeric limits and acceptance owners  | [Budgets](../../design/budgets.md) and [traceability](../traceability/README.md)                                                                                                                                      |
 
 AC-INF-001…008 are PI-owned. AC-OPS-015…019 are P9A-owned. PI sequencing and
 status live in the [master plan](../implementation-plan.md). These authority

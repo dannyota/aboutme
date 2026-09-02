@@ -13,7 +13,7 @@ import (
 // Default values used when the corresponding Options field is zero.
 const (
 	// DefaultBodyLimitBytes matches the request-body budget (256 KB); see
-	// docs/plans/budgets.md. Applies to every route EXCEPT the health
+	// docs/design/budgets.md. Applies to every route EXCEPT the health
 	// endpoints — see HealthBodyLimitBytes.
 	DefaultBodyLimitBytes int64 = 256 * 1024
 	// HealthBodyLimitBytes caps request bodies on the health chain far

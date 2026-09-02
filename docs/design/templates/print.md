@@ -208,5 +208,5 @@ its own viewport rather than `@page`; it inherits every determinism rule here.
 
 Operationally, prints run one at a time inside the Go task's 512 MiB whole-task
 budget, with a 20-second timeout and process-group kill. The
-[numeric budgets](../../plans/budgets.md) own those values. A template that
-exceeds them is defective; every golden fixture must print within the limits.
+[numeric budgets](../budgets.md) own those values. A template that exceeds them
+is defective; every golden fixture must print within the limits.

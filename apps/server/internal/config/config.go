@@ -121,7 +121,7 @@ type Config struct {
 	// key ring, mode, and sender). See AuthEmailConfig.
 	AuthEmail AuthEmailConfig
 	// AgentAccess is the closed MCP/OAuth feature configuration. All numeric
-	// values are the frozen budgets from docs/plans/budgets.md; operators may
+	// values are the frozen budgets from docs/design/budgets.md; operators may
 	// enable or disable the feature but cannot silently widen those bounds.
 	AgentAccess AgentAccessConfig
 }

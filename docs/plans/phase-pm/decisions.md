@@ -81,7 +81,7 @@ change with evidence, never test tuning.
 | OAuth request bodies            | ≤ 4,096 bytes               |
 | Idle-client GC                  | 24 h idle; ≤ 200 rows/sweep |
 
-These numbers are copied into `docs/plans/budgets.md` at T00; budgets.md is the
+These numbers are copied into `docs/design/budgets.md` at T00; budgets.md is the
 enforcement authority afterwards.
 
 ## M6 — MCP transport and tool contract

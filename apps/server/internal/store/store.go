@@ -9,7 +9,7 @@ import (
 )
 
 // MaxPoolSize is the hard cap on pool connections, per the resource budget
-// (below Postgres max_connections). See docs/plans/budgets.md.
+// (below Postgres max_connections). See docs/design/budgets.md.
 const MaxPoolSize = 20
 
 // Pool wraps a pgxpool.Pool with a context-aware Close.

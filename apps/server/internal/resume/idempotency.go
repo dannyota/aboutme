@@ -21,7 +21,7 @@ import (
 // the retention guarantee for inactive ones.
 const IdempotencyTTL = 24 * time.Hour
 
-// Retention bounds from docs/plans/budgets.md and ADR 0016. The cleanup
+// Retention bounds from docs/design/budgets.md and ADR 0016. The cleanup
 // batch bounds one request's cleanup work; the two caps bound an account's
 // physically retained records and their stored response bytes (body plus
 // approved headers, by the canonical octet_length expression).

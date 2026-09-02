@@ -163,7 +163,7 @@ rotate on every use inside one family; presenting a superseded refresh token
 revokes the whole family. An access token lives one hour and a refresh family
 has a 30-day absolute lifetime. Revocation through RFC 7009 or the settings UI
 kills the grant and its token families in one transaction. Exact rate, cap, and
-body bounds live in [the numeric budgets](../plans/budgets.md).
+body bounds live in [the numeric budgets](budgets.md).
 
 Scopes are closed to `resumes:read` and `resumes:write` and are enforced inside
 the resource server, per tool, never by the client. A token grants no publish,
@@ -208,8 +208,8 @@ traffic cannot turn cleanup into unbounded request work.
 Password routes add their own bounded policies: login admission and a per-email
 failure budget, registration/forgot per-email and per-IP, verification/reset
 token consumption, and `(account, client IP)` for add/change/reauthentication.
-Exact values live in [the numeric budgets](../plans/budgets.md). Unknown,
-provider-only, and wrong-password states stay byte-identical.
+Exact values live in [the numeric budgets](budgets.md). Unknown, provider-only,
+and wrong-password states stay byte-identical.
 
 Agent routes add registration and token policies per client IP, a failed-grant
 budget per client, tool-call budgets per token and per user, a

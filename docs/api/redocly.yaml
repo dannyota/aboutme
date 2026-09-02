@@ -15,10 +15,9 @@ rules:
   operation-4xx-response: off
   # Envelope, Error, Revision, IfMatch, and IdempotencyKey are the shared
   # envelope/write-safety contract (design doc §4). They are deliberately
-  # declared ahead of use: later phases append paths to this file that
-  # reference them, per docs/plans/phase-0a-contracts.md Task 4 ("every
-  # later phase adds paths to this file; it is never rewritten"). Error is
-  # already referenced by GET /readyz's 503 response.
+  # declared ahead of use: this file only ever grows new paths that reference
+  # them and is never rewritten. Error is already referenced by GET /readyz's
+  # 503 response.
   no-unused-components: off
   # Examples are contract, not decoration: a wrong example teaches a client
   # the wrong shape. Both rules are errors so docs/api/test asserts the

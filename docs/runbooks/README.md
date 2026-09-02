@@ -10,7 +10,6 @@ operations the repository supports now.
 
 Cloud deploy, rollback, restore, EIP recovery, and secret rotation procedures
 will be written when their infrastructure exists. Planned behavior belongs in
-the [deployment design](../design/deployment.md) and
-[infrastructure plan](../plans/phase-pi/README.md), not in speculative runbooks.
+the [deployment design](../design/deployment.md), not in speculative runbooks.
 
 Use [`../guides/`](../guides/README.md) for setup and explanatory workflows.

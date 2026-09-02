@@ -9,6 +9,7 @@ link to that source instead of copying the contract.
 | Question                                          | Authority                                                                |
 | ------------------------------------------------- | ------------------------------------------------------------------------ |
 | What should the product and system become?        | [`design/`](design/README.md)                                            |
+| Which numeric limit applies?                      | [`design/budgets.md`](design/budgets.md)                                 |
 | What does the HTTP API implement now?             | [`api/openapi.yaml`](api/openapi.yaml)                                   |
 | What does the repository implement now?           | Code, deployment configuration, and [`architecture.md`](architecture.md) |
 | Why was an architecture choice accepted?          | [`adr/`](adr/README.md)                                                  |
@@ -25,16 +26,16 @@ defect, not permission to choose one silently.
 
 ## Directory map
 
-| Path                                     | Contents                                                    | Lifecycle                                                |
-| ---------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
-| [`design/`](design/README.md)            | Intended product, architecture, and template contract       | Approved at v4; changes need an ADR or a new revision    |
-| [`adr/`](adr/README.md)                  | One decision per record                                     | Accepted records are append-only; supersede, never edit  |
-| [`api/`](api/README.md)                  | OpenAPI source, contract tests, and client-generation notes | Living with implemented HTTP behavior                    |
-| [`plans/`](plans/README.md)              | Roadmap, active phase plans, budgets, gates, and evidence   | Active plans are living; completed records are immutable |
-| [`research/`](research/flowcv/README.md) | External observations used as evidence                      | Not project authority                                    |
-| [`guides/`](guides/README.md)            | Setup and usage guidance                                    | Living with supported workflows                          |
-| [`runbooks/`](runbooks/README.md)        | Exact operating, verification, and recovery procedures      | Added only when the operation exists                     |
-| [`standards/`](standards/README.md)      | Documentation and code-comment rules                        | Living repository policy                                 |
+| Path                                     | Contents                                                       | Lifecycle                                               |
+| ---------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------- |
+| [`design/`](design/README.md)            | Intended product, architecture, budgets, and template contract | Approved at v4; changes need an ADR or a new revision   |
+| [`adr/`](adr/README.md)                  | One decision per record                                        | Accepted records are append-only; supersede, never edit |
+| [`api/`](api/README.md)                  | OpenAPI source, contract tests, and client-generation notes    | Living with implemented HTTP behavior                   |
+| [`plans/`](plans/README.md)              | Roadmap, active phase plans, and acceptance traceability       | Living; a phase's plan is deleted when the phase exits  |
+| [`research/`](research/flowcv/README.md) | External observations used as evidence                         | Not project authority                                   |
+| [`guides/`](guides/README.md)            | Setup and usage guidance                                       | Living with supported workflows                         |
+| [`runbooks/`](runbooks/README.md)        | Exact operating, verification, and recovery procedures         | Added only when the operation exists                    |
+| [`standards/`](standards/README.md)      | Documentation and code-comment rules                           | Living repository policy                                |
 
 Root [`README.md`](../README.md), [`CONTRIBUTING.md`](../CONTRIBUTING.md),
 [`SECURITY.md`](../SECURITY.md), and [`LICENSE`](../LICENSE) cover repository
@@ -44,7 +45,6 @@ entry points and project policy.
 
 - [Approved v4 design](design/README.md)
 - [Current-state architecture](architecture.md)
-- [Implementation roadmap](plans/implementation-plan.md)
 - [Template system](design/templates/README.md)
 - [OpenAPI contract](api/openapi.yaml)
 - [Self-hosting guide](guides/self-hosting.md)
@@ -60,13 +60,9 @@ Design v4 is approved. Changing a decision needs a new ADR; see the
 - Use Mermaid for Markdown diagrams.
 - Keep living Markdown files near 300 lines. Split larger subjects into a
   directory with a `README.md` index and focused pages.
-- Do not rewrite completed phase records.
+- Delete a phase's plan when the phase exits; git history keeps it.
 - Move long-lived design reasoning out of code comments and into the owning
   design page or ADR.
 - Run `make docs-fmt` and `make docs-lint` after Markdown or YAML changes.
 
 The full rules are in [`standards/engineering.md`](standards/engineering.md).
-
-`UAT` means the P9 local and P9A staging user-workflow gates. Earlier files
-named `uat-phase-*` are immutable automated acceptance history; their names do
-not redefine the term.

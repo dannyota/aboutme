@@ -1,14 +1,20 @@
 # aboutme implementation plan
 
-Status: **Revision 20, active** (2026-09-02).
+Status: **Revision 21, active** (2026-09-02).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
-[design](../design/README.md) owns intended behavior; it is approved at v4. This
-plan owns delivery order, task state, and gates. A plan cannot redefine the
-design.
+[design](../design/README.md) owns intended behavior and is approved at v4. This
+plan owns delivery order, phase state, and gates. A plan cannot redefine the
+design: a phase that changes a decision amends the Approved v4 text and records
+an ADR first.
 
 We work agile and local-first: build a working slice, review it, improve it, and
 keep everything runnable on the laptop until the whole product works there.
+
+A phase's plan lives in `phase-<id>/` while the phase is active. When the phase
+exits, its plan directory is deleted; git history keeps it. What the phase built
+is described by [the architecture](../architecture.md), the code, and the
+[traceability rows](traceability/README.md) it proved.
 
 ## v1 release scope
 
@@ -16,84 +22,44 @@ Decided 2026-09-01 by the human owner:
 
 - **v1 authentication is password-only.** Provider (OAuth) login stays in the
   code base behind a configuration flag and is disabled for v1. Phase PF owns
-  the flag and UI gating; the P1 provider code and tests remain so providers can
+  the flag and UI gating; the provider code and tests remain so providers can
   return without a new phase.
 - **MCP agent access ships in v1.** Users bring their own agents, which build
   resumes through an authenticated MCP server over the resume API. Phase PM owns
-  it and blocks P9 local UAT.
+  it and blocks local UAT.
 
-A plan cannot redefine the design: each phase's T00 amends the Approved v4 text
-and records the decision as an ADR, following the PA/ADR 0025 pattern.
+## State
 
-## Current baseline
+Complete and pushed: foundations, the TypeScript API client, provider
+authentication and its hardening, the resume domain and store, the renderer
+lane, resume HTTP and media, the authenticated editor, publish and public SSR,
+password authentication, and the native HTTPS development harness.
 
-| Slice                         | State                           | Remaining work                                  |
-| ----------------------------- | ------------------------------- | ----------------------------------------------- |
-| P0 foundations                | Complete                        | None                                            |
-| P0F TypeScript API client     | Complete                        | None                                            |
-| P1 authentication             | Complete                        | None                                            |
-| P1.1 authentication hardening | Complete                        | None                                            |
-| P2A resume domain and store   | Complete                        | None                                            |
-| P3 renderer lane              | Complete                        | None                                            |
-| P2B server lane               | Complete                        | None                                            |
-| P4 authenticated editor       | Complete                        | None                                            |
-| P5A publish and public SSR    | Complete                        | None                                            |
-| PA password authentication    | Complete                        | None                                            |
-| PF provider-login flag        | Not started                     | ADR, design amendment, config flag, UI gating   |
-| PM MCP agent access           | Exit candidate                  | Review confirmation; phase gates                |
-| P9 native HTTPS harness       | Complete for development checks | Full isolated port-443 UAT remains later        |
-| PI infrastructure             | Adopted, not executed           | Refresh after runtime phases; no cloud mutation |
-
-The settings page uses authenticated CSRF-protected POST for provider linking
-and reauthentication. P1.1's contract, tests, browser proof, and gates agree.
+| Phase | Work                                        | State                                               |
+| ----- | ------------------------------------------- | --------------------------------------------------- |
+| PM    | [MCP agent access](phase-pm/README.md)      | Exit candidate: review confirmation and phase gates |
+| PF    | Provider-login flag                         | Not started: ADR, design amendment, flag, UI gating |
+| P5B   | Publish UX                                  | Not started                                         |
+| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                         |
+| P7    | Print worker, public PDF and images         | Not started                                         |
+| P8    | Privacy lifecycle                           | Not started                                         |
+| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains     |
+| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation            |
 
 ## Delivery order
 
-P3, P2B, P4, and P5A are complete. The two lanes below closed their phase
-reviews and definitive exit gates:
-
-| Lane        | Phase | Work                                                        |
-| ----------- | ----- | ----------------------------------------------------------- |
-| Editor      | P4    | Authenticated editor, autosave, conflicts, private photos   |
-| Public read | P5A   | Publish state, revocation, public artifacts, and public SSR |
-
-The lanes consume the same released document schema and renderer but own
-different implementation paths. Root manifests, generated contracts, Caddy,
-native harness scripts, migrations, and shared traceability indexes use the
-serialized integration-owner windows named by their phase plans. Full gates run
-once per phase, never concurrently.
-
-Shared-path windows use this total order across both phase graphs:
-
-1. P4 Task 00 lands the authenticated cache/validator prerequisite, editor
-   dependencies, and its generated-client baseline.
-2. P5A Task 00 lands render topology, generated public-root routing, and native
-   harness parity on that baseline.
-3. P5A Tasks 01 and 04 run the migration/sqlc and OpenAPI/client owner windows,
-   in that order, before P4 transport work or public route authors consume the
-   generated interfaces.
-4. The P5A Task 09 manifest/lock/Nuxt owner subwindow runs after P4 Task 00 and
-   before either phase starts its final browser window.
-5. P4 Task 15 owns the first final native-HTTPS harness window. P5A Task 12
-   follows with the native-public capture window and must preserve the P4
-   scenario.
-
-No worker edits a shared path during these windows. The integration owner
-finishes and verifies one window before opening the next. Disjoint phase tasks
-may continue in parallel between them.
-
-After both lanes close their phase review and exit checklist:
-
-1. PA password authentication — complete (local encrypted mail/capture UAT
-   proven).
-2. PM MCP agent access — complete (OAuth, fifteen tools, connected-agent
-   revocation, and native HTTPS proof).
-3. PF provider-login flag — small; its ADR and design amendment land first, and
-   the flag may land any time before P9.
-4. P5B publish UX and P6 realtime.
-5. P7 print and images and P8 privacy lifecycle.
-6. P9 local UAT over the complete product, then human cloud authorization, PI
+1. PM closes its phase review and gates.
+2. PF: its ADR and design amendment land first; the flag may land any time
+   before P9.
+3. P5B publish UX and P6 realtime.
+4. P7 print and images, and P8 privacy lifecycle.
+5. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
+
+Security controls are delivered inside every route-owning phase and verified end
+to end in P9 and P9A. The Go sanitizer runs on every write and on the public
+read that feeds public SSR; P7 proves the same conformance on the read that
+feeds internal print SSR.
 
 ## Remaining gates
 
@@ -110,59 +76,21 @@ ADRs 0001–0026 are accepted.
 
 ```mermaid
 graph TD
-    P0[P0 foundations] --> P0F[P0F API client]
-    P0 --> P1[P1 auth]
-    P1 --> P11[P1.1 hardening]
-    P0 --> P2A[P2A domain and store]
-    P2A --> P3[P3 renderer, fonts, templates]
-    P2A --> P2B[P2B resume HTTP and media]
-    P0F --> P2B
-    P11 --> P2B
-    P3 -. schema v2 .-> P2B
-    P2B --> P4[P4 editor]
-    P3 --> P4
-    P9H --> P4
-    P2B --> P5A[P5A publish and public SSR]
-    P3 --> P5A
-    P4 --> PA[PA password authentication]
-    P5A --> PA
-    P11 --> PF[PF provider-login flag]
-    PA --> PF
-    P2B --> PM[PM MCP agent access]
-    PA --> PM
-    P4 --> P5B[P5B publish UX]
-    P5A --> P5B
-    P2A --> P6A[P6A SSE transport]
-    P5A --> P6B[P6B refetch and unpublish]
-    P6A --> P6B
-    P2B --> P7A[P7A owner print worker]
-    P5A --> P7B[P7B public PDF and images]
-    P7A --> P7B
-    P2B --> P8P[P8 privacy lifecycle]
-    P5A --> P8P
-    P11 --> P9H[P9 HTTPS overlay]
-    P5B --> P9[P9 local UAT]
+    PM[PM MCP agent access] --> P9[P9 local UAT]
+    PF[PF provider-login flag] --> P9
+    P5B[P5B publish UX] --> P9
+    P6A[P6A SSE transport] --> P6B[P6B refetch and unpublish]
     P6B --> P9
+    P7A[P7A owner print worker] --> P7B[P7B public PDF and images]
     P7B --> P9
-    P8P --> P9
-    PA --> P9
-    PF --> P9
-    PM --> P9
-    P9H --> P9
+    P8[P8 privacy lifecycle] --> P9
     PI[PI local IaC] --> P9
     P9 --> AUTH{Human authorizes cloud resources}
     AUTH --> P9A[P9A staging rehearsal]
     P9A --> LAUNCH{Human approves launch}
     LAUNCH --> P10[P10 production]
-    P10 --> P11M[P11 Flutter]
+    P10 --> P11[P11 Flutter]
 ```
-
-P8 security controls are delivered inside every route-owning phase and verified
-end to end in P9 and P9A.
-
-P3 supplies the Go sanitizer package. P2B calls it on every write. P5A
-re-sanitizes the public read that feeds public SSR. P7A proves the same
-conformance on the document read that feeds internal print SSR.
 
 ## Gates
 
@@ -181,13 +109,11 @@ reviewer confirms those invariants by name.
 ## Environment
 
 Daily work uses the native stack at `http://localhost:20080` and one shared
-PostgreSQL container. `make dev` stays HTTP-only for image and network smoke
-checks. Authenticated browser flows need Secure `__Host-` cookies. The landed
-native HTTPS harness serves trusted local checks at `https://localhost:20443`;
-P4 owns its editor scenario and PM owns its OAuth/MCP scenario. Neither may
-bypass TLS or the external-request firewall. P5A's unauthenticated public SSR
-may use the native HTTP origin. The later P9 overlay still owns isolated
-port-443 whole-product UAT and is not a P4/P5A implementation prerequisite.
+PostgreSQL container. Authenticated browser checks use the native HTTPS harness
+at `https://localhost:20443`; see the
+[local UAT runbook](../runbooks/local-uat.md). Neither may bypass TLS or the
+external-request firewall. The isolated port-443 whole-product UAT belongs to
+P9.
 
 P9 validates complete user workflows locally and records browser, network,
 console, server, and database evidence. Only after it passes may the human owner
@@ -196,23 +122,6 @@ proves production topology and the restore, rollback, alarm, origin-secret,
 migration-lock, and edge-routing drills. Production promotion needs a separate
 human approval.
 
-## Phase plan index
-
-| Phase | Plan                                                                          |
-| ----- | ----------------------------------------------------------------------------- |
-| P0    | Historical [P0A](phase-0a-contracts.md) and [P0B/C](phase-0bc-foundations.md) |
-| P1    | Historical [P1](phase-1-auth.md); [P1.1](phase-1-deferred.md)                 |
-| P2A   | [Resume domain and store](phase-2a/README.md)                                 |
-| P2B   | [Resume HTTP and media](phase-2b/README.md)                                   |
-| P3    | [Renderer, sanitizer, templates, and fonts](phase-3/README.md)                |
-| P4    | [Authenticated editor](phase-4/README.md)                                     |
-| P5A   | [Publish and public SSR](phase-5a/README.md)                                  |
-| PA    | [Password authentication](phase-pa/README.md)                                 |
-| PF    | Provider-login flag — directory created at dispatch                           |
-| PM    | [MCP agent access](phase-pm/README.md)                                        |
-| PI    | [Infrastructure](phase-pi/README.md)                                          |
-| P9    | [HTTPS overlay and local UAT](phase-9/README.md)                              |
-
-Before dispatching a future phase, create its directory, task files, and
-acceptance rows. [Traceability](traceability/README.md) owns acceptance
-ownership; [`budgets.md`](budgets.md) owns numeric limits.
+Before dispatching a phase, create its directory, task files, and acceptance
+rows. [Traceability](traceability/README.md) owns acceptance ownership;
+[`../design/budgets.md`](../design/budgets.md) owns numeric limits.

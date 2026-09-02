@@ -18,7 +18,7 @@ opaque capability with a maximum 60-second lifetime. Only a hash is retained.
 Capability and controller state exist only in the bounded in-memory render
 queue. A job reserves one admitted-job slot before either record is created.
 Admitted-job capacity is the configured concurrent-render limit plus queue-depth
-limit from the [numeric budgets](../plans/budgets.md); each active job has at
+limit from the [numeric budgets](../design/budgets.md); each active job has at
 most one unused capability record and one controller/job record. Active jobs and
 unused capabilities therefore cannot exceed that shared admission bound.
 Replacing an unused capability removes the old record atomically before
