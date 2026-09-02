@@ -9,6 +9,7 @@ import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
+  isExpectedAnonymousMeConsole,
 } from './network-policy';
 
 const ORIGIN = ALLOWED_ORIGIN;
@@ -98,7 +99,12 @@ test('proves authenticated transport preserves cache and precondition bytes', as
   });
   await networkSession.send('Network.enable');
 
-  const attachPageDiagnostics = pageDiagnosticsAttacher(counters);
+  const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
+    countConsoleError: (message) => !isExpectedAnonymousMeConsole(
+      message.text(),
+      message.location().url,
+    ),
+  });
   attachPageDiagnostics(page);
   context.on('page', attachPageDiagnostics);
   await context.route('**/*', async (route) => {
