@@ -46,8 +46,9 @@
   `Template changes need review`, the state message, the progress
   `ul aria-label="Template change progress"`, the reason as
   `StatusBanner kind="error"`, and three footer `Button`s with the existing
-  `data-action` values; Escape emits nothing (the parent unmounts it when the
-  state changes) and initial focus is `Retry remaining`.
+  `data-action` values; Escape emits no recovery action and does not dismiss the
+  controlled dialog (the parent unmounts it only when the state changes), and
+  initial focus is `Retry remaining`.
 
 ## Hook changes
 

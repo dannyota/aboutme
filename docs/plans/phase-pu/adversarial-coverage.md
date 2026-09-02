@@ -110,7 +110,7 @@ task is that author's job; no separate reviewer supplies it.
 - Delete-section confirmation rebinds when placement or the section changed.
 - Move and reorder emit complete permutations only.
 - Template partial dialog focuses Retry, maps every unavailable reason, and
-  keeps Escape returning focus.
+  keeps Escape inside the controlled dialog without emitting recovery.
 - Hostile section display names render as text in the outline and controls.
 
 ## T11 — Customization
