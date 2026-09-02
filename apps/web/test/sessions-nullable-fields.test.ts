@@ -43,13 +43,12 @@ registerEndpoint('/api/v1/sessions', () => ({
 }));
 
 describe('sessions.vue nullable fields', () => {
-  it('renders a session row with null ua and ip without crashing',
-    async () => {
-      const wrapper = await mountSuspended(SessionsPage);
-      await flushPromises();
+  it('renders a session row with null ua and ip without crashing', async () => {
+    const wrapper = await mountSuspended(SessionsPage);
+    await flushPromises();
 
-      expect(
-        wrapper.find('[data-testid="session-row-sess-3"]').exists(),
-      ).toBe(true);
-    });
+    expect(wrapper.find('[data-testid="session-row-sess-3"]').exists()).toBe(
+      true,
+    );
+  });
 });

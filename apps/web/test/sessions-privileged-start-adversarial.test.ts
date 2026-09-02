@@ -108,11 +108,8 @@ function privilegedAnchors(
     + '\\?purpose=(link|reauth)$',
   );
   return wrapper
-    .findAll('a')
-    .filter((anchor) => privilegedStart.test(
-      anchor.attributes('href') ?? '',
-    ),
-    );
+    .findAll('[href]')
+    .filter((anchor) => privilegedStart.test(anchor.attributes('href') ?? ''));
 }
 
 function actionButton(
@@ -120,7 +117,7 @@ function actionButton(
   label: string,
 ) {
   const button = wrapper
-    .findAll('button')
+    .findAll('[data-slot="button"]')
     .find((candidate) => candidate.text().trim() === label);
   expect(
     button,
@@ -365,9 +362,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
     });
     await refreshNuxtData();
     await flushPromises();
-    window.happyDOM.setURL(
-      'https://localhost:20443/app/settings/sessions',
-    );
+    window.happyDOM.setURL('https://localhost:20443/app/settings/sessions');
     await settleClick(page, 'Sign in again with google');
     expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith(
       'https://localhost:20443/__uat/oauth/google/authorize',
@@ -389,16 +384,17 @@ describe('settings privileged OAuth starts (adversarial)', () => {
       vi.mocked(navigateTo).mockClear();
       await settleClick(page, 'Sign in again with google');
       expect(vi.mocked(navigateTo), authorizeUrl).not.toHaveBeenCalled();
-      expect(page.get('[data-testid="link-error"]').text(), authorizeUrl)
-        .not.toBe('');
+      expect(
+        page.get('[data-testid="link-error"]').text(),
+        authorizeUrl,
+      ).not.toBe('');
     }
 
-    window.happyDOM.setURL(
-      'https://accounts.google.com/app/settings/sessions',
-    );
+    window.happyDOM.setURL('https://accounts.google.com/app/settings/sessions');
     respondToStart = () => ({
       data: {
-        authorizeUrl: 'https://accounts.google.com/__uat/oauth/google/authorize',
+        authorizeUrl:
+          'https://accounts.google.com/__uat/oauth/google/authorize',
       },
     });
     vi.mocked(navigateTo).mockClear();

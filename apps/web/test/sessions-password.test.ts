@@ -27,7 +27,8 @@ function requestHeader(event: MockEvent, name: string): string | undefined {
 }
 
 describe('sessions.vue password reauth', () => {
-  it('reauthenticates a password user through POST with JSON and CSRF',
+  it(
+    'reauthenticates a password user through POST with JSON and ' + 'CSRF',
     async () => {
       registerEndpoint('/api/v1/me', () => ({
         data: {
@@ -81,11 +82,12 @@ describe('sessions.vue password reauth', () => {
       await wrapper.get('[data-testid="password-action"]').trigger('click');
       await flushPromises();
       await wrapper.get('#password-current').setValue('current-secret');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       expect(receivedMethod).toBe('POST');
       expect(receivedHeader).toBe('test-csrf-token');
       expect(receivedBody).toBe('{"password":"current-secret"}');
-    });
+    },
+  );
 });

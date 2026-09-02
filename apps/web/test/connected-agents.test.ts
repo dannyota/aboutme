@@ -5,6 +5,7 @@ import {
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { setResponseStatus } from 'h3';
 import ConnectedAgents from '../app/components/settings/ConnectedAgents.vue';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
@@ -41,18 +42,17 @@ let agentHandler: () => unknown = () => ({ data: { grants: [grant] } });
 let agentStatus: number | null = null;
 let failAgentAfterFirst = false;
 let agentRequests = 0;
-let deleteHandler: (event: Parameters<typeof setResponseStatus>[0]) => unknown
-  = (event) => {
-    setResponseStatus(event, 204);
-    return null;
-  };
+let deleteHandler: (
+  event: Parameters<typeof setResponseStatus>[0],
+) => unknown = (event) => {
+  setResponseStatus(event, 204);
+  return null;
+};
 
 registerEndpoint('/api/v1/me', () => meHandler());
 registerEndpoint('/api/v1/me/agents', (event) => {
   agentRequests += 1;
-  const status = failAgentAfterFirst && agentRequests > 1
-    ? 401
-    : agentStatus;
+  const status = failAgentAfterFirst && agentRequests > 1 ? 401 : agentStatus;
   if (status !== null) setResponseStatus(event, status);
   if (status === 401 && failAgentAfterFirst) {
     return { error: { code: 'session_required', message: 'secret' } };
@@ -84,17 +84,23 @@ describe('ConnectedAgents', () => {
   });
 
   it(
-    'renders hostile client names as text without injecting elements',
+    'renders hostile client names as text without ' + 'injecting elements',
     async () => {
       const wrapper = await mountSuspended(ConnectedAgents);
       await flushPromises();
+      expect(wrapper.get('[data-testid="connected-agents"] h2').text()).toBe(
+        'Connected agents',
+      );
+      expect(
+        wrapper.find('[data-testid="connected-agents"] [as]').exists(),
+      ).toBe(false);
       expect(wrapper.text()).toContain(grant.clientName);
-      expect(wrapper.find('img').exists()).toBe(false);
+      expect(wrapper.find('[onerror]').exists()).toBe(false);
     },
   );
 
   it(
-    'renders closed scopes and deterministic times including Never',
+    'renders closed scopes and deterministic times including ' + 'Never',
     async () => {
       const wrapper = await mountSuspended(ConnectedAgents);
       await flushPromises();
@@ -102,7 +108,7 @@ describe('ConnectedAgents', () => {
       expect(wrapper.text()).toContain('Write resumes');
       expect(wrapper.text()).toContain('Created September 1, 2026');
       expect(wrapper.text()).toContain('Last used Never');
-      expect(wrapper.get('time').attributes('datetime')).toBe(
+      expect(wrapper.get('[datetime]').attributes('datetime')).toBe(
         grant.createdAt,
       );
     },
@@ -113,11 +119,11 @@ describe('ConnectedAgents', () => {
     const wrapper = await mountSuspended(ConnectedAgents);
     await flushPromises();
     expect(wrapper.text()).toContain('connect through MCP');
-    expect(wrapper.find('a').exists()).toBe(false);
+    expect(wrapper.find('[href]').exists()).toBe(false);
   });
 
   it(
-    'shows fixed loading and unavailable copy with keyboard Retry',
+    'shows fixed loading and unavailable copy with keyboard ' + 'Retry',
     async () => {
       agentHandler = () => ({
         error: { code: 'other', message: 'secret raw error' },
@@ -127,8 +133,9 @@ describe('ConnectedAgents', () => {
       await flushPromises();
       expect(wrapper.text()).toContain('Connected agents are unavailable');
       expect(wrapper.text()).not.toContain('secret raw error');
-      expect(wrapper.get('[data-testid="agents-retry"]').element.tagName)
-        .toBe('BUTTON');
+      expect(
+        wrapper.get('[data-testid="agents-retry"]').attributes('data-slot'),
+      ).toBe('button');
     },
   );
 
@@ -148,7 +155,7 @@ describe('ConnectedAgents', () => {
   });
 
   it(
-    'navigates to login for an exact initial list session failure',
+    'navigates to login for an exact initial list session ' + 'failure',
     async () => {
       agentStatus = 401;
       agentHandler = () => ({
@@ -161,7 +168,7 @@ describe('ConnectedAgents', () => {
   );
 
   it(
-    'opens, cancels, escapes, and returns focus from confirmation',
+    'opens, cancels, escapes, and returns focus from ' + 'confirmation',
     async () => {
       const wrapper = await mountSuspended(ConnectedAgents, {
         attachTo: document.body,
@@ -171,26 +178,34 @@ describe('ConnectedAgents', () => {
       (revoke.element as HTMLButtonElement).focus();
       await revoke.trigger('click');
       await flushPromises();
-      expect(wrapper.get('[role="dialog"]').exists()).toBe(true);
-      expect(document.activeElement?.textContent).toContain('Revoke access');
-      await wrapper.get('[role="dialog"]').trigger('keydown.esc');
+      expect(
+        document.body.querySelector('[role="alertdialog"]'),
+      ).not.toBeNull();
+      expect(document.activeElement?.textContent).toContain('Cancel');
+      document.body
+        .querySelector('[role="alertdialog"]')!
+        .dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
       await flushPromises();
-      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
       expect(document.activeElement).toBe(revoke.element);
 
       await revoke.trigger('click');
       await flushPromises();
-      await wrapper
-        .get('[role="dialog"] button[type="button"]')
-        .trigger('click');
+      document.body
+        .querySelector<HTMLButtonElement>(
+          '[data-action="agent-revoke-cancel"]',
+        )!
+        .click();
       await flushPromises();
-      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
       expect(document.activeElement).toBe(revoke.element);
     },
   );
 
   it(
-    'confirms by keyboard, refreshes exactly, and closes a 404 quietly',
+    'confirms by keyboard, refreshes exactly, and closes a 404 ' + 'quietly',
     async () => {
       let gets = 0;
       let deletes = 0;
@@ -206,16 +221,41 @@ describe('ConnectedAgents', () => {
       const wrapper = await mountSuspended(ConnectedAgents);
       await flushPromises();
       await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
-      await wrapper.get('[role="dialog"] form').trigger('submit');
+      document.body
+        .querySelector<HTMLButtonElement>(
+          '[data-action="agent-revoke-confirm"]',
+        )!
+        .click();
       await flushPromises();
       await flushPromises();
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(deletes).toBe(1);
       expect(gets).toBe(2);
-      expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
       expect(wrapper.find('[data-testid="agents-error"]').exists()).toBe(false);
     },
   );
+
+  it('revokes through the confirm dialog and returns focus', async () => {
+    const wrapper = await mountSuspended(ConnectedAgents, {
+      attachTo: document.body,
+    });
+    await flushPromises();
+    const trigger = wrapper.get('[data-testid="agent-revoke"]');
+    (trigger.element as HTMLButtonElement).focus();
+    await trigger.trigger('click');
+    await nextTick();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('Revoke access');
+    document.body
+      .querySelector<HTMLButtonElement>('[data-action="agent-revoke-confirm"]')!
+      .click();
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger.element);
+    wrapper.unmount();
+  });
 
   it('refreshes exactly once after a successful DELETE', async () => {
     let gets = 0;
@@ -232,7 +272,10 @@ describe('ConnectedAgents', () => {
     const wrapper = await mountSuspended(ConnectedAgents);
     await flushPromises();
     await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
-    await wrapper.get('[role="dialog"] form').trigger('submit');
+    await nextTick();
+    document.body
+      .querySelector<HTMLButtonElement>('[data-action="agent-revoke-confirm"]')!
+      .click();
     await flushPromises();
     await flushPromises();
     expect(deletes).toBe(1);
@@ -241,7 +284,8 @@ describe('ConnectedAgents', () => {
   });
 
   it(
-    'preserves the row on unavailable revoke and prevents rapid double-submit',
+    'preserves the row on unavailable revoke and prevents rapid '
+    + 'double-submit',
     async () => {
       let deletes = 0;
       deleteHandler = (event) => {
@@ -256,8 +300,11 @@ describe('ConnectedAgents', () => {
       const wrapper = await mountSuspended(ConnectedAgents);
       await flushPromises();
       await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
-      const form = wrapper.get('[role="dialog"] form');
-      await Promise.all([form.trigger('submit'), form.trigger('submit')]);
+      const confirm = document.body.querySelector<HTMLButtonElement>(
+        '[data-action="agent-revoke-confirm"]',
+      )!;
+      confirm.click();
+      confirm.click();
       await new Promise((resolve) => setTimeout(resolve, 10));
       await flushPromises();
       await flushPromises();
@@ -275,12 +322,18 @@ describe('ConnectedAgents', () => {
     const wrapper = await mountSuspended(ConnectedAgents);
     await flushPromises();
     await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
-    await wrapper.get('[role="dialog"] form').trigger('submit');
+    await nextTick();
+    document.body
+      .querySelector<HTMLButtonElement>('[data-action="agent-revoke-confirm"]')!
+      .click();
     await flushPromises();
-    expect(navigateTo).toHaveBeenCalledWith('/login');
+    await vi.waitFor(() => {
+      expect(navigateTo).toHaveBeenCalledWith('/login');
+    });
   });
 
-  it('navigates to login when the post-success refresh loses the session',
+  it(
+    'navigates to login when the post-success refresh loses the ' + 'session',
     async () => {
       let deletes = 0;
       agentHandler = () => {
@@ -295,26 +348,32 @@ describe('ConnectedAgents', () => {
       await flushPromises();
       failAgentAfterFirst = true;
       await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
-      await wrapper.get('[role="dialog"] form').trigger('submit');
+      document.body
+        .querySelector<HTMLButtonElement>(
+          '[data-action="agent-revoke-confirm"]',
+        )!
+        .click();
       await flushPromises();
       await flushPromises();
       expect(deletes).toBe(1);
       expect(agentRequests).toBe(2);
-      expect(navigateTo).toHaveBeenCalledWith('/login');
-    });
-
-  it(
-    'integrates after signed-in devices and before password settings',
-    async () => {
-      const wrapper = await mountSuspended(SessionsPage);
-      await flushPromises();
-      expect(wrapper.text()).toContain('Signed-in devices');
-      const agents = wrapper.get('.connected-agents').element;
-      const password = wrapper.get('[data-testid="password-settings"]').element;
-      expect(agents.compareDocumentPosition(password)
-        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      await vi.waitFor(() => {
+        expect(navigateTo).toHaveBeenCalledWith('/login');
+      });
     },
   );
+
+  it('integrates after password settings', async () => {
+    const wrapper = await mountSuspended(SessionsPage);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Signed-in devices');
+    const agents = wrapper.get('[data-testid="connected-agents"]').element;
+    const password = wrapper.get('[data-testid="password-settings"]').element;
+    expect(
+      password.compareDocumentPosition(agents)
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 
   it('disables revoke before the CSRF token is available', async () => {
     const wrapper = await mountSuspended(ConnectedAgents);
@@ -328,7 +387,8 @@ describe('ConnectedAgents', () => {
     await refreshNuxtData();
     await flushPromises();
     expect(wrapper.vm.csrfToken).toBe(null);
-    expect(wrapper.get('[data-testid="agent-revoke"]').element.disabled)
-      .toBe(true);
+    expect(wrapper.get('[data-testid="agent-revoke"]').element.disabled).toBe(
+      true,
+    );
   });
 });
