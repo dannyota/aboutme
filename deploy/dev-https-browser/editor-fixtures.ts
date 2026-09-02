@@ -65,7 +65,7 @@ export async function createBlankResume(
       && url.origin === ORIGIN
       && url.pathname === '/api/v1/resumes';
   });
-  await page.getByRole('button', { name: 'Create resume' }).press('Enter');
+  await page.getByTestId('create-resume').press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Create resume' });
   await dialog.getByLabel('Title').fill(title);
   await dialog.getByRole('button', { name: 'Create' }).press('Enter');

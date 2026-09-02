@@ -99,7 +99,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
       header.getByRole('link', { name: 'Settings', exact: true }),
     ).toBeVisible();
     await expect(
-      header.getByRole('link', { name: /Account settings for Dev User/ }),
+      header.getByRole('button', { name: /Account settings for Dev User/ }),
     ).toBeVisible();
     await expect(header.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
     steps.signedInShell = true;

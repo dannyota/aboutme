@@ -477,10 +477,11 @@ async function proveKeyboardStructureAndContextActions(
   );
   await deleteRemoteEntry(page, resumeID, 'work', deletedEntryID);
   expect((await staleEntryMutation).status()).toBe(412);
+  const saveStatus = page.locator('[role="status"][data-state]');
   await expect.poll(
-    async () => page.locator('[data-state]').getAttribute('data-state'),
+    async () => saveStatus.getAttribute('data-state'),
   ).not.toBe('saving');
-  const saveState = await page.locator('[data-state]').getAttribute('data-state');
+  const saveState = await saveStatus.getAttribute('data-state');
   editorDiagnosticStage = saveState === 'conflict'
     ? 'entries-missing-state-conflict'
     : saveState === 'error'
@@ -706,7 +707,7 @@ async function provePhotoSessionPersistence(
   editorDiagnosticStage = 'session-local-edit-blur';
   await page.getByLabel('Headline').press('Tab');
   editorDiagnosticStage = 'session-loss-alert';
-  await expect(page.getByRole('alert', { name: 'Sign in to continue editing' })).toBeVisible();
+  await expect(page.getByRole('alertdialog', { name: 'Sign in to continue editing' })).toBeVisible();
   await expectURLUnchanged(page, baseline);
   await expectNoPersistenceWrites(probes);
   editorDiagnosticStage = 'session-reauthenticated';
@@ -781,7 +782,7 @@ async function deleteThroughListKeyboard(page: Page, resumeID: string): Promise<
   const title = (await row.getByRole('link').innerText()).trim();
   expect(title).not.toBe('');
   await row.getByRole('button', { name: `Delete ${title}` }).press('Enter');
-  const dialog = page.getByRole('dialog', { name: 'Delete resume' });
+  const dialog = page.getByRole('alertdialog', { name: 'Delete resume' });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Current title').fill(title);
   const deletion = page.waitForResponse((response) => {

@@ -337,7 +337,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     });
     await waitForHydration(page);
     await expect(
-      page.getByRole('heading', { name: 'Connect an agent' }),
+      page.getByRole('heading', { name: 'Allow access' }),
     ).toBeVisible();
     await expect(page.getByTestId('consent-client-name')).toHaveText(
       clientName,
@@ -494,7 +494,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
       );
     });
     await grantRow.getByTestId('agent-revoke').click();
-    const dialog = page.getByRole('dialog', { name: 'Revoke access' });
+    const dialog = page.getByRole('alertdialog', { name: 'Revoke access' });
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Revoke access' }).click();
     expect((await revoked).status()).toBe(204);
