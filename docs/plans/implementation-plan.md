@@ -35,16 +35,16 @@ authentication and its hardening, the resume domain and store, the renderer
 lane, resume HTTP and media, the authenticated editor, publish and public SSR,
 password authentication, and the native HTTPS development harness.
 
-| Phase | Work                                        | State                                               |
-| ----- | ------------------------------------------- | --------------------------------------------------- |
-| PM    | [MCP agent access](phase-pm/README.md)      | Exit candidate: review confirmation and phase gates |
-| PF    | Provider-login flag                         | Not started: ADR, design amendment, flag, UI gating |
-| P5B   | Publish UX                                  | Not started                                         |
-| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                         |
-| P7    | Print worker, public PDF and images         | Not started                                         |
-| P8    | Privacy lifecycle                           | Not started                                         |
-| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains     |
-| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation            |
+| Phase | Work                                        | State                                                       |
+| ----- | ------------------------------------------- | ----------------------------------------------------------- |
+| PM    | [MCP agent access](phase-pm/README.md)      | Exit candidate: review confirmation and phase gates         |
+| PF    | [v1 entry experience](phase-pf/README.md)   | Planned: flag, landing, seed, capabilities, no-operator ADR |
+| P5B   | Publish UX                                  | Not started                                                 |
+| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                                 |
+| P7    | Print worker, public PDF and images         | Not started                                                 |
+| P8    | Privacy lifecycle                           | Not started                                                 |
+| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains             |
+| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation                    |
 
 ## Delivery order
 
