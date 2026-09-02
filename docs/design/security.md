@@ -31,6 +31,12 @@ settings UI uses that stable first identity as its default reauthentication
 provider. Equal timestamps must not make that choice depend on a PostgreSQL scan
 plan.
 
+Provider login is gated by `PROVIDER_LOGIN_ENABLED`, default `false`. When
+false, no provider start or callback route is registered and the settings
+provider-link and provider-reauthentication starts are absent; each path returns
+the uniform not-found response. [ADR 0027](../adr/0027-provider-login-flag.md)
+records the decision.
+
 ## Password authentication
 
 An account holds zero or one password credential alongside its linked provider
@@ -215,6 +221,14 @@ Agent routes add registration and token policies per client IP, a failed-grant
 budget per client, tool-call budgets per token and per user, a
 concurrent-request cap per user, and a live-grant cap per account. All compose
 the same bounded limiter and the canonical Caddy client address.
+
+## No operator surface
+
+The public application has no privileged role, operator session, or route that
+reads or changes another account's data. `/admin` is a reserved public root that
+Caddy denies. Operator actions are command-line tools that require a database
+URL and a database-name guard. [ADR 0028](../adr/0028-no-operator-surface.md)
+owns this boundary.
 
 ## Public artifact revocation
 

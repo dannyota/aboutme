@@ -17,12 +17,23 @@ produces the same document everywhere.
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.
 
-The login page keeps Google, GitHub, and LinkedIn and adds an email/password
-form. Registration, verification, forgot-password, and reset-password are
-separate Nuxt pages. Verification and reset strip the `#token=` fragment before
-any network call and load no third-party resource. Account settings show whether
-a password is set and allow add/change after recent reauthentication; provider
-emails are never shown as a linkage decision.
+The login page shows the email/password form always and the provider links only
+when the capabilities read reports `providerLogin`. Registration, verification,
+forgot-password, and reset-password are separate Nuxt pages. Verification and
+reset strip the `#token=` fragment before any network call and load no
+third-party resource. Account settings show whether a password is set and allow
+add/change after recent reauthentication; the provider-linking block appears
+only when `providerLogin` is true and the connected-agents block only when
+`agentAccess` is true. Provider emails are never shown as a linkage decision.
+
+The application shell renders two variants from the client-side session state:
+signed out shows the brand, Sign in, Create account, and the theme toggle;
+signed in shows Resumes, Settings, the account control, and the theme toggle.
+Until the session read resolves, the shell renders the signed-out variant. The
+editor route keeps its own top bar.
+
+Nuxt reads `GET /api/v1/capabilities` only in the browser after hydration. A
+failed read is treated as every capability false.
 
 ## Agent consent and connected agents
 

@@ -18,6 +18,14 @@ Native development uses ports `20432` (PostgreSQL), `20081` (Go), `20030`
 (Nuxt), and `20080` (Caddy). The test and development databases are separate
 logical databases in the one container. Local UAT does not reuse this native
 process stack; it creates the full deployment and tears it down at session end.
+The native script idempotently seeds `aboutme_dev` with one development account
+and one private sample resume. The command refuses any other database and is
+never run by Compose or cloud environments.
+
+`PROVIDER_LOGIN_ENABLED` defaults to false and accepts only `true`, `false`, or
+blank. The native HTTPS harness sets it to true for provider authentication
+proofs; native HTTP, Compose, self-hosted, and production configurations leave
+it unset for the password-only v1 surface.
 
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI

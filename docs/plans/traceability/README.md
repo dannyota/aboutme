@@ -11,10 +11,10 @@ closes its owned rows before its exit checklist.
 
 ## Ownership
 
-The `Phase/task` column names the phase and tasks that own a row. Phase PM is
-active; see [its plan](../phase-pm/README.md). A completed phase's plan is
-deleted at exit, so its task IDs are history that git keeps. The test and
-acceptance references in each row remain the evidence.
+The `Phase/task` column names the phase and tasks that own a row. Phases PM and
+PF are active; see [PM](../phase-pm/README.md) and [PF](../phase-pf/README.md).
+A completed phase's plan is deleted at exit, so its task IDs are history that
+git keeps. The test and acceptance references in each row remain the evidence.
 
 ## Matrix index
 
@@ -24,15 +24,15 @@ rows are never split by number range.
 | Prefix      | Rows | File                           |
 | ----------- | ---- | ------------------------------ |
 | `AC-DOC`    | 12   | [ac-doc.md](./ac-doc.md)       |
-| `AC-AUTH`   | 16   | [ac-auth.md](./ac-auth.md)     |
+| `AC-AUTH`   | 18   | [ac-auth.md](./ac-auth.md)     |
 | `AC-SAVE`   | 5    | [ac-save.md](./ac-save.md)     |
 | `AC-MEDIA`  | 9    | [ac-media.md](./ac-media.md)   |
 | `AC-PUB`    | 5    | [ac-pub.md](./ac-pub.md)       |
-| `AC-SEC`    | 5    | [ac-sec.md](./ac-sec.md)       |
+| `AC-SEC`    | 6    | [ac-sec.md](./ac-sec.md)       |
 | `AC-RT`     | 2    | [ac-rt.md](./ac-rt.md)         |
 | `AC-PDF`    | 1    | [ac-pdf.md](./ac-pdf.md)       |
 | `AC-PRIV`   | 1    | [ac-priv.md](./ac-priv.md)     |
-| `AC-OPS`    | 21   | [ac-ops.md](./ac-ops.md)       |
+| `AC-OPS`    | 23   | [ac-ops.md](./ac-ops.md)       |
 | `AC-INF`    | 8    | [ac-inf.md](./ac-inf.md)       |
 | `AC-API`    | 2    | [ac-api.md](./ac-api.md)       |
 | `AC-REN`    | 9    | [ac-ren.md](./ac-ren.md)       |
@@ -40,4 +40,4 @@ rows are never split by number range.
 | `AC-EDITOR` | 17   | [ac-editor.md](./ac-editor.md) |
 | `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
 
-Total: 124 rows across 16 prefixes.
+Total: 129 rows across 16 prefixes.

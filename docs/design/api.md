@@ -36,30 +36,36 @@ behavior that future contract changes must implement.
 
 ## Endpoint groups
 
-| Endpoint group                                                     | Purpose                                                      |
-| ------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `GET /auth/{provider}/start`, `GET /auth/{provider}/callback`      | Login start and callback                                     |
-| `POST /auth/{provider}/start`                                      | Authenticated provider link or recent reauthentication start |
-| `POST /auth/logout`, `GET /me`                                     | Logout and current identity/CSRF state                       |
-| `POST /auth/password/register`, `POST /auth/password/verify`       | Email-and-password registration and single-use verification  |
-| `POST /auth/password/login`, `POST /auth/password/reauth`          | Password login and recent reauthentication                   |
-| `POST /auth/password/forgot`, `POST /auth/password/reset`          | Password reset request and single-use token consumption      |
-| `PUT /me/password`                                                 | Add or replace the account password credential               |
-| `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions`       | Device list, per-session revoke, and logout-everywhere       |
-| `GET/POST /resumes`, `GET/PATCH/DELETE /resumes/{id}`              | Resume list, create, read, metadata update, and delete       |
-| `PATCH /resumes/{id}/entries/{sectionKey}`, `DELETE .../{entryId}` | Entry upsert and delete                                      |
-| `PATCH /resumes/{id}/sections/{sectionKey}`                        | Section display metadata and entry order                     |
-| `PATCH /resumes/{id}/structure`                                    | Atomic section create, delete, move, or reorder              |
-| `PATCH /resumes/{id}/personal-details`, `PATCH .../customization`  | Personal details and allowlisted customization deltas        |
-| `POST/GET/PATCH/DELETE /resumes/{id}/photo`                        | Owner-only photo upload, read, crop, replace, and delete     |
-| `POST /resumes/{id}/publish`                                       | Slug claim and three publish controls                        |
-| `GET /resumes/{id}/pdf`                                            | Owner PDF                                                    |
-| `GET /events`, `GET /live/{slug}`                                  | Authenticated and public SSE invalidation streams            |
-| `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`   | Live-gated public document and photo                         |
-| `GET /public/resumes/{slug}/pdf`                                   | Live and download-gated public PDF                           |
-| `GET /oauth/consent`, `POST /oauth/consent`                        | Agent consent read and the approve/deny decision             |
-| `GET /me/agents`, `DELETE /me/agents/{grantId}`                    | Connected-agent list and grant revocation                    |
-| `GET /me/export`, `DELETE /me`                                     | Data export and recent-reauthenticated account deletion      |
+| Endpoint group                                                     | Purpose                                                                   |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `GET /auth/{provider}/start`, `GET /auth/{provider}/callback`      | Login start and callback                                                  |
+| `POST /auth/{provider}/start`                                      | Authenticated provider link or recent reauthentication start              |
+| `POST /auth/logout`, `GET /me`                                     | Logout and current identity/CSRF state                                    |
+| `GET /capabilities`                                                | Unauthenticated read of optional surfaces: `providerLogin`, `agentAccess` |
+| `POST /auth/password/register`, `POST /auth/password/verify`       | Email-and-password registration and single-use verification               |
+| `POST /auth/password/login`, `POST /auth/password/reauth`          | Password login and recent reauthentication                                |
+| `POST /auth/password/forgot`, `POST /auth/password/reset`          | Password reset request and single-use token consumption                   |
+| `PUT /me/password`                                                 | Add or replace the account password credential                            |
+| `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions`       | Device list, per-session revoke, and logout-everywhere                    |
+| `GET/POST /resumes`, `GET/PATCH/DELETE /resumes/{id}`              | Resume list, create, read, metadata update, and delete                    |
+| `PATCH /resumes/{id}/entries/{sectionKey}`, `DELETE .../{entryId}` | Entry upsert and delete                                                   |
+| `PATCH /resumes/{id}/sections/{sectionKey}`                        | Section display metadata and entry order                                  |
+| `PATCH /resumes/{id}/structure`                                    | Atomic section create, delete, move, or reorder                           |
+| `PATCH /resumes/{id}/personal-details`, `PATCH .../customization`  | Personal details and allowlisted customization deltas                     |
+| `POST/GET/PATCH/DELETE /resumes/{id}/photo`                        | Owner-only photo upload, read, crop, replace, and delete                  |
+| `POST /resumes/{id}/publish`                                       | Slug claim and three publish controls                                     |
+| `GET /resumes/{id}/pdf`                                            | Owner PDF                                                                 |
+| `GET /events`, `GET /live/{slug}`                                  | Authenticated and public SSE invalidation streams                         |
+| `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`   | Live-gated public document and photo                                      |
+| `GET /public/resumes/{slug}/pdf`                                   | Live and download-gated public PDF                                        |
+| `GET /oauth/consent`, `POST /oauth/consent`                        | Agent consent read and the approve/deny decision                          |
+| `GET /me/agents`, `DELETE /me/agents/{grantId}`                    | Connected-agent list and grant revocation                                 |
+| `GET /me/export`, `DELETE /me`                                     | Data export and recent-reauthenticated account deletion                   |
+
+Provider start and callback operations are registered only when
+`PROVIDER_LOGIN_ENABLED` is true; the OpenAPI description on each says so. The
+capabilities read is `security: []`, returns two required booleans, and uses
+`Cache-Control: no-store`.
 
 Password routes use strict JSON with a 4,096-byte body cap and the exact
 `application/json` media type. Registration and forgot-password return an
