@@ -114,6 +114,10 @@ describe('sessions.vue', () => {
     expect(
       current.get('[data-testid="session-user-agent"]').classes(),
     ).toContain('break-words');
+    const lastSeen = current.get('[data-testid="session-last-seen"]');
+    expect(lastSeen.text()).toBe('Last seen 2026-08-01T00:00:00Z');
+    expect(lastSeen.classes()).toContain('whitespace-normal');
+    expect(lastSeen.classes()).toContain('break-words');
   });
 
   it('revokes another session, sending the CSRF header', async () => {

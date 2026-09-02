@@ -363,7 +363,10 @@ const linkErrorMessage = computed(() => {
                   This device
                 </Badge>
               </TableCell>
-              <TableCell class="text-muted-foreground">
+              <TableCell
+                class="text-muted-foreground whitespace-normal break-words"
+                data-testid="session-last-seen"
+              >
                 Last seen {{ session.lastSeenAt }}
               </TableCell>
               <TableCell class="text-right">
