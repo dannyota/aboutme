@@ -107,8 +107,8 @@ the closed vocabularies, `Already have an account?`, `Passwords do not match.`.
           >
             {{ title }}
           </CardTitle>
-          <CardDescription v-if="description">
-            {{ description }}
+          <CardDescription v-if="description || $slots.description">
+            <slot name="description">{{ description }}</slot>
           </CardDescription>
         </CardHeader>
         <CardContent class="grid gap-4">
@@ -219,8 +219,9 @@ the closed vocabularies, `Already have an account?`, `Passwords do not match.`.
       `focusOnMount` where the page called `.focus()` before. Footer links:
       `Already have an account? Sign in`, `Back to sign in`, `Sign in`.
 
-- [ ] **Consent page.** `AuthCard` title `Allow access` with the client name in
-      `CardDescription` inside `<strong data-testid="consent-client-name">`, the
+- [ ] **Consent page.** `AuthCard` title `Allow access` with its `description`
+      slot rendering the client name in
+      `<strong data-testid="consent-client-name">` inside `CardDescription`, the
       scope list as `Badge variant="secondary"` items, and a footer-free
       `CardContent` holding the two buttons: `Button` `type="submit"`
       `data-decision="approve"` (`Approve`) and `Button variant="outline"`

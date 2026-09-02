@@ -86,6 +86,7 @@ messages, `Could not revoke that session. Try again.`,
     await flushPromises();
     expect(revokedIds).toEqual(["g1"]);
     expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger.element);
     wrapper.unmount();
   });
   ```
