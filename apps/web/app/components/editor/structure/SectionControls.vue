@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import type { Section } from '@aboutme/schema';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import FormField from '@/components/app/FormField.vue';
 
 type SectionAction = {
   readonly key: string;
@@ -59,53 +63,80 @@ function changeIconKey(event: Event): void {
 </script>
 
 <template>
-  <fieldset :disabled="disabled">
-    <legend>{{ sectionKey }}</legend>
-    <label>
-      Section name
-      <input
-        :value="section.displayName ?? ''"
+  <div class="grid gap-3">
+    <div class="flex items-center justify-between gap-2">
+      <Badge variant="outline">
+        {{ sectionKey }}
+      </Badge>
+    </div>
+    <FormField
+      v-slot="{ id }"
+      label="Section name"
+      name="displayName"
+    >
+      <Input
+        :id="id"
         data-action="displayName"
+        :disabled="disabled"
+        :model-value="section.displayName ?? ''"
         @change="changeDisplayName"
-      >
-    </label>
-    <label>
-      Icon key
-      <input
-        :value="section.iconKey ?? ''"
+      />
+    </FormField>
+    <FormField
+      v-slot="{ id }"
+      label="Icon key"
+      name="iconKey"
+    >
+      <Input
+        :id="id"
         data-action="iconKey"
+        :disabled="disabled"
+        :model-value="section.iconKey ?? ''"
         @change="changeIconKey"
-      >
-    </label>
-    <div aria-label="Section placement controls">
-      <button
+      />
+    </FormField>
+    <div
+      aria-label="Section placement controls"
+      class="flex flex-wrap gap-2"
+    >
+      <Button
         type="button"
         data-action="move-up"
-        :disabled="index === 0"
+        :disabled="disabled || index === 0"
+        size="sm"
+        variant="outline"
         @click="emit('move', { ...action(), column, index: index - 1 })"
       >
         Move up
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         data-action="move-down"
-        :disabled="index === sectionCount - 1"
+        :disabled="disabled || index === sectionCount - 1"
+        size="sm"
+        variant="outline"
         @click="emit('move', { ...action(), column, index: index + 1 })"
       >
         Move down
-      </button>
-      <button
+      </Button>
+      <Button
         v-if="column === 'sidebar'"
         type="button"
         data-action="move-main"
+        :disabled="disabled"
+        size="sm"
+        variant="outline"
         @click="emit('move', { ...action(), column: 'main', index: 0 })"
       >
         Move to main
-      </button>
-      <button
+      </Button>
+      <Button
         v-else
         type="button"
         data-action="move-sidebar"
+        :disabled="disabled"
+        size="sm"
+        variant="outline"
         @click="
           emit('move', {
             ...action(),
@@ -115,22 +146,28 @@ function changeIconKey(event: Event): void {
         "
       >
         Move to sidebar
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         data-action="reorder"
-        :disabled="index === 0"
+        :disabled="disabled || index === 0"
+        size="sm"
+        variant="outline"
         @click="emit('reorder', { ...action(), column, index: 0 })"
       >
         Move to start
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         data-action="delete"
+        :disabled="disabled"
+        size="sm"
+        variant="ghost"
+        class="text-destructive"
         @click="emit('delete', action())"
       >
         Delete section
-      </button>
+      </Button>
     </div>
-  </fieldset>
+  </div>
 </template>

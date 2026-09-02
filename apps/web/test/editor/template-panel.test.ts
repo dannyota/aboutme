@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { computed, nextTick, ref } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TEMPLATES } from '@aboutme/schema/templates';
 
@@ -19,6 +19,14 @@ import { parseRevision } from '../../app/editor/revision';
 import type { AcceptedResume } from '../../app/editor/types';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+
+afterEach(() => {
+  document.body
+    .querySelectorAll(
+      '[data-slot="alert-dialog-content"], [data-slot="alert-dialog-overlay"]',
+    )
+    .forEach((element) => element.remove());
+});
 
 const runtime: EditorRuntime = {
   nowEpochMs: () => 0,
@@ -39,7 +47,9 @@ describe('TemplatePanel', () => {
     });
 
     expect(wrapper.findAll('[data-template]')).toHaveLength(TEMPLATES.length);
-    await wrapper.get(`[data-template="${TEMPLATES[0]!.id}"]`).trigger('click');
+    await wrapper
+      .get(`[data-template="${TEMPLATES[0]!.id}"] button`)
+      .trigger('click');
 
     expect(applyTemplate).toHaveBeenCalledOnce();
     expect(applyTemplate).toHaveBeenCalledWith(TEMPLATES[0]);
@@ -63,7 +73,7 @@ describe('TemplatePanel', () => {
       'Page or date format will change.',
     );
 
-    await wrapper.get(`[data-template="${preset.id}"]`).trigger('click');
+    await wrapper.get(`[data-template="${preset.id}"] button`).trigger('click');
 
     expect(wrapper.get('[role="status"]').text()).toBe('No changes');
     expect(wrapper.text()).not.toContain('Selected template');
@@ -165,6 +175,7 @@ describe('TemplatePartialDialog', () => {
           : { kind: 'enqueue' as const, group },
       );
       const wrapper = mount(TemplatePartialDialog, {
+        attachTo: document.body,
         props: {
           actions: actionsFor(vi.fn(), undefined, recoverTemplate),
           group,
@@ -172,16 +183,22 @@ describe('TemplatePartialDialog', () => {
         },
       });
 
-      await wrapper.get(`[data-action="${action}"]`).trigger('click');
+      await nextTick();
+      const actionButtons = document.body.querySelectorAll<HTMLElement>(
+        `[data-action="${action}"]`,
+      );
+      actionButtons[actionButtons.length - 1]?.click();
 
       expect(recoverTemplate).toHaveBeenCalledWith(action);
+      wrapper.unmount();
     },
   );
 
-  it('renders safe structured partial changes', () => {
+  it('renders safe structured partial changes', async () => {
     const group = templateGroup();
     const latest = partialLatest(group);
     const wrapper = mount(TemplatePartialDialog, {
+      attachTo: document.body,
       props: {
         actions: actionsFor(vi.fn()),
         group,
@@ -189,16 +206,24 @@ describe('TemplatePartialDialog', () => {
       },
     });
 
-    expect(wrapper.text()).toContain('Placement change accepted.');
-    expect(wrapper.text()).toContain('Customization change remains.');
-    expect(wrapper.text()).toContain('The template result needs review.');
-    expect(wrapper.text()).not.toContain('unknown-outcome');
-    expect(wrapper.text()).not.toContain(group.id);
+    await nextTick();
+
+    expect(document.body.textContent).toContain('Placement change accepted.');
+    expect(document.body.textContent).toContain(
+      'Customization change remains.',
+    );
+    expect(document.body.textContent).toContain(
+      'The template result needs review.',
+    );
+    expect(document.body.textContent).not.toContain('unknown-outcome');
+    expect(document.body.textContent).not.toContain(group.id);
+    wrapper.unmount();
   });
 
   it('keeps the dialog open for unavailable recovery', async () => {
     const group = templateGroup();
     const wrapper = mount(TemplatePartialDialog, {
+      attachTo: document.body,
       props: {
         actions: actionsFor(
           vi.fn(),
@@ -213,45 +238,62 @@ describe('TemplatePartialDialog', () => {
       },
     });
 
-    await wrapper.get('[data-action="retry-remaining"]').trigger('click');
+    await nextTick();
+    const retries = document.body.querySelectorAll<HTMLElement>(
+      '[data-action="retry-remaining"]',
+    );
+    retries[retries.length - 1]?.click();
+    await nextTick();
 
-    expect(wrapper.get('[role="alertdialog"]').exists()).toBe(true);
-    expect(wrapper.get('[role="alert"]').text()).toBe(
+    expect(
+      document.body.querySelector('[role="alertdialog"]'),
+    ).not.toBeNull();
+    const alerts = document.body.querySelectorAll('[role="alert"]');
+    expect(alerts[alerts.length - 1]!.textContent).toBe(
       [
         'The resume context changed.',
         'Review the current resume before trying again.',
       ].join(' '),
     );
-  });
-
-  it('supports Escape and restores opener focus', async () => {
-    const group = templateGroup();
-    const latest = partialLatest(group);
-    const opener = document.createElement('button');
-    document.body.append(opener);
-    opener.focus();
-    const wrapper = mount(TemplatePartialDialog, {
-      attachTo: document.body,
-      props: {
-        actions: actionsFor(vi.fn()),
-        group,
-        state: partialState(latest),
-      },
-    });
-
-    await nextTick();
-    expect(document.activeElement).toBe(
-      wrapper.get('[data-action="retry-remaining"]').element,
-    );
-    await wrapper
-      .get('[role="alertdialog"]')
-      .trigger('keydown', { key: 'Escape' });
-    await nextTick();
-
-    expect(document.activeElement).toBe(opener);
     wrapper.unmount();
-    opener.remove();
   });
+
+  it(
+    'keeps the controlled dialog mounted on Escape without recovery',
+    async () => {
+      const group = templateGroup();
+      const latest = partialLatest(group);
+      const recoverTemplate = vi.fn();
+      const wrapper = mount(TemplatePartialDialog, {
+        attachTo: document.body,
+        props: {
+          actions: actionsFor(vi.fn(), undefined, recoverTemplate),
+          group,
+          state: partialState(latest),
+        },
+      });
+
+      await nextTick();
+      const retryButtons = document.body.querySelectorAll(
+        '[data-action="retry-remaining"]',
+      );
+      const retry = retryButtons[retryButtons.length - 1]!;
+      expect(document.activeElement).toBe(retry);
+      document.body
+        .querySelector('[role="alertdialog"]')!
+        .dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', bubbles: true,
+        }));
+      await nextTick();
+
+      expect(
+        document.body.querySelector('[role="alertdialog"]'),
+      ).not.toBeNull();
+      expect(document.activeElement).toBe(retry);
+      expect(recoverTemplate).not.toHaveBeenCalled();
+      wrapper.unmount();
+    },
+  );
 });
 
 function templateGroup() {
