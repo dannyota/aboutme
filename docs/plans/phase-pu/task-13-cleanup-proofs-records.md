@@ -83,8 +83,12 @@
 
 - [ ] Delete `app/assets/css/{app,editor,auth,landing}.css`, their import lines
       in `tailwind.css`, and `app/components/editor/forms/OptionalField.vue`.
-      Narrow `app/components/editor/forms/fieldIntent.ts` to `set | unset`.
-      Confirm
+      Remove the final legacy stylesheet import from `PasswordSettings.vue` and
+      the temporary deleted-stylesheet assertions from `test/register.test.ts`,
+      `test/editor/theme.test.ts`, and `test/editor/editor-shell.test.ts`, plus
+      `test/ui/toolkit.test.ts`. Narrow
+      `app/components/editor/forms/fieldIntent.ts` to `set | unset`. Update
+      `scripts/web-e2e-source.manifest` for the deleted source paths. Confirm
       `grep -rn "editor.css\|auth.css\|landing.css\|app.css\|OptionalField" app test`
       prints nothing.
 

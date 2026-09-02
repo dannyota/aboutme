@@ -144,10 +144,16 @@ typecheck before the T13 gates.
 
 - `app/assets/css/{app,editor,auth,landing}.css` deleted and their
   `tailwind.css` import lines removed
+- `app/components/auth/PasswordSettings.vue` (remove the last legacy stylesheet
+  import)
 - `app/components/editor/forms/OptionalField.vue` deleted
 - `app/components/editor/forms/fieldIntent.ts`
 - `test/ui/surface-boundary.test.ts`
+- `test/ui/toolkit.test.ts` (remove the temporary deleted-stylesheet assertion)
+- `test/register.test.ts`, `test/editor/{theme,editor-shell}.test.ts` (remove
+  temporary assertions for the deleted stylesheets)
 - `e2e/normal-csp.spec.ts`
+- `scripts/web-e2e-source.manifest` (remove deleted source paths)
 - `README.md` (UI conventions section)
 - `docs/architecture.md`, `docs/plans/implementation-plan.md`,
   `docs/plans/traceability/ac-ui.md`, `docs/runbooks/local-uat.md` if a proof
