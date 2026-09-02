@@ -76,11 +76,23 @@ function commit(): void {
     error.value = 'Start date must not be after end date.';
     return;
   }
+  const candidate = { start, end, present: present.value };
+  if (sameRange(candidate, props.modelValue)) {
+    dirty.value = false;
+    return;
+  }
   emit('intent', {
     kind: 'set',
-    value: { start, end, present: present.value },
+    value: candidate,
   });
   dirty.value = false;
+}
+
+function sameRange(left: DateRange, right: DateRange | undefined): boolean {
+  return right !== undefined
+    && left.present === right.present
+    && left.start.y === right.start.y && left.start.m === right.start.m
+    && left.end?.y === right.end?.y && left.end?.m === right.end?.m;
 }
 
 function unset(): void {

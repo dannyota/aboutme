@@ -31,6 +31,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const editorRoot = ref<HTMLElement>();
 let view: EditorView | undefined;
 let lastInput = props.modelValue;
+let pendingOutput: string | undefined;
 
 function hasFiles(files: FileList | readonly File[] | undefined): boolean {
   return files !== undefined && files.length > 0;
@@ -96,9 +97,46 @@ function dispatchTransaction(transaction: Transaction): void {
   if (!transaction.docChanged) return;
 
   const output = serializeRichText(nextState.doc);
-  if (output === lastInput) return;
-  lastInput = output;
-  emit('update:modelValue', output);
+  if (output === lastInput) {
+    pendingOutput = undefined;
+    return;
+  }
+  pendingOutput = output;
+}
+
+function commitBlur(): void {
+  if (pendingOutput === undefined || pendingOutput === lastInput) return;
+  lastInput = pendingOutput;
+  emit('update:modelValue', pendingOutput);
+  pendingOutput = undefined;
+}
+
+function isEditorSurface(target: EventTarget | null): target is HTMLElement {
+  return target instanceof HTMLElement
+    && target.getAttribute('contenteditable') === 'true';
+}
+
+function revertEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || view === undefined) return;
+  if (!isEditorSurface(event.target)) return;
+  event.preventDefault();
+  pendingOutput = undefined;
+  lastInput = props.modelValue;
+  view.updateState(createState(parseRichTextHTML(props.modelValue)));
+}
+
+function handleBlur(event: FocusEvent): void {
+  const target = event.target;
+  if (
+    event.currentTarget instanceof HTMLElement
+    && event.relatedTarget instanceof Node
+    && event.currentTarget.contains(event.relatedTarget)
+  ) return;
+  if (
+    isEditorSurface(target)
+    && !(event.relatedTarget instanceof Node
+      && editorRoot.value?.contains(event.relatedTarget))
+  ) commitBlur();
 }
 
 function run(command: Command): void {
@@ -169,7 +207,11 @@ onBeforeUnmount(() => view?.destroy());
 watch(
   () => props.modelValue,
   (modelValue) => {
-    if (view === undefined || modelValue === lastInput) return;
+    if (
+      view === undefined
+      || modelValue === lastInput
+      || pendingOutput !== undefined
+    ) return;
     lastInput = modelValue;
     view.updateState(createState(parseRichTextHTML(modelValue)));
   },
@@ -179,6 +221,8 @@ watch(
 <template>
   <div
     @drop.capture="blockDroppedFiles"
+    @blur.capture="handleBlur"
+    @keydown.capture="revertEscape"
   >
     <div
       aria-label="Rich-text controls"

@@ -51,8 +51,16 @@ function commit(): void {
     error.value = 'Enter a valid year and month.';
     return;
   }
+  if (sameYearMonth(next, props.modelValue)) {
+    dirty.value = false;
+    return;
+  }
   emit('intent', { kind: 'set', value: next });
   dirty.value = false;
+}
+
+function sameYearMonth(left: YearMonth, right: YearMonth | undefined): boolean {
+  return right !== undefined && left.y === right.y && left.m === right.m;
 }
 
 function unset(): void {
