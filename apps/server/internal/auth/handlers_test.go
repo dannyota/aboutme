@@ -492,7 +492,7 @@ func TestService_RegisterRoutes_ProviderLoginDisabled_ProviderPathsAre404(t *tes
 	}
 	for _, path := range paths {
 		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodHead} {
-			req := httptest.NewRequest(method, path, nil)
+			req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			if rec.Code != http.StatusNotFound {
@@ -502,7 +502,7 @@ func TestService_RegisterRoutes_ProviderLoginDisabled_ProviderPathsAre404(t *tes
 	}
 
 	// Session routes are unaffected: an anonymous /me is 401, not 404.
-	req := httptest.NewRequest(http.MethodGet, auth.MePath, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, auth.MePath, nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -518,7 +518,7 @@ func TestService_RegisterRoutes_ProviderLoginDisabled_NotFoundBodyIsUniform(t *t
 
 	notFound := func(path string) (int, string, string, string) {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
