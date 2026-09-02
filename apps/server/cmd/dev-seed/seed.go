@@ -271,8 +271,8 @@ func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte,
 		Content         json.RawMessage `json:"content"`
 		Customization   json.RawMessage `json:"customization"`
 	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, nil, nil, fmt.Errorf("decode full.json: %w", err)
+	if unmarshalErr := json.Unmarshal(raw, &doc); unmarshalErr != nil {
+		return nil, nil, nil, fmt.Errorf("decode full.json: %w", unmarshalErr)
 	}
 	if doc.SchemaVersion != 2 {
 		return nil, nil, nil, fmt.Errorf("full.json schemaVersion = %d, want 2", doc.SchemaVersion)
@@ -346,8 +346,8 @@ func scanObjectEntries(raw []byte) ([]jsonObjectEntry, error) {
 			return nil, err
 		}
 		var key string
-		if err := json.Unmarshal(raw[index:keyEnd], &key); err != nil {
-			return nil, fmt.Errorf("decode personalDetails key: %w", err)
+		if keyErr := json.Unmarshal(raw[index:keyEnd], &key); keyErr != nil {
+			return nil, fmt.Errorf("decode personalDetails key: %w", keyErr)
 		}
 		index = skipJSONSpace(raw, keyEnd)
 		if index >= len(raw) || raw[index] != ':' {
