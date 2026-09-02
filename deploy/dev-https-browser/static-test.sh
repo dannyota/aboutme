@@ -404,6 +404,7 @@ const {
   DIRECT_RENDER_ORIGIN,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
+  isExpectedAnonymousMeConsole,
   isExpectedNegativeHTTPConsole,
   httpFailureStatus,
 } =
@@ -456,6 +457,22 @@ const cases = [
   [isExpectedNegativeHTTPConsole(
     'Failed to load resource: the server responded with a status of 403 ()',
     'https://example.invalid/api/v1/auth/google/start?purpose=reauth',
+  ), false],
+  [isExpectedAnonymousMeConsole(
+    'Failed to load resource: the server responded with a status of 401 ()',
+    'https://localhost:20443/api/v1/me',
+  ), true],
+  [isExpectedAnonymousMeConsole(
+    'Failed to load resource: the server responded with a status of 400 ()',
+    'https://localhost:20443/api/v1/auth/password/reset',
+  ), false],
+  [isExpectedAnonymousMeConsole(
+    'Failed to load resource: the server responded with a status of 403 ()',
+    'https://localhost:20443/api/v1/auth/google/start?purpose=reauth',
+  ), false],
+  [isExpectedAnonymousMeConsole(
+    'Failed to load resource: the server responded with a status of 401 ()',
+    'https://localhost:20443/api/v1/me?unexpected=1',
   ), false],
   [httpFailureStatus(
     'Failed to load resource: the server responded with a status of 412 (Precondition Failed)',
@@ -749,7 +766,7 @@ JSON
   "origin": "https://localhost:20443",
   "scenario": "entry-flow",
   "schemaVersion": 1,
-  "steps": {"landing": true, "providerLinks": true, "resumeList": true, "signIn": true, "signedInShell": true}
+  "steps": {"landing": true, "providerLinks": true, "resumeList": true, "signIn": true, "signOut": true, "signedInShell": true}
 }
 JSON
     ;;

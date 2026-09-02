@@ -48,6 +48,21 @@ export function isExpectedNegativeHTTPConsole(
   return false;
 }
 
+// Entry starts signed out, so its only expected console failure is the exact
+// unauthenticated /me read. Keep this narrower than the shared negative-flow
+// filter used by specs that deliberately exercise password and reauth errors.
+export function isExpectedAnonymousMeConsole(
+  message: string,
+  value: string,
+): boolean {
+  const url = parsedURL(value);
+  return message
+      === 'Failed to load resource: the server responded with a status of 401 ()'
+    && url?.origin === ALLOWED_ORIGIN
+    && url.pathname === '/api/v1/me'
+    && url.search === '';
+}
+
 export function httpFailureStatus(message: string): number | null {
   const match = message.match(
     /^Failed to load resource: the server responded with a status of ([1-5][0-9]{2}) \([^\r\n]*\)$/,

@@ -375,6 +375,15 @@ test_operational_gate_includes_render_topology() {
   return "$failed"
 }
 
+test_live_db_gate_includes_dev_seed() {
+  local output
+  output=$(cd "$ROOT" && /usr/bin/make --no-print-directory -n server-test-db 2>&1) ||
+    return 1
+  if [[ $output != *'./cmd/dev-seed'* ]]; then
+    note_failure 'server-test-db omits the live dev-seed package' || return 1
+  fi
+}
+
 run_test "phase scan fails closed without connected Semgrep and still runs gitleaks" \
   test_phase_scan_requires_connected_semgrep
 run_test "local CI preserves a shared DB under pipefail and checks generated Go" \
@@ -387,6 +396,8 @@ run_test "native status verifies the database host listener" \
   test_native_status_checks_database_host_port
 run_test "operational gate includes render topology and HTTPS parity" \
   test_operational_gate_includes_render_topology
+run_test "live DB gate includes dev-seed" \
+  test_live_db_gate_includes_dev_seed
 
 printf '\n%s passed; %s failed\n' "$passes" "$failures"
 [ "$failures" -eq 0 ]

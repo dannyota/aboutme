@@ -324,6 +324,7 @@ const expected = mode === 'auth' ? {
     providerLinks: true,
     resumeList: true,
     signIn: true,
+    signOut: true,
     signedInShell: true,
   },
 } : {
