@@ -1,12 +1,12 @@
 # Local UAT
 
-Status: **blocked for acceptance**. The P9 contract requires the complete
+Status: **blocked for acceptance**. The local UAT contract requires the complete
 image-based deployment at an HTTPS origin on port 443. The current Compose
 Caddyfile exposes HTTP only, so it cannot produce valid authentication or
 end-to-end UAT evidence.
 
-Do not mark a P9 criterion `PASS` against the current HTTP origin. Do not weaken
-Secure cookies or the HTTPS requirement to bypass the blocker.
+Do not mark a UAT criterion `PASS` against the current HTTP origin. Do not
+weaken Secure cookies or the HTTPS requirement to bypass the blocker.
 
 ## Native HTTPS feature checks
 
@@ -94,7 +94,7 @@ this handoff or stops the shared database.
 
 ## Acceptance entry conditions
 
-P9 can start only when all of these are true:
+Local UAT can start only when all of these are true:
 
 - the UAT deployment serves `https://localhost` on port 443 through the real
   route table;
@@ -102,7 +102,7 @@ P9 can start only when all of these are true:
   and manage only the isolated `aboutme-uat` project and its disposable data;
 - rootless Podman can bind 443, and the isolated browser profile trusts the
   recorded UAT Caddy root without certificate-error bypass flags;
-- the complete product slice and frozen P9 scenarios are present;
+- the complete product slice and frozen UAT scenarios are present;
 - the exact candidate contains `apps/server/migrations/.uat-baseline`, which
   freezes every existing migration after that candidate lands;
 - `make ci` passes at the exact candidate commit;
@@ -116,9 +116,8 @@ P9 can start only when all of these are true:
   required.
 
 The native HTTPS targets above exist, but these separate `uat-*` targets do not
-exist yet. The active [P9 plan](../plans/phase-9/README.md) owns their
-implementation order, frozen scenarios, and evidence schema. Update that plan
-and the deployment together when the port-443 overlay lands.
+exist yet. Update this runbook and the deployment together when the port-443
+overlay lands.
 
 ## Required execution shape
 

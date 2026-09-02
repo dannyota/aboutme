@@ -1,8 +1,7 @@
 # Current-state architecture
 
 This document describes the current integration candidate, verified on
-2026-09-02. The [design](design/README.md) owns intended behavior. The
-[roadmap](plans/implementation-plan.md) owns delivery state and gates.
+2026-09-02. The [design](design/README.md) owns intended behavior.
 
 ## Running system
 
@@ -40,8 +39,8 @@ the host trust store or use a certificate bypass.
 The Compose deployment has four long-lived containers plus a one-shot migration
 container. PostgreSQL is not published to the host. Caddy is the only published
 service. The current Compose Caddyfile serves HTTP; this is suitable for
-deployment smoke checks but does not yet satisfy the P9 HTTPS-on-443 UAT
-contract.
+deployment smoke checks but does not yet satisfy the local UAT contract of an
+HTTPS origin on port 443.
 
 ## Implemented HTTP surface
 
@@ -104,9 +103,8 @@ user, resume, client, grant, code, and token rows.
 
 ## Implemented resume data layer
 
-Phase 2A provides the relational domain and transaction primitives. Phase 2B
-wires those primitives into the complete private resume HTTP surface. The
-implemented boundary provides:
+The relational domain and transaction primitives back the complete private
+resume HTTP surface. The implemented boundary provides:
 
 - immutable resume schemas v1 and v2, retained generated types, explicit
   adjacent converters, and released/accepted/emitted registries for both
@@ -130,17 +128,17 @@ Every mutation uses strict singleton headers, bounded and duplicate-key-safe
 decoding, owner-scoped lookup, revision CAS, and one aggregate sanitizer and
 validator boundary. A released v1 request is upgraded, changed, persisted as a
 complete current-v2 aggregate, and projected back to v1. The fixed customization
-allowlist is derived from the embedded current schema. P8 still owns the
-authoritative hourly global idempotency-expiry sweep.
+allowlist is derived from the embedded current schema. The authoritative hourly
+global idempotency-expiry sweep is not implemented yet.
 
 The versioned sanitizer allowlist and hostile corpus generate Go and TypeScript
 artifacts. `internal/sanitize.RichText` builds its Go policy from that artifact;
 the client wrapper builds DOMPurify policy from the same data and is a byte-
 preserving passthrough on server-side rendering. Author and independent suites
 cover the corpus, parser boundaries, exact anchor hardening, idempotence, and
-deterministic arbitrary input. Phase 2B calls the Go sanitizer before every
-resume write. Public-read and internal-print re-sanitizing remain owned by P5A
-and P7A.
+deterministic arbitrary input. The Go sanitizer runs before every resume write
+and on the public-read projection. Internal-print re-sanitizing awaits the print
+worker.
 
 The web package contains the licensed font catalog, a pure Vue renderer with
 continuous and deterministic paged modes, and a generated registry for all 20
@@ -167,8 +165,8 @@ backend I/O. Filesystem and S3 implement the same create-only, bounded-page
 contract. Replacement and deletion revoke the database reference and enqueue the
 exact old key in one transaction. Definite failures compensate a proved-created
 candidate; unknown object-write or database outcomes remain private for later
-reconciliation. P8-priv owns the deletion worker, 24-hour target, and 48-hour
-orphan reconciliation.
+reconciliation. The deletion worker, its 24-hour target, and the 48-hour orphan
+reconciliation are not implemented yet.
 
 ## Implemented authenticated editor
 
@@ -182,9 +180,9 @@ Templates apply against optimistic state, preserve content, and emit a
 deterministic placement delta with exact partial recovery and guarded undo.
 Photos upload as raw bytes and are never previewed or decoded on the client;
 owner reads bind an in-memory data URL to the accepted photo key. The preview
-imports the pure Phase 3 renderer and never derives a photo URL from an object
-key. Session loss retains in-memory work for reauthentication; no browser
-storage or unload beacon holds resume data.
+imports the pure renderer and never derives a photo URL from an object key.
+Session loss retains in-memory work for reauthentication; no browser storage or
+unload beacon holds resume data.
 
 ## Implemented public publish and SSR
 
@@ -201,10 +199,10 @@ mismatched revision.
 
 ## Known delivery gaps
 
-- The current Compose route serves HTTP. P9 requires the complete image-based
-  deployment at an HTTPS origin on port 443 with isolated data and services. The
-  native 20443 authentication harness supports development but does not close
-  this UAT gap.
+- The current Compose route serves HTTP. Local UAT requires the complete
+  image-based deployment at an HTTPS origin on port 443 with isolated data and
+  services. The native 20443 authentication harness supports development but
+  does not close this gap.
 
 ## Not implemented
 
