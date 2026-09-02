@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import '~/assets/css/auth.css';
 import {
   type OAuthConsentDecision,
   type OAuthConsentRequest,

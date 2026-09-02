@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import '~/assets/css/landing.css';
-
 useHead({
   title: 'aboutme',
   meta: [

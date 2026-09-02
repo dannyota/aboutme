@@ -9,7 +9,6 @@
  * token never appears in route query, history, state, or the DOM. A malformed
  * or missing fragment fails locally with no request at all.
  */
-import '~/assets/css/auth.css';
 import {
   type PasswordAuthFailure,
   usePasswordAuth,

@@ -8,7 +8,6 @@
  * replaced with an empty string. A malformed or missing fragment renders a
  * local error and no form.
  */
-import '~/assets/css/auth.css';
 import PasswordField from '../components/auth/PasswordField.vue';
 import {
   type PasswordAuthFailure,

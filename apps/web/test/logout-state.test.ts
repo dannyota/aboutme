@@ -7,7 +7,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
-import AppChrome from '../app/components/ui/AppChrome.vue';
+import AppChrome from '../app/components/app/AppChrome.vue';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 

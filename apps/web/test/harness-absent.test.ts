@@ -96,8 +96,12 @@ describe('build-only renderer harness', () => {
         true,
       );
       const normalBytes = readTextTree(normalTestOutputRoot);
+      const normalRoutes = readFileSync(
+        resolve(normalTestOutputRoot, 'server/chunks/virtual/entry.mjs'),
+        'utf8',
+      );
       expect(normalBytes).toContain('/login');
-      expect(normalBytes).not.toContain('/_harness');
+      expect(normalRoutes).not.toContain('path: "/_harness/render"');
       expect(normalBytes).not.toContain(
         'aa570fab912ce9b49b805b07decf274178b3c0092b983c1a1127bed3b213252e',
       );

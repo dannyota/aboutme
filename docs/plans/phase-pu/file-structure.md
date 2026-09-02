@@ -38,7 +38,8 @@ after every earlier window is integrated.
 - `app/components/ui/**` (generated; the three existing files move to
   `app/components/app/`)
 - `scripts/ui-add.sh`
-- `test/ui/toolkit.test.ts`
+- `test/ui/toolkit.test.ts`; contract updates in `test/fonts.test.ts` and
+  `test/harness-absent.test.ts`
 - Import-path updates in `app/app.vue`, `EditorShell.vue`,
   `test/app-chrome.test.ts`, `test/logout-state.test.ts`,
   `test/editor/theme.test.ts`

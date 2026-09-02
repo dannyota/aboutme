@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { build as viteBuild } from 'vite';
 
@@ -171,7 +172,7 @@ const publicRenderWorkerPlugin = (emitAssets = true) => ({
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@nuxt/eslint', '@pinia/nuxt'],
+  modules: ['@nuxt/eslint', '@pinia/nuxt', 'shadcn-nuxt'],
 
   // Server-side rendering is required: public resume pages and SEO/GEO
   // surfaces must be crawlable without JS (spec §5).
@@ -186,7 +187,7 @@ export default defineNuxtConfig({
     },
   },
 
-  css: ['~/assets/css/fonts.css', '~/assets/css/app.css'],
+  css: ['~/assets/css/tailwind.css'],
 
   runtimeConfig: {
     public: {
@@ -249,7 +250,7 @@ export default defineNuxtConfig({
   },
 
   vite: {
-    plugins: [publicRenderWorkerPlugin(false)],
+    plugins: [tailwindcss(), publicRenderWorkerPlugin(false)],
   },
 
   hooks: {
@@ -316,4 +317,6 @@ export default defineNuxtConfig({
       },
     },
   },
+
+  shadcn: { prefix: 'Ui', componentDir: '@/components/ui' },
 });

@@ -362,6 +362,10 @@ export default withNuxt(
     rules: googleStyleRules,
   },
   {
+    files: ['app/components/ui/**/*.{ts,vue}'],
+    rules: { 'max-len': 'off' },
+  },
+  {
     files: ['app/components/resume/**/*.{ts,vue,mts}'],
     plugins: {
       aboutme: aboutmePlugin,

@@ -7,7 +7,6 @@
  * same fixed, account-neutral copy, so this page never reveals whether an
  * email is registered.
  */
-import '~/assets/css/auth.css';
 import { usePasswordAuth } from '../composables/usePasswordAuth';
 
 const GENERIC_COPY
