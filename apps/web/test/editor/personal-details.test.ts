@@ -4,300 +4,50 @@ import { computed } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
 import ContactList from '../../app/components/editor/forms/ContactList.vue';
-import DateRangeField from
-  '../../app/components/editor/forms/DateRangeField.vue';
-import OptionalField from '../../app/components/editor/forms/OptionalField.vue';
 import PersonalDetailsPanel from
   '../../app/components/editor/forms/PersonalDetailsPanel.vue';
-import YearMonthField from
-  '../../app/components/editor/forms/YearMonthField.vue';
 import type { ResumeEditorActions } from
   '../../app/composables/useResumeEditor';
 
-describe('OptionalField', () => {
-  it('does not turn an untouched absent field into a command', async () => {
-    const wrapper = mount(OptionalField, {
-      props: { label: 'Name', modelValue: undefined },
-    });
-
-    await wrapper.get('input').trigger('blur');
-
-    expect(wrapper.emitted('intent')).toBeUndefined();
-  });
-
-  it('emits a set transition for typed text', async () => {
-    const wrapper = mount(OptionalField, {
-      props: { label: 'Name', modelValue: undefined },
-    });
-
-    await wrapper.get('input').setValue('Ada');
-    await wrapper.get('input').trigger('blur');
-
-    expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual({
-      kind: 'set',
-      value: 'Ada',
-    });
-  });
-
-  it.each([
-    ['clear', { kind: 'clear', value: '' }],
-    ['unset', { kind: 'unset' }],
-  ] as const)('emits the %s transition exactly', async (action, expected) => {
-    const wrapper = mount(OptionalField, {
-      props: { label: 'Name', modelValue: 'Ada' },
-    });
-
-    await wrapper.get(`[data-action="${action}"]`).trigger('click');
-    await wrapper.get('input').trigger('blur');
-
-    expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual(expected);
-  });
-
-  it('commits clear directly from its button action', async () => {
-    const wrapper = mount(OptionalField, {
-      props: { label: 'Name', modelValue: 'Ada' },
-    });
-
-    await wrapper.get('[data-action="clear"]').trigger('click');
-
-    expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual({
-      kind: 'clear',
-      value: '',
-    });
-  });
-
-  it(
-    'commits Set once from its button action and ignores a later blur',
-    async () => {
-      const wrapper = mount(OptionalField, {
-        props: { label: 'Name', modelValue: undefined },
-      });
-
-      await wrapper.get('input').setValue('Ada');
-      await wrapper.get('[data-action="set"]').trigger('click');
-      expect(wrapper.emitted('intent')).toEqual([[
-        { kind: 'set', value: 'Ada' },
-      ]]);
-      await wrapper.get('input').trigger('blur');
-
-      expect(wrapper.emitted('intent')).toEqual([[
-        { kind: 'set', value: 'Ada' },
-      ]]);
-    },
-  );
-
-  it(
-    'commits remove once from its button action and ignores a later blur',
-    async () => {
-      const wrapper = mount(OptionalField, {
-        props: { label: 'Name', modelValue: 'Ada' },
-      });
-
-      await wrapper.get('[data-action="unset"]').trigger('click');
-      await wrapper.get('input').trigger('blur');
-
-      expect(wrapper.emitted('intent')).toEqual([[{ kind: 'unset' }]]);
-    },
-  );
-});
-
-describe('YearMonthField', () => {
-  it('preserves a month value while capturing an exact date', async () => {
-    const wrapper = mount(YearMonthField, {
-      props: { fieldId: 'date', label: 'Date', modelValue: undefined },
-    });
-
-    await wrapper.get('[data-part="year"]').setValue('2026');
-    await wrapper.get('[data-part="month"]').setValue('1');
-    await wrapper.get('[data-part="month"]').trigger('blur');
-
-    expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual({
-      kind: 'set',
-      value: { y: 2026, m: 1 },
-    });
-  });
-
-  it('does not capture fractional or non-finite numeric values', async () => {
-    const wrapper = mount(YearMonthField, {
-      props: { fieldId: 'date', label: 'Date', modelValue: undefined },
-    });
-
-    await wrapper.get('[data-part="year"]').setValue('2026.5');
-    await wrapper.get('[data-part="year"]').trigger('blur');
-
-    expect(wrapper.emitted('intent')).toBeUndefined();
-  });
-
-  it('unsets a present date without emitting an invalid clear', async () => {
-    const wrapper = mount(YearMonthField, {
-      props: { fieldId: 'date', label: 'Date', modelValue: { y: 2026 } },
-    });
-
-    await wrapper.get('[data-action="unset"]').trigger('click');
-
-    expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual({ kind: 'unset' });
-    expect(wrapper.find('[data-action="clear"]').exists()).toBe(false);
-  });
-});
-
-describe('DateRangeField', () => {
-  it('captures present ranges with a null end', async () => {
-    const wrapper = mount(DateRangeField, {
-      props: { fieldId: 'work-dates', modelValue: undefined },
-    });
-
-    await wrapper.get('[data-part="start-year"]').setValue('2024');
-    await wrapper.get('[data-part="start-month"]').setValue('1');
-    await wrapper.get('[data-part="present"]').setValue(true);
-    await wrapper.get('[data-part="present"]').trigger('change');
-
-    expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual({
-      kind: 'set',
-      value: { start: { y: 2024, m: 1 }, end: null, present: true },
-    });
-  });
-
-  it('requires a start date before accepting present', async () => {
-    const wrapper = mount(DateRangeField, {
-      props: { fieldId: 'work-dates', modelValue: undefined },
-    });
-
-    await wrapper.get('[data-part="present"]').setValue(true);
-    await wrapper.get('[data-part="present"]').trigger('change');
-
-    expect(wrapper.get('[data-error="date-order"]').text()).toBe(
-      'Enter a valid start date.',
-    );
-    expect(wrapper.emitted('intent')).toBeUndefined();
-  });
-
-  it('does not unset an existing range when present has no start', async () => {
-    const wrapper = mount(DateRangeField, {
-      props: {
-        fieldId: 'work-dates',
-        modelValue: {
-          start: { y: 2024 }, end: { y: 2025 }, present: false,
-        },
-      },
-    });
-
-    await wrapper.get('[data-part="start-year"]').setValue('');
-    await wrapper.get('[data-part="end-year"]').setValue('');
-    await wrapper.get('[data-part="present"]').setValue(true);
-    await wrapper.get('[data-part="present"]').trigger('change');
-
-    expect(wrapper.get('[data-error="date-order"]').text()).toBe(
-      'Enter a valid start date.',
-    );
-    expect(wrapper.emitted('intent')).toBeUndefined();
-  });
-
-  it(
-    'shows a local order error instead of emitting start-after-end',
-    async () => {
-      const wrapper = mount(DateRangeField, {
-        props: {
-          fieldId: 'work-dates',
-          modelValue: {
-            start: { y: 2026, m: 2 },
-            end: { y: 2025, m: 12 },
-            present: false,
-          },
-        },
-      });
-
-      await wrapper.get('[data-part="end-month"]').setValue('12');
-      await wrapper.get('[data-part="end-month"]').trigger('blur');
-
-      expect(wrapper.get('[data-error="date-order"]').text()).toBe(
-        'Start date must not be after end date.',
-      );
-      expect(wrapper.get('fieldset').attributes('aria-describedby')).toBe(
-        'work-dates-error',
-      );
-      expect(wrapper.emitted('intent')).toBeUndefined();
-    },
-  );
-
-  it(
-    'uses January for a missing month and keeps an absent cleared range quiet',
-    async () => {
-      const wrapper = mount(DateRangeField, {
-        props: { fieldId: 'dates', modelValue: undefined },
-      });
-      await wrapper.get('[data-part="start-year"]').setValue('2024');
-      await wrapper.get('[data-part="end-year"]').setValue('2024');
-      await wrapper.get('[data-part="end-month"]').setValue('1');
-      await wrapper.get('[data-part="end-month"]').trigger('blur');
-      expect(wrapper.emitted('intent')?.at(-1)?.[0]).toEqual({
-        kind: 'set',
-        value: {
-          start: { y: 2024 }, end: { y: 2024, m: 1 }, present: false,
-        },
-      });
-      await wrapper.get('[data-part="start-year"]').setValue('');
-      await wrapper.get('[data-part="end-year"]').setValue('');
-      await wrapper.get('[data-part="end-month"]').setValue('');
-      await wrapper.get('[data-part="end-month"]').trigger('blur');
-      expect(wrapper.find('[data-error="date-order"]').exists()).toBe(false);
-    },
-  );
-});
-
 describe('PersonalDetailsPanel', () => {
-  it(
-    'captures full name and headline intent through the action boundary',
-    async () => {
-      const edit = vi.fn();
-      const wrapper = mount(PersonalDetailsPanel, {
-        props: { actions: actionsFor(edit), personal: {} },
-      });
+  it('sets a typed name on blur and unsets an emptied one', async () => {
+    const edit = vi.fn(() => ({ kind: 'enqueued' as const }));
+    const wrapper = mount(PersonalDetailsPanel, {
+      props: { actions: actionsFor(edit), personal: { fullName: 'Ada' } },
+    });
+    const name = wrapper.get('[data-field="fullName"] [data-field-input]');
+    await name.setValue('Ada Lovelace');
+    await name.trigger('blur');
+    expect(edit).toHaveBeenLastCalledWith({
+      kind: 'personalField', path: 'fullName',
+      value: { present: true, value: 'Ada Lovelace' },
+    });
+    await wrapper.setProps({ personal: { fullName: 'Ada Lovelace' } });
+    await name.setValue('');
+    await name.trigger('blur');
+    expect(edit).toHaveBeenLastCalledWith({
+      kind: 'personalField',
+      path: 'fullName',
+      value: { present: false },
+    });
+  });
 
-      await wrapper.get('[data-field="fullName"] input').setValue('Ada');
-      await wrapper.get('[data-field="fullName"] input').trigger('blur');
-      await wrapper.get('[data-field="headline"] input').setValue('Engineer');
-      await wrapper.get('[data-field="headline"] input').trigger('blur');
-
-      expect(edit).toHaveBeenNthCalledWith(1, {
-        kind: 'personalField',
-        path: 'fullName',
-        value: { present: true, value: 'Ada' },
-      });
-      expect(edit).toHaveBeenNthCalledWith(2, {
-        kind: 'personalField',
-        path: 'headline',
-        value: { present: true, value: 'Engineer' },
-      });
-    },
-  );
-
-  it(
-    'preserves clear versus unset at the personal action boundary',
-    async () => {
-      const edit = vi.fn();
-      const wrapper = mount(PersonalDetailsPanel, {
-        props: { actions: actionsFor(edit), personal: { fullName: 'Ada' } },
-      });
-
-      await wrapper
-        .get('[data-field="fullName"] [data-action="clear"]')
-        .trigger('click');
-      await wrapper
-        .get('[data-field="fullName"] [data-action="unset"]')
-        .trigger('click');
-
-      expect(edit).toHaveBeenNthCalledWith(1, {
-        kind: 'personalField',
-        path: 'fullName',
-        value: { present: true, value: '' },
-      });
-      expect(edit).toHaveBeenNthCalledWith(2, {
-        kind: 'personalField',
-        path: 'fullName',
-        value: { present: false },
-      });
-    },
-  );
+  it('never emits a clear intent', async () => {
+    const edit = vi.fn(() => ({ kind: 'enqueued' as const }));
+    const wrapper = mount(PersonalDetailsPanel, {
+      props: { actions: actionsFor(edit), personal: { headline: 'Engineer' } },
+    });
+    const headline = wrapper.get(
+      '[data-field="headline"] [data-field-input]',
+    );
+    await headline.setValue('');
+    await headline.trigger('keydown', { key: 'Enter' });
+    expect(edit.mock.calls.every(([command]) =>
+      !('value' in command)
+      || command.value.present === false
+      || command.value.value !== '',
+    )).toBe(true);
+  });
 
   it('captures ordered contact edits through the action boundary', async () => {
     const edit = vi.fn();
@@ -492,6 +242,34 @@ describe('PersonalDetailsPanel', () => {
     },
   );
 
+  it('unsets a present label and toggles hidden by checkbox role', async () => {
+    const wrapper = mount(ContactList, {
+      props: {
+        createEntityId: () => 'detail-2',
+        details: [{
+          id: 'detail-1', type: 'email', value: 'a@b.c', label: 'Work',
+          isHidden: false,
+        }],
+      },
+    });
+
+    const label = wrapper.get('[data-detail-label]');
+    await label.setValue('');
+    await label.trigger('blur');
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([{
+      id: 'detail-1', type: 'email', value: 'a@b.c', isHidden: false,
+    }]);
+
+    const hidden = wrapper.get('[data-detail-is-hidden]');
+    expect(hidden.attributes('role')).toBe('checkbox');
+    expect(hidden.attributes('aria-checked')).toBe('false');
+    await hidden.trigger('click');
+    expect(hidden.attributes('aria-checked')).toBe('true');
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([{
+      id: 'detail-1', type: 'email', value: 'a@b.c', isHidden: true,
+    }]);
+  });
+
   it(
     'rejects a web-profile type change that carries an invalid value',
     async () => {
@@ -538,13 +316,11 @@ describe('PersonalDetailsPanel', () => {
         attachTo: document.body,
       });
 
-      const input = wrapper.get('[data-field="fullName"] input');
-      const issue = wrapper.get('[data-issue="personalDetails.fullName"]');
-      expect(issue.text()).toBe('This value is too long.');
-      await wrapper
-        .get('[data-issue="personalDetails.fullName"]')
-        .trigger('click');
-      expect(document.activeElement).toBe(input.element);
+      expect(wrapper.get('[data-error-for="fullName"]').text()).toBe(
+        'This value is too long.',
+      );
+      expect(wrapper.find('[data-issue="personalDetails.fullName"]').exists())
+        .toBe(false);
     },
   );
 

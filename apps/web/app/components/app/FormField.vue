@@ -9,6 +9,7 @@ const props = defineProps<{
   readonly name?: string;
   readonly hint?: string;
   readonly error?: string;
+  readonly errorAttrs?: Record<string, string>;
   readonly required?: boolean;
   readonly class?: string;
 }>();
@@ -49,6 +50,7 @@ const invalid = computed(() => (props.error ? true : undefined));
     </p>
     <p
       v-if="error"
+      v-bind="errorAttrs"
       :id="errorId"
       role="alert"
       :data-error-for="name"

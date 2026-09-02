@@ -103,6 +103,7 @@ describe('TextField commit rule (decisions U4)', () => {
         id: 'n',
         hint: 'h',
         error: 'e',
+        errorAttrs: { 'data-error': 'contact-url' },
         name: 'fullName',
       },
     });
@@ -110,6 +111,9 @@ describe('TextField commit rule (decisions U4)', () => {
     expect(
       wrapper.get('[data-field-input]').attributes('aria-describedby'),
     ).toBe('n-hint n-error');
+    expect(wrapper.get('[role="alert"]').attributes('data-error')).toBe(
+      'contact-url',
+    );
     expect(wrapper.attributes('data-field')).toBe('fullName');
   });
 });
