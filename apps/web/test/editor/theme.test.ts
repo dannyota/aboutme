@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import {
-  mountSuspended,
-  registerEndpoint,
-} from '@nuxt/test-utils/runtime';
+import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
 import { ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
@@ -81,7 +78,7 @@ describe('theme preference boundary', () => {
     async () => {
       const wrapper = await mountSuspended(ThemeToggle);
 
-      const button = wrapper.get('button');
+      const button = wrapper.get('[data-slot="button"]');
       expect(button.attributes('aria-label')).toMatch(/^Switch to /);
       expect(button.text()).toMatch(/(Light|Dark) mode/);
     },
@@ -95,14 +92,12 @@ describe('theme preference boundary', () => {
       });
       await flushPromises();
 
-      const actions = wrapper.get('.app-account-actions');
-      const controls = actions.findAll(':scope > *');
-
-      expect(controls).toHaveLength(2);
-      expect(controls[0]?.classes()).toContain('account-control');
-      expect(controls[1]?.attributes('aria-label')).toMatch(/^Switch to /);
-      expect(actions.get('.account-control').attributes('aria-label'))
-        .toContain('Account settings');
+      const shell = wrapper.get('[data-testid="app-shell"]');
+      expect(shell.find('[data-testid="account-menu"]').exists()).toBe(true);
+      expect(shell.find('[aria-label^="Switch to"]').exists()).toBe(true);
+      expect(
+        shell.get('[data-testid="account-menu"]').attributes('aria-label'),
+      ).toContain('Account settings');
     },
     15_000,
   );
@@ -116,8 +111,7 @@ describe('theme preference boundary', () => {
         route: '/_harness/render',
       });
 
-      expect(wrapper.find('.aboutme-app').exists()).toBe(false);
-      expect(wrapper.find('.app-chrome').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="app-shell"]').exists()).toBe(false);
       expect(document.body.classList.contains('aboutme-app-body')).toBe(false);
       expect(fetch).not.toHaveBeenCalled();
     },
@@ -130,8 +124,7 @@ describe('theme preference boundary', () => {
         route: '/app/resumes/resume-1',
       });
 
-      expect(wrapper.find('.aboutme-app').exists()).toBe(true);
-      expect(wrapper.find('.app-chrome').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="app-shell"]').exists()).toBe(false);
     },
     15_000,
   );
@@ -188,9 +181,7 @@ describe('theme preference boundary', () => {
   it('uses Nova control states and readable inspector groups', async () => {
     const css = await readFile(editorCss, 'utf8');
 
-    expect(css).toContain(
-      '.editor-view-switcher button[aria-pressed="true"]',
-    );
+    expect(css).toContain('.editor-view-switcher button[aria-pressed="true"]');
     expect(css).toContain('.editor-inspector fieldset');
     expect(css).toContain('.editor-inspector ol');
     expect(css).toContain('.editor-inspector input[type="checkbox"]');

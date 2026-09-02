@@ -1,13 +1,13 @@
 <template>
   <div :class="{ 'aboutme-app': isAppSurface }">
-    <AppChrome v-if="showAppChrome" />
+    <AppShell v-if="showAppChrome" />
     <NuxtRouteAnnouncer v-if="isAppSurface" />
     <NuxtPage />
   </div>
 </template>
 
 <script setup lang="ts">
-import AppChrome from './components/app/AppChrome.vue';
+import AppShell from './components/app/AppShell.vue';
 
 const route = useRoute();
 const isAppSurface = computed(() => !route.path.startsWith('/_harness'));

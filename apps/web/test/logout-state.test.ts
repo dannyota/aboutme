@@ -7,7 +7,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
-import AppChrome from '../app/components/app/AppChrome.vue';
+import AppShell from '../app/components/app/AppShell.vue';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 
@@ -47,19 +47,31 @@ const Harness = defineComponent({
   },
   render() {
     return h('div', [
-      h(AppChrome),
+      h(AppShell),
       h('span', { 'data-testid': 'user' }, JSON.stringify(this.user)),
-      h('span', {
-        'data-testid': 'csrf',
-      }, JSON.stringify(this.csrfToken)),
-      h('span', {
-        'data-testid': 'identities',
-      }, JSON.stringify(this.identities)),
+      h(
+        'span',
+        {
+          'data-testid': 'csrf',
+        },
+        JSON.stringify(this.csrfToken),
+      ),
+      h(
+        'span',
+        {
+          'data-testid': 'identities',
+        },
+        JSON.stringify(this.identities),
+      ),
       h('span', { 'data-testid': 'auth-state' }, this.authState),
-      h('button', {
-        'data-testid': 'logout',
-        'onClick': () => this.logout(),
-      }, 'Log out'),
+      h(
+        'button',
+        {
+          'data-testid': 'logout',
+          'onClick': () => this.logout(),
+        },
+        'Log out',
+      ),
     ]);
   },
 });
@@ -70,7 +82,9 @@ describe('logout state transition', () => {
     await flushPromises();
     const readsBeforeLogout = meReads;
 
-    expect(wrapper.get('.account-control').text()).toContain('Dev User');
+    expect(wrapper.get('[data-testid="account-menu"]').text()).toContain(
+      'Dev User',
+    );
     expect(wrapper.get('[data-testid="auth-state"]').text()).toBe(
       'authenticated',
     );
@@ -83,9 +97,9 @@ describe('logout state transition', () => {
     expect(wrapper.get('[data-testid="csrf"]').text()).toBe('null');
     expect(wrapper.get('[data-testid="identities"]').text()).toBe('[]');
     expect(wrapper.get('[data-testid="auth-state"]').text()).toBe('anonymous');
-    expect(wrapper.find('.account-control').exists()).toBe(false);
-    expect(wrapper.get('a[href="/login"]').text()).toContain('Sign in');
-    expect(wrapper.get('a[href="/register"]').text()).toContain(
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+    expect(wrapper.get('[href="/login"]').text()).toContain('Sign in');
+    expect(wrapper.get('[href="/register"]').text()).toContain(
       'Create account',
     );
     expect(meReads).toBe(readsBeforeLogout);
