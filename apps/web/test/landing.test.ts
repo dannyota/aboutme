@@ -1,0 +1,94 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+  mockNuxtImport,
+  mountSuspended,
+  registerEndpoint,
+} from '@nuxt/test-utils/runtime';
+import { flushPromises } from '@vue/test-utils';
+import { setResponseStatus } from 'h3';
+import AppRoot from '../app/app.vue';
+import LandingPage from '../app/pages/index.vue';
+
+const mocks = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const real: any = (globalThis as { $fetch: unknown }).$fetch;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { fetchMock: vi.fn((...args: any[]) => real(...args)) };
+});
+mockNuxtImport('$fetch', () => mocks.fetchMock);
+
+let meRequests = 0;
+registerEndpoint('/api/v1/me', (event) => {
+  meRequests += 1;
+  setResponseStatus(event, 401);
+  return { error: { code: 'session_required', message: 'Sign in.' } };
+});
+
+function apiPaths(): string[] {
+  return mocks.fetchMock.mock.calls
+    .map(([url]) => new URL(String(url), 'http://localhost').pathname)
+    .filter((path) => path.startsWith('/api/'));
+}
+
+describe('index.vue', () => {
+  it('renders the approved copy', async () => {
+    const wrapper = await mountSuspended(LandingPage);
+    expect(wrapper.get('h1').text()).toBe(
+      'Build your resume. Publish it at its own link.',
+    );
+    expect(wrapper.text()).toContain(
+      'aboutme is an open-source resume builder.',
+    );
+    const points = wrapper
+      .findAll('[data-testid="landing-point"]')
+      .map((p) => p.get('strong').text());
+    expect(points).toEqual([
+      'Yours to keep.',
+      'One link per resume.',
+      'Bring your own agent.',
+    ]);
+  });
+
+  it('offers sign-in and registration and nothing into the app', async () => {
+    const wrapper = await mountSuspended(LandingPage);
+    const hrefs = wrapper.findAll('a').map((a) => a.attributes('href'));
+    expect(hrefs).toContain('/login');
+    expect(hrefs).toContain('/register');
+    expect(hrefs.some((h) => h?.startsWith('/app'))).toBe(false);
+  });
+
+  it('names no unshipped feature', async () => {
+    const wrapper = await mountSuspended(LandingPage);
+    expect(wrapper.text().toLowerCase()).not.toMatch(/pdf|realtime|real-time/);
+  });
+
+  it('links the license line to the repository', async () => {
+    const wrapper = await mountSuspended(LandingPage);
+    const license = wrapper.get('[data-testid="landing-license"] a');
+    expect(license.text()).toContain('AGPL-3.0');
+    expect(license.attributes('href')).toBe(
+      'https://github.com/dannyota/aboutme',
+    );
+    expect(license.attributes('rel')).toBe('noopener noreferrer');
+  });
+
+  it('keeps the shell read to one /me request and no other API calls',
+    async () => {
+      mocks.fetchMock.mockClear();
+      meRequests = 0;
+      const wrapper = await mountSuspended(AppRoot, { route: '/' });
+      await flushPromises();
+
+      expect(meRequests).toBeLessThanOrEqual(1);
+      expect(apiPaths().every((path) => path === '/api/v1/me')).toBe(true);
+      expect(wrapper.get('main.landing').exists()).toBe(true);
+    });
+
+  it('does not request API data from the landing page', async () => {
+    mocks.fetchMock.mockClear();
+    await mountSuspended(LandingPage);
+    await flushPromises();
+
+    expect(apiPaths()).toEqual([]);
+  });
+});

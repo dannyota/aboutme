@@ -1,9 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
-import { mountSuspended } from '@nuxt/test-utils/runtime';
+import {
+  mountSuspended,
+  registerEndpoint,
+} from '@nuxt/test-utils/runtime';
 import { ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 
 import AppRoot from '../../app/app.vue';
 import ThemeToggle from '../../app/components/ui/ThemeToggle.vue';
@@ -16,6 +20,23 @@ const appCss = resolve(process.cwd(), 'app/assets/css/app.css');
 const editorCss = resolve(process.cwd(), 'app/assets/css/editor.css');
 const nuxtConfig = resolve(process.cwd(), 'nuxt.config.ts');
 const themeBootstrap = resolve(process.cwd(), 'public/theme-bootstrap.js');
+
+registerEndpoint('/api/v1/me', {
+  method: 'GET',
+  handler: () => ({
+    data: {
+      user: {
+        id: 'user-1',
+        email: 'dev@aboutme.invalid',
+        name: 'Dev User',
+        avatarKey: null,
+        hasPassword: true,
+      },
+      csrfToken: 'csrf',
+      identities: [],
+    },
+  }),
+});
 
 function clearThemeCookie(): void {
   document.cookie = 'aboutme-theme=; Max-Age=0; Path=/';
@@ -71,6 +92,7 @@ describe('theme preference boundary', () => {
       const wrapper = await mountSuspended(AppRoot, {
         route: '/app/resumes',
       });
+      await flushPromises();
 
       const actions = wrapper.get('.app-account-actions');
       const controls = actions.findAll(':scope > *');
