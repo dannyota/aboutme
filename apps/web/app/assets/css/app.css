@@ -105,6 +105,26 @@ html[data-theme='dark'] .aboutme-app {
   font-size: 0.875rem;
 }
 
+.aboutme-app .app-entry-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: calc(var(--radius) - 0.2rem);
+  padding: 0.45rem 0.625rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.aboutme-app .app-entry-link:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.aboutme-app .app-entry-link--primary {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
 .aboutme-app .app-nav a:hover,
 .aboutme-app .app-nav a.router-link-active {
   background: var(--accent);
@@ -176,7 +196,6 @@ html[data-theme='dark'] .aboutme-app {
   max-inline-size: 32rem;
 }
 
-.aboutme-app .placeholder-hero,
 .aboutme-app .login,
 .aboutme-app .resume-list,
 .aboutme-app .resume-list-page > p,
@@ -188,20 +207,17 @@ html[data-theme='dark'] .aboutme-app {
   box-shadow: 0 1px 2px oklch(0.141 0.005 285.823 / 5%);
 }
 
-.aboutme-app .placeholder-hero,
 .aboutme-app .login,
 .aboutme-app .resume-list {
   padding: clamp(1.25rem, 3vw, 2rem);
 }
 
-.aboutme-app .placeholder-hero h1,
 .aboutme-app .login h1,
 .aboutme-app .resume-list h1 {
   margin: 0;
   letter-spacing: -0.04em;
 }
 
-.aboutme-app .placeholder-hero p,
 .aboutme-app .login p,
 .aboutme-app .resume-list p,
 .aboutme-app .resume-list-page > p {
