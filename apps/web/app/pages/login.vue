@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
- * Login page: email/password form + static OAuth provider links.
+ * Login page: email/password form + optional static OAuth provider links.
  *
- * Provider buttons are plain `<a href>` elements, never fetch/JS-driven
+ * Provider buttons render only when the capabilities read reports
+ * `providerLogin`. They are plain `<a href>` elements, never fetch/JS-driven
  * navigation — `/api/v1/auth/{provider}/start` sets a cookie and issues a
  * redirect, which requires a real top-level browser navigation.
  *
@@ -20,8 +21,10 @@ import {
   type PasswordAuthFailure,
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
+import { useCapabilities } from '../composables/useCapabilities';
 
 const route = useRoute();
+const { providerLogin } = useCapabilities();
 
 const FALLBACK_NEXT = '/app/resumes';
 
@@ -183,26 +186,28 @@ async function onSubmit() {
         </NuxtLink>
       </div>
 
-      <div class="auth-divider">
-        or
-      </div>
+      <template v-if="providerLogin">
+        <div class="auth-divider">
+          or
+        </div>
 
-      <ul class="login-providers">
-        <li
-          v-for="provider in providers"
-          :key="provider.id"
-        >
-          <a
-            :href="explicitNext
-              ? `/api/v1/auth/${provider.id}/start?next=${encodeURIComponent(
-                explicitNext,
-              )}`
-              : `/api/v1/auth/${provider.id}/start`"
+        <ul class="login-providers">
+          <li
+            v-for="provider in providers"
+            :key="provider.id"
           >
-            {{ provider.label }}
-          </a>
-        </li>
-      </ul>
+            <a
+              :href="explicitNext
+                ? `/api/v1/auth/${provider.id}/start?next=${encodeURIComponent(
+                  explicitNext,
+                )}`
+                : `/api/v1/auth/${provider.id}/start`"
+            >
+              {{ provider.label }}
+            </a>
+          </li>
+        </ul>
+      </template>
     </section>
   </main>
 </template>

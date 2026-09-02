@@ -8,6 +8,9 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import ConnectedAgents from '../app/components/settings/ConnectedAgents.vue';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
+import { registerCapabilities } from './support/capabilities';
+
+registerCapabilities();
 
 mockNuxtImport('navigateTo', () => vi.fn());
 

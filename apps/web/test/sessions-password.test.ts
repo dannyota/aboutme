@@ -3,6 +3,9 @@ import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { readRawBody, setResponseStatus } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
+import { registerCapabilities } from './support/capabilities';
+
+registerCapabilities();
 
 // Deliberately its own file with a single test, mirroring
 // `useAuth-csrf-rotation.test.ts`: the assertion depends on the FIRST `/me`

@@ -8,6 +8,9 @@ import { flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { setResponseStatus } from 'h3';
 import LoginPage from '../app/pages/login.vue';
+import { registerCapabilities } from './support/capabilities';
+
+registerCapabilities();
 
 // login() navigates to /app/resumes on success — stub it so tests can assert
 // the target without a real page transition tearing the mounted wrapper down.
@@ -16,6 +19,7 @@ mockNuxtImport('navigateTo', () => vi.fn());
 describe('login.vue', () => {
   it('renders a real top-level link for each OAuth provider', async () => {
     const wrapper = await mountSuspended(LoginPage);
+    await flushPromises();
 
     const google = wrapper.get('a[href="/api/v1/auth/google/start"]');
     const github = wrapper.get('a[href="/api/v1/auth/github/start"]');
@@ -111,6 +115,7 @@ describe('login.vue password form', () => {
   it('adds email and current-password fields alongside the provider anchors',
     async () => {
       const wrapper = await mountSuspended(LoginPage);
+      await flushPromises();
       expect(wrapper.get('input[autocomplete="email"]').exists()).toBe(true);
       expect(wrapper.get('input[autocomplete="current-password"]').exists())
         .toBe(true);
@@ -237,4 +242,58 @@ describe('login.vue password form', () => {
     expect((passwordInput.element as HTMLInputElement).value).toBe('');
     expect(wrapper.html()).not.toContain('correct horse battery staple');
   });
+});
+
+describe('login.vue provider gating', () => {
+  beforeEach(() => {
+    clearNuxtData();
+  });
+
+  it('renders no provider link or divider when providerLogin is false',
+    async () => {
+      registerCapabilities({ providerLogin: false, agentAccess: false });
+      const wrapper = await mountSuspended(LoginPage);
+      await flushPromises();
+      expect(wrapper.find('.login-providers').exists()).toBe(false);
+      expect(wrapper.find('.auth-divider').exists()).toBe(false);
+      expect(wrapper.find('a[href^="/api/v1/auth/"]').exists()).toBe(false);
+      // The password form is unconditional.
+      expect(wrapper.find('form.auth-form').exists()).toBe(true);
+    });
+
+  it('renders no provider link when the capabilities read fails', async () => {
+    registerCapabilities(null);
+    const wrapper = await mountSuspended(LoginPage);
+    await flushPromises();
+    expect(wrapper.find('a[href^="/api/v1/auth/"]').exists()).toBe(false);
+  });
+
+  it('renders no provider link while the capabilities read is pending',
+    async () => {
+      let release!: (body: unknown) => void;
+      registerEndpoint('/api/v1/capabilities', () => new Promise((resolve) => {
+        release = () => resolve({
+          data: { providerLogin: true, agentAccess: true },
+        });
+      }));
+      const wrapper = await mountSuspended(LoginPage);
+      expect(wrapper.find('.login-providers').exists()).toBe(false);
+      expect(wrapper.find('.auth-divider').exists()).toBe(false);
+      release({
+        data: { providerLogin: true, agentAccess: true },
+      });
+      await flushPromises();
+      await flushPromises();
+      expect(wrapper.findAll('a[href^="/api/v1/auth/"]')).toHaveLength(3);
+    });
+
+  it(
+    'renders the provider links after providerLogin resolves true',
+    async () => {
+      registerCapabilities({ providerLogin: true, agentAccess: false });
+      const wrapper = await mountSuspended(LoginPage);
+      await flushPromises();
+      expect(wrapper.findAll('a[href^="/api/v1/auth/"]')).toHaveLength(3);
+    },
+  );
 });
