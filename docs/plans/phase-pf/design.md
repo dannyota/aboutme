@@ -72,10 +72,10 @@ explicitly; it is never added as a hidden route.
 
 The shell header shows:
 
-| State                 | Left  | Middle            | Right                          |
-| --------------------- | ----- | ----------------- | ------------------------------ |
-| Logged out            | Brand | nothing           | Sign in, Create account, theme |
-| Signed in, app routes | Brand | Resumes, Settings | Account control, theme         |
+| State      | Left  | Middle            | Right                          |
+| ---------- | ----- | ----------------- | ------------------------------ |
+| Logged out | Brand | nothing           | Sign in, Create account, theme |
+| Signed in  | Brand | Resumes, Settings | Account control, theme         |
 
 The editor route keeps its own top bar. Authentication state on `/` and `/login`
 is the client-side `/me` result; until it resolves, the shell renders the
@@ -142,13 +142,14 @@ HTTPS entry check runs `seed` before its browser and does not run `cleanup`.
 - Web (vitest): shell variants by auth state; landing copy and links; login with
   capabilities false, true, and failed; settings gating for both flags.
 - Browser: `deploy/dev-https-browser/entry.spec.ts` run by
-  `make dev-https-entry-check` with the existing evidence rules. Steps: landing
-  renders the heading and both buttons without app navigation; sign in as the
-  seed user lands on the resume list; the login page shows no provider link when
-  the harness runs the check with the flag off; settings hides the provider and
-  connected-agents blocks when their flags are off; console and page errors are
-  zero. The check starts the HTTPS server with both flags off for this proof
-  only, so the other proofs keep their flag-on environment.
+  `make dev-https-entry-check` with the existing evidence rules, against the
+  harness's standard environment (both flags on). Steps: the landing page
+  renders the heading and both buttons and no app navigation; signing in as the
+  seed user lands on the resume list with the signed-in shell; the login page
+  shows the provider links because the harness enables them; console and page
+  errors are zero. The flag-off branches (no provider routes, no provider links,
+  no connected-agents block) are proven by the Go route tests and the vitest
+  suites, and are what the native HTTP stack shows daily.
 
 ## Authorities and amendments
 
@@ -173,7 +174,7 @@ HTTPS entry check runs `seed` before its browser and does not run `cleanup`.
 | AC-AUTH-018 | The capabilities read is unauthenticated, exact, and `no-store`                                  |
 | AC-SEC-006  | No operator surface: no privileged role, no admin route, `/admin` denied, ADR 0028 accepted      |
 | AC-OPS-021  | The dev seed is idempotent, refuses non-development databases, and never runs outside native dev |
-| AC-OPS-022  | The entry flow is proven headless: landing, sign-in, list, and gated settings                    |
+| AC-OPS-022  | The entry flow is proven headless: landing, seed sign-in, resume list, and shell variants        |
 
 ## Out of scope
 
