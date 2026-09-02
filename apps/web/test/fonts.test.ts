@@ -678,11 +678,16 @@ describe('generated CSS', () => {
     expect(parsed).toEqual(expected);
   });
 
-  it('is registered in nuxt.config.ts', () => {
+  it('is loaded through the layered stylesheet entry', () => {
     const nuxtConfig = readFileSync(
       join(webRoot, 'nuxt.config.ts'), 'utf8',
     );
-    expect(nuxtConfig).toContain('~/assets/css/fonts.css');
+    const tailwindCss = readFileSync(
+      join(webRoot, 'app/assets/css/tailwind.css'), 'utf8',
+    );
+    expect(nuxtConfig).toContain('~/assets/css/tailwind.css');
+    expect(nuxtConfig).not.toContain('~/assets/css/fonts.css');
+    expect(tailwindCss).toContain('@import "./fonts.css" layer(theme);');
   });
 });
 

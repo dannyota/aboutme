@@ -1,0 +1,216 @@
+/* Chrome reset. Replaces Tailwind Preflight for application routes only and
+   never reaches the resume renderer (decisions U2). */
+html[data-ui="app"] body {
+  margin: 0;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+html[data-ui="app"]
+  body
+  :where(*):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ),
+html[data-ui="app"]
+  body
+  :where(*):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  )::before,
+html[data-ui="app"]
+  body
+  :where(*):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  )::after {
+  box-sizing: border-box;
+  margin: 0;
+  border: 0 solid var(--border);
+}
+
+html[data-ui="app"]
+  body
+  :where(h1, h2, h3, h4):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+html[data-ui="app"]
+  body
+  :where(ul, ol):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  padding: 0;
+  list-style: none;
+}
+
+html[data-ui="app"]
+  body
+  :where(fieldset, legend):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  min-inline-size: 0;
+  padding: 0;
+}
+
+html[data-ui="app"]
+  body
+  :where(a):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  color: inherit;
+  text-decoration: inherit;
+}
+
+html[data-ui="app"]
+  body
+  :where(button, input, select, textarea, optgroup):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background-color: transparent;
+  border-radius: 0;
+}
+
+html[data-ui="app"]
+  body
+  :where(button, [role="button"]):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  cursor: pointer;
+}
+
+html[data-ui="app"]
+  body
+  :where(button:disabled, [aria-disabled="true"]):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  cursor: default;
+}
+
+html[data-ui="app"]
+  body
+  :where(img, svg, video, canvas):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
+html[data-ui="app"]
+  body
+  :where(textarea):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  resize: vertical;
+}
+
+html[data-ui="app"]
+  body
+  :where([hidden]):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  display: none !important;
+}
+
+html[data-ui="app"]
+  body
+  :where(:focus-visible):not(
+    :where(
+      .resume-document,
+      .paged-resume,
+      .resume-document *,
+      .paged-resume *
+    )
+  ) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="app"]
+    body
+    :where(*):not(
+      :where(
+        .resume-document,
+        .paged-resume,
+        .resume-document *,
+        .paged-resume *
+      )
+    ) {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

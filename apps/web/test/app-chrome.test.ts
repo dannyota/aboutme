@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
-import AppChrome from '../app/components/ui/AppChrome.vue';
+import AppChrome from '../app/components/app/AppChrome.vue';
 
 const me = {
   data: {

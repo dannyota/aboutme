@@ -14,6 +14,7 @@ worker:
 | `@tailwindcss/vite`        | 4.3.3   | dev  |
 | `shadcn-nuxt`              | 2.8.2   | dev  |
 | `reka-ui`                  | 2.10.4  | prod |
+| `@vueuse/core`             | 14.4.0  | prod |
 | `class-variance-authority` | 0.7.1   | prod |
 | `clsx`                     | 2.1.1   | prod |
 | `tailwind-merge`           | 3.6.0   | prod |

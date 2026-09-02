@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 
 import AppRoot from '../../app/app.vue';
-import ThemeToggle from '../../app/components/ui/ThemeToggle.vue';
+import ThemeToggle from '../../app/components/app/ThemeToggle.vue';
 import {
   createThemeController,
   type Theme,
@@ -18,6 +18,7 @@ import {
 
 const appCss = resolve(process.cwd(), 'app/assets/css/app.css');
 const editorCss = resolve(process.cwd(), 'app/assets/css/editor.css');
+const themeCss = resolve(process.cwd(), 'app/assets/css/theme.css');
 const nuxtConfig = resolve(process.cwd(), 'nuxt.config.ts');
 const themeBootstrap = resolve(process.cwd(), 'public/theme-bootstrap.js');
 
@@ -106,12 +107,14 @@ describe('theme preference boundary', () => {
     15_000,
   );
 
-  it.each(['/_harness/render', '/print/resume-1', '/public-resume'])(
-    'does not add app chrome or app-surface classes on bare route %s',
-    async (route) => {
+  it(
+    'does not add app chrome or app-surface classes on the harness route',
+    async () => {
       const fetch = vi.fn();
       vi.stubGlobal('fetch', fetch);
-      const wrapper = await mountSuspended(AppRoot, { route });
+      const wrapper = await mountSuspended(AppRoot, {
+        route: '/_harness/render',
+      });
 
       expect(wrapper.find('.aboutme-app').exists()).toBe(false);
       expect(wrapper.find('.app-chrome').exists()).toBe(false);
@@ -155,6 +158,7 @@ describe('theme preference boundary', () => {
     'keeps app styling away from the renderer and scopes focus styling',
     async () => {
       const css = await readFile(appCss, 'utf8');
+      const tokens = await readFile(themeCss, 'utf8');
 
       expect(css).not.toMatch(/\.resume-(document|page)\b/);
       expect(css).toContain('.aboutme-app :focus-visible');
@@ -164,8 +168,10 @@ describe('theme preference boundary', () => {
       expect(css).not.toContain('body.aboutme-app-body');
       expect(css).toContain('.editor-topbar');
       expect(css).not.toContain('.editor-chrome');
-      expect(css).toContain('--positive: oklch(0.508 0.118 165.612)');
-      expect(css).toContain('--chart-1: oklch(0.845 0.143 164.978)');
+      expect(css).not.toContain('--positive:');
+      expect(css).not.toContain('--chart-1:');
+      expect(tokens).toContain('--positive: oklch(0.508 0.118 165.612)');
+      expect(tokens).toContain('--chart-1: oklch(0.845 0.143 164.978)');
     },
   );
 

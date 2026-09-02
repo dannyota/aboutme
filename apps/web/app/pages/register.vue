@@ -7,7 +7,6 @@
  * to fixed copy. The 202 success copy is fixed and reveals nothing about
  * email ownership.
  */
-import '~/assets/css/auth.css';
 import PasswordField from '../components/auth/PasswordField.vue';
 import {
   type PasswordAuthFailure,

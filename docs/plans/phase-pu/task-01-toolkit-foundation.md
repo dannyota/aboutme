@@ -57,9 +57,16 @@ regenerates the lockfile, and runs the renderer suites.
   const css = (name: string): string =>
     readFileSync(`app/assets/css/${name}`, "utf8");
   const RENDERER_GUARD =
-    ":not(:where(.resume-document, .paged-resume, " +
-    ".resume-document *, .paged-resume *))";
+    ":not(:where(.resume-document,.paged-resume," +
+    ".resume-document *,.paged-resume *))";
   const APP_GUARD = 'html[data-ui="app"] body';
+
+  function normalizeSelector(selector: string): string {
+    return selector
+      .replaceAll(/\s+/g, " ")
+      .replaceAll(/\s*([(),])\s*/g, "$1")
+      .trim();
+  }
 
   function splitSelectorList(selector: string): string[] {
     const parts: string[] = [];
@@ -124,7 +131,7 @@ regenerates the lockfile, and runs the renderer suites.
 
     it("guards every chrome reset rule", () => {
       for (const selector of selectors(css("base.css"))) {
-        const normalized = selector.replaceAll(/\s+/g, " ");
+        const normalized = normalizeSelector(selector);
         expect(normalized.startsWith(APP_GUARD), selector).toBe(true);
         if (normalized !== APP_GUARD) {
           expect(normalized, selector).toContain(RENDERER_GUARD);
@@ -508,10 +515,12 @@ regenerates the lockfile, and runs the renderer suites.
 
   ```ts
   const isAppSurface = computed(() => !route.path.startsWith("/_harness"));
-  useHead({
-    title: "aboutme",
-    htmlAttrs: computed(() => (isAppSurface.value ? { "data-ui": "app" } : {})),
-  });
+  useHead(
+    computed(() => ({
+      title: "aboutme",
+      htmlAttrs: isAppSurface.value ? { "data-ui": "app" } : {},
+    })),
+  );
   ```
 
   and keep `:class="{ 'aboutme-app': isAppSurface }"` and the `showAppChrome`
@@ -571,7 +580,14 @@ regenerates the lockfile, and runs the renderer suites.
     echo 'usage: scripts/ui-add.sh <component>...' >&2
     exit 64
   fi
-  npx --yes shadcn-vue@2.8.2 add --yes --overwrite "$@"
+  # npm exec exports user-level allow-scripts as a project-scoped child
+  # setting; npm 12 rejects that scope. Remove only those inherited variables.
+  npx --yes --package shadcn-vue@2.8.2 -- \
+    env -u npm_config_allow_scripts -u NPM_CONFIG_ALLOW_SCRIPTS \
+    shadcn-vue add --yes --overwrite "$@"
+  # Restore registry dependencies to the frozen exact pins after generation.
+  npm install --save-exact \
+    @lucide/vue@1.31.0 @vueuse/core@14.4.0 reka-ui@2.10.4
   # The generator imports lucide-vue-next; the repository ships @lucide/vue.
   while IFS= read -r file; do
     sed -i "s#from 'lucide-vue-next'#from '@lucide/vue'#g; s#from \"lucide-vue-next\"#from '@lucide/vue'#g" "$file"

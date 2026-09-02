@@ -15,7 +15,6 @@
  * The password form sends closed copy for every failure and never retains
  * the password after a successful login.
  */
-import '~/assets/css/auth.css';
 import PasswordField from '../components/auth/PasswordField.vue';
 import {
   type PasswordAuthFailure,
