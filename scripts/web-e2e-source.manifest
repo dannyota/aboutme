@@ -63,6 +63,8 @@ apps/web/app/components/editor/ConflictPanel.vue
 apps/web/app/components/editor/EditorPreview.vue
 apps/web/app/components/editor/EditorShell.vue
 apps/web/app/components/editor/ErrorSummary.vue
+apps/web/app/components/editor/InspectorPanel.vue
+apps/web/app/components/editor/PreviewToolbar.vue
 apps/web/app/components/editor/PublishDialog.vue
 apps/web/app/components/editor/SaveStatus.vue
 apps/web/app/components/editor/customization/ColorField.vue
