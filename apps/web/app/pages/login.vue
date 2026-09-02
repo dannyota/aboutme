@@ -15,7 +15,13 @@
  * The password form sends closed copy for every failure and never retains
  * the password after a successful login.
  */
-import PasswordField from '../components/auth/PasswordField.vue';
+import AuthCard from '@/components/auth/AuthCard.vue';
+import FormField from '@/components/app/FormField.vue';
+import PasswordField from '@/components/auth/PasswordField.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import {
   type PasswordAuthFailure,
   usePasswordAuth,
@@ -124,89 +130,101 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main class="app-page app-page--narrow">
-    <section class="login">
-      <h1>Sign in</h1>
-
-      <p
-        v-if="errorMessage"
-        data-testid="login-error"
-        role="alert"
+  <AuthCard
+    description="Use the email and password for your account."
+    title="Sign in"
+  >
+    <StatusBanner
+      v-if="errorMessage"
+      kind="error"
+      testid="login-error"
+    >
+      {{ errorMessage }}
+    </StatusBanner>
+    <StatusBanner
+      v-if="formError"
+      kind="error"
+      testid="login-form-error"
+    >
+      {{ formError }}
+    </StatusBanner>
+    <form
+      class="grid gap-4"
+      data-testid="login-form"
+      novalidate
+      @submit.prevent="onSubmit"
+    >
+      <FormField
+        id="login-email"
+        v-slot="{ id, describedBy, invalid }"
+        label="Email"
       >
-        {{ errorMessage }}
-      </p>
-
-      <div
-        v-if="formError"
-        data-testid="login-form-error"
-        class="auth-error-summary"
-        role="alert"
-      >
-        {{ formError }}
-      </div>
-
-      <form
-        class="auth-form"
-        novalidate
-        @submit.prevent="onSubmit"
-      >
-        <div class="auth-field">
-          <label for="login-email">Email</label>
-          <input
-            id="login-email"
-            v-model="email"
-            type="email"
-            autocomplete="email"
-          >
-        </div>
-
-        <PasswordField
-          id="login-password"
-          v-model="password"
-          label="Password"
-          autocomplete="current-password"
+        <Input
+          :id="id"
+          v-model="email"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          autocomplete="email"
+          type="email"
         />
-
-        <button
-          type="submit"
-          class="auth-submit"
-          :disabled="pending"
-        >
-          {{ pending ? 'Signing in…' : 'Sign in' }}
-        </button>
-      </form>
-
-      <div class="auth-links">
-        <NuxtLink to="/forgot-password">
-          Forgot password?
-        </NuxtLink>
-        <NuxtLink to="/register">
-          Create account
-        </NuxtLink>
+      </FormField>
+      <PasswordField
+        id="login-password"
+        v-model="password"
+        autocomplete="current-password"
+        label="Password"
+      />
+      <Button
+        class="mt-1 w-full"
+        :disabled="pending"
+        type="submit"
+      >
+        {{ pending ? "Signing in…" : "Sign in" }}
+      </Button>
+    </form>
+    <template v-if="providerLogin">
+      <div
+        class="flex items-center gap-3 text-xs
+          text-muted-foreground"
+        data-testid="login-divider"
+      >
+        <Separator class="flex-1" />
+        or
+        <Separator class="flex-1" />
       </div>
-
-      <template v-if="providerLogin">
-        <div class="auth-divider">
-          or
-        </div>
-
-        <ul class="login-providers">
-          <li
-            v-for="provider in providers"
-            :key="provider.id"
+      <ul class="grid gap-2">
+        <li
+          v-for="provider in providers"
+          :key="provider.id"
+        >
+          <a
+            :class="buttonVariants({ variant: 'outline', class: 'w-full' })"
+            :href="
+              explicitNext
+                ? `/api/v1/auth/${provider.id}/start?next=${
+                  encodeURIComponent(explicitNext)
+                }`
+                : `/api/v1/auth/${provider.id}/start`
+            "
           >
-            <a
-              :href="explicitNext
-                ? `/api/v1/auth/${provider.id}/start?next=${encodeURIComponent(
-                  explicitNext,
-                )}`
-                : `/api/v1/auth/${provider.id}/start`"
-            >
-              {{ provider.label }}
-            </a>
-          </li>
-        </ul>
-      </template>
-    </section>
-  </main>
+            {{ provider.label }}
+          </a>
+        </li>
+      </ul>
+    </template>
+    <template #footer>
+      <NuxtLink
+        class="text-primary underline-offset-4 hover:underline"
+        to="/forgot-password"
+      >
+        Forgot password?
+      </NuxtLink>
+      <NuxtLink
+        class="text-primary underline-offset-4 hover:underline"
+        to="/register"
+      >
+        Create account
+      </NuxtLink>
+    </template>
+  </AuthCard>
 </template>

@@ -58,6 +58,20 @@ beforeEach(() => {
 });
 
 describe('/authorize', () => {
+  it('composes the auth card and shared banner', async () => {
+    const wrapper = await mountSuspended(AuthorizePage, {
+      route: '/authorize?client_id=only-one-field',
+    });
+    await flushPromises();
+
+    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    expect(
+      wrapper.get('[data-testid="consent-error"]').attributes('role'),
+    ).toBe(
+      'alert',
+    );
+  });
+
   it('renders hostile client names as text and displays scopes', async () => {
     consentMocks.get.mockResolvedValue({
       clientName: '<img src=x onerror=alert(1)>',
@@ -68,7 +82,7 @@ describe('/authorize', () => {
     expect(wrapper.get('[data-testid="consent-client-name"]').text()).toBe(
       '<img src=x onerror=alert(1)>',
     );
-    expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.find('[src]').exists()).toBe(false);
     expect(wrapper.text()).toContain('Read resumes');
     expect(wrapper.text()).toContain('Write resumes');
   });
@@ -86,9 +100,9 @@ describe('/authorize', () => {
       const wrapper = await mountSuspended(AuthorizePage, { route: route() });
       await flushPromises();
       if (decision === 'approve') {
-        await wrapper.get('form').trigger('submit');
+        await wrapper.get('[data-testid="consent-form"]').trigger('submit');
       } else {
-        await wrapper.get('button[data-decision="deny"]').trigger('click');
+        await wrapper.get('[data-decision="deny"]').trigger('click');
       }
       await flushPromises();
       expect(body).toEqual({ ...query, decision });
@@ -102,7 +116,7 @@ describe('/authorize', () => {
       consentMocks.decide.mockResolvedValue({ redirectTo });
       const wrapper = await mountSuspended(AuthorizePage, { route: route() });
       await flushPromises();
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="consent-form"]').trigger('submit');
       await flushPromises();
       expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(redirectTo, {
         external: true,
@@ -173,11 +187,11 @@ describe('/authorize', () => {
       const wrapper = await mountSuspended(AuthorizePage, { route: route() });
       await flushPromises();
       const firstSubmit = first === 'approve'
-        ? wrapper.get('form').trigger('submit')
-        : wrapper.get('button[data-decision="deny"]').trigger('click');
+        ? wrapper.get('[data-testid="consent-form"]').trigger('submit')
+        : wrapper.get('[data-decision="deny"]').trigger('click');
       const secondSubmit = second === 'approve'
-        ? wrapper.get('form').trigger('submit')
-        : wrapper.get('button[data-decision="deny"]').trigger('click');
+        ? wrapper.get('[data-testid="consent-form"]').trigger('submit')
+        : wrapper.get('[data-decision="deny"]').trigger('click');
       await Promise.all([firstSubmit, secondSubmit]);
       expect(calls).toBe(1);
       release();
@@ -193,14 +207,13 @@ describe('/authorize', () => {
       const path = route('/authorize?x=1');
       const wrapper = await mountSuspended(AuthorizePage, { route: path });
       await flushPromises();
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="consent-form"]').trigger('submit');
       await flushPromises();
       const target = vi.mocked(navigateTo).mock.calls[0]?.[0] as string;
       const currentPath = useRoute().fullPath;
       expect(target).toBe(`/login?next=${encodeURIComponent(currentPath)}`);
     });
 });
-
 describe('login next preservation', () => {
   it('keeps provider links bare when next is absent or invalid', async () => {
     const invalid = [
@@ -217,18 +230,18 @@ describe('login next preservation', () => {
         : `/login?next=${encodeURIComponent(next)}`;
       const wrapper = await mountSuspended(LoginPage, { route: path });
       await flushPromises();
-      expect(wrapper.get('a[href="/api/v1/auth/google/start"]').exists())
+      expect(wrapper.get('[href="/api/v1/auth/google/start"]').exists())
         .toBe(true);
-      expect(wrapper.get('a[href="/api/v1/auth/github/start"]').exists())
+      expect(wrapper.get('[href="/api/v1/auth/github/start"]').exists())
         .toBe(true);
-      expect(wrapper.get('a[href="/api/v1/auth/linkedin/start"]').exists())
+      expect(wrapper.get('[href="/api/v1/auth/linkedin/start"]').exists())
         .toBe(true);
     }
     const arrayWrapper = await mountSuspended(LoginPage, {
       route: '/login?next=%2Fone&next=%2Ftwo',
     });
     await flushPromises();
-    expect(arrayWrapper.get('a[href="/api/v1/auth/google/start"]').exists())
+    expect(arrayWrapper.get('[href="/api/v1/auth/google/start"]').exists())
       .toBe(true);
   });
 
@@ -245,7 +258,9 @@ describe('login next preservation', () => {
         route: `/login?next=${encodeURIComponent(next)}`,
       });
       await flushPromises();
-      const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'));
+      const hrefs = wrapper
+        .findAll('[href]')
+        .map((link) => link.attributes('href'));
       for (const provider of ['google', 'github', 'linkedin']) {
         const prefix = `/api/v1/auth/${provider}/start`;
         if (valid) {
@@ -265,7 +280,9 @@ describe('login next preservation', () => {
         route: `/login?next=${encodeURIComponent(next)}`,
       });
       await flushPromises();
-      const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'));
+      const hrefs = wrapper
+        .findAll('[href]')
+        .map((link) => link.attributes('href'));
       for (const provider of ['google', 'github', 'linkedin']) {
         expect(hrefs).toContain(
           `/api/v1/auth/${provider}/start?next=${encodeURIComponent(next)}`,
@@ -285,12 +302,12 @@ describe('login next preservation', () => {
     const wrapper = await mountSuspended(LoginPage, {
       route: `/login?next=${encodeURIComponent(next)}`,
     });
-    await wrapper.get('input[autocomplete="email"]').setValue(
+    await wrapper.get('[autocomplete="email"]').setValue(
       'ada@example.com',
     );
-    await wrapper.get('input[autocomplete="current-password"]')
+    await wrapper.get('[autocomplete="current-password"]')
       .setValue('correct horse battery staple');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(next);
   });
@@ -314,12 +331,12 @@ describe('login next preservation', () => {
         },
       });
       const login = await mountSuspended(LoginPage, { route: loginTarget });
-      await login.get('input[autocomplete="email"]').setValue(
+      await login.get('[autocomplete="email"]').setValue(
         'ada@example.com',
       );
-      await login.get('input[autocomplete="current-password"]')
+      await login.get('[autocomplete="current-password"]')
         .setValue('correct horse battery staple');
-      await login.get('form').trigger('submit');
+      await login.get('[data-testid="login-form"]').trigger('submit');
       await flushPromises();
       const expectedPath = new URL(
         loginTarget,

@@ -6,6 +6,10 @@ import {
   OAuthConsentFailure,
   useOAuthConsent,
 } from '../composables/useOAuthConsent';
+import AuthCard from '@/components/auth/AuthCard.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 const route = useRoute();
 const consent = useOAuthConsent();
@@ -125,66 +129,65 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="aboutme-app">
-    <section class="app-page app-page--narrow">
-      <div class="login">
-        <h1>Connect an agent</h1>
-
-        <p
-          v-if="state === 'loading'"
-          class="auth-note"
+  <AuthCard title="Allow access">
+    <template #description>
+      <template v-if="view">
+        <strong data-testid="consent-client-name">{{ view.clientName }}</strong>
+        is requesting access to your resumes.
+      </template>
+    </template>
+    <p
+      v-if="state === 'loading'"
+      class="text-sm text-muted-foreground"
+    >
+      Loading authorization…
+    </p>
+    <StatusBanner
+      v-else-if="state === 'invalid' || state === 'unavailable'"
+      ref="errorSummary"
+      :focus-on-mount="true"
+      kind="error"
+      testid="consent-error"
+    >
+      {{ state === "invalid" ? INVALID_COPY : UNAVAILABLE_COPY }}
+    </StatusBanner>
+    <form
+      v-else-if="view"
+      class="grid gap-4"
+      data-testid="consent-form"
+      @submit.prevent="submit('approve')"
+    >
+      <ul
+        aria-label="Requested permissions"
+        class="flex flex-wrap gap-2"
+      >
+        <li
+          v-for="scope in view.scopes"
+          :key="scope"
         >
-          Loading authorization…
-        </p>
-
-        <div
-          v-else-if="state === 'invalid' || state === 'unavailable'"
-          ref="errorSummary"
-          data-testid="consent-error"
-          class="auth-error-summary"
-          role="alert"
-          tabindex="-1"
+          <Badge variant="secondary">
+            {{ scope === "resumes:read" ? "Read resumes" : "Write resumes" }}
+          </Badge>
+        </li>
+      </ul>
+      <div class="flex flex-wrap gap-2">
+        <Button
+          data-decision="approve"
+          :disabled="pending"
+          type="submit"
         >
-          {{ state === 'invalid' ? INVALID_COPY : UNAVAILABLE_COPY }}
-        </div>
-
-        <form
-          v-else-if="view"
-          class="auth-form"
-          @submit.prevent="submit('approve')"
+          {{ pending ? "Working…" : "Approve" }}
+        </Button>
+        <Button
+          data-decision="deny"
+          :disabled="pending"
+          type="button"
+          variant="outline"
+          @click="submit('deny')"
         >
-          <p>
-            <span data-testid="consent-client-name">{{ view.clientName }}</span>
-            is requesting access to your resumes.
-          </p>
-
-          <ul aria-label="Requested permissions">
-            <li
-              v-for="scope in view.scopes"
-              :key="scope"
-            >
-              {{ scope === 'resumes:read' ? 'Read resumes' : 'Write resumes' }}
-            </li>
-          </ul>
-
-          <button
-            type="submit"
-            class="auth-submit"
-            data-decision="approve"
-            :disabled="pending"
-          >
-            {{ pending ? 'Working…' : 'Approve' }}
-          </button>
-          <button
-            type="button"
-            data-decision="deny"
-            :disabled="pending"
-            @click="submit('deny')"
-          >
-            Deny
-          </button>
-        </form>
+          Deny
+        </Button>
       </div>
-    </section>
-  </main>
+    </form>
+  </AuthCard>
 </template>

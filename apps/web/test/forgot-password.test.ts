@@ -8,12 +8,19 @@ const GENERIC_COPY
   = 'If an account exists for this email, we\'ve sent a password reset link.';
 
 async function submit(wrapper: Awaited<ReturnType<typeof mountSuspended>>) {
-  await wrapper.get('input[autocomplete="email"]').setValue('ada@example.com');
-  await wrapper.get('form').trigger('submit');
+  await wrapper.get('[autocomplete="email"]').setValue('ada@example.com');
+  await wrapper.get('[data-testid="forgot-form"]').trigger('submit');
   await flushPromises();
 }
 
 describe('forgot-password.vue', () => {
+  it('composes the auth card and shared form field', async () => {
+    const wrapper = await mountSuspended(ForgotPasswordPage);
+
+    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    expect(wrapper.get('#forgot-email').attributes('id')).toBe('forgot-email');
+  });
+
   it('shows the exact generic 202 copy after a successful submit',
     async () => {
       registerEndpoint('/api/v1/auth/password/forgot', {

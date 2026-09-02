@@ -14,6 +14,21 @@ const TOKEN = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg';
 const NEW_PASSWORD = 'correct horse battery staple';
 
 describe('reset-password.vue (fragment handling)', () => {
+  it('composes the auth card and shared error banner', async () => {
+    window.location.hash = '';
+    const wrapper = await mountSuspended(ResetPasswordPage);
+
+    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="reset-error"]').attributes('role')).toBe(
+      'alert',
+    );
+    expect(
+      wrapper.get('[data-testid="reset-error"]').attributes('tabindex'),
+    ).toBe(
+      '-1',
+    );
+  });
+
   beforeEach(() => {
     vi.mocked(useHead).mockClear();
     window.location.hash = '';
@@ -39,7 +54,7 @@ describe('reset-password.vue (fragment handling)', () => {
       const wrapper = await mountSuspended(ResetPasswordPage);
       await wrapper.get('#reset-password').setValue(NEW_PASSWORD);
       await wrapper.get('#reset-password-confirm').setValue(NEW_PASSWORD);
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="reset-form"]').trigger('submit');
       await flushPromises();
 
       expect(calls).toBe(1);
@@ -70,7 +85,7 @@ describe('reset-password.vue (fragment handling)', () => {
       const wrapper = await mountSuspended(ResetPasswordPage);
       await flushPromises();
       expect(calls).toBe(0);
-      expect(wrapper.find('form').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="reset-form"]').exists()).toBe(false);
       expect(wrapper.get('[data-testid="reset-error"]').text()).toBe(
         'This reset link is invalid or incomplete.',
       );
@@ -90,7 +105,7 @@ describe('reset-password.vue (fragment handling)', () => {
     const wrapper = await mountSuspended(ResetPasswordPage);
     await wrapper.get('#reset-password').setValue(NEW_PASSWORD);
     await wrapper.get('#reset-password-confirm').setValue('different');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="reset-form"]').trigger('submit');
     await flushPromises();
     expect(calls).toBe(0);
     expect(wrapper.get('[data-testid="reset-error"]').text()).toContain(
@@ -116,7 +131,7 @@ describe('reset-password.vue (fragment handling)', () => {
     const wrapper = await mountSuspended(ResetPasswordPage);
     await wrapper.get('#reset-password').setValue(NEW_PASSWORD);
     await wrapper.get('#reset-password-confirm').setValue(NEW_PASSWORD);
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="reset-form"]').trigger('submit');
     await flushPromises();
     expect(wrapper.get('[data-testid="reset-error"]').text()).toContain(
       'data breach',

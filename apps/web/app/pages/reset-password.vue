@@ -8,7 +8,10 @@
  * replaced with an empty string. A malformed or missing fragment renders a
  * local error and no form.
  */
-import PasswordField from '../components/auth/PasswordField.vue';
+import AuthCard from '@/components/auth/AuthCard.vue';
+import PasswordField from '@/components/auth/PasswordField.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
+import { Button } from '@/components/ui/button';
 import {
   type PasswordAuthFailure,
   type PasswordIssue,
@@ -98,62 +101,55 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main class="aboutme-app">
-    <section class="app-page app-page--narrow">
-      <div class="login">
-        <h1>Reset your password</h1>
-
-        <div
-          v-if="tokenError || errorMessage"
-          data-testid="reset-error"
-          class="auth-error-summary"
-          role="alert"
-        >
-          {{ tokenError ?? errorMessage }}
-        </div>
-
-        <div
-          v-if="success"
-          data-testid="reset-success"
-          class="auth-success"
-          role="status"
-        >
-          Password reset. Sign in.
-        </div>
-
-        <form
-          v-else-if="!tokenError"
-          class="auth-form"
-          novalidate
-          @submit.prevent="onSubmit"
-        >
-          <PasswordField
-            id="reset-password"
-            ref="passwordField"
-            v-model="password"
-            label="New password"
-            autocomplete="new-password"
-            confirm
-          />
-
-          <button
-            type="submit"
-            class="auth-submit"
-            :disabled="pending"
-          >
-            {{ pending ? 'Resetting…' : 'Reset password' }}
-          </button>
-        </form>
-
-        <p
-          v-if="success"
-          class="auth-note"
-        >
-          <NuxtLink to="/login">
-            Sign in
-          </NuxtLink>
-        </p>
-      </div>
-    </section>
-  </main>
+  <AuthCard
+    description="Choose a new password for your account."
+    title="Reset password"
+  >
+    <StatusBanner
+      v-if="tokenError || errorMessage"
+      kind="error"
+      testid="reset-error"
+    >
+      {{ tokenError ?? errorMessage }}
+    </StatusBanner>
+    <StatusBanner
+      v-if="success"
+      kind="success"
+      testid="reset-success"
+    >
+      Password reset. Sign in.
+    </StatusBanner>
+    <form
+      v-else-if="!tokenError"
+      class="grid gap-4"
+      data-testid="reset-form"
+      novalidate
+      @submit.prevent="onSubmit"
+    >
+      <PasswordField
+        id="reset-password"
+        ref="passwordField"
+        v-model="password"
+        autocomplete="new-password"
+        confirm
+        label="New password"
+      />
+      <Button
+        class="mt-1 w-full"
+        :disabled="pending"
+        type="submit"
+      >
+        {{ pending ? "Resetting…" : "Reset password" }}
+      </Button>
+    </form>
+    <template #footer>
+      <NuxtLink
+        v-if="success"
+        class="text-primary underline-offset-4 hover:underline"
+        to="/login"
+      >
+        Sign in
+      </NuxtLink>
+    </template>
+  </AuthCard>
 </template>

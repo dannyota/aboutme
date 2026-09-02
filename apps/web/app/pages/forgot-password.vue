@@ -8,6 +8,11 @@
  * email is registered.
  */
 import { usePasswordAuth } from '../composables/usePasswordAuth';
+import AuthCard from '@/components/auth/AuthCard.vue';
+import FormField from '@/components/app/FormField.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const GENERIC_COPY
   = 'If an account exists for this email, we\'ve sent a password reset link.';
@@ -36,63 +41,60 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main class="aboutme-app">
-    <section class="app-page app-page--narrow">
-      <div class="login">
-        <h1>Forgot your password?</h1>
-        <p class="auth-note">
-          Enter your email and we'll send a reset link if an account exists.
-        </p>
-
-        <div
-          v-if="errorMessage"
-          data-testid="forgot-error"
-          class="auth-error-summary"
-          role="alert"
-        >
-          {{ errorMessage }}
-        </div>
-
-        <div
-          v-if="success"
-          data-testid="forgot-success"
-          class="auth-success"
-          role="status"
-        >
-          {{ GENERIC_COPY }}
-        </div>
-
-        <form
-          v-else
-          class="auth-form"
-          novalidate
-          @submit.prevent="onSubmit"
-        >
-          <div class="auth-field">
-            <label for="forgot-email">Email</label>
-            <input
-              id="forgot-email"
-              v-model="email"
-              type="email"
-              autocomplete="email"
-            >
-          </div>
-
-          <button
-            type="submit"
-            class="auth-submit"
-            :disabled="pending"
-          >
-            {{ pending ? 'Sending…' : 'Send reset link' }}
-          </button>
-        </form>
-
-        <p class="auth-note">
-          <NuxtLink to="/login">
-            Back to sign in
-          </NuxtLink>
-        </p>
-      </div>
-    </section>
-  </main>
+  <AuthCard
+    description="Enter your email to receive a reset link if an account exists."
+    title="Forgot password"
+  >
+    <StatusBanner
+      v-if="errorMessage"
+      kind="error"
+      testid="forgot-error"
+    >
+      {{ errorMessage }}
+    </StatusBanner>
+    <StatusBanner
+      v-if="success"
+      kind="success"
+      testid="forgot-success"
+    >
+      {{ GENERIC_COPY }}
+    </StatusBanner>
+    <form
+      v-else
+      class="grid gap-4"
+      data-testid="forgot-form"
+      novalidate
+      @submit.prevent="onSubmit"
+    >
+      <FormField
+        id="forgot-email"
+        v-slot="{ id, describedBy, invalid }"
+        label="Email"
+      >
+        <Input
+          :id="id"
+          v-model="email"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          autocomplete="email"
+          type="email"
+        />
+      </FormField>
+      <Button
+        class="mt-1 w-full"
+        :disabled="pending"
+        type="submit"
+      >
+        {{ pending ? "Sending…" : "Send reset link" }}
+      </Button>
+    </form>
+    <template #footer>
+      <NuxtLink
+        class="text-primary underline-offset-4 hover:underline"
+        to="/login"
+      >
+        Back to sign in
+      </NuxtLink>
+    </template>
+  </AuthCard>
 </template>

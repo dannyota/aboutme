@@ -21,10 +21,10 @@ describe('login.vue', () => {
     const wrapper = await mountSuspended(LoginPage);
     await flushPromises();
 
-    const google = wrapper.get('a[href="/api/v1/auth/google/start"]');
-    const github = wrapper.get('a[href="/api/v1/auth/github/start"]');
+    const google = wrapper.get('[href="/api/v1/auth/google/start"]');
+    const github = wrapper.get('[href="/api/v1/auth/github/start"]');
     const linkedin = wrapper.get(
-      'a[href="/api/v1/auth/linkedin/start"]',
+      '[href="/api/v1/auth/linkedin/start"]',
     );
 
     // Plain <a> tags, never JS-driven navigation: the start endpoint sets
@@ -93,6 +93,36 @@ describe('login.vue', () => {
       expect(banner.text()).toContain('Something went wrong');
     });
 
+  it('falls back for the prototype object error code', async () => {
+    const wrapper = await mountSuspended(LoginPage, {
+      route: '/login?error=__proto__',
+    });
+
+    expect(wrapper.get('[data-testid="login-error"]').text()).toContain(
+      'Something went wrong',
+    );
+  });
+
+  it('composes the auth card, shared banner, and generated inputs',
+    async () => {
+      const wrapper = await mountSuspended(LoginPage, {
+        route: '/login?error=cancelled',
+      });
+      await flushPromises();
+
+      expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+      expect(
+        wrapper.get('[data-testid="login-error"]').attributes('role'),
+      ).toBe(
+        'alert',
+      );
+      expect(
+        wrapper
+          .findAll('[data-slot="input"]')
+          .every((input) => input.attributes('id') !== undefined),
+      ).toBe(true);
+    });
+
   it('does not resolve a prototype property as a valid error code',
     async () => {
       // A plain `errorMessages[code]` lookup resolves inherited
@@ -106,7 +136,6 @@ describe('login.vue', () => {
       expect(banner.text()).toContain('Something went wrong');
     });
 });
-
 describe('login.vue password form', () => {
   beforeEach(() => {
     vi.mocked(navigateTo).mockClear();
@@ -116,21 +145,21 @@ describe('login.vue password form', () => {
     async () => {
       const wrapper = await mountSuspended(LoginPage);
       await flushPromises();
-      expect(wrapper.get('input[autocomplete="email"]').exists()).toBe(true);
-      expect(wrapper.get('input[autocomplete="current-password"]').exists())
+      expect(wrapper.get('[autocomplete="email"]').exists()).toBe(true);
+      expect(wrapper.get('[autocomplete="current-password"]').exists())
         .toBe(true);
       // Provider anchors remain real top-level navigation links.
-      expect(wrapper.get('a[href="/api/v1/auth/google/start"]').exists())
+      expect(wrapper.get('[href="/api/v1/auth/google/start"]').exists())
         .toBe(true);
-      expect(wrapper.get('a[href="/api/v1/auth/github/start"]').exists())
+      expect(wrapper.get('[href="/api/v1/auth/github/start"]').exists())
         .toBe(true);
-      expect(wrapper.get('a[href="/api/v1/auth/linkedin/start"]').exists())
+      expect(wrapper.get('[href="/api/v1/auth/linkedin/start"]').exists())
         .toBe(true);
     });
 
   it('links to the forgot-password and register pages', async () => {
     const wrapper = await mountSuspended(LoginPage);
-    const hrefs = wrapper.findAll('a').map((a) => a.attributes('href'));
+    const hrefs = wrapper.findAll('[href]').map((a) => a.attributes('href'));
     expect(hrefs).toContain('/forgot-password');
     expect(hrefs).toContain('/register');
   });
@@ -144,11 +173,11 @@ describe('login.vue password form', () => {
       },
     });
     const wrapper = await mountSuspended(LoginPage);
-    await wrapper.get('input[autocomplete="email"]')
+    await wrapper.get('[autocomplete="email"]')
       .setValue('ada@example.com');
-    await wrapper.get('input[autocomplete="current-password"]')
+    await wrapper.get('[autocomplete="current-password"]')
       .setValue('correct horse battery staple');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/app/resumes');
   });
@@ -163,11 +192,11 @@ describe('login.vue password form', () => {
         },
       });
       const wrapper = await mountSuspended(LoginPage);
-      await wrapper.get('input[autocomplete="email"]')
+      await wrapper.get('[autocomplete="email"]')
         .setValue('ada@example.com');
-      await wrapper.get('input[autocomplete="current-password"]')
+      await wrapper.get('[autocomplete="current-password"]')
         .setValue('wrong');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="login-form"]').trigger('submit');
       await flushPromises();
       expect(wrapper.get('[data-testid="login-form-error"]').text())
         .toContain('Invalid email or password');
@@ -185,11 +214,11 @@ describe('login.vue password form', () => {
       },
     });
     const wrapper = await mountSuspended(LoginPage);
-    await wrapper.get('input[autocomplete="email"]')
+    await wrapper.get('[autocomplete="email"]')
       .setValue('ada@example.com');
-    await wrapper.get('input[autocomplete="current-password"]')
+    await wrapper.get('[autocomplete="current-password"]')
       .setValue('x');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
     expect(wrapper.get('[data-testid="login-form-error"]').text())
       .toContain('Something went wrong');
@@ -208,13 +237,13 @@ describe('login.vue password form', () => {
         }),
       });
       const wrapper = await mountSuspended(LoginPage);
-      await wrapper.get('input[autocomplete="email"]')
+      await wrapper.get('[autocomplete="email"]')
         .setValue('ada@example.com');
-      await wrapper.get('input[autocomplete="current-password"]')
+      await wrapper.get('[autocomplete="current-password"]')
         .setValue('correct horse battery staple');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="login-form"]').trigger('submit');
       await flushPromises();
-      const button = wrapper.get('button[type="submit"]');
+      const button = wrapper.get('[data-slot="button"][type="submit"]');
       expect(button.attributes('disabled')).toBeDefined();
       expect(button.text()).toContain('Signing in');
       resolveRequest();
@@ -231,12 +260,12 @@ describe('login.vue password form', () => {
     });
     const wrapper = await mountSuspended(LoginPage);
     const passwordInput = wrapper.get(
-      'input[autocomplete="current-password"]',
+      '[autocomplete="current-password"]',
     );
-    await wrapper.get('input[autocomplete="email"]')
+    await wrapper.get('[autocomplete="email"]')
       .setValue('ada@example.com');
     await passwordInput.setValue('correct horse battery staple');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
     await nextTick();
     expect((passwordInput.element as HTMLInputElement).value).toBe('');
@@ -254,18 +283,19 @@ describe('login.vue provider gating', () => {
       registerCapabilities({ providerLogin: false, agentAccess: false });
       const wrapper = await mountSuspended(LoginPage);
       await flushPromises();
-      expect(wrapper.find('.login-providers').exists()).toBe(false);
-      expect(wrapper.find('.auth-divider').exists()).toBe(false);
-      expect(wrapper.find('a[href^="/api/v1/auth/"]').exists()).toBe(false);
+      expect(wrapper.find('[href^="/api/v1/auth/"]').exists()).toBe(false);
+      expect(
+        wrapper.find('[data-testid="login-divider"]').exists(),
+      ).toBe(false);
       // The password form is unconditional.
-      expect(wrapper.find('form.auth-form').exists()).toBe(true);
+      expect(wrapper.find('[data-testid="login-form"]').exists()).toBe(true);
     });
 
   it('renders no provider link when the capabilities read fails', async () => {
     registerCapabilities(null);
     const wrapper = await mountSuspended(LoginPage);
     await flushPromises();
-    expect(wrapper.find('a[href^="/api/v1/auth/"]').exists()).toBe(false);
+    expect(wrapper.find('[href^="/api/v1/auth/"]').exists()).toBe(false);
   });
 
   it('renders no provider link while the capabilities read is pending',
@@ -277,14 +307,16 @@ describe('login.vue provider gating', () => {
         });
       }));
       const wrapper = await mountSuspended(LoginPage);
-      expect(wrapper.find('.login-providers').exists()).toBe(false);
-      expect(wrapper.find('.auth-divider').exists()).toBe(false);
+      expect(wrapper.find('[href^="/api/v1/auth/"]').exists()).toBe(false);
+      expect(
+        wrapper.find('[data-testid="login-divider"]').exists(),
+      ).toBe(false);
       release({
         data: { providerLogin: true, agentAccess: true },
       });
       await flushPromises();
       await flushPromises();
-      expect(wrapper.findAll('a[href^="/api/v1/auth/"]')).toHaveLength(3);
+      expect(wrapper.findAll('[href^="/api/v1/auth/"]')).toHaveLength(3);
     });
 
   it(
@@ -293,7 +325,7 @@ describe('login.vue provider gating', () => {
       registerCapabilities({ providerLogin: true, agentAccess: false });
       const wrapper = await mountSuspended(LoginPage);
       await flushPromises();
-      expect(wrapper.findAll('a[href^="/api/v1/auth/"]')).toHaveLength(3);
+      expect(wrapper.findAll('[href^="/api/v1/auth/"]')).toHaveLength(3);
     },
   );
 });

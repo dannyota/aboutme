@@ -7,7 +7,12 @@
  * to fixed copy. The 202 success copy is fixed and reveals nothing about
  * email ownership.
  */
-import PasswordField from '../components/auth/PasswordField.vue';
+import AuthCard from '@/components/auth/AuthCard.vue';
+import FormField from '@/components/app/FormField.vue';
+import PasswordField from '@/components/auth/PasswordField.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   type PasswordAuthFailure,
   type PasswordIssue,
@@ -75,79 +80,84 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main class="aboutme-app">
-    <section class="app-page app-page--narrow">
-      <div class="login">
-        <h1>Create account</h1>
-        <p class="auth-note">
-          Already have an account?
-          <NuxtLink to="/login">
-            Sign in
-          </NuxtLink>
-        </p>
-
-        <div
-          v-if="errorMessage"
-          ref="errorSummary"
-          data-testid="register-error"
-          class="auth-error-summary"
-          role="alert"
-          tabindex="-1"
-        >
-          {{ errorMessage }}
-        </div>
-
-        <div
-          v-if="success"
-          data-testid="register-success"
-          class="auth-success"
-          role="status"
-        >
-          Check your email to verify your address.
-        </div>
-
-        <form
-          class="auth-form"
-          novalidate
-          @submit.prevent="onSubmit"
-        >
-          <div class="auth-field">
-            <label for="register-name">Name</label>
-            <input
-              id="register-name"
-              v-model="name"
-              type="text"
-              autocomplete="name"
-            >
-          </div>
-          <div class="auth-field">
-            <label for="register-email">Email</label>
-            <input
-              id="register-email"
-              v-model="email"
-              type="email"
-              autocomplete="email"
-            >
-          </div>
-
-          <PasswordField
-            id="register-password"
-            ref="passwordField"
-            v-model="password"
-            label="Password"
-            autocomplete="new-password"
-            confirm
-          />
-
-          <button
-            type="submit"
-            class="auth-submit"
-            :disabled="pending"
-          >
-            {{ pending ? 'Creating account…' : 'Create account' }}
-          </button>
-        </form>
-      </div>
-    </section>
-  </main>
+  <AuthCard
+    description="Create an account to build and publish your resumes."
+    title="Create account"
+  >
+    <StatusBanner
+      v-if="errorMessage"
+      ref="errorSummary"
+      :focus-on-mount="true"
+      kind="error"
+      testid="register-error"
+    >
+      {{ errorMessage }}
+    </StatusBanner>
+    <StatusBanner
+      v-if="success"
+      kind="success"
+      testid="register-success"
+    >
+      Check your email to verify your address.
+    </StatusBanner>
+    <form
+      class="grid gap-4"
+      data-testid="register-form"
+      novalidate
+      @submit.prevent="onSubmit"
+    >
+      <FormField
+        id="register-name"
+        v-slot="{ id, describedBy, invalid }"
+        label="Name"
+      >
+        <Input
+          :id="id"
+          v-model="name"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          autocomplete="name"
+          type="text"
+        />
+      </FormField>
+      <FormField
+        id="register-email"
+        v-slot="{ id, describedBy, invalid }"
+        label="Email"
+      >
+        <Input
+          :id="id"
+          v-model="email"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          autocomplete="email"
+          type="email"
+        />
+      </FormField>
+      <PasswordField
+        id="register-password"
+        ref="passwordField"
+        v-model="password"
+        autocomplete="new-password"
+        confirm
+        label="Password"
+      />
+      <Button
+        class="mt-1 w-full"
+        :disabled="pending"
+        type="submit"
+      >
+        {{ pending ? "Creating account…" : "Create account" }}
+      </Button>
+    </form>
+    <template #footer>
+      <span>Already have an account?</span>
+      <NuxtLink
+        class="text-primary underline-offset-4 hover:underline"
+        to="/login"
+      >
+        Sign in
+      </NuxtLink>
+    </template>
+  </AuthCard>
 </template>
