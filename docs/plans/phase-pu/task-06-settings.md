@@ -259,6 +259,9 @@ messages, `Could not revoke that session. Try again.`,
   `h2` `CardTitle`. Keep the existing `Last seen {{ session.lastSeenAt }}` text
   so the sessions tests match.
 
+  If the generated `CardTitle` has no `as` prop, render `<h2>` with the same
+  classes directly inside `CardHeader`, as T04 does for its `h1`.
+
 - [ ] Implement `PasswordSettings.vue` and `ConnectedAgents.vue` templates per
       the contract; the agents confirmation replaces `selected`, `confirmation`,
       and `returnFocus` handling with `ConfirmDialog :open="selected !== null"`,
