@@ -281,9 +281,14 @@ validate_group_member() {
   if member_has_token "$pid" "$token"; then
     return 0
   fi
-  # A short-lived child can disappear between the group snapshot and its
-  # environ read. Disappearance is safe; a still-live unmarked member is not.
-  kill -0 "$pid" 2>/dev/null || return 0
+  # A short-lived child can disappear or become a zombie between the group
+  # snapshot and its environ read. Recheck its state before treating it as an
+  # unmarked live member of the owned group.
+  actual=$(ps -o pgid=,sid=,stat= -p "$pid" 2>/dev/null) || return 0
+  [ -n "$actual" ] || return 0
+  read -r actual_pgid actual_sid state <<<"$actual"
+  [ "$actual_pgid" = "$pgid" ] && [ "$actual_sid" = "$sid" ] || return 0
+  [[ $state == Z* ]] && return 0
   return 1
 }
 

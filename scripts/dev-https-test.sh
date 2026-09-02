@@ -223,6 +223,37 @@ if [ -s "$pidfile" ]; then
 fi
 EOF
 
+  cat >"$fakebin/ps" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if [ -n "${FAKE_EXIT_RACE_PID-}" ]; then
+  case "$*" in
+  '-eo pid=,pgid=,sid=')
+    /usr/bin/ps "$@"
+    calls=0
+    [ ! -f "$FAKE_EXIT_RACE_GROUP_CALLS" ] || calls=$(<"$FAKE_EXIT_RACE_GROUP_CALLS")
+    calls=$((calls + 1))
+    printf '%s\n' "$calls" >"$FAKE_EXIT_RACE_GROUP_CALLS"
+    if [ "$calls" -eq 2 ]; then
+      printf '%s %s %s\n' "$FAKE_EXIT_RACE_PID" "$FAKE_EXIT_RACE_PGID" "$FAKE_EXIT_RACE_PGID"
+    fi
+    exit 0
+    ;;
+  "-o pgid=,sid=,stat= -p $FAKE_EXIT_RACE_PID")
+    calls=0
+    [ ! -f "$FAKE_EXIT_RACE_STATE_CALLS" ] || calls=$(<"$FAKE_EXIT_RACE_STATE_CALLS")
+    calls=$((calls + 1))
+    printf '%s\n' "$calls" >"$FAKE_EXIT_RACE_STATE_CALLS"
+    state=S
+    [ "$calls" -eq 1 ] || state=Z
+    printf '%s %s %s\n' "$FAKE_EXIT_RACE_PGID" "$FAKE_EXIT_RACE_PGID" "$state"
+    exit 0
+    ;;
+  esac
+fi
+exec /usr/bin/ps "$@"
+EOF
+
   cat >"$fakebin/chmod" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -673,6 +704,26 @@ run_process_group_drain_check() (
   done < <(ps -eo pid=,pgid= | awk -v pgid="$pid" '$2 == pgid { print $1 }')
   [ ! -e .dev/native-https/run/server.pid ] || fail "down retained server PID after group drained"
   [ ! -e .dev/native-https/run/server.identity ] || fail "down retained server identity after group drained"
+)
+
+run_group_member_exit_race_check() (
+  local fixture output foreign_pid web_pid
+  fixture=$(new_fixture)
+  trap 'cleanup_fixture "$fixture"' EXIT
+  fixture_env "$fixture"
+  cd "$fixture/repo"
+  output=$(bash scripts/dev-https.sh up 2>&1) || fail "group-member exit-race setup failed: $output"
+  web_pid=$(<.dev/native-https/run/web.pid)
+  /usr/bin/setsid --fork bash -c 'echo $$ >"$1"; exec sleep 300' foreign "$fixture/foreign-pid"
+  for _ in $(seq 1 50); do [ -s "$fixture/foreign-pid" ] && break; sleep 0.02; done
+  foreign_pid=$(<"$fixture/foreign-pid")
+  printf '%s\n' "$foreign_pid" >>"$fixture/all-pids"
+  export FAKE_EXIT_RACE_PID=$foreign_pid
+  export FAKE_EXIT_RACE_PGID=$web_pid
+  export FAKE_EXIT_RACE_GROUP_CALLS=$fixture/exit-race-group-calls
+  export FAKE_EXIT_RACE_STATE_CALLS=$fixture/exit-race-state-calls
+  output=$(bash scripts/dev-https.sh down 2>&1) || fail "down rejected a group member that exited during identity validation: $output"
+  kill -0 "$foreign_pid" 2>/dev/null || fail 'down signalled the simulated exiting process'
 )
 
 run_identity_field_tamper_check() (
@@ -1143,6 +1194,7 @@ main() {
   identity) run_foreign_ownership_down_check; return ;;
   identity-tamper) run_identity_field_tamper_check; return ;;
   group-drain) run_process_group_drain_check; return ;;
+  member-exit-race) run_group_member_exit_race_check; return ;;
   binary-drift) run_binary_drift_check; return ;;
   lifecycle-drift) run_lifecycle_command_drift_down_check; return ;;
   rollback) run_partial_startup_rollback_check; return ;;
@@ -1174,6 +1226,7 @@ main() {
   run_foreign_ownership_down_check
   run_identity_field_tamper_check
   run_process_group_drain_check
+  run_group_member_exit_race_check
   run_binary_drift_check
   run_lifecycle_command_drift_down_check
   run_partial_startup_rollback_check
