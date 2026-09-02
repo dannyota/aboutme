@@ -9,12 +9,24 @@ import type {
 } from '../../../editor/commands';
 import type { JsonValue } from '../../../editor/types';
 import type { ResumeRecord } from '../../../stores/resumes';
+import CheckboxField from '../../app/CheckboxField.vue';
+import FormField from '../../app/FormField.vue';
+import SelectField from '../../app/SelectField.vue';
+import SwitchField from '../../app/SwitchField.vue';
+import { Button } from '../../ui/button';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '../../ui/card';
+import { Input } from '../../ui/input';
+import InspectorPanel from '../InspectorPanel.vue';
 import {
   CUSTOMIZATION_FIELDS,
   type CustomizationField,
 } from './fields';
 import ColorField from './ColorField.vue';
-import OptionalCustomizationField from './OptionalCustomizationField.vue';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -30,9 +42,45 @@ const customization = computed(
   () => record.value?.current.document.customization,
 );
 const issues = computed(() => Object.values(record.value?.issues ?? {}).flat());
-const scalarFields = CUSTOMIZATION_FIELDS.filter(
-  (field) => !isSpecialField(field.path),
-);
+const LABELS: Readonly<Partial<Record<CustomizationSetPath, string>>> = {
+  'font.family': 'Font family',
+  'font.baseSizePx': 'Base size (px)',
+  'spacing.sectionGap': 'Section gap',
+  'spacing.entryGap': 'Entry gap',
+  'spacing.lineHeight': 'Line height',
+  'heading.style': 'Heading style',
+  'heading.showRule': 'Show heading rule',
+  'layout.columns': 'Columns',
+  'layout.surfaceTarget': 'Surface target',
+  'sectionDisplay.skill.style': 'Skill display',
+  'sectionDisplay.language.style': 'Language display',
+  'pageFormat': 'Page format',
+  'dateFormat': 'Date format',
+};
+
+const GROUPS = [
+  { title: 'Typography', fields: ['font.family', 'font.baseSizePx'] },
+  { title: 'Colors', fields: [] },
+  {
+    title: 'Spacing',
+    fields: ['spacing.sectionGap', 'spacing.entryGap', 'spacing.lineHeight'],
+  },
+  {
+    title: 'Headings and header',
+    fields: ['heading.style', 'heading.showRule'],
+  },
+  {
+    title: 'Layout',
+    fields: [
+      'layout.columns',
+      'layout.surfaceTarget',
+      'sectionDisplay.skill.style',
+      'sectionDisplay.language.style',
+      'pageFormat',
+      'dateFormat',
+    ],
+  },
+] as const;
 
 function commit(deltas: readonly CustomizationDelta[]): void {
   props.actions.edit({ kind: 'customization', deltas });
@@ -51,12 +99,6 @@ function changeField(field: CustomizationField, event: Event): void {
   setLocalError(field.path, '');
   if (value === valueAt(field.path)) return;
   commit([{ op: 'set', path: field.path, value }]);
-}
-
-function changePageMargin(path: CustomizationSetPath, event: Event): void {
-  const field = fieldFor(path);
-  if (field === undefined) return;
-  changeField(field, event);
 }
 
 function enablePageMargin(): void {
@@ -82,13 +124,25 @@ function unsetHeader(): void {
   commit([{ op: 'unset', path: 'header' }]);
 }
 
-function changeSurfaceTarget(event: Event): void {
-  const field = fieldFor('layout.surfaceTarget');
-  if (field === undefined) return;
-  const value = valueFromEvent(field, event);
-  if (value === undefined || !isAllowed(field, value)) return;
-  if (value === (customization.value?.layout.surfaceTarget ?? 'none')) return;
-  commit([{ op: 'set', path: 'layout.surfaceTarget', value }]);
+function commitBoolean(field: CustomizationField, value: boolean): void {
+  if (!isAllowed(field, value) || value === valueAt(field.path)) return;
+  commit([{ op: 'set', path: field.path, value }]);
+}
+
+function commitEnum(
+  field: CustomizationField,
+  value: string | number,
+): void {
+  const typed = field.values?.every((item) => typeof item === 'number')
+    ? Number(value)
+    : value;
+  if (!isAllowed(field, typed)) {
+    setLocalError(field.path, 'Choose one of the available options.');
+    return;
+  }
+  setLocalError(field.path, '');
+  if (typed === valueAt(field.path)) return;
+  commit([{ op: 'set', path: field.path, value: typed }]);
 }
 
 function unsetSurfaceTarget(): void {
@@ -118,13 +172,6 @@ function fieldFor(path: CustomizationSetPath): CustomizationField | undefined {
 
 function valuesFor(field: CustomizationField): readonly (string | number)[] {
   return field.values ?? [];
-}
-
-function valuesForPath(
-  path: CustomizationSetPath,
-): readonly (string | number)[] {
-  const field = fieldFor(path);
-  return field === undefined ? [] : valuesFor(field);
 }
 
 function valueFromEvent(
@@ -164,13 +211,6 @@ function isNumeric(kind: CustomizationField['kind']): boolean {
   return kind === 'integer' || kind === 'number';
 }
 
-function isSpecialField(path: CustomizationSetPath): boolean {
-  return path.startsWith('colors.')
-    || path.startsWith('spacing.pageMargin.')
-    || path.startsWith('header.')
-    || path === 'layout.surfaceTarget';
-}
-
 function setLocalError(path: CustomizationSetPath, message: string): void {
   localErrors.value = { ...localErrors.value, [path]: message };
 }
@@ -179,12 +219,38 @@ function fieldId(path: CustomizationSetPath): string {
   return `customization-${path.replaceAll('.', '-')}`;
 }
 
-function errorId(path: CustomizationSetPath): string {
-  return `${fieldId(path)}-error`;
-}
-
 function localError(path: CustomizationSetPath): string {
   return localErrors.value[path] ?? '';
+}
+
+function labelFor(path: CustomizationSetPath): string {
+  return LABELS[path] ?? path;
+}
+
+function colorValue(path: string): string | undefined {
+  const key = path.split('.')[1] as
+    | 'primary' | 'text' | 'background' | 'accent' | 'surface';
+  return customization.value?.colors[key];
+}
+
+function pathFor(path: string): CustomizationSetPath {
+  return path as CustomizationSetPath;
+}
+
+function typedDisplay(
+  path: CustomizationSetPath,
+  fallback: JsonValue,
+): string | number {
+  const value = displayValue(path, fallback);
+  return typeof value === 'string' || typeof value === 'number' ? value : '';
+}
+
+function unsetColor(path: string): void {
+  if (path === 'colors.accent') {
+    commit([{ op: 'unset', path: 'colors.accent' }]);
+  } else if (path === 'colors.surface') {
+    commit([{ op: 'unset', path: 'colors.surface' }]);
+  }
 }
 
 function fieldForIssue(path: string): CustomizationSetPath | undefined {
@@ -198,7 +264,8 @@ function focusIssue(path: string): void {
   const field = fieldForIssue(path);
   if (field === undefined) return;
   const selector = `[data-field="${field}"] input, `
-    + `[data-field="${field}"] select`;
+    + `[data-field="${field}"] select, `
+    + `[data-field="${field}"] [role="checkbox"]`;
   root.value?.querySelector<HTMLElement>(selector)?.focus();
 }
 
@@ -229,335 +296,186 @@ function customizationValue(): Customization | undefined {
 </script>
 
 <template>
-  <section
+  <InspectorPanel
     v-if="customizationValue() !== undefined"
-    ref="root"
-    aria-labelledby="customization-title"
+    title="Customization"
+    title-id="customization-title"
   >
-    <h2 id="customization-title">
-      Customization
-    </h2>
-
-    <div
-      v-for="field in scalarFields"
-      :key="field.path"
-      :data-field="field.path"
-    >
-      <label
-        v-if="field.kind === 'boolean'"
-        :for="fieldId(field.path)"
+    <div ref="root">
+      <Card
+        v-for="group in GROUPS"
+        :key="group.title"
       >
-        {{ field.path }}
-        <input
-          :id="fieldId(field.path)"
-          type="checkbox"
-          :checked="displayValue(field.path, false) === true"
-          :aria-invalid="localError(field.path) === '' ? undefined : 'true'"
-          :aria-describedby="localError(field.path) === ''
-            ? undefined : errorId(field.path)"
-          @change="changeField(field, $event)"
-        >
-      </label>
-      <label
-        v-else-if="field.kind === 'enum'"
-        :for="fieldId(field.path)"
-      >
-        {{ field.path }}
-        <select
-          :id="fieldId(field.path)"
-          :value="displayValue(field.path, '')"
-          :aria-invalid="localError(field.path) === '' ? undefined : 'true'"
-          :aria-describedby="localError(field.path) === ''
-            ? undefined : errorId(field.path)"
-          @change="changeField(field, $event)"
-        >
-          <option
-            v-for="value in valuesFor(field)"
-            :key="String(value)"
-            :value="value"
-          >
-            {{ value }}
-          </option>
-        </select>
-      </label>
-      <label
-        v-else
-        :for="fieldId(field.path)"
-      >
-        {{ field.path }}
-        <input
-          :id="fieldId(field.path)"
-          type="number"
-          :min="field.minimum"
-          :max="field.maximum"
-          :step="field.kind === 'integer' ? 1 : 'any'"
-          :value="displayValue(field.path, 0)"
-          :aria-invalid="localError(field.path) === '' ? undefined : 'true'"
-          :aria-describedby="localError(field.path) === ''
-            ? undefined : errorId(field.path)"
-          @change="changeField(field, $event)"
-        >
-      </label>
-      <p
-        v-if="localError(field.path) !== ''"
-        :id="errorId(field.path)"
-        :data-error-for="field.path"
-        role="alert"
-      >
-        {{ localError(field.path) }}
-      </p>
-    </div>
-
-    <div data-field="colors.primary">
-      <ColorField
-        field-id="colors.primary"
-        label="Primary color"
-        :model-value="customizationValue()?.colors.primary"
-        required
-        @set="commit([{ op: 'set', path: 'colors.primary', value: $event }])"
-      />
-    </div>
-    <div data-field="colors.text">
-      <ColorField
-        field-id="colors.text"
-        label="Text color"
-        :model-value="customizationValue()?.colors.text"
-        required
-        @set="commit([{ op: 'set', path: 'colors.text', value: $event }])"
-      />
-    </div>
-    <div data-field="colors.background">
-      <ColorField
-        field-id="colors.background"
-        label="Background color"
-        :model-value="customizationValue()?.colors.background"
-        required
-        @set="commit([{ op: 'set', path: 'colors.background', value: $event }])"
-      />
-    </div>
-    <div data-field="colors.accent">
-      <ColorField
-        field-id="colors.accent"
-        label="Accent color"
-        :fallback="customizationValue()?.colors.primary"
-        :model-value="customizationValue()?.colors.accent"
-        unset-action="unset-accent"
-        @set="commit([{ op: 'set', path: 'colors.accent', value: $event }])"
-        @unset="commit([{ op: 'unset', path: 'colors.accent' }])"
-      />
-    </div>
-    <div data-field="colors.surface">
-      <ColorField
-        field-id="colors.surface"
-        label="Surface color"
-        :fallback="customizationValue()?.colors.background"
-        :model-value="customizationValue()?.colors.surface"
-        unset-action="unset-surface"
-        @set="commit([{ op: 'set', path: 'colors.surface', value: $event }])"
-        @unset="commit([{ op: 'unset', path: 'colors.surface' }])"
-      />
-    </div>
-
-    <OptionalCustomizationField
-      action="page-margin"
-      label="Page margins"
-      :present="customizationValue()?.spacing.pageMargin !== undefined"
-      @enable="enablePageMargin"
-      @unset="unsetPageMargin"
-    >
-      <label
-        data-field="spacing.pageMargin.x"
-        :for="fieldId('spacing.pageMargin.x')"
-      >
-        Horizontal margin
-        <input
-          :id="fieldId('spacing.pageMargin.x')"
-          type="number"
-          :min="fieldFor('spacing.pageMargin.x')?.minimum"
-          :max="fieldFor('spacing.pageMargin.x')?.maximum"
-          step="any"
-          :value="displayValue('spacing.pageMargin.x', 15)"
-          :aria-invalid="localError('spacing.pageMargin.x') === ''
-            ? undefined : 'true'"
-          :aria-describedby="localError('spacing.pageMargin.x') === ''
-            ? undefined : errorId('spacing.pageMargin.x')"
-          @change="changePageMargin('spacing.pageMargin.x', $event)"
-        >
-      </label>
-      <p
-        v-if="localError('spacing.pageMargin.x') !== ''"
-        :id="errorId('spacing.pageMargin.x')"
-        data-error-for="spacing.pageMargin.x"
-        role="alert"
-      >
-        {{ localError('spacing.pageMargin.x') }}
-      </p>
-      <label
-        data-field="spacing.pageMargin.y"
-        :for="fieldId('spacing.pageMargin.y')"
-      >
-        Vertical margin
-        <input
-          :id="fieldId('spacing.pageMargin.y')"
-          type="number"
-          :min="fieldFor('spacing.pageMargin.y')?.minimum"
-          :max="fieldFor('spacing.pageMargin.y')?.maximum"
-          step="any"
-          :value="displayValue('spacing.pageMargin.y', 15)"
-          :aria-invalid="localError('spacing.pageMargin.y') === ''
-            ? undefined : 'true'"
-          :aria-describedby="localError('spacing.pageMargin.y') === ''
-            ? undefined : errorId('spacing.pageMargin.y')"
-          @change="changePageMargin('spacing.pageMargin.y', $event)"
-        >
-      </label>
-      <p
-        v-if="localError('spacing.pageMargin.y') !== ''"
-        :id="errorId('spacing.pageMargin.y')"
-        data-error-for="spacing.pageMargin.y"
-        role="alert"
-      >
-        {{ localError('spacing.pageMargin.y') }}
-      </p>
-    </OptionalCustomizationField>
-
-    <OptionalCustomizationField
-      action="header"
-      label="Header"
-      :present="customizationValue()?.header !== undefined"
-      @enable="enableHeader"
-      @unset="unsetHeader"
-    >
-      <label
-        data-field="header.align"
-        :for="fieldId('header.align')"
-      >
-        Header alignment
-        <select
-          :id="fieldId('header.align')"
-          :value="displayValue('header.align', 'left')"
-          :aria-invalid="localError('header.align') === '' ? undefined : 'true'"
-          :aria-describedby="localError('header.align') === ''
-            ? undefined : errorId('header.align')"
-          @change="changeField(fieldFor('header.align')!, $event)"
-        >
-          <option
-            v-for="value in valuesForPath('header.align')"
-            :key="String(value)"
-            :value="value"
-          >
-            {{ value }}
-          </option>
-        </select>
-      </label>
-      <p
-        v-if="localError('header.align') !== ''"
-        :id="errorId('header.align')"
-        data-error-for="header.align"
-        role="alert"
-      >
-        {{ localError('header.align') }}
-      </p>
-      <label
-        data-field="header.detailsLayout"
-        :for="fieldId('header.detailsLayout')"
-      >
-        Contact layout
-        <select
-          :id="fieldId('header.detailsLayout')"
-          :value="displayValue('header.detailsLayout', 'inline')"
-          :aria-invalid="localError('header.detailsLayout') === ''
-            ? undefined : 'true'"
-          :aria-describedby="localError('header.detailsLayout') === ''
-            ? undefined : errorId('header.detailsLayout')"
-          @change="changeField(fieldFor('header.detailsLayout')!, $event)"
-        >
-          <option
-            v-for="value in valuesForPath('header.detailsLayout')"
-            :key="String(value)"
-            :value="value"
-          >
-            {{ value }}
-          </option>
-        </select>
-      </label>
-      <p
-        v-if="localError('header.detailsLayout') !== ''"
-        :id="errorId('header.detailsLayout')"
-        data-error-for="header.detailsLayout"
-        role="alert"
-      >
-        {{ localError('header.detailsLayout') }}
-      </p>
-      <label
-        data-field="header.iconStyle"
-        :for="fieldId('header.iconStyle')"
-      >
-        Icon style
-        <select
-          :id="fieldId('header.iconStyle')"
-          :value="displayValue('header.iconStyle', 'outline')"
-          :aria-invalid="localError('header.iconStyle') === ''
-            ? undefined : 'true'"
-          :aria-describedby="localError('header.iconStyle') === ''
-            ? undefined : errorId('header.iconStyle')"
-          @change="changeField(fieldFor('header.iconStyle')!, $event)"
-        >
-          <option
-            v-for="value in valuesForPath('header.iconStyle')"
-            :key="String(value)"
-            :value="value"
-          >
-            {{ value }}
-          </option>
-        </select>
-      </label>
-      <p
-        v-if="localError('header.iconStyle') !== ''"
-        :id="errorId('header.iconStyle')"
-        data-error-for="header.iconStyle"
-        role="alert"
-      >
-        {{ localError('header.iconStyle') }}
-      </p>
-    </OptionalCustomizationField>
-
-    <div data-field="layout.surfaceTarget">
-      <label :for="fieldId('layout.surfaceTarget')">
-        Surface target
-        <select
-          :id="fieldId('layout.surfaceTarget')"
-          :value="displayValue('layout.surfaceTarget', 'none')"
-          :aria-invalid="localError('layout.surfaceTarget') === ''
-            ? undefined : 'true'"
-          :aria-describedby="localError('layout.surfaceTarget') === ''
-            ? undefined : errorId('layout.surfaceTarget')"
-          @change="changeSurfaceTarget"
-        >
-          <option
-            v-for="value in valuesForPath('layout.surfaceTarget')"
-            :key="String(value)"
-            :value="value"
-          >
-            {{ value }}
-          </option>
-        </select>
-      </label>
-      <p
-        v-if="localError('layout.surfaceTarget') !== ''"
-        :id="errorId('layout.surfaceTarget')"
-        data-error-for="layout.surfaceTarget"
-        role="alert"
-      >
-        {{ localError('layout.surfaceTarget') }}
-      </p>
-      <button
-        type="button"
-        data-action="unset-surface-target"
-        @click="unsetSurfaceTarget"
-      >
-        Remove surface target
-      </button>
+        <CardHeader><CardTitle>{{ group.title }}</CardTitle></CardHeader>
+        <CardContent class="grid gap-4">
+          <template v-if="group.title === 'Colors'">
+            <div
+              v-for="color in [
+                ['colors.primary', 'Primary color', true],
+                ['colors.text', 'Text color', true],
+                ['colors.background', 'Background color', true],
+                ['colors.accent', 'Accent color', false],
+                ['colors.surface', 'Surface color', false],
+              ]"
+              :key="color[0]"
+              :data-field="color[0]"
+            >
+              <ColorField
+                :field-id="color[0]"
+                :label="color[1]"
+                :fallback="color[0] === 'colors.accent'
+                  ? customizationValue()?.colors.primary
+                  : customizationValue()?.colors.background"
+                :model-value="colorValue(color[0])"
+                :required="color[2]"
+                :unset-action="color[0] === 'colors.accent'
+                  ? 'unset-accent' : 'unset-surface'"
+                @set="commit([{
+                  op: 'set', path: pathFor(color[0]), value: $event,
+                }])"
+                @unset="unsetColor(color[0])"
+              />
+            </div>
+          </template>
+          <template v-else>
+            <template
+              v-for="path in group.fields"
+              :key="path"
+            >
+              <CheckboxField
+                v-if="fieldFor(path)?.kind === 'boolean'"
+                :id="fieldId(path)"
+                :label="labelFor(path)"
+                :model-value="displayValue(path, false) === true"
+                :name="path"
+                @update:model-value="commitBoolean(fieldFor(path)!, $event)"
+              />
+              <SelectField
+                v-else-if="fieldFor(path)?.kind === 'enum'"
+                :id="fieldId(path)"
+                :error="localError(path) || undefined"
+                :label="labelFor(path)"
+                :model-value="typedDisplay(
+                  path, path === 'layout.surfaceTarget' ? 'none' : '',
+                )"
+                :name="path"
+                :options="valuesFor(fieldFor(path)!).map((value) => ({
+                  value, label: String(value),
+                }))"
+                @update:model-value="commitEnum(fieldFor(path)!, $event)"
+              />
+              <FormField
+                v-else
+                :id="fieldId(path)"
+                v-slot="{ id, describedBy, invalid }"
+                :error="localError(path) || undefined"
+                :label="labelFor(path)"
+                :name="path"
+              >
+                <Input
+                  :id="id"
+                  :aria-describedby="describedBy"
+                  :aria-invalid="invalid"
+                  :max="fieldFor(path)?.maximum"
+                  :min="fieldFor(path)?.minimum"
+                  :model-value="typedDisplay(path, 0)"
+                  :step="fieldFor(path)?.kind === 'integer' ? 1 : 'any'"
+                  type="number"
+                  @change="changeField(fieldFor(path)!, $event)"
+                />
+              </FormField>
+            </template>
+            <SwitchField
+              v-if="group.title === 'Spacing'"
+              data-action="page-margin"
+              label="Page margins"
+              :model-value="customizationValue()?.spacing.pageMargin
+                !== undefined"
+              @update:model-value="$event
+                ? enablePageMargin() : unsetPageMargin()"
+            />
+            <div
+              v-if="group.title === 'Spacing'
+                && customizationValue()?.spacing.pageMargin !== undefined"
+              class="grid gap-4"
+            >
+              <FormField
+                v-for="path in ['spacing.pageMargin.x', 'spacing.pageMargin.y']"
+                :id="fieldId(pathFor(path))"
+                :key="path"
+                v-slot="{ id, describedBy, invalid }"
+                :error="localError(pathFor(path)) || undefined"
+                :label="path.endsWith('.x')
+                  ? 'Horizontal margin' : 'Vertical margin'"
+                :name="path"
+              >
+                <Input
+                  :id="id"
+                  :aria-describedby="describedBy"
+                  :aria-invalid="invalid"
+                  :max="fieldFor(pathFor(path))?.maximum"
+                  :min="fieldFor(pathFor(path))?.minimum"
+                  :model-value="typedDisplay(pathFor(path), 15)"
+                  step="any"
+                  type="number"
+                  @change="changeField(fieldFor(pathFor(path))!, $event)"
+                />
+              </FormField>
+            </div>
+            <SwitchField
+              v-if="group.title === 'Headings and header'"
+              data-action="header"
+              label="Header"
+              :model-value="customizationValue()?.header !== undefined"
+              @update:model-value="$event
+                ? enableHeader() : unsetHeader()"
+            />
+            <div
+              v-if="group.title === 'Headings and header'
+                && customizationValue()?.header !== undefined"
+              class="grid gap-4"
+            >
+              <template
+                v-for="path in [
+                  'header.align', 'header.detailsLayout', 'header.iconStyle',
+                ]"
+                :key="path"
+              >
+                <SelectField
+                  :id="fieldId(pathFor(path))"
+                  :error="localError(pathFor(path)) || undefined"
+                  :label="path === 'header.align'
+                    ? 'Header alignment'
+                    : path === 'header.detailsLayout'
+                      ? 'Contact layout' : 'Icon style'"
+                  :model-value="typedDisplay(
+                    pathFor(path), path === 'header.align' ? 'left'
+                      : path === 'header.detailsLayout' ? 'inline' : 'outline',
+                  )"
+                  :name="path"
+                  :options="valuesFor(fieldFor(pathFor(path))!).map(
+                    (value) => ({
+                      value, label: String(value),
+                    }))"
+                  @update:model-value="commitEnum(
+                    fieldFor(pathFor(path))!, $event,
+                  )"
+                />
+              </template>
+            </div>
+            <Button
+              v-if="group.title === 'Layout'
+                && customizationValue()?.layout.surfaceTarget !== undefined"
+              variant="ghost"
+              size="sm"
+              data-action="unset-surface-target"
+              @click="unsetSurfaceTarget"
+            >
+              Remove surface target
+            </Button>
+          </template>
+        </CardContent>
+      </Card>
     </div>
 
     <ul v-if="issues.length > 0">
@@ -565,16 +483,18 @@ function customizationValue(): Customization | undefined {
         v-for="issue in issues"
         :key="`${issue.path}:${issue.code}`"
       >
-        <button
+        <Button
           v-if="fieldForIssue(issue.path) !== undefined"
           type="button"
+          variant="ghost"
+          size="sm"
           :data-issue="issue.path"
           @click="focusIssue(issue.path)"
         >
           {{ messageForCode(issue.code) }}
-        </button>
+        </Button>
         <span v-else>{{ messageForCode(issue.code) }}</span>
       </li>
     </ul>
-  </section>
+  </InspectorPanel>
 </template>

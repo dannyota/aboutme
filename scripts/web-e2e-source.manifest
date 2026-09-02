@@ -70,7 +70,6 @@ apps/web/app/components/editor/PublishDialog.vue
 apps/web/app/components/editor/SaveStatus.vue
 apps/web/app/components/editor/customization/ColorField.vue
 apps/web/app/components/editor/customization/CustomizationPanel.vue
-apps/web/app/components/editor/customization/OptionalCustomizationField.vue
 apps/web/app/components/editor/customization/fields.ts
 apps/web/app/components/editor/forms/ContactList.vue
 apps/web/app/components/editor/forms/DateRangeField.vue
