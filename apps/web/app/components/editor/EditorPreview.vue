@@ -11,23 +11,45 @@ import {
 } from 'vue';
 
 import { observeSettledVisiblePageCount } from '../../editor/pageCountObserver';
+import type { PhotoReadState } from '../../stores/resumes';
 import ResumeDocument from '../resume/ResumeDocument.vue';
+import {
+  photoStateFor,
+  previewProjection,
+} from './previewProjection';
 
 const props = defineProps<{
   readonly document: Resume;
   readonly lng: string;
   readonly photoUrl?: string;
+  readonly photoRead?: PhotoReadState;
 }>();
 
 const previewRoot = shallowRef<HTMLElement | null>(null);
 const estimatedPages = ref<number | null>(null);
 const renderFailed = ref(false);
-const requiresPhoto = computed(
-  () => props.document.personalDetails.photo !== undefined,
+const projected = computed(() =>
+  previewProjection(props.document, props.photoUrl),
 );
-const canRender = computed(
-  () => !requiresPhoto.value || props.photoUrl !== undefined,
+const photoState = computed(() =>
+  photoStateFor(
+    props.photoRead,
+    props.document.personalDetails.photo !== undefined,
+  ),
 );
+const photoNotice = computed(() => {
+  switch (photoState.value) {
+    case 'loading':
+      return 'Photo is loading. The preview is shown without it.';
+    case 'unavailable':
+      return (
+        'Photo unavailable. The preview is shown without it. '
+        + 'Open the Photo panel to retry.'
+      );
+    default:
+      return '';
+  }
+});
 const context = computed(() => ({
   lng: props.lng,
   mode: 'paged' as const,
@@ -77,14 +99,14 @@ onBeforeUnmount(() => stopObserving?.());
       tabindex="0"
     >
       <p
-        v-if="!canRender"
+        v-if="photoNotice !== ''"
         class="editor-preview__notice"
         role="status"
       >
-        Preview is waiting for the authorized photo.
+        {{ photoNotice }}
       </p>
       <p
-        v-else-if="renderFailed"
+        v-if="renderFailed"
         class="editor-preview__notice"
         role="status"
       >
@@ -96,7 +118,7 @@ onBeforeUnmount(() => stopObserving?.());
       >
         <ResumeDocument
           :context="context"
-          :document="document"
+          :document="projected"
         />
       </div>
     </div>
