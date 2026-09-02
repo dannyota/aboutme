@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue';
+import { computed, ref, useId } from 'vue';
+import { ImageOff, Upload } from '@lucide/vue';
+import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
+import InspectorPanel from '@/components/editor/InspectorPanel.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type { AtomicConflictRecord } from '../../../editor/conflicts';
@@ -12,10 +20,9 @@ const props = defineProps<{
 }>();
 
 const pendingDeleteBinding = ref<string | null>(null);
-const confirmDeleteButton = ref<HTMLButtonElement | null>(null);
-const deleteOpener = ref<HTMLElement | null>(null);
 const deleteStatus = ref('');
 const opaqueReplacement = ref<File | null>(null);
+const uploadId = `photo-upload-${useId()}`;
 const photo = computed(
   () => props.record.current.document.personalDetails.photo,
 );
@@ -45,15 +52,11 @@ function upload(event: Event): void {
   props.actions.edit({ kind: 'photoUpload', file });
 }
 
-function requestDelete(event: MouseEvent): void {
+function requestDelete(): void {
   const binding = photo.value?.key;
   if (binding === undefined) return;
-  deleteOpener.value = event.currentTarget instanceof HTMLElement
-    ? event.currentTarget
-    : null;
   deleteStatus.value = '';
   pendingDeleteBinding.value = binding;
-  void nextTick(() => confirmDeleteButton.value?.focus());
 }
 
 function confirmDelete(): void {
@@ -73,29 +76,6 @@ function cancelDelete(): void {
 
 function closeDeleteDialog(): void {
   pendingDeleteBinding.value = null;
-  void nextTick(() => deleteOpener.value?.focus());
-}
-
-function trapDeleteFocus(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    cancelDelete();
-    return;
-  }
-  if (event.key !== 'Tab') return;
-  const dialog = event.currentTarget;
-  if (!(dialog instanceof HTMLElement)) return;
-  const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('button')];
-  const first = buttons[0];
-  const last = buttons.at(-1);
-  if (first === undefined || last === undefined) return;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 function keepObserved(): void {
@@ -185,6 +165,10 @@ function statusText(): string | undefined {
   }
 }
 
+function statusKind(): 'info' | 'error' {
+  return props.record.attempt?.kind === 'failed' ? 'error' : 'info';
+}
+
 function observedText(): string {
   switch (opaque.value?.observed) {
     case 'unchanged':
@@ -218,141 +202,169 @@ function isPhotoCommand(kind: string): boolean {
 </script>
 
 <template>
-  <section aria-labelledby="photo-title">
-    <h2 id="photo-title">
-      Photo
-    </h2>
-    <div
+  <InspectorPanel
+    title="Photo"
+    title-id="photo-title"
+  >
+    <Card
       aria-live="polite"
       data-photo-preview
+      class="flex flex-col items-center gap-2"
     >
-      <img
-        v-if="read.kind === 'ready' && read.binding === photo?.key"
-        :src="read.dataUrl"
-        alt=""
-      >
-      <p>{{ previewText() }}</p>
-    </div>
+      <div class="size-32 rounded-lg border bg-muted">
+        <img
+          v-if="read.kind === 'ready' && read.binding === photo?.key"
+          data-photo-image
+          class="size-full rounded-lg object-cover"
+          :src="read.dataUrl"
+          alt=""
+        >
+        <ImageOff
+          v-else
+          aria-hidden="true"
+          class="size-8 text-muted-foreground"
+        />
+      </div>
+      <p class="text-sm text-muted-foreground">
+        {{ previewText() }}
+      </p>
+    </Card>
 
-    <p
+    <StatusBanner
       v-if="statusText() !== undefined"
-      role="status"
+      :kind="statusKind()"
     >
       {{ statusText() }}
-    </p>
-    <p
+    </StatusBanner>
+    <StatusBanner
       v-if="deleteStatus !== ''"
-      role="status"
+      kind="error"
     >
       {{ deleteStatus }}
-    </p>
-    <button
+    </StatusBanner>
+    <Button
       v-if="retryCommandId !== undefined && opaque === null"
       data-action="retry-photo"
+      size="sm"
       type="button"
       @click="retryPhoto"
     >
       Retry photo request
-    </button>
-    <div
+    </Button>
+    <Card
       v-if="opaque !== null"
       data-photo-outcome
     >
       <p>We could not confirm whether the upload changed your photo.</p>
       <p>{{ observedText() }}</p>
-      <label>
-        Select a replacement photo
-        <input
+      <Label
+        class="flex cursor-pointer flex-col items-center gap-1 rounded-lg
+          border border-dashed p-4 text-sm hover:bg-accent"
+        :for="uploadId"
+      >
+        <Upload
+          aria-hidden="true"
+          class="size-5 text-muted-foreground"
+        />
+        <span>Select a replacement photo</span>
+        <Input
+          :id="uploadId"
           accept="image/jpeg,image/png"
+          class="sr-only"
+          data-action="upload-photo-input"
           type="file"
           @change="upload"
-        >
-      </label>
-      <button
+        />
+      </Label>
+      <Button
         data-action="keep-observed"
+        size="sm"
         type="button"
+        variant="ghost"
         @click="keepObserved"
       >
         Keep observed photo
-      </button>
-      <button
+      </Button>
+      <Button
         data-action="replace"
+        size="sm"
         type="button"
+        variant="ghost"
         :disabled="opaqueReplacement === null"
         @click="replaceObserved"
       >
         Replace photo
-      </button>
-    </div>
+      </Button>
+    </Card>
     <template v-if="opaque === null">
-      <label>
-        {{ photo === undefined ? "Upload photo" : "Replace photo" }}
-        <input
+      <Label
+        class="flex cursor-pointer flex-col items-center gap-1 rounded-lg
+          border border-dashed p-4 text-sm hover:bg-accent"
+        :for="uploadId"
+      >
+        <Upload
+          aria-hidden="true"
+          class="size-5 text-muted-foreground"
+        />
+        <span class="font-medium">
+          {{ photo === undefined ? 'Upload photo' : 'Replace photo' }}
+        </span>
+        <span class="text-xs text-muted-foreground">
+          JPEG or PNG, up to 2 MB.
+        </span>
+        <Input
+          :id="uploadId"
           accept="image/jpeg,image/png"
+          class="sr-only"
+          data-action="upload-photo-input"
           type="file"
           @change="upload"
-        >
-      </label>
+        />
+      </Label>
 
       <template v-if="photo !== undefined">
-        <button
+        <Button
           data-action="delete"
+          size="sm"
           type="button"
+          variant="ghost"
           @click="requestDelete"
         >
           Delete photo
-        </button>
-        <div
-          v-if="pendingDeleteBinding !== null"
-          aria-describedby="photo-delete-description"
-          aria-labelledby="photo-delete-title"
-          aria-modal="true"
-          role="alertdialog"
-          @keydown="trapDeleteFocus"
-        >
-          <h3 id="photo-delete-title">
-            Delete photo
-          </h3>
-          <p id="photo-delete-description">
-            Delete the current photo?
-          </p>
-          <button
-            ref="confirmDeleteButton"
-            data-action="confirm-delete"
-            type="button"
-            @click="confirmDelete"
-          >
-            Delete photo
-          </button>
-          <button
-            data-action="cancel-delete"
-            type="button"
-            @click="cancelDelete"
-          >
-            Cancel
-          </button>
-        </div>
-        <CropEditor
-          v-if="read.kind === 'ready' && read.binding === photo.key"
-          :actions="actions"
-          :crop="photo.crop"
-          :photo-key="photo.key"
-          :photo-url="read.dataUrl"
+        </Button>
+        <ConfirmDialog
+          :open="pendingDeleteBinding !== null"
+          title="Delete photo"
+          description="Delete the current photo?"
+          confirm-label="Delete photo"
+          destructive
+          confirm-action="confirm-delete"
+          cancel-action="cancel-delete"
+          @confirm="confirmDelete"
+          @cancel="cancelDelete"
         />
+        <Card v-if="read.kind === 'ready' && read.binding === photo.key">
+          <CropEditor
+            :actions="actions"
+            :crop="photo.crop"
+            :photo-key="photo.key"
+            :photo-url="read.dataUrl"
+          />
+        </Card>
       </template>
-      <div
+      <StatusBanner
         v-if="cropConflict !== undefined"
-        role="alert"
+        kind="info"
       >
         <p>The photo changed. Reopen crop against the current photo.</p>
-        <button
+        <Button
           data-action="reopen-crop"
           type="button"
           @click="reopenCrop"
         >
           Reopen crop
-        </button>
-      </div>
+        </Button>
+      </StatusBanner>
     </template>
-  </section>
+  </InspectorPanel>
 </template>

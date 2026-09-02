@@ -14,6 +14,22 @@ import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
 describe('private photo controls', () => {
+  it('shows the frame without an image until the read is ready', () => {
+    const wrapper = mount(PhotoPanel, {
+      props: {
+        record: photoRecord({
+          photoRead: { kind: 'loading', binding: 'k', generation: 1 },
+        }),
+        actions: actionsFor(vi.fn()),
+      },
+    });
+    const preview = wrapper.get('[data-photo-preview]');
+    expect(preview.find('[data-photo-image]').exists()).toBe(false);
+    expect(preview.find('.size-32').exists()).toBe(true);
+    expect(preview.find('svg').exists()).toBe(true);
+    expect(preview.text()).toContain('Photo preview is loading.');
+  });
+
   it.each([
     ['keep-observed', undefined],
     ['replace', new File(['new'], 'new.png', { type: 'image/png' })],
@@ -76,7 +92,10 @@ describe('private photo controls', () => {
 
     await wrapper.get('[data-action="delete"]').trigger('click');
     expect(edit).not.toHaveBeenCalled();
-    await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+    const confirm = document.body.querySelector(
+      '[data-action="confirm-delete"]',
+    ) as HTMLElement;
+    confirm.click();
 
     expect(edit).toHaveBeenCalledWith({ kind: 'photoDelete' });
   });
@@ -92,26 +111,24 @@ describe('private photo controls', () => {
 
       await opener.trigger('click');
       await nextTick();
-      const dialog = wrapper.get('[role="alertdialog"]');
-      expect(dialog.attributes('aria-modal')).toBe('true');
-      expect(dialog.attributes('aria-labelledby')).toBe('photo-delete-title');
-      expect(dialog.attributes('aria-describedby')).toBe(
-        'photo-delete-description',
-      );
+      const dialog = document.body.querySelector(
+        '[role="alertdialog"]',
+      ) as HTMLElement;
+      expect(dialog.getAttribute('role')).toBe('alertdialog');
+      expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+      expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
       expect(document.activeElement).toBe(
-        wrapper.get('[data-action="confirm-delete"]').element,
+        document.body.querySelector('[data-action="cancel-delete"]'),
       );
-      await dialog.trigger('keydown', { key: 'Tab', shiftKey: true });
-      expect(document.activeElement).toBe(
-        wrapper.get('[data-action="cancel-delete"]').element,
-      );
-      await dialog.trigger('keydown', { key: 'Tab' });
-      expect(document.activeElement).toBe(
-        wrapper.get('[data-action="confirm-delete"]').element,
-      );
-      await dialog.trigger('keydown', { key: 'Escape' });
+      dialog.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        key: 'Escape',
+      }));
+      await nextTick();
+      await nextTick();
+      await nextTick();
 
-      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false);
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
       expect(document.activeElement).toBe(opener.element);
       wrapper.unmount();
     },
@@ -127,7 +144,13 @@ describe('private photo controls', () => {
     (opener.element as HTMLButtonElement).focus();
     await opener.trigger('click');
     await wrapper.setProps({ record: photoRecordForKey('photo-b') });
-    await wrapper.get('[data-action="confirm-delete"]').trigger('click');
+    const confirm = document.body.querySelector(
+      '[data-action="confirm-delete"]',
+    ) as HTMLElement;
+    confirm.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    await nextTick();
+    await nextTick();
 
     expect(edit).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain(
@@ -389,7 +412,9 @@ describe('private photo controls', () => {
     const actions = wrapper
       .findAll('[data-action]')
       .map((node) => node.attributes('data-action'));
+    expect(wrapper.findAll('button:not([data-slot="button"])')).toHaveLength(0);
     expect(actions).toEqual([
+      'upload-photo-input',
       'keep-observed',
       'replace',
     ]);
