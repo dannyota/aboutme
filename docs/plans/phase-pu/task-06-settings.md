@@ -19,7 +19,8 @@
   show `Revoke` (`data-testid="revoke-button"`). `Log out everywhere`
   (`data-testid="revoke-all-button"`) sits in the card footer as
   `Button variant="outline"`. Every action stays disabled without a CSRF token.
-  The user-agent string renders as text in `text-muted-foreground`.
+  The table uses fixed layout, and the user-agent string renders as wrapping,
+  breakable text in `text-muted-foreground` so the other columns remain visible.
 - `revoke-error`, `link-error`, and `reauth-prompt` render through
   `StatusBanner kind="error"`; the reauth prompt keeps its inline
   `Sign in again with {provider}` button.
@@ -160,7 +161,7 @@ messages, `Could not revoke that session. Try again.`,
           >
         </CardHeader>
         <CardContent>
-          <Table>
+          <Table class="table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead>Device</TableHead>
@@ -176,8 +177,8 @@ messages, `Could not revoke that session. Try again.`,
                 :key="session.id"
                 :data-testid="`session-row-${session.id}`"
               >
-                <TableCell>
-                  <span class="text-muted-foreground">{{
+                <TableCell class="whitespace-normal">
+                  <span class="break-words text-muted-foreground">{{
                     session.ua ?? "Unknown device"
                   }}</span>
                   <Badge v-if="session.current" class="ml-2" variant="secondary"
