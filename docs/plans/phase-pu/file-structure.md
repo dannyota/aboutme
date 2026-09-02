@@ -222,13 +222,12 @@ changes".
 - `data-field="fullName"`, `data-field="headline"`, `data-issue`;
   `data-detail-index`, `data-detail-id`, `data-detail-type`,
   `data-detail-label`, `data-detail-value`, `data-detail-is-hidden`;
-  `data-action`: `unset-detail-label`, `move-detail-up`, `move-detail-down`,
-  `remove-detail`, `add-detail`, `unset-details`; `data-error`: `contact-url`,
-  `detail-limit`
+  `data-action`: `move-detail-up`, `move-detail-down`, `remove-detail`,
+  `add-detail`, `unset-details`; `data-error`: `contact-url`, `detail-limit`
 - Labels and texts: `Personal details`, `Full name`, `Headline`,
   `Contact details`, `Contact detail {n}`, `Type`, `Label`, `Value`,
   `Hide this detail`, `Move up`, `Move down`, `Remove detail`, `Add detail`,
-  `Remove contact list`, `Remove label`, `Use a lowercase https:// URL.`,
+  `Remove contact list`, `Use a lowercase https:// URL.`,
   `You can add up to 16 contact details.`
 
 ### Section panel and entries (T09)
@@ -236,9 +235,9 @@ changes".
 - `data-section-key`, `data-section-id-text`, `data-entry-id`,
   `data-entry-id-text`, `data-entry-field="{path}"`, `data-delete-dialog`,
   `data-issue`; `data-action`: `add-entry`, `toggle-hidden`, `delete-entry`,
-  `confirm-delete-entry`, `cancel-delete-entry`, `unset` on date fields;
-  `data-part`: `start-year`, `start-month`, `end-year`, `end-month`, `present`,
-  `year`, `month`; `data-error="date-order"`
+  `toggle-entry-fields`, `confirm-delete-entry`, `cancel-delete-entry`, `unset`
+  on date fields; `data-part`: `start-year`, `start-month`, `end-year`,
+  `end-month`, `present`, `year`, `month`; `data-error="date-order"`
 - `aria-label="Section issues"`, `aria-label="Rich-text controls"` with
   `role="toolbar"`, toolbar button `aria-label`s `Paragraph`, `Line break`,
   `Bold`, `Italic`, `Underline`, `Ordered list`, `Bullet list`, `Link`, `Unlink`
@@ -246,8 +245,9 @@ changes".
 - Labels: `Job title`, `Employer`, `Employer link`, `City`, `Country`,
   `Work description`, `Name`, `Level`, `Skill information`, `Degree`, `School`,
   `Hidden`, `Date range`, `Start year`, `Start month`, `End year`, `End month`,
-  `Present`, `Year`, `Month`; texts `Add entry`, `Delete entry`, `Delete`,
-  `Cancel`, `Entry {n}`, `Remove date range`, `Remove date`
+  `Present`, `Year`, `Month`, `Collapse entry fields`, `Expand entry fields`;
+  texts `Add entry`, `Delete entry`, `Delete`, `Cancel`, `Entry {n}`,
+  `Remove date range`, `Remove date`
 
 ### Structure and templates (T10)
 
