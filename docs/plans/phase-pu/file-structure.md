@@ -101,7 +101,8 @@ T08 and T09 remove every `clear` producer, then runs web typecheck before W5.
 - `.editor-shell`, `.editor-topbar`, `.editor-app-rail`, `.editor-outline`,
   `.editor-preview*`, `.editor-session-lost`, `.save-status`,
   `.editor-error-summary`, `.editor-conflicts` rules deleted from
-  `app/assets/css/editor.css`
+  `app/assets/css/editor.css`; the root `.editor-inspector` layout rule is also
+  deleted while its descendant form rules remain for T08–T12
 
 ## T08 — Personal details
 

@@ -21,7 +21,9 @@
 - Top bar: brand link, the title in `truncate text-sm font-semibold` with
   `data-resume-title`, `SaveStatus`, the two view buttons (`Button` with
   `variant` `default` when pressed else `outline`, `size="sm"`, `aria-pressed`,
-  `data-action`), `AccountMenu`, `ThemeToggle`.
+  `data-action`), `AccountMenu`, `ThemeToggle`. It remains one row inside the
+  fixed `4rem` shell row at the `max-[72rem]` breakpoint; no child creates an
+  implicit second row.
 - Rail: `IconButton`s with the existing `aria-label`s, `pressed` bound to the
   inspector kind, and `data-action="open-{kind}"` where kind is `document`,
   `structure`, `design`, `templates`, `photo`; the settings link is `NuxtLink`
@@ -32,12 +34,13 @@
   `data-outline-key`, `aria-current`, and
   `aria-[current=page]:bg-positive/15 aria-[current=page]:text-foreground`; the
   footer `+ Add section` is `Button variant="outline"`.
-- Preview region: `PreviewToolbar` above `EditorPreview`; `EditorPreview` gains
-  a `zoom: 'fit' | 'full'` prop and applies
-  `[zoom:0.84] max-[72rem]:[zoom:0.72]` or `[zoom:1]` on the document wrapper;
-  the canvas is `overflow-auto bg-muted p-6` and the document wrapper
-  `mx-auto w-fit shadow-md`. The photo notice from T02 moves into the toolbar
-  `Badge`; `EditorPreview` keeps only the render-failure notice.
+- Preview region: a `grid-rows-[auto_minmax(0,1fr)]` grid holds `PreviewToolbar`
+  above `EditorPreview`, so the preview consumes the remaining height without
+  extending below the shell; `EditorPreview` gains a `zoom: 'fit' | 'full'` prop
+  and applies `[zoom:0.84] max-[72rem]:[zoom:0.72]` or `[zoom:1]` on the
+  document wrapper; the canvas is `overflow-auto bg-muted p-6` and the document
+  wrapper `mx-auto w-fit shadow-md`. The photo notice from T02 moves into the
+  toolbar `Badge`; `EditorPreview` keeps only the render-failure notice.
 - Inspector: `overflow-auto border-l bg-card p-4` holding `ErrorSummary`,
   `ConflictPanel`, then the active panel. `ErrorSummary` renders
   `StatusBanner kind="error" title="Check these fields"` with the issue buttons
@@ -209,7 +212,10 @@ Everything under "Editor shell" in the retained hooks list, the eight
 
 - [ ] **`[id].vue` template** per the contract.
 
-- [ ] Delete the rules listed for T07 from `app/assets/css/editor.css`.
+- [ ] Delete the rules listed for T07 from `app/assets/css/editor.css`. Also
+      delete the root `.editor-inspector` layout rule, including its obsolete
+      `grid-area: inspector`; retain the descendant inspector form rules until
+      their owning surface tasks replace them.
 
 - [ ] GREEN:
 
