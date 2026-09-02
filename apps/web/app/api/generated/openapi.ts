@@ -98,7 +98,7 @@ export interface paths {
         };
         /**
          * Begin "Sign in with Google"
-         * @description Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to Google's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/google/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to Google's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/google/callback` consumes.
          *
          *     A `HEAD` request is rejected with `405`, not treated as a bodyless `GET`, because a successful request creates a database-backed transaction. `GET` accepts only the login purpose. A `link` or `reauth` purpose returns `405` with `Allow: POST` before a session lookup, database write, or cookie is set.
          */
@@ -106,7 +106,7 @@ export interface paths {
         put?: never;
         /**
          * Begin a Google link or reauthentication
-         * @description Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns Google's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/google/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns Google's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/google/callback` consumes.
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
@@ -128,7 +128,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with Google"
-         * @description Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves or creates the local user or attaches the identity to an already-authenticated one, depending on the transaction's own `purpose` (set at `/auth/google/start`):
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves or creates the local user or attaches the identity to an already-authenticated one, depending on the transaction's own `purpose` (set at `/auth/google/start`):
          *
          *     - `purpose=login` (default): requires `email_verified == true`,
          *       then resolves the identity — an already-linked identity signs
@@ -185,13 +185,13 @@ export interface paths {
         };
         /**
          * Begin "Sign in with GitHub"
-         * @description Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
          */
         get: operations["getAuthGitHubStart"];
         put?: never;
         /**
          * Begin a GitHub link or reauthentication
-         * @description Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns GitHub's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/github/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns GitHub's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/github/callback` consumes.
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
@@ -213,7 +213,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with GitHub"
-         * @description Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code, and — for `purpose=login` only — fetches the authenticated user's verified primary email from GitHub's REST API (AC-AUTH-003) — deliberately plain OAuth2, never OIDC: no ID token, no issuer/audience/ signature/nonce to verify. `purpose=link`/`reauth` never fetches email at all (no email check for linking — see below). Otherwise follows the exact same purpose-dependent resolution and always-redirect contract as `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code, and — for `purpose=login` only — fetches the authenticated user's verified primary email from GitHub's REST API (AC-AUTH-003) — deliberately plain OAuth2, never OIDC: no ID token, no issuer/audience/ signature/nonce to verify. `purpose=link`/`reauth` never fetches email at all (no email check for linking — see below). Otherwise follows the exact same purpose-dependent resolution and always-redirect contract as `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets.
          */
         get: operations["getAuthGitHubCallback"];
         put?: never;
@@ -233,13 +233,13 @@ export interface paths {
         };
         /**
          * Begin "Sign in with LinkedIn"
-         * @description Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
          */
         get: operations["getAuthLinkedInStart"];
         put?: never;
         /**
          * Begin a LinkedIn link or reauthentication
-         * @description Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns LinkedIn's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/linkedin/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns LinkedIn's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/linkedin/callback` consumes.
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
@@ -261,7 +261,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with LinkedIn"
-         * @description Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves the local user per `purpose`, exactly like `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets, with ONE LinkedIn-specific difference: `purpose=login`'s registration path (an UNKNOWN identity only — an existing identity's repeat login never re-checks email at all, matching every other provider) requires a verified email exactly like Google, EXCEPT LinkedIn's OIDC `email`/`email_verified` claims are OPTIONAL — an absent `email_verified` claim is never treated as true (AC-AUTH-002). `purpose=link`/`reauth` never checks email; linking an existing account remains allowed without a verified email.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this path returns the uniform not-found response (ADR 0027). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves the local user per `purpose`, exactly like `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets, with ONE LinkedIn-specific difference: `purpose=login`'s registration path (an UNKNOWN identity only — an existing identity's repeat login never re-checks email at all, matching every other provider) requires a verified email exactly like Google, EXCEPT LinkedIn's OIDC `email`/`email_verified` claims are OPTIONAL — an absent `email_verified` claim is never treated as true (AC-AUTH-002). `purpose=link`/`reauth` never checks email; linking an existing account remains allowed without a verified email.
          */
         get: operations["getAuthLinkedInCallback"];
         put?: never;
@@ -286,6 +286,26 @@ export interface paths {
          *     The CSRF token is returned **only** here, in the response body — never in a header, cookie, URL, or log line. A client must echo it back on the `X-CSRF-Token` header for every mutating cookie-authenticated request (see the `csrfToken` security scheme).
          */
         get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which optional sign-in and agent surfaces this deployment enables
+         * @description Unauthenticated read of the two configuration flags the web needs before it renders a sign-in or settings page: `providerLogin` (`PROVIDER_LOGIN_ENABLED`) and `agentAccess` (`MCP_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
+         */
+        get: operations["getCapabilities"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1027,6 +1047,12 @@ export interface components {
             avatarKey: string | null;
             /** @description Whether the account has a password credential. A provider-only account is `false` until a password is added. */
             hasPassword: boolean;
+        };
+        Capabilities: {
+            /** @description Google, GitHub, and LinkedIn login and linking routes are registered. */
+            providerLogin: boolean;
+            /** @description The OAuth authorization server, `/mcp`, and connected-agent settings are registered. */
+            agentAccess: boolean;
         };
         /**
          * @description One linked OAuth provider identity. `GET /me` exposes only the provider itself — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client.
@@ -3625,6 +3651,36 @@ export interface operations {
                      *     }
                      */
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The enabled optional surfaces. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "providerLogin": false,
+                     *         "agentAccess": false
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Envelope"] & {
+                        data?: components["schemas"]["Capabilities"];
+                    };
                 };
             };
         };

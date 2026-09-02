@@ -15,10 +15,27 @@ import (
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
+	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 )
+
+func TestCapabilitiesRegistrarReflectsConfig(t *testing.T) {
+	t.Parallel()
+	cfg := config.Config{ProviderLoginEnabled: true}
+	cfg.AgentAccess.Enabled = false
+	mux := http.NewServeMux()
+	capabilitiesRegistrar(cfg)(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/capabilities", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := rec.Body.String(); got != "{\"data\":{\"providerLogin\":true,\"agentAccess\":false}}\n" {
+		t.Fatalf("body = %q", got)
+	}
+}
 
 func TestAgentRoutesFollowPublicRootRegistryAndDisableCleanly(t *testing.T) {
 	t.Parallel()
