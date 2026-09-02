@@ -100,20 +100,24 @@ func openTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close database: %v", err)
+		}
+	})
 	return db
 }
 
-func countRows(t *testing.T, db *sql.DB, query string, args ...any) int {
+func countRows(ctx context.Context, t *testing.T, db *sql.DB, query string, args ...any) int {
 	t.Helper()
 	var n int
-	if err := db.QueryRowContext(context.Background(), query, args...).Scan(&n); err != nil {
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
 		t.Fatalf("%s: %v", query, err)
 	}
 	return n
 }
 
-func deleteSeedTestRows(t *testing.T, ctx context.Context, db *sql.DB) {
+func deleteSeedTestRows(ctx context.Context, t *testing.T, db *sql.DB) {
 	t.Helper()
 	if _, err := db.ExecContext(ctx, `DELETE FROM resumes WHERE id = $1`, seedResumeID); err != nil {
 		t.Errorf("delete seed resume: %v", err)
@@ -129,24 +133,28 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	if err := runCleanupWithDB(ctx, db); err != nil {
 		t.Fatalf("pre-clean: %v", err)
 	}
-	t.Cleanup(func() { _ = runCleanupWithDB(ctx, db) })
+	t.Cleanup(func() {
+		if err := runCleanupWithDB(ctx, db); err != nil {
+			t.Errorf("cleanup seed rows: %v", err)
+		}
+	})
 
 	for i := 0; i < 2; i++ {
 		if err := runSeedWithDB(ctx, db); err != nil {
 			t.Fatalf("seed run %d: %v", i+1, err)
 		}
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID); n != 1 {
 		t.Fatalf("users = %d, want 1", n)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 1 {
 		t.Fatalf("credentials = %d, want 1", n)
 	}
 	var originalHash []byte
 	if err := db.QueryRowContext(ctx, `SELECT encoded_hash FROM password_credentials WHERE user_id = $1`, seedUser.ID).Scan(&originalHash); err != nil {
 		t.Fatalf("read original credential hash: %v", err)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND live = false AND slug IS NULL AND revision = 1 AND schema_version = 2`, seedResumeID, seedUser.ID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND live = false AND slug IS NULL AND revision = 1 AND schema_version = 2`, seedResumeID, seedUser.ID); n != 1 {
 		t.Fatalf("seed resume rows = %d, want 1 private v2 resume at revision 1", n)
 	}
 
@@ -164,14 +172,14 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	if !bytes.Equal(originalHash, reseededHash) {
 		t.Fatal("re-seed overwrote an existing credential hash")
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = 'edited' AND revision = 7`, seedResumeID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = 'edited' AND revision = 7`, seedResumeID); n != 1 {
 		t.Fatal("re-seed overwrote an existing document")
 	}
 
 	if err := runCleanupWithDB(ctx, db); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID) + countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1`, seedResumeID); n != 0 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID) + countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1`, seedResumeID); n != 0 {
 		t.Fatalf("rows after cleanup = %d, want 0", n)
 	}
 }
@@ -179,8 +187,8 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 func TestSeedRefusesFixedIDOwnedByDifferentEmail(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
-	deleteSeedTestRows(t, ctx, db)
-	t.Cleanup(func() { deleteSeedTestRows(t, ctx, db) })
+	deleteSeedTestRows(ctx, t, db)
+	t.Cleanup(func() { deleteSeedTestRows(ctx, t, db) })
 
 	const otherEmail = "seed-id-collision@aboutme.invalid"
 	if _, err := db.ExecContext(ctx,
@@ -203,10 +211,10 @@ func TestSeedRefusesFixedIDOwnedByDifferentEmail(t *testing.T) {
 	if email != otherEmail || name != "Fixed ID collision" {
 		t.Fatalf("collision user = (%q, %q), want (%q, %q)", email, name, otherEmail, "Fixed ID collision")
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 0 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 0 {
 		t.Fatalf("credentials = %d, want 0", n)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1`, seedResumeID); n != 0 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1`, seedResumeID); n != 0 {
 		t.Fatalf("seed resumes = %d, want 0", n)
 	}
 }
@@ -214,7 +222,7 @@ func TestSeedRefusesFixedIDOwnedByDifferentEmail(t *testing.T) {
 func TestSeedAndCleanupRefuseFixedResumeIDOwnedByAnotherUser(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
-	deleteSeedTestRows(t, ctx, db)
+	deleteSeedTestRows(ctx, t, db)
 
 	const otherUserID = "5d000000-0000-4000-8000-0000000000fe"
 	const otherEmail = "seed-resume-collision@aboutme.invalid"
@@ -225,7 +233,7 @@ func TestSeedAndCleanupRefuseFixedResumeIDOwnedByAnotherUser(t *testing.T) {
 		if _, err := db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, otherUserID); err != nil {
 			t.Errorf("delete colliding resume owner: %v", err)
 		}
-		deleteSeedTestRows(t, ctx, db)
+		deleteSeedTestRows(ctx, t, db)
 	})
 
 	if _, err := db.ExecContext(ctx,
@@ -236,12 +244,13 @@ func TestSeedAndCleanupRefuseFixedResumeIDOwnedByAnotherUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("split resume document: %v", err)
 	}
-	if _, err := db.ExecContext(ctx, `
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO resumes
 			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
 			 schema_version, revision, personal_details, content, customization)
 		VALUES ($1, $2, 'Other resume', NULL, false, true, false, 2, 7, $3, $4, $5)`,
-		seedResumeID, otherUserID, personalDetails, content, customization); err != nil {
+		seedResumeID, otherUserID, personalDetails, content, customization)
+	if err != nil {
 		t.Fatalf("insert colliding resume: %v", err)
 	}
 
@@ -249,27 +258,27 @@ func TestSeedAndCleanupRefuseFixedResumeIDOwnedByAnotherUser(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "seed resume id is owned by a different user") {
 		t.Fatalf("runSeedWithDB error = %v, want fixed-resume refusal", err)
 	}
-	assertFixedResumeCollisionUnchanged(t, ctx, db, otherUserID, otherEmail)
+	assertFixedResumeCollisionUnchanged(ctx, t, db, otherUserID, otherEmail)
 
 	err = runCleanupWithDB(ctx, db)
 	if err == nil || !strings.Contains(err.Error(), "seed resume id is owned by a different user") {
 		t.Fatalf("runCleanupWithDB error = %v, want fixed-resume refusal", err)
 	}
-	assertFixedResumeCollisionUnchanged(t, ctx, db, otherUserID, otherEmail)
+	assertFixedResumeCollisionUnchanged(ctx, t, db, otherUserID, otherEmail)
 }
 
-func assertFixedResumeCollisionUnchanged(t *testing.T, ctx context.Context, db *sql.DB, otherUserID, otherEmail string) {
+func assertFixedResumeCollisionUnchanged(ctx context.Context, t *testing.T, db *sql.DB, otherUserID, otherEmail string) {
 	t.Helper()
-	if n := countRows(t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID); n != 0 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID); n != 0 {
 		t.Fatalf("seed users = %d, want 0", n)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 0 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 0 {
 		t.Fatalf("seed credentials = %d, want 0", n)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM users WHERE id = $1 AND email::text = $2 AND name = 'Fixed resume collision'`, otherUserID, otherEmail); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM users WHERE id = $1 AND email::text = $2 AND name = 'Fixed resume collision'`, otherUserID, otherEmail); n != 1 {
 		t.Fatalf("resume owners = %d, want unchanged row", n)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND title = 'Other resume' AND revision = 7`, seedResumeID, otherUserID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND title = 'Other resume' AND revision = 7`, seedResumeID, otherUserID); n != 1 {
 		t.Fatalf("colliding resumes = %d, want unchanged row", n)
 	}
 }
@@ -280,7 +289,7 @@ func TestCleanupRefusesWhenSeedUserOwnsNonSeedResume(t *testing.T) {
 	if err := runCleanupWithDB(ctx, db); err != nil {
 		t.Fatalf("pre-clean: %v", err)
 	}
-	t.Cleanup(func() { deleteSeedTestRows(t, ctx, db) })
+	t.Cleanup(func() { deleteSeedTestRows(ctx, t, db) })
 	if err := runSeedWithDB(ctx, db); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -312,10 +321,10 @@ func TestCleanupRefusesWhenSeedUserOwnsNonSeedResume(t *testing.T) {
 	if email != seedUser.Email || name != seedUser.Name {
 		t.Fatalf("seed user = (%q, %q), want (%q, %q)", email, name, seedUser.Email, seedUser.Name)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = $2 AND revision = 1`, seedResumeID, seedResumeTitle); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = $2 AND revision = 1`, seedResumeID, seedResumeTitle); n != 1 {
 		t.Fatalf("seed resumes = %d, want unchanged row", n)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = 'Developer resume' AND revision = 1`, extraResumeID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = 'Developer resume' AND revision = 1`, extraResumeID); n != 1 {
 		t.Fatalf("extra resumes = %d, want unchanged row", n)
 	}
 	var retainedHash []byte
@@ -337,7 +346,11 @@ func TestSeedFailsWhenEmailBelongsToAnotherAccount(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, 'Other')`, other, seedUser.Email); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, other) })
+	t.Cleanup(func() {
+		if _, err := db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, other); err != nil {
+			t.Errorf("delete other user: %v", err)
+		}
+	})
 
 	err := runSeedWithDB(ctx, db)
 	if err == nil || !strings.Contains(err.Error(), "exists under a different id") {

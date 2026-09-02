@@ -143,19 +143,21 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 	}
 
 	var otherID uuid.NullUUID
-	if err := db.QueryRowContext(ctx,
+	err = db.QueryRowContext(ctx,
 		`SELECT id FROM users WHERE email = $1::citext AND id <> $2`, seedUser.Email, seedUser.ID,
-	).Scan(&otherID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	).Scan(&otherID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("check seed email: %w", err)
 	}
 	if otherID.Valid {
 		return fmt.Errorf("seed email %s exists under a different id; remove that account or change the seed", seedUser.Email)
 	}
 
-	if _, err := db.ExecContext(ctx,
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO users (id, email, name, avatar_key) VALUES ($1, $2, $3, NULL)
 		 ON CONFLICT (id) DO NOTHING`,
-		seedUser.ID, seedUser.Email, seedUser.Name); err != nil {
+		seedUser.ID, seedUser.Email, seedUser.Name)
+	if err != nil {
 		return fmt.Errorf("insert user: %w", err)
 	}
 
@@ -171,17 +173,19 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}
-	if _, err := db.ExecContext(ctx,
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO password_credentials (user_id, encoded_hash, created_at, changed_at)
 		 VALUES ($1, $2, now(), now())
 		 ON CONFLICT (user_id) DO NOTHING`,
-		seedUser.ID, []byte(encoded)); err != nil {
+		seedUser.ID, []byte(encoded))
+	if err != nil {
 		return fmt.Errorf("insert credential: %w", err)
 	}
 
 	var exists bool
-	if err := db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM resumes WHERE id = $1)`, seedResumeID).Scan(&exists); err != nil {
+	err = db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM resumes WHERE id = $1)`, seedResumeID).Scan(&exists)
+	if err != nil {
 		return fmt.Errorf("check resume: %w", err)
 	}
 	if exists {
@@ -193,12 +197,13 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	if _, err := db.ExecContext(ctx, `
+	_, err = db.ExecContext(ctx, `
 		INSERT INTO resumes
 			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
 			 schema_version, revision, personal_details, content, customization)
 		VALUES ($1, $2, $3, NULL, false, true, false, 2, 1, $4, $5, $6)`,
-		seedResumeID, seedUser.ID, seedResumeTitle, personalDetails, content, customization); err != nil {
+		seedResumeID, seedUser.ID, seedResumeTitle, personalDetails, content, customization)
+	if err != nil {
 		return fmt.Errorf("insert resume: %w", err)
 	}
 	return nil
@@ -211,7 +216,11 @@ func runCleanupWithDB(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("begin cleanup: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			fmt.Fprintln(os.Stderr, "dev-seed: rollback cleanup:", rollbackErr)
+		}
+	}()
 
 	var lockedUserEmail string
 	err = tx.QueryRowContext(ctx, `SELECT email::text FROM users WHERE id = $1 FOR UPDATE`, seedUser.ID).Scan(&lockedUserEmail)

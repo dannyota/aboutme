@@ -14,7 +14,7 @@ func TestCapabilitiesHandler_ReflectsFlagsAndRejectsOtherMethods(t *testing.T) {
 	h := api.CapabilitiesHandler(api.Capabilities{ProviderLogin: true, AgentAccess: false})
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/capabilities", nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/capabilities", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET status = %d, want 200", rec.Code)
 	}
@@ -30,7 +30,7 @@ func TestCapabilitiesHandler_ReflectsFlagsAndRejectsOtherMethods(t *testing.T) {
 
 	for _, method := range []string{http.MethodPost, http.MethodHead, http.MethodPut, http.MethodDelete} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/capabilities", nil))
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), method, "/api/v1/capabilities", nil))
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Errorf("%s status = %d, want 405", method, rec.Code)
 		}
@@ -43,7 +43,7 @@ func TestCapabilitiesHandler_IsNoStoreThroughTheRouter(t *testing.T) {
 		mux.Handle("/api/v1/capabilities", api.CapabilitiesHandler(api.Capabilities{}))
 	})
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/capabilities", nil))
+	handler.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/capabilities", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
