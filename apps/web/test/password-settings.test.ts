@@ -8,6 +8,9 @@ import {
   PasswordSettingsFailure,
 } from '../app/composables/passwordSettings';
 import type { AuthProvider } from '../app/composables/useAuth';
+import { registerCapabilities } from './support/capabilities';
+
+registerCapabilities();
 
 interface SettingsProps {
   hasPassword: boolean;

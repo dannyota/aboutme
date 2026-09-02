@@ -9,6 +9,7 @@ import {
   mapReauthStartError,
   mapSetPasswordError,
 } from '../../../composables/passwordSettings';
+import { useCapabilities } from '../../../composables/useCapabilities';
 
 interface SessionInfo {
   id: string;
@@ -41,6 +42,7 @@ const {
   mutate,
   refresh: refreshMe,
 } = useAuth();
+const { providerLogin, agentAccess } = useCapabilities();
 
 // Server-side rendering has neither the browser cookies nor the local proxy.
 const { data: sessionsResponse } = await useFetch<SessionsEnvelope>(
@@ -386,7 +388,7 @@ const linkErrorMessage = computed(() => {
     </button>
 
     <section
-      v-if="unlinkedProviders.length"
+      v-if="providerLogin && unlinkedProviders.length"
       class="add-provider"
     >
       <button
@@ -414,7 +416,7 @@ const linkErrorMessage = computed(() => {
       </ul>
     </section>
 
-    <ConnectedAgents />
+    <ConnectedAgents v-if="agentAccess" />
 
     <PasswordSettings
       :has-password="user?.hasPassword ?? false"

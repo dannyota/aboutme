@@ -7,6 +7,9 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { createError, readRawBody, setResponseStatus } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
+import { registerCapabilities } from './support/capabilities';
+
+registerCapabilities();
 
 // revoke-all (on success) and the current-session "Log out" button both
 // navigate away via `navigateTo` — stub it so tests can assert on the
@@ -652,5 +655,70 @@ describe('sessions.vue', () => {
           { external: true },
         );
       });
+  });
+});
+
+describe('sessions.vue capability gating', () => {
+  beforeEach(() => {
+    clearNuxtData();
+  });
+
+  it('hides the provider block when providerLogin is false', async () => {
+    registerCapabilities({ providerLogin: false, agentAccess: true });
+    const wrapper = await mountSuspended(SessionsPage);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('Add another sign-in provider');
+  });
+
+  it(
+    'hides Connected agents and never requests the grant list when agentAccess '
+    + 'is false',
+    async () => {
+      let agentRequests = 0;
+      registerEndpoint('/api/v1/me/agents', () => {
+        agentRequests += 1;
+        return { data: { grants: [] } };
+      });
+      registerCapabilities({ providerLogin: true, agentAccess: false });
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+      expect(wrapper.text()).not.toContain('Connected agents');
+      expect(agentRequests).toBe(0);
+      // Sessions and password remain.
+      expect(wrapper.text()).toContain('Signed-in devices');
+      expect(wrapper.text()).toContain('Password');
+    },
+  );
+
+  it('hides provider and agent blocks while capabilities are pending',
+    async () => {
+      let release!: (body: unknown) => void;
+      registerEndpoint('/api/v1/me/agents', () => ({
+        data: { grants: [] },
+      }));
+      registerEndpoint('/api/v1/capabilities', () => new Promise((resolve) => {
+        release = () => resolve({
+          data: { providerLogin: true, agentAccess: true },
+        });
+      }));
+      const wrapper = await mountSuspended(SessionsPage);
+      expect(wrapper.text()).not.toContain('Add another sign-in provider');
+      expect(wrapper.text()).not.toContain('Connected agents');
+      release({
+        data: { providerLogin: true, agentAccess: true },
+      });
+      await flushPromises();
+      await flushPromises();
+      expect(wrapper.text()).toContain('Add another sign-in provider');
+      expect(wrapper.text()).toContain('Connected agents');
+    });
+
+  it('shows both blocks when both flags are true', async () => {
+    registerEndpoint('/api/v1/me/agents', () => ({ data: { grants: [] } }));
+    registerCapabilities({ providerLogin: true, agentAccess: true });
+    const wrapper = await mountSuspended(SessionsPage);
+    await flushPromises();
+    expect(wrapper.text()).toContain('Add another sign-in provider');
+    expect(wrapper.text()).toContain('Connected agents');
   });
 });

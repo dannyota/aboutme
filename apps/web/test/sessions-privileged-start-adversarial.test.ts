@@ -7,6 +7,9 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { createError, readRawBody, setResponseStatus, type H3Event } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
+import { registerCapabilities } from './support/capabilities';
+
+registerCapabilities();
 
 mockNuxtImport('navigateTo', () => vi.fn());
 

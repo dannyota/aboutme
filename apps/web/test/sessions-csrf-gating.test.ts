@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
+import { registerCapabilities } from './support/capabilities';
+
+registerCapabilities();
 
 // Deliberately its own file, not a case inside sessions.test.ts:
 // `useFetch('/api/v1/me')`'s automatic initial fetch is keyed by URL and,

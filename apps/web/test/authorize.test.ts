@@ -9,8 +9,10 @@ import { setResponseStatus } from 'h3';
 import AuthorizePage from '../app/pages/authorize.vue';
 import LoginPage from '../app/pages/login.vue';
 import { OAuthConsentFailure } from '../app/composables/useOAuthConsent';
+import { registerCapabilities } from './support/capabilities';
 
 mockNuxtImport('navigateTo', () => vi.fn());
+registerCapabilities();
 
 const consentMocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -214,6 +216,7 @@ describe('login next preservation', () => {
         ? '/login'
         : `/login?next=${encodeURIComponent(next)}`;
       const wrapper = await mountSuspended(LoginPage, { route: path });
+      await flushPromises();
       expect(wrapper.get('a[href="/api/v1/auth/google/start"]').exists())
         .toBe(true);
       expect(wrapper.get('a[href="/api/v1/auth/github/start"]').exists())
@@ -224,6 +227,7 @@ describe('login next preservation', () => {
     const arrayWrapper = await mountSuspended(LoginPage, {
       route: '/login?next=%2Fone&next=%2Ftwo',
     });
+    await flushPromises();
     expect(arrayWrapper.get('a[href="/api/v1/auth/google/start"]').exists())
       .toBe(true);
   });
@@ -240,6 +244,7 @@ describe('login next preservation', () => {
       const wrapper = await mountSuspended(LoginPage, {
         route: `/login?next=${encodeURIComponent(next)}`,
       });
+      await flushPromises();
       const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'));
       for (const provider of ['google', 'github', 'linkedin']) {
         const prefix = `/api/v1/auth/${provider}/start`;
@@ -259,6 +264,7 @@ describe('login next preservation', () => {
       const wrapper = await mountSuspended(LoginPage, {
         route: `/login?next=${encodeURIComponent(next)}`,
       });
+      await flushPromises();
       const hrefs = wrapper.findAll('a').map((link) => link.attributes('href'));
       for (const provider of ['google', 'github', 'linkedin']) {
         expect(hrefs).toContain(
