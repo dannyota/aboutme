@@ -10,6 +10,9 @@ import {
 } from 'vue';
 
 import EditorShell from '../../../components/editor/EditorShell.vue';
+import EmptyState from '../../../components/app/EmptyState.vue';
+import LoadingState from '../../../components/app/LoadingState.vue';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   useResumeEditor,
   type ResumeEditorActions,
@@ -128,41 +131,54 @@ async function bytesToDataURL(
 <template>
   <EditorShell
     v-if="
-      loadState === 'ready'
-        && record !== undefined
-        && actions !== undefined
+      loadState === 'ready' && record !== undefined && actions !== undefined
     "
     :actions="actions"
     :record="record"
   />
   <main
     v-else
-    class="editor-route-state"
+    class="grid min-h-dvh place-content-center bg-background p-8 text-center
+      text-foreground"
   >
-    <p
+    <LoadingState
       v-if="loadState === 'loading'"
-      role="status"
-    >
-      Loading editor…
-    </p>
+      class="mx-auto w-full max-w-md"
+      label="Loading editor"
+    />
     <template v-else-if="loadState === 'unavailable'">
-      <h1>Resume unavailable</h1>
-      <p>This resume is not available.</p>
-      <NuxtLink to="/app/resumes"> Back to resumes </NuxtLink>
+      <EmptyState
+        title="Resume unavailable"
+        description="This resume is not available."
+      >
+        <template #action>
+          <NuxtLink
+            :class="buttonVariants({ variant: 'outline' })"
+            to="/app/resumes"
+          >
+            Back to resumes
+          </NuxtLink>
+        </template>
+      </EmptyState>
     </template>
     <template v-else>
-      <h1>Editor unavailable</h1>
-      <p>We could not open this resume. Try again.</p>
-      <button
-        type="button"
-        @click="
-          loadingStarted = false;
-          loadState = 'loading';
-          load();
-        "
+      <EmptyState
+        title="Editor unavailable"
+        description="We could not open this resume. Try again."
       >
-        Try again
-      </button>
+        <template #action>
+          <Button
+            type="button"
+            @click="
+              loadingStarted = false;
+              loadState = 'loading';
+              load();
+            "
+          >
+            Try again
+          </Button>
+        </template>
+      </EmptyState>
     </template>
   </main>
 </template>

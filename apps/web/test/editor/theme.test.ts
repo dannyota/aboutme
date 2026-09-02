@@ -181,7 +181,9 @@ describe('theme preference boundary', () => {
   it('uses Nova control states and readable inspector groups', async () => {
     const css = await readFile(editorCss, 'utf8');
 
-    expect(css).toContain('.editor-view-switcher button[aria-pressed="true"]');
+    expect(css).not.toContain(
+      '.editor-view-switcher button[aria-pressed="true"]',
+    );
     expect(css).toContain('.editor-inspector fieldset');
     expect(css).toContain('.editor-inspector ol');
     expect(css).toContain('.editor-inspector input[type="checkbox"]');

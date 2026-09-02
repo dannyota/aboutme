@@ -193,7 +193,7 @@
   font: inherit;
 }
 
-.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) button {
+.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) button:not([data-slot="button"]) {
   border: 1px solid transparent;
   border-radius: calc(var(--radius) - 0.15rem);
   padding: 0.5rem 0.75rem;
@@ -202,11 +202,11 @@
   cursor: pointer;
 }
 
-.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) button:hover:not(:disabled) {
+.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) button:not([data-slot="button"]):hover:not(:disabled) {
   filter: brightness(0.95);
 }
 
-.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) button:disabled {
+.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, .editor-outline, .editor-inspector) button:not([data-slot="button"]):disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }

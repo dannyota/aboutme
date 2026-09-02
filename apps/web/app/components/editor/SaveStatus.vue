@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { CheckCircle2, CircleAlert, CloudOff, LoaderCircle } from '@lucide/vue';
+import { computed } from 'vue';
 
+import { Badge } from '@/components/ui/badge';
 import type { SaveState } from '../../editor/types';
 
 const props = defineProps<{ readonly state: SaveState }>();
@@ -34,10 +36,11 @@ function assertNever(value: never): never {
 </script>
 
 <template>
-  <p
-    class="save-status"
+  <Badge
+    :class="state === 'saved' || state === 'idle' ? 'text-positive' : undefined"
     :data-state="state"
     role="status"
+    variant="outline"
   >
     <LoaderCircle
       v-if="state === 'saving'"
@@ -50,9 +53,9 @@ function assertNever(value: never): never {
       aria-hidden="true"
     />
     <CircleAlert
-      v-else-if="state === 'error'
-        || state === 'conflict'
-        || state === 'session-lost'"
+      v-else-if="
+        state === 'error' || state === 'conflict' || state === 'session-lost'
+      "
       :size="16"
       aria-hidden="true"
     />
@@ -62,5 +65,5 @@ function assertNever(value: never): never {
       aria-hidden="true"
     />
     <span>{{ text }}</span>
-  </p>
+  </Badge>
 </template>

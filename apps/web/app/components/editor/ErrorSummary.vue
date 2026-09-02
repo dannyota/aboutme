@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
 
+import { Button } from '@/components/ui/button';
+import StatusBanner from '../app/StatusBanner.vue';
 import type { ServerValidationIssue } from '../../editor/attempt';
 
 const props = defineProps<{
@@ -9,14 +11,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   focusIssue: [path: string];
 }>();
-const summary = ref<HTMLElement | null>(null);
+const summary = ref<{ focus?: () => void } | null>(null);
 
 watch(
   () => props.issues.map(({ path, code }) => `${path}:${code}`).join('|'),
   async (next, previous) => {
     if (next === '' || next === previous) return;
     await nextTick();
-    summary.value?.focus();
+    summary.value?.focus?.();
   },
 );
 
@@ -39,28 +41,28 @@ function safeText(code: string): string {
 </script>
 
 <template>
-  <section
+  <StatusBanner
     v-if="issues.length > 0"
     ref="summary"
     class="editor-error-summary"
-    aria-labelledby="editor-error-title"
-    tabindex="-1"
+    :focus-on-mount="false"
+    kind="error"
+    title="Check these fields"
   >
-    <h2 id="editor-error-title">
-      Check these fields
-    </h2>
     <ul>
       <li
         v-for="(issue, index) in issues"
         :key="`${issue.path}:${issue.code}:${index}`"
       >
-        <button
+        <Button
+          size="sm"
           type="button"
+          variant="link"
           @click="emit('focusIssue', issue.path)"
         >
           {{ safeText(issue.code) }}
-        </button>
+        </Button>
       </li>
     </ul>
-  </section>
+  </StatusBanner>
 </template>
