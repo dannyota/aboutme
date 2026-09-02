@@ -13,6 +13,8 @@ import {
   type PasswordAuthFailure,
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
+import AuthCard from '@/components/auth/AuthCard.vue';
+import StatusBanner from '@/components/app/StatusBanner.vue';
 
 useHead({
   meta: [{ name: 'referrer', content: 'no-referrer' }],
@@ -70,42 +72,37 @@ function copyFor(failure: PasswordAuthFailure): string {
 </script>
 
 <template>
-  <main class="aboutme-app">
-    <section class="app-page app-page--narrow">
-      <div class="login">
-        <h1>Verify your email</h1>
-
-        <div
-          v-if="status === 'error'"
-          data-testid="verify-error"
-          class="auth-error-summary"
-          role="alert"
-        >
-          {{ errorMessage }}
-        </div>
-
-        <div
-          v-else-if="status === 'success'"
-          data-testid="verify-success"
-          class="auth-success"
-          role="status"
-        >
-          Email verified. Sign in.
-        </div>
-
-        <p
-          v-else
-          class="auth-note"
-        >
-          Verifying your email address…
-        </p>
-
-        <p class="auth-note">
-          <NuxtLink to="/login">
-            Sign in
-          </NuxtLink>
-        </p>
-      </div>
-    </section>
-  </main>
+  <AuthCard
+    description="Follow the link in your email to verify your address."
+    title="Verify email"
+  >
+    <StatusBanner
+      v-if="status === 'error'"
+      kind="error"
+      testid="verify-error"
+    >
+      {{ errorMessage }}
+    </StatusBanner>
+    <StatusBanner
+      v-else-if="status === 'success'"
+      kind="success"
+      testid="verify-success"
+    >
+      Email verified. Sign in.
+    </StatusBanner>
+    <p
+      v-else
+      class="text-sm text-muted-foreground"
+    >
+      Verifying your email address…
+    </p>
+    <template #footer>
+      <NuxtLink
+        class="text-primary underline-offset-4 hover:underline"
+        to="/login"
+      >
+        Sign in
+      </NuxtLink>
+    </template>
+  </AuthCard>
 </template>

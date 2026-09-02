@@ -13,6 +13,21 @@ mockNuxtImport('useHead', () => vi.fn());
 const TOKEN = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg';
 
 describe('verify-email.vue (fragment handling)', () => {
+  it('composes the auth card and shared error banner', async () => {
+    window.location.hash = '';
+    const wrapper = await mountSuspended(VerifyEmailPage);
+
+    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    expect(wrapper.get('[data-testid="verify-error"]').attributes('role')).toBe(
+      'alert',
+    );
+    expect(
+      wrapper.get('[data-testid="verify-error"]').attributes('tabindex'),
+    ).toBe(
+      '-1',
+    );
+  });
+
   beforeEach(() => {
     vi.mocked(useHead).mockClear();
     window.location.hash = '';

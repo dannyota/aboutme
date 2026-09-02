@@ -14,16 +14,23 @@
  * (for a page's submit-time check) but never submitted by any parent, and no
  * strength score or character-class hint is ever rendered.
  */
-const props = withDefaults(defineProps<{
-  id: string;
-  label: string;
-  autocomplete: 'current-password' | 'new-password';
-  confirm?: boolean;
-  confirmLabel?: string;
-}>(), {
-  confirm: false,
-  confirmLabel: 'Confirm password',
-});
+import { Button } from '@/components/ui/button';
+import FormField from '@/components/app/FormField.vue';
+import { Input } from '@/components/ui/input';
+
+const props = withDefaults(
+  defineProps<{
+    id: string;
+    label: string;
+    autocomplete: 'current-password' | 'new-password';
+    confirm?: boolean;
+    confirmLabel?: string;
+  }>(),
+  {
+    confirm: false,
+    confirmLabel: 'Confirm password',
+  },
+);
 
 const model = defineModel<string>({ default: '' });
 
@@ -33,49 +40,66 @@ const visible = ref(false);
 const inputType = computed(() => (visible.value ? 'text' : 'password'));
 
 const confirmMismatch = computed(
-  () => props.confirm
-    && confirmValue.value !== '' && confirmValue.value !== model.value,
+  () =>
+    props.confirm
+    && confirmValue.value !== ''
+    && confirmValue.value !== model.value,
 );
 
 defineExpose({ confirmValue, confirmMismatch });
+
+function toggleVisibility(): void {
+  visible.value = !visible.value;
+}
 </script>
 
 <template>
-  <div class="auth-field">
-    <label :for="id">{{ label }}</label>
-    <div class="auth-field__input">
-      <input
-        :id="id"
+  <FormField
+    :id="id"
+    v-slot="{ id: fieldId, describedBy, invalid }"
+    :label="label"
+  >
+    <div class="flex gap-2">
+      <Input
+        :id="fieldId"
         v-model="model"
-        :type="inputType"
+        :aria-describedby="describedBy"
+        :aria-invalid="invalid"
         :autocomplete="autocomplete"
-      >
-      <button
+        :type="inputType"
+      />
+      <Button
+        size="sm"
         type="button"
-        class="auth-password-toggle"
-        :aria-pressed="visible"
+        variant="ghost"
         :aria-label="visible ? `Hide ${label}` : `Show ${label}`"
+        :aria-pressed="visible"
+        @click="toggleVisibility"
       >
-        {{ visible ? 'Hide' : 'Show' }}
-      </button>
+        {{ visible ? "Hide" : "Show" }}
+      </Button>
     </div>
 
     <template v-if="confirm">
-      <label :for="`${id}-confirm`">{{ confirmLabel }}</label>
-      <div class="auth-field__input auth-field__input--confirm">
-        <input
-          :id="`${id}-confirm`"
-          v-model="confirmValue"
-          :type="inputType"
-          autocomplete="new-password"
-        >
-      </div>
-      <p
-        v-if="confirmMismatch"
-        class="auth-field-error"
+      <FormField
+        :id="`${id}-confirm`"
+        v-slot="{
+          id: confirmId,
+          describedBy: confirmDescribedBy,
+          invalid: confirmInvalid,
+        }"
+        :error="confirmMismatch ? 'Passwords do not match.' : undefined"
+        :label="confirmLabel"
       >
-        Passwords do not match.
-      </p>
+        <Input
+          :id="confirmId"
+          v-model="confirmValue"
+          :aria-describedby="confirmDescribedBy"
+          :aria-invalid="confirmInvalid"
+          autocomplete="new-password"
+          :type="inputType"
+        />
+      </FormField>
     </template>
-  </div>
+  </FormField>
 </template>

@@ -196,6 +196,35 @@ describe('usePasswordAuth.register', () => {
 });
 
 describe('register.vue', () => {
+  it('composes the auth card and generated fields', async () => {
+    const wrapper = await mountSuspended(RegisterPage);
+
+    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    expect(wrapper.findAll('[data-slot="input"]').length).toBeGreaterThan(0);
+    expect(
+      wrapper
+        .findAll('[data-slot="input"]')
+        .every((input) => input.attributes('id') !== undefined),
+    ).toBe(true);
+  });
+
+  it('keeps password toggle semantics and native autofill', async () => {
+    const wrapper = await mountSuspended(RegisterPage);
+    const password = wrapper.get('#register-password');
+    const toggle = wrapper.get('[aria-label="Show Password"]');
+
+    expect(password.attributes('autocomplete')).toBe('new-password');
+    expect(toggle.attributes('aria-pressed')).toBe('false');
+    expect(toggle.text()).toBe('Show');
+    expect(wrapper.html()).not.toContain('@paste');
+
+    await toggle.trigger('click');
+    expect(password.attributes('type')).toBe('text');
+    expect(toggle.attributes('aria-pressed')).toBe('true');
+    expect(toggle.attributes('aria-label')).toBe('Hide Password');
+    expect(toggle.text()).toBe('Hide');
+  });
+
   it('renders name/email/password/confirm with correct autocomplete',
     async () => {
       const wrapper = await mountSuspended(RegisterPage);
@@ -211,7 +240,7 @@ describe('register.vue', () => {
       expect(wrapper.get('#register-password').attributes('type'))
         .toBe('password');
       // Root carries the Nova/Zinc/Emerald theme token wrapper.
-      expect(wrapper.get('main.aboutme-app').exists()).toBe(true);
+      expect(wrapper.get('[data-slot="card"]').exists()).toBe(true);
     });
 
   it('blocks submit with a local error when the passwords do not match',
@@ -231,7 +260,7 @@ describe('register.vue', () => {
       await wrapper.get('#register-password').setValue(validInput.password);
       await wrapper.get('#register-password-confirm')
         .setValue('a different password');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
       await flushPromises();
       expect(wrapper.get('[data-testid="register-error"]').text())
         .toContain('Passwords do not match');
@@ -255,7 +284,7 @@ describe('register.vue', () => {
       await wrapper.get('#register-password').setValue(validInput.password);
       await wrapper.get('#register-password-confirm')
         .setValue(validInput.password);
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
       await settle();
       expect(wrapper.get('[data-testid="register-success"]').text()).toBe(
         'Check your email to verify your address.',
@@ -288,7 +317,7 @@ describe('register.vue', () => {
       await wrapper.get('#register-email').setValue(validInput.email);
       await wrapper.get('#register-password').setValue('weak');
       await wrapper.get('#register-password-confirm').setValue('weak');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
       await flushPromises();
       expect(wrapper.get('[data-testid="register-error"]').text())
         .toContain(fragment);
@@ -311,7 +340,7 @@ describe('register.vue', () => {
       await wrapper.get('#register-email').setValue(validInput.email);
       await wrapper.get('#register-password').setValue('a');
       await wrapper.get('#register-password-confirm').setValue('a');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
       await flushPromises();
       // No character-class or strength hint is ever rendered.
       expect(wrapper.html()).not.toMatch(
@@ -340,9 +369,9 @@ describe('register.vue', () => {
       await wrapper.get('#register-password').setValue(validInput.password);
       await wrapper.get('#register-password-confirm')
         .setValue(validInput.password);
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
       await flushPromises();
-      const button = wrapper.get('button[type="submit"]');
+      const button = wrapper.get('[data-slot="button"][type="submit"]');
       expect(button.attributes('disabled')).toBeDefined();
       expect(button.text()).toContain('Creating account');
       resolveRequest();
@@ -374,7 +403,7 @@ describe('register.vue', () => {
     await wrapper.get('#register-email').setValue(validInput.email);
     await wrapper.get('#register-password').setValue('weak');
     await wrapper.get('#register-password-confirm').setValue('weak');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="register-form"]').trigger('submit');
     await settle();
     const summary = wrapper.get('[data-testid="register-error"]');
     expect(summary.attributes('tabindex')).toBe('-1');
@@ -382,19 +411,12 @@ describe('register.vue', () => {
   });
 });
 
-describe('auth.css theme tokens', () => {
-  it('uses only the Nova/Zinc/Emerald tokens, no hard-coded colors',
-    () => {
-      const source = readFileSync(
-        join(webRoot, 'app/assets/css/auth.css'),
-        'utf8',
-      );
-      expect(source).toContain('var(--background)');
-      expect(source).toContain('var(--input)');
-      expect(source).toContain('var(--primary)');
-      expect(source).toContain('var(--positive)');
-      expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-      expect(source).not.toMatch(/oklch\(/);
-      expect(source).not.toMatch(/data-theme/);
-    });
+describe('auth.css cleanup', () => {
+  it('has no legacy authentication rules', () => {
+    const source = readFileSync(
+      join(webRoot, 'app/assets/css/auth.css'),
+      'utf8',
+    );
+    expect(source).toBe('');
+  });
 });
