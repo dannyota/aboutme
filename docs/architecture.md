@@ -1,7 +1,7 @@
 # Current-state architecture
 
 This document describes the current integration candidate, verified on
-2026-09-02. The [design](design/README.md) owns intended behavior.
+2026-09-03. The [design](design/README.md) owns intended behavior.
 
 ## Running system
 
@@ -104,12 +104,15 @@ and the revoked token's closed 401 over the trusted local HTTPS origin. The
 proof writes only bounded boolean/error-count evidence and cleans its reserved
 user, resume, client, grant, code, and token rows.
 
-The web shell renders a signed-out variant (Sign in, Create account) until the
-session read resolves and a signed-in variant (Resumes, Settings, account)
-afterward. The login and settings pages show provider and connected-agent
-controls only when the capabilities read enables them. Local native development
-and HTTPS proof commands seed one account and one private sample resume; Compose
-and cloud never run the seed.
+The application chrome uses Tailwind without Preflight and a generated
+shadcn-vue/Reka primitive layer. Shared application composites provide the
+accessible fields, status regions, menus, and dialogs used by pages and editor
+panels. The web shell renders a signed-out variant (Sign in, Create account)
+until the session read resolves and a signed-in variant (Resumes, Settings,
+account) afterward. The login and settings pages show provider and
+connected-agent controls only when the capabilities read enables them. Local
+native development and HTTPS proof commands seed one account and one private
+sample resume; Compose and cloud never run the seed.
 
 ## Implemented resume data layer
 
@@ -187,12 +190,17 @@ dispatch after one second of inactivity. A revision CAS reconciles stale writes,
 offers one safe rebase per conflict, and surfaces dedicated field, entry,
 reorder, structure, crop/photo, and destructive reconfirmation actions.
 Templates apply against optimistic state, preserve content, and emit a
-deterministic placement delta with exact partial recovery and guarded undo.
-Photos upload as raw bytes and are never previewed or decoded on the client;
-owner reads bind an in-memory data URL to the accepted photo key. The preview
-imports the pure renderer and never derives a photo URL from an object key.
-Session loss retains in-memory work for reauthentication; no browser storage or
-unload beacon holds resume data.
+deterministic placement delta with exact partial recovery and guarded undo. Text
+fields commit on blur or Enter, unset defined values when emptied, emit nothing
+when unchanged, and revert on Escape. Enumerations, checkboxes, switches,
+colors, and numbers commit on change. Generated primitives, shared application
+composites, and editor surfaces keep those controls and dialogs on one
+accessible component boundary. Photos upload as raw bytes and are never
+previewed or decoded on the client; owner reads bind an in-memory data URL to
+the accepted photo key. The preview imports the pure renderer, never derives a
+photo URL from an object key, and renders a photo-less projection while the
+owner read is loading or unavailable. Session loss retains in-memory work for
+reauthentication; no browser storage or unload beacon holds resume data.
 
 The editor's human-only Publish dialog keeps Public resume, PDF download, and
 SEO and GEO as separate choices. It flushes editor work before freezing the

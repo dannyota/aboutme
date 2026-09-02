@@ -6,19 +6,31 @@ npm workspace. Intended UI and renderer boundaries live in the
 
 ## Implemented surface
 
-- Server-rendered landing and login pages.
-- Client-side authenticated user state.
-- Session and device settings with CSRF-aware mutations.
+- Server-rendered entry, password-authentication, and public resume pages.
+- Client-side authenticated user state, resume list, and optimistic-save editor.
+- Session, device, and connected-agent settings with CSRF-aware mutations.
+- A pure resume renderer shared by the editor preview and public SSR.
 - A committed TypeScript API client generated from
   [`docs/api/openapi.yaml`](../../docs/api/openapi.yaml).
 
-The settings page still uses GET links to start provider linking and
-reauthentication. The implemented server contract requires authenticated POST,
-then navigation to the returned authorization URL. This P1.1 defect remains
-open.
+## UI conventions
 
-The editor, public resume pages, sanitizer, and shared resume renderer have not
-landed.
+The application UI has three layers:
+
+- Generated primitives live under `app/components/ui/`. Add them through
+  `scripts/ui-add.sh`; never hand-edit generated primitive files. Their
+  `data-slot` attributes mark primitive boundaries.
+- Shared application composites live under `app/components/app/`.
+- Pages and editor panels compose those layers into product surfaces.
+
+Text fields commit on blur or Enter. Empty text unsets a defined value,
+unchanged text emits nothing, and Escape restores the current model value.
+Enumerations, checkboxes, switches, colors, and numbers commit on change.
+
+Tests query accessible roles and labels first, then retained stable hooks. Do
+not couple tests to tags, utility classes, or list positions. Dialog and menu
+content teleports to `body`, so tests mount surfaces with a real body target and
+clean it after each case.
 
 ## API client
 
