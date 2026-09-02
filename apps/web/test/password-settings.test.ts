@@ -28,10 +28,7 @@ function makeActions(
   };
 }
 
-function mountSettings(
-  props: SettingsProps,
-  actions: PasswordSettingsActions,
-) {
+function mountSettings(props: SettingsProps, actions: PasswordSettingsActions) {
   return mountSuspended(PasswordSettings, {
     props,
     global: {
@@ -43,7 +40,8 @@ function mountSettings(
 }
 
 describe('PasswordSettings', () => {
-  it('shows the add action and no-password status for a provider-only user',
+  it(
+    'shows the add action and no-password status for a ' + 'provider-only user',
     async () => {
       const wrapper = await mountSettings(
         { hasPassword: false, providers: ['google', 'github'] },
@@ -51,6 +49,12 @@ describe('PasswordSettings', () => {
       );
       await flushPromises();
 
+      expect(wrapper.get('[data-testid="password-settings"] h2').text()).toBe(
+        'Password',
+      );
+      expect(
+        wrapper.find('[data-testid="password-settings"] [as]').exists(),
+      ).toBe(false);
       expect(wrapper.get('[data-testid="password-status"]').text()).toBe(
         'No password set.',
       );
@@ -58,11 +62,12 @@ describe('PasswordSettings', () => {
         'Add a password',
       );
       // Provider-only add never asks for a current password up front.
-      expect(wrapper.find('input[autocomplete="current-password"]').exists())
-        .toBe(false);
-    });
+      expect(wrapper.find('#password-current').exists()).toBe(false);
+    },
+  );
 
-  it('shows the change action and has-password status for a password user',
+  it(
+    'shows the change action and has-password status for a ' + 'password user',
     async () => {
       const wrapper = await mountSettings(
         { hasPassword: true, providers: ['google'] },
@@ -76,9 +81,11 @@ describe('PasswordSettings', () => {
       expect(wrapper.get('[data-testid="password-action"]').text()).toBe(
         'Change password',
       );
-    });
+    },
+  );
 
-  it('changes a password: reauth with current, then set the new one',
+  it(
+    'changes a password: reauth with current, then set the ' + 'new one',
     async () => {
       const actions = makeActions();
       const wrapper = await mountSettings(
@@ -92,7 +99,7 @@ describe('PasswordSettings', () => {
 
       // Reauth first: current password only.
       await wrapper.get('#password-current').setValue('current-secret');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       expect(actions.reauthenticate).toHaveBeenCalledWith('current-secret');
@@ -102,7 +109,7 @@ describe('PasswordSettings', () => {
       expect(wrapper.find('#password-new').exists()).toBe(true);
       await wrapper.get('#password-new').setValue('new-secret');
       await wrapper.get('#password-new-confirm').setValue('new-secret');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       // The confirmation value is component-local: only the new password
@@ -117,9 +124,11 @@ describe('PasswordSettings', () => {
       expect(wrapper.get('[data-testid="password-action"]').text()).toBe(
         'Change password',
       );
-    });
+    },
+  );
 
-  it('adds a password for a provider-only user and reports exact success',
+  it(
+    'adds a password for a provider-only user and reports exact ' + 'success',
     async () => {
       const actions = makeActions();
       const wrapper = await mountSettings(
@@ -135,7 +144,7 @@ describe('PasswordSettings', () => {
       // recent provider reauth is still required.
       await wrapper.get('#password-new').setValue('brand-new-password');
       await wrapper.get('#password-new-confirm').setValue('brand-new-password');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       expect(actions.setPassword).toHaveBeenCalledWith('brand-new-password');
@@ -145,7 +154,8 @@ describe('PasswordSettings', () => {
       expect(wrapper.get('[data-testid="password-success"]').text()).toBe(
         'Password added.',
       );
-    });
+    },
+  );
 
   it('shows incorrect-password copy when password reauth fails', async () => {
     const actions = makeActions({
@@ -162,7 +172,7 @@ describe('PasswordSettings', () => {
     await wrapper.get('[data-testid="password-action"]').trigger('click');
     await flushPromises();
     await wrapper.get('#password-current').setValue('wrong');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="password-form"]').trigger('submit');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
@@ -173,7 +183,8 @@ describe('PasswordSettings', () => {
     expect(wrapper.find('#password-new').exists()).toBe(false);
   });
 
-  it('recovers to password reauth when a change loses its reauth window',
+  it(
+    'recovers to password reauth when a change loses its reauth ' + 'window',
     async () => {
       const actions = makeActions({
         reauthenticate: vi.fn(async () => {}),
@@ -190,11 +201,11 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-action"]').trigger('click');
       await flushPromises();
       await wrapper.get('#password-current').setValue('current-secret');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
       await wrapper.get('#password-new').setValue('new-secret');
       await wrapper.get('#password-new-confirm').setValue('new-secret');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       // Back to the password-reauth step, with recovery copy.
@@ -203,9 +214,11 @@ describe('PasswordSettings', () => {
         'Sign in again',
       );
       expect(wrapper.emitted('updated')).toBeUndefined();
-    });
+    },
+  );
 
-  it('offers linked providers for reauth when an add needs provider reauth',
+  it(
+    'offers linked providers for reauth when an add needs provider ' + 'reauth',
     async () => {
       const actions = makeActions({
         setPassword: vi.fn(async () => {
@@ -221,25 +234,30 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-action"]').trigger('click');
       await flushPromises();
       await wrapper.get('#password-new').setValue('new-secret');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       // Only the linked providers are offered, each as a reauth target.
       expect(
-        wrapper.find('[data-testid="password-provider-reauth-google"]')
+        wrapper
+          .find('[data-testid="password-provider-reauth-google"]')
           .exists(),
       ).toBe(true);
       expect(
-        wrapper.find('[data-testid="password-provider-reauth-github"]')
+        wrapper
+          .find('[data-testid="password-provider-reauth-github"]')
           .exists(),
       ).toBe(true);
       expect(
-        wrapper.find('[data-testid="password-provider-reauth-linkedin"]')
+        wrapper
+          .find('[data-testid="password-provider-reauth-linkedin"]')
           .exists(),
       ).toBe(false);
-    });
+    },
+  );
 
-  it('starts the provider reauth round trip with the selected provider',
+  it(
+    'starts the provider reauth round trip with the selected ' + 'provider',
     async () => {
       const actions = makeActions({
         setPassword: vi.fn(async () => {
@@ -255,7 +273,7 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-action"]').trigger('click');
       await flushPromises();
       await wrapper.get('#password-new').setValue('new-secret');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       await wrapper
@@ -264,7 +282,8 @@ describe('PasswordSettings', () => {
       await flushPromises();
 
       expect(actions.startProviderReauth).toHaveBeenCalledWith('github');
-    });
+    },
+  );
 
   it('maps each closed policy issue to fixed copy', async () => {
     const cases = [
@@ -288,7 +307,7 @@ describe('PasswordSettings', () => {
       await wrapper.get('[data-testid="password-action"]').trigger('click');
       await flushPromises();
       await wrapper.get('#password-new').setValue('bad');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
 
       expect(wrapper.get('[data-testid="password-error"]').text()).toContain(
@@ -309,7 +328,7 @@ describe('PasswordSettings', () => {
     await flushPromises();
     await wrapper.get('#password-new').setValue('one-password');
     await wrapper.get('#password-new-confirm').setValue('different-password');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="password-form"]').trigger('submit');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
@@ -335,7 +354,7 @@ describe('PasswordSettings', () => {
     await wrapper.get('[data-testid="password-action"]').trigger('click');
     await flushPromises();
     await wrapper.get('#password-new').setValue('new-secret');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="password-form"]').trigger('submit');
     await flushPromises();
 
     // While the action is unresolved the submit is disabled.
@@ -344,7 +363,7 @@ describe('PasswordSettings', () => {
     ).toBeDefined();
 
     // A second submit during the pending window is a no-op.
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="password-form"]').trigger('submit');
     await flushPromises();
     expect(setPassword).toHaveBeenCalledOnce();
 
@@ -367,7 +386,7 @@ describe('PasswordSettings', () => {
     await wrapper.get('[data-testid="password-action"]').trigger('click');
     await flushPromises();
     await wrapper.get('#password-current').setValue('x');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-testid="password-form"]').trigger('submit');
     await flushPromises();
 
     expect(wrapper.get('[data-testid="password-error"]').text()).toBe(

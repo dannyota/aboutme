@@ -80,19 +80,31 @@ describe('sessions.vue', () => {
 
     const rows = wrapper.findAll('[data-testid^="session-row-"]');
     expect(rows).toHaveLength(2);
+    expect(wrapper.get('h2').text()).toBe('Signed-in devices');
+    expect(wrapper.find('[as]').exists()).toBe(false);
 
     const currentRow = wrapper.get('[data-testid="session-row-sess-1"]');
     // Revoking your own current session is logout, not a generic device
     // removal — no identical "Revoke" action on the current row.
     expect(
-      currentRow.findAll('button').some((b) => b.text() === 'Revoke'),
+      currentRow
+        .findAll('[data-slot="button"]')
+        .some((b) => b.text() === 'Revoke'),
     ).toBe(false);
     expect(currentRow.text()).toContain('This device');
 
     const otherRow = wrapper.get('[data-testid="session-row-sess-2"]');
-    expect(otherRow.get('[data-testid="revoke-button"]').text()).toBe(
-      'Revoke',
-    );
+    expect(otherRow.get('[data-testid="revoke-button"]').text()).toBe('Revoke');
+  });
+
+  it('renders devices as a table with a current-device badge', async () => {
+    const wrapper = await mountSuspended(SessionsPage);
+    await flushPromises();
+
+    const current = wrapper.get('[data-testid="session-row-sess-1"]');
+    expect(current.element.tagName).toBe('TR');
+    expect(current.text()).toContain('This device');
+    expect(current.find('[data-testid="revoke-button"]').exists()).toBe(false);
   });
 
   it('revokes another session, sending the CSRF header', async () => {
@@ -138,9 +150,7 @@ describe('sessions.vue', () => {
 
     expect(deleteAttempted).toBe(true);
     // An already-gone session is a stale row, not a user-visible error.
-    expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
-      false,
-    );
+    expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(false);
   });
 
   it('shows an error dialog for a non-404 revoke failure', async () => {
@@ -186,9 +196,7 @@ describe('sessions.vue', () => {
       await flushPromises();
 
       await wrapper
-        .get(
-          '[data-testid="session-row-sess-2"] [data-testid="revoke-button"]',
-        )
+        .get('[data-testid="session-row-sess-2"] [data-testid="revoke-button"]')
         .trigger('click');
       await flushPromises();
       await flushPromises();
@@ -199,9 +207,7 @@ describe('sessions.vue', () => {
       // the server already refused for an unrelated reason).
       expect(deleteAttempts).toBe(1);
 
-      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
-        false,
-      );
+      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(false);
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
       // "action" reason copy, not the link-specific wording — revoking a
       // session has nothing to do with linking a provider.
@@ -210,7 +216,9 @@ describe('sessions.vue', () => {
     },
   );
 
-  it('starts linking with a bodiless CSRF POST and follows the provider URL',
+  it(
+    'starts linking with a bodiless CSRF POST and follows the '
+    + 'provider URL',
     async () => {
       let meCalls = 0;
       registerEndpoint('/api/v1/me', {
@@ -233,7 +241,7 @@ describe('sessions.vue', () => {
           return {
             data: {
               authorizeUrl:
-              'https://github.com/login/oauth/authorize?state=test-state',
+                'https://github.com/login/oauth/authorize?state=test-state',
             },
           };
         },
@@ -254,7 +262,7 @@ describe('sessions.vue', () => {
       // meData only has a `google` identity linked, so github/linkedin are
       // offered — and google (already linked) is not.
       const linkButtons = wrapper
-        .findAll('button')
+        .findAll('[data-slot="button"]')
         .filter((button) => button.text().startsWith('Link '));
       expect(linkButtons.map((button) => button.text())).toEqual([
         'Link github',
@@ -273,10 +281,11 @@ describe('sessions.vue', () => {
         'https://github.com/login/oauth/authorize?state=test-state',
         { external: true },
       );
-    });
+    },
+  );
 
   it(
-    'prompts with an existing provider when a link start requires reauth',
+    'prompts with an existing provider when a link start requires ' + 'reauth',
     async () => {
       let linkAttempts = 0;
       registerEndpoint('/api/v1/auth/github/start', {
@@ -294,7 +303,7 @@ describe('sessions.vue', () => {
       await wrapper.get('[data-testid="add-provider-button"]').trigger('click');
       await flushPromises();
       const githubButton = wrapper
-        .findAll('button')
+        .findAll('[data-slot="button"]')
         .find((button) => button.text() === 'Link github');
       expect(githubButton).toBeDefined();
 
@@ -305,7 +314,9 @@ describe('sessions.vue', () => {
       expect(linkAttempts).toBe(1);
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
       expect(prompt.text()).toContain('link a new provider');
-      expect(prompt.get('button').text()).toBe('Sign in again with google');
+      expect(prompt.get('[data-slot="button"]').text()).toBe(
+        'Sign in again with google',
+      );
       expect(wrapper.find('[data-testid="link-error"]').exists()).toBe(false);
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     },
@@ -315,9 +326,7 @@ describe('sessions.vue', () => {
     const wrapper = await mountSuspended(SessionsPage);
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
-      false,
-    );
+    expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="link-error"]').exists()).toBe(false);
   });
 
@@ -337,24 +346,21 @@ describe('sessions.vue', () => {
 
       // meData's only linked identity is `google` — reauth targets that
       // existing provider, never the not-yet-linked one being added.
-      const reauthButton = prompt.get('button');
+      const reauthButton = prompt.get('[data-slot="button"]');
       expect(reauthButton.text()).toBe('Sign in again with google');
     },
   );
 
-  it('shows a generic banner for ?error=identity_already_linked',
-    async () => {
-      const wrapper = await mountSuspended(SessionsPage, {
-        route: '/app/settings/sessions?error=identity_already_linked',
-      });
-      await flushPromises();
-
-      const banner = wrapper.get('[data-testid="link-error"]');
-      expect(banner.text()).toContain('already linked');
-      expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
-        false,
-      );
+  it('shows a generic banner for ?error=identity_already_linked', async () => {
+    const wrapper = await mountSuspended(SessionsPage, {
+      route: '/app/settings/sessions?error=identity_already_linked',
     });
+    await flushPromises();
+
+    const banner = wrapper.get('[data-testid="link-error"]');
+    expect(banner.text()).toContain('already linked');
+    expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(false);
+  });
 
   it(
     'falls back to a generic link-error message for an unrecognized '
@@ -364,9 +370,9 @@ describe('sessions.vue', () => {
         route: '/app/settings/sessions?error=some_unrecognized_code',
       });
       await flushPromises();
-      expect(
-        unrecognized.get('[data-testid="link-error"]').text(),
-      ).toContain('Something went wrong');
+      expect(unrecognized.get('[data-testid="link-error"]').text()).toContain(
+        'Something went wrong',
+      );
 
       // A plain `linkErrorMessages[code]` lookup resolves inherited
       // properties too — `?error=constructor` would otherwise render
@@ -482,42 +488,38 @@ describe('sessions.vue', () => {
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
       expect(prompt.text()).toContain('then try again');
       expect(prompt.text()).not.toContain('link a new provider');
-      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(
-        false,
-      );
+      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(false);
       // Sensitive-op rejection, not a generic failure — and definitely
       // not a silent success.
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     },
   );
 
-  it('shows an error banner for a non-reauth revoke-all failure',
-    async () => {
-      registerEndpoint('/api/v1/sessions', {
-        method: 'DELETE',
-        handler: () => {
-          throw createError({ statusCode: 500 });
-        },
-      });
-
-      const wrapper = await mountSuspended(SessionsPage);
-      await flushPromises();
-
-      await wrapper.get('[data-testid="revoke-all-button"]').trigger('click');
-      await flushPromises();
-      await flushPromises();
-
-      expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
-        'Could not log out everywhere',
-      );
-      expect(
-        wrapper.find('[data-testid="reauth-prompt"]').exists(),
-      ).toBe(false);
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+  it('shows an error banner for a non-reauth revoke-all failure', async () => {
+    registerEndpoint('/api/v1/sessions', {
+      method: 'DELETE',
+      handler: () => {
+        throw createError({ statusCode: 500 });
+      },
     });
 
+    const wrapper = await mountSuspended(SessionsPage);
+    await flushPromises();
+
+    await wrapper.get('[data-testid="revoke-all-button"]').trigger('click');
+    await flushPromises();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
+      'Could not log out everywhere',
+    );
+    expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(false);
+    expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+  });
+
   describe('password settings integration', () => {
-    it('refreshes /me and the session list after a successful add',
+    it(
+      'refreshes /me and the session list after a successful ' + 'add',
       async () => {
         let meCalls = 0;
         registerEndpoint('/api/v1/me', {
@@ -556,7 +558,7 @@ describe('sessions.vue', () => {
         await flushPromises();
         await wrapper.get('#password-new').setValue('new-secret');
         await wrapper.get('#password-new-confirm').setValue('new-secret');
-        await wrapper.get('form').trigger('submit');
+        await wrapper.get('[data-testid="password-form"]').trigger('submit');
         await flushPromises();
         await flushPromises();
 
@@ -564,9 +566,11 @@ describe('sessions.vue', () => {
         // (a successful add/change replaces the current session).
         expect(meCalls).toBeGreaterThan(meCallsAtMount);
         expect(sessionsGetCalls).toBeGreaterThan(sessionsCallsAtMount);
-      });
+      },
+    );
 
-    it('sets a password through an authenticated PUT with JSON and CSRF',
+    it(
+      'sets a password through an authenticated PUT with JSON and ' + 'CSRF',
       async () => {
         let receivedMethod: string | undefined;
         let receivedHeader: string | undefined;
@@ -591,16 +595,18 @@ describe('sessions.vue', () => {
         await flushPromises();
         await wrapper.get('#password-new').setValue('new-secret');
         await wrapper.get('#password-new-confirm').setValue('new-secret');
-        await wrapper.get('form').trigger('submit');
+        await wrapper.get('[data-testid="password-form"]').trigger('submit');
         await flushPromises();
 
         expect(receivedMethod).toBe('PUT');
         expect(receivedHeader).toBe('test-csrf-token');
         expect(receivedContentType).toBe('application/json');
         expect(receivedBody).toBe('{"password":"new-secret"}');
-      });
+      },
+    );
 
-    it('starts a provider reauth round trip when an add needs reauth',
+    it(
+      'starts a provider reauth round trip when an add needs ' + 'reauth',
       async () => {
         registerEndpoint('/api/v1/me/password', {
           method: 'PUT',
@@ -617,7 +623,7 @@ describe('sessions.vue', () => {
             return {
               data: {
                 authorizeUrl:
-                'https://accounts.google.com/o/oauth2/v2/auth?state=test',
+                  'https://accounts.google.com/o/oauth2/v2/auth?state=test',
               },
             };
           },
@@ -630,16 +636,18 @@ describe('sessions.vue', () => {
         await flushPromises();
         await wrapper.get('#password-new').setValue('new-secret');
         await wrapper.get('#password-new-confirm').setValue('new-secret');
-        await wrapper.get('form').trigger('submit');
+        await wrapper.get('[data-testid="password-form"]').trigger('submit');
         await flushPromises();
 
         // The linked provider is offered; no email is shown.
         expect(
-          wrapper.find('[data-testid="password-provider-reauth-google"]')
+          wrapper
+            .find('[data-testid="password-provider-reauth-google"]')
             .exists(),
         ).toBe(true);
         expect(
-          wrapper.find('[data-testid="password-provider-reauth-google"]')
+          wrapper
+            .find('[data-testid="password-provider-reauth-google"]')
             .text(),
         ).toBe('Continue with Google');
 
@@ -654,7 +662,8 @@ describe('sessions.vue', () => {
           'https://accounts.google.com/o/oauth2/v2/auth?state=test',
           { external: true },
         );
-      });
+      },
+    );
   });
 });
 
@@ -724,15 +733,16 @@ describe('sessions.vue capability gating', () => {
       await flushPromises();
       await flushPromises();
 
-      expect(wrapper.find('[data-testid="reauth-prompt"]').exists())
-        .toBe(false);
+      expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
+        false,
+      );
       expect(wrapper.text()).not.toContain('Sign in again');
       expect(providerStarts).toBe(0);
     },
   );
 
   it(
-    'does not expose provider password reauth when providerLogin is false',
+    'does not expose provider password reauth when providerLogin ' + 'is false',
     async () => {
       let providerStarts = 0;
       registerCapabilities({ providerLogin: false, agentAccess: false });
@@ -762,12 +772,13 @@ describe('sessions.vue capability gating', () => {
       await flushPromises();
       await wrapper.get('#password-new').setValue('new-password');
       await wrapper.get('#password-new-confirm').setValue('new-password');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
       await flushPromises();
       await flushPromises();
 
       expect(
-        wrapper.find('[data-testid="password-provider-reauth-google"]')
+        wrapper
+          .find('[data-testid="password-provider-reauth-google"]')
           .exists(),
       ).toBe(false);
       expect(wrapper.text()).not.toContain('Continue with Google');
@@ -775,17 +786,23 @@ describe('sessions.vue capability gating', () => {
     },
   );
 
-  it('hides provider and agent blocks while capabilities are pending',
+  it(
+    'hides provider and agent blocks while capabilities are ' + 'pending',
     async () => {
       let release!: (body: unknown) => void;
       registerEndpoint('/api/v1/me/agents', () => ({
         data: { grants: [] },
       }));
-      registerEndpoint('/api/v1/capabilities', () => new Promise((resolve) => {
-        release = () => resolve({
-          data: { providerLogin: true, agentAccess: true },
-        });
-      }));
+      registerEndpoint(
+        '/api/v1/capabilities',
+        () =>
+          new Promise((resolve) => {
+            release = () =>
+              resolve({
+                data: { providerLogin: true, agentAccess: true },
+              });
+          }),
+      );
       const wrapper = await mountSuspended(SessionsPage);
       expect(wrapper.text()).not.toContain('Add another sign-in provider');
       expect(wrapper.text()).not.toContain('Connected agents');
@@ -796,7 +813,8 @@ describe('sessions.vue capability gating', () => {
       await flushPromises();
       expect(wrapper.text()).toContain('Add another sign-in provider');
       expect(wrapper.text()).toContain('Connected agents');
-    });
+    },
+  );
 
   it('shows both blocks when both flags are true', async () => {
     registerEndpoint('/api/v1/me/agents', () => ({ data: { grants: [] } }));

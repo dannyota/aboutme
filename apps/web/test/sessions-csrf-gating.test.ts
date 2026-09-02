@@ -44,7 +44,8 @@ registerEndpoint('/api/v1/sessions', () => ({
 }));
 
 describe('sessions.vue CSRF gating', () => {
-  it('uses the first returned identity as the reauthentication provider',
+  it(
+    'uses the first returned identity as the reauthentication ' + 'provider',
     async () => {
       meResponse = {
         data: {
@@ -55,10 +56,7 @@ describe('sessions.vue CSRF gating', () => {
             avatarKey: null,
           },
           csrfToken: 'test-csrf-token',
-          identities: [
-            { provider: 'linkedin' },
-            { provider: 'google' },
-          ],
+          identities: [{ provider: 'linkedin' }, { provider: 'google' }],
         },
       };
 
@@ -68,14 +66,15 @@ describe('sessions.vue CSRF gating', () => {
       await flushPromises();
 
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
-      expect(prompt.get('button').text()).toBe(
+      expect(prompt.get('[data-slot="button"]').text()).toBe(
         'Sign in again with linkedin',
       );
 
       meResponse = {};
       await refreshNuxtData();
       await flushPromises();
-    });
+    },
+  );
 
   it('disables mutating controls until csrfToken is available', async () => {
     // Contract drift / a proxy error page — /me resolves with no usable
@@ -85,7 +84,7 @@ describe('sessions.vue CSRF gating', () => {
 
     const currentRow = wrapper.get('[data-testid="session-row-sess-1"]');
     const logoutButton = currentRow
-      .findAll('button')
+      .findAll('[data-slot="button"]')
       .find((b) => b.text() === 'Log out');
     expect(logoutButton?.element.disabled).toBe(true);
 
