@@ -2,7 +2,7 @@
 
 **Acceptance:** AC-UI-002, AC-UI-003, AC-UI-006.
 
-**Depends on:** T03. Runs beside T07 and T09 (disjoint files).
+**Depends on:** T03 and T07 (`InspectorPanel`). Runs beside T09 after T07.
 
 **Owned paths:** T08 paths in `file-structure.md`.
 
@@ -231,7 +231,7 @@ Everything under "Personal details" in the retained hooks list except
 
   ```sh
   cd apps/web && npx vitest run test/editor/personal-details.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist

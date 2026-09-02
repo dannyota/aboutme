@@ -41,29 +41,16 @@
 
 ## TDD cycle
 
-- [ ] **Seed RED.** In `apps/server/cmd/dev-seed/seed_test.go` add
-      `"encoding/json"` to the imports and this test:
+- [ ] **Seed RED.** In `apps/server/cmd/dev-seed/seed_test.go`, add a literal
+      byte-for-byte assertion that the returned personal-details object equals
+      the fixture's personal-details bytes with only its top-level `photo`
+      member removed. Also decode the result and assert the remaining required
+      keys exist. The test must fail on a map marshal that reorders keys.
 
   ```go
-  func TestSplitResumeDocStripsPhoto(t *testing.T) {
-    t.Parallel()
-    personalDetails, _, _, err := splitResumeDoc(fullFixture)
-    if err != nil {
-      t.Fatal(err)
-    }
-    var decoded map[string]json.RawMessage
-    if err := json.Unmarshal(personalDetails, &decoded); err != nil {
-      t.Fatal(err)
-    }
-    if _, ok := decoded["photo"]; ok {
-      t.Fatal("seeded personal details must not reference a photo object")
-    }
-    for _, key := range []string{"fullName", "headline", "details"} {
-      if _, ok := decoded[key]; !ok {
-        t.Fatalf("seeded personal details lost %q", key)
-      }
-    }
-  }
+  // Derive `want` as a literal from the checked-in fixture, not with the
+  // production remover or a map marshal. Compare `personalDetails` directly
+  // with `want`, then decode only for the key-presence assertions.
   ```
 
 - [ ] Run it and watch it fail on the photo key:
@@ -72,32 +59,11 @@
   cd apps/server && go test ./cmd/dev-seed -run TestSplitResumeDocStripsPhoto -count=1
   ```
 
-- [ ] **Seed GREEN.** In `seed.go`, replace the return of `splitResumeDoc` with
-      a stripped copy:
-
-  ```go
-    personalDetails, err := withoutPhoto(doc.PersonalDetails)
-    if err != nil {
-      return nil, nil, nil, err
-    }
-    return personalDetails, doc.Content, doc.Customization, nil
-  }
-
-  // withoutPhoto drops the fixture's photo reference: the seed has no media
-  // backend, and a key without bytes fails the owner photo read.
-  func withoutPhoto(raw json.RawMessage) (json.RawMessage, error) {
-    var fields map[string]json.RawMessage
-    if err := json.Unmarshal(raw, &fields); err != nil {
-      return nil, fmt.Errorf("decode personalDetails: %w", err)
-    }
-    delete(fields, "photo")
-    out, err := json.Marshal(fields)
-    if err != nil {
-      return nil, fmt.Errorf("encode personalDetails: %w", err)
-    }
-    return out, nil
-  }
-  ```
+- [ ] **Seed GREEN.** Strip the top-level `photo` member from the decoded
+      `personalDetails` raw JSON without round-tripping the object through a Go
+      map. Preserve every remaining byte and key order, return a copied slice,
+      and return a closed decode error for malformed input. The seed has no
+      media backend, so the resulting sample must not carry a photo key.
 
   Rerun the test to GREEN, then the package with the live database:
 

@@ -12,8 +12,9 @@ Implement every composite in [component-contracts.md](component-contracts.md)
 under `app/components/app/`, each with `<script setup lang="ts">`, explicit
 primitive imports, no `<style>` block, and a `class` pass-through. Replace
 `AppChrome.vue` and `AccountControl.vue` with `AppShell.vue` and
-`AccountMenu.vue`; rebuild `ThemeToggle.vue` in place. Reduce `fieldIntent.ts`
-to `set | unset`. Retarget the three shell tests.
+`AccountMenu.vue`; rebuild `ThemeToggle.vue` in place. Emit only `set | unset`;
+the integration owner narrows `fieldIntent.ts` after T08 and T09 remove the
+remaining legacy `clear` producers. Retarget the three shell tests.
 
 **Interfaces:**
 
@@ -29,15 +30,16 @@ to `set | unset`. Retarget the three shell tests.
 
 ## TDD cycle
 
-- [ ] **fieldIntent.** Change `app/components/editor/forms/fieldIntent.ts` to:
+- [ ] **fieldIntent inventory.** Run `make web-typecheck`, inventory every
+      current `clear` producer in the T08 and T09 paths, and record the list. Do
+      not narrow the shared type yet; that would make this task and W3 fail
+      their typecheck boundary. After T08 and T09 land, the integration owner
+      changes it to:
 
   ```ts
   export type FieldIntent<T> =
     { readonly kind: "set"; readonly value: T } | { readonly kind: "unset" };
   ```
-
-  Run `make web-typecheck`; every `clear` producer it reports belongs to a later
-  task (T08, T09) and is left alone. Record the list in the report.
 
 - [ ] **FormField RED.** Create `test/app/form-field.test.ts`:
 
@@ -48,7 +50,7 @@ to `set | unset`. Retarget the three shell tests.
   import FormField from "../../app/components/app/FormField.vue";
 
   const slotInput = `<template #default="{ id, describedBy, invalid }">
-    <input :id="id" :aria-describedby="describedBy" :aria-invalid="invalid">
+    <input data-field-input :id="id" :aria-describedby="describedBy" :aria-invalid="invalid">
   </template>`;
 
   describe("FormField", () => {
@@ -63,8 +65,10 @@ to `set | unset`. Retarget the three shell tests.
         },
         slots: { default: slotInput },
       });
-      const input = wrapper.get("input");
-      expect(wrapper.get("label").attributes("for")).toBe("email");
+      const input = wrapper.get("[data-field-input]");
+      expect(wrapper.get('[data-slot="label"]').attributes("for")).toBe(
+        "email",
+      );
       expect(input.attributes("aria-describedby")).toBe(
         "email-hint email-error",
       );
@@ -83,7 +87,7 @@ to `set | unset`. Retarget the three shell tests.
         props: { label: "Email" },
         slots: { default: slotInput },
       });
-      const input = wrapper.get("input");
+      const input = wrapper.get("[data-field-input]");
       expect(input.attributes("id")).toMatch(/^field-/);
       expect(input.attributes("aria-describedby")).toBeUndefined();
       expect(input.attributes("aria-invalid")).toBeUndefined();
@@ -189,7 +193,7 @@ to `set | unset`. Retarget the three shell tests.
           name: "fullName",
         },
       });
-      expect(wrapper.get("label").attributes("for")).toBe("n");
+      expect(wrapper.get('[data-slot="label"]').attributes("for")).toBe("n");
       expect(
         wrapper.get("[data-field-input]").attributes("aria-describedby"),
       ).toBe("n-hint n-error");
@@ -197,6 +201,10 @@ to `set | unset`. Retarget the three shell tests.
     });
   });
   ```
+
+  Add adversarial cases that pass a `controlAttrs` record and assert every
+  attribute reaches the rendered control, and that a queued blur after unmount
+  emits no intent.
 
 - [ ] **ConfirmDialog RED.** Create `test/app/confirm-dialog.test.ts`:
 
@@ -247,7 +255,9 @@ to `set | unset`. Retarget the three shell tests.
       const confirm = body().querySelector<HTMLButtonElement>(
         '[data-action="confirm-delete"]',
       )!;
-      const input = body().querySelector<HTMLInputElement>("input")!;
+      const input = body().querySelector<HTMLInputElement>(
+        '[role="alertdialog"] [data-slot="input"]',
+      )!;
       expect(confirm.disabled).toBe(true);
       input.value = "my resume";
       input.dispatchEvent(new Event("input"));
@@ -442,6 +452,7 @@ to `set | unset`. Retarget the three shell tests.
       readonly error?: string;
       readonly required?: boolean;
       readonly disabled?: boolean;
+      readonly controlAttrs?: Record<string, string>;
       readonly class?: string;
     }>(),
     { type: "text", rows: 3 },
@@ -510,6 +521,7 @@ to `set | unset`. Retarget the three shell tests.
         :aria-describedby="describedBy"
         :aria-invalid="invalid"
         :autocomplete="autocomplete"
+        v-bind="controlAttrs"
         data-field-input
         :disabled="disabled"
         :inputmode="inputmode"
@@ -868,7 +880,7 @@ to `set | unset`. Retarget the three shell tests.
 
   ```sh
   cd apps/web && npx vitest run test/app test/logout-state.test.ts test/editor/theme.test.ts test/editor/editor-shell.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist

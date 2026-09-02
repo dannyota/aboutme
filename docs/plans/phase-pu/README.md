@@ -112,9 +112,13 @@ writes the same surface.
 | W1   | 01               | T00 committed                      | Owner alone: install, build, renderer suites   |
 | W2   | 03               | T01 committed                      | One Vitest run                                 |
 | W3   | 04, 05, 06       | T03 committed                      | Three disjoint Vitest runs                     |
-| W4   | 07, 08, 09       | T03 committed; W3 reports accepted | Three disjoint Vitest runs                     |
+| W4a  | 07               | T03 committed; W3 reports accepted | One Vitest run                                 |
+| W4b  | 08, 09           | T07 committed                      | Two disjoint Vitest runs                       |
 | W5   | 10, 11, 12       | T07 committed                      | Three disjoint Vitest runs                     |
 | W6   | 13, review, exit | T00–T12 reports accepted           | Owner alone: build, browser proofs, then gates |
+
+After W4b, the integration owner narrows `FieldIntent` to `set | unset` and runs
+`make web-typecheck`. W5 does not start until that owner window is green.
 
 ## Dispatch and completion
 

@@ -107,9 +107,6 @@ messages, `Could not revoke that session. Try again.`,
     expect(current.element.tagName).toBe("TR");
     expect(current.text()).toContain("This device");
     expect(current.find('[data-testid="revoke-button"]').exists()).toBe(false);
-    expect(wrapper.find('button:not([data-slot="button"])').exists()).toBe(
-      false,
-    );
   });
   ```
 
@@ -263,15 +260,17 @@ messages, `Could not revoke that session. Try again.`,
 
 - [ ] Implement `PasswordSettings.vue` and `ConnectedAgents.vue` templates per
       the contract; the agents confirmation replaces `selected`, `confirmation`,
-      and `returnFocus` handling with `ConfirmDialog :open="selected !== null"`
-      and `@confirm="confirmRevoke" @cancel="closeConfirmation"` (drop the
-      manual `nextTick` focus code; the dialog returns focus).
+      and `returnFocus` handling with `ConfirmDialog :open="selected !== null"`,
+      `confirm-action="agent-revoke-confirm"`,
+      `cancel-action="agent-revoke-cancel"`, and
+      `@confirm="confirmRevoke" @cancel="closeConfirmation"` (drop the manual
+      `nextTick` focus code; the dialog returns focus).
 
 - [ ] GREEN:
 
   ```sh
   cd apps/web && npx vitest run test/sessions.test.ts test/sessions-csrf-gating.test.ts test/sessions-nullable-fields.test.ts test/sessions-password.test.ts test/sessions-privileged-start-adversarial.test.ts test/password-settings.test.ts test/connected-agents.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist

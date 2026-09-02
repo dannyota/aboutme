@@ -57,12 +57,9 @@ the closed vocabularies, `Already have an account?`, `Passwords do not match.`.
     expect(wrapper.get('[data-testid="login-error"]').attributes("role")).toBe(
       "alert",
     );
-    expect(wrapper.find('button:not([data-slot="button"])').exists()).toBe(
-      false,
-    );
     expect(
       wrapper
-        .findAll("input")
+        .findAll('[data-slot="input"]')
         .every((input) => input.attributes("id") !== undefined),
     ).toBe(true);
   });
@@ -242,7 +239,7 @@ the closed vocabularies, `Already have an account?`, `Passwords do not match.`.
 
   ```sh
   cd apps/web && npx vitest run test/login.test.ts test/register.test.ts test/forgot-password.test.ts test/reset-password.test.ts test/verify-email.test.ts test/authorize.test.ts test/landing.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist

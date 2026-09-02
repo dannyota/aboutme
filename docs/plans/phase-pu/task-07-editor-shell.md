@@ -92,9 +92,7 @@ Everything under "Editor shell" in the retained hooks list, the eight
     expect(design.attributes("aria-pressed")).toBe("false");
     await design.trigger("click");
     expect(design.attributes("aria-pressed")).toBe("true");
-    expect(wrapper.get('[data-region="inspector"] h2').text()).toBe(
-      "Customization",
-    );
+    expect(wrapper.get("#customization-title").text()).toBe("Customization");
   });
 
   it("keeps the session-lost dialog open on Escape", async () => {
@@ -121,11 +119,12 @@ Everything under "Editor shell" in the retained hooks list, the eight
   overrides and mount options if it does not). In
   `test/editor/editor-preview.test.ts` switch `shallowMount` to
   `mount(EditorPreview, { global: { stubs: { ResumeDocument: true } } })` and
-  keep every assertion; move the two photo-state assertions to the toolbar:
-  `wrapper.get('[data-photo-state]').text()` contains `Photo is loading` /
-  `Photo unavailable`. In `test/editor/accessibility.test.ts` keep every
-  assertion; the `ErrorSummary` focus case now expects `document.activeElement`
-  to be the banner (`wrapper.element`), which is unchanged.
+  keep every projection and renderer assertion. Add the two toolbar photo-state
+  cases to `editor-shell.test.ts`, where `PreviewToolbar` is rendered:
+  `[data-photo-state]` contains `Photo is loading` / `Photo unavailable`. In
+  `test/editor/accessibility.test.ts` keep every assertion; the `ErrorSummary`
+  focus case now expects `document.activeElement` to be the banner
+  (`wrapper.element`), which is unchanged.
 
 - [ ] Run and watch the changed cases fail:
 
@@ -216,7 +215,7 @@ Everything under "Editor shell" in the retained hooks list, the eight
 
   ```sh
   cd apps/web && npx vitest run test/editor/editor-shell.test.ts test/editor/editor-preview.test.ts test/editor/accessibility.test.ts test/editor/conflicts.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist

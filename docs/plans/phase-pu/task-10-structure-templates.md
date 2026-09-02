@@ -10,15 +10,15 @@
 
 - `StructurePanel.vue` keeps its script except the delete-dialog focus code and
   renders `InspectorPanel` (`title="Sections"`, `titleId="structure-title"`).
-  The create form is a `Card` titled `Add a section` with `SelectField`
+  The create form is a `Card` titled `Add a section` with
+  `data-testid="section-create-form"` on its form and `SelectField`
   `Section type` (`controlAttrs: { 'data-action': 'section-type' }`),
-  `SelectField` `Column`, `TextField` `Section name` and `Icon key` (these two
-  are plain drafts, so they bind through `FormField` + `Input` with `v-model`,
-  not `TextField`), and `Button type="submit" data-action="create"`
-  `Add section`. Status and issue texts render through `StatusBanner`. Each
-  placed section is a `Card` (`data-section`) holding `SectionControls` and
-  `EntryOrderControls`; the delete confirmation is `ConfirmDialog`
-  (`title="Delete section"`, description
+  `SelectField` `Column`, then `FormField` + `Input` with `v-model` for the
+  plain `Section name` and `Icon key` drafts, and
+  `Button type="submit" data-action="create"` `Add section`. Status and issue
+  texts render through `StatusBanner`. Each placed section is a `Card`
+  (`data-section`) holding `SectionControls` and `EntryOrderControls`; the
+  delete confirmation is `ConfirmDialog` (`title="Delete section"`, description
   `This permanently deletes {key} and its entries.`,
   `confirmLabel="Delete section"`, `destructive`,
   `confirmAction="confirm-delete"`, `cancelAction="cancel-delete"`); the two
@@ -76,7 +76,7 @@ Everything under "Structure and templates" in the retained hooks list.
     await wrapper
       .get('[data-field="displayName"] input')
       .setValue("Side projects");
-    await wrapper.get("form").trigger("submit");
+    await wrapper.get('[data-testid="section-create-form"]').trigger("submit");
     expect(edit).toHaveBeenLastCalledWith(
       expect.objectContaining({
         kind: "structure",
@@ -210,7 +210,7 @@ Everything under "Structure and templates" in the retained hooks list.
 
   ```sh
   cd apps/web && npx vitest run test/editor/structure-controls.test.ts test/editor/template-panel.test.ts
-  make web-lint web-typecheck
+  make -C ../.. web-lint web-typecheck
   ```
 
 ## Adversarial checklist
