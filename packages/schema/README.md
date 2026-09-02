@@ -21,8 +21,7 @@ Never change a released snapshot or manifest entry.
 
 Document schema v2 uses the licensed font catalog's stable IDs while retaining
 v1's immutable display-name identifiers. See the
-[font catalog design](../../docs/design/fonts.md) and
-[P3 font release task](../../docs/plans/phase-3/task-05b-font-schema-v2.md).
+[font catalog design](../../docs/design/fonts.md).
 
 ## Validation data
 

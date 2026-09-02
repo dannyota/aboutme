@@ -2,7 +2,7 @@ package auth_test
 
 // Deterministic password-service race proofs. Each race has two explicit
 // orderings (or one lock-ordered ordering) with a deterministic pause via a
-// test-only probe, never a sleep. See docs/plans/phase-pa/task-08-password-http-service.md.
+// test-only probe, never a sleep.
 
 import (
 	"context"

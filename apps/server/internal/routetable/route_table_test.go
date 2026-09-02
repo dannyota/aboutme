@@ -1,7 +1,6 @@
-// Package routetable closes AC-OPS-005 (design spec §2; docs/plans/
-// traceability/ac-ops.md) with an automated test of the Caddy route table.
-// Before this file, the only verification was UAT-P0-06's manual curl
-// step — the one Phase 0 acceptance criterion with no automated coverage.
+// Package routetable closes AC-OPS-005 (docs/design/system.md, "Route
+// ownership"; docs/plans/traceability/ac-ops.md) with an automated test of
+// the Caddy route table.
 //
 // # Design decision
 //

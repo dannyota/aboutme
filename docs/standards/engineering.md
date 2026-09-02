@@ -8,6 +8,7 @@ and prevents an old task narrative from becoming an accidental contract.
 | Information                                    | Owner                                      |
 | ---------------------------------------------- | ------------------------------------------ |
 | Intended product or architecture               | `docs/design/`                             |
+| Numeric limits and benchmark protocol          | `docs/design/budgets.md`                   |
 | One proposed or accepted choice and trade-offs | `docs/adr/`                                |
 | Current implemented system                     | Code, configuration, OpenAPI, architecture |
 | Work order, gates, and delivery state          | `docs/plans/`                              |
@@ -43,9 +44,11 @@ the data design applies.
 
 ## Plans and records
 
-Plans describe work that remains. When work lands, update the active status and
-preserve any completed phase record needed for evidence. Never rewrite a
-completed acceptance report to match later behavior.
+Plans describe work that remains. When a phase exits, delete its plan directory;
+git history keeps it. The traceability rows it proved, the architecture
+narrative, and the code record what it built. Never rewrite a proven
+traceability row's evidence to match later behavior; change its state and cite
+the new evidence.
 
 Use exact states: `planned`, `in progress`, `landed`, `verified`, `accepted`, or
 `blocked`. `Landed` means present in the repository. It does not imply that

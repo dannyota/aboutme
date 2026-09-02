@@ -9,14 +9,12 @@ States are `PLANNED`, `LANDED`, `PROVEN`, or `BLOCKED`. A concrete test
 reference is evidence, not a substitute for adjudicating the row. Each phase
 closes its owned rows before its exit checklist.
 
-## Active delivery graphs
+## Ownership
 
-| Phase | Plan                                             | Planned acceptance ownership                      |
-| ----- | ------------------------------------------------ | ------------------------------------------------- |
-| P4    | [Authenticated editor](../phase-4/README.md)     | `AC-EDITOR-001`–`AC-EDITOR-017`                   |
-| P5A   | [Publish and public SSR](../phase-5a/README.md)  | `AC-PUB`; P5A slices of `AC-OPS` and `AC-SEC-001` |
-| PA    | [Password authentication](../phase-pa/README.md) | `AC-AUTH-008`–`016`; `AC-SEC-005`; `AC-OPS-020`   |
-| PM    | [MCP agent access](../phase-pm/README.md)        | `AC-MCP-001`–`AC-MCP-010`                         |
+The `Phase/task` column names the phase and tasks that own a row. Phase PM is
+active; see [its plan](../phase-pm/README.md). A completed phase's plan is
+deleted at exit, so its task IDs are history that git keeps. The test and
+acceptance references in each row remain the evidence.
 
 ## Matrix index
 

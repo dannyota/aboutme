@@ -5,9 +5,9 @@ documentation in agreement.
 
 ## Before changing code
 
-1. Read the [design](docs/design/README.md), relevant
-   [Architecture Decision Records](docs/adr/README.md), and the active
-   [implementation plan](docs/plans/implementation-plan.md).
+1. Read the [design](docs/design/README.md), the relevant
+   [Architecture Decision Records](docs/adr/README.md), and the
+   [current-state architecture](docs/architecture.md).
 2. Check the [OpenAPI contract](docs/api/openapi.yaml), schema, code, and tests
    that own current behavior.
 3. Add or update a failing test for behavior changes before implementing the

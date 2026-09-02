@@ -127,7 +127,7 @@ type photoMultipartAuthority struct {
 
 func assertPhotoMultipartAuthorityCompleteness(t *testing.T) photoMultipartAuthority {
 	t.Helper()
-	budgets, err := os.ReadFile("../../../../docs/plans/budgets.md")
+	budgets, err := os.ReadFile("../../../../docs/design/budgets.md")
 	if err != nil {
 		t.Fatalf("read photo budget authority: %v", err)
 	}

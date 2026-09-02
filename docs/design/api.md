@@ -93,7 +93,7 @@ replacement.
 
 Owner reads are private and conditional. Public reads are served through the
 live-gated Go route; there is no direct public object-store path in v1. Exact
-resource and time limits live in [the numeric budgets](../plans/budgets.md).
+resource and time limits live in [the numeric budgets](budgets.md).
 `PATCH /resumes/{id}/photo` changes only the optional normalized crop rectangle
 or clears it. It preserves the transaction-read server-owned object key and
 performs no object I/O.

@@ -31,9 +31,9 @@ a named law has been satisfied merely because infrastructure is in one region.
 
 ## Resource and performance budgets
 
-[`../plans/budgets.md`](../plans/budgets.md) owns numeric limits and benchmark
-protocol. Hard limits include request and document sizes, the PostgreSQL pool,
-render concurrency, queue depth, timeout, and whole-task memory. Service-level
+[`budgets.md`](budgets.md) owns numeric limits and benchmark protocol. Hard
+limits include request and document sizes, the PostgreSQL pool, render
+concurrency, queue depth, timeout, and whole-task memory. Service-level
 objectives include API, SSR, and render latency.
 
 A benchmark records the candidate commit, production-shaped hardware and limits,
@@ -71,5 +71,4 @@ staging. Dashboards without a tested notification path do not satisfy the gate.
   rollback, alarms, and edge behavior.
 
 The tracked engineering gates are summarized in
-[`../standards/engineering.md`](../standards/engineering.md). Phase-specific
-evidence and ownership live in [`../plans/`](../plans/).
+[`../standards/engineering.md`](../standards/engineering.md).

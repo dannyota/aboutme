@@ -21,7 +21,7 @@ Reconcile the authorities so no operative text contradicts the spec:
   from `decisions.md`), `security.md` (OAuth token model, cookie isolation,
   scope enforcement), `data.md` (four bounded tables, digest-only storage),
   `web.md` (consent page, connected agents), `decisions.md` design index.
-- Add the M5 rows to `docs/plans/budgets.md` with `PM` enforcement column
+- Add the M5 rows to `docs/design/budgets.md` with `PM` enforcement column
   values.
 - Create `docs/plans/traceability/ac-mcp.md` with AC-MCP-001…010 in state
   PLANNED and add the prefix to the traceability README index and phase table.
