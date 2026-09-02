@@ -4,7 +4,7 @@ import type { ProfileEntry } from '@aboutme/schema';
 import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import type { FieldIntent } from '../fieldIntent';
 
-const props = defineProps<{ readonly entry: ProfileEntry }>();
+defineProps<{ readonly entry: ProfileEntry }>();
 const emit = defineEmits<{
   field: [
     change: { readonly path: 'text'; readonly intent: FieldIntent<string> },
@@ -12,17 +12,12 @@ const emit = defineEmits<{
 }>();
 
 function updateText(value: string): void {
-  emit('field', { path: 'text', intent: textIntent(props.entry.text, value) });
+  emit('field', { path: 'text', intent: textIntent(value) });
 }
 
-function textIntent(
-  current: string | undefined,
-  value: string,
-): FieldIntent<string> {
+function textIntent(value: string): FieldIntent<string> {
   if (value !== '') return { kind: 'set', value };
-  return current === undefined
-    ? { kind: 'unset' }
-    : { kind: 'clear', value: '' };
+  return { kind: 'unset' };
 }
 </script>
 

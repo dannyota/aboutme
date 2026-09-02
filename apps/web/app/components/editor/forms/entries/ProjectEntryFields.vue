@@ -3,11 +3,11 @@ import type { ProjectEntry } from '@aboutme/schema';
 
 import DateRangeField from '../DateRangeField.vue';
 import type { FieldIntent } from '../fieldIntent';
-import OptionalField from '../OptionalField.vue';
+import TextField from '@/components/app/TextField.vue';
 import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import EntryLinkField from './EntryLinkField.vue';
 
-const props = defineProps<{ readonly entry: ProjectEntry }>();
+defineProps<{ readonly entry: ProjectEntry }>();
 const emit = defineEmits<{
   field: [
     change: {
@@ -21,15 +21,13 @@ function updateDescription(value: string): void {
     path: 'description',
     intent: value !== ''
       ? { kind: 'set', value }
-      : props.entry.description === undefined
-        ? { kind: 'unset' }
-        : { kind: 'clear', value: '' },
+      : { kind: 'unset' },
   });
 }
 </script>
 
 <template>
-  <OptionalField
+  <TextField
     data-entry-field="title"
     label="Title"
     :model-value="entry.title"

@@ -6,6 +6,18 @@ import { wrapInList } from 'prosemirror-schema-list';
 import { EditorState, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+  Bold,
+  CornerDownLeft,
+  Italic,
+  Link,
+  List,
+  ListOrdered,
+  Pilcrow,
+  Underline,
+  Unlink,
+} from '@lucide/vue';
+import IconButton from '@/components/app/IconButton.vue';
 
 import { parseRichTextHTML, richTextSchema } from './schema';
 import { serializeRichText } from './serialize';
@@ -166,86 +178,102 @@ watch(
 
 <template>
   <div
-    class="rich-text-editor"
     @drop.capture="blockDroppedFiles"
   >
     <div
       aria-label="Rich-text controls"
       role="toolbar"
     >
-      <button
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+Alt+0"
-        aria-label="Paragraph"
+        label="Paragraph"
         type="button"
         @click="run(setBlockType(richTextSchema.nodes.paragraph))"
       >
-        Paragraph
-      </button>
-      <button
+        <Pilcrow />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+Enter"
-        aria-label="Line break"
+        label="Line break"
         type="button"
         @click="run(insertHardBreak)"
       >
-        Line break
-      </button>
-      <button
+        <CornerDownLeft />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+B"
-        aria-label="Bold"
+        label="Bold"
         type="button"
         @click="run(toggleMark(richTextSchema.marks.strong))"
       >
-        Bold
-      </button>
-      <button
+        <Bold />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+I"
-        aria-label="Italic"
+        label="Italic"
         type="button"
         @click="run(toggleMark(richTextSchema.marks.em))"
       >
-        Italic
-      </button>
-      <button
+        <Italic />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+U"
-        aria-label="Underline"
+        label="Underline"
         type="button"
         @click="run(toggleMark(richTextSchema.marks.underline))"
       >
-        Underline
-      </button>
-      <button
+        <Underline />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+Shift+8"
-        aria-label="Ordered list"
+        label="Ordered list"
         type="button"
         @click="run(wrapInList(richTextSchema.nodes.ordered_list))"
       >
-        Ordered list
-      </button>
-      <button
+        <ListOrdered />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+Shift+9"
-        aria-label="Bullet list"
+        label="Bullet list"
         type="button"
         @click="run(wrapInList(richTextSchema.nodes.bullet_list))"
       >
-        Bullet list
-      </button>
-      <button
+        <List />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+K"
-        aria-label="Link"
+        label="Link"
         type="button"
         @click="runLink"
       >
-        Link
-      </button>
-      <button
+        <Link />
+      </IconButton>
+      <IconButton
+        size="icon-sm"
         aria-keyshortcuts="Control+Shift+K"
-        aria-label="Unlink"
+        label="Unlink"
         type="button"
         @click="runUnlink"
       >
-        Unlink
-      </button>
+        <Unlink />
+      </IconButton>
     </div>
-    <div ref="editorRoot" />
+    <div
+      ref="editorRoot"
+      :class="[
+        'min-h-24 rounded-md border border-input bg-background px-3 py-2',
+        'text-sm focus-within:ring-2 focus-within:ring-ring [&_p]:my-1',
+        '[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5',
+        '[&_a]:underline',
+      ]"
+    />
   </div>
 </template>

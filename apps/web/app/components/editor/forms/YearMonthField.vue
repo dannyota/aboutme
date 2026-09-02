@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { YearMonth } from '@aboutme/schema';
 import { computed, ref, watch } from 'vue';
+import { Button } from '@/components/ui/button';
+import FormField from '@/components/app/FormField.vue';
+import { Input } from '@/components/ui/input';
 
 import type { FieldIntent } from './fieldIntent';
 
@@ -86,35 +89,54 @@ function toText(value: number | undefined): string {
 </script>
 
 <template>
-  <fieldset :aria-describedby="describedBy">
-    <legend>{{ label }}</legend>
-    <label>
-      Year
-      <input
-        v-model="year"
-        data-part="year"
-        inputmode="numeric"
-        @input="capture"
-        @blur="commit"
-      >
-    </label>
-    <label>
-      Month
-      <input
-        v-model="month"
-        data-part="month"
-        inputmode="numeric"
-        @input="capture"
-        @blur="commit"
-      >
-    </label>
-    <button
+  <div
+    role="group"
+    :aria-labelledby="`${fieldId}-label`"
+    :aria-describedby="describedBy"
+  >
+    <div
+      :id="`${fieldId}-label`"
+      class="text-sm font-medium"
+    >
+      {{ label }}
+    </div>
+    <FormField label="Year">
+      <template #default="{ id, describedBy: partDescribedBy, invalid }">
+        <Input
+          :id="id"
+          v-model="year"
+          :aria-describedby="partDescribedBy"
+          :aria-invalid="invalid"
+          data-part="year"
+          inputmode="numeric"
+          @input="capture"
+          @blur="commit"
+        />
+      </template>
+    </FormField>
+    <FormField label="Month">
+      <template #default="{ id, describedBy: partDescribedBy, invalid }">
+        <Input
+          :id="id"
+          v-model="month"
+          :aria-describedby="partDescribedBy"
+          :aria-invalid="invalid"
+          data-part="month"
+          inputmode="numeric"
+          @input="capture"
+          @blur="commit"
+        />
+      </template>
+    </FormField>
+    <Button
       type="button"
       data-action="unset"
+      size="sm"
+      variant="ghost"
       @click="unset"
     >
       Remove date
-    </button>
+    </Button>
     <p
       v-if="error !== ''"
       :id="`${fieldId}-error`"
@@ -122,5 +144,5 @@ function toText(value: number | undefined): string {
     >
       {{ error }}
     </p>
-  </fieldset>
+  </div>
 </template>

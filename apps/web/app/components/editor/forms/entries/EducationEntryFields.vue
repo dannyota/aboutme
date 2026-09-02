@@ -3,11 +3,11 @@ import type { EducationEntry } from '@aboutme/schema';
 
 import DateRangeField from '../DateRangeField.vue';
 import type { FieldIntent } from '../fieldIntent';
-import OptionalField from '../OptionalField.vue';
+import TextField from '@/components/app/TextField.vue';
 import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import EntryLinkField from './EntryLinkField.vue';
 
-const props = defineProps<{ readonly entry: EducationEntry }>();
+defineProps<{ readonly entry: EducationEntry }>();
 const emit = defineEmits<{
   field: [
     change: {
@@ -21,29 +21,22 @@ const emit = defineEmits<{
 function updateDescription(value: string): void {
   emit('field', {
     path: 'description',
-    intent: textIntent(props.entry.description, value),
+    intent: textIntent(value),
   });
 }
-function textIntent(
-  current: string | undefined,
-  value: string,
-): FieldIntent<string> {
-  return value !== ''
-    ? { kind: 'set', value }
-    : current === undefined
-      ? { kind: 'unset' }
-      : { kind: 'clear', value: '' };
+function textIntent(value: string): FieldIntent<string> {
+  return value === '' ? { kind: 'unset' } : { kind: 'set', value };
 }
 </script>
 
 <template>
-  <OptionalField
+  <TextField
     data-entry-field="degree"
     label="Degree"
     :model-value="entry.degree"
     @intent="emit('field', { path: 'degree', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="school"
     label="School"
     :model-value="entry.school"
@@ -55,13 +48,13 @@ function textIntent(
     :model-value="entry.schoolLink"
     @intent="emit('field', { path: 'schoolLink', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="city"
     label="City"
     :model-value="entry.city"
     @intent="emit('field', { path: 'city', intent: $event })"
   />
-  <OptionalField
+  <TextField
     data-entry-field="country"
     label="Country"
     :model-value="entry.country"

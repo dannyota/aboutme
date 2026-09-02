@@ -14,6 +14,11 @@ import ProfileEntryFields from './entries/ProfileEntryFields.vue';
 import ProjectEntryFields from './entries/ProjectEntryFields.vue';
 import SkillEntryFields from './entries/SkillEntryFields.vue';
 import WorkEntryFields from './entries/WorkEntryFields.vue';
+import EntryCard from '../EntryCard.vue';
+import InspectorPanel from '../InspectorPanel.vue';
+import ConfirmDialog from '../../app/ConfirmDialog.vue';
+import StatusBanner from '../../app/StatusBanner.vue';
+import { Button } from '../../ui/button';
 import type { FieldIntent } from './fieldIntent';
 
 const props = defineProps<{
@@ -25,7 +30,6 @@ const props = defineProps<{
 interface DeleteTarget {
   readonly entry: Section['entries'][number];
   readonly index: number;
-  readonly opener: HTMLElement;
   readonly sectionType: Section['sectionType'];
 }
 
@@ -33,9 +37,8 @@ const deleteTarget = ref<DeleteTarget>();
 const issues = computed(() =>
   Object.values(props.actions.record.value?.issues ?? {}).flat(),
 );
-const root = ref<HTMLElement>();
-const confirmDeleteButton = ref<HTMLButtonElement>();
-const issueSummary = ref<HTMLElement>();
+const root = ref<{ $el?: HTMLElement }>();
+const issueSummary = ref<{ $el?: HTMLElement }>();
 const selectedComponent = computed<Component>(() => {
   switch (props.section.sectionType) {
     case 'profile':
@@ -64,7 +67,7 @@ watch(
   async (next, previous) => {
     if (next === '' || next === previous) return;
     await nextTick();
-    issueSummary.value?.focus();
+    issueSummary.value?.$el?.focus();
   },
 );
 
@@ -104,26 +107,31 @@ function toggleHidden(entryId: string, isHidden: boolean | undefined): void {
   });
 }
 
-function openDelete(
-  event: MouseEvent,
-  entry: Section['entries'][number],
-  index: number,
-): void {
-  const opener = event.currentTarget;
-  if (!(opener instanceof HTMLElement)) return;
+function openDelete(entry: Section['entries'][number], index: number): void {
   deleteTarget.value = {
     entry: structuredClone(toRaw(entry)),
     index,
-    opener,
     sectionType: props.section.sectionType,
   };
-  void nextTick(() => confirmDeleteButton.value?.focus());
+}
+
+function reorder(entryId: string, direction: -1 | 1): void {
+  const ids = props.section.entries.map((entry) => entry.id);
+  const index = ids.indexOf(entryId);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= ids.length) return;
+  const [moved] = ids.splice(index, 1);
+  if (moved === undefined) return;
+  ids.splice(next, 0, moved);
+  props.actions.edit({
+    kind: 'entryReorder',
+    sectionKey: props.sectionKey,
+    entryIds: ids,
+  });
 }
 
 function closeDelete(): void {
-  const opener = deleteTarget.value?.opener;
   deleteTarget.value = undefined;
-  void nextTick(() => (opener?.isConnected ? opener : root.value)?.focus());
 }
 
 function confirmDelete(): void {
@@ -191,29 +199,6 @@ function sectionHeading(section: Section): string {
   return labels[section.sectionType];
 }
 
-function trapDeleteFocus(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    closeDelete();
-    return;
-  }
-  if (event.key !== 'Tab') return;
-  const controls = root.value?.querySelectorAll<HTMLElement>(
-    '[data-delete-dialog] button',
-  );
-  if (controls === undefined || controls.length === 0) return;
-  const first = controls[0]!;
-  const last = controls[controls.length - 1]!;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  }
-  if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
 function focusIssue(path: string): void {
   const location = issueLocation(path);
   if (location === undefined) return;
@@ -227,7 +212,9 @@ function focusIssue(path: string): void {
           `${entrySelector} ${fieldSelector} select`,
           `${entrySelector} ${fieldSelector} [contenteditable="true"]`,
         ].join(', ');
-  root.value?.querySelector<HTMLElement>(selector)?.focus();
+  const element = root.value?.$el
+    ?? (root.value as unknown as HTMLElement | undefined);
+  element?.querySelector<HTMLElement>(selector)?.focus();
 }
 
 function issueLocation(
@@ -305,110 +292,90 @@ function assertNever(value: never): never {
 </script>
 
 <template>
-  <section
+  <InspectorPanel
     ref="root"
     :data-section-key="sectionKey"
+    :title="sectionHeading(section)"
+    :title-id="`${sectionKey}-title`"
     tabindex="-1"
   >
-    <h2>{{ sectionHeading(section) }}</h2>
+    <template #actions>
+      <Button
+        data-action="add-entry"
+        size="sm"
+        @click="add"
+      >
+        Add entry
+      </Button>
+    </template>
     <p data-section-id-text>
       {{ sectionKey }}
     </p>
-    <button
-      type="button"
-      data-action="add-entry"
-      @click="add"
-    >
-      Add entry
-    </button>
-    <ul
+    <StatusBanner
       v-if="issues.length > 0"
       ref="issueSummary"
+      kind="error"
       aria-label="Section issues"
       tabindex="-1"
     >
-      <li
+      <template
         v-for="issue in issues"
         :key="`${issue.path}:${issue.code}`"
       >
-        <button
+        <Button
           v-if="issueLocation(issue.path) !== undefined"
+          variant="link"
           type="button"
           :data-issue="issue.path"
           @click="focusIssue(issue.path)"
         >
           {{ messageForCode(issue.code) }}
-        </button>
+        </Button>
         <span v-else>{{ messageForCode(issue.code) }}</span>
-      </li>
-    </ul>
-    <article
+      </template>
+    </StatusBanner>
+    <EntryCard
       v-for="(entry, index) in section.entries"
       :key="entry.id"
-      :data-entry-id="entry.id"
+      :count="section.entries.length"
+      :entry-id="entry.id"
+      :hidden="entry.isHidden ?? false"
+      :index="index"
+      :title="entryLabel(entry, index)"
+      @delete="openDelete(entry, index)"
+      @move-down="reorder(entry.id, 1)"
+      @move-up="reorder(entry.id, -1)"
+      @toggle-hidden="toggleHidden(entry.id, entry.isHidden)"
     >
-      <h3>{{ entryLabel(entry, index) }}</h3>
-      <p data-entry-id-text>
+      <p
+        class="text-xs text-muted-foreground"
+        data-entry-id-text
+      >
         {{ entry.id }}
       </p>
-      <label>
-        <input
-          type="checkbox"
-          :checked="entry.isHidden ?? false"
-          data-action="toggle-hidden"
-          @change="toggleHidden(entry.id, entry.isHidden)"
-        >
-        Hidden
-      </label>
       <component
         :is="selectedComponent"
         :entry="entry"
         @field="edit(entry.id, $event.path, $event.intent)"
       />
-      <button
-        type="button"
-        data-action="delete-entry"
-        @click="openDelete($event, entry, index)"
-      >
-        Delete entry
-      </button>
-    </article>
-    <div
+    </EntryCard>
+    <ConfirmDialog
       v-if="deleteTarget !== undefined"
-      data-delete-dialog
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="entry-delete-title"
-      aria-describedby="entry-delete-description"
-      @keydown="trapDeleteFocus"
-    >
-      <h3 id="entry-delete-title">
-        Delete entry
-      </h3>
-      <p id="entry-delete-description">
-        Delete {{ deleteLabel(deleteTarget) }}?
-      </p>
-      <button
-        ref="confirmDeleteButton"
-        type="button"
-        data-action="confirm-delete-entry"
-        @click="confirmDelete"
-      >
-        Delete
-      </button>
-      <button
-        type="button"
-        data-action="cancel-delete-entry"
-        @click="closeDelete"
-      >
-        Cancel
-      </button>
-    </div>
+      :open="true"
+      title="Delete entry"
+      :description="`Delete ${deleteLabel(deleteTarget)}?`"
+      confirm-label="Delete"
+      destructive
+      confirm-action="confirm-delete-entry"
+      cancel-action="cancel-delete-entry"
+      @confirm="confirmDelete"
+      @cancel="closeDelete"
+    />
     <p
       v-if="status !== ''"
       role="status"
     >
       {{ status }}
     </p>
-  </section>
+  </InspectorPanel>
 </template>
