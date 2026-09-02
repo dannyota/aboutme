@@ -80,21 +80,17 @@ describe('CustomizationPanel', () => {
     });
 
     expect(
-      wrapper.get('[data-field="spacing.pageMargin.x"] input').element.value,
+      wrapper.get('[data-action="page-margin"]').attributes('aria-checked'),
     )
-      .toBe('15');
+      .toBe('false');
     expect(
-      wrapper.get('[data-field="spacing.pageMargin.y"] input').element.value,
+      wrapper.get('[data-action="header"]').attributes('aria-checked'),
     )
-      .toBe('15');
-    expect(wrapper.get('[data-field="header.align"] select').element.value)
-      .toBe('left');
+      .toBe('false');
     expect(
-      wrapper.get('[data-field="header.detailsLayout"] select').element.value,
-    )
-      .toBe('inline');
-    expect(wrapper.get('[data-field="header.iconStyle"] select').element.value)
-      .toBe('outline');
+      wrapper.find('[data-field="spacing.pageMargin.x"]').exists(),
+    ).toBe(false);
+    expect(wrapper.find('[data-field="header.align"]').exists()).toBe(false);
     expect(wrapper.get('[data-field="colors.accent"] input').element.value)
       .toBe('#112233');
     expect(wrapper.get('[data-field="colors.surface"] input').element.value)
@@ -103,53 +99,105 @@ describe('CustomizationPanel', () => {
       wrapper.get('[data-field="layout.surfaceTarget"] select').element.value,
     )
       .toBe('none');
+    expect(wrapper.get('[data-field="layout.surfaceTarget"] label').text())
+      .toContain('Surface target');
+    expect(wrapper.findAllComponents(ColorField)).toHaveLength(5);
     expect(edit).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ['unset-accent', [{ op: 'unset', path: 'colors.accent' }]],
-    [
-      'enable-page-margin',
-      [
-        { op: 'set', path: 'spacing.pageMargin.x', value: 15 },
-        { op: 'set', path: 'spacing.pageMargin.y', value: 15 },
-      ],
-    ],
-    [
-      'enable-header',
-      [
-        { op: 'set', path: 'header.align', value: 'left' },
-        { op: 'set', path: 'header.detailsLayout', value: 'inline' },
-        { op: 'set', path: 'header.iconStyle', value: 'outline' },
-      ],
-    ],
-    ['unset-header', [{ op: 'unset', path: 'header' }]],
-  ] as const)('emits the exact %s delta', async (action, deltas) => {
+  it('enables and removes page margins through the switch', async () => {
     const edit = vi.fn();
     const record = recordFor();
-    if (action === 'unset-accent') {
-      record.current.document.customization.colors.accent = '#abcdef';
-    }
-    if (action === 'unset-header') {
-      record.current.document.customization.header = {
-        align: 'left',
-        detailsLayout: 'inline',
-        iconStyle: 'outline',
-      };
-    }
     const wrapper = mount(CustomizationPanel, {
       props: { actions: actionsFor(edit), record },
     });
 
-    await wrapper.get(`[data-action="${action}"]`).trigger('click');
-
-    expect(edit).toHaveBeenCalledWith({ kind: 'customization', deltas });
+    const toggle = wrapper.get('[data-action="page-margin"]');
+    expect(toggle.attributes('role')).toBe('switch');
+    expect(toggle.attributes('aria-checked')).toBe('false');
+    await toggle.trigger('click');
+    expect(edit).toHaveBeenLastCalledWith({
+      kind: 'customization',
+      deltas: [
+        { op: 'set', path: 'spacing.pageMargin.x', value: 15 },
+        { op: 'set', path: 'spacing.pageMargin.y', value: 15 },
+      ],
+    });
+    await setCustomization(wrapper, {
+      spacing: { pageMargin: { x: 15, y: 15 } },
+    });
+    await wrapper.get('[data-action="page-margin"]').trigger('click');
+    expect(edit).toHaveBeenLastCalledWith({
+      kind: 'customization',
+      deltas: [{ op: 'unset', path: 'spacing.pageMargin' }],
+    });
   });
+
+  it('labels scalar fields for people, not paths', () => {
+    const { wrapper } = mountPanel();
+    expect(wrapper.get('[data-field="font.family"] label').text()).toBe(
+      'Font family',
+    );
+    expect(wrapper.text()).not.toContain('font.baseSizePx');
+  });
+
+  it('rejects an unknown enum with a linked local error', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(CustomizationPanel, {
+      props: { actions: actionsFor(edit), record: recordFor() },
+    });
+    const field = wrapper.get('[data-field="heading.style"]');
+    const select = field.get('select');
+    (select.element as HTMLSelectElement).value = 'bogus';
+    await select.trigger('change');
+    await wrapper.vm.$nextTick();
+    const error = field.get('[data-error-for="heading.style"]');
+    expect(edit).not.toHaveBeenCalled();
+    expect(error.text()).toBe('Choose one of the available options.');
+    expect(select.attributes('aria-describedby')).toBe(error.attributes('id'));
+  });
+
+  it(
+    'uses shared buttons for issue focus and keeps optional removal a no-op',
+    async () => {
+      const wrapper = mount(CustomizationPanel, {
+        props: {
+          actions: actionsFor(vi.fn()),
+          record: recordFor({}, {
+            '/customization/heading/showRule': [
+              { code: 'enum', path: '/customization/heading/showRule' },
+            ],
+          }),
+        },
+        attachTo: document.body,
+      });
+      expect(
+        wrapper.get('[data-issue="/customization/heading/showRule"]')
+          .attributes('data-slot'),
+      ).toBe('button');
+      await wrapper
+        .get('[data-issue="/customization/heading/showRule"]')
+        .trigger('click');
+      expect(document.activeElement).toBe(
+        wrapper.get('[data-field="heading.showRule"] [role="checkbox"]')
+          .element,
+      );
+      const edit = vi.fn();
+      await wrapper.setProps({ actions: actionsFor(edit) });
+      await wrapper.get('[data-action="unset-accent"]').trigger('click');
+      await wrapper.get('[data-action="unset-surface"]').trigger('click');
+      expect(edit).not.toHaveBeenCalled();
+      wrapper.unmount();
+    },
+  );
 
   it('preserves placement when column count changes', async () => {
     const edit = vi.fn();
     const wrapper = mount(CustomizationPanel, {
-      props: { actions: actionsFor(edit), record: recordFor() },
+      props: {
+        actions: actionsFor(edit),
+        record: recordFor({ spacing: { pageMargin: { x: 15, y: 15 } } }),
+      },
     });
 
     await wrapper.get('[data-field="layout.columns"] select').setValue('2');
@@ -169,14 +217,18 @@ describe('CustomizationPanel', () => {
         props: { actions: actionsFor(edit), record },
       });
       const next = nextValue(field, valueAt(record, field.path));
-      const control = wrapper.get(
-        `[data-field="${field.path}"] input, `
-        + `[data-field="${field.path}"] select`,
-      );
+      const control = field.kind === 'boolean'
+        ? wrapper.get(`[data-field="${field.path}"] [role="checkbox"]`)
+        : wrapper.get(
+            `[data-field="${field.path}"] input, `
+            + `[data-field="${field.path}"] select`,
+          );
 
       if (field.kind === 'color') {
         await control.setValue(String(next));
         await control.trigger('blur');
+      } else if (field.kind === 'boolean') {
+        await control.trigger('click');
       } else {
         setControlValue(control.element, next);
         await control.trigger('change');
@@ -197,9 +249,9 @@ describe('CustomizationPanel', () => {
     });
 
     const input = wrapper.get('[data-field="spacing.sectionGap"] input');
-    await input.setValue('0');
+    (input.element as HTMLInputElement).value = '0';
     await input.trigger('change');
-    await input.setValue('65');
+    (input.element as HTMLInputElement).value = '65';
     await input.trigger('change');
 
     expect(edit).toHaveBeenCalledTimes(1);
@@ -325,7 +377,10 @@ describe('CustomizationPanel', () => {
   it('associates every local error with the invalid input', async () => {
     const edit = vi.fn();
     const wrapper = mount(CustomizationPanel, {
-      props: { actions: actionsFor(edit), record: recordFor() },
+      props: {
+        actions: actionsFor(edit),
+        record: recordFor({ spacing: { pageMargin: { x: 15, y: 15 } } }),
+      },
     });
     const gap = wrapper.get('[data-field="spacing.sectionGap"] input');
     const margin = wrapper.get('[data-field="spacing.pageMargin.x"] input');
@@ -346,10 +401,10 @@ describe('CustomizationPanel', () => {
   });
 
   it.each([
-    ['enable-page-margin', false],
-    ['unset-page-margin', true],
-    ['enable-header', false],
-    ['unset-header', true],
+    ['page-margin', false],
+    ['page-margin', true],
+    ['header', false],
+    ['header', true],
     ['unset-accent', true],
     ['unset-surface', true],
     ['unset-surface-target', true],
@@ -428,6 +483,31 @@ function recordFor(
     conflicts: [],
     sessionLost: false,
   } as ResumeRecord;
+}
+
+function mountPanel() {
+  const edit = vi.fn();
+  const wrapper = mount(CustomizationPanel, {
+    props: { actions: actionsFor(edit), record: recordFor() },
+  });
+  return { edit, wrapper };
+}
+
+async function setCustomization(
+  wrapper: ReturnType<typeof mount>,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const record = wrapper.props('record') as ResumeRecord;
+  const customization = record.current.document.customization;
+  record.current.document.customization = {
+    ...customization,
+    ...patch,
+    spacing: {
+      ...customization.spacing,
+      ...(patch.spacing as object | undefined),
+    },
+  };
+  await wrapper.setProps({ record });
 }
 
 function actionsFor(edit: ReturnType<typeof vi.fn>): ResumeEditorActions {

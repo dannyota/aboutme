@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
+import FormField from '../../app/FormField.vue';
+import { Button } from '../../ui/button';
+import { Input } from '../../ui/input';
+
 const props = withDefaults(
   defineProps<{
     readonly fallback?: string;
@@ -25,7 +29,6 @@ const value = ref(props.modelValue ?? props.fallback);
 const inputId = computed(
   () => `customization-${props.fieldId.replaceAll('.', '-')}`,
 );
-const errorId = computed(() => `${inputId.value}-error`);
 
 watch(
   () => [props.modelValue, props.fallback] as const,
@@ -40,8 +43,9 @@ function capture(): void {
 }
 
 function commit(event: FocusEvent): void {
-  if (removeButton.value !== null
-    && event.relatedTarget === removeButton.value) {
+  const related = event.relatedTarget;
+  if (related instanceof HTMLElement
+    && related.dataset.action === props.unsetAction) {
     return;
   }
   if (!dirty.value) return;
@@ -72,36 +76,44 @@ function isHexColor(candidate: string): boolean {
 </script>
 
 <template>
-  <label :for="inputId">
-    {{ label }}
-    <input
-      :id="inputId"
-      v-model="value"
-      type="text"
-      inputmode="text"
-      :aria-invalid="error === '' ? undefined : 'true'"
-      :aria-describedby="error === '' ? undefined : errorId"
-      @input="capture"
-      @blur="commit"
-    >
-  </label>
-  <p
-    v-if="error !== ''"
-    :id="errorId"
-    :data-error-for="fieldId"
-    role="alert"
+  <FormField
+    :id="inputId"
+    :error="error || undefined"
+    :label="label"
+    :name="fieldId"
   >
-    {{ error }}
-  </p>
-  <button
+    <template #default="{ id, describedBy, invalid }">
+      <div class="flex items-center gap-2">
+        <Input
+          :id="id"
+          v-model="value"
+          :aria-describedby="describedBy"
+          :aria-invalid="invalid"
+          inputmode="text"
+          spellcheck="false"
+          type="text"
+          @input="capture"
+          @blur="commit"
+        />
+        <span
+          class="size-6 rounded border"
+          :style="{ backgroundColor: isHexColor(value) ? value : undefined }"
+          aria-hidden="true"
+        />
+      </div>
+    </template>
+  </FormField>
+  <Button
     v-if="!required"
     ref="removeButton"
     type="button"
+    variant="ghost"
+    size="sm"
     :data-action="unsetAction"
     @pointerdown="prepareRemove"
     @mousedown="prepareRemove"
     @click="remove"
   >
     Remove
-  </button>
+  </Button>
 </template>
