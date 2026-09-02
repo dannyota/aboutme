@@ -16,13 +16,13 @@ graph LR
     G --> M[Private filesystem or S3 media]
 ```
 
-| Component  | Implemented responsibility                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go                                     |
-| Go server  | Health, user and agent authentication, sessions, resume HTTP/MCP, private media, publish, public read, and request policy |
-| Nuxt       | Landing/login/session/agent-consent UI, typed API transport, fonts, presets, the authenticated editor, and public SSR     |
-| PostgreSQL | Auth, OAuth client/grant/token, session, user, resume, public-state, idempotency, and media-cleanup records               |
-| Media      | Private create-only filesystem or S3 objects behind validated server-owned keys                                           |
+| Component  | Implemented responsibility                                                                                                  |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Caddy      | One-origin routing, forwarding-header removal, and canonical client-IP delivery to Go                                       |
+| Go server  | Health, user and agent authentication, sessions, resume HTTP/MCP, private media, publish, public read, and request policy   |
+| Nuxt       | Landing page, login/session/agent-consent UI, typed API transport, fonts, presets, the authenticated editor, and public SSR |
+| PostgreSQL | Auth, OAuth client/grant/token, session, user, resume, public-state, idempotency, and media-cleanup records                 |
+| Media      | Private create-only filesystem or S3 objects behind validated server-owned keys                                             |
 
 Daily development runs Go, Nuxt, and Caddy as native processes at
 `http://localhost:20080`. They use the `aboutme_dev` database in the one shared
@@ -50,7 +50,10 @@ protocol and MCP endpoints follow their protocol contracts and the accepted
 includes:
 
 - `GET` and `HEAD` health and readiness probes;
-- Google and LinkedIn OpenID Connect plus GitHub OAuth login;
+- an unauthenticated capabilities read that reports whether provider login and
+  agent access are enabled;
+- Google and LinkedIn OpenID Connect plus GitHub OAuth login, whose routes are
+  registered only when `PROVIDER_LOGIN_ENABLED` is true (off by default);
 - email-and-password registration, verification, login, reauthentication,
   add/change, and reset;
 - authenticated, CSRF-protected provider link and reauthentication starts;
@@ -100,6 +103,13 @@ exchange, exact tool discovery, agent-created editor content, grant revocation,
 and the revoked token's closed 401 over the trusted local HTTPS origin. The
 proof writes only bounded boolean/error-count evidence and cleans its reserved
 user, resume, client, grant, code, and token rows.
+
+The web shell renders a signed-out variant (Sign in, Create account) until the
+session read resolves and a signed-in variant (Resumes, Settings, account)
+afterward. The login and settings pages show provider and connected-agent
+controls only when the capabilities read enables them. Local native development
+and HTTPS proof commands seed one account and one private sample resume; Compose
+and cloud never run the seed.
 
 ## Implemented resume data layer
 
