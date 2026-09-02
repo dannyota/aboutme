@@ -27,6 +27,9 @@ func TestParseConfigGuardsTheDatabase(t *testing.T) {
 		{name: "missing url", args: []string{"seed"}, want: "--database-url is required"},
 		{name: "test database refused", args: []string{"seed", "--database-url", "postgres://127.0.0.1/aboutme"}, want: "aboutme_dev"},
 		{name: "remote host refused", args: []string{"seed", "--database-url", "postgres://db.example.com/aboutme_dev"}, want: "127.0.0.1"},
+		{name: "query remote host refused", args: []string{"seed", "--database-url", validDSN + "&host=db.example.com"}, want: "127.0.0.1"},
+		{name: "query fallback host refused", args: []string{"seed", "--database-url", validDSN + "&host=127.0.0.1,db.example.com"}, want: "127.0.0.1"},
+		{name: "query test database refused", args: []string{"seed", "--database-url", validDSN + "&dbname=aboutme"}, want: "aboutme_dev"},
 		{name: "mysql refused", args: []string{"seed", "--database-url", "mysql://127.0.0.1/aboutme_dev"}, want: "postgres"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,6 +48,22 @@ func TestParseConfigGuardsTheDatabase(t *testing.T) {
 				t.Fatalf("parseConfig() error = %v, want substring %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseConfigDoesNotExposeCredentials(t *testing.T) {
+	t.Parallel()
+	const credentialMarker = "dev-seed-test-secret"
+	_, _, err := parseConfig([]string{
+		"seed",
+		"--database-url",
+		"postgres://aboutme:" + credentialMarker + "@127.0.0.1:20432/%zz",
+	})
+	if err == nil {
+		t.Fatal("parseConfig() error = nil, want malformed database URL refusal")
+	}
+	if strings.Contains(err.Error(), credentialMarker) {
+		t.Fatalf("parseConfig() exposed credential marker: %v", err)
 	}
 }
 
@@ -94,6 +113,16 @@ func countRows(t *testing.T, db *sql.DB, query string, args ...any) int {
 	return n
 }
 
+func deleteSeedTestRows(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx, `DELETE FROM resumes WHERE id = $1`, seedResumeID); err != nil {
+		t.Errorf("delete seed resume: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, seedUser.ID); err != nil {
+		t.Errorf("delete seed user: %v", err)
+	}
+}
+
 func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
@@ -113,6 +142,10 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	if n := countRows(t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 1 {
 		t.Fatalf("credentials = %d, want 1", n)
 	}
+	var originalHash []byte
+	if err := db.QueryRowContext(ctx, `SELECT encoded_hash FROM password_credentials WHERE user_id = $1`, seedUser.ID).Scan(&originalHash); err != nil {
+		t.Fatalf("read original credential hash: %v", err)
+	}
 	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND live = false AND slug IS NULL AND revision = 1 AND schema_version = 2`, seedResumeID, seedUser.ID); n != 1 {
 		t.Fatalf("seed resume rows = %d, want 1 private v2 resume at revision 1", n)
 	}
@@ -124,6 +157,13 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	if err := runSeedWithDB(ctx, db); err != nil {
 		t.Fatalf("re-seed: %v", err)
 	}
+	var reseededHash []byte
+	if err := db.QueryRowContext(ctx, `SELECT encoded_hash FROM password_credentials WHERE user_id = $1`, seedUser.ID).Scan(&reseededHash); err != nil {
+		t.Fatalf("read reseeded credential hash: %v", err)
+	}
+	if !bytes.Equal(originalHash, reseededHash) {
+		t.Fatal("re-seed overwrote an existing credential hash")
+	}
 	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = 'edited' AND revision = 7`, seedResumeID); n != 1 {
 		t.Fatal("re-seed overwrote an existing document")
 	}
@@ -133,6 +173,157 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	}
 	if n := countRows(t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID) + countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1`, seedResumeID); n != 0 {
 		t.Fatalf("rows after cleanup = %d, want 0", n)
+	}
+}
+
+func TestSeedRefusesFixedIDOwnedByDifferentEmail(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	deleteSeedTestRows(t, ctx, db)
+	t.Cleanup(func() { deleteSeedTestRows(t, ctx, db) })
+
+	const otherEmail = "seed-id-collision@aboutme.invalid"
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO users (id, email, name) VALUES ($1, $2, 'Fixed ID collision')`, seedUser.ID, otherEmail); err != nil {
+		t.Fatalf("insert fixed-ID collision: %v", err)
+	}
+
+	err := runSeedWithDB(ctx, db)
+	if err == nil || !strings.Contains(err.Error(), "fixed id exists under a different email") {
+		t.Fatalf("runSeedWithDB error = %v, want fixed-ID refusal", err)
+	}
+	if err := runCleanupWithDB(ctx, db); err == nil || !strings.Contains(err.Error(), "different email") {
+		t.Fatalf("runCleanupWithDB error = %v, want fixed-ID refusal", err)
+	}
+
+	var email, name string
+	if err := db.QueryRowContext(ctx, `SELECT email::text, name FROM users WHERE id = $1`, seedUser.ID).Scan(&email, &name); err != nil {
+		t.Fatalf("read collision user: %v", err)
+	}
+	if email != otherEmail || name != "Fixed ID collision" {
+		t.Fatalf("collision user = (%q, %q), want (%q, %q)", email, name, otherEmail, "Fixed ID collision")
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 0 {
+		t.Fatalf("credentials = %d, want 0", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1`, seedResumeID); n != 0 {
+		t.Fatalf("seed resumes = %d, want 0", n)
+	}
+}
+
+func TestSeedAndCleanupRefuseFixedResumeIDOwnedByAnotherUser(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	deleteSeedTestRows(t, ctx, db)
+
+	const otherUserID = "5d000000-0000-4000-8000-0000000000fe"
+	const otherEmail = "seed-resume-collision@aboutme.invalid"
+	t.Cleanup(func() {
+		if _, err := db.ExecContext(ctx, `DELETE FROM resumes WHERE id = $1 AND user_id = $2`, seedResumeID, otherUserID); err != nil {
+			t.Errorf("delete colliding resume: %v", err)
+		}
+		if _, err := db.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, otherUserID); err != nil {
+			t.Errorf("delete colliding resume owner: %v", err)
+		}
+		deleteSeedTestRows(t, ctx, db)
+	})
+
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO users (id, email, name) VALUES ($1, $2, 'Fixed resume collision')`, otherUserID, otherEmail); err != nil {
+		t.Fatalf("insert resume owner: %v", err)
+	}
+	personalDetails, content, customization, err := splitResumeDoc(fullFixture)
+	if err != nil {
+		t.Fatalf("split resume document: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO resumes
+			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
+			 schema_version, revision, personal_details, content, customization)
+		VALUES ($1, $2, 'Other resume', NULL, false, true, false, 2, 7, $3, $4, $5)`,
+		seedResumeID, otherUserID, personalDetails, content, customization); err != nil {
+		t.Fatalf("insert colliding resume: %v", err)
+	}
+
+	err = runSeedWithDB(ctx, db)
+	if err == nil || !strings.Contains(err.Error(), "seed resume id is owned by a different user") {
+		t.Fatalf("runSeedWithDB error = %v, want fixed-resume refusal", err)
+	}
+	assertFixedResumeCollisionUnchanged(t, ctx, db, otherUserID, otherEmail)
+
+	err = runCleanupWithDB(ctx, db)
+	if err == nil || !strings.Contains(err.Error(), "seed resume id is owned by a different user") {
+		t.Fatalf("runCleanupWithDB error = %v, want fixed-resume refusal", err)
+	}
+	assertFixedResumeCollisionUnchanged(t, ctx, db, otherUserID, otherEmail)
+}
+
+func assertFixedResumeCollisionUnchanged(t *testing.T, ctx context.Context, db *sql.DB, otherUserID, otherEmail string) {
+	t.Helper()
+	if n := countRows(t, db, `SELECT count(*) FROM users WHERE id = $1`, seedUser.ID); n != 0 {
+		t.Fatalf("seed users = %d, want 0", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM password_credentials WHERE user_id = $1`, seedUser.ID); n != 0 {
+		t.Fatalf("seed credentials = %d, want 0", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM users WHERE id = $1 AND email::text = $2 AND name = 'Fixed resume collision'`, otherUserID, otherEmail); n != 1 {
+		t.Fatalf("resume owners = %d, want unchanged row", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND title = 'Other resume' AND revision = 7`, seedResumeID, otherUserID); n != 1 {
+		t.Fatalf("colliding resumes = %d, want unchanged row", n)
+	}
+}
+
+func TestCleanupRefusesWhenSeedUserOwnsNonSeedResume(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	if err := runCleanupWithDB(ctx, db); err != nil {
+		t.Fatalf("pre-clean: %v", err)
+	}
+	t.Cleanup(func() { deleteSeedTestRows(t, ctx, db) })
+	if err := runSeedWithDB(ctx, db); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	const extraResumeID = "5d000000-0000-4000-8000-000000000003"
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO resumes
+			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
+			 schema_version, revision, personal_details, content, customization)
+		SELECT $1, user_id, 'Developer resume', NULL, false, true, false,
+		       schema_version, 1, personal_details, content, customization
+		FROM resumes WHERE id = $2`, extraResumeID, seedResumeID); err != nil {
+		t.Fatalf("insert extra resume: %v", err)
+	}
+	var originalHash []byte
+	if err := db.QueryRowContext(ctx, `SELECT encoded_hash FROM password_credentials WHERE user_id = $1`, seedUser.ID).Scan(&originalHash); err != nil {
+		t.Fatalf("read credential hash: %v", err)
+	}
+
+	err := runCleanupWithDB(ctx, db)
+	if err == nil || !strings.Contains(err.Error(), "non-seed resume") {
+		t.Fatalf("runCleanupWithDB error = %v, want non-seed resume refusal", err)
+	}
+
+	var email, name string
+	if err := db.QueryRowContext(ctx, `SELECT email::text, name FROM users WHERE id = $1`, seedUser.ID).Scan(&email, &name); err != nil {
+		t.Fatalf("read seed user: %v", err)
+	}
+	if email != seedUser.Email || name != seedUser.Name {
+		t.Fatalf("seed user = (%q, %q), want (%q, %q)", email, name, seedUser.Email, seedUser.Name)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = $2 AND revision = 1`, seedResumeID, seedResumeTitle); n != 1 {
+		t.Fatalf("seed resumes = %d, want unchanged row", n)
+	}
+	if n := countRows(t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND title = 'Developer resume' AND revision = 1`, extraResumeID); n != 1 {
+		t.Fatalf("extra resumes = %d, want unchanged row", n)
+	}
+	var retainedHash []byte
+	if err := db.QueryRowContext(ctx, `SELECT encoded_hash FROM password_credentials WHERE user_id = $1`, seedUser.ID).Scan(&retainedHash); err != nil {
+		t.Fatalf("read retained credential hash: %v", err)
+	}
+	if !bytes.Equal(originalHash, retainedHash) {
+		t.Fatal("cleanup changed the credential hash")
 	}
 }
 
