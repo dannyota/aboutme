@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import type { PersonalDetail, PersonalDetails } from '@aboutme/schema';
 import { computed, ref } from 'vue';
+import { Button } from '@/components/ui/button';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
+import InspectorPanel from '../InspectorPanel.vue';
+import TextField from '../../app/TextField.vue';
 import ContactList from './ContactList.vue';
 import type { FieldIntent } from './fieldIntent';
-import OptionalField from './OptionalField.vue';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly personal: PersonalDetails;
 }>();
 
-const panel = ref<HTMLElement | null>(null);
+const panel = ref<{ $el?: HTMLElement } | null>(null);
 const issues = computed(() =>
   Object.values(props.actions.record.value?.issues ?? {}).flat(),
 );
@@ -65,14 +67,14 @@ function issueFor(field: 'fullName' | 'headline'): string | undefined {
 function focusField(path: string): void {
   const textField = textFieldForIssue(path);
   if (textField !== undefined) {
-    panel.value?.querySelector<HTMLElement>(
-      `[data-field="${textField}"] input`,
+    panel.value?.$el?.querySelector<HTMLElement>(
+      `[data-field="${textField}"] [data-field-input]`,
     )?.focus();
     return;
   }
   const contactField = contactFieldForIssue(path);
   if (contactField === undefined) return;
-  panel.value?.querySelector<HTMLElement>(
+  panel.value?.$el?.querySelector<HTMLElement>(
     `[data-detail-index="${contactField.index}"] `
     + `[data-detail-${contactField.field}]`,
   )?.focus();
@@ -144,68 +146,58 @@ function messageForCode(code: string): string {
 </script>
 
 <template>
-  <section
+  <InspectorPanel
     ref="panel"
-    aria-labelledby="personal-details-title"
+    title="Personal details"
+    title-id="personal-details-title"
   >
-    <h2 id="personal-details-title">
-      Personal details
-    </h2>
-    <div data-field="fullName">
-      <OptionalField
-        label="Full name"
-        :model-value="personal.fullName"
-        @intent="editText('fullName', $event)"
-      />
-      <button
-        v-if="issueFor('fullName') !== undefined"
-        type="button"
-        data-issue="personalDetails.fullName"
-        @click="focusField('personalDetails.fullName')"
-      >
-        {{ issueFor("fullName") }}
-      </button>
-    </div>
-    <div data-field="headline">
-      <OptionalField
-        label="Headline"
-        :model-value="personal.headline"
-        @intent="editText('headline', $event)"
-      />
-      <button
-        v-if="issueFor('headline') !== undefined"
-        type="button"
-        data-issue="personalDetails.headline"
-        @click="focusField('personalDetails.headline')"
-      >
-        {{ issueFor("headline") }}
-      </button>
-    </div>
+    <TextField
+      :error="issueFor('fullName')"
+      label="Full name"
+      :model-value="personal.fullName"
+      name="fullName"
+      @intent="editText('fullName', $event)"
+    />
+    <TextField
+      :error="issueFor('headline')"
+      label="Headline"
+      :model-value="personal.headline"
+      name="headline"
+      @intent="editText('headline', $event)"
+    />
+    <h3 class="sr-only">
+      Contact details
+    </h3>
     <ContactList
       :details="personal.details"
       :create-entity-id="actions.createEntityId"
       @change="editDetails"
       @unset="unsetDetails"
     />
-    <ul v-if="contactIssues.length > 0 || unmappedIssues.length > 0">
+    <ul
+      v-if="contactIssues.length > 0 || unmappedIssues.length > 0"
+      class="grid gap-1"
+    >
       <li
         v-for="issue in contactIssues"
         :key="`${issue.path}:${issue.code}`"
       >
-        <button
-          type="button"
+        <Button
           :data-issue="issue.path"
+          size="sm"
+          variant="link"
           @click="focusField(issue.path)"
         >
           {{ messageForCode(issue.code) }}
-        </button>
+        </Button>
       </li>
       <li
         v-for="issue in unmappedIssues"
         :key="`${issue.path}:${issue.code}`"
+        class="text-sm text-destructive"
       >
         {{ messageForCode(issue.code) }}
       </li>
     </ul>
-  </section>
+  </InspectorPanel>
 </template>

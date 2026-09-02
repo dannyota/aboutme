@@ -18,6 +18,7 @@ describe('FormField', () => {
         id: 'email',
         hint: 'Work address',
         error: 'Required',
+        errorAttrs: { 'data-error': 'contact-url' },
         name: 'email',
       },
       slots: { default: slotInput },
@@ -29,6 +30,9 @@ describe('FormField', () => {
     expect(wrapper.get('[role="alert"]').attributes('id')).toBe('email-error');
     expect(wrapper.get('[role="alert"]').attributes('data-error-for')).toBe(
       'email',
+    );
+    expect(wrapper.get('[role="alert"]').attributes('data-error')).toBe(
+      'contact-url',
     );
     expect(wrapper.attributes('data-field')).toBe('email');
   });

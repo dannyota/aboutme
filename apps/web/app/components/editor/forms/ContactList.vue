@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import type { PersonalDetail } from '@aboutme/schema';
 import { ref, watch } from 'vue';
+import { ChevronDown, ChevronUp, Trash2 } from '@lucide/vue';
+import IconButton from '../../app/IconButton.vue';
+import CheckboxField from '../../app/CheckboxField.vue';
+import SelectField from '../../app/SelectField.vue';
+import StatusBanner from '../../app/StatusBanner.vue';
+import TextField from '../../app/TextField.vue';
+import { Button } from '../../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 
 const props = defineProps<{
   readonly createEntityId: () => string;
@@ -151,141 +159,122 @@ function isWebProfile(type: PersonalDetail['type']): boolean {
     || type === 'twitter'
   );
 }
+
+const typeOptions = [
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'location', label: 'Location' },
+  { value: 'website', label: 'Website' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'github', label: 'GitHub' },
+  { value: 'twitter', label: 'Twitter' },
+  { value: 'custom', label: 'Custom' },
+] as const;
 </script>
 
 <template>
-  <fieldset>
-    <legend>Contact details</legend>
-    <ol>
-      <li
-        v-for="(detail, index) in details"
-        :key="detail.id"
-        :data-detail-index="index"
-      >
-        <strong :data-detail-id="detail.id">
-          Contact detail {{ index + 1 }}
-        </strong>
-        <label>
-          Type
-          <select
-            data-detail-type
-            :value="detail.type"
-            @change="
-              changeType(
-                detail.id,
-                ($event.target as HTMLSelectElement)
-                  .value as PersonalDetail['type'],
-              )
-            "
-          >
-            <option value="email">Email</option>
-            <option value="phone">Phone</option>
-            <option value="location">Location</option>
-            <option value="website">Website</option>
-            <option value="linkedin">LinkedIn</option>
-            <option value="github">GitHub</option>
-            <option value="twitter">Twitter</option>
-            <option value="custom">Custom</option>
-          </select>
-        </label>
-        <label>
-          Label
-          <input
-            data-detail-label
-            :value="detail.label ?? ''"
-            @blur="
-              changeLabel(detail.id, ($event.target as HTMLInputElement).value)
-            "
-          >
-        </label>
-        <button
-          type="button"
-          data-action="unset-detail-label"
-          @click="unsetLabel(detail.id)"
-        >
-          Remove label
-        </button>
-        <label>
-          Value
-          <input
-            data-detail-value
-            :value="detail.value"
-            :aria-describedby="
-              urlError === detail.id ? `contact-url-${index}` : undefined
-            "
-            @blur="
-              changeValue(detail.id, ($event.target as HTMLInputElement).value)
-            "
-          >
-        </label>
-        <p
-          v-if="urlError === detail.id"
-          :id="`contact-url-${index}`"
-          data-error="contact-url"
-          role="alert"
-        >
-          Use a lowercase https:// URL.
-        </p>
-        <label>
-          <input
-            data-detail-is-hidden
-            type="checkbox"
-            :checked="detail.isHidden"
-            @change="
-              changeHidden(
-                detail.id,
-                ($event.target as HTMLInputElement).checked,
-              )
-            "
-          >
-          Hide this detail
-        </label>
-        <button
-          type="button"
-          data-action="move-detail-up"
-          :disabled="index === 0"
-          @click="move(detail.id, -1)"
-        >
-          Move up
-        </button>
-        <button
-          type="button"
-          data-action="move-detail-down"
-          :disabled="index === details.length - 1"
-          @click="move(detail.id, 1)"
-        >
-          Move down
-        </button>
-        <button
-          type="button"
-          data-action="remove-detail"
-          @click="remove(detail.id)"
-        >
-          Remove detail
-        </button>
-      </li>
-    </ol>
-    <button
-      type="button"
-      data-action="add-detail"
-      @click="add"
+  <div class="grid gap-4">
+    <Card
+      v-for="(detail, index) in details"
+      :key="detail.id"
+      :data-detail-index="index"
     >
-      Add detail
-    </button>
-    <p
+      <CardHeader>
+        <CardTitle
+          class="text-base"
+          :data-detail-id="detail.id"
+        >
+          Contact detail {{ index + 1 }}
+        </CardTitle>
+      </CardHeader>
+      <CardContent class="grid gap-4">
+        <SelectField
+          label="Type"
+          :model-value="detail.type"
+          :options="typeOptions"
+          :control-attrs="{ 'data-detail-type': '' }"
+          @update:model-value="
+            changeType(detail.id, $event as PersonalDetail['type'])
+          "
+        />
+        <TextField
+          label="Label"
+          :model-value="detail.label"
+          :control-attrs="{ 'data-detail-label': '' }"
+          @intent="(intent) => intent.kind === 'unset'
+            ? unsetLabel(detail.id) : changeLabel(detail.id, intent.value)"
+        />
+        <TextField
+          label="Value"
+          :model-value="detail.value"
+          :error="urlError === detail.id ? 'Use a lowercase https:// URL.' : undefined"
+          :error-attrs="{ 'data-error': 'contact-url' }"
+          :control-attrs="{ 'data-detail-value': '' }"
+          @intent="(intent) => intent.kind === 'unset'
+            ? changeValue(detail.id, '') : changeValue(detail.id, intent.value)"
+        />
+        <CheckboxField
+          label="Hide this detail"
+          :model-value="detail.isHidden"
+          :data-detail-is-hidden="true"
+          role="checkbox"
+          @update:model-value="changeHidden(detail.id, $event)"
+        />
+        <div class="flex justify-end gap-1">
+          <IconButton
+            label="Move up"
+            size="icon-sm"
+            :disabled="index === 0"
+            data-action="move-detail-up"
+            @click="move(detail.id, -1)"
+          >
+            <ChevronUp />
+          </IconButton>
+          <IconButton
+            label="Move down"
+            size="icon-sm"
+            :disabled="index === details.length - 1"
+            data-action="move-detail-down"
+            @click="move(detail.id, 1)"
+          >
+            <ChevronDown />
+          </IconButton>
+          <IconButton
+            label="Remove detail"
+            size="icon-sm"
+            data-action="remove-detail"
+            @click="remove(detail.id)"
+          >
+            <Trash2 />
+          </IconButton>
+        </div>
+      </CardContent>
+    </Card>
+    <div class="flex gap-2">
+      <Button
+        data-action="add-detail"
+        size="sm"
+        variant="outline"
+        @click="add"
+      >
+        Add detail
+      </Button>
+      <Button
+        v-if="props.details !== undefined"
+        data-action="unset-details"
+        size="sm"
+        variant="ghost"
+        @click="emit('unset')"
+      >
+        Remove contact list
+      </Button>
+    </div>
+    <StatusBanner
       v-if="limitError"
+      kind="error"
       data-error="detail-limit"
-      role="alert"
     >
       You can add up to 16 contact details.
-    </p>
-    <button
-      v-if="details !== undefined"
-      type="button"
-      data-action="unset-details"
-      @click="emit('unset')"
-    >
-      Remove contact list
-    </button>
-  </fieldset>
+    </StatusBanner>
+  </div>
 </template>

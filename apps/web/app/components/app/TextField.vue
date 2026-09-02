@@ -20,6 +20,7 @@ const props = withDefaults(
     readonly placeholder?: string;
     readonly hint?: string;
     readonly error?: string;
+    readonly errorAttrs?: Record<string, string>;
     readonly required?: boolean;
     readonly disabled?: boolean;
     readonly controlAttrs?: Record<string, string>;
@@ -75,6 +76,7 @@ defineExpose({ focus: (): void => control.value?.$el?.focus() });
     v-slot="{ id: fieldId, describedBy, invalid }"
     :class="cn(props.class)"
     :error="error"
+    :error-attrs="errorAttrs"
     :hint="hint"
     :label="label"
     :name="name"
