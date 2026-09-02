@@ -13,16 +13,17 @@ import {
 import { observeSettledVisiblePageCount } from '../../editor/pageCountObserver';
 import type { PhotoReadState } from '../../stores/resumes';
 import ResumeDocument from '../resume/ResumeDocument.vue';
-import {
-  photoStateFor,
-  previewProjection,
-} from './previewProjection';
+import { previewProjection } from './previewProjection';
 
 const props = defineProps<{
   readonly document: Resume;
   readonly lng: string;
+  readonly zoom: 'fit' | 'full';
   readonly photoUrl?: string;
   readonly photoRead?: PhotoReadState;
+}>();
+const emit = defineEmits<{
+  pages: [count: number];
 }>();
 
 const previewRoot = shallowRef<HTMLElement | null>(null);
@@ -31,25 +32,6 @@ const renderFailed = ref(false);
 const projected = computed(() =>
   previewProjection(props.document, props.photoUrl),
 );
-const photoState = computed(() =>
-  photoStateFor(
-    props.photoRead,
-    props.document.personalDetails.photo !== undefined,
-  ),
-);
-const photoNotice = computed(() => {
-  switch (photoState.value) {
-    case 'loading':
-      return 'Photo is loading. The preview is shown without it.';
-    case 'unavailable':
-      return (
-        'Photo unavailable. The preview is shown without it. '
-        + 'Open the Photo panel to retry.'
-      );
-    default:
-      return '';
-  }
-});
 const context = computed(() => ({
   lng: props.lng,
   mode: 'paged' as const,
@@ -69,6 +51,7 @@ onMounted(async () => {
       previewRoot.value,
       (count) => {
         estimatedPages.value = count;
+        emit('pages', count);
       },
     );
   }
@@ -79,42 +62,28 @@ onBeforeUnmount(() => stopObserving?.());
 
 <template>
   <section
-    class="editor-preview"
+    class="grid h-full min-h-0 grid-rows-[minmax(0,1fr)]"
     aria-labelledby="editor-preview-title"
   >
-    <header class="editor-preview__header">
-      <h2 id="editor-preview-title">
-        Preview
-      </h2>
-      <p class="editor-preview__count">
-        <span data-estimated-pages-label>Estimated pages</span>
-        <output aria-label="Estimated page count">
-          {{ estimatedPages ?? "—" }}
-        </output>
-      </p>
-    </header>
     <div
       ref="previewRoot"
-      class="editor-preview__canvas"
+      class="overflow-auto bg-muted p-6"
       tabindex="0"
     >
       <p
-        v-if="photoNotice !== ''"
-        class="editor-preview__notice"
-        role="status"
-      >
-        {{ photoNotice }}
-      </p>
-      <p
         v-if="renderFailed"
-        class="editor-preview__notice"
+        class="mx-auto mt-16 max-w-md rounded-lg border bg-card p-4
+          text-muted-foreground"
         role="status"
       >
         Preview is temporarily unavailable. Your edits are still safe.
       </p>
       <div
         v-else
-        class="editor-preview__document"
+        :class="[
+          'mx-auto w-fit shadow-md',
+          zoom === 'fit' ? '[zoom:0.84] max-[72rem]:[zoom:0.72]' : '[zoom:1]',
+        ]"
       >
         <ResumeDocument
           :context="context"

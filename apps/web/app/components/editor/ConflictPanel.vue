@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { Button } from '@/components/ui/button';
+
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
 import type { ConflictRecord } from '../../editor/reconcile';
+import StatusBanner from '../app/StatusBanner.vue';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -184,15 +187,12 @@ function assertNever(value: never): never {
 </script>
 
 <template>
-  <section
+  <StatusBanner
     v-if="conflicts.length > 0"
     class="editor-conflicts"
-    aria-labelledby="editor-conflict-title"
-    role="status"
+    kind="info"
+    title="Review changes"
   >
-    <h2 id="editor-conflict-title">
-      Review changes
-    </h2>
     <article
       v-for="conflict in conflicts"
       :key="conflict.id"
@@ -201,25 +201,27 @@ function assertNever(value: never): never {
       <p>
         This part changed elsewhere. Review the latest version before saving.
       </p>
-      <button
+      <Button
         v-if="canAcceptLatest(conflict)"
+        size="sm"
         type="button"
         @click="acceptLatest(conflict.id)"
       >
         Accept latest
-      </button>
-      <button
+      </Button>
+      <Button
         v-if="controlFor(conflict) !== undefined"
         :data-action="
           controlFor(conflict)?.kind === 'apply-field'
             ? 'apply-mine'
             : controlFor(conflict)?.kind
         "
+        size="sm"
         type="button"
         @click="useControl(conflict)"
       >
         {{ controlFor(conflict)?.label }}
-      </button>
+      </Button>
     </article>
-  </section>
+  </StatusBanner>
 </template>

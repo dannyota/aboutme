@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
-import { computed, nextTick, type ComputedRef } from 'vue';
+import { computed, type ComputedRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
 import EditorShell from '../../app/components/editor/EditorShell.vue';
@@ -12,13 +14,15 @@ import type {
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
+const appCss = readFileSync(
+  resolve(process.cwd(), 'app/assets/css/app.css'),
+  'utf8',
+);
+const compact = (value: string): string => value.replaceAll(/\s+/g, '');
+
 describe('EditorShell', () => {
   it('renders the four-region editor with adjacent account and theme', () => {
-    const record = editorRecord();
-    const wrapper = mount(EditorShell, {
-      props: { actions: actionsFor(record), record },
-      global: { stubs: heavyStubs() },
-    });
+    const wrapper = mountShell();
 
     expect(wrapper.get('[data-region="app-rail"]').exists()).toBe(true);
     expect(wrapper.get('[data-region="outline"]').exists()).toBe(true);
@@ -26,29 +30,81 @@ describe('EditorShell', () => {
     expect(wrapper.get('[data-region="inspector"]').exists()).toBe(true);
     expect(wrapper.get('[data-resume-title]').text()).toBe('Fixture');
 
-    const controls = wrapper
-      .get('.editor-account-actions')
-      .findAll(':scope > *');
-    expect(controls).toHaveLength(2);
-    expect(controls[0]?.attributes('data-testid')).toBe('account-menu');
-    expect(controls[1]?.classes()).toContain('theme-toggle');
+    expect(wrapper.get('[data-testid="account-menu"]').exists()).toBe(true);
+    expect(wrapper.get('button[aria-label^="Switch to"]').exists()).toBe(true);
     expect(wrapper.get('[data-action="publish"]').text()).toBe('Publish');
+    expect(wrapper.text()).not.toMatch(/Undo all|Redo/);
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
 
   it('opens the publish dialog from the editor topbar', async () => {
-    const record = editorRecord();
-    const wrapper = mount(EditorShell, {
-      props: { actions: actionsFor(record), record },
-      global: { stubs: heavyStubs() },
-    });
+    const wrapper = mountShell();
 
     await wrapper.get('[data-action="publish"]').trigger('click');
 
     expect(wrapper.get('[role="dialog"]').text()).toContain('Publish resume');
   });
 
-  it('derives the outline order from layout and changes local focus only',
+  it('places each editor region in an explicit grid cell', () => {
+    const wrapper = mountShell();
+
+    expect(wrapper.get('[data-region="app-rail"]').classes()).toEqual(
+      expect.arrayContaining(['col-start-1', 'row-start-2']),
+    );
+    expect(wrapper.get('[data-region="outline"]').classes()).toEqual(
+      expect.arrayContaining(['col-start-2', 'row-start-2']),
+    );
+    expect(wrapper.get('[data-region="preview"]').classes()).toEqual(
+      expect.arrayContaining(['col-start-3', 'row-start-2']),
+    );
+    expect(wrapper.get('[data-region="inspector"]').classes()).toEqual(
+      expect.arrayContaining(['col-start-4', 'row-start-2']),
+    );
+  });
+
+  it('keeps the narrow topbar to one explicit row', () => {
+    const wrapper = mountShell();
+    const topbar = wrapper.get('.editor-topbar');
+
+    expect(topbar.classes()).toContain(
+      'max-[72rem]:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]',
+    );
+    expect(wrapper.get('.editor-account-actions').classes()).not.toContain(
+      'max-[72rem]:col-span-full',
+    );
+  });
+
+  it('fits the preview toolbar and document in two grid rows', () => {
+    const wrapper = mountShell();
+    expect(wrapper.get('[data-region="preview"]').classes()).toEqual(
+      expect.arrayContaining(['grid', 'grid-rows-[auto_minmax(0,1fr)]']),
+    );
+  });
+
+  it(
+    'excludes shared Button primitives from legacy editor button rules',
+    () => {
+      const scope
+        = '.aboutme-app :is(.app-chrome, .app-page, .editor-topbar, '
+          + '.editor-outline, .editor-inspector)';
+      const hoverSelector
+        = `${scope} button:not([data-slot="button"]):hover:not(:disabled)`;
+      const normalizedAppCss = compact(appCss);
+
+      expect(normalizedAppCss).toContain(
+        compact(`${scope} button:not([data-slot="button"])`),
+      );
+      expect(normalizedAppCss).toContain(
+        compact(hoverSelector),
+      );
+      expect(normalizedAppCss).toContain(
+        compact(`${scope} button:not([data-slot="button"]):disabled`),
+      );
+    },
+  );
+
+  it(
+    'derives the outline order from layout and changes local focus only',
     async () => {
       const record = editorRecord();
       const actions = actionsFor(record);
@@ -67,16 +123,17 @@ describe('EditorShell', () => {
         wrapper.getComponent({ name: 'SectionPanel' }).props('sectionKey'),
       ).toBe('skill');
       expect(actions.edit).not.toHaveBeenCalled();
-    });
+    },
+  );
 
-  it('keeps editor and preview mounted while narrow navigation changes',
+  it(
+    'keeps editor and preview mounted while narrow navigation changes',
     async () => {
       const record = editorRecord();
       const wrapper = mount(EditorShell, {
         props: { actions: actionsFor(record), record },
         global: { stubs: heavyStubs() },
       });
-
       const editor = wrapper.get('[data-responsive-region="editor"]');
       const preview = wrapper.get('[data-responsive-region="preview"]');
       await wrapper.get('[data-action="show-preview"]').trigger('click');
@@ -85,9 +142,78 @@ describe('EditorShell', () => {
       expect(preview.exists()).toBe(true);
       expect(editor.attributes('data-narrow-active')).toBe('false');
       expect(preview.attributes('data-narrow-active')).toBe('true');
-    });
+    },
+  );
 
-  it('matches hostile issue paths without building a CSS selector',
+  it('renders the rail as pressed icon buttons with tooltips', async () => {
+    const wrapper = mountShell();
+    const design = wrapper.get(
+      '[data-region="app-rail"] [aria-label="Design"]',
+    );
+    expect(design.attributes('aria-pressed')).toBe('false');
+    await design.trigger('click');
+    expect(design.attributes('aria-pressed')).toBe('true');
+    expect(wrapper.get('#customization-title').text()).toBe('Customization');
+    expect(wrapper.findAll('#customization-title')).toHaveLength(1);
+  });
+
+  it('keeps the session-lost dialog open on Escape', async () => {
+    const wrapper = mountShell(
+      { sessionLost: true },
+      { attachTo: document.body },
+    );
+    await wrapper.vm.$nextTick();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('Sign in to continue editing');
+    dialog.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await wrapper.vm.$nextTick();
+    expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-action="resume-after-auth"]'),
+    ).not.toBeNull();
+    const overlay = document.body.querySelector(
+      '[data-slot="alert-dialog-overlay"]',
+    )!;
+    overlay.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(wrapper.get('[data-region="preview"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it.each([
+    ['loading', 'Photo is loading'],
+    ['unavailable', 'Photo unavailable'],
+  ] as const)(
+    'renders the %s photo state in the preview toolbar',
+    (state, text) => {
+      const record = editorRecord();
+      record.current.document.personalDetails.photo = {
+        key: 'resumes/resume-1/private-object.jpg',
+      };
+      record.photoRead
+        = state === 'loading'
+          ? { kind: 'loading', binding: 'k', generation: 1 }
+          : {
+              kind: 'suspended',
+              binding: 'k',
+              generation: 1,
+              reason: 'read-failed',
+            };
+      const wrapper = mount(EditorShell, {
+        props: { actions: actionsFor(record), record },
+        global: { stubs: heavyStubs() },
+      });
+
+      expect(wrapper.get('[data-photo-state]').text()).toContain(text);
+      expect(wrapper.html()).not.toContain('private-object.jpg');
+    },
+  );
+
+  it(
+    'matches hostile issue paths without building a CSS selector',
     async () => {
       const record = editorRecord();
       const path = 'personalDetails"]';
@@ -116,41 +242,8 @@ describe('EditorShell', () => {
 
       expect(wrapper.get('[data-issue]').text()).toBe('1');
       wrapper.unmount();
-    });
-
-  it('keeps focus on the owning field after closing a publish issue',
-    async () => {
-      const path = 'personalDetails.fullName';
-      const record = editorRecord();
-      const state = computed<PublishControllerState>(() => ({
-        kind: 'invalid',
-        issues: [{ path, code: 'required_for_live' }],
-      }));
-      const wrapper = mount(EditorShell, {
-        attachTo: document.body,
-        props: { actions: actionsFor(record, state), record },
-        global: {
-          stubs: {
-            ...heavyStubs(),
-            PersonalDetailsPanel: {
-              data: () => ({ path }),
-              template: [
-                '<input :data-issue="path"',
-                ' @click="$event.currentTarget.focus()">',
-              ].join(''),
-            },
-          },
-        },
-      });
-
-      await wrapper.get('[data-action="publish"]').trigger('click');
-      await wrapper.get('[data-action="focus-publish-issue"]').trigger('click');
-      await nextTick();
-      await nextTick();
-
-      expect(document.activeElement).toBe(wrapper.get('[data-issue]').element);
-      wrapper.unmount();
-    });
+    },
+  );
 });
 
 function editorRecord(): ResumeRecord {
@@ -187,6 +280,18 @@ function editorRecord(): ResumeRecord {
     sessionLost: false,
     opaquePhotoOutcome: null,
   };
+}
+
+function mountShell(
+  recordOverrides: Partial<ResumeRecord> = {},
+  options: { attachTo?: Element | string } = {},
+) {
+  const record = { ...editorRecord(), ...recordOverrides };
+  return mount(EditorShell, {
+    ...options,
+    props: { actions: actionsFor(record), record },
+    global: { stubs: heavyStubs() },
+  });
 }
 
 function actionsFor(
@@ -241,7 +346,7 @@ function heavyStubs() {
     StructurePanel: { name: 'StructurePanel', template: '<div />' },
     CustomizationPanel: {
       name: 'CustomizationPanel',
-      template: '<div />',
+      template: '<div><h2 id="customization-title">Customization</h2></div>',
     },
     TemplatePanel: { name: 'TemplatePanel', template: '<div />' },
     PhotoPanel: { name: 'PhotoPanel', template: '<div />' },

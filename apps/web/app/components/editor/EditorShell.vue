@@ -10,6 +10,16 @@ import {
   UserRound,
 } from '@lucide/vue';
 import { computed, nextTick, ref } from 'vue';
+import { Button, buttonVariants } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import IconButton from '../app/IconButton.vue';
 
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
 import type { SaveState } from '../../editor/types';
@@ -25,8 +35,10 @@ import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
 import EditorPreview from './EditorPreview.vue';
 import ErrorSummary from './ErrorSummary.vue';
+import PreviewToolbar from './PreviewToolbar.vue';
 import SaveStatus from './SaveStatus.vue';
 import PublishDialog from './PublishDialog.vue';
+import { photoStateFor } from './previewProjection';
 
 type InspectorPanel
   = | { readonly kind: 'personal' }
@@ -44,6 +56,8 @@ const props = defineProps<{
 const inspector = ref<InspectorPanel>({ kind: 'personal' });
 const narrowRegion = ref<'editor' | 'preview'>('editor');
 const publishOpen = ref(false);
+const estimatedPages = ref<number | null>(null);
+const zoom = ref<'fit' | 'full'>('fit');
 const document = computed(() => props.record.current.document);
 const placement = computed(() => document.value.customization.layout.sections);
 const outline = computed(() => [
@@ -72,6 +86,12 @@ const photoUrl = computed(() => {
     ? read.dataUrl
     : undefined;
 });
+const photoState = computed(() =>
+  photoStateFor(
+    props.record.photoRead,
+    document.value.personalDetails.photo !== undefined,
+  ),
+);
 const issues = computed(() => Object.values(props.record.issues).flat());
 const saveState = computed<SaveState>(() => {
   const record = props.record;
@@ -143,48 +163,72 @@ function sectionLabel(type: string): string {
 </script>
 
 <template>
-  <main class="editor-shell">
-    <header class="editor-topbar">
+  <main
+    :class="[
+      'editor-shell grid min-h-dvh max-h-dvh',
+      'grid-cols-[4rem_16.5rem_minmax(32rem,1fr)_22rem]',
+      'grid-rows-[4rem_minmax(0,1fr)] overflow-hidden bg-background',
+      'text-foreground max-[72rem]:grid-cols-[4rem_minmax(0,1fr)]',
+    ]"
+  >
+    <header
+      :class="[
+        'editor-topbar col-span-full grid',
+        'grid-cols-[auto_minmax(12rem,1fr)_auto_auto_auto] items-center gap-5',
+        'border-b bg-background/95 px-4 py-2.5',
+        'max-[72rem]:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]',
+        'max-[72rem]:grid-rows-[4rem]',
+        'max-[42rem]:gap-3',
+      ]"
+    >
       <NuxtLink
         class="editor-brand"
         to="/app/resumes"
       > aboutme </NuxtLink>
-      <div class="editor-title-group">
-        <h1 data-resume-title>
+      <div class="editor-title-group flex min-w-0 items-center gap-4">
+        <h1
+          class="truncate text-sm font-semibold"
+          data-resume-title
+        >
           {{ record.current.metadata.title }}
         </h1>
         <SaveStatus :state="saveState" />
       </div>
-      <button
-        type="button"
+      <Button
         class="editor-publish-action"
         data-action="publish"
+        size="sm"
+        type="button"
         @click="publishOpen = true"
       >
         Publish
-      </button>
+      </Button>
       <div
-        class="editor-view-switcher"
+        class="editor-view-switcher flex items-center gap-1"
         aria-label="Editor view"
       >
-        <button
-          type="button"
-          data-action="show-editor"
+        <Button
           :aria-pressed="narrowRegion === 'editor'"
+          :data-action="'show-editor'"
+          :variant="narrowRegion === 'editor' ? 'default' : 'outline'"
+          size="sm"
+          type="button"
           @click="narrowRegion = 'editor'"
         >
           Editor
-        </button>
-        <button
-          type="button"
-          data-action="show-preview"
+        </Button>
+        <Button
           :aria-pressed="narrowRegion === 'preview'"
+          :data-action="'show-preview'"
+          :variant="narrowRegion === 'preview' ? 'default' : 'outline'"
+          size="sm"
+          type="button"
           @click="narrowRegion = 'preview'"
         >
           Preview
-        </button>
+        </Button>
       </div>
-      <div class="editor-account-actions">
+      <div class="editor-account-actions flex items-center gap-2">
         <AccountMenu />
         <ThemeToggle />
       </div>
@@ -198,103 +242,70 @@ function sectionLabel(type: string): string {
       @focus-issue="focusIssue"
     />
 
-    <section
-      v-if="record.sessionLost"
-      class="editor-session-lost"
-      aria-labelledby="editor-session-title"
-      role="alert"
-    >
-      <h2 id="editor-session-title">
-        Sign in to continue editing
-      </h2>
-      <p>Your unsaved work is still open in this tab.</p>
-      <a
-        href="/login"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Open sign-in in another tab
-      </a>
-      <button
-        type="button"
-        data-action="resume-after-auth"
-        @click="actions.resumeAfterAuth()"
-      >
-        Resume after sign-in
-      </button>
-      <button
-        type="button"
-        @click="discardAndSignIn"
-      >
-        Discard and sign in
-      </button>
-    </section>
-
     <aside
-      class="editor-app-rail"
+      class="editor-app-rail col-start-1 row-start-2 flex flex-col items-center
+        gap-2 border-r bg-card p-2"
       data-region="app-rail"
       aria-label="Editor tools"
     >
-      <button
-        type="button"
-        aria-label="Document"
-        :aria-pressed="
-          inspector.kind === 'personal' || inspector.kind === 'section'
-        "
+      <IconButton
+        data-action="open-document"
+        :pressed="inspector.kind === 'personal' || inspector.kind === 'section'"
+        label="Document"
         @click="inspector = { kind: 'personal' }"
       >
         <FileText
           :size="20"
           aria-hidden="true"
         />
-      </button>
-      <button
-        type="button"
-        aria-label="Structure"
-        :aria-pressed="inspector.kind === 'structure'"
+      </IconButton>
+      <IconButton
+        data-action="open-structure"
+        :pressed="inspector.kind === 'structure'"
+        label="Structure"
         @click="inspector = { kind: 'structure' }"
       >
         <LayoutList
           :size="20"
           aria-hidden="true"
         />
-      </button>
-      <button
-        type="button"
-        aria-label="Design"
-        :aria-pressed="inspector.kind === 'customization'"
+      </IconButton>
+      <IconButton
+        data-action="open-design"
+        :pressed="inspector.kind === 'customization'"
+        label="Design"
         @click="inspector = { kind: 'customization' }"
       >
         <Palette
           :size="20"
           aria-hidden="true"
         />
-      </button>
-      <button
-        type="button"
-        aria-label="Templates"
-        :aria-pressed="inspector.kind === 'templates'"
+      </IconButton>
+      <IconButton
+        data-action="open-templates"
+        :pressed="inspector.kind === 'templates'"
+        label="Templates"
         @click="inspector = { kind: 'templates' }"
       >
         <Sparkles
           :size="20"
           aria-hidden="true"
         />
-      </button>
-      <button
-        type="button"
-        aria-label="Photo"
-        :aria-pressed="inspector.kind === 'photo'"
+      </IconButton>
+      <IconButton
+        data-action="open-photo"
+        :pressed="inspector.kind === 'photo'"
+        label="Photo"
         @click="inspector = { kind: 'photo' }"
       >
         <Image
           :size="20"
           aria-hidden="true"
         />
-      </button>
-      <span class="editor-app-rail__spacer" />
+      </IconButton>
+      <span class="flex-1" />
       <NuxtLink
-        class="editor-rail-link"
+        :class="buttonVariants({ variant: 'ghost', size: 'icon' })"
         to="/app/settings/sessions"
         aria-label="Account settings"
       >
@@ -304,7 +315,7 @@ function sectionLabel(type: string): string {
         />
       </NuxtLink>
       <span
-        class="editor-rail-avatar"
+        class="grid size-9 place-items-center rounded-full border"
         aria-hidden="true"
       >
         <UserRound :size="18" />
@@ -312,67 +323,95 @@ function sectionLabel(type: string): string {
     </aside>
 
     <aside
-      class="editor-outline"
+      class="editor-outline col-start-2 row-start-2 flex min-w-0 flex-col
+        overflow-auto border-r bg-card max-[72rem]:col-start-2
+        max-[72rem]:row-start-2 max-[72rem]:w-full max-[72rem]:max-w-[38rem]
+        max-[72rem]:data-[narrow-active=false]:pointer-events-none
+        max-[72rem]:data-[narrow-active=false]:invisible"
       data-region="outline"
       data-responsive-region="editor"
       :data-narrow-active="narrowRegion === 'editor'"
     >
-      <div class="editor-panel-heading">
-        <h2>Resume</h2>
-        <button
-          type="button"
-          aria-label="Add section"
+      <div class="flex items-center justify-between p-4">
+        <h2 class="text-base font-semibold">
+          Resume
+        </h2>
+        <IconButton
+          label="Add section"
+          size="icon-sm"
           @click="inspector = { kind: 'structure' }"
         >
           +
-        </button>
+        </IconButton>
       </div>
-      <nav aria-label="Resume outline">
-        <button
+      <nav
+        class="grid gap-1 px-2"
+        aria-label="Resume outline"
+      >
+        <Button
           v-for="item in outline"
           :key="item.key"
-          type="button"
-          :data-outline-key="item.key"
           :aria-current="
             (inspector.kind === 'section' && inspector.key === item.key)
               || (inspector.kind === 'personal' && item.key === 'personal')
               ? 'page'
               : undefined
           "
+          :data-outline-key="item.key"
+          class="w-full justify-start aria-[current=page]:bg-positive/15
+            aria-[current=page]:text-foreground"
+          variant="ghost"
           @click="selectOutline(item.key)"
         >
           <PanelsTopLeft
             :size="18"
             aria-hidden="true"
           />
-          <span>{{ item.label }}</span>
-        </button>
+          <span class="truncate">{{ item.label }}</span>
+        </Button>
       </nav>
-      <button
-        class="editor-add-section"
-        type="button"
+      <Button
+        class="mx-4 mt-auto mb-4"
+        variant="outline"
         @click="inspector = { kind: 'structure' }"
       >
         + Add section
-      </button>
+      </Button>
     </aside>
 
     <div
-      class="editor-preview-region"
+      class="editor-preview-region col-start-3 row-start-2 grid min-w-0
+        grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-muted
+        max-[72rem]:col-start-2 max-[72rem]:row-start-2
+        max-[72rem]:data-[narrow-active=false]:pointer-events-none
+        max-[72rem]:data-[narrow-active=false]:invisible"
       data-region="preview"
       data-responsive-region="preview"
       :data-narrow-active="narrowRegion === 'preview'"
     >
+      <PreviewToolbar
+        :estimated-pages="estimatedPages"
+        :photo-state="photoState"
+        :zoom="zoom"
+        @open-photo="inspector = { kind: 'photo' }"
+        @update:zoom="zoom = $event"
+      />
       <EditorPreview
         :document="document"
         :lng="record.current.metadata.lng"
-        :photo-url="photoUrl"
         :photo-read="record.photoRead"
+        :photo-url="photoUrl"
+        :zoom="zoom"
+        @pages="estimatedPages = $event"
       />
     </div>
 
     <aside
-      class="editor-inspector"
+      class="editor-inspector col-start-4 row-start-2 min-w-0 overflow-auto
+        border-l bg-card p-4 max-[72rem]:col-start-2 max-[72rem]:row-start-2
+        max-[72rem]:ml-[min(16.5rem,38%)] max-[72rem]:w-[min(100%,38rem)]
+        max-[72rem]:data-[narrow-active=false]:pointer-events-none
+        max-[72rem]:data-[narrow-active=false]:invisible"
       data-region="inspector"
       data-responsive-region="editor"
       :data-narrow-active="narrowRegion === 'editor'"
@@ -419,5 +458,38 @@ function sectionLabel(type: string): string {
         :record="record"
       />
     </aside>
+
+    <AlertDialog :open="record.sessionLost">
+      <AlertDialogContent @escape-key-down.prevent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Sign in to continue editing</AlertDialogTitle>
+          <AlertDialogDescription>
+            Your unsaved work is still open in this tab.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <a
+            :class="buttonVariants({ variant: 'outline' })"
+            href="/login"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open sign-in in another tab
+          </a>
+          <Button
+            data-action="resume-after-auth"
+            @click="actions.resumeAfterAuth()"
+          >
+            Resume after sign-in
+          </Button>
+          <Button
+            variant="ghost"
+            @click="discardAndSignIn"
+          >
+            Discard and sign in
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </main>
 </template>

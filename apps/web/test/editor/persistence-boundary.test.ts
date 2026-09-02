@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { computed } from 'vue';
+import { computed, nextTick } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import EditorShell from '../../app/components/editor/EditorShell.vue';
@@ -27,24 +27,41 @@ describe('editor persistence boundary', () => {
       expect(shouldRetainEditorOnSessionLoss(editorRecord())).toBe(false);
     });
 
-  it('does not persist retained session-lost work or change the URL', () => {
-    const storage = persistenceProbes();
-    const before = currentURL();
-    const record = editorRecord();
-    record.pending = [{ id: 'pending-1' }] as never;
-    record.sessionLost = true;
+  it(
+    'does not persist retained session-lost work or change the URL',
+    async () => {
+      const storage = persistenceProbes();
+      const before = currentURL();
+      const record = editorRecord();
+      record.pending = [{ id: 'pending-1' }] as never;
+      record.sessionLost = true;
 
-    const wrapper = mount(EditorShell, {
-      props: { actions: actionsFor(record), record },
-      global: { stubs: shellStubs() },
-    });
+      const wrapper = mount(EditorShell, {
+        attachTo: document.body,
+        props: { actions: actionsFor(record), record },
+        global: { stubs: shellStubs() },
+      });
 
-    expect(wrapper.get('[data-action="resume-after-auth"]').exists()).toBe(
-      true,
-    );
-    expect(storage.every((probe) => probe.mock.calls.length === 0)).toBe(true);
-    expect(currentURL()).toEqual(before);
-  });
+      try {
+        await nextTick();
+        expect(
+          document.body.querySelector('[data-action="resume-after-auth"]'),
+        ).not.toBeNull();
+        expect(storage.every((probe) => probe.mock.calls.length === 0)).toBe(
+          true,
+        );
+        expect(currentURL()).toEqual(before);
+      } finally {
+        wrapper.unmount();
+        if (wrapper.element.isConnected) wrapper.element.remove();
+        document.body
+          .querySelectorAll(
+            '[role="alertdialog"], [data-slot="alert-dialog-overlay"]',
+          )
+          .forEach((element) => element.remove());
+      }
+    },
+  );
 });
 
 function currentURL() {
