@@ -153,6 +153,45 @@ func TestLoad_MCPEnableFlagRejectsInvalidValueWithoutEcho(t *testing.T) {
 	}
 }
 
+func TestLoad_ProviderLoginFlag(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		raw     string
+		enabled bool
+	}{
+		{name: "blank is off", raw: "", enabled: false},
+		{name: "false is off", raw: "false", enabled: false},
+		{name: "true is on", raw: "true", enabled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			vars := validDevEnv()
+			vars["PROVIDER_LOGIN_ENABLED"] = tc.raw
+			got, err := config.Load(env(vars))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if got.ProviderLoginEnabled != tc.enabled {
+				t.Fatalf("ProviderLoginEnabled = %t, want %t", got.ProviderLoginEnabled, tc.enabled)
+			}
+		})
+	}
+}
+
+func TestLoad_ProviderLoginFlagRejectsInvalidValueWithoutEcho(t *testing.T) {
+	t.Parallel()
+	vars := validDevEnv()
+	vars["PROVIDER_LOGIN_ENABLED"] = "yes-secret-sentinel"
+	_, err := config.Load(env(vars))
+	if err == nil {
+		t.Fatal("Load() error = nil, want PROVIDER_LOGIN_ENABLED rejection")
+	}
+	if !strings.Contains(err.Error(), "PROVIDER_LOGIN_ENABLED") || strings.Contains(err.Error(), vars["PROVIDER_LOGIN_ENABLED"]) {
+		t.Fatalf("Load() error = %q, want variable name without raw value", err)
+	}
+}
+
 func TestConfig_ValidateAgentAccessRejectsPartialEnabledConfiguration(t *testing.T) {
 	t.Parallel()
 	cfg := config.Config{
