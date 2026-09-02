@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -80,6 +81,104 @@ func TestEmbeddedFixtureMatchesSchemaPackage(t *testing.T) {
 	}
 	if _, _, _, err := splitResumeDoc(fullFixture); err != nil {
 		t.Fatalf("splitResumeDoc: %v", err)
+	}
+}
+
+func TestSplitResumeDocStripsPhoto(t *testing.T) {
+	t.Parallel()
+	personalDetails, _, _, err := splitResumeDoc(fullFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte(`{
+    "fullName": "Ada Lovelace",
+    "headline": "Analytical Engineer",
+    "details": [
+      {
+        "id": "f0cf483d-585c-4340-9adc-773b3bea3db0",
+        "type": "email",
+        "value": "ada@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "2c25e47b-3eaa-4670-ac85-c23626079998",
+        "type": "phone",
+        "value": "+84 90 000 0000",
+        "isHidden": false
+      },
+      {
+        "id": "9d150558-23be-4bcd-b7ec-181932f94907",
+        "type": "location",
+        "value": "Hanoi, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "062fe149-9545-4484-8df0-332c302cd3b8",
+        "type": "linkedin",
+        "label": "LinkedIn",
+        "value": "https://linkedin.com/in/ada",
+        "isHidden": false
+      },
+      {
+        "id": "09418968-1a86-49cb-8dd8-c746a2780249",
+        "type": "website",
+        "value": "https://ada.example.com",
+        "isHidden": false
+      }
+    ]
+  }`)
+	if !bytes.Equal(personalDetails, want) {
+		t.Fatalf("personal details bytes differ from fixture minus photo:\n got: %s\nwant: %s", personalDetails, want)
+	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(personalDetails, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := decoded["photo"]; ok {
+		t.Fatal("seeded personal details must not reference a photo object")
+	}
+	for _, key := range []string{"fullName", "headline", "details"} {
+		if _, ok := decoded[key]; !ok {
+			t.Fatalf("seeded personal details lost %q", key)
+		}
+	}
+}
+
+func TestWithoutPhotoCopiesWhenPhotoIsAbsent(t *testing.T) {
+	t.Parallel()
+	raw := json.RawMessage(`{"fullName":"Ada Lovelace"}`)
+	want := append([]byte(nil), raw...)
+	got, err := withoutPhoto(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[2] = 'X'
+	if !bytes.Equal(got, want) {
+		t.Fatalf("withoutPhoto changed its result after input mutation: got %q, want %q", got, want)
+	}
+}
+
+func TestWithoutPhotoHandlesPhotoPosition(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "first", raw: `{"photo":{"key":"p"},"fullName":"Ada","details":[]}`, want: `{"fullName":"Ada","details":[]}`},
+		{name: "middle", raw: `{"fullName":"Ada","photo":[1,2],"details":[]}`, want: `{"fullName":"Ada","details":[]}`},
+		{name: "last", raw: `{"fullName":"Ada","details":[],"photo":null}`, want: `{"fullName":"Ada","details":[]}`},
+		{name: "sole", raw: `{"photo":true}`, want: `{}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := withoutPhoto(json.RawMessage(tt.raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, []byte(tt.want)) {
+				t.Fatalf("withoutPhoto(%s) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
 	}
 }
 
