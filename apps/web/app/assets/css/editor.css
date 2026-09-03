@@ -44,7 +44,7 @@
 .aboutme-app .editor-topbar {
   grid-area: topbar;
   display: grid;
-  grid-template-columns: auto minmax(12rem, 1fr) auto auto;
+  grid-template-columns: auto minmax(12rem, 1fr) auto auto auto;
   align-items: center;
   gap: 1.25rem;
   border-block-end: 1px solid var(--border);
@@ -113,6 +113,77 @@
 
 .aboutme-app .editor-account-actions {
   gap: 0.5rem;
+}
+
+.aboutme-app .editor-publish-action {
+  border-color: var(--positive);
+  background: var(--positive);
+  color: var(--positive-foreground);
+  white-space: nowrap;
+}
+
+.aboutme-app .publish-dialog-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 1rem;
+  background: oklch(0.141 0.005 285.823 / 56%);
+}
+
+.aboutme-app .publish-dialog {
+  inline-size: min(100%, 38rem);
+  max-block-size: calc(100dvh - 2rem);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 1rem 3rem oklch(0.141 0.005 285.823 / 24%);
+}
+
+.aboutme-app .publish-dialog form,
+.aboutme-app .publish-dialog fieldset,
+.aboutme-app .publish-dialog__reauth,
+.aboutme-app .publish-dialog__actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.aboutme-app .publish-dialog h2,
+.aboutme-app .publish-dialog p {
+  margin-block: 0 0.75rem;
+}
+
+.aboutme-app .publish-dialog label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.aboutme-app .publish-dialog fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+
+.aboutme-app .publish-dialog fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.aboutme-app .publish-dialog__actions {
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  margin-block-start: 1rem;
+}
+
+.aboutme-app .publish-dialog__success {
+  color: var(--positive);
 }
 
 .aboutme-app :is(.editor-topbar, .app-chrome) button.theme-toggle {
@@ -383,12 +454,16 @@
   }
 
   .aboutme-app .editor-topbar {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     gap: 0.75rem;
   }
 
-  .aboutme-app .editor-view-switcher {
+  .aboutme-app .editor-publish-action {
     grid-column: 3;
+  }
+
+  .aboutme-app .editor-view-switcher {
+    grid-column: 4;
   }
 
   .aboutme-app .editor-account-actions {

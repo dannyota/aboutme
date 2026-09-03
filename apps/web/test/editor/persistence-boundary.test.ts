@@ -123,6 +123,15 @@ function actionsFor(record: ResumeRecord): ResumeEditorActions {
     applyMine: vi.fn(),
     resumeAfterAuth: vi.fn(),
     discard: vi.fn(),
+    publish: {
+      state: computed(() => ({ kind: 'idle' })) as never,
+      submit: vi.fn(),
+      retryUncertain: vi.fn(),
+      reauthPassword: vi.fn(),
+      startProviderReauth: vi.fn(),
+      retryAfterProviderReauth: vi.fn(),
+      cancel: vi.fn(),
+    },
   };
 }
 

@@ -23,12 +23,26 @@ describe('EditorShell', () => {
     expect(wrapper.get('[data-region="inspector"]').exists()).toBe(true);
     expect(wrapper.get('[data-resume-title]').text()).toBe('Fixture');
 
-    const controls = wrapper.get('.editor-account-actions')
+    const controls = wrapper
+      .get('.editor-account-actions')
       .findAll(':scope > *');
     expect(controls).toHaveLength(2);
     expect(controls[0]?.classes()).toContain('account-control');
     expect(controls[1]?.classes()).toContain('theme-toggle');
-    expect(wrapper.text()).not.toMatch(/\bPublish\b|Undo all|Redo/);
+    expect(wrapper.get('[data-action="publish"]').text()).toBe('Publish');
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
+  it('opens the publish dialog from the editor topbar', async () => {
+    const record = editorRecord();
+    const wrapper = mount(EditorShell, {
+      props: { actions: actionsFor(record), record },
+      global: { stubs: heavyStubs() },
+    });
+
+    await wrapper.get('[data-action="publish"]').trigger('click');
+
+    expect(wrapper.get('[role="dialog"]').text()).toContain('Publish resume');
   });
 
   it('derives the outline order from layout and changes local focus only',
@@ -41,12 +55,14 @@ describe('EditorShell', () => {
       });
 
       const outline = wrapper.get('[aria-label="Resume outline"]');
-      expect(outline.findAll('[data-outline-key]').map((item) => item.text()))
-        .toEqual(['Personal details', 'Experience', 'Skills']);
+      expect(
+        outline.findAll('[data-outline-key]').map((item) => item.text()),
+      ).toEqual(['Personal details', 'Experience', 'Skills']);
 
       await outline.get('[data-outline-key="skill"]').trigger('click');
-      expect(wrapper.getComponent({ name: 'SectionPanel' }).props('sectionKey'))
-        .toBe('skill');
+      expect(
+        wrapper.getComponent({ name: 'SectionPanel' }).props('sectionKey'),
+      ).toBe('skill');
       expect(actions.edit).not.toHaveBeenCalled();
     });
 
@@ -156,6 +172,15 @@ function actionsFor(record: ResumeRecord): ResumeEditorActions {
     applyMine: vi.fn(),
     resumeAfterAuth: vi.fn(),
     discard: vi.fn(),
+    publish: {
+      state: computed(() => ({ kind: 'idle' })) as never,
+      submit: vi.fn(),
+      retryUncertain: vi.fn(),
+      reauthPassword: vi.fn(),
+      startProviderReauth: vi.fn(),
+      retryAfterProviderReauth: vi.fn(),
+      cancel: vi.fn(),
+    },
   };
 }
 
