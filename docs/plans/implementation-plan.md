@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 23, active** (2026-09-03).
+Status: **Revision 24, active** (2026-09-03).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -25,8 +25,8 @@ Decided 2026-09-01 by the human owner:
   the flag and UI gating; the provider code and tests remain so providers can
   return without a new phase.
 - **MCP agent access ships in v1.** Users bring their own agents, which build
-  resumes through an authenticated MCP server over the resume API. Phase PM owns
-  it and blocks local UAT.
+  resumes through an authenticated MCP server over the resume API. Phase PM
+  delivered it and its native HTTPS proof.
 
 ## State
 
@@ -34,25 +34,22 @@ Complete and pushed: foundations, the TypeScript API client, provider
 authentication and its hardening, the resume domain and store, the renderer
 lane, resume HTTP and media, the authenticated editor, publish and public SSR,
 password authentication, the native HTTPS development harness, and the v1 entry
-experience.
+experience, including MCP agent access.
 
-| Phase | Work                                        | State                                            |
-| ----- | ------------------------------------------- | ------------------------------------------------ |
-| PM    | [MCP agent access](phase-pm/README.md)      | Idempotency parity correction, review, and gates |
-| P5B   | Publish UX                                  | Not started                                      |
-| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                      |
-| P7    | Print worker, public PDF and images         | Not started                                      |
-| P8    | Privacy lifecycle                           | Not started                                      |
-| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains  |
-| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation         |
+| Phase | Work                                        | State                                           |
+| ----- | ------------------------------------------- | ----------------------------------------------- |
+| P5B   | Publish UX                                  | Not started                                     |
+| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                     |
+| P7    | Print worker, public PDF and images         | Not started                                     |
+| P8    | Privacy lifecycle                           | Not started                                     |
+| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains |
+| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation        |
 
 ## Delivery order
 
-1. PM closes the MCP idempotency-parity defect, then completes its
-   current-candidate review and phase gates.
-2. P5B publish UX and P6 realtime.
-3. P7 print and images, and P8 privacy lifecycle.
-4. P9 local UAT over the complete product, then human cloud authorization, PI
+1. P5B publish UX and P6 realtime.
+2. P7 print and images, and P8 privacy lifecycle.
+3. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
 
 Security controls are delivered inside every route-owning phase and verified end
@@ -75,8 +72,7 @@ ADRs 0001–0028 are accepted.
 
 ```mermaid
 graph TD
-    PM[PM MCP agent access] --> P9[P9 local UAT]
-    P5B[P5B publish UX] --> P9
+    P5B[P5B publish UX] --> P9[P9 local UAT]
     P6A[P6A SSE transport] --> P6B[P6B refetch and unpublish]
     P6B --> P9
     P7A[P7A owner print worker] --> P7B[P7B public PDF and images]
