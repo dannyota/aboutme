@@ -110,7 +110,7 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,entry.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,run.sh} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,entry.spec.ts,publish.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,run.sh} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
 cp "$ROOT/scripts/dev-https-check.sh" "$HTTPS_REPO/scripts/dev-https-check.sh"
 printf '%s\n' 'static test root' > \
@@ -153,7 +153,9 @@ image:inspect)
     printf '%s\n' "${FAKE_HTTPS_IMAGE_ID#sha256:}"
   fi
   ;;
-run:*) ;;
+run:*)
+  [ "${FAKE_PODMAN_RUN_FAIL:-0}" != 1 ] || exit 125
+  ;;
 *) exit 64 ;;
 esac
 EOF
@@ -604,6 +606,60 @@ grep -Fxq entry "$HTTPS_ENTRY_LOG" || {
   printf 'makefile-safety-test: entry seed lifecycle drifted\n' >&2
   exit 1
 }
+
+: >"$HTTPS_CALLS"
+if run_https_make DEV_HTTPS_FAKE_FAIL=status dev-https-publish-check \
+  >"$WORK/https-publish-preflight.out" 2>&1; then
+  printf 'makefile-safety-test: publish check passed failed status\n' >&2
+  exit 1
+fi
+if read_https_calls | grep -Eq '^(podman|fixture)$'; then
+  printf 'makefile-safety-test: publish check mutated after failed status\n' >&2
+  exit 1
+fi
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 5 ] || {
+  printf 'makefile-safety-test: failed publish preflight created evidence\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+run_https_make dev-https-publish-check >"$WORK/https-publish.out" 2>&1 || {
+  sed -n '1,120p' "$WORK/https-publish.out" >&2
+  printf 'makefile-safety-test: publish check target failed\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 6 ] || {
+  printf 'makefile-safety-test: publish check did not create separate evidence\n' >&2
+  exit 1
+}
+[ "$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d -name 'publish.*' | wc -l)" -eq 1 ] || {
+  printf 'makefile-safety-test: publish evidence directory naming drifted\n' >&2
+  exit 1
+}
+HTTPS_PUBLISH_LOG=$WORK/https-publish-runtime.calls
+read_https_calls >"$HTTPS_PUBLISH_LOG"
+grep -Fxq publish "$HTTPS_PUBLISH_LOG" || {
+  printf 'makefile-safety-test: publish mode did not reach the runner\n' >&2
+  exit 1
+}
+[ "$(grep -c '^fixture$' "$HTTPS_PUBLISH_LOG")" -eq 1 ] &&
+  [ "$(grep -c '^seed$' "$HTTPS_PUBLISH_LOG")" -eq 1 ] &&
+  [ "$(grep -c '^cleanup$' "$HTTPS_PUBLISH_LOG")" -eq 0 ] || {
+  printf 'makefile-safety-test: publish seed lifecycle drifted\n' >&2
+  exit 1
+}
+
+: >"$HTTPS_CALLS"
+if run_https_make FAKE_PODMAN_RUN_FAIL=1 dev-https-publish-check \
+  >"$WORK/https-publish-browser-failure.out" 2>&1; then
+  printf 'makefile-safety-test: failed publish browser was accepted\n' >&2
+  exit 1
+fi
+if find "$HTTPS_REPO/.dev/native-https" -mindepth 1 -maxdepth 1 \
+  -type d -name 'spec-input.*' -print -quit | grep -q .; then
+  printf 'makefile-safety-test: publish failure retained staged specs\n' >&2
+  exit 1
+fi
 
 ROUTE_PLAN=$(cd "$ROOT" && /usr/bin/make --no-print-directory -n route-table-test)
 GENERATOR_LINE=$(grep -Fn 'node scripts/generate-public-roots.mjs --check' <<<"$ROUTE_PLAN" | head -n 1 | cut -d: -f1)
