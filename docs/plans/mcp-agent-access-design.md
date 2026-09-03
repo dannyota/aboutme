@@ -134,14 +134,17 @@ Fifteen tools map one-to-one onto existing editor operations:
 
 Each tool dispatches through a closed in-process facade to the same handler as
 its REST counterpart, so both protocols execute one validation, sanitizer,
-bounds, and store chain. `create_resume` has no prior revision; existing-resume
-mutations take the editor's decimal-string revision validator. A lost race
-returns the closed `revision_conflict` tool error instructing the agent to
-re-read. Successful create and update operations return the complete canonical
-stored resume after sanitizing. Resume deletion returns the matched revision
-plus a closed deletion marker. A write grant may delete a published resume
-without browser recent reauth, using the existing public revocation fence,
-drain, tombstone, media cleanup, and rollback path.
+bounds, idempotency, and store chain. Every mutating tool takes a
+caller-generated UUID `idempotency_key`; an exact retry returns the retained
+success without another mutation, and changed intent under one key fails closed.
+`create_resume` has no prior revision; existing-resume mutations take the
+editor's decimal-string revision validator. A lost race returns the closed
+`revision_conflict` tool error instructing the agent to re-read. Successful
+create and update operations return the complete canonical stored resume after
+sanitizing. Resume deletion returns the matched revision plus a closed deletion
+marker. A write grant may delete a published resume without browser recent
+reauth, using the existing public revocation fence, drain, tombstone, media
+cleanup, and rollback path.
 
 The tool error vocabulary is closed: `validation_failed`, `revision_conflict`,
 `not_found`, `payload_too_large`, `scope_denied`, `rate_limited`,
@@ -171,7 +174,9 @@ name and requested scopes, and submits approval or denial through the existing
 CSRF-protected POST chain. Login redirects preserve the pending authorize
 request. The settings page adds a "Connected agents" block: each grant shows
 client name, scopes, created and last-used times, and a revoke action wired like
-the sessions list. The UI never displays token material.
+the sessions list. Phase PF later made that block conditional on the
+configuration-backed `agentAccess` capability; a failed capability read hides it
+and the page does not request grants. The UI never displays token material.
 
 ## Security and privacy
 
@@ -205,8 +210,9 @@ One author per task, one independent phase reviewer. Tests include:
   limits;
 - bearer middleware matrices: absent, malformed, expired, revoked, and
   cross-user tokens produce byte-identical closed failures;
-- tool-level matrices proving each tool enforces scope, bounds, sanitizing, and
-  CAS identically to its REST counterpart, including hostile markup and
+- tool-level matrices proving each tool enforces scope, bounds, sanitizing,
+  caller-controlled idempotent replay, and CAS identically to its REST
+  counterpart, including changed-fingerprint rejection, hostile markup, and
   oversized payloads through MCP;
 - an integration run driving the official Go SDK client through discovery,
   authorization, token exchange, and every tool against the live server;

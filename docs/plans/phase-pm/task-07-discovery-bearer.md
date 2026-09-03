@@ -22,8 +22,8 @@
   header, forwarded headers, and request URL never influence output. GET only;
   stable bytes; `Cache-Control: public, max-age=3600`.
 - `mcpapi.Bearer.Authenticate` implements M7: single exact header, shape parse,
-  digest lookup joined to grant and user, expiry/revocation/ supersession/kind
-  checks, bounded `last_used_at` touch, closed 401 with the RFC 9728
+  digest lookup joined to grant and user, expiry, revocation, supersession, and
+  token-kind checks, bounded `last_used_at` touch, closed 401 with the RFC 9728
   `WWW-Authenticate` pointer. `RequireScope` returns the closed `scope_denied`
   mapping. Cookies are never parsed on this path.
 

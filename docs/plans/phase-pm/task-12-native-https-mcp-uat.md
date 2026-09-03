@@ -41,10 +41,12 @@ Playwright MCP server only as an authoring aid.
 
 The HTTPS lifecycle must set `MCP_ENABLED=true` for its isolated server and pin
 that setting in `dev-https-test.sh`; no global or daily native default is
-changed. `playwright.config.ts` must accept the `mcp` mode. The existing auth
-spec and shared provider-login helper must expect `/app/resumes`, matching the
-approved provider-login default introduced before T10, before the required auth
-regression can pass.
+changed. Phase PF later added `PROVIDER_LOGIN_ENABLED`; the MCP proof also sets
+that flag to `true` because its seeded sign-in uses the local provider. The
+current-candidate proof must retain both settings. `playwright.config.ts` must
+accept the `mcp` mode. The existing auth spec and shared provider-login helper
+must expect `/app/resumes`, matching the approved provider-login default
+introduced before T10, before the required auth regression can pass.
 
 ## TDD cycle
 

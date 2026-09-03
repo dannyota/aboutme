@@ -13,13 +13,13 @@ Add exactly four operations per `integration-handoffs.md`:
 
 - `getOAuthConsent` (GET `/api/v1/oauth/consent`): query parameters `client_id`,
   `redirect_uri`, `response_type`, `scope`, `state`, `code_challenge`,
-  `code_challenge_method`; 200 `{ clientName, scopes }`; closed 400/401/404
-  errors. Session required; no CSRF (read).
+  `code_challenge_method`; 200 `{ data: { clientName, scopes } }`; closed
+  400/401/404 errors. Session required; no CSRF (read).
 - `postOAuthConsentDecision` (POST `/api/v1/oauth/consent`): strict JSON body of
-  the same fields plus `decision` (`approve`/`deny`); 200 `{ redirectTo }`;
-  session + CSRF + exact Origin; ≤ 4,096 bytes.
+  the same fields plus `decision` (`approve`/`deny`); 200
+  `{ data: { redirectTo } }`; session + CSRF + exact Origin; ≤ 4,096 bytes.
 - `listAgentGrants` (GET `/api/v1/me/agents`): 200
-  `{ grants: [{ id, clientName, scopes, createdAt, lastUsedAt }] }`.
+  `{ data: { grants: [{ id, clientName, scopes, createdAt, lastUsedAt }] } }`.
 - `revokeAgentGrant` (DELETE `/api/v1/me/agents/{grantId}`): 204; session +
   CSRF + exact Origin; unknown or foreign grant returns the same closed 404.
 

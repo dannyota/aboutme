@@ -149,8 +149,10 @@ fence and its 60-second cache trade-off.
 - Drafts accept partial data. Publish applies a separate completeness policy.
 - Public pages disclose resume content, not account data or a list of the
   account's other resumes.
-- A connected agent acts only on resume content. It reaches no session, account,
-  or publish surface and cannot change a resume's public state.
+- A connected agent acts only on resume content. It reaches no session or
+  account surface and cannot publish or unpublish a resume. A write grant may
+  delete a published resume; deletion revokes its public URL through the normal
+  fence and cleanup path rather than exposing a publish-state control.
 - The public application has no operator or platform-admin surface. Operator
   actions run out of band with database credentials.
   [ADR 0028](../adr/0028-no-operator-surface.md) owns this rule.

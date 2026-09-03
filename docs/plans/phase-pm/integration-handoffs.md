@@ -79,11 +79,11 @@ endpoint with plain JSON-RPC fetches from Node.
 ## OpenAPI operations (T02 → T10/T11)
 
 - `getOAuthConsent` — GET `/api/v1/oauth/consent` (query = M8 fields) →
-  `{ clientName, scopes }`.
+  `{ data: { clientName, scopes } }`.
 - `postOAuthConsentDecision` — POST `/api/v1/oauth/consent` (body = M8 fields +
-  `decision`) → `{ redirectTo }`.
+  `decision`) → `{ data: { redirectTo } }`.
 - `listAgentGrants` — GET `/api/v1/me/agents` →
-  `{ grants: [{ id, clientName, scopes, createdAt, lastUsedAt }] }`.
+  `{ data: { grants: [{ id, clientName, scopes, createdAt, lastUsedAt }] } }`.
 - `revokeAgentGrant` — DELETE `/api/v1/me/agents/{grantId}` → 204.
 
 All four use the existing session, CSRF (mutations), and exact-Origin chain and
@@ -98,8 +98,12 @@ the strict JSON envelope.
    `go.mod`, `go.sum`, `go.work.sum`; then run `go mod tidy` (the hosted CI
    tidy-is-a-no-op gate requires canonical files) and inspect that diff too.
 5. T09: config, `.env.example` names, `main.go` composition.
-6. T12: Makefile, harness scripts, contract tests, AGENTS.md check row.
-7. W8: records, review, exit gates.
+6. T10 correction, after T09 closes: migration/sqlc, OpenAPI/generated client,
+   and provider start/callback paths before the web-consent author starts.
+7. T12: Makefile, harness scripts, contract tests, AGENTS.md check row.
+8. T13: MCP input schemas, resume-agent bridge, instructions, and focused/live
+   tests for caller-controlled idempotency.
+9. W10: records, review, exit gates.
 
 No worker edits a path inside an open owner window. Full gates run once per
 phase, never concurrently.

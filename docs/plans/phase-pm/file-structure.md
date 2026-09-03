@@ -91,7 +91,7 @@ the integration owner and are serialized.
 
 ## T10 — Consent page
 
-- Integration-owner correction for provider login return preservation:
+- Serialized integration-owner correction after the T09 owner window closes:
   `docs/api/openapi.yaml` and generated web types; migration 00009, OAuth
   transaction sqlc sources/generated files, and migration tests; provider
   start/callback implementation and tests under `apps/server/internal/auth/`.
@@ -124,3 +124,11 @@ the integration owner and are serialized.
 - `Makefile` `dev-https-mcp-check` target and AGENTS.md check-table row.
 - New `apps/server/cmd/mcp-uat-fixture` seed/cleanup command if the proof needs
   a dedicated identity; reuse `uat-google-00x` conventions.
+
+## T13 — MCP idempotency parity
+
+- `apps/server/internal/resumeapi/{validate.go,agent_test.go}`.
+- `apps/server/internal/mcpapi/{instructions.go,tools_lifecycle.go,tools_content.go,tools_photo.go,tools_test.go,server_test.go}`.
+- `deploy/dev-https-browser/mcp.spec.ts`.
+- PM decisions, task index, exit criteria, MCP design draft, Approved v4 API
+  clarification, and AC-MCP-007 traceability row.

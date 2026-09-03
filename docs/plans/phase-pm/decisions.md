@@ -103,9 +103,13 @@ enforcement authority afterwards.
   including entry and photo deletion, return `{ revision, state }` with the
   complete canonical stored resume after sanitizing. `delete_resume` returns the
   matched revision plus `{ id, deleted: true }` because no row remains.
-- MCP mutations have no client-supplied idempotency key or replay guarantee;
-  revision CAS is the concurrency contract. `upload_photo` takes base64 content
-  bounded by the existing media ceilings after decode.
+- Every MCP mutation takes a required caller-generated `idempotency_key` UUID.
+  The facade forwards that exact key into the existing REST idempotency path.
+  Repeating the same tool, concrete target, revision, and semantic input with
+  the same key returns the retained success without executing again. Reusing a
+  key with changed intent maps to `validation_failed` and writes nothing.
+  Revision CAS remains the concurrency contract. `upload_photo` takes base64
+  content bounded by the existing media ceilings after decode.
 - `mcpapi` reaches resume state only through a closed in-process `resumeapi`
   facade. The facade dispatches its fifteen operations to the existing handlers,
   so REST and MCP share one validator, sanitizer, bounds, and store path.
@@ -114,11 +118,12 @@ enforcement authority afterwards.
   published deletion still uses the existing public revocation fence, drain,
   slug tombstone, media cleanup, and atomic rollback path. There are no
   standalone publish or unpublish tools.
-- Validation/document/media-shape failures map to `validation_failed`; stale CAS
-  maps to `revision_conflict`; missing and cross-user targets map to
-  `not_found`; transport or decoded-media overflow maps to `payload_too_large`;
-  admission exhaustion maps to `rate_limited`; and a failed in-transaction
-  bearer recheck maps to `agent_access_unavailable`.
+- Validation/document/media-shape failures and invalid or changed-fingerprint
+  idempotency keys map to `validation_failed`; stale CAS maps to
+  `revision_conflict`; missing and cross-user targets map to `not_found`;
+  transport or decoded-media overflow maps to `payload_too_large`;
+  idempotency-capacity and other admission exhaustion map to `rate_limited`; and
+  a failed in-transaction bearer recheck maps to `agent_access_unavailable`.
 - Server instructions text describes the document shape, the read-modify-write
   loop, and the absence of publish tools.
 
