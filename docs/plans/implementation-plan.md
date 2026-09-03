@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 24, active** (2026-09-03).
+Status: **Revision 25, active** (2026-09-03).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -38,7 +38,7 @@ experience, including MCP agent access.
 
 | Phase | Work                                        | State                                           |
 | ----- | ------------------------------------------- | ----------------------------------------------- |
-| P5B   | Publish UX                                  | Not started                                     |
+| P5B   | [Publish UX](phase-5b/README.md)            | Plan active                                     |
 | P6    | Realtime: SSE transport, refetch, unpublish | Not started                                     |
 | P7    | Print worker, public PDF and images         | Not started                                     |
 | P8    | Privacy lifecycle                           | Not started                                     |

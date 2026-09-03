@@ -27,7 +27,7 @@ rows are never split by number range.
 | `AC-AUTH`   | 18   | [ac-auth.md](./ac-auth.md)     |
 | `AC-SAVE`   | 5    | [ac-save.md](./ac-save.md)     |
 | `AC-MEDIA`  | 9    | [ac-media.md](./ac-media.md)   |
-| `AC-PUB`    | 5    | [ac-pub.md](./ac-pub.md)       |
+| `AC-PUB`    | 10   | [ac-pub.md](./ac-pub.md)       |
 | `AC-SEC`    | 6    | [ac-sec.md](./ac-sec.md)       |
 | `AC-RT`     | 2    | [ac-rt.md](./ac-rt.md)         |
 | `AC-PDF`    | 1    | [ac-pdf.md](./ac-pdf.md)       |
@@ -40,4 +40,4 @@ rows are never split by number range.
 | `AC-EDITOR` | 17   | [ac-editor.md](./ac-editor.md) |
 | `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
 
-Total: 129 rows across 16 prefixes.
+Total: 134 rows across 16 prefixes.
