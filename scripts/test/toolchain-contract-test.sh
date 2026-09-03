@@ -49,7 +49,7 @@ EOF
 
 cat >"$BIN/semgrep" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' 1.175.0
+printf '%s\n' 1.176.0
 EOF
 
 cat >"$BIN/caddy" <<'EOF'
@@ -88,8 +88,8 @@ grep -Fq 'version: v2.13.2' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin golangci-lint v2.13.2"
 grep -Fq 'govulncheck@v1.7.0' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin govulncheck v1.7.0"
-grep -Fq 'semgrep==1.175.0' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin Semgrep 1.175.0"
+grep -Fq 'semgrep==1.176.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin Semgrep 1.176.0"
 grep -Fq 'sqlc@v1.31.1' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin sqlc v1.31.1"
 grep -Fq 'caddy@v2.11.4' "$ROOT/.github/workflows/ci.yml" ||
