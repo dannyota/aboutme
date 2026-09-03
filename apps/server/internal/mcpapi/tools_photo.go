@@ -94,14 +94,14 @@ func registerPhotoTools(server *mcp.Server, runtime *toolRuntime) {
 
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_photo", Description: "Delete the private resume photo using revision compare-and-swap."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input resumeMutationInput) (*mcp.CallToolResult, mutationOutput, error) {
-			_, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
+			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
 				Operation: resumeapi.AgentDeletePhoto, IdempotencyKey: input.IdempotencyKey,
 				ResumeID: input.ResumeID, Revision: input.Revision,
 			})
 			if err != nil {
 				return nil, mutationOutput{}, err
 			}
-			output, err := runtime.refreshAfterMutation(ctx, input.ResumeID)
+			output, err := responseMutation(response.Body)
 			return nil, output, err
 		})
 }

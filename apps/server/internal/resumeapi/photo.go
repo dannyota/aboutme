@@ -339,8 +339,12 @@ func (s *Service) handleUpdateResumePhotoCrop(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Service) handleDeleteResumePhoto(w http.ResponseWriter, r *http.Request) {
+	operation := "deleteResumePhoto"
+	if _, agentCall := agentPrincipalFromContext(r.Context()); agentCall {
+		operation = "mcp.deleteResumePhoto"
+	}
 	spec := mutationSpec{
-		RegisteredOperation: "deleteResumePhoto", RequireMatch: true,
+		RegisteredOperation: operation, RequireMatch: true,
 		Decode: func(r *http.Request) (boundedInput, error) {
 			id, err := parseResumePathID(r)
 			if err != nil {
@@ -374,7 +378,12 @@ func (s *Service) handleDeleteResumePhoto(w http.ResponseWriter, r *http.Request
 				BeforeSave: func(ctx context.Context, qtx *store.Queries, _ resume.Resume, _ schema.Resume) error {
 					return queue.EnqueueMediaDeletionTx(ctx, qtx, decoded.ResumeID, oldKey)
 				},
-				Response: deletedChildResponse,
+				Response: func(row resume.Resume, doc schema.Resume, version int32) (resume.StoredResponse, error) {
+					if _, agentCall := agentPrincipalFromContext(ctx); agentCall {
+						return s.resumeResponseBuilder(http.StatusOK, false)(row, doc, version)
+					}
+					return deletedChildResponse(row, doc, version)
+				},
 			}}, nil
 		},
 		Run:        aggregateOperation{service: s},
