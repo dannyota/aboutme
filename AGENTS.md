@@ -164,9 +164,13 @@ assistance. Run `gitleaks` per commit; the repository is public.
 
 ## Engineering rules
 
-- Pin the latest stable dependency at scaffold time. Upgrade only through
+- Pin the latest stable dependency at scaffold time. Dependency upgrades need
   explicit review. Exact tool versions live in `.tool-versions`;
   `make tools-check` rejects drift.
+- The user manages local tool upgrades. When `make tools-check` reports that an
+  installed tool is newer than the repository pin, update `.tool-versions` and
+  every exact mirror to that installed version. Verify compatibility and run the
+  affected checks. Do not adopt older, prerelease, or unsupported versions.
 - Follow Google Go and TypeScript style. Use `gofmt`/`goimports` and configured
   ESLint. Tests inject clocks, randomness, and UUIDs and pin renderer inputs.
   Never retry a flaky test into a pass.

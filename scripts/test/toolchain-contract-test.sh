@@ -26,7 +26,7 @@ EOF
 cat >"$BIN/go" <<'EOF'
 #!/usr/bin/env bash
 if [ "${1:-}" = env ] && [ "${2:-}" = GOVERSION ]; then
-  printf '%s\n' go1.27.0
+  printf '%s\n' go1.27.1
   exit 0
 fi
 if [ "${1:-}" = version ] && [ "${2:-}" = -m ]; then
@@ -36,7 +36,7 @@ if [ "${1:-}" = version ] && [ "${2:-}" = -m ]; then
   gitleaks) module=github.com/zricethezav/gitleaks/v8 version=v8.30.1 ;;
   *) exit 2 ;;
   esac
-  printf '%s\n' "$3: go1.27.0" "path fixture" "mod $module $version fixture"
+  printf '%s\n' "$3: go1.27.1" "path fixture" "mod $module $version fixture"
   exit 0
 fi
 exit 2
@@ -82,8 +82,8 @@ grep -Fq 'sqlc: want v1.31.1, got v9.9.9' "$WORK/out" ||
 
 grep -Fq 'node-version: 24.20.0' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin Node 24.20.0"
-grep -Fq 'go-version: "1.27.0"' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin Go 1.27.0"
+grep -Fq 'go-version: "1.27.1"' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin Go 1.27.1"
 grep -Fq 'version: v2.13.2' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin golangci-lint v2.13.2"
 grep -Fq 'govulncheck@v1.7.0' "$ROOT/.github/workflows/ci.yml" ||

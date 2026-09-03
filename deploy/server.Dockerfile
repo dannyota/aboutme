@@ -3,7 +3,7 @@
 
 # ---- build ----
 # Match the exact Go version declared by apps/server/go.mod.
-FROM docker.io/library/golang:1.27.0-alpine3.24 AS build
+FROM docker.io/library/golang:1.27.1-alpine3.24 AS build
 
 WORKDIR /src
 
