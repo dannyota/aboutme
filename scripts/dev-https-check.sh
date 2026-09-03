@@ -248,8 +248,6 @@ elif [ "$MODE" = mcp ]; then
     status=1
   fi
 fi
-[ "$status" -eq 0 ] || fail 'browser proof failed'
-
 # Keep only the newest EVIDENCE_KEEP runs for this mode.
 mapfile -t old_evidence < <(
   find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d \
@@ -262,5 +260,7 @@ for old in "${old_evidence[@]}"; do
   *) fail 'refusing to prune outside the evidence root' ;;
   esac
 done
+
+[ "$status" -eq 0 ] || fail 'browser proof failed'
 
 printf '%s evidence: %s (spec sha256 %s)\n' "$TARGET" "$evidence" "$spec_sha"

@@ -70,6 +70,7 @@ export interface ResumeMutationCoordinator {
   abandonOpaqueCreate(intentId: string): void;
   schedule(resumeId: string): void;
   flush(resumeId: string): Promise<void>;
+  completeRead(resumeId: string): Promise<boolean>;
   retry(resumeId: string, commandId: string): Promise<void>;
   refreshAndReconcile(resumeId: string): Promise<void>;
   acceptLatest(resumeId: string, conflictId: string): Promise<void>;
@@ -937,6 +938,7 @@ export function createMutationCoordinator(deps: {
     abandonOpaqueCreate,
     schedule,
     flush,
+    completeRead: completeReadBarrier,
     retry,
     refreshAndReconcile,
     acceptLatest,

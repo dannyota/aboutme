@@ -108,7 +108,10 @@ export interface PublishController {
 export interface PublishControllerDeps {
   readonly resumeId: string;
   readonly store: ReturnType<typeof useResumeStore>;
-  readonly coordinator: Pick<ResumeMutationCoordinator, 'flush'>;
+  readonly coordinator: Pick<
+    ResumeMutationCoordinator,
+    'flush' | 'completeRead'
+  >;
   readonly auth: Pick<
     ReturnType<typeof useAuth>,
     'user' | 'csrfToken' | 'authState' | 'identities' | 'refresh' | 'mutate'
@@ -181,6 +184,7 @@ export function createPublishController(
       return setState(result);
     }
     if (result.kind === 'stale') {
+      const staleAttempt = attempt;
       const metadata = deps.store.recordFor(deps.resumeId)?.accepted.metadata;
       if (metadata === undefined) {
         return setState({ kind: 'blocked', reason: 'not-loaded' });
@@ -191,6 +195,20 @@ export function createPublishController(
         metadataFreshness: 'stale',
       });
       attempt = null;
+      const readComplete = await deps.coordinator
+        .completeRead(deps.resumeId)
+        .catch(() => false);
+      if (runGeneration !== generation) return state.value;
+      if (!sameOwner(staleAttempt, deps.auth)) return loseSession();
+      const refreshed = deps.store.recordFor(deps.resumeId);
+      if (
+        !readComplete
+        || refreshed === undefined
+        || refreshed.completeReadRequired
+        || refreshed.accepted.metadataFreshness !== 'complete'
+      ) {
+        return setState({ kind: 'blocked', reason: 'read-required' });
+      }
       return setState(result);
     }
     if (result.kind === 'reauth-required') {

@@ -661,6 +661,31 @@ if find "$HTTPS_REPO/.dev/native-https" -mindepth 1 -maxdepth 1 \
   exit 1
 fi
 
+HTTPS_EVIDENCE_KEEP=$(awk -F= '$1 == "EVIDENCE_KEEP" { print $2; exit }' \
+  "$HTTPS_REPO/scripts/dev-https-check.sh")
+[[ $HTTPS_EVIDENCE_KEEP =~ ^[1-9][0-9]*$ ]] || {
+  printf 'makefile-safety-test: could not read publish evidence bound\n' >&2
+  exit 1
+}
+find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d \
+  -name 'publish.*' -exec rm -rf -- {} +
+for ((failure_run = 1; failure_run <= HTTPS_EVIDENCE_KEEP + 1; failure_run++)); do
+  : >"$HTTPS_CALLS"
+  if run_https_make FAKE_PODMAN_RUN_FAIL=1 dev-https-publish-check \
+    >"$WORK/https-publish-failure-$failure_run.out" 2>&1; then
+    printf 'makefile-safety-test: failed publish run %s was accepted\n' \
+      "$failure_run" >&2
+    exit 1
+  fi
+done
+HTTPS_PUBLISH_FAILURE_COUNT=$(find "$HTTPS_EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 \
+  -type d -name 'publish.*' | wc -l)
+[ "$HTTPS_PUBLISH_FAILURE_COUNT" -le "$HTTPS_EVIDENCE_KEEP" ] || {
+  printf 'makefile-safety-test: failed publish retained %s evidence directories (keep=%s)\n' \
+    "$HTTPS_PUBLISH_FAILURE_COUNT" "$HTTPS_EVIDENCE_KEEP" >&2
+  exit 1
+}
+
 ROUTE_PLAN=$(cd "$ROOT" && /usr/bin/make --no-print-directory -n route-table-test)
 GENERATOR_LINE=$(grep -Fn 'node scripts/generate-public-roots.mjs --check' <<<"$ROUTE_PLAN" | head -n 1 | cut -d: -f1)
 ROUTE_LINE=$(grep -Fn 'go test ./internal/routetable/' <<<"$ROUTE_PLAN" | head -n 1 | cut -d: -f1)

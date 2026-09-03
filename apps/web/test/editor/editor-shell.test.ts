@@ -1,11 +1,14 @@
 import { mount } from '@vue/test-utils';
-import { computed } from 'vue';
+import { computed, nextTick, type ComputedRef } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
 import EditorShell from '../../app/components/editor/EditorShell.vue';
 import type {
   ResumeEditorActions,
 } from '../../app/composables/useResumeEditor';
+import type {
+  PublishControllerState,
+} from '../../app/editor/publishController';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
@@ -114,6 +117,40 @@ describe('EditorShell', () => {
       expect(wrapper.get('[data-issue]').text()).toBe('1');
       wrapper.unmount();
     });
+
+  it('keeps focus on the owning field after closing a publish issue',
+    async () => {
+      const path = 'personalDetails.fullName';
+      const record = editorRecord();
+      const state = computed<PublishControllerState>(() => ({
+        kind: 'invalid',
+        issues: [{ path, code: 'required_for_live' }],
+      }));
+      const wrapper = mount(EditorShell, {
+        attachTo: document.body,
+        props: { actions: actionsFor(record, state), record },
+        global: {
+          stubs: {
+            ...heavyStubs(),
+            PersonalDetailsPanel: {
+              data: () => ({ path }),
+              template: [
+                '<input :data-issue="path"',
+                ' @click="$event.currentTarget.focus()">',
+              ].join(''),
+            },
+          },
+        },
+      });
+
+      await wrapper.get('[data-action="publish"]').trigger('click');
+      await wrapper.get('[data-action="focus-publish-issue"]').trigger('click');
+      await nextTick();
+      await nextTick();
+
+      expect(document.activeElement).toBe(wrapper.get('[data-issue]').element);
+      wrapper.unmount();
+    });
 });
 
 function editorRecord(): ResumeRecord {
@@ -152,7 +189,12 @@ function editorRecord(): ResumeRecord {
   };
 }
 
-function actionsFor(record: ResumeRecord): ResumeEditorActions {
+function actionsFor(
+  record: ResumeRecord,
+  publishState: ComputedRef<PublishControllerState> = computed(
+    () => ({ kind: 'idle' }),
+  ),
+): ResumeEditorActions {
   return {
     record: computed(() => record),
     createEntityId: vi.fn(() => '00000000-0000-4000-8000-000000000001'),
@@ -173,7 +215,7 @@ function actionsFor(record: ResumeRecord): ResumeEditorActions {
     resumeAfterAuth: vi.fn(),
     discard: vi.fn(),
     publish: {
-      state: computed(() => ({ kind: 'idle' })) as never,
+      state: publishState,
       submit: vi.fn(),
       retryUncertain: vi.fn(),
       reauthPassword: vi.fn(),

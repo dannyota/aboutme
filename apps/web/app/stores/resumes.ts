@@ -296,6 +296,7 @@ const resumeStore = defineStore('resumes', {
         revision: accepted.revision,
         metadataFreshness: 'stale',
       };
+      record.completeReadRequired = true;
       replay(record);
     },
 

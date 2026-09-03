@@ -29,7 +29,11 @@ function setup() {
     mutate: vi.fn(),
     identities,
   } as never;
-  const coordinator = { flush: vi.fn().mockResolvedValue(undefined) } as never;
+  const completeRead = vi.fn().mockResolvedValue(true);
+  const coordinator = {
+    flush: vi.fn().mockResolvedValue(undefined),
+    completeRead,
+  } as never;
   const api = { dispatch: vi.fn() } as never;
   const controller = createPublishController({
     resumeId: accepted.metadata.id,
@@ -49,6 +53,7 @@ function setup() {
     store,
     auth,
     coordinator,
+    completeRead,
     api,
     controller,
     user,
@@ -111,6 +116,20 @@ describe('publish controller', () => {
 
   it('adopts stale winner and never republishes automatically', async () => {
     const context = setup();
+    const complete = acceptedFixture({
+      revision: parseRevision('2'),
+      metadata: {
+        ...context.accepted.metadata,
+        live: true,
+        downloadEnabled: false,
+        seoGeoEnabled: true,
+        slug: 'concurrent-winner',
+      },
+    });
+    context.completeRead.mockImplementation(async () => {
+      context.store.adoptCompleteRead(context.accepted.metadata.id, complete);
+      return true;
+    });
     vi.mocked(context.api.dispatch).mockResolvedValue({
       kind: 'stale',
       winner: {
@@ -121,6 +140,35 @@ describe('publish controller', () => {
     await expect(context.controller.submit(command)).resolves.toMatchObject({
       kind: 'stale',
     });
+    expect(context.api.dispatch).toHaveBeenCalledOnce();
+    expect(context.completeRead).toHaveBeenCalledOnce();
+    expect(context.store.recordFor('resume-1')).toMatchObject({
+      accepted: {
+        revision: parseRevision('2'),
+        metadata: {
+          live: true,
+          seoGeoEnabled: true,
+          slug: 'concurrent-winner',
+        },
+        metadataFreshness: 'complete',
+      },
+      completeReadRequired: false,
+    });
+  });
+
+  it('fails closed without retaining malformed-response attempts', async () => {
+    const context = setup();
+    vi.mocked(context.api.dispatch).mockResolvedValue({
+      kind: 'failed',
+      code: 'response_invalid',
+    });
+
+    await expect(context.controller.submit(command)).resolves.toEqual({
+      kind: 'failed',
+      code: 'response_invalid',
+    });
+    await context.controller.retryUncertain();
+
     expect(context.api.dispatch).toHaveBeenCalledOnce();
   });
 

@@ -2,7 +2,10 @@
 import { computed, nextTick, ref, watch } from 'vue';
 
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
-import type { PublishCommand } from '../../editor/publishApi';
+import {
+  canonicalPublicPath,
+  type PublishCommand,
+} from '../../editor/publishApi';
 import type { PublishControllerState } from '../../editor/publishController';
 import type { ResumeRecord } from '../../stores/resumes';
 
@@ -38,9 +41,7 @@ const busy = computed(
 const slugValid = computed(
   () =>
     (slug.value === '' && !live.value)
-    || (/^(?:[a-z0-9]+)(?:-[a-z0-9]+)*$/.test(slug.value)
-      && slug.value.length >= 4
-      && slug.value.length <= 30),
+    || canonicalPublicPath(slug.value) !== null,
 );
 const submitDisabled = computed(
   () =>
@@ -69,17 +70,27 @@ const primaryAction = computed(() => {
   if (live.value && initialLive.value) return 'Update publication';
   return 'Publish';
 });
+const publicHref = computed(() => {
+  const result = state.value;
+  return result.kind === 'accepted' && result.resume.metadata.live
+    ? canonicalPublicPath(result.resume.metadata.slug)
+    : null;
+});
+
+function syncMetadata(metadata: ResumeRecord['accepted']['metadata']): void {
+  initialLive.value = metadata.live;
+  live.value = metadata.live;
+  downloadEnabled.value = metadata.live && metadata.downloadEnabled;
+  seoGeoEnabled.value = metadata.live && metadata.seoGeoEnabled;
+  slug.value = metadata.slug ?? '';
+}
 
 watch(
   () => props.open,
   (open) => {
     if (open) {
       const metadata = props.record.accepted.metadata;
-      initialLive.value = metadata.live;
-      live.value = metadata.live;
-      downloadEnabled.value = metadata.live && metadata.downloadEnabled;
-      seoGeoEnabled.value = metadata.live && metadata.seoGeoEnabled;
-      slug.value = metadata.slug ?? '';
+      syncMetadata(metadata);
       password.value = '';
       providerLinkActivated.value = false;
       returnFocus.value
@@ -97,13 +108,14 @@ watch(
 );
 
 watch(state, (next) => {
-  if (next.kind !== 'accepted') return;
-  const metadata = next.resume.metadata;
-  initialLive.value = metadata.live;
-  live.value = metadata.live;
-  downloadEnabled.value = metadata.live && metadata.downloadEnabled;
-  seoGeoEnabled.value = metadata.live && metadata.seoGeoEnabled;
-  slug.value = metadata.slug ?? '';
+  if (next.kind === 'accepted') {
+    syncMetadata(next.resume.metadata);
+  } else if (
+    next.kind === 'stale'
+    && props.record.accepted.metadataFreshness === 'complete'
+  ) {
+    syncMetadata(props.record.accepted.metadata);
+  }
 });
 
 function setLive(value: boolean): void {
@@ -201,6 +213,7 @@ function retryProvider(): void {
 }
 
 function focusIssue(path: string): void {
+  returnFocus.value = null;
   close();
   emit('focus-issue', path);
 }
@@ -527,11 +540,8 @@ function failureMessage(code: string): string {
             Resume is private.
           </template>
           <a
-            v-if="
-              state.resume.metadata.live
-                && state.resume.metadata.slug !== null
-            "
-            :href="`/${state.resume.metadata.slug}`"
+            v-if="publicHref !== null"
+            :href="publicHref"
           >
             View public resume
           </a>
