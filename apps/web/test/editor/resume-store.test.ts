@@ -466,6 +466,9 @@ describe('resume store adoption and teardown', () => {
       metadata: { title: accepted.metadata.title },
       metadataFreshness: 'stale',
     });
+    expect(
+      store.recordFor(accepted.metadata.id)!.completeReadRequired,
+    ).toBe(true);
     store.adoptStaleWinner(
       accepted.metadata.id,
       acceptedFixture({ revision: parseRevision('5') }),

@@ -327,6 +327,49 @@ describe('PublishDialog', () => {
       expect(unknown.actions.publish.retryUncertain).toHaveBeenCalledOnce();
     });
 
+  it('resynchronizes inputs after a stale complete read', async () => {
+    const record = editorRecord({
+      live: true,
+      downloadEnabled: true,
+      seoGeoEnabled: false,
+      slug: 'old-slug',
+    });
+    const context = actionsFor(record);
+    const wrapper = mountDialog(record, context.actions);
+
+    record.accepted = acceptedFixture({
+      metadata: {
+        ...record.accepted.metadata,
+        live: true,
+        downloadEnabled: false,
+        seoGeoEnabled: true,
+        slug: 'concurrent-winner',
+      },
+      metadataFreshness: 'complete',
+    });
+    context.state.value = {
+      kind: 'stale',
+      winner: {
+        document: record.accepted.document,
+        revision: record.accepted.revision,
+      },
+    };
+    await wrapper.vm.$nextTick();
+
+    expect(
+      (wrapper.get('[data-action="publish-download"]')
+        .element as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(
+      (wrapper.get('[data-action="publish-seo-geo"]')
+        .element as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (wrapper.get('[data-action="publish-slug"]')
+        .element as HTMLInputElement).value,
+    ).toBe('concurrent-winner');
+  });
+
   it('uses fixed copy and one intended recovery path for terminal states',
     async () => {
       const record = editorRecord({ live: true, slug: 'ada-lovelace' });
@@ -543,6 +586,19 @@ describe('PublishDialog', () => {
       expect(wrapper.get('.publish-dialog__success a').attributes('href')).toBe(
         '/canonical-slug',
       );
+
+      context.state.value = {
+        kind: 'accepted',
+        resume: acceptedFixture({
+          metadata: {
+            ...acceptedFixture().metadata,
+            live: true,
+            slug: '//evil.example',
+          },
+        }),
+      };
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find('.publish-dialog__success a').exists()).toBe(false);
 
       context.state.value = {
         kind: 'accepted',

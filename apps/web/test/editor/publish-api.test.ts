@@ -298,8 +298,8 @@ describe('publish API transport', () => {
           ),
         );
         await expect(api.dispatch(frozen(), 'csrf')).resolves.toEqual({
-          kind: 'unknown',
-          reason: 'server',
+          kind: 'failed',
+          code: 'response_invalid',
         });
       }
       const mismatches: Array<[number, string]> = [
@@ -325,8 +325,8 @@ describe('publish API transport', () => {
               ),
           ).dispatch(frozen(), 'csrf'),
         ).resolves.toEqual({
-          kind: 'unknown',
-          reason: 'server',
+          kind: 'failed',
+          code: 'response_invalid',
         });
       }
     },
@@ -376,8 +376,8 @@ describe('publish API transport', () => {
           ),
         ).dispatch(frozen(), 'csrf'),
       ).resolves.toEqual({
-        kind: 'unknown',
-        reason: 'server',
+        kind: 'failed',
+        code: 'response_invalid',
       });
     },
   );
@@ -532,16 +532,28 @@ describe('publish API transport', () => {
             'X-Resume-Schema-Version': String(CURRENT_VERSION),
           },
         ),
+        response(
+          200,
+          {
+            data: {
+              ...acceptedBody().data,
+              live: true,
+              slug: '//evil.example',
+            },
+          },
+          {
+            'ETag': '"r2"',
+            'X-Resume-Schema-Version': String(CURRENT_VERSION),
+          },
+        ),
       ];
-      for (const invalid of cases) {
-        await expect(
-          createPublishApi(vi.fn().mockResolvedValue(invalid)).dispatch(
-            frozen(),
-            'csrf',
-          ),
-        ).resolves.toEqual({
-          kind: 'unknown',
-          reason: 'server',
+      for (const [index, invalid] of cases.entries()) {
+        const result = await createPublishApi(
+          vi.fn().mockResolvedValue(invalid),
+        ).dispatch(frozen(), 'csrf');
+        expect(result, `malformed case ${index}`).toEqual({
+          kind: 'failed',
+          code: 'response_invalid',
         });
       }
     },

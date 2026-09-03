@@ -32,6 +32,7 @@ export type PublishFailureCode
     | 'precondition_malformed'
     | 'precondition_required'
     | 'request_invalid'
+    | 'response_invalid'
     | 'resume_not_found'
     | 'unsupported_schema_version';
 
@@ -102,6 +103,15 @@ export function publishRequest(
   return request;
 }
 
+export function canonicalPublicPath(slug: string | null): string | null {
+  return slug !== null
+    && slug.length >= 4
+    && slug.length <= 30
+    && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
+    ? `/${slug}`
+    : null;
+}
+
 export function createPublishApi(fetcher: typeof fetch = fetch): PublishApi {
   return {
     async dispatch(attempt, csrfToken): Promise<PublishTransportResult> {
@@ -111,8 +121,11 @@ export function createPublishApi(fetcher: typeof fetch = fetch): PublishApi {
       } catch {
         return { kind: 'unknown', reason: 'transport' };
       }
-      if (response.headers.get('Cache-Control') !== 'no-store, no-transform') {
+      if (response.status === 500) {
         return { kind: 'unknown', reason: 'server' };
+      }
+      if (response.headers.get('Cache-Control') !== 'no-store, no-transform') {
+        return { kind: 'failed', code: 'response_invalid' };
       }
       if (response.status === 200) {
         try {
@@ -120,6 +133,7 @@ export function createPublishApi(fetcher: typeof fetch = fetch): PublishApi {
           if (
             accepted.metadata.id !== attempt.resumeId
             || compareRevision(accepted.revision, attempt.revision) <= 0
+            || !validPublicationMetadata(accepted.metadata)
           ) {
             throw new Error('publish response mismatch');
           }
@@ -128,7 +142,7 @@ export function createPublishApi(fetcher: typeof fetch = fetch): PublishApi {
             resume: accepted,
           };
         } catch {
-          return { kind: 'unknown', reason: 'server' };
+          return { kind: 'failed', code: 'response_invalid' };
         }
       }
       if (response.status === 412) {
@@ -144,17 +158,14 @@ export function createPublishApi(fetcher: typeof fetch = fetch): PublishApi {
             winner: Object.freeze({ revision, document }),
           };
         } catch {
-          return { kind: 'unknown', reason: 'server' };
+          return { kind: 'failed', code: 'response_invalid' };
         }
       }
       let error: ParsedError;
       try {
         error = await parseError(response);
       } catch {
-        return { kind: 'unknown', reason: 'server' };
-      }
-      if (response.status === 500) {
-        return { kind: 'unknown', reason: 'server' };
+        return { kind: 'failed', code: 'response_invalid' };
       }
       if (response.status === 401 && error.code === 'session_required') {
         return { kind: 'session-lost' };
@@ -172,7 +183,7 @@ export function createPublishApi(fetcher: typeof fetch = fetch): PublishApi {
         try {
           return { kind: 'invalid', issues: validateIssues(error.details) };
         } catch {
-          return { kind: 'unknown', reason: 'server' };
+          return { kind: 'failed', code: 'response_invalid' };
         }
       }
       if (response.status === 429 && error.code === 'rate_limited') {
@@ -194,10 +205,21 @@ export function createPublishApi(fetcher: typeof fetch = fetch): PublishApi {
       if (KNOWN_FAILURE_CODES.has(`${response.status}:${error.code}`)) {
         return { kind: 'failed', code: error.code as PublishFailureCode };
       }
-      if (response.status >= 500) return { kind: 'unknown', reason: 'server' };
-      return { kind: 'unknown', reason: 'server' };
+      return { kind: 'failed', code: 'response_invalid' };
     },
   };
+}
+
+function validPublicationMetadata(
+  metadata: AcceptedResume['metadata'],
+): boolean {
+  if (metadata.slug !== null && canonicalPublicPath(metadata.slug) === null) {
+    return false;
+  }
+  if (metadata.live && metadata.slug === null) return false;
+  return (
+    metadata.live || (!metadata.downloadEnabled && !metadata.seoGeoEnabled)
+  );
 }
 
 const KNOWN_FAILURE_CODES = new Set<string>([
