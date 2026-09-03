@@ -26,12 +26,21 @@ make dev-https-browser-image
 make dev-https-auth-check
 make dev-https-mcp-check
 make dev-https-entry-check
+make dev-https-publish-check
 make dev-https-down
 make dev-native
 ```
 
 The entry check seeds the development account, proves the landing page, sign-in,
 and signed-in shell, and signs out; it deletes nothing.
+
+The publish check seeds the same development account, creates a uniquely named
+complete resume through the editor, and proves save-before-publish ordering. It
+publishes with discovery off, enables discovery, unpublishes, and observes the
+uniform public `404` within five seconds. Its `finally` cleanup deletes only the
+resume created for that run with a fresh CSRF token, current revision, and new
+idempotency key. The check signs out and leaves the shared account and sample
+resume intact.
 
 The browser image imports only the root exported by this harness. It uses no TLS
 bypass and permits network traffic only to the fixed HTTPS origin. Each check
@@ -55,6 +64,12 @@ session. Fixture teardown verifies that its user, identity, resume, client,
 authorization code, grant, and token rows are absent. Its retained verdict is
 `mcp-proof.json`, mode 0600 and at most 4,096 bytes; it contains only the ten M9
 step booleans and four error counters.
+
+The publish check retains `publish-proof.json`, mode 0600 and at most 8,192
+bytes. It contains only fixed step booleans, response statuses, the bounded
+revocation time, mutation-header presence flags, and error counters. It never
+stores header values, cookies, passwords, request or response bodies, resume
+content, or personal data.
 
 For renderer specs, `make web-e2e-fast` iterates in the pinned browser against
 the working tree without the hermetic tar (`ARGS="print.spec.ts"` selects specs,

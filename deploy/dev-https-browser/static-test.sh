@@ -22,6 +22,7 @@ readonly -a SPEC_FILES=(
   password-auth.spec.ts
   mcp.spec.ts
   entry.spec.ts
+  publish.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -156,7 +157,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public | password-auth | mcp | entry)
+  transport | editor | public | password-auth | mcp | entry | publish)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -362,7 +363,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -390,10 +391,14 @@ grep -Fq '/uat-input/caddy-root.crt' "$SOURCE/run.sh" ||
   fail 'runner does not use the closed CA path'
 grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
-grep -Fqx "const timeout = mode === 'editor' || mode === 'public' || mode === 'password-auth'" \
-  "$SOURCE/playwright.config.ts" || fail 'editor/public/password timeout is not explicitly bounded'
-grep -Eq "\|\| mode === ['\"]mcp['\"]" "$SOURCE/playwright.config.ts" ||
-  fail 'mcp timeout is not explicitly bounded'
+for heavy_mode in editor public password-auth mcp publish; do
+  grep -Eq "mode === ['\"]${heavy_mode}['\"]" "$SOURCE/playwright.config.ts" ||
+    fail "$heavy_mode timeout is not explicitly bounded"
+done
+grep -Fq '? 120_000' "$SOURCE/playwright.config.ts" ||
+  fail 'heavy-flow timeout bound drifted'
+grep -Fq ': 30_000' "$SOURCE/playwright.config.ts" ||
+  fail 'default timeout bound drifted'
 grep -Fq '  timeout,' "$SOURCE/playwright.config.ts" ||
   fail 'Playwright does not use the bounded mode timeout'
 
@@ -581,6 +586,18 @@ if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
   <<<"$ENTRY_LIST_OUTPUT"; then
   fail 'entry mode listed the auth proof'
 fi
+readonly PUBLISH_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=publish \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
+grep -Fq 'proves native HTTPS publish, discovery, and revocation' \
+  <<<"$PUBLISH_LIST_OUTPUT" || fail 'Playwright could not compile and list the publish proof'
+for unrelated in \
+  'proves trusted local Google authentication and CSRF boundaries' \
+  'proves authenticated editor behavior over trusted HTTPS' \
+  'proves a published resume hydrates in a real browser'; do
+  if grep -Fq "$unrelated" <<<"$PUBLISH_LIST_OUTPUT"; then
+    fail 'publish mode listed an unrelated proof'
+  fi
+done
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
@@ -691,6 +708,12 @@ mcp-fail)
   printf '%s\n' 'mcp-stage:list-tools'
   exit 1
   ;;
+publish-fail)
+  printf '%s\n' 'browser-secret-must-not-escape'
+  printf '%s\n' 'publish-stage:login-form'
+  printf '%s\n' 'publish-stage:credentials-filled'
+  exit 1
+  ;;
 malformed)
   case " $* " in
   *' editor.spec.ts '*) evidence=editor-proof.json ;;
@@ -698,6 +721,7 @@ malformed)
   *' password-auth.spec.ts '*) evidence=password-proof.json ;;
   *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
   *' entry.spec.ts '*) evidence=entry-proof.json ;;
+  *' publish.spec.ts '*) evidence=publish-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -709,6 +733,7 @@ oversized)
   *' password-auth.spec.ts '*) evidence=password-proof.json ;;
   *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
   *' entry.spec.ts '*) evidence=entry-proof.json ;;
+  *' publish.spec.ts '*) evidence=publish-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -767,6 +792,20 @@ JSON
   "scenario": "entry-flow",
   "schemaVersion": 1,
   "steps": {"landing": true, "providerLinks": true, "resumeList": true, "signIn": true, "signOut": true, "signedInShell": true}
+}
+JSON
+    ;;
+  *' publish.spec.ts '*)
+    cat >"$FAKE_INSIDE_EVIDENCE/publish-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "native-https-publish",
+  "schemaVersion": 1,
+  "steps": {"auth": true, "complete": true, "published": true, "saveFirst": true, "headers": true, "noindex": true, "discovery": true, "unpublish": true, "revocation": true, "cleanup": true, "signOut": true, "accessibility": true, "keyboard": true},
+  "statuses": {"publish": 200, "publicPrivate": 200, "publicDiscoverable": 200, "unpublish": 200, "revoked": 404},
+  "elapsedMs": {"revocation": 1},
+  "headers": {"publishContentType": true, "publishCSRF": true, "publishIfMatch": true, "publishIdempotency": true, "publishSchema": true, "unpublishContentType": true, "unpublishCSRF": true, "unpublishIfMatch": true, "unpublishIdempotency": true, "unpublishSchema": true}
 }
 JSON
     ;;
@@ -857,7 +896,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -956,6 +995,17 @@ if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
   fail 'mcp failure leaked volatile output'
 fi
 rm -- "$INSIDE_INPUT/mcp-client-name"
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=publish-fail PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside publish 2>&1); then
+  fail 'publish browser failure was accepted'
+fi
+grep -Fxq 'dev-https-browser: publish-stage:credentials-filled' <<<"$output" ||
+  fail 'publish failure did not expose its last bounded stage'
+if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
+  fail 'publish failure leaked volatile output'
+fi
 
 reset_inside
 assert_inside_rejected malformed-evidence \
@@ -1136,5 +1186,39 @@ if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized entry evidence returned the wrong diagnostic'
+
+reset_inside
+readonly PUBLISH_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside publish)
+grep -Fq 'dev-https-browser native HTTPS publish, discovery, and revocation proof: PASS' \
+  <<<"$PUBLISH_INSIDE_OUTPUT" ||
+  fail 'inside-container publish success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts publish.spec.ts' "$BROWSER_LOG" ||
+  fail 'focused publish invocation drifted'
+grep -Fxq 'MODE=publish' "$BROWSER_LOG" ||
+  fail 'publish mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/publish-proof.json" ] ||
+  fail 'publish evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/publish-proof.json")" = 600 ] ||
+  fail 'publish evidence mode drifted'
+if grep -Eiq '"(cookie|password|csrfToken|idempotencyKey|responseBody|body)"[[:blank:]]*:' \
+  "$INSIDE_EVIDENCE/publish-proof.json"; then
+  fail 'publish evidence contains secret-bearing or unbounded fields'
+fi
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside publish 2>&1); then
+  fail 'malformed publish evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed publish evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside publish 2>&1); then
+  fail 'oversized publish evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
+  fail 'oversized publish evidence returned the wrong diagnostic'
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

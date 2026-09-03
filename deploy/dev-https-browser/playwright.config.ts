@@ -9,6 +9,7 @@ const browserModes = [
   'password-auth',
   'mcp',
   'entry',
+  'publish',
 ] as const;
 type BrowserMode = typeof browserModes[number];
 const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
@@ -19,7 +20,7 @@ if (!browserModes.includes(requestedMode as BrowserMode)) {
 
 const mode = requestedMode as BrowserMode;
 const timeout = mode === 'editor' || mode === 'public' || mode === 'password-auth'
-  || mode === 'mcp' ? 120_000 : 30_000;
+  || mode === 'mcp' || mode === 'publish' ? 120_000 : 30_000;
 
 for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   if (Object.hasOwn(process.env, name)) {
@@ -28,12 +29,14 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
 }
 
 export default defineConfig({
+  actionTimeout: mode === 'publish' ? 10_000 : 0,
   forbidOnly: true,
   fullyParallel: false,
   outputDir: '/tmp/playwright-artifacts',
   preserveOutput: 'never',
   reporter: [['line']],
   retries: 0,
+  navigationTimeout: mode === 'publish' ? 20_000 : 0,
   testDir: import.meta.dirname,
   testMatch: [`${mode}.spec.ts`],
   timeout,

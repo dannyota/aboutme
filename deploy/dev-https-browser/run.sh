@@ -19,6 +19,7 @@ readonly -a SPEC_SOURCES=(
   password-auth.spec.ts
   mcp.spec.ts
   entry.spec.ts
+  publish.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -70,8 +71,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -206,6 +207,12 @@ inside_container() {
     proof_name='entry flow'
     spec=entry.spec.ts
     ;;
+  publish)
+    evidence_name=publish-proof.json
+    evidence_limit=8192
+    proof_name='native HTTPS publish, discovery, and revocation'
+    spec=publish.spec.ts
+    ;;
   esac
   # Stage the mounted specs beside a node_modules symlink so module
   # resolution finds the image's pinned dependencies. The image package.json
@@ -228,7 +235,7 @@ inside_container() {
     --config playwright.config.ts "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
-    if [ "$mode" = editor ] || [ "$mode" = mcp ]; then
+    if [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ]; then
       local -a bounded_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
@@ -315,6 +322,47 @@ const expected = mode === 'auth' ? {
     grantRevoked: true,
     revokedRejected: true,
   },
+} : mode === 'publish' ? {
+  ...common,
+  scenario: 'native-https-publish',
+  schemaVersion: 1,
+  steps: {
+    auth: true,
+    complete: true,
+    published: true,
+    saveFirst: true,
+    headers: true,
+    noindex: true,
+    discovery: true,
+    unpublish: true,
+    revocation: true,
+    cleanup: true,
+    signOut: true,
+    accessibility: true,
+    keyboard: true,
+  },
+  statuses: {
+    publish: 200,
+    publicPrivate: 200,
+    publicDiscoverable: 200,
+    unpublish: 200,
+    revoked: 404,
+  },
+  elapsedMs: { revocation: Number.isInteger(actual.elapsedMs?.revocation)
+    && actual.elapsedMs.revocation >= 0
+    && actual.elapsedMs.revocation <= 5000 ? actual.elapsedMs.revocation : -1 },
+  headers: {
+    publishContentType: true,
+    publishCSRF: true,
+    publishIfMatch: true,
+    publishIdempotency: true,
+    publishSchema: true,
+    unpublishContentType: true,
+    unpublishCSRF: true,
+    unpublishIfMatch: true,
+    unpublishIdempotency: true,
+    unpublishSchema: true,
+  },
 } : mode === 'entry' ? {
   ...common,
   scenario: 'entry-flow',
@@ -358,11 +406,11 @@ VERIFY_EVIDENCE
 
 host_run() {
   [ "$#" -ge 4 ] && [ "$#" -le 5 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry]'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish]'
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, or entry' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra

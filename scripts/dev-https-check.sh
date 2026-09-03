@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # One entry point for the trusted-browser proofs (auth, transport, editor,
-# public, password-auth, MCP, and entry). Stages an immutable per-run copy of
+# public, password-auth, MCP, entry, and publish). Stages an immutable per-run copy of
 # the spec
 # sources and mounts it into the pinned browser image, so editing a spec
 # never requires an image rebuild; the image manifest gates only the
@@ -37,6 +37,7 @@ readonly -a SPEC_SOURCES=(
   password-auth.spec.ts
   mcp.spec.ts
   entry.spec.ts
+  publish.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -63,9 +64,10 @@ password-auth)
   ;;
 mcp) evidence_prefix=mcp ;;
 entry) evidence_prefix=entry ;;
+publish) evidence_prefix=publish ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish'
   ;;
 esac
 
@@ -214,6 +216,12 @@ elif [ "$MODE" = mcp ]; then
   "$mcp_fixture" seed --database-url "$NATIVE_DSN" \
     --client-name "$mcp_client_name"
 elif [ "$MODE" = entry ]; then
+  install -d -m 0700 "$REPO/.dev/bin"
+  (cd "$REPO/apps/server" &&
+    go build -o "$REPO/.dev/bin/dev-seed" ./cmd/dev-seed) ||
+    fail 'dev-seed build failed'
+  "$REPO/.dev/bin/dev-seed" seed --database-url "$NATIVE_DSN"
+elif [ "$MODE" = publish ]; then
   install -d -m 0700 "$REPO/.dev/bin"
   (cd "$REPO/apps/server" &&
     go build -o "$REPO/.dev/bin/dev-seed" ./cmd/dev-seed) ||
