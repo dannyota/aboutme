@@ -94,6 +94,8 @@ assert_ci_failure 'go tidy middle command' 'go mod tidy' --fast \
   /usr/bin/env FAIL_GO_TIDY=1
 assert_ci_failure 'database first command' 'database suites' '' \
   /usr/bin/env FAIL_MAKE_TARGET=server-test-integration
+assert_ci_failure 'web source manifest build' web '' \
+  /usr/bin/env FAIL_MAKE_TARGET=web-source-build
 assert_ci_failure 'migration diff command' 'migrations append-only' --fast \
   /usr/bin/env FAIL_GIT_DIFF_PATH=apps/server/migrations
 assert_ci_failure 'released schema diff command' 'released schemas append-only' --fast \
