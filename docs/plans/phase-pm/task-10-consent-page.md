@@ -5,7 +5,10 @@
 **Depends on:** T01 mutable pre-UAT migration; T02 generated client; T05 service
 semantics.
 
-**Owned paths:** T10 paths in `file-structure.md`.
+**Owned paths:** The web-consent author owned the page, composable, and web
+tests listed for T10 in `file-structure.md`. The integration owner alone made
+the serialized migration/sqlc, OpenAPI/generated-client, and provider-auth
+corrections listed there after the T01 and T02 owner windows had closed.
 
 ## Contract
 

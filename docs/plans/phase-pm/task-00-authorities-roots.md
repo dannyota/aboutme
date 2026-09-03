@@ -1,6 +1,8 @@
 # Task 00 — Authorities, budgets, traceability, and v6 roots
 
-**Acceptance:** AC-MCP-001…010 rows created as PLANNED; no behavior lands.
+**Acceptance:** AC-MCP-001…010 rows were created as PLANNED; completed PM tasks
+later promoted them to PROVEN. AC-MCP-007 has since reopened for T13. No runtime
+behavior landed in T00.
 
 **Depends on:** Approved spec `../mcp-agent-access-design.md`; PA complete.
 

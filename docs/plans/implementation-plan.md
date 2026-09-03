@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 22, active** (2026-09-02).
+Status: **Revision 23, active** (2026-09-03).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -36,19 +36,20 @@ lane, resume HTTP and media, the authenticated editor, publish and public SSR,
 password authentication, the native HTTPS development harness, and the v1 entry
 experience.
 
-| Phase | Work                                        | State                                               |
-| ----- | ------------------------------------------- | --------------------------------------------------- |
-| PM    | [MCP agent access](phase-pm/README.md)      | Exit candidate: review confirmation and phase gates |
-| P5B   | Publish UX                                  | Not started                                         |
-| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                         |
-| P7    | Print worker, public PDF and images         | Not started                                         |
-| P8    | Privacy lifecycle                           | Not started                                         |
-| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains     |
-| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation            |
+| Phase | Work                                        | State                                            |
+| ----- | ------------------------------------------- | ------------------------------------------------ |
+| PM    | [MCP agent access](phase-pm/README.md)      | Idempotency parity correction, review, and gates |
+| P5B   | Publish UX                                  | Not started                                      |
+| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                      |
+| P7    | Print worker, public PDF and images         | Not started                                      |
+| P8    | Privacy lifecycle                           | Not started                                      |
+| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains  |
+| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation         |
 
 ## Delivery order
 
-1. PM closes its phase review and gates.
+1. PM closes the MCP idempotency-parity defect, then completes its
+   current-candidate review and phase gates.
 2. P5B publish UX and P6 realtime.
 3. P7 print and images, and P8 privacy lifecycle.
 4. P9 local UAT over the complete product, then human cloud authorization, PI

@@ -51,11 +51,15 @@ Failed or unsatisfiable items are corrected and rerun under ADR 0024.
       cookies; the consent operations enforce session, CSRF, and exact Origin.
       Absent, malformed, expired, revoked, superseded, and cross-user tokens
       produce byte-identical closed 401s.
-- [ ] Each of the fifteen tools enforces scope, bounds, strict validation,
-      sanitizing, and CAS identically to its REST counterpart, proven by
-      shared-chain tests including hostile markup and oversized payloads through
-      MCP; responses return the canonical stored state and new revision;
-      `revision_conflict` surfaces lost races.
+- [ ] Each of the fifteen tools enforces its applicable scope, bounds, strict
+      validation, and stored-state rules identically to its REST counterpart.
+      Each of the twelve mutations also uses the shared sanitizer,
+      caller-controlled UUID idempotency, and CAS chain. Exact retries return
+      the retained success without another mutation; changed fingerprints fail
+      closed and write nothing. Shared-chain tests include create replay,
+      hostile markup, and oversized payloads through MCP; responses return the
+      canonical stored state and new revision; `revision_conflict` surfaces lost
+      races.
 - [ ] No publish, unpublish, or public-read capability is reachable through any
       tool, scope, or error path.
 - [ ] The REST surface is behavior-identical for users with no agent
@@ -75,17 +79,24 @@ Failed or unsatisfiable items are corrected and rerun under ADR 0024.
 - [ ] Connected agents lists grants with last-used, revokes through the
       generated client, and refreshes; revocation is visible to a live agent as
       a closed 401.
+- [ ] The later PF capability gate preserves PM behavior: `MCP_ENABLED=false`
+      reports `agentAccess=false`, hides Connected agents, and makes no grant
+      request; `MCP_ENABLED=true` reports `agentAccess=true` and exposes the
+      tested consent and revocation flow. The MCP HTTPS proof also enables the
+      provider-login flag required by its seeded sign-in.
 - [ ] `make dev-https-mcp-check` passes end to end with the M9 evidence:
       registration, authorize, consent, token exchange, tool list, resume built
       by the agent, editor visibility, revocation, and revoked-rejection, with
       all error counters zero.
-- [ ] Every T00–T12 report matches the handoff format; shared edits and unrun
+- [ ] Every T00–T13 report matches the handoff format; shared edits and unrun
       checks are resolved or block exit.
 - [ ] The owner updates and commits the master plan/index, architecture,
       runbook, and trace evidence before review; focused record checks pass.
-- [ ] One fresh non-author reviews the full candidate and confirms the PKCE,
-      code-replay, token-rotation, revocation, scope, cookie-isolation,
-      redirect, enumeration, rate-limit, sanitizing, CAS, and no-publish
-      invariants; the same reviewer confirms fixes.
+- [ ] The original non-author reviewer confirms the fixes in `7899535` and
+      reviews the current PM surface after `7899535`, including PF's capability
+      gating and HTTPS-harness changes. The verdict names the PKCE, code-replay,
+      token-rotation, revocation, scope, cookie-isolation, redirect,
+      enumeration, rate-limit, sanitizing, CAS, no-publish, disabled-surface,
+      and live-proof invariants.
 - [ ] `make ci` passes alone, then connected `SEMGREP_APP_TOKEN` `make scan`
       passes alone on the same unchanged candidate.

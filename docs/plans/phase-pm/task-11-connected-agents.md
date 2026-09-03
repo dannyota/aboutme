@@ -12,6 +12,10 @@
   (`sessions.vue` integration point): a list of grants from `listAgentGrants`
   showing client name (text only), scopes, created and last-used times, and a
   Revoke action per row.
+- Phase PF later made this mount conditional on the configuration-backed
+  `agentAccess` capability. When disabled, the settings page neither renders the
+  block nor requests the grant list. AC-AUTH-018 and AC-SEC-006 own that later
+  gate; T14 reviews it for PM compatibility.
 - Revoke calls `revokeAgentGrant` through the CSRF chain with a confirmation
   dialog patterned on the sessions list, then refreshes the grant list. The
   empty state explains that agents connect through MCP and links nothing

@@ -41,9 +41,10 @@ pin and the `resumeapi` extraction are owner windows).
   token path gets its own mid-transaction revocation race test.
 - Each tool: check scope, apply per-tool input bounds, run the shared
   validation + sanitizer + service call, and map errors onto the closed M6
-  vocabulary. `create_resume` omits revision; every existing-resume mutation
-  takes the decimal-string `revision`. Successful create/update operations
-  return `{ revision, state }` with the complete canonical stored resume;
+  vocabulary. `create_resume` omits revision; every mutating tool takes a
+  caller-generated UUID `idempotency_key`; every existing-resume mutation takes
+  the decimal-string `revision`. Successful create/update operations return
+  `{ revision, state }` with the complete canonical stored resume;
   `delete_resume` returns the matched revision and `{ id, deleted: true }`.
   `upload_photo` decodes base64 first and enforces the existing media ceilings
   on decoded bytes. A write grant may delete a private or published resume. A
@@ -58,6 +59,9 @@ pin and the `resumeapi` extraction are owner windows).
       (hostile markup, oversized payload, invalid ids).
 - [x] Write CAS REDs: stale revision through a tool returns `revision_conflict`;
       the returned revision from a mutation chains into the next call.
+- T13 adds the missed caller-controlled retry matrix required by ADR 0026; T08
+  used a fresh server-generated key for each call and therefore did not prove
+  safe tool retries.
 - [x] Write scope and cookie-isolation REDs at the `/mcp` handler level (read
       token vs write tool; session cookie ignored).
 - [x] Write a write-safety principal RED: a token revoked after admission but
