@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 25, active** (2026-09-03).
+Status: **Revision 26, active** (2026-09-04).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -34,11 +34,10 @@ Complete and pushed: foundations, the TypeScript API client, provider
 authentication and its hardening, the resume domain and store, the renderer
 lane, resume HTTP and media, the authenticated editor, publish and public SSR,
 password authentication, the native HTTPS development harness, and the v1 entry
-experience, including MCP agent access.
+experience, including MCP agent access and the owner publish UX.
 
 | Phase | Work                                        | State                                           |
 | ----- | ------------------------------------------- | ----------------------------------------------- |
-| P5B   | [Publish UX](phase-5b/README.md)            | Plan active                                     |
 | P6    | Realtime: SSE transport, refetch, unpublish | Not started                                     |
 | P7    | Print worker, public PDF and images         | Not started                                     |
 | P8    | Privacy lifecycle                           | Not started                                     |
@@ -47,7 +46,7 @@ experience, including MCP agent access.
 
 ## Delivery order
 
-1. P5B publish UX and P6 realtime.
+1. P6 realtime.
 2. P7 print and images, and P8 privacy lifecycle.
 3. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
@@ -72,7 +71,6 @@ ADRs 0001–0028 are accepted.
 
 ```mermaid
 graph TD
-    P5B[P5B publish UX] --> P9[P9 local UAT]
     P6A[P6A SSE transport] --> P6B[P6B refetch and unpublish]
     P6B --> P9
     P7A[P7A owner print worker] --> P7B[P7B public PDF and images]
