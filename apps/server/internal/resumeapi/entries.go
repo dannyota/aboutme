@@ -122,7 +122,7 @@ func entryCanonicalTargets(input boundedInput) ([]string, error) {
 	return targets, nil
 }
 
-func (s *Service) prepareEntryMutation(_ context.Context, input boundedInput, _ idempotencyInspection) (preparedInput, error) {
+func (s *Service) prepareEntryMutation(ctx context.Context, input boundedInput, _ idempotencyInspection) (preparedInput, error) {
 	entry, ok := input.Value.(entryMutationInput)
 	if !ok {
 		return preparedInput{}, errors.New("entry mutation input has the wrong type")
@@ -136,6 +136,9 @@ func (s *Service) prepareEntryMutation(_ context.Context, input boundedInput, _ 
 	response := s.resumeResponseBuilder(http.StatusOK, false)
 	if entry.IsDelete {
 		response = deletedChildResponse
+		if _, agentCall := agentPrincipalFromContext(ctx); agentCall {
+			response = s.resumeResponseBuilder(http.StatusOK, false)
+		}
 	}
 	return preparedInput{Input: input, Value: aggregatePreparedInput{
 		ResumeID: entry.ResumeID,
@@ -366,8 +369,12 @@ func (s *Service) handleUpsertResumeEntry(w http.ResponseWriter, r *http.Request
 	})
 }
 func (s *Service) handleDeleteResumeEntry(w http.ResponseWriter, r *http.Request) {
+	operation := "deleteResumeEntry"
+	if _, agentCall := agentPrincipalFromContext(r.Context()); agentCall {
+		operation = "mcp.deleteResumeEntry"
+	}
 	s.executeMutation(w, r, mutationSpec{
-		RegisteredOperation: "deleteResumeEntry",
+		RegisteredOperation: operation,
 		RequireMatch:        true,
 		Decode:              decodeEntryDelete,
 		CanonicalTargets:    entryCanonicalTargets,

@@ -65,20 +65,6 @@ func marshalPayload(value any) ([]byte, error) {
 	return payload, nil
 }
 
-func (r *toolRuntime) refreshAfterMutation(ctx context.Context, resumeID string) (mutationOutput, error) {
-	authority, err := authorityFromContext(ctx)
-	if err != nil {
-		return mutationOutput{}, closedToolError("agent_access_unavailable")
-	}
-	response := r.resumes.ExecuteAgent(ctx, authority.agent, resumeapi.AgentCall{
-		Operation: resumeapi.AgentGetResume, ResumeID: resumeID,
-	})
-	if response.Status < 200 || response.Status >= 300 {
-		return mutationOutput{}, mapAgentResponseError(response)
-	}
-	return responseMutation(response.Body)
-}
-
 func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 	mcp.AddTool(server, &mcp.Tool{Name: "upsert_entry", Description: "Insert or replace one entry using revision compare-and-swap."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input entryInput) (*mcp.CallToolResult, mutationOutput, error) {
@@ -100,7 +86,7 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_entry", Description: "Delete one entry using revision compare-and-swap."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input deleteEntryInput) (*mcp.CallToolResult, mutationOutput, error) {
-			_, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
+			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
 				Operation: resumeapi.AgentDeleteEntry, IdempotencyKey: input.IdempotencyKey,
 				ResumeID: input.ResumeID, Revision: input.Revision,
 				SectionKey: input.SectionKey, EntryID: input.EntryID,
@@ -108,7 +94,7 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 			if err != nil {
 				return nil, mutationOutput{}, err
 			}
-			output, err := runtime.refreshAfterMutation(ctx, input.ResumeID)
+			output, err := responseMutation(response.Body)
 			return nil, output, err
 		})
 

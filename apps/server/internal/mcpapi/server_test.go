@@ -262,6 +262,56 @@ func TestServer_MutatingToolsForwardIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestServer_DeleteToolsUseRetainedMutationResponseWithoutRead(t *testing.T) {
+	h := newBearerHarness(t, "resumes:write")
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	canonical := resumeapi.AgentResponse{
+		Status: http.StatusOK, Header: make(http.Header),
+		Body: []byte(`{"data":{"id":"01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f","revision":"2","document":{}}}`),
+	}
+	executor := &recordingAgentExecutor{responses: map[resumeapi.AgentOperation]resumeapi.AgentResponse{
+		resumeapi.AgentDeleteEntry: canonical,
+		resumeapi.AgentDeletePhoto: canonical,
+		resumeapi.AgentGetResume:   canonical,
+	}}
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	session := connectMCPClient(t, httpServer.URL, raw, "")
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+		op   resumeapi.AgentOperation
+	}{
+		{name: "delete_entry", args: map[string]any{
+			"idempotency_key": uuid.NewString(), "resume_id": uuid.NewString(), "revision": "1",
+			"section_key": "work", "entry_id": "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
+		}, op: resumeapi.AgentDeleteEntry},
+		{name: "delete_photo", args: map[string]any{
+			"idempotency_key": uuid.NewString(), "resume_id": uuid.NewString(), "revision": "1",
+		}, op: resumeapi.AgentDeletePhoto},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := len(executor.snapshotCalls())
+			result, callErr := session.CallTool(context.Background(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
+			if callErr != nil || result.IsError {
+				t.Fatalf("CallTool = %#v, error = %v", result, callErr)
+			}
+			output := decodeStructuredMutation(t, result)
+			if output.Revision != "2" {
+				t.Fatalf("output = %#v", output)
+			}
+			calls := executor.snapshotCalls()[before:]
+			if len(calls) != 1 || calls[0].Operation != tc.op {
+				t.Fatalf("calls = %#v, want one %s call", calls, tc.op)
+			}
+		})
+	}
+}
+
 func TestServer_WriteScopeDeniedBeforeResumeStateAndCookieCannotAuthenticate(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)

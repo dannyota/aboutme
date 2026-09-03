@@ -445,7 +445,8 @@ func TestExecuteAgent_ContentOperationsUseCanonicalMutationKernel(t *testing.T) 
 		SectionKey:     "work",
 		EntryID:        "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
 	})
-	if deletedEntry.Status != http.StatusNoContent || deletedEntry.Header.Get("ETag") != `"r3"` {
+	if deletedEntry.Status != http.StatusOK || deletedEntry.Header.Get("ETag") != `"r3"` ||
+		decodeResumeResource(t, testHTTPResponse{status: deletedEntry.Status, header: deletedEntry.Header, body: deletedEntry.Body}).Revision != "3" {
 		t.Fatalf("delete entry = %d headers=%v body=%s", deletedEntry.Status, deletedEntry.Header, deletedEntry.Body)
 	}
 
@@ -522,6 +523,129 @@ func TestExecuteAgent_ContentOperationsUseCanonicalMutationKernel(t *testing.T) 
 	}
 }
 
+func TestExecuteAgent_DeleteMutationsRetainCanonicalResponsesAcrossRetry(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	principal := newAgentPrincipalForTest(t, h)
+	created := createEntryContractResume(t, h)
+	entryKey := uuid.NewString()
+	deleteEntry := AgentCall{
+		Operation: AgentDeleteEntry, IdempotencyKey: entryKey,
+		ResumeID: created.ID.String(), Revision: "1", SectionKey: "work",
+		EntryID: "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
+	}
+	firstEntry := h.service.ExecuteAgent(h.ctx, principal, deleteEntry)
+	if firstEntry.Status != http.StatusOK {
+		t.Fatalf("delete entry = %d %s", firstEntry.Status, firstEntry.Body)
+	}
+	firstResource := decodeResumeResource(t, testHTTPResponse{status: firstEntry.Status, header: firstEntry.Header, body: firstEntry.Body})
+	if firstResource.Revision != "2" {
+		t.Fatalf("delete entry revision = %q", firstResource.Revision)
+	}
+	advance := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentUpdateResumeMetadata, IdempotencyKey: uuid.NewString(),
+		ResumeID: created.ID.String(), Revision: "2", Payload: json.RawMessage(`{"title":"intervening"}`),
+	})
+	if advance.Status != http.StatusOK {
+		t.Fatalf("intervening update = %d %s", advance.Status, advance.Body)
+	}
+	retryEntry := h.service.ExecuteAgent(h.ctx, principal, deleteEntry)
+	if retryEntry.Status != http.StatusOK || !bytes.Equal(retryEntry.Body, firstEntry.Body) {
+		t.Fatalf("delete entry retry = %d %s, want retained %d %s", retryEntry.Status, retryEntry.Body, firstEntry.Status, firstEntry.Body)
+	}
+	changedEntry := deleteEntry
+	changedEntry.Revision = "2"
+	changedEntryResponse := h.service.ExecuteAgent(h.ctx, principal, changedEntry)
+	if changedEntryResponse.Status != http.StatusConflict || !bytes.Contains(changedEntryResponse.Body, []byte(`"idempotency_key_reuse"`)) {
+		t.Fatalf("changed entry fingerprint = %d %s", changedEntryResponse.Status, changedEntryResponse.Body)
+	}
+	current, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil || current.Revision != 3 {
+		t.Fatalf("changed entry fingerprint mutated revision=%d err=%v", current.Revision, err)
+	}
+
+	photoResume := h.createResume(t)
+	uploaded := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentUploadPhoto, IdempotencyKey: uuid.NewString(),
+		ResumeID: photoResume.ID.String(), Revision: "1", File: makePhotoPNG(t),
+	})
+	if uploaded.Status != http.StatusOK {
+		t.Fatalf("upload photo = %d %s", uploaded.Status, uploaded.Body)
+	}
+	photoKey := uuid.NewString()
+	deletePhoto := AgentCall{Operation: AgentDeletePhoto, IdempotencyKey: photoKey, ResumeID: photoResume.ID.String(), Revision: "2"}
+	firstPhoto := h.service.ExecuteAgent(h.ctx, principal, deletePhoto)
+	if firstPhoto.Status != http.StatusOK {
+		t.Fatalf("delete photo = %d %s", firstPhoto.Status, firstPhoto.Body)
+	}
+	firstPhotoResource := decodeResumeResource(t, testHTTPResponse{status: firstPhoto.Status, header: firstPhoto.Header, body: firstPhoto.Body})
+	if firstPhotoResource.Revision != "3" {
+		t.Fatalf("delete photo revision = %q", firstPhotoResource.Revision)
+	}
+	advancePhoto := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentUpdateResumeMetadata, IdempotencyKey: uuid.NewString(),
+		ResumeID: photoResume.ID.String(), Revision: "3", Payload: json.RawMessage(`{"title":"intervening photo"}`),
+	})
+	if advancePhoto.Status != http.StatusOK {
+		t.Fatalf("intervening photo update = %d %s", advancePhoto.Status, advancePhoto.Body)
+	}
+	retryPhoto := h.service.ExecuteAgent(h.ctx, principal, deletePhoto)
+	if retryPhoto.Status != http.StatusOK || !bytes.Equal(retryPhoto.Body, firstPhoto.Body) {
+		t.Fatalf("delete photo retry = %d %s, want retained %d %s", retryPhoto.Status, retryPhoto.Body, firstPhoto.Status, firstPhoto.Body)
+	}
+	changedPhoto := deletePhoto
+	changedPhoto.Revision = "3"
+	changedPhotoResponse := h.service.ExecuteAgent(h.ctx, principal, changedPhoto)
+	if changedPhotoResponse.Status != http.StatusConflict || !bytes.Contains(changedPhotoResponse.Body, []byte(`"idempotency_key_reuse"`)) {
+		t.Fatalf("changed photo fingerprint = %d %s", changedPhotoResponse.Status, changedPhotoResponse.Body)
+	}
+	currentPhoto, err := h.resumes.Get(h.ctx, h.userID, photoResume.ID)
+	if err != nil || currentPhoto.Revision != 4 {
+		t.Fatalf("changed photo fingerprint mutated revision=%d err=%v", currentPhoto.Revision, err)
+	}
+}
+
+func TestDeleteRESTAndAgentResponsesDoNotCrossReplay(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	principal := newAgentPrincipalForTest(t, h)
+	created := createEntryContractResume(t, h)
+	entryKey := uuid.NewString()
+	restEntry := h.mutationRequest(t, http.MethodDelete,
+		apiResumePath+"/"+created.ID.String()+"/entries/work/01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
+		nil, 1, entryKey)
+	if restEntry.status != http.StatusNoContent || len(restEntry.body) != 0 || restEntry.header.Get("ETag") != `"r2"` {
+		t.Fatalf("REST delete entry = %d headers=%v body=%s", restEntry.status, restEntry.header, restEntry.body)
+	}
+	agentEntry := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentDeleteEntry, IdempotencyKey: entryKey,
+		ResumeID: created.ID.String(), Revision: "1", SectionKey: "work",
+		EntryID: "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
+	})
+	if agentEntry.Status != http.StatusPreconditionFailed {
+		t.Fatalf("agent delete entry cross replay = %d %s", agentEntry.Status, agentEntry.Body)
+	}
+
+	photoResume := h.createResume(t)
+	uploaded := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentUploadPhoto, IdempotencyKey: uuid.NewString(),
+		ResumeID: photoResume.ID.String(), Revision: "1", File: makePhotoPNG(t),
+	})
+	if uploaded.Status != http.StatusOK {
+		t.Fatalf("upload photo = %d %s", uploaded.Status, uploaded.Body)
+	}
+	photoKey := uuid.NewString()
+	restPhoto := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+photoResume.ID.String()+"/photo", nil, 2, photoKey)
+	if restPhoto.status != http.StatusNoContent || len(restPhoto.body) != 0 || restPhoto.header.Get("ETag") != `"r3"` {
+		t.Fatalf("REST delete photo = %d headers=%v body=%s", restPhoto.status, restPhoto.header, restPhoto.body)
+	}
+	agentPhoto := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentDeletePhoto, IdempotencyKey: photoKey,
+		ResumeID: photoResume.ID.String(), Revision: "2",
+	})
+	if agentPhoto.Status != http.StatusPreconditionFailed {
+		t.Fatalf("agent delete photo cross replay = %d %s", agentPhoto.Status, agentPhoto.Body)
+	}
+}
+
 func TestExecuteAgent_PhotoOperationsUseCanonicalMediaPath(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	principal := newAgentPrincipalForTest(t, h)
@@ -575,7 +699,8 @@ func TestExecuteAgent_PhotoOperationsUseCanonicalMediaPath(t *testing.T) {
 		ResumeID:       created.ID.String(),
 		Revision:       "3",
 	})
-	if deleted.Status != http.StatusNoContent || deleted.Header.Get("ETag") != `"r4"` {
+	if deleted.Status != http.StatusOK || deleted.Header.Get("ETag") != `"r4"` ||
+		decodeResumeResource(t, testHTTPResponse{status: deleted.Status, header: deleted.Header, body: deleted.Body}).Revision != "4" {
 		t.Fatalf("delete photo = %d headers=%v body=%s", deleted.Status, deleted.Header, deleted.Body)
 	}
 	missing := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
