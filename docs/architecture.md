@@ -194,6 +194,15 @@ imports the pure renderer and never derives a photo URL from an object key.
 Session loss retains in-memory work for reauthentication; no browser storage or
 unload beacon holds resume data.
 
+The editor's human-only Publish dialog keeps Public resume, PDF download, and
+SEO and GEO as separate choices. It flushes editor work before freezing the
+publish body, owner, parent revision, and idempotency key. One CSRF refresh may
+replay that same attempt; an uncertain result keeps it for explicit retry, while
+a stale winner is adopted without automatic republish. A live-slug rename uses
+the account's supported recent-reauthentication factor. Provider handoff is
+capability-gated, stable-first, allowlisted, and opened only by a second user
+action. Structured completeness issues return focus to the owning editor field.
+
 ## Implemented public publish and SSR
 
 Publish state is one row per resume holding the live flag, slug, discovery
@@ -206,6 +215,15 @@ return the uniform public `404`. Nuxt renders public HTML through an isolated
 worker with a five-second deadline, exact request/origin bounds, deterministic
 JSON-LD, a single matching CSP hash, and external hydration that replaces only a
 mismatched revision.
+
+The native HTTPS publish proof creates one disposable complete resume, verifies
+accepted-save ordering and the full mutation-header envelope, checks discovery
+off and on, then unpublishes and observes the uniform public `404` within five
+seconds. Its bounded local evidence contains statuses, elapsed time, header
+presence, fixed step booleans, and error counters only. The proof deletes its
+exact resume and signs out on success, and its `finally` path attempts the same
+exact cleanup after a failed assertion. Connected agents still have no publish,
+unpublish, or public-read tool.
 
 ## Known delivery gaps
 
