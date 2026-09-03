@@ -26,6 +26,18 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
     });
   });
   const external = await denyExternalRequests(page);
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/v1/capabilities', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { providerLogin: false, agentAccess: false },
+      }),
+    });
+  });
   await page.route('**/login', async (route) => {
     const upstream = await route.fetch({ maxRedirects: 0, maxRetries: 0 });
     await route.fulfill({
