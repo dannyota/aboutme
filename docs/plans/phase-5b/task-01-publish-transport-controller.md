@@ -21,7 +21,8 @@ interface PublishCommand {
 
 interface FrozenPublishAttempt {
   resumeId: string;
-  revision: number;
+  ownerId: string;
+  revision: Revision;
   schemaVersion: number;
   idempotencyKey: string;
   command: Readonly<PublishCommand>;
@@ -39,6 +40,11 @@ type PublishResult =
   | { kind: "failed"; code: PublishFailureCode }
   | { kind: "unknown"; reason: "transport" | "server" };
 ```
+
+Plan correction (2026-09-03): `revision` is the editor's branded decimal
+`Revision` string, not a JavaScript `number`; the API revision is int64 and must
+not cross a lossy numeric conversion. `ownerId` binds every retained retry to
+the authenticated account that created it.
 
 The exact type names may follow nearby editor conventions, but those states must
 remain explicit. The transport sends `POST /api/v1/resumes/{id}/publish` with
