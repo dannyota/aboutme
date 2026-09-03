@@ -20,15 +20,17 @@ type photoOutput struct {
 }
 
 type uploadPhotoInput struct {
-	ResumeID   string `json:"resume_id" jsonschema:"resume UUID"`
-	Revision   string `json:"revision" jsonschema:"current decimal revision"`
-	DataBase64 string `json:"data_base64" jsonschema:"base64-encoded JPEG, PNG, or WebP image"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string `json:"revision" jsonschema:"current decimal revision"`
+	DataBase64     string `json:"data_base64" jsonschema:"base64-encoded JPEG, PNG, or WebP image"`
 }
 
 type updatePhotoCropInput struct {
-	ResumeID string `json:"resume_id" jsonschema:"resume UUID"`
-	Revision string `json:"revision" jsonschema:"current decimal revision"`
-	Crop     any    `json:"crop" jsonschema:"crop rectangle or null"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string `json:"revision" jsonschema:"current decimal revision"`
+	Crop           any    `json:"crop" jsonschema:"crop rectangle or null"`
 }
 
 func registerPhotoTools(server *mcp.Server, runtime *toolRuntime) {
@@ -63,7 +65,7 @@ func registerPhotoTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, closedToolError("payload_too_large")
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUploadPhoto, ResumeID: input.ResumeID,
+				Operation: resumeapi.AgentUploadPhoto, IdempotencyKey: input.IdempotencyKey, ResumeID: input.ResumeID,
 				Revision: input.Revision, File: file,
 			})
 			if err != nil {
@@ -80,7 +82,7 @@ func registerPhotoTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, closedToolError("validation_failed")
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUpdatePhotoCrop, ResumeID: input.ResumeID,
+				Operation: resumeapi.AgentUpdatePhotoCrop, IdempotencyKey: input.IdempotencyKey, ResumeID: input.ResumeID,
 				Revision: input.Revision, Payload: payload,
 			})
 			if err != nil {
@@ -93,7 +95,8 @@ func registerPhotoTools(server *mcp.Server, runtime *toolRuntime) {
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_photo", Description: "Delete the private resume photo using revision compare-and-swap."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input resumeMutationInput) (*mcp.CallToolResult, mutationOutput, error) {
 			_, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentDeletePhoto, ResumeID: input.ResumeID, Revision: input.Revision,
+				Operation: resumeapi.AgentDeletePhoto, IdempotencyKey: input.IdempotencyKey,
+				ResumeID: input.ResumeID, Revision: input.Revision,
 			})
 			if err != nil {
 				return nil, mutationOutput{}, err

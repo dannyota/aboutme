@@ -11,44 +11,50 @@ import (
 )
 
 type entryInput struct {
-	ResumeID   string         `json:"resume_id" jsonschema:"resume UUID"`
-	Revision   string         `json:"revision" jsonschema:"current decimal revision"`
-	SectionKey string         `json:"section_key" jsonschema:"section key"`
-	Entry      map[string]any `json:"entry" jsonschema:"complete entry object"`
+	IdempotencyKey string         `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string         `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string         `json:"revision" jsonschema:"current decimal revision"`
+	SectionKey     string         `json:"section_key" jsonschema:"section key"`
+	Entry          map[string]any `json:"entry" jsonschema:"complete entry object"`
 }
 
 type deleteEntryInput struct {
-	ResumeID   string `json:"resume_id" jsonschema:"resume UUID"`
-	Revision   string `json:"revision" jsonschema:"current decimal revision"`
-	SectionKey string `json:"section_key" jsonschema:"section key"`
-	EntryID    string `json:"entry_id" jsonschema:"entry UUID"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string `json:"revision" jsonschema:"current decimal revision"`
+	SectionKey     string `json:"section_key" jsonschema:"section key"`
+	EntryID        string `json:"entry_id" jsonschema:"entry UUID"`
 }
 
 type updateSectionInput struct {
-	ResumeID    string `json:"resume_id" jsonschema:"resume UUID"`
-	Revision    string `json:"revision" jsonschema:"current decimal revision"`
-	SectionKey  string `json:"section_key" jsonschema:"section key"`
-	DisplayName any    `json:"display_name,omitempty" jsonschema:"section display name"`
-	IconKey     any    `json:"icon_key,omitempty" jsonschema:"section icon key or null"`
-	EntryOrder  any    `json:"entry_order,omitempty" jsonschema:"complete entry UUID permutation"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string `json:"revision" jsonschema:"current decimal revision"`
+	SectionKey     string `json:"section_key" jsonschema:"section key"`
+	DisplayName    any    `json:"display_name,omitempty" jsonschema:"section display name"`
+	IconKey        any    `json:"icon_key,omitempty" jsonschema:"section icon key or null"`
+	EntryOrder     any    `json:"entry_order,omitempty" jsonschema:"complete entry UUID permutation"`
 }
 
 type updateStructureInput struct {
-	ResumeID string           `json:"resume_id" jsonschema:"resume UUID"`
-	Revision string           `json:"revision" jsonschema:"current decimal revision"`
-	Commands []map[string]any `json:"commands" jsonschema:"ordered structure commands"`
+	IdempotencyKey string           `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string           `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string           `json:"revision" jsonschema:"current decimal revision"`
+	Commands       []map[string]any `json:"commands" jsonschema:"ordered structure commands"`
 }
 
 type updatePersonalDetailsInput struct {
+	IdempotencyKey  string         `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
 	ResumeID        string         `json:"resume_id" jsonschema:"resume UUID"`
 	Revision        string         `json:"revision" jsonschema:"current decimal revision"`
 	PersonalDetails map[string]any `json:"personal_details" jsonschema:"complete personal details replacement"`
 }
 
 type updateCustomizationInput struct {
-	ResumeID string           `json:"resume_id" jsonschema:"resume UUID"`
-	Revision string           `json:"revision" jsonschema:"current decimal revision"`
-	Deltas   []map[string]any `json:"deltas" jsonschema:"ordered customization deltas"`
+	IdempotencyKey string           `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string           `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string           `json:"revision" jsonschema:"current decimal revision"`
+	Deltas         []map[string]any `json:"deltas" jsonschema:"ordered customization deltas"`
 }
 
 func marshalPayload(value any) ([]byte, error) {
@@ -81,7 +87,8 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, err
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUpsertEntry, ResumeID: input.ResumeID, Revision: input.Revision,
+				Operation: resumeapi.AgentUpsertEntry, IdempotencyKey: input.IdempotencyKey,
+				ResumeID: input.ResumeID, Revision: input.Revision,
 				SectionKey: input.SectionKey, Payload: payload,
 			})
 			if err != nil {
@@ -94,7 +101,8 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_entry", Description: "Delete one entry using revision compare-and-swap."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input deleteEntryInput) (*mcp.CallToolResult, mutationOutput, error) {
 			_, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentDeleteEntry, ResumeID: input.ResumeID, Revision: input.Revision,
+				Operation: resumeapi.AgentDeleteEntry, IdempotencyKey: input.IdempotencyKey,
+				ResumeID: input.ResumeID, Revision: input.Revision,
 				SectionKey: input.SectionKey, EntryID: input.EntryID,
 			})
 			if err != nil {
@@ -125,7 +133,8 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, err
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUpdateSection, ResumeID: input.ResumeID, Revision: input.Revision,
+				Operation: resumeapi.AgentUpdateSection, IdempotencyKey: input.IdempotencyKey,
+				ResumeID: input.ResumeID, Revision: input.Revision,
 				SectionKey: input.SectionKey, Payload: payload,
 			})
 			if err != nil {
@@ -142,7 +151,7 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, err
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUpdateStructure, ResumeID: input.ResumeID,
+				Operation: resumeapi.AgentUpdateStructure, IdempotencyKey: input.IdempotencyKey, ResumeID: input.ResumeID,
 				Revision: input.Revision, Payload: payload,
 			})
 			if err != nil {
@@ -159,7 +168,7 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, err
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUpdatePersonalDetails, ResumeID: input.ResumeID,
+				Operation: resumeapi.AgentUpdatePersonalDetails, IdempotencyKey: input.IdempotencyKey, ResumeID: input.ResumeID,
 				Revision: input.Revision, Payload: payload,
 			})
 			if err != nil {
@@ -176,7 +185,7 @@ func registerContentTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, err
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUpdateCustomization, ResumeID: input.ResumeID,
+				Operation: resumeapi.AgentUpdateCustomization, IdempotencyKey: input.IdempotencyKey, ResumeID: input.ResumeID,
 				Revision: input.Revision, Payload: payload,
 			})
 			if err != nil {

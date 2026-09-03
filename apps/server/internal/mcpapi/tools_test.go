@@ -18,6 +18,7 @@ func TestToolErrorMapIsClosed(t *testing.T) {
 		{"document", http.StatusUnprocessableEntity, "document_invalid", "validation_failed"},
 		{"media type", http.StatusUnsupportedMediaType, "media_type_unsupported", "validation_failed"},
 		{"stale", http.StatusPreconditionFailed, "revision_mismatch", "revision_conflict"},
+		{"idempotency reuse", http.StatusConflict, "idempotency_key_reuse", "validation_failed"},
 		{"missing", http.StatusNotFound, "resume_not_found", "not_found"},
 		{"transport size", http.StatusRequestEntityTooLarge, "photo_too_large", "payload_too_large"},
 		{"route limit", http.StatusTooManyRequests, "rate_limited", "rate_limited"},

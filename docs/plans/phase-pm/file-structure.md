@@ -128,7 +128,7 @@ the integration owner and are serialized.
 ## T13 — MCP idempotency parity
 
 - `apps/server/internal/resumeapi/{validate.go,agent_test.go}`.
-- `apps/server/internal/mcpapi/{instructions.go,tools_lifecycle.go,tools_content.go,tools_photo.go,tools_test.go,server_test.go}`.
+- `apps/server/internal/mcpapi/{instructions.go,tools_lifecycle.go,tools_content.go,tools_photo.go,tools_read.go,tools_test.go,server_test.go}`.
 - `deploy/dev-https-browser/mcp.spec.ts`.
 - PM decisions, task index, exit criteria, MCP design draft, Approved v4 API
   clarification, and AC-MCP-007 traceability row.

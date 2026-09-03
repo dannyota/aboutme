@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { request as httpsRequest, type IncomingHttpHeaders } from 'node:https';
 
@@ -264,6 +264,8 @@ test('proves MCP agent access over trusted HTTPS', async ({
   );
   let resumeID: string | null = null;
   let teardownComplete = false;
+  const createIdempotencyKey = randomUUID();
+  const upsertIdempotencyKey = randomUUID();
 
   try {
     stage('register-client');
@@ -409,6 +411,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     stage('create-resume');
     const created = mutation(
       await callTool(ca, accessToken as string, 3, 'create_resume', {
+        idempotency_key: createIdempotencyKey,
         title: 'MCP UAT Resume',
         document: minimalWorkDocument(),
       }),
@@ -417,9 +420,31 @@ test('proves MCP agent access over trusted HTTPS', async ({
     expect(created.state.id).toMatch(/^[0-9a-f-]{36}$/i);
     resumeID = created.state.id as string;
 
+    stage('replay-create-resume');
+    const replayed = mutation(
+      await callTool(ca, accessToken as string, 4, 'create_resume', {
+        idempotency_key: createIdempotencyKey,
+        title: 'MCP UAT Resume',
+        document: minimalWorkDocument(),
+      }),
+    );
+    expect(replayed.state.id).toBe(resumeID);
+    expect(replayed.revision).toBe(created.revision);
+    const listedAfterReplay = await callTool(
+      ca,
+      accessToken as string,
+      5,
+      'list_resumes',
+      {},
+    );
+    const listedState = object(listedAfterReplay.structuredContent)?.resumes;
+    expect(Array.isArray(listedState)).toBe(true);
+    expect(listedState).toHaveLength(1);
+
     stage('upsert-entry');
     const upserted = mutation(
-      await callTool(ca, accessToken as string, 4, 'upsert_entry', {
+      await callTool(ca, accessToken as string, 6, 'upsert_entry', {
+        idempotency_key: upsertIdempotencyKey,
         resume_id: resumeID,
         revision: created.revision,
         section_key: 'work',
@@ -445,7 +470,9 @@ test('proves MCP agent access over trusted HTTPS', async ({
     stage('verify-entry-value');
     const agentEntry = page.locator(`[data-entry-id="${ENTRY_ID}"]`);
     await expect(agentEntry).toBeVisible();
-    await expect(agentEntry.getByRole('heading', { name: ENTRY_TITLE })).toBeVisible();
+    await expect(
+      agentEntry.getByRole('heading', { name: ENTRY_TITLE }),
+    ).toBeVisible();
 
     stage('revoke-grant');
     const settings = await page.goto('/app/settings/sessions');
@@ -476,7 +503,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     stage('reject-revoked-token');
     const revokedBody = JSON.stringify({
       jsonrpc: '2.0',
-      id: 5,
+      id: 7,
       method: 'tools/list',
       params: {},
     });

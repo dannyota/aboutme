@@ -56,16 +56,131 @@ func newAgentPrincipalForTest(t *testing.T, h *resumeAPITestHarness) AgentPrinci
 	return principal
 }
 
+func TestExecuteAgent_RequiresCallerIdempotencyKey(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	principal := newAgentPrincipalForTest(t, h)
+	response := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentCreateResume,
+		Payload:   json.RawMessage(`{"title":"missing key"}`),
+	})
+	if response.Status != http.StatusBadRequest || !bytes.Contains(response.Body, []byte(`"idempotency_key_required"`)) {
+		t.Fatalf("missing key = %d %s", response.Status, response.Body)
+	}
+	if resumes := countResumeTestRows(t, h, "resumes"); resumes != 0 {
+		t.Fatalf("missing key created %d resumes", resumes)
+	}
+	if records := countResumeTestRows(t, h, "idempotency_records"); records != 0 {
+		t.Fatalf("missing key retained %d records", records)
+	}
+}
+
+func TestExecuteAgent_ReplaysCallerIdempotencyKey(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	principal := newAgentPrincipalForTest(t, h)
+	key := uuid.NewString()
+	call := AgentCall{
+		Operation: AgentCreateResume, IdempotencyKey: key,
+		Payload: json.RawMessage(`{"title":"retryable create"}`),
+	}
+	first := h.service.ExecuteAgent(h.ctx, principal, call)
+	second := h.service.ExecuteAgent(h.ctx, principal, call)
+	if first.Status != http.StatusCreated || second.Status != http.StatusCreated {
+		t.Fatalf("create statuses = %d/%d, bodies = %s/%s", first.Status, second.Status, first.Body, second.Body)
+	}
+	firstResource := decodeResumeResource(t, testHTTPResponse{status: first.Status, header: first.Header, body: first.Body})
+	secondResource := decodeResumeResource(t, testHTTPResponse{status: second.Status, header: second.Header, body: second.Body})
+	if firstResource.ID != secondResource.ID || firstResource.Revision != secondResource.Revision {
+		t.Fatalf("replay resources = %#v / %#v", firstResource, secondResource)
+	}
+	if resumes := countResumeTestRows(t, h, "resumes"); resumes != 1 {
+		t.Fatalf("replay created %d resumes", resumes)
+	}
+	if records := countResumeTestRows(t, h, "idempotency_records"); records != 1 {
+		t.Fatalf("replay retained %d records", records)
+	}
+}
+
+func TestExecuteAgent_ReplaysExistingMutation(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	principal := newAgentPrincipalForTest(t, h)
+	created := h.createResume(t)
+	key := uuid.NewString()
+	call := AgentCall{
+		Operation: AgentUpdateResumeMetadata, IdempotencyKey: key,
+		ResumeID: created.ID.String(), Revision: "1", Payload: json.RawMessage(`{"title":"retryable update"}`),
+	}
+	first := h.service.ExecuteAgent(h.ctx, principal, call)
+	second := h.service.ExecuteAgent(h.ctx, principal, call)
+	if first.Status != http.StatusOK || second.Status != http.StatusOK {
+		t.Fatalf("update statuses = %d/%d, bodies = %s/%s", first.Status, second.Status, first.Body, second.Body)
+	}
+	firstResource := decodeResumeResource(t, testHTTPResponse{status: first.Status, header: first.Header, body: first.Body})
+	secondResource := decodeResumeResource(t, testHTTPResponse{status: second.Status, header: second.Header, body: second.Body})
+	if firstResource.ID != secondResource.ID || firstResource.Revision != "2" || secondResource.Revision != "2" {
+		t.Fatalf("replay resources = %#v / %#v", firstResource, secondResource)
+	}
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if stored.Revision != 2 || stored.Title != "retryable update" {
+		t.Fatalf("stored update = %q/%d", stored.Title, stored.Revision)
+	}
+}
+
+func TestExecuteAgent_RejectsChangedIdempotencyFingerprint(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	principal := newAgentPrincipalForTest(t, h)
+	created := h.createResume(t)
+	key := uuid.NewString()
+	first := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentUpdateResumeMetadata, IdempotencyKey: key,
+		ResumeID: created.ID.String(), Revision: "1", Payload: json.RawMessage(`{"title":"first intent"}`),
+	})
+	changed := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
+		Operation: AgentUpdateResumeMetadata, IdempotencyKey: key,
+		ResumeID: created.ID.String(), Revision: "1", Payload: json.RawMessage(`{"title":"changed intent"}`),
+	})
+	if first.Status != http.StatusOK {
+		t.Fatalf("first update = %d %s", first.Status, first.Body)
+	}
+	var retainedBefore []byte
+	if err := h.pool.QueryRow(h.ctx, `SELECT response_body FROM idempotency_records WHERE user_id = $1 AND idempotency_key = $2`, h.userID, key).Scan(&retainedBefore); err != nil {
+		t.Fatalf("read retained response before reuse: %v", err)
+	}
+	if changed.Status != http.StatusConflict || !bytes.Contains(changed.Body, []byte(`"idempotency_key_reuse"`)) {
+		t.Fatalf("changed replay = %d %s", changed.Status, changed.Body)
+	}
+	var retainedAfter []byte
+	if err := h.pool.QueryRow(h.ctx, `SELECT response_body FROM idempotency_records WHERE user_id = $1 AND idempotency_key = $2`, h.userID, key).Scan(&retainedAfter); err != nil {
+		t.Fatalf("read retained response after reuse: %v", err)
+	}
+	if !bytes.Equal(retainedBefore, retainedAfter) {
+		t.Fatalf("changed replay replaced retained response: before=%s after=%s", retainedBefore, retainedAfter)
+	}
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if stored.Title != "first intent" || stored.Revision != 2 {
+		t.Fatalf("changed replay mutated row = %q/%d", stored.Title, stored.Revision)
+	}
+	if records := countResumeTestRows(t, h, "idempotency_records"); records != 1 {
+		t.Fatalf("changed replay retained %d records", records)
+	}
+}
+
 func TestExecuteAgent_ReusesCanonicalMetadataMutation(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	principal := newAgentPrincipalForTest(t, h)
 	created := h.createResume(t)
 
 	response := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentUpdateResumeMetadata,
-		ResumeID:  created.ID.String(),
-		Revision:  "1",
-		Payload:   json.RawMessage(`{"title":"Agent title"}`),
+		Operation:      AgentUpdateResumeMetadata,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "1",
+		Payload:        json.RawMessage(`{"title":"Agent title"}`),
 	})
 	if response.Status != http.StatusOK {
 		t.Fatalf("ExecuteAgent status = %d, body = %s", response.Status, response.Body)
@@ -103,10 +218,11 @@ func TestExecuteAgent_IgnoresAmbientBrowserSessionContext(t *testing.T) {
 		t.Fatalf("agent list with ambient session = %d %s", listed.Status, listed.Body)
 	}
 	updated := h.service.ExecuteAgent(ctx, principal, AgentCall{
-		Operation: AgentUpdateResumeMetadata,
-		ResumeID:  created.ID.String(),
-		Revision:  "1",
-		Payload:   json.RawMessage(`{"title":"agent authority"}`),
+		Operation:      AgentUpdateResumeMetadata,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "1",
+		Payload:        json.RawMessage(`{"title":"agent authority"}`),
 	})
 	if updated.Status != http.StatusOK {
 		t.Fatalf("agent mutation with ambient session = %d %s", updated.Status, updated.Body)
@@ -124,10 +240,11 @@ func TestExecuteAgent_RevokedGrantCannotCommitMutation(t *testing.T) {
 	}
 
 	response := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentUpdateResumeMetadata,
-		ResumeID:  created.ID.String(),
-		Revision:  "1",
-		Payload:   json.RawMessage(`{"title":"must not commit"}`),
+		Operation:      AgentUpdateResumeMetadata,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "1",
+		Payload:        json.RawMessage(`{"title":"must not commit"}`),
 	})
 	if response.Status != http.StatusServiceUnavailable || !bytes.Contains(response.Body, []byte(`"agent_access_unavailable"`)) {
 		t.Fatalf("ExecuteAgent = %d %s", response.Status, response.Body)
@@ -158,10 +275,11 @@ func TestExecuteAgent_TokenRevokedAfterAdmissionCannotCommitMutation(t *testing.
 	result := make(chan AgentResponse, 1)
 	go func() {
 		result <- h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-			Operation: AgentUpdateResumeMetadata,
-			ResumeID:  created.ID.String(),
-			Revision:  "1",
-			Payload:   json.RawMessage(`{"title":"must not commit"}`),
+			Operation:      AgentUpdateResumeMetadata,
+			IdempotencyKey: uuid.NewString(),
+			ResumeID:       created.ID.String(),
+			Revision:       "1",
+			Payload:        json.RawMessage(`{"title":"must not commit"}`),
 		})
 	}()
 	<-reached
@@ -217,8 +335,9 @@ func TestExecuteAgent_ResumeLifecycleUsesCanonicalHandlers(t *testing.T) {
 	}
 
 	createdResponse := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentCreateResume,
-		Payload:   json.RawMessage(`{"title":"Created by agent","lng":"EN-us"}`),
+		Operation:      AgentCreateResume,
+		IdempotencyKey: uuid.NewString(),
+		Payload:        json.RawMessage(`{"title":"Created by agent","lng":"EN-us"}`),
 	})
 	if createdResponse.Status != http.StatusCreated {
 		t.Fatalf("create status = %d, body = %s", createdResponse.Status, createdResponse.Body)
@@ -231,9 +350,10 @@ func TestExecuteAgent_ResumeLifecycleUsesCanonicalHandlers(t *testing.T) {
 	}
 
 	deleted := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentDeleteResume,
-		ResumeID:  created.ID.String(),
-		Revision:  created.Revision,
+		Operation:      AgentDeleteResume,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       created.Revision,
 	})
 	if deleted.Status != http.StatusNoContent || len(deleted.Body) != 0 {
 		t.Fatalf("delete status = %d, body = %s", deleted.Status, deleted.Body)
@@ -271,9 +391,10 @@ func TestExecuteAgent_DeletePublishedResumePreservesPublicRevocation(t *testing.
 	}
 
 	deleted := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentDeleteResume,
-		ResumeID:  created.ID.String(),
-		Revision:  "2",
+		Operation:      AgentDeleteResume,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "2",
 	})
 	if deleted.Status != http.StatusNoContent || len(deleted.Body) != 0 {
 		t.Fatalf("delete published status = %d, body = %s", deleted.Status, deleted.Body)
@@ -303,11 +424,12 @@ func TestExecuteAgent_ContentOperationsUseCanonicalMutationKernel(t *testing.T) 
 	secondEntryID := "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e61"
 
 	upserted := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation:  AgentUpsertEntry,
-		ResumeID:   created.ID.String(),
-		Revision:   "1",
-		SectionKey: "work",
-		Payload:    json.RawMessage(`{"entry":{"id":"` + secondEntryID + `"}}`),
+		Operation:      AgentUpsertEntry,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "1",
+		SectionKey:     "work",
+		Payload:        json.RawMessage(`{"entry":{"id":"` + secondEntryID + `"}}`),
 	})
 	if upserted.Status != http.StatusOK || decodeResumeResource(t, testHTTPResponse{
 		status: upserted.Status, header: upserted.Header, body: upserted.Body,
@@ -316,22 +438,24 @@ func TestExecuteAgent_ContentOperationsUseCanonicalMutationKernel(t *testing.T) 
 	}
 
 	deletedEntry := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation:  AgentDeleteEntry,
-		ResumeID:   created.ID.String(),
-		Revision:   "2",
-		SectionKey: "work",
-		EntryID:    "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
+		Operation:      AgentDeleteEntry,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "2",
+		SectionKey:     "work",
+		EntryID:        "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60",
 	})
 	if deletedEntry.Status != http.StatusNoContent || deletedEntry.Header.Get("ETag") != `"r3"` {
 		t.Fatalf("delete entry = %d headers=%v body=%s", deletedEntry.Status, deletedEntry.Header, deletedEntry.Body)
 	}
 
 	updatedSection := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation:  AgentUpdateSection,
-		ResumeID:   created.ID.String(),
-		Revision:   "3",
-		SectionKey: "work",
-		Payload:    json.RawMessage(`{"displayName":"Agent experience"}`),
+		Operation:      AgentUpdateSection,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "3",
+		SectionKey:     "work",
+		Payload:        json.RawMessage(`{"displayName":"Agent experience"}`),
 	})
 	if updatedSection.Status != http.StatusOK || decodeResumeResource(t, testHTTPResponse{
 		status: updatedSection.Status, header: updatedSection.Header, body: updatedSection.Body,
@@ -340,9 +464,10 @@ func TestExecuteAgent_ContentOperationsUseCanonicalMutationKernel(t *testing.T) 
 	}
 
 	updatedStructure := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentUpdateStructure,
-		ResumeID:  created.ID.String(),
-		Revision:  "4",
+		Operation:      AgentUpdateStructure,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "4",
 		Payload: json.RawMessage(`{"commands":[{"op":"createSection","key":"skills","sectionType":"skill",` +
 			`"displayName":"Skills","column":"main","index":1}]}`),
 	})
@@ -353,10 +478,11 @@ func TestExecuteAgent_ContentOperationsUseCanonicalMutationKernel(t *testing.T) 
 	}
 
 	updatedDetails := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentUpdatePersonalDetails,
-		ResumeID:  created.ID.String(),
-		Revision:  "5",
-		Payload:   json.RawMessage(`{"fullName":"Agent User","headline":"Writer","details":[]}`),
+		Operation:      AgentUpdatePersonalDetails,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "5",
+		Payload:        json.RawMessage(`{"fullName":"Agent User","headline":"Writer","details":[]}`),
 	})
 	if updatedDetails.Status != http.StatusOK || decodeResumeResource(t, testHTTPResponse{
 		status: updatedDetails.Status, header: updatedDetails.Header, body: updatedDetails.Body,
@@ -365,10 +491,11 @@ func TestExecuteAgent_ContentOperationsUseCanonicalMutationKernel(t *testing.T) 
 	}
 
 	updatedCustomization := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentUpdateCustomization,
-		ResumeID:  created.ID.String(),
-		Revision:  "6",
-		Payload:   json.RawMessage(`{"deltas":[{"op":"set","path":"colors.primary","value":"#112233"}]}`),
+		Operation:      AgentUpdateCustomization,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "6",
+		Payload:        json.RawMessage(`{"deltas":[{"op":"set","path":"colors.primary","value":"#112233"}]}`),
 	})
 	if updatedCustomization.Status != http.StatusOK {
 		t.Fatalf("update customization = %d %s", updatedCustomization.Status, updatedCustomization.Body)
@@ -401,10 +528,11 @@ func TestExecuteAgent_PhotoOperationsUseCanonicalMediaPath(t *testing.T) {
 	created := h.createResume(t)
 
 	uploaded := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentUploadPhoto,
-		ResumeID:  created.ID.String(),
-		Revision:  "1",
-		File:      makePhotoPNG(t),
+		Operation:      AgentUploadPhoto,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "1",
+		File:           makePhotoPNG(t),
 	})
 	if uploaded.Status != http.StatusOK {
 		t.Fatalf("upload photo = %d %s", uploaded.Status, uploaded.Body)
@@ -429,10 +557,11 @@ func TestExecuteAgent_PhotoOperationsUseCanonicalMediaPath(t *testing.T) {
 	}
 
 	cropped := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentUpdatePhotoCrop,
-		ResumeID:  created.ID.String(),
-		Revision:  "2",
-		Payload:   json.RawMessage(`{"crop":{"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`),
+		Operation:      AgentUpdatePhotoCrop,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "2",
+		Payload:        json.RawMessage(`{"crop":{"x":0.1,"y":0.2,"width":0.7,"height":0.6}}`),
 	})
 	if cropped.Status != http.StatusOK || decodeResumeResource(t, testHTTPResponse{
 		status: cropped.Status, header: cropped.Header, body: cropped.Body,
@@ -441,9 +570,10 @@ func TestExecuteAgent_PhotoOperationsUseCanonicalMediaPath(t *testing.T) {
 	}
 
 	deleted := h.service.ExecuteAgent(h.ctx, principal, AgentCall{
-		Operation: AgentDeletePhoto,
-		ResumeID:  created.ID.String(),
-		Revision:  "3",
+		Operation:      AgentDeletePhoto,
+		IdempotencyKey: uuid.NewString(),
+		ResumeID:       created.ID.String(),
+		Revision:       "3",
 	})
 	if deleted.Status != http.StatusNoContent || deleted.Header.Get("ETag") != `"r4"` {
 		t.Fatalf("delete photo = %d headers=%v body=%s", deleted.Status, deleted.Header, deleted.Body)

@@ -14,7 +14,7 @@ other task edits these paths concurrently.
 - Modify: `apps/server/internal/resumeapi/validate.go`.
 - Test: `apps/server/internal/resumeapi/agent_test.go`.
 - Modify:
-  `apps/server/internal/mcpapi/{instructions.go,tools_lifecycle.go,tools_content.go,tools_photo.go}`.
+  `apps/server/internal/mcpapi/{instructions.go,tools_lifecycle.go,tools_content.go,tools_photo.go,tools_read.go}`.
 - Test: `apps/server/internal/mcpapi/{tools_test.go,server_test.go}`.
 - Modify and live-test: `deploy/dev-https-browser/mcp.spec.ts`.
 - Integration-owner records:
@@ -60,7 +60,7 @@ retained successful mutation response without executing the mutation again.
 
 ## TDD cycle
 
-- [ ] **Step 1: write MCP schema and error-mapping REDs**
+- [x] **Step 1: write MCP schema and error-mapping REDs**
 
   Add `TestServer_MutatingToolSchemasRequireIdempotencyKey` to assert that all
   twelve mutating schemas require `idempotency_key` and the three read schemas
@@ -71,7 +71,7 @@ retained successful mutation response without executing the mutation again.
   `409 idempotency_key_reuse` expects `validation_failed`; retain the existing
   `429 rate_limited` mapping for idempotency-capacity exhaustion.
 
-- [ ] **Step 2: run the MCP REDs**
+- [x] **Step 2: run the MCP REDs**
 
   ```sh
   cd apps/server && go test ./internal/mcpapi -race -count=1 \
@@ -81,7 +81,7 @@ retained successful mutation response without executing the mutation again.
   Expected: FAIL because mutation schemas omit the field, calls cannot forward
   it, and idempotency-key reuse maps to `agent_access_unavailable`.
 
-- [ ] **Step 3: write resume-facade REDs**
+- [x] **Step 3: write resume-facade REDs**
 
   Start the shared database with `make test-db-up`; leave it running for the
   integration owner.
@@ -100,7 +100,7 @@ retained successful mutation response without executing the mutation again.
     `idempotency_key_reuse` and leaves both resume and retained response
     unchanged.
 
-- [ ] **Step 4: run the facade REDs**
+- [x] **Step 4: run the facade REDs**
 
   ```sh
   cd apps/server && REQUIRE_TEST_DB=1 \
@@ -112,7 +112,7 @@ retained successful mutation response without executing the mutation again.
   Expected: FAIL because `ExecuteAgent` replaces the missing caller key with a
   new UUID on every mutation.
 
-- [ ] **Step 5: implement the smallest parity change**
+- [x] **Step 5: implement the smallest parity change**
 
   Add the required field to each mutation input, pass it into `AgentCall`,
   forward it unchanged in `ExecuteAgent`, add the closed reuse-error mapping,
@@ -120,7 +120,7 @@ retained successful mutation response without executing the mutation again.
   exact retry and choose a new key for changed intent. Do not add another
   idempotency store, table, error code, or OpenAPI operation.
 
-- [ ] **Step 6: run the focused GREEN gates**
+- [x] **Step 6: run the focused GREEN gates**
 
   ```sh
   cd apps/server && go test ./internal/mcpapi -race -count=1
@@ -134,7 +134,7 @@ retained successful mutation response without executing the mutation again.
   exact create and update replays mutate once, and changed-fingerprint reuse
   writes nothing.
 
-- [ ] **Step 7: extend the live proof**
+- [x] **Step 7: extend the live proof**
 
   Give every logical mutation in `mcp.spec.ts` its own UUID key and retain the
   key for a retry. Retry `create_resume` immediately with the same key and
@@ -156,7 +156,7 @@ retained successful mutation response without executing the mutation again.
   returns the first create result, and fixture cleanup removes the one resume
   and every OAuth row.
 
-- [ ] **Step 8: update records and hand off**
+- [x] **Step 8: update records and hand off**
 
   Update AC-MCP-007 from PLANNED to PROVEN only after the focused and live
   checks pass. Report the twelve mutating tool schema names, facade replay/reuse
