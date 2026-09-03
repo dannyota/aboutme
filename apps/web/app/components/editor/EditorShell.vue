@@ -26,6 +26,7 @@ import ConflictPanel from './ConflictPanel.vue';
 import EditorPreview from './EditorPreview.vue';
 import ErrorSummary from './ErrorSummary.vue';
 import SaveStatus from './SaveStatus.vue';
+import PublishDialog from './PublishDialog.vue';
 import '../../assets/css/editor.css';
 
 type InspectorPanel
@@ -43,6 +44,7 @@ const props = defineProps<{
 
 const inspector = ref<InspectorPanel>({ kind: 'personal' });
 const narrowRegion = ref<'editor' | 'preview'>('editor');
+const publishOpen = ref(false);
 const document = computed(() => props.record.current.document);
 const placement = computed(() => document.value.customization.layout.sections);
 const outline = computed(() => [
@@ -154,6 +156,14 @@ function sectionLabel(type: string): string {
         </h1>
         <SaveStatus :state="saveState" />
       </div>
+      <button
+        type="button"
+        class="editor-publish-action"
+        data-action="publish"
+        @click="publishOpen = true"
+      >
+        Publish
+      </button>
       <div
         class="editor-view-switcher"
         aria-label="Editor view"
@@ -180,6 +190,14 @@ function sectionLabel(type: string): string {
         <ThemeToggle />
       </div>
     </header>
+
+    <PublishDialog
+      :open="publishOpen"
+      :actions="actions"
+      :record="record"
+      @close="publishOpen = false"
+      @focus-issue="focusIssue"
+    />
 
     <section
       v-if="record.sessionLost"
