@@ -32,7 +32,7 @@ by `AC-MCP-007`. P6 owns SSE. P7B owns public PDF and image generation.
 | T01  | Publish transport and state controller           | Luna implementer                                          | T00         | `cd apps/web && npx vitest run test/editor/publish-api.test.ts test/editor/publish-controller.test.ts` |
 | T02  | Accessible publish dialog and editor integration | Luna implementer                                          | T01         | `cd apps/web && npx vitest run test/editor/publish-dialog.test.ts test/editor/editor-shell.test.ts`    |
 | T03  | Native HTTPS publish proof                       | Luna implementer plus integration-owner shared-file edits | T02         | Harness static tests, then `make dev-https-publish-check`                                              |
-| T04  | Records, fresh phase review, and exit            | Integration owner; fresh Terra reviewer                   | T03         | [`exit-criteria.md`](exit-criteria.md)                                                                 |
+| T04  | Records, fresh phase review, and exit            | Integration owner; fresh Sol reviewer                     | T03         | [`exit-criteria.md`](exit-criteria.md)                                                                 |
 
 The implementation tasks run in order because T02 consumes T01's controller
 contract and T03 proves the integrated T02 flow. Each implementer writes the

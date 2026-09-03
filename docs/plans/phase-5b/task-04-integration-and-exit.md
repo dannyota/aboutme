@@ -17,7 +17,7 @@ Update:
 - `docs/plans/traceability/README.md` only if counts change.
 - `docs/plans/implementation-plan.md` after exit.
 
-One fresh Terra reviewer who authored none of P5B reads the integrated diff for
+One fresh Sol reviewer who authored none of P5B reads the integrated diff for
 defects, design fit, stable interfaces, accessibility, and traceability. The
 reviewer must confirm by name: session ownership, password reauthentication,
 stable-first provider selection, provider-login capability gating, authorize-URL

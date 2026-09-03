@@ -27,8 +27,8 @@ the affected sequence is rerun.
 
 - [ ] Architecture, local UAT runbook, roadmap, and traceability agree with the
       code, OpenAPI, and deployment harness.
-- [ ] A fresh non-author Terra reviewer reports no unresolved finding and
-      confirms every invariant named in T04.
+- [ ] A fresh non-author Sol reviewer reports no unresolved finding and confirms
+      every invariant named in T04.
 - [ ] The integrated diff contains no generated-file hand edit, unrelated
       change, secret, credential, personal data, or committed local evidence.
 
