@@ -182,34 +182,35 @@ assistance. Run `gitleaks` per commit; the repository is public.
   route-specific rate limits, CSP, secret-free logs.
 - Design rationale belongs in `docs/`, not code comments. Cite files, commands,
   and uncertainty; claim only checks that actually ran. Use Mermaid, not ASCII
-  diagrams. Keep living Markdown near 300 lines. Never rewrite completed phase
-  records.
+  diagrams. Keep living Markdown near 300 lines. A phase's plan is deleted when
+  the phase exits; git history keeps it.
 
 Run the narrowest relevant checks:
 
-| Change area                     | Command or evidence                                                                                                     |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Integration handoff, owner only | `make ci`; workers never run it                                                                                         |
-| Markdown or YAML                | Prettier and markdownlint on owned paths; the owner runs `make docs-fmt`                                                |
-| Local instructions              | `npx prettier --check --ignore-path /dev/null AGENTS.md CLAUDE.md`, then `npx markdownlint-cli2` on both                |
-| Resume schema/generated types   | `make schema-check`                                                                                                     |
-| OpenAPI                         | `make api-check`                                                                                                        |
-| Go server                       | `make server-build server-vet server-test`                                                                              |
-| Store or migrations             | Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test`                             |
-| Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`                                                                        |
-| Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                        |
-| Authenticated UI                | `make dev-https-auth-check dev-https-editor-check` (scripted headless Playwright); full P9 port-443 UAT overlay pending |
-| Public surface                  | `make p5a-native-http-check` and `make dev-https-public-check`                                                          |
-| Phase gate or security work     | `make scan` with `SEMGREP_APP_TOKEN` (connected SAST, SCA, secrets, full-history gitleaks)                              |
+| Change area                     | Command or evidence                                                                                                                                               |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration handoff, owner only | `make ci`; workers never run it                                                                                                                                   |
+| Markdown or YAML                | Prettier and markdownlint on owned paths; the owner runs `make docs-fmt`                                                                                          |
+| Local instructions              | `npx prettier --check --ignore-path /dev/null AGENTS.md CLAUDE.md`, then `npx markdownlint-cli2` on both                                                          |
+| Resume schema/generated types   | `make schema-check`                                                                                                                                               |
+| OpenAPI                         | `make api-check`                                                                                                                                                  |
+| Go server                       | `make server-build server-vet server-test`                                                                                                                        |
+| Store or migrations             | Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test`                                                                       |
+| Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`                                                                                                                  |
+| Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                                                                  |
+| Authenticated UI                | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check` (scripted headless Playwright); full P9 port-443 UAT overlay pending |
+| Public surface                  | `make p5a-native-http-check` and `make dev-https-public-check`                                                                                                    |
+| Phase gate or security work     | `make scan` with `SEMGREP_APP_TOKEN` (connected SAST, SCA, secrets, full-history gitleaks)                                                                        |
 
 Reusable browser automation is scripted headless Playwright, committed and run
 through `make web-e2e`, `make dev-https-auth-check`,
 `make dev-https-transport-check`, `make dev-https-editor-check`, and
-`make dev-https-public-check`. To author
-those tests, use the Playwright MCP server to drive a live browser — inspect
-real selectors, requests, and page state — then write what you observed as
-headless `@playwright/test` specs. MCP is an authoring aid only; it never runs
-the recorded automation.
+`make dev-https-public-check`, `make dev-https-password-check`,
+`make dev-https-mcp-check`, and `make dev-https-entry-check`. To author those
+tests, use the Playwright MCP server to drive a live browser — inspect real
+selectors, requests, and page state — then write what you observed as headless
+`@playwright/test` specs. MCP is an authoring aid only; it never runs the
+recorded automation.
 
 Report an unrun check with its exact command, reason, and remaining uncertainty.
 
