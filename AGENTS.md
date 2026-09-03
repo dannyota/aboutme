@@ -3,9 +3,8 @@
 ## Scope and authority
 
 This file is the repository's single source of coding-agent instructions.
-`CLAUDE.md` is an untracked compatibility bootstrap and adds no rules. Both are
-excluded by the user's global Git ignore; never stage, commit, or force-add
-either one.
+`CLAUDE.md` is a tracked compatibility bootstrap and adds no rules. Both files
+are tracked so instruction changes can be reviewed with the repository.
 
 Direct user instructions and platform safety rules come first. Then:
 
@@ -68,17 +67,18 @@ acceptance catalog and no separate acceptance worker.
 
 Model assignment depends on the coordinator:
 
-| Work                                                                                 | Claude Code | Codex                    |
-| ------------------------------------------------------------------------------------ | ----------- | ------------------------ |
-| High-judgment work across files, including new components, concurrency, and security | Opus        | `gpt-5.6-sol`            |
-| Code review (defect and phase review)                                                | Sonnet      | `gpt-5.6-terra` subagent |
-| Implementation from a complete contract                                              | Haiku       | `gpt-5.6-luna` subagent  |
-| Search, exploration, and summaries                                                   | Haiku       | `gpt-5.6-luna` subagent  |
+| Work                                                                                 | Claude Code | Codex                   |
+| ------------------------------------------------------------------------------------ | ----------- | ----------------------- |
+| High-judgment work across files, including new components, concurrency, and security | Opus        | `gpt-5.6-sol`           |
+| Code review (defect and phase review)                                                | Sonnet      | `gpt-5.6-sol` subagent  |
+| Implementation from a complete contract                                              | Haiku       | `gpt-5.6-luna` subagent |
+| Search, exploration, and summaries                                                   | Haiku       | `gpt-5.6-luna` subagent |
 
-Codex uses Terra and Luna for the corresponding worker roles. Claude Code uses
-Sonnet and Haiku: Haiku writes the mechanical implementation from a complete
-contract for speed, and Sonnet reviews the result. When unsure, use the
-coordinator's high-judgment model.
+Codex uses Sol for every plan, defect, and phase review. Terra and Luna are
+limited to non-review worker roles. Claude Code uses Sonnet and Haiku: Haiku
+writes the mechanical implementation from a complete contract for speed, and
+Sonnet reviews the result. When unsure, use the coordinator's high-judgment
+model.
 
 ## Resource rules
 
@@ -157,10 +157,10 @@ Before a commit, the integration owner inspects `git diff -- <owned-paths>` and
 with `git commit -m "..." -- <paths>`.
 
 Never use `git add .`, `git add -A`, `git commit -a`, or force-add. Never stage
-`.env`, `CLAUDE.md`, or `AGENTS.md`. Never reset, stash, amend, rebase, clean,
-or restore to repair index contamination — stop for the integration owner. Use
-Conventional Commits; messages never mention agents, AI, or automated
-assistance. Run `gitleaks` per commit; the repository is public.
+`.env`. Never reset, stash, amend, rebase, clean, or restore to repair index
+contamination — stop for the integration owner. Use Conventional Commits;
+messages never mention agents, AI, or automated assistance. Run `gitleaks` per
+commit; the repository is public.
 
 ## Engineering rules
 
