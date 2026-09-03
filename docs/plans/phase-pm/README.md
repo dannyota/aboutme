@@ -1,12 +1,11 @@
 # Phase PM — MCP agent access implementation plan
 
-Status: **Defect correction and closeout** (2026-09-03). T00–T12 are complete,
-but the current tools generate a fresh internal idempotency key for every call
-instead of exposing the caller retry contract required by ADR 0026 and the
-Approved v4 write-safety design. T13 owns that correction. The review fixes in
-`7899535` still await the same reviewer's confirmation. Phase PF later changed
-shared MCP configuration, web, and HTTPS-harness surfaces, so T14 reviews those
-overlaps at the current candidate before the unchanged-candidate gates.
+Status: **Current-candidate review and closeout** (2026-09-03). T00–T13 are
+complete, including caller-controlled retry parity and its focused and live
+proofs. The review fixes in `7899535` still await confirmation. Phase PF later
+changed shared MCP configuration, web, and HTTPS-harness surfaces, so T14
+reviews those overlaps at the current candidate before the unchanged-candidate
+gates.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or

@@ -83,6 +83,8 @@ func mapAgentResponseError(response resumeapi.AgentResponse) error {
 		return closedToolError("not_found")
 	case response.Status == http.StatusPreconditionFailed || (unmarshalErr == nil && envelope.Error.Code == "revision_mismatch"):
 		return closedToolError("revision_conflict")
+	case unmarshalErr == nil && envelope.Error.Code == "idempotency_key_reuse":
+		return closedToolError("validation_failed")
 	case response.Status == http.StatusRequestEntityTooLarge:
 		return closedToolError("payload_too_large")
 	case response.Status == http.StatusTooManyRequests || (unmarshalErr == nil && envelope.Error.Code == "media_busy") ||

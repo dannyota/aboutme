@@ -92,13 +92,14 @@ const (
 // AgentCall is the validated bridge from typed MCP inputs to the existing REST
 // validation and mutation kernel.
 type AgentCall struct {
-	Operation  AgentOperation
-	ResumeID   string
-	Revision   string
-	SectionKey string
-	EntryID    string
-	Payload    json.RawMessage
-	File       []byte
+	Operation      AgentOperation
+	IdempotencyKey string
+	ResumeID       string
+	Revision       string
+	SectionKey     string
+	EntryID        string
+	Payload        json.RawMessage
+	File           []byte
 }
 
 // AgentResponse preserves the canonical REST response for closed MCP mapping.
@@ -199,7 +200,9 @@ func (s *Service) ExecuteAgent(ctx context.Context, principal AgentPrincipal, ca
 		request.Header.Set("Content-Type", "application/json")
 	}
 	if mutation {
-		request.Header.Set("Idempotency-Key", uuid.NewString())
+		if call.IdempotencyKey != "" {
+			request.Header.Set("Idempotency-Key", call.IdempotencyKey)
+		}
 	}
 	if requireRevision {
 		request.Header.Set("If-Match", `"r`+call.Revision+`"`)

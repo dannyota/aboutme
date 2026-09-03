@@ -153,6 +153,115 @@ func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
 	}
 }
 
+func TestServer_MutatingToolSchemasRequireIdempotencyKey(t *testing.T) {
+	h := newBearerHarness(t, "resumes:read resumes:write")
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	session := connectMCPClient(t, httpServer.URL, raw, "")
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	mutating := map[string]bool{
+		"create_resume": true, "delete_resume": true, "update_resume_metadata": true,
+		"upsert_entry": true, "delete_entry": true, "update_section": true,
+		"update_structure": true, "update_personal_details": true, "update_customization": true,
+		"upload_photo": true, "update_photo_crop": true, "delete_photo": true,
+	}
+	reads := map[string]bool{"list_resumes": true, "get_resume": true, "get_photo": true}
+	for _, tool := range listed.Tools {
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		schemaJSON, marshalErr := json.Marshal(tool.InputSchema)
+		if marshalErr != nil {
+			t.Fatalf("marshal %s schema: %v", tool.Name, marshalErr)
+		}
+		if unmarshalErr := json.Unmarshal(schemaJSON, &schema); unmarshalErr != nil {
+			t.Fatalf("decode %s schema: %v", tool.Name, unmarshalErr)
+		}
+		_, propertyPresent := schema.Properties["idempotency_key"]
+		required := false
+		for _, name := range schema.Required {
+			if name == "idempotency_key" {
+				required = true
+			}
+		}
+		switch {
+		case mutating[tool.Name] && (!propertyPresent || !required):
+			t.Errorf("mutating tool %q schema property=%v required=%v; want required idempotency_key", tool.Name, propertyPresent, required)
+		case reads[tool.Name] && propertyPresent:
+			t.Errorf("read tool %q schema unexpectedly exposes idempotency_key", tool.Name)
+		}
+	}
+}
+
+func TestServer_MutatingToolsForwardIdempotencyKey(t *testing.T) {
+	h := newBearerHarness(t, "resumes:read resumes:write")
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	executor := &recordingAgentExecutor{}
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	session := connectMCPClient(t, httpServer.URL, raw, "")
+	resumeID, revision := uuid.NewString(), "1"
+	key := uuid.NewString()
+	entryID := "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e60"
+	tests := []struct {
+		name string
+		args map[string]any
+		op   resumeapi.AgentOperation
+	}{
+		{"create_resume", map[string]any{"idempotency_key": key, "title": "test"}, resumeapi.AgentCreateResume},
+		{"delete_resume", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision}, resumeapi.AgentDeleteResume},
+		{"update_resume_metadata", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "title": "test"}, resumeapi.AgentUpdateResumeMetadata},
+		{"upsert_entry", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "section_key": "work", "entry": map[string]any{"id": entryID}}, resumeapi.AgentUpsertEntry},
+		{"delete_entry", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "section_key": "work", "entry_id": entryID}, resumeapi.AgentDeleteEntry},
+		{"update_section", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "section_key": "work", "display_name": "Work"}, resumeapi.AgentUpdateSection},
+		{"update_structure", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "commands": []any{}}, resumeapi.AgentUpdateStructure},
+		{"update_personal_details", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "personal_details": map[string]any{}}, resumeapi.AgentUpdatePersonalDetails},
+		{"update_customization", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "deltas": []any{}}, resumeapi.AgentUpdateCustomization},
+		{"upload_photo", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "data_base64": base64.StdEncoding.EncodeToString([]byte("photo"))}, resumeapi.AgentUploadPhoto},
+		{"update_photo_crop", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision, "crop": nil}, resumeapi.AgentUpdatePhotoCrop},
+		{"delete_photo", map[string]any{"idempotency_key": key, "resume_id": resumeID, "revision": revision}, resumeapi.AgentDeletePhoto},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			before := len(executor.snapshotCalls())
+			result, callErr := session.CallTool(context.Background(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
+			if callErr != nil || result.IsError {
+				t.Fatalf("CallTool = %#v, error = %v", result, callErr)
+			}
+			calls := executor.snapshotCalls()[before:]
+			var found *resumeapi.AgentCall
+			for i := range calls {
+				if calls[i].Operation == tc.op {
+					found = &calls[i]
+					break
+				}
+			}
+			if found == nil {
+				t.Fatalf("calls = %#v, missing operation %s", calls, tc.op)
+			}
+			if found.IdempotencyKey != key {
+				t.Errorf("forwarded key = %q, want %q", found.IdempotencyKey, key)
+			}
+			if tc.op == resumeapi.AgentCreateResume && bytes.Contains(found.Payload, []byte(`"idempotency_key"`)) {
+				t.Errorf("create payload contains transport idempotency_key: %s", found.Payload)
+			}
+		})
+	}
+}
+
 func TestServer_WriteScopeDeniedBeforeResumeStateAndCookieCannotAuthenticate(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
@@ -299,7 +408,7 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	sections["main"] = []any{"work"}
 
 	created, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "create_resume", Arguments: map[string]any{"title": "MCP lifecycle", "document": document},
+		Name: "create_resume", Arguments: map[string]any{"idempotency_key": uuid.NewString(), "title": "MCP lifecycle", "document": document},
 	})
 	if err != nil || created.IsError {
 		t.Fatalf("create_resume = %#v, error = %v", created, err)
@@ -313,7 +422,8 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 	entryID := "01890f47-7e8a-7b2a-8d70-9a1f2c3d4e61"
 	upserted, err := session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name: "upsert_entry", Arguments: map[string]any{
-			"resume_id": resumeID, "revision": createdOutput.Revision, "section_key": "work",
+			"idempotency_key": uuid.NewString(),
+			"resume_id":       resumeID, "revision": createdOutput.Revision, "section_key": "work",
 			"entry": map[string]any{"id": entryID, "description": `<script>alert(1)</script><p>safe</p>`},
 		},
 	})
@@ -342,7 +452,8 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 
 	stale, err := session.CallTool(context.Background(), &mcp.CallToolParams{
 		Name: "update_resume_metadata", Arguments: map[string]any{
-			"resume_id": resumeID, "revision": "1", "title": "stale",
+			"idempotency_key": uuid.NewString(),
+			"resume_id":       resumeID, "revision": "1", "title": "stale",
 		},
 	})
 	if err != nil || !stale.IsError || len(stale.Content) != 1 {
@@ -439,7 +550,7 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 		t.Fatalf("list_resumes = %#v, error = %v", listed, err)
 	}
 	deletedResume, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "delete_resume", Arguments: map[string]any{"resume_id": resumeID, "revision": "11"},
+		Name: "delete_resume", Arguments: map[string]any{"idempotency_key": uuid.NewString(), "resume_id": resumeID, "revision": "11"},
 	})
 	if err != nil || deletedResume.IsError {
 		t.Fatalf("delete_resume = %#v, error = %v", deletedResume, err)
@@ -457,6 +568,9 @@ func TestServer_CreateUpsertGetChainsRevisionAndClosesStaleConflict(t *testing.T
 
 func callMutationTool(t *testing.T, session *mcp.ClientSession, name string, arguments map[string]any) mutationOutput {
 	t.Helper()
+	if _, ok := arguments["idempotency_key"]; !ok {
+		arguments["idempotency_key"] = uuid.NewString()
+	}
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: arguments})
 	if err != nil || result.IsError {
 		t.Fatalf("%s = %#v, tool error = %q, error = %v", name, result, toolErrorText(result), err)

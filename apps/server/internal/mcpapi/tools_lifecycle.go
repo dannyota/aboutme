@@ -11,32 +11,39 @@ import (
 )
 
 type createResumeInput struct {
-	Title    *string        `json:"title,omitempty" jsonschema:"resume title"`
-	Lng      *string        `json:"lng,omitempty" jsonschema:"BCP 47 language tag"`
-	Document map[string]any `json:"document,omitempty" jsonschema:"optional complete resume document"`
+	IdempotencyKey string         `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	Title          *string        `json:"title,omitempty" jsonschema:"resume title"`
+	Lng            *string        `json:"lng,omitempty" jsonschema:"BCP 47 language tag"`
+	Document       map[string]any `json:"document,omitempty" jsonschema:"optional complete resume document"`
 }
 
 type resumeMutationInput struct {
-	ResumeID string `json:"resume_id" jsonschema:"resume UUID"`
-	Revision string `json:"revision" jsonschema:"current decimal revision"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string `json:"revision" jsonschema:"current decimal revision"`
 }
 
 type updateResumeMetadataInput struct {
-	ResumeID string  `json:"resume_id" jsonschema:"resume UUID"`
-	Revision string  `json:"revision" jsonschema:"current decimal revision"`
-	Title    *string `json:"title,omitempty" jsonschema:"replacement title"`
-	Lng      *string `json:"lng,omitempty" jsonschema:"replacement BCP 47 language tag"`
+	IdempotencyKey string  `json:"idempotency_key" jsonschema:"caller-generated UUID reused only for an exact retry"`
+	ResumeID       string  `json:"resume_id" jsonschema:"resume UUID"`
+	Revision       string  `json:"revision" jsonschema:"current decimal revision"`
+	Title          *string `json:"title,omitempty" jsonschema:"replacement title"`
+	Lng            *string `json:"lng,omitempty" jsonschema:"replacement BCP 47 language tag"`
 }
 
 func registerLifecycleTools(server *mcp.Server, runtime *toolRuntime) {
 	mcp.AddTool(server, &mcp.Tool{Name: "create_resume", Description: "Create a private resume draft."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input createResumeInput) (*mcp.CallToolResult, mutationOutput, error) {
-			payload, err := json.Marshal(input)
+			payload, err := json.Marshal(struct {
+				Title    *string        `json:"title,omitempty"`
+				Lng      *string        `json:"lng,omitempty"`
+				Document map[string]any `json:"document,omitempty"`
+			}{Title: input.Title, Lng: input.Lng, Document: input.Document})
 			if err != nil {
 				return nil, mutationOutput{}, closedToolError("validation_failed")
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentCreateResume, Payload: payload,
+				Operation: resumeapi.AgentCreateResume, IdempotencyKey: input.IdempotencyKey, Payload: payload,
 			})
 			if err != nil {
 				return nil, mutationOutput{}, err
@@ -48,7 +55,8 @@ func registerLifecycleTools(server *mcp.Server, runtime *toolRuntime) {
 	mcp.AddTool(server, &mcp.Tool{Name: "delete_resume", Description: "Delete a private or published resume using its current revision."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input resumeMutationInput) (*mcp.CallToolResult, deleteResumeOutput, error) {
 			_, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentDeleteResume, ResumeID: input.ResumeID, Revision: input.Revision,
+				Operation: resumeapi.AgentDeleteResume, IdempotencyKey: input.IdempotencyKey,
+				ResumeID: input.ResumeID, Revision: input.Revision,
 			})
 			if err != nil {
 				return nil, deleteResumeOutput{}, err
@@ -66,7 +74,7 @@ func registerLifecycleTools(server *mcp.Server, runtime *toolRuntime) {
 				return nil, mutationOutput{}, closedToolError("validation_failed")
 			}
 			response, err := runtime.execute(ctx, oauthsrv.ScopeResumesWrite, resumeapi.AgentCall{
-				Operation: resumeapi.AgentUpdateResumeMetadata, ResumeID: input.ResumeID,
+				Operation: resumeapi.AgentUpdateResumeMetadata, IdempotencyKey: input.IdempotencyKey, ResumeID: input.ResumeID,
 				Revision: input.Revision, Payload: payload,
 			})
 			if err != nil {
