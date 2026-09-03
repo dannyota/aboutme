@@ -26,10 +26,12 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
     });
   });
   const external = await denyExternalRequests(page);
-  await page.route('**/api/v1/me', async (route) => {
+  await page.route('/api/v1/me', async (route) => {
+    expect(route.request().method()).toBe('GET');
     await route.fulfill({ status: 204 });
   });
-  await page.route('**/api/v1/capabilities', async (route) => {
+  await page.route('/api/v1/capabilities', async (route) => {
+    expect(route.request().method()).toBe('GET');
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
