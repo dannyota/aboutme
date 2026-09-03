@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -92,10 +93,7 @@ func TestSeedIdentitiesAreFixed(t *testing.T) {
 
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	dsn := testutil.RequireMigratedTestDatabaseURL(t)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Fatalf("open: %v", err)

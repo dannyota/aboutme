@@ -93,7 +93,7 @@ go_vuln() { cd "$ROOT/apps/server" && govulncheck ./...; }
 
 sqlc_drift() { make sqlc-check; }
 
-web() { make web-lint web-typecheck web-test web-build; }
+web() { make web-lint web-typecheck web-test web-build web-source-build; }
 
 migrations_append_only() {
   bash "$ROOT/scripts/check-migrations-append-only.sh" --local origin/main
