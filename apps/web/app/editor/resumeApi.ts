@@ -217,7 +217,10 @@ export function createResumeApi(fetcher: typeof fetch = fetch): ResumeApi {
         return { kind: 'failed', reason: 'response-invalid' };
       }
       try {
-        return { kind: 'complete', accepted: await parseAccepted(response) };
+        return {
+          kind: 'complete',
+          accepted: await parseAcceptedResponse(response),
+        };
       } catch {
         return { kind: 'failed', reason: 'response-invalid' };
       }
@@ -235,7 +238,7 @@ export function createResumeApi(fetcher: typeof fetch = fetch): ResumeApi {
       }
       try {
         if (response.status === 200 || response.status === 201) {
-          const accepted = await parseAccepted(response);
+          const accepted = await parseAcceptedResponse(response);
           if (
             attempt.ifMatch !== undefined
             && compareRevision(
@@ -486,7 +489,9 @@ function wireForCommand(
   }
 }
 
-async function parseAccepted(response: Response): Promise<AcceptedResume> {
+export async function parseAcceptedResponse(
+  response: Response,
+): Promise<AcceptedResume> {
   if (!hasCurrentSchemaHeader(response)) throw new Error('wrong schema header');
   const data = dataOf(await response.json());
   const summary = parseSummary(data);

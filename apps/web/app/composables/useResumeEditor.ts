@@ -12,6 +12,11 @@ import {
   type AtomicEditorCommand,
 } from '../editor/commands';
 import { createResumeApi } from '../editor/resumeApi';
+import { createPublishApi } from '../editor/publishApi';
+import {
+  createPublishController,
+  type PublishController,
+} from '../editor/publishController';
 import {
   captureTemplateGroup,
   captureTemplateUndo,
@@ -68,6 +73,7 @@ export interface ResumeEditorActions {
   ): Promise<void>;
   resumeAfterAuth(): Promise<void>;
   discard(): void;
+  readonly publish: PublishController;
 }
 
 export interface ResumeEditorActionDeps {
@@ -76,12 +82,22 @@ export interface ResumeEditorActionDeps {
   coordinator: ResumeMutationCoordinator;
   auth: ReturnType<typeof useAuth>;
   runtime: EditorRuntime;
+  providerLogin?: ComputedRef<boolean>;
 }
 
 export function createResumeEditorActions(
   deps: ResumeEditorActionDeps,
 ): ResumeEditorActions {
   const record = computed(() => deps.store.recordFor(deps.resumeId));
+  const publish = createPublishController({
+    resumeId: deps.resumeId,
+    store: deps.store,
+    coordinator: deps.coordinator,
+    auth: deps.auth,
+    runtime: deps.runtime,
+    api: createPublishApi(),
+    providerLogin: deps.providerLogin ?? computed(() => false),
+  });
   const blocked = (
     reason: Extract<EditorActionResult, { kind: 'blocked' }>['reason'],
   ): Extract<EditorActionResult, { kind: 'blocked' }> => ({
@@ -224,6 +240,7 @@ export function createResumeEditorActions(
       deps.coordinator.applyMine(deps.resumeId, conflictId, confirmation),
     resumeAfterAuth: () => deps.coordinator.resumeAfterAuth(deps.resumeId),
     discard: () => deps.coordinator.discard(deps.resumeId),
+    publish,
   };
 }
 
@@ -242,6 +259,7 @@ export function useResumeEditor(
 ): ResumeEditorActions {
   const store = useResumeStore();
   const auth = useAuth();
+  const { providerLogin } = useCapabilities();
   const coordinator = createMutationCoordinator({
     api: createResumeApi(),
     store,
@@ -254,5 +272,6 @@ export function useResumeEditor(
     coordinator,
     auth,
     runtime,
+    providerLogin,
   });
 }
