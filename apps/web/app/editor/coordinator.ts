@@ -870,9 +870,12 @@ export function createMutationCoordinator(deps: {
       confirmation,
     );
     if (replacement === null) return;
-    deps.store.adoptCompleteRead(resumeId, latest.accepted);
-    deps.store.dropHead(resumeId, conflict.command.id);
-    deps.store.enqueue(resumeId, replacement);
+    if (!deps.store.replaceActiveAfterCompleteRead(
+      resumeId,
+      conflict.command.id,
+      latest.accepted,
+      replacement,
+    )) return;
     deps.store.resolveConflict(resumeId, conflictId);
     schedule(resumeId);
   }

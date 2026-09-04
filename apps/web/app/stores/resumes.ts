@@ -129,6 +129,12 @@ export interface ResumeStoreActions {
   adoptStaleWinner(resumeId: string, accepted: AcceptedResume): void;
   acknowledgeChild(resumeId: string, itemId: string, etag: ParentETag): void;
   acknowledgeResumeDelete(resumeId: string, itemId: string): void;
+  replaceActiveAfterCompleteRead(
+    resumeId: string,
+    itemId: string,
+    accepted: AcceptedResume,
+    replacement: EditorQueueItem,
+  ): boolean;
   replaceHead(resumeId: string, item: EditorQueueItem): void;
   dropHead(resumeId: string, itemId: string): void;
   markConflict(resumeId: string, conflict: ConflictRecord): void;
@@ -336,6 +342,29 @@ const resumeStore = defineStore('resumes', {
         return;
       }
       this.records.delete(resumeId);
+    },
+
+    replaceActiveAfterCompleteRead(
+      resumeId: string,
+      itemId: string,
+      accepted: AcceptedResume,
+      replacement: EditorQueueItem,
+    ) {
+      const record = this.records.get(resumeId) as unknown as
+        | ResumeRecord
+        | undefined;
+      if (
+        record?.attempt?.queueItem.id !== itemId
+        || compareRevision(accepted.revision, record.accepted.revision) < 0
+      ) {
+        return false;
+      }
+      record.accepted = cloneAccepted(accepted);
+      record.completeReadRequired = false;
+      record.attempt = null;
+      record.pending = [replacement, ...record.pending];
+      replay(record);
+      return true;
     },
 
     replaceHead(resumeId: string, item: EditorQueueItem) {
