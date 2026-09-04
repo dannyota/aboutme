@@ -58,6 +58,7 @@ function safeText(code: string): string {
           size="sm"
           type="button"
           variant="link"
+          data-action="focus-editor-issue"
           @click="emit('focusIssue', issue.path)"
         >
           {{ safeText(issue.code) }}

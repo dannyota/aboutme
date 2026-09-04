@@ -23,7 +23,7 @@ describe('EditorShell', () => {
     expect(wrapper.get('[data-resume-title]').text()).toBe('Fixture');
 
     expect(wrapper.get('[data-testid="account-menu"]').exists()).toBe(true);
-    expect(wrapper.get('button[aria-label^="Switch to"]').exists()).toBe(true);
+    expect(wrapper.get('[aria-label^="Switch to"]').exists()).toBe(true);
     expect(wrapper.get('[data-action="publish"]').text()).toBe('Publish');
     expect(wrapper.text()).not.toMatch(/Undo all|Redo/);
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
@@ -59,14 +59,13 @@ describe('EditorShell', () => {
 
   it('keeps the narrow topbar to one explicit row', () => {
     const wrapper = mountShell();
-    const topbar = wrapper.get('.editor-topbar');
+    const topbar = wrapper.get('[data-region="topbar"]');
 
     expect(topbar.classes()).toContain(
       'max-[72rem]:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]',
     );
-    expect(wrapper.get('.editor-account-actions').classes()).not.toContain(
-      'max-[72rem]:col-span-full',
-    );
+    expect(wrapper.get('[data-region="account-actions"]').classes())
+      .not.toContain('max-[72rem]:col-span-full');
   });
 
   it('fits the preview toolbar and document in two grid rows', () => {
@@ -126,8 +125,10 @@ describe('EditorShell', () => {
     expect(design.attributes('aria-pressed')).toBe('false');
     await design.trigger('click');
     expect(design.attributes('aria-pressed')).toBe('true');
-    expect(wrapper.get('#customization-title').text()).toBe('Customization');
-    expect(wrapper.findAll('#customization-title')).toHaveLength(1);
+    expect(wrapper.get('[data-testid="customization-title"]').text())
+      .toBe('Customization');
+    expect(wrapper.findAll('[data-testid="customization-title"]'))
+      .toHaveLength(1);
   });
 
   it('keeps the session-lost dialog open on Escape', async () => {
@@ -211,7 +212,7 @@ describe('EditorShell', () => {
         },
       });
 
-      await wrapper.get('.editor-error-summary button').trigger('click');
+      await wrapper.get('[data-action="focus-editor-issue"]').trigger('click');
 
       expect(wrapper.get('[data-issue]').text()).toBe('1');
       wrapper.unmount();
@@ -319,7 +320,10 @@ function heavyStubs() {
     StructurePanel: { name: 'StructurePanel', template: '<div />' },
     CustomizationPanel: {
       name: 'CustomizationPanel',
-      template: '<div><h2 id="customization-title">Customization</h2></div>',
+      template: [
+        '<div><h2 id="customization-title"',
+        ' data-testid="customization-title">Customization</h2></div>',
+      ].join(''),
     },
     TemplatePanel: { name: 'TemplatePanel', template: '<div />' },
     PhotoPanel: { name: 'PhotoPanel', template: '<div />' },
