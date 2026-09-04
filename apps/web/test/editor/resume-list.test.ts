@@ -585,7 +585,11 @@ describe('useResumeList', () => {
           removalFocusId: null,
           removalFocusVersion: 0,
         },
-        global: { stubs: { NuxtLink: true } },
+        global: {
+          stubs: {
+            NuxtLink: { template: '<a><slot /></a>' },
+          },
+        },
       });
       const list = wrapper.get('[data-testid="resume-list"]');
       expect(list.classes()).toEqual(expect.arrayContaining([
@@ -603,6 +607,13 @@ describe('useResumeList', () => {
           'rounded-[var(--radius-dialog)]',
           'shadow-[var(--shadow-paper)]',
         ]),
+      );
+      expect(sheets[0]!.get('time').classes()).toContain('text-[#5f6763]');
+      expect(sheets[0]!.get('time').classes()).not.toContain(
+        'text-muted-foreground',
+      );
+      expect(sheets[0]!.get('[data-state-mark]').attributes('style')).toContain(
+        'color: #5f6763',
       );
       expect(wrapper.findAll('[data-testid^="resume-slot-"]')).toHaveLength(0);
       expect(

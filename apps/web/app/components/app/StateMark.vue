@@ -24,7 +24,9 @@ const publicLink = computed(() => {
       state === 'failed' ? 'text-destructive' : 'text-muted-foreground',
     ]"
     :data-state-mark="state"
-    :role="state === 'failed' ? 'alert' : 'status'"
+    :role="
+      state === 'failed' ? 'alert' : state === 'public' ? undefined : 'status'
+    "
   >
     <template v-if="state === 'saved'">
       <svg

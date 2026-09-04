@@ -235,7 +235,8 @@ inside_container() {
     --config playwright.config.ts "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
-    if [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ]; then
+    if [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
+      [ "$mode" = entry ]; then
       local -a bounded_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true

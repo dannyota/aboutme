@@ -261,13 +261,13 @@ function cloneIntent(intent: AtomicCommandIntent): AtomicCommandIntent {
     case 'entryReorder':
       return { ...intent, entryIds: [...intent.entryIds] };
     case 'entryUpsert':
-      return { ...intent, entry: structuredClone(intent.entry) };
+      return { ...intent, entry: cloneReactiveSafe(intent.entry) };
     case 'personalField':
     case 'entryField':
       return {
         ...intent,
         value: intent.value.present
-          ? { present: true, value: structuredClone(intent.value.value) }
+          ? { present: true, value: cloneReactiveSafe(intent.value.value) }
           : { present: false },
       } as AtomicCommandIntent;
     default:

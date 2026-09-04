@@ -106,7 +106,7 @@ watch(
         >
           <span class="block text-lg font-semibold">{{ item.title }}</span>
           <time
-            class="block text-xs tabular-nums text-muted-foreground"
+            class="block text-xs tabular-nums text-[#5f6763]"
             :datetime="item.updatedAt"
           >
             Updated {{ formatRelativeTime(item.updatedAt, now) }}
@@ -115,13 +115,13 @@ watch(
         <span class="relative z-10 block px-6 pb-4">
           <StateMark
             v-if="item.live && item.slug"
-            class="text-[#5f6763]"
+            style="color: #5f6763"
             state="public"
             :link="`/${item.slug}`"
           />
           <StateMark
             v-else
-            class="text-[#5f6763]"
+            style="color: #5f6763"
             state="draft"
           />
         </span>

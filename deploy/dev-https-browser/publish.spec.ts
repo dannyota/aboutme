@@ -213,8 +213,9 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       request.method() === "PATCH" &&
       url.pathname.endsWith("/personal-details") &&
       response.status() === 200
-    )
+    ) {
       events.push("edit-accepted");
+    }
   };
   await installPublicGuards(context, counters);
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
@@ -316,6 +317,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     steps.accessibility = true;
     stage("dialog-audited");
     await page.setViewportSize({ width: 1280, height: 900 });
+    stage("dialog-sized");
     await page.getByLabel("Slug").fill(slug);
     const live = page.getByLabel("Public resume");
     const download = page.getByLabel("PDF download");
@@ -323,9 +325,11 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await expect(live).not.toBeChecked();
     await expect(download).not.toBeChecked();
     await expect(seo).not.toBeChecked();
+    stage("dialog-defaults");
     await live.press("Space");
     await download.press("Space");
     await expect(seo).not.toBeChecked();
+    stage("dialog-options");
     const publishResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -336,12 +340,21 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await dialog
       .getByRole("button", { name: "Publish", exact: true })
       .press("Enter");
+    stage("publish-requested");
     const acceptedPublish = await publishResponse;
     statuses.publish = acceptedPublish.status();
     expect(statuses.publish).toBe(200);
+    const publicMark = page.getByTestId("public-mark");
+    const previewStamp = page.getByTestId("preview-stamp");
+    stage("publish-marks-landing");
+    await Promise.all([
+      expect(publicMark).toHaveAttribute("data-stamp", "landing"),
+      expect(previewStamp).toHaveAttribute("data-stamp", "landing"),
+    ]);
     await expect(dialog.getByRole("status")).toHaveText(
       "Published successfully.",
     );
+    stage("publish-status");
     const editAccepted = events.indexOf("edit-accepted");
     const publishRequested = events.indexOf("publish-request");
     expect(editAccepted).toBeGreaterThanOrEqual(0);
@@ -349,24 +362,29 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     steps.saveFirst = true;
     steps.headers = Object.values(headerPresence).slice(0, 5).every(Boolean);
 
-    const publicMark = page.getByTestId("public-mark");
-    const previewStamp = page.getByTestId("preview-stamp");
+    stage("publish-marks");
     await Promise.all([
       expect(publicMark).toBeVisible(),
       expect(previewStamp).toBeVisible(),
     ]);
-    await expect(
-      publicMark.getByRole("link", {
-        name: `aboutme.vn/${slug}`,
-        exact: true,
-      }),
-    ).toHaveAttribute("href", `/${slug}`);
+    stage("publish-marks-visible");
+    const publicMarkLink = publicMark.locator("[data-public-link]");
+    await expect(publicMarkLink).toHaveCount(1);
+    stage("publish-mark-link-count");
+    await expect(publicMarkLink).toHaveText(`aboutme.vn/${slug}`);
+    stage("publish-mark-link-text");
+    await expect(publicMarkLink).toHaveAttribute("href", `/${slug}`);
+    stage("publish-mark-link");
     await expect(previewStamp).toHaveAttribute(
       "aria-label",
       `Public at aboutme.vn/${slug}`,
     );
-    await expect(publicMark).not.toHaveAttribute("data-stamp");
-    await expect(previewStamp).not.toHaveAttribute("data-stamp");
+    stage("publish-mark-label");
+    stage("publish-marks-idle");
+    await Promise.all([
+      expect(publicMark).not.toHaveAttribute("data-stamp"),
+      expect(previewStamp).not.toHaveAttribute("data-stamp"),
+    ]);
 
     const link = dialog.getByRole("link", {
       name: `aboutme.vn/${slug}`,
@@ -407,10 +425,14 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await dialog
       .getByRole("button", { name: "Cancel", exact: true })
       .press("Enter");
+    stage("published-close");
     await expect(page.locator('[data-action="publish"]')).toBeFocused();
+    stage("published-focus-restored");
     await page.locator('[data-action="publish"]').press("Enter");
+    stage("update-reopen");
     let updateDialog = page.getByRole("dialog", { name: "Publish resume" });
     await expect(updateDialog).toBeVisible();
+    stage("update-visible");
 
     await page.setViewportSize({ width: 390, height: 844 });
     syntheticInvalidRequest = true;
