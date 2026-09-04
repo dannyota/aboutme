@@ -55,6 +55,7 @@ beforeEach(() => {
 describe('index.vue', () => {
   it('renders the approved stamped-document hero without a card', async () => {
     const wrapper = await mountSuspended(LandingPage);
+    expect(wrapper.get('[data-testid="landing"]').element.tagName).toBe('MAIN');
     const heading = wrapper.get('[data-testid="landing-title"]');
 
     expect(heading.element.tagName).toBe('H1');
@@ -144,6 +145,9 @@ describe('index.vue', () => {
       'https://github.com/dannyota/aboutme',
     );
     expect(license.attributes('rel')).toBe('noopener noreferrer');
+    expect(license.classes()).toEqual(
+      expect.arrayContaining(['text-primary', 'underline']),
+    );
   });
 
   it(

@@ -385,6 +385,9 @@ describe('PublishDialog', () => {
       const link = wrapper.get('[data-action="publish-provider-link"]');
       expect(link.attributes('target')).toBe('_blank');
       expect(link.attributes('rel')).toBe('noopener noreferrer');
+      expect(link.classes()).toEqual(
+        expect.arrayContaining(['text-primary', 'underline']),
+      );
       await link.trigger('click');
       expect(openSpy).not.toHaveBeenCalled();
       expect(wrapper.text()).toContain('return to the editor');
@@ -701,6 +704,9 @@ describe('PublishDialog', () => {
       expect(
         wrapper.get('[data-action="view-public-resume"]').attributes('href'),
       ).toBe('/canonical-slug');
+      expect(
+        wrapper.get('[data-action="view-public-resume"]').classes(),
+      ).toEqual(expect.arrayContaining(['text-primary', 'underline']));
 
       context.state.value = {
         kind: 'accepted',

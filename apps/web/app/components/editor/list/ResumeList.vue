@@ -112,7 +112,10 @@ watch(
             Updated {{ formatRelativeTime(item.updatedAt, now) }}
           </time>
         </NuxtLink>
-        <span class="relative z-10 block px-6 pb-4">
+        <span
+          class="relative z-10 block px-6 pb-4"
+          :class="{ 'pointer-events-none': !item.live || !item.slug }"
+        >
           <StateMark
             v-if="item.live && item.slug"
             style="color: #5f6763"
