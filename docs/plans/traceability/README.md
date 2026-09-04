@@ -39,6 +39,6 @@ rows are never split by number range.
 | `AC-FONT`   | 1    | [ac-font.md](./ac-font.md)     |
 | `AC-EDITOR` | 17   | [ac-editor.md](./ac-editor.md) |
 | `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
-| `AC-UI`     | 7    | [ac-ui.md](./ac-ui.md)         |
+| `AC-UI`     | 13   | [ac-ui.md](./ac-ui.md)         |
 
-Total: 141 rows across 17 prefixes.
+Total: 147 rows across 17 prefixes.
