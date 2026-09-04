@@ -46,7 +46,7 @@ const linkClass = cn(
       v-if="signedIn"
       class="ml-auto flex items-center gap-2"
     >
-      <AccountMenu /><ThemeToggle />
+      <AccountMenu />
     </div>
     <div
       v-else

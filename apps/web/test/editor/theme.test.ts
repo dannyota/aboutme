@@ -83,7 +83,7 @@ describe('theme preference boundary', () => {
   );
 
   it(
-    'keeps the theme toggle directly beside the signed-in account control',
+    'keeps the theme control inside the signed-in account menu',
     async () => {
       const wrapper = await mountSuspended(AppRoot, {
         route: '/app/resumes',
@@ -92,10 +92,16 @@ describe('theme preference boundary', () => {
 
       const shell = wrapper.get('[data-testid="app-shell"]');
       expect(shell.find('[data-testid="account-menu"]').exists()).toBe(true);
-      expect(shell.find('[aria-label^="Switch to"]').exists()).toBe(true);
+      expect(shell.find('[aria-label^="Switch to"]').exists()).toBe(false);
       expect(
         shell.get('[data-testid="account-menu"]').attributes('aria-label'),
-      ).toContain('Account settings');
+      ).toBe('Account menu');
+
+      await shell.get('[aria-label="Account menu"]').trigger('click');
+      await flushPromises();
+      expect(document.body.querySelector('[data-testid="theme-toggle"]'))
+        .not.toBeNull();
+      wrapper.unmount();
     },
     15_000,
   );

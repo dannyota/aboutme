@@ -13,7 +13,7 @@ import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
 describe('EditorShell', () => {
-  it('renders the four-region editor with adjacent account and theme', () => {
+  it('renders the four-region editor with its stamped top bar', () => {
     const wrapper = mountShell();
 
     expect(wrapper.get('[data-region="app-rail"]').exists()).toBe(true);
@@ -22,12 +22,34 @@ describe('EditorShell', () => {
     expect(wrapper.get('[data-region="inspector"]').exists()).toBe(true);
     expect(wrapper.get('[data-resume-title]').text()).toBe('Fixture');
 
-    expect(wrapper.get('[data-testid="account-menu"]').exists()).toBe(true);
-    expect(wrapper.get('[aria-label^="Switch to"]').exists()).toBe(true);
-    expect(wrapper.get('[data-action="publish"]').text()).toBe('Publish');
+    expect(wrapper.get('[aria-label="Account menu"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label^="Switch to"]').exists()).toBe(false);
+    const publish = wrapper.get('[data-action="publish"]');
+    expect(publish.text()).toBe('Publish');
+    expect(publish.attributes('data-variant')).toBe('seal');
+    expect(wrapper.findAll('[data-action="publish"]')).toHaveLength(1);
     expect(wrapper.text()).not.toMatch(/Undo all|Redo/);
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
+
+  it(
+    'shows the canonical public mark only for a live resume with a slug',
+    () => {
+      const draft = mountShell();
+      expect(draft.find('[data-testid="public-mark"]').exists()).toBe(false);
+
+      const record = editorRecord();
+      record.current.metadata.live = true;
+      record.current.metadata.slug = 'ada-lovelace';
+      const live = mount(EditorShell, {
+        props: { actions: actionsFor(record), record },
+        global: { stubs: heavyStubs() },
+      });
+      expect(live.get('[data-testid="public-mark"]').text()).toContain(
+        'aboutme.vn/ada-lovelace',
+      );
+    },
+  );
 
   it('opens the publish dialog from the editor topbar', async () => {
     const wrapper = mountShell({}, { attachTo: document.body });
@@ -57,22 +79,25 @@ describe('EditorShell', () => {
     );
   });
 
-  it('keeps the narrow topbar to one explicit row', () => {
+  it('keeps the narrow topbar compact', () => {
     const wrapper = mountShell();
     const topbar = wrapper.get('[data-region="topbar"]');
 
-    expect(topbar.classes()).toContain(
-      'max-[72rem]:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]',
+    expect(topbar.classes()).toEqual(
+      expect.arrayContaining(['flex', 'h-16']),
     );
+    expect(wrapper.get('[data-resume-title]').classes())
+      .toContain('max-[42rem]:hidden');
     expect(wrapper.get('[data-region="account-actions"]').classes())
       .not.toContain('max-[72rem]:col-span-full');
   });
 
-  it('fits the preview toolbar and document in two grid rows', () => {
+  it('uses one headerless preview row', () => {
     const wrapper = mountShell();
     expect(wrapper.get('[data-region="preview"]').classes()).toEqual(
-      expect.arrayContaining(['grid', 'grid-rows-[auto_minmax(0,1fr)]']),
+      expect.arrayContaining(['grid', 'grid-rows-[minmax(0,1fr)]']),
     );
+    expect(wrapper.find('[data-preview-header]').exists()).toBe(false);
   });
 
   it(
@@ -89,6 +114,14 @@ describe('EditorShell', () => {
       expect(
         outline.findAll('[data-outline-key]').map((item) => item.text()),
       ).toEqual(['Personal details', 'Experience', 'Skills']);
+      expect(
+        outline.get('[data-outline-key="personal"] [data-outline-icon]')
+          .attributes('data-icon-key'),
+      ).toBe('user');
+      expect(
+        outline.get('[data-outline-key="work"] [data-outline-icon]')
+          .attributes('data-icon-key'),
+      ).toBe('briefcase');
 
       await outline.get('[data-outline-key="skill"]').trigger('click');
       expect(
@@ -125,10 +158,75 @@ describe('EditorShell', () => {
     expect(design.attributes('aria-pressed')).toBe('false');
     await design.trigger('click');
     expect(design.attributes('aria-pressed')).toBe('true');
+    expect(design.classes()).toEqual(
+      expect.arrayContaining([
+        'aria-pressed:bg-secondary',
+        'aria-pressed:text-primary',
+      ]),
+    );
     expect(wrapper.get('[data-testid="customization-title"]').text())
       .toBe('Customization');
     expect(wrapper.findAll('[data-testid="customization-title"]'))
       .toHaveLength(1);
+  });
+
+  it(
+    'keeps the phone switch outside the topbar and fits the preview',
+    async () => {
+      const originalWidth = window.innerWidth;
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 390,
+      });
+      const record = editorRecord();
+      const wrapper = mount(EditorShell, {
+        props: { actions: actionsFor(record), record },
+        global: { stubs: heavyStubs({ preview: false }) },
+      });
+      await wrapper.vm.$nextTick();
+
+      const switcher = wrapper.get('[role="tablist"]');
+      expect(switcher.get('[data-action="show-editor"]').text()).toBe('Edit');
+      await switcher.get('[data-action="show-preview"]').trigger('click');
+      expect(
+        wrapper.get('[data-responsive-region="preview"]')
+          .attributes('data-narrow-active'),
+      ).toBe('true');
+      expect(wrapper.get('[data-region="inspector"]').classes()).toEqual(
+        expect.arrayContaining([
+          'max-[42rem]:w-full',
+          'max-[42rem]:max-w-none',
+        ]),
+      );
+      const sheet = wrapper.get('[data-testid="preview-sheet"]');
+      expect(Number(sheet.attributes('data-sheet-zoom'))).toBeLessThan(1);
+      expect(Number(sheet.attributes('data-scaled-width'))).toBeLessThan(390);
+
+      await wrapper.get('[data-action="show-editor"]').trigger('click');
+      await wrapper.get('[data-action="open-sections"]').trigger('click');
+      await wrapper.vm.$nextTick();
+      expect(document.body.querySelector('[aria-label="Resume sections"]'))
+        .not.toBeNull();
+
+      wrapper.unmount();
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: originalWidth,
+      });
+    },
+  );
+
+  it('renders a hostile resume title as text', () => {
+    const record = editorRecord();
+    record.current.metadata.title = '<img src=x onerror=alert(1)>';
+    const wrapper = mount(EditorShell, {
+      props: { actions: actionsFor(record), record },
+      global: { stubs: heavyStubs() },
+    });
+    const title = wrapper.get('[data-resume-title]');
+
+    expect(title.text()).toBe('<img src=x onerror=alert(1)>');
+    expect(descendantNames(title.element)).not.toContain('img');
   });
 
   it('keeps the session-lost dialog open on Escape', async () => {
@@ -161,7 +259,7 @@ describe('EditorShell', () => {
     ['loading', 'Photo is loading'],
     ['unavailable', 'Photo unavailable'],
   ] as const)(
-    'renders the %s photo state in the preview toolbar',
+    'renders the %s photo state with the preview sheet',
     (state, text) => {
       const record = editorRecord();
       record.current.document.personalDetails.photo = {
@@ -178,9 +276,10 @@ describe('EditorShell', () => {
             };
       const wrapper = mount(EditorShell, {
         props: { actions: actionsFor(record), record },
-        global: { stubs: heavyStubs() },
+        global: { stubs: heavyStubs({ preview: false }) },
       });
 
+      expect(wrapper.findAll('[data-photo-state]')).toHaveLength(1);
       expect(wrapper.get('[data-photo-state]').text()).toContain(text);
       expect(wrapper.html()).not.toContain('private-object.jpg');
     },
@@ -226,11 +325,13 @@ function editorRecord(): ResumeRecord {
     work: {
       sectionType: 'work',
       displayName: 'Experience',
+      iconKey: 'briefcase',
       entries: [],
     },
     skill: {
       sectionType: 'skill',
       displayName: 'Skills',
+      iconKey: 'code',
       entries: [],
     },
   };
@@ -254,6 +355,17 @@ function editorRecord(): ResumeRecord {
     sessionLost: false,
     opaquePhotoOutcome: null,
   };
+}
+
+function descendantNames(root: Element): string[] {
+  const names: string[] = [];
+  const pending = [...root.children];
+  while (pending.length > 0) {
+    const element = pending.pop()!;
+    names.push(element.localName);
+    pending.push(...element.children);
+  }
+  return names;
 }
 
 function mountShell(
@@ -305,9 +417,11 @@ function actionsFor(
   };
 }
 
-function heavyStubs() {
+function heavyStubs(options: { preview?: boolean } = {}) {
   return {
-    EditorPreview: { name: 'EditorPreview', template: '<div />' },
+    ...(options.preview === false
+      ? { ResumeDocument: { name: 'ResumeDocument', template: '<div />' } }
+      : { EditorPreview: { name: 'EditorPreview', template: '<div />' } }),
     PersonalDetailsPanel: {
       name: 'PersonalDetailsPanel',
       template: '<div />',
