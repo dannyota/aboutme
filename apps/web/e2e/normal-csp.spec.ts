@@ -29,7 +29,22 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
   const external = await denyExternalRequests(page);
   await page.route('/api/v1/me', async (route) => {
     expect(route.request().method()).toBe('GET');
-    await route.fulfill({ status: 204 });
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          user: {
+            id: 'csp-user',
+            email: 'csp@example.invalid',
+            name: 'CSP User',
+            avatarKey: null,
+            hasPassword: true,
+          },
+          csrfToken: 'csp-test-token',
+          identities: [],
+        },
+      },
+    });
   });
   await page.route('/api/v1/capabilities', async (route) => {
     expect(route.request().method()).toBe('GET');
