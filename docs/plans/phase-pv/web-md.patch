@@ -1,0 +1,23 @@
+--- a/docs/design/web.md
++++ b/docs/design/web.md
+@@ -61,11 +61,15 @@
+ are defined on the document root and switched by the `data-theme` attribute that
+ the theme cookie already controls, so teleported dialogs and menus inherit them.
+ 
+-The chrome is neutral: the zinc palette, Inter, and emerald only for saved and
+-active states. The resume preview on its muted canvas is the one element with
+-visual weight. Copy is sentence case, buttons name the action they perform, an
+-empty state says what to do next, and an error says what happened and how to fix
+-it.
++The chrome is the desk and the resume is the paper. Seal red marks only the
++public state: a round seal on the sheet means "public at this link", pressed by
++a person and never by an agent. The person's own actions use signature ink,
++secondary text and draft or saved states are pencil marks, and the chrome
++typeface is Be Vietnam Pro. The preview sheet keeps its own document background
++in both themes and is never cropped.
++[ADR 0030](../adr/0030-stamped-document-visual-identity.md) owns the identity.
++Copy is sentence case, buttons name the action they perform, an empty state says
++what to do next, and an error says what happened and how to fix it.
+ 
+ Text fields commit on blur or Enter. A non-empty changed value is set, an empty
+ value removes the field, an unchanged value sends nothing, and Escape reverts to

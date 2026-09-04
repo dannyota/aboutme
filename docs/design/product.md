@@ -38,8 +38,9 @@ collaborative editing.
 ## Landing and entry
 
 The home page introduces the product in a few lines and offers sign-in and
-registration. It is static server-rendered text with no data fetch and no
-application navigation for a visitor who is not signed in. Its copy names only
+registration. It is static server-rendered content with no data fetch and no
+application navigation for a visitor who is not signed in; it renders one
+compiled-in sample resume through the shared renderer. Its copy names only
 shipped behavior. Registration is public and verifies the email before an
 account exists.
 

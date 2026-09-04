@@ -8,3 +8,4 @@ packages/schema/gen/
 CLAUDE.md
 AGENTS.md
 .claude/
+.impeccable/surfaces/

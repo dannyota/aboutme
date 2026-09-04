@@ -12,9 +12,9 @@ closes its owned rows before its exit checklist.
 ## Ownership
 
 The `Phase/task` column names the phase and tasks that own a row. Phase PM is
-complete. A completed phase's plan is deleted at exit, so its task IDs are
-history that Git keeps. The test and acceptance references in each row remain
-the evidence.
+complete. Phase PV is active; see [PV](../phase-pv/README.md). A completed
+phase's plan is deleted at exit, so its task IDs are history that Git keeps. The
+test and acceptance references in each row remain the evidence.
 
 ## Matrix index
 
@@ -39,5 +39,6 @@ rows are never split by number range.
 | `AC-FONT`   | 1    | [ac-font.md](./ac-font.md)     |
 | `AC-EDITOR` | 17   | [ac-editor.md](./ac-editor.md) |
 | `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
+| `AC-UI`     | 7    | [ac-ui.md](./ac-ui.md)         |
 
-Total: 134 rows across 16 prefixes.
+Total: 141 rows across 17 prefixes.
