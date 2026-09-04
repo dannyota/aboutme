@@ -36,16 +36,17 @@ the affected sequence is rerun.
 - [ ] Every page passes the axe scan in light and dark with no serious or
       critical violation.
 
-## Impeccable finish
+## Code-led finish
 
-- [ ] `node <impeccable>/scripts/detect.mjs --json apps/web/app` reports no
-      mechanical finding that T10 did not resolve or justify.
-- [ ] `.impeccable/review/desktop.png` and `mobile.png` exist for the landing,
-      list, settings, and editor, captured after motion settled.
-- [ ] The finish reviewer's last disposition is `ship`, or every open finding is
-      listed in the exit report with the owner's decision.
-- [ ] `DESIGN.md` exists at the repository root, written by the documenter from
-      the built pages, and `impeccable doctor` reports no drift.
+- [ ] The UI boundary, lint, type, unit, build, and browser gates report no
+      unresolved mechanical finding.
+- [ ] The nine landing, list, settings, and editor captures named in T10 exist
+      under `.impeccable/review/`, captured after motion settled.
+- [ ] The fresh Sol reviewer's last disposition is `ship`, or every open finding
+      is listed in the exit report with the owner's decision.
+- [ ] `DESIGN.md` exists at the repository root and matches the built pages,
+      `PRODUCT.md`, the direction contract, and the checked-in design
+      authorities.
 
 ## Documentation and review
 

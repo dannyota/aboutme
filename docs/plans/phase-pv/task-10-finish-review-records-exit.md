@@ -4,32 +4,35 @@
 
 Integration owner, alone, on one candidate commit after W4 is accepted.
 
-### Impeccable finish (code-led)
+### Code-led finish
 
-1. Reload the direction contract:
-   `node <impeccable>/scripts/surface-brief.mjs read apps/web/app/pages/index.vue`.
+The planned Impeccable CLI, detector scripts, shipped reviewer/documenter, and
+`document.md` reference are not present in the repository or installed toolset.
+Use the checked-in direction contract and repository gates directly instead of
+recording commands that cannot run.
+
+1. Reload the direction contract from
+   `.impeccable/surfaces/apps-web-app-pages-index-vue.md`.
 2. With `make dev-native` up and the dev account seeded, capture into
    `.impeccable/review/` after motion settles: `desktop.png` (1440 wide, full
    page) and `mobile.png` (390 wide) for `/`, plus `list-desktop.png`,
    `list-mobile.png`, `settings-desktop.png`, `editor-desktop.png`,
    `editor-mobile.png`, in light; and `desktop-dark.png`, `editor-dark.png`.
    Open each file once and confirm it shows what its name says.
-3. Run `node <impeccable>/scripts/detect.mjs --json apps/web/app` once. Fix
-   mechanical findings; list the rest for the reviewer.
-4. Spawn the shipped `impeccable-finish-reviewer` fresh (no forked history)
-   with: the original request ("the UI is not good; design and plan"), the
-   confirmed answers (Vietnamese tech job seekers; "the resume is public, you
-   are not"; rebase PU), the artifact paths (`apps/web/app/pages/index.vue`,
-   `EditorShell.vue`, `ResumeList.vue`, `sessions.vue`, `PublishDialog.vue`),
-   the screenshot paths, the direction contract, the detector findings, the
-   craft-floor reference path, and no comp (code-led; note the decision page had
-   no comps). Act on the disposition: `recapture`, `fix` (one batch, one
-   recapture, verdict pass), `rebuild`, or `ship`. Two rounds is the budget;
-   list any open finding in the exit report for the owner.
-5. Spawn the shipped `impeccable-documenter` with the project root, the artifact
-   paths, the direction contract, `PRODUCT.md`, and the `document.md` reference
-   path; it writes `DESIGN.md` from the built pages. Re-run it if any fix
-   follows.
+3. Run the repository's UI boundary, lint, type, unit, build, and browser gates.
+   Fix mechanical findings and list any remaining visual finding for the
+   reviewer.
+4. Spawn a fresh Sol reviewer that authored none of the phase with: the original
+   request ("the UI is not good; design and plan"), the confirmed answers
+   (Vietnamese tech job seekers; "the resume is public, you are not"; rebase
+   PU), the artifact paths (`apps/web/app/pages/index.vue`, `EditorShell.vue`,
+   `ResumeList.vue`, `sessions.vue`, `PublishDialog.vue`), the screenshot paths,
+   the direction contract, the repository gate results, the checked-in design
+   authorities, and no comp. Act on the disposition: `recapture`, `fix`,
+   `rebuild`, or `ship`. Two rounds is the budget; list any open finding in the
+   exit report for the owner.
+5. Write `DESIGN.md` from the built pages, `PRODUCT.md`, the direction contract,
+   and the checked-in design authorities. Recheck it after any visual fix.
 
 ### Browser proofs and hooks
 
@@ -76,4 +79,5 @@ Owned paths: `.impeccable/review/**` (local), `DESIGN.md`, `apps/web/e2e/**` and
 Acceptance: `AC-UI-013`, and every PV row to `PROVEN`.
 
 Report: the candidate SHA, each command's outcome, the reviewer disposition
-history, open findings with the owner's decision, and the pushed SHA.
+history, open findings with the owner's decision, and the pushed SHA when the
+owner authorizes the push.
