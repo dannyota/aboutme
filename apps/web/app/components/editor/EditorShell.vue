@@ -257,7 +257,8 @@ function sectionLabel(type: string): string {
         max-[72rem]:z-20 max-[72rem]:h-14 max-[72rem]:flex-row
         max-[72rem]:border-b max-[72rem]:border-r-0 max-[42rem]:col-start-1
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
-        max-[72rem]:data-[narrow-active=false]:invisible"
+        max-[72rem]:data-[narrow-active=false]:invisible
+        max-[72rem]:data-[narrow-active=false]:opacity-0"
       aria-label="Editor tools"
       :data-narrow-active="narrowRegion === 'editor'"
       data-region="app-rail"
