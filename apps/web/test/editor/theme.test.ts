@@ -145,11 +145,15 @@ describe('theme preference boundary', () => {
     },
   );
 
-  it('keeps the application tokens in the theme layer', async () => {
+  it('keeps the stamped-document tokens in the theme layer', async () => {
     const tokens = await readFile(themeCss, 'utf8');
 
-    expect(tokens).toContain('--positive: oklch(0.508 0.118 165.612)');
-    expect(tokens).toContain('--chart-1: oklch(0.845 0.143 164.978)');
+    expect(tokens).toContain('--color-seal: var(--seal)');
+    expect(tokens).toContain(
+      '--font-sans: "Be Vietnam Pro", "Inter", system-ui, sans-serif',
+    );
+    expect(tokens).not.toMatch(/--positive(?:-foreground)?\s*:/);
+    expect(tokens).not.toMatch(/--chart-/);
   });
 
   it(

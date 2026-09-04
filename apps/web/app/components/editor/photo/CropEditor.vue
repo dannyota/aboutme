@@ -182,7 +182,7 @@ function roundCrop(value: number): number {
         <div
           aria-hidden="true"
           data-crop-rectangle
-          class="absolute border-2 border-positive bg-positive/10"
+          class="absolute border-2 border-primary bg-primary/10"
           :style="rectangleStyle"
         />
       </div>

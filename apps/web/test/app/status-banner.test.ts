@@ -28,4 +28,18 @@ describe('StatusBanner', () => {
     expect(document.activeElement).toBe(wrapper.element);
     wrapper.unmount();
   });
+
+  it('renders success as a neutral pencil mark', () => {
+    const wrapper = mount(StatusBanner, {
+      props: { kind: 'success', testid: 'success' },
+      slots: { default: 'Saved.' },
+    });
+
+    const banner = wrapper.get('[data-testid="success"]');
+    expect(banner.classes()).toEqual(
+      expect.arrayContaining(['border-border', 'text-foreground']),
+    );
+    expect(banner.classes().join(' ')).not.toContain('positive');
+    expect(wrapper.get('[data-status-glyph="success"]').exists()).toBe(true);
+  });
 });

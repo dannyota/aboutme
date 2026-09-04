@@ -362,8 +362,8 @@ function sectionLabel(type: string): string {
               : undefined
           "
           :data-outline-key="item.key"
-          class="w-full justify-start aria-[current=page]:bg-positive/15
-            aria-[current=page]:text-foreground"
+          class="w-full justify-start aria-[current=page]:bg-accent
+            aria-[current=page]:text-accent-foreground"
           variant="ghost"
           @click="selectOutline(item.key)"
         >

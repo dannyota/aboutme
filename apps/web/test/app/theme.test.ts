@@ -157,6 +157,19 @@ describe('application theme', () => {
     },
   );
 
+  it('has no retained utility consumer of removed palette tokens', () => {
+    const consumers = sourceFiles(resolve(webRoot, 'app'))
+      .filter((path) => path !== themePath)
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8');
+        return /\b(?:bg|text|border)-(?:positive(?:\/\d+)?|chart-[1-5])\b/
+          .test(source);
+      })
+      .map((path) => path.slice(webRoot.length + 1));
+
+    expect(consumers).toEqual([]);
+  });
+
   it('keeps the document background inline under the dark chrome theme', () => {
     const fixture = JSON.parse(
       readFileSync(
