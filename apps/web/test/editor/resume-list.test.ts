@@ -12,9 +12,8 @@ import DeleteResumeDialog from '../../app/components/editor/list/DeleteResumeDia
 import RenameResumeDialog from '../../app/components/editor/list/RenameResumeDialog.vue';
 
 import ResumeList from '../../app/components/editor/list/ResumeList.vue';
-import type {
-  ResumeEditorActions,
-} from '../../app/composables/useResumeEditor';
+// eslint-disable-next-line max-len -- composable action type import.
+import type { ResumeEditorActions } from '../../app/composables/useResumeEditor';
 import type { CreateResumeIntent } from '../../app/editor/commands';
 import type {
   OpaqueCreateOutcome,
@@ -517,11 +516,11 @@ describe('useResumeList', () => {
 
     const firstButton = wrapper.get(
       `[data-testid="resume-row-${first.id}"]`
-      + ` [aria-label="Rename ${first.title}"]`,
+      + ` [aria-label="More actions for ${first.title}"]`,
     );
     const secondButton = wrapper.get(
       `[data-testid="resume-row-${second.id}"]`
-      + ` [aria-label="Rename ${second.title}"]`,
+      + ` [aria-label="More actions for ${second.title}"]`,
     );
     expect(firstButton.attributes('disabled')).toBeDefined();
     expect(secondButton.attributes('disabled')).toBeUndefined();
@@ -558,9 +557,6 @@ describe('useResumeList', () => {
         },
         global: { stubs: { NuxtLink: true } },
       });
-      const create = document.createElement('button');
-      create.dataset.testid = 'create-resume';
-      document.body.append(create);
       await wrapper.setProps({
         items: [first, second, third].filter((item) => item.id !== removed),
         removalFocusId: nextId,
@@ -569,29 +565,123 @@ describe('useResumeList', () => {
       await nextTick();
       await nextTick();
       const target = nextId === null
-        ? document.body.querySelector('[data-testid="create-resume"]')!
+        ? wrapper.get('[data-testid="create-resume"]').element
         : wrapper.get(
-          `[data-testid="resume-row-${nextId}"] [aria-label^="Rename "]`,
+          `[data-testid="resume-row-${nextId}"]`
+          + ' [aria-label^="More actions for "]',
         ).element;
       expect(document.activeElement).toBe(target);
       wrapper.unmount();
-      create.remove();
     },
   );
 
-  it('renders rows in a table with accessible actions', () => {
+  it(
+    'renders three sheets without empty slots and disables Create resume',
+    () => {
+      const wrapper = mount(ResumeList, {
+        props: {
+          items: [1, 2, 3].map((id) => summary({ id: `r${id}` })),
+          busyIds: [],
+          removalFocusId: null,
+          removalFocusVersion: 0,
+        },
+        global: { stubs: { NuxtLink: true } },
+      });
+      expect(wrapper.get('[data-testid="resume-list"]')).toBeTruthy();
+      const sheets = wrapper.findAll('[data-testid^="resume-row-"]');
+      expect(sheets).toHaveLength(3);
+      expect(sheets[0]!.classes()).toEqual(
+        expect.arrayContaining([
+          'rounded-[var(--radius-dialog)]',
+          'shadow-[var(--shadow-paper)]',
+        ]),
+      );
+      expect(wrapper.findAll('[data-testid^="resume-slot-"]')).toHaveLength(0);
+      expect(
+        wrapper.get('[data-testid="create-resume"]').attributes('disabled'),
+      ).toBeDefined();
+      wrapper.unmount();
+    },
+  );
+
+  it('renders two dashed slots for one resume', () => {
     const wrapper = mount(ResumeList, {
       props: {
-        items: [
-          summary({
-            id: 'r1',
-            title: 'First',
-            updatedAt: '2026-01-01T00:00:00Z',
-          }),
-        ],
+        items: [summary({ id: 'r1', title: 'First' })],
         busyIds: [],
         removalFocusId: null,
         removalFocusVersion: 0,
+      },
+      global: { stubs: { NuxtLink: true } },
+    });
+    expect(wrapper.findAll('[data-testid^="resume-row-"]')).toHaveLength(1);
+    expect(wrapper.findAll('[data-testid^="resume-slot-"]')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it('renders the empty status in the first of three slots', () => {
+    const wrapper = mount(ResumeList, {
+      props: {
+        items: [],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+      },
+    });
+    expect(wrapper.findAll('[data-testid^="resume-slot-"]')).toHaveLength(3);
+    expect(wrapper.get('[role="status"]').text()).toBe('No resumes yet.');
+    expect(
+      wrapper.get('[data-action="create-resume-slot"]')
+        .attributes('data-slot'),
+    ).toBe('button');
+    expect(wrapper.text()).toContain(
+      'Create your first resume. You can keep up to three.',
+    );
+    wrapper.unmount();
+  });
+
+  it('shows public and draft marks from the summary fields', () => {
+    const publicItem = summary({
+      id: 'public',
+      title: 'Public resume',
+      live: true,
+      slug: 'ada-lovelace',
+    });
+    const draftItem = summary({
+      id: 'draft',
+      title: 'Draft resume',
+      live: false,
+      slug: 'stale-slug',
+    });
+    const wrapper = mount(ResumeList, {
+      props: {
+        items: [publicItem, draftItem],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+      },
+      global: { stubs: { NuxtLink: true } },
+    });
+    const publicRow = wrapper.get('[data-testid="resume-row-public"]');
+    const draftRow = wrapper.get('[data-testid="resume-row-draft"]');
+    expect(publicRow.text()).toContain('aboutme.vn/ada-lovelace');
+    expect(publicRow.text()).not.toContain('stale-slug');
+    const sheetLink = publicRow.get('[data-sheet-link]').element;
+    const publicLink = publicRow.get('[data-public-link]').element;
+    expect(sheetLink.contains(publicLink)).toBe(false);
+    expect(draftRow.text()).toContain('Draft');
+    expect(draftRow.text()).not.toContain('aboutme.vn');
+    wrapper.unmount();
+  });
+
+  it('opens the editor from the sheet link with Enter', async () => {
+    const wrapper = mount(ResumeList, {
+      props: {
+        items: [summary({ id: 'resume/one' })],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+        now: new Date('2026-09-04T12:00:00Z'),
       },
       global: {
         stubs: {
@@ -602,15 +692,72 @@ describe('useResumeList', () => {
         },
       },
     });
-    const row = wrapper.get('[data-testid="resume-row-r1"]');
-    expect(row.element.tagName).toBe('TR');
-    expect(row.get('[href="/app/resumes/r1"]').attributes('href')).toBe(
-      '/app/resumes/r1',
+    const link = wrapper.get(
+      '[data-testid="resume-row-resume/one"] [data-sheet-link]',
     );
-    expect(row.get('[aria-label="Rename First"]').text()).toBe('Rename');
-    expect(row.get('[aria-label="Delete First"]').text()).toBe('Delete');
+    expect(link.attributes('href')).toBe('/app/resumes/resume%2Fone');
+    await link.trigger('keydown.enter');
+    expect(wrapper.emitted('rename')).toBeUndefined();
+    expect(wrapper.emitted('remove')).toBeUndefined();
     wrapper.unmount();
   });
+
+  it('emits Rename from the overflow menu without navigating', async () => {
+    const item = summary({ id: 'r1', title: 'First' });
+    const wrapper = mount(ResumeList, {
+      attachTo: document.body,
+      props: {
+        items: [item],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+      },
+      global: { stubs: { NuxtLink: true } },
+    });
+    const trigger = wrapper.get('[aria-label="More actions for First"]');
+    await trigger.trigger('click');
+    const rename = document.body.querySelector<HTMLElement>(
+      '[aria-label="Rename First"]',
+    );
+    expect(rename).not.toBeNull();
+    rename?.click();
+    await nextTick();
+    expect(wrapper.emitted('rename')).toEqual([[item]]);
+    expect(wrapper.emitted('remove')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it(
+    'returns focus to the overflow trigger when the menu closes with Escape',
+    async () => {
+      const wrapper = mount(ResumeList, {
+        attachTo: document.body,
+        props: {
+          items: [summary({ id: 'r1', title: 'First' })],
+          busyIds: [],
+          removalFocusId: null,
+          removalFocusVersion: 0,
+        },
+      });
+      const trigger = wrapper.get('[aria-label="More actions for First"]');
+      await trigger.trigger('click');
+      const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
+      expect(menu).not.toBeNull();
+      menu?.focus();
+      menu?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          bubbles: true,
+          cancelable: true,
+          key: 'Escape',
+        }),
+      );
+      await nextTick();
+      await nextTick();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(document.activeElement).toBe(trigger.element);
+      wrapper.unmount();
+    },
+  );
 
   it('gates deletion on the exact current title', async () => {
     const wrapper = mount(DeleteResumeDialog, {
@@ -735,14 +882,9 @@ describe('useResumeList', () => {
         removalFocusVersion: 0,
       },
     });
-    expect(
-      document.body.querySelector(
-        `[data-testid="resume-row-${item.id}"] [onerror]`,
-      ),
-    ).toBeNull();
-    expect(
-      rowWrapper.get(`[data-testid="resume-row-${item.id}"]`).text(),
-    ).toContain(hostile);
+    const row = rowWrapper.get(`[data-testid="resume-row-${item.id}"]`);
+    expect(descendantNames(row.element)).not.toContain('img');
+    expect(row.text()).toContain(hostile);
     rowWrapper.unmount();
 
     const renameWrapper = mount(RenameResumeDialog, {
@@ -931,3 +1073,14 @@ describe('useResumeList', () => {
     trigger.remove();
   });
 });
+
+function descendantNames(root: Element): string[] {
+  const names: string[] = [];
+  const pending = [...root.children];
+  while (pending.length > 0) {
+    const element = pending.pop()!;
+    names.push(element.localName);
+    pending.push(...element.children);
+  }
+  return names;
+}

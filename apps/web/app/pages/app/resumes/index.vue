@@ -1,17 +1,16 @@
 <script setup lang="ts">
 import type { ResumeSummary } from '../../../editor/resumeApi';
 import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
-import EmptyState from '@/components/app/EmptyState.vue';
 import LoadingState from '@/components/app/LoadingState.vue';
-import PageHeader from '@/components/app/PageHeader.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
-import { Button } from '@/components/ui/button';
 import {
   createStatusMessage,
   useResumeList,
 } from '../../../composables/useResumeList';
+import { useNow } from '../../../composables/useNow';
 
 const list = useResumeList();
+const now = useNow();
 const createOpen = ref(false);
 const renameItem = ref<ResumeSummary | null>(null);
 const deleteItem = ref<ResumeSummary | null>(null);
@@ -73,20 +72,6 @@ async function remove(id: string, title: string): Promise<void> {
 
 <template>
   <main class="app-page space-y-6">
-    <PageHeader
-      title="Resumes"
-      description="Up to three private resumes. Publishing is a separate step."
-    >
-      <template #actions>
-        <Button
-          data-testid="create-resume"
-          type="button"
-          @click="createOpen = true"
-        >
-          Create resume
-        </Button>
-      </template>
-    </PageHeader>
     <LoadingState
       v-if="list.view.value.kind === 'waiting-auth'"
       label="Checking your session."
@@ -101,24 +86,11 @@ async function remove(id: string, title: string): Promise<void> {
     >
       Resumes are unavailable. Try again.
     </StatusBanner>
-    <EmptyState
-      v-else-if="list.items.value.length === 0"
-      title="No resumes yet."
-      description="Create your first resume to start editing."
-    >
-      <template #action>
-        <Button
-          type="button"
-          @click="createOpen = true"
-        >
-          Create resume
-        </Button>
-      </template>
-    </EmptyState>
     <EditorListResumeList
       v-else
       :items="list.items.value"
       :busy-ids="[...busyIds]"
+      :now="now"
       :removal-focus-id="list.removalFocusId.value"
       :removal-focus-version="list.removalFocusVersion.value"
       @create="createOpen = true"
