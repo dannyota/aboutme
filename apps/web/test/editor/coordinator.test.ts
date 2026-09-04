@@ -1084,6 +1084,145 @@ describe('mutation coordinator', () => {
   });
 
   it.each([
+    [
+      'same target',
+      {
+        kind: 'personalField' as const,
+        path: 'headline' as const,
+        value: { present: true as const, value: 'Newer local value' },
+      },
+    ],
+    [
+      'different target',
+      {
+        kind: 'metadataField' as const,
+        field: 'title' as const,
+        value: 'Newer title',
+      },
+    ],
+  ])('keeps a %s edit made during the apply-mine read',
+    async (_case, newerIntent) => {
+      setActivePinia(createPinia());
+      const accepted = acceptedFixture();
+      const localIntent = {
+        kind: 'personalField' as const,
+        path: 'headline' as const,
+        value: { present: true as const, value: 'Local conflict value' },
+      };
+      const winnerSnapshot = applyIntent(accepted, {
+        ...localIntent,
+        value: { present: true, value: 'Remote winner' },
+      });
+      const winner = {
+        ...accepted,
+        ...winnerSnapshot,
+        revision: parseRevision('2'),
+      };
+      const mineSnapshot = applyIntent(winner, localIntent);
+      const mine = {
+        ...winner,
+        ...mineSnapshot,
+        revision: parseRevision('3'),
+      };
+      const newestSnapshot = applyIntent(mine, newerIntent);
+      const newest = {
+        ...mine,
+        ...newestSnapshot,
+        revision: parseRevision('4'),
+      };
+      const store = useResumeStore();
+      store.initialize(accepted);
+      const conflictCommand = captureCommand(
+        accepted,
+        {
+          resumeId: accepted.metadata.id,
+          ownerId: 'owner-1',
+          sequence: 1,
+          dependencyIds: [],
+          intent: localIntent,
+        },
+        { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+      );
+      store.enqueue(accepted.metadata.id, conflictCommand);
+      let releaseRead = (): void => {};
+      const readGate = new Promise<void>((resolve) => {
+        releaseRead = resolve;
+      });
+      const api = {
+        dispatch: vi.fn()
+          .mockResolvedValueOnce({
+            kind: 'stale',
+            status: 412,
+            winner: { document: winner.document, revision: winner.revision },
+          })
+          .mockResolvedValueOnce({
+            kind: 'complete', status: 200, accepted: mine,
+          })
+          .mockResolvedValueOnce({
+            kind: 'complete', status: 200, accepted: newest,
+          }),
+        read: vi.fn(async () => {
+          await readGate;
+          return { kind: 'complete', accepted: winner };
+        }),
+      } as never;
+      const coordinator = createMutationCoordinator({
+        api,
+        store,
+        auth: {
+          user: computed(() => ({ id: 'owner-1' })),
+          csrfToken: computed(() => 'csrf-1'),
+          authState: computed(() => 'authenticated'),
+        } as never,
+        runtime: {
+          nowEpochMs: () => 0,
+          uuid: () => 'attempt-1',
+          delay: async () => {},
+        },
+      });
+
+      await coordinator.flush(accepted.metadata.id);
+      const applying = coordinator.applyMine(
+        accepted.metadata.id,
+        conflictCommand.id,
+        { kind: 'field' },
+      );
+      await vi.waitFor(() => {
+        expect((api as { read: ReturnType<typeof vi.fn> }).read)
+          .toHaveBeenCalledOnce();
+      });
+      store.enqueue(
+        accepted.metadata.id,
+        captureCommand(
+          store.recordFor(accepted.metadata.id)!.current,
+          {
+            resumeId: accepted.metadata.id,
+            ownerId: 'owner-1',
+            sequence: 2,
+            dependencyIds: [conflictCommand.id],
+            intent: newerIntent,
+          },
+          // eslint-disable-next-line max-len
+          { nowEpochMs: () => 1, uuid: () => 'command-2', delay: async () => {} },
+        ),
+      );
+      releaseRead();
+
+      await applying;
+      await coordinator.flush(accepted.metadata.id);
+
+      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+        .toHaveBeenCalledTimes(3);
+      expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+        accepted: newest,
+        attempt: null,
+        conflicts: [],
+        pending: [],
+      });
+    },
+  );
+
+  it.each([
     ['anonymous', 'owner-1', true],
     ['authenticated', 'owner-2', true],
     ['error', undefined, false],
