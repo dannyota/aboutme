@@ -844,7 +844,7 @@ describe('mutation coordinator', () => {
     },
   );
 
-  it('surfaces a conflict when a stale winner removed the edited entry',
+  it('completes a stale-winner read before continuing after accept latest',
     async () => {
       setActivePinia(createPinia());
       const base = acceptedFixture();
@@ -901,12 +901,30 @@ describe('mutation coordinator', () => {
         ),
       );
       const api = {
-        dispatch: vi.fn().mockResolvedValue({
-          kind: 'stale',
-          status: 412,
-          winner: { document: winner.document, revision: winner.revision },
-        }),
-        read: vi.fn(),
+        dispatch: vi.fn()
+          .mockResolvedValueOnce({
+            kind: 'stale',
+            status: 412,
+            winner: { document: winner.document, revision: winner.revision },
+          })
+          .mockResolvedValueOnce({
+            kind: 'complete',
+            status: 200,
+            accepted: {
+              ...winner,
+              document: {
+                ...winner.document,
+                content: {
+                  work: {
+                    sectionType: 'work' as const,
+                    entries: [{ id: 'entry-2' }],
+                  },
+                },
+              },
+              revision: parseRevision('3'),
+            },
+          }),
+        read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: winner }),
       } as never;
       const coordinator = createMutationCoordinator({
         api,
@@ -926,10 +944,144 @@ describe('mutation coordinator', () => {
         { kind: 'membership-changed', command: { kind: 'entryField' } },
       ]);
       expect(store.saveStateFor(accepted.metadata.id)).toBe('conflict');
+      const conflictId
+        = store.recordFor(accepted.metadata.id)!.conflicts[0]!.id;
+      const accepting = coordinator.acceptLatest(
+        accepted.metadata.id,
+        conflictId,
+      );
+      store.enqueue(
+        accepted.metadata.id,
+        captureCommand(
+          store.recordFor(accepted.metadata.id)!.current,
+          {
+            resumeId: accepted.metadata.id,
+            ownerId: 'owner-1',
+            sequence: 2,
+            dependencyIds: [],
+            intent: {
+              kind: 'entryUpsert',
+              sectionKey: 'work',
+              entry: { id: 'entry-2' },
+            },
+          },
+          // eslint-disable-next-line max-len
+          { nowEpochMs: () => 0, uuid: () => 'command-2', delay: async () => {} },
+        ),
+      );
+
+      await accepting;
+
       expect((api as { read: ReturnType<typeof vi.fn> }).read)
-        .not.toHaveBeenCalled();
+        .toHaveBeenCalledOnce();
+      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+        .toHaveBeenCalledTimes(2);
+      expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+        completeReadRequired: false,
+        conflicts: [],
+        pending: [],
+        attempt: null,
+        accepted: { revision: parseRevision('3') },
+      });
     },
   );
+
+  it('clears the stale-winner read barrier before applying mine', async () => {
+    setActivePinia(createPinia());
+    const base = acceptedFixture();
+    const accepted = {
+      ...base,
+      document: {
+        ...base.document,
+        content: {
+          work: {
+            sectionType: 'work' as const,
+            entries: [{ id: 'entry-1' }, { id: 'entry-2' }],
+          },
+        },
+        customization: {
+          ...base.document.customization,
+          layout: {
+            ...base.document.customization.layout,
+            sections: { main: ['work'], sidebar: [] },
+          },
+        },
+      },
+    };
+    const winner = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        content: {
+          work: {
+            sectionType: 'work' as const,
+            entries: [{ id: 'entry-1' }],
+          },
+        },
+      },
+      revision: parseRevision('2'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    store.enqueue(
+      accepted.metadata.id,
+      captureCommand(
+        accepted,
+        {
+          resumeId: accepted.metadata.id,
+          ownerId: 'owner-1',
+          sequence: 1,
+          dependencyIds: [],
+          intent: {
+            kind: 'entryReorder',
+            sectionKey: 'work',
+            entryIds: ['entry-2', 'entry-1'],
+          },
+        },
+        { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+      ),
+    );
+    const api = {
+      dispatch: vi.fn().mockResolvedValue({
+        kind: 'stale',
+        status: 412,
+        winner: { document: winner.document, revision: winner.revision },
+      }),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: winner }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+      // eslint-disable-next-line max-len
+      runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
+    });
+
+    await coordinator.flush(accepted.metadata.id);
+    const conflictId
+      = store.recordFor(accepted.metadata.id)!.conflicts[0]!.id;
+    await coordinator.applyMine(accepted.metadata.id, conflictId, {
+      kind: 'reorder',
+      members: ['entry-1'],
+    });
+    await coordinator.flush(accepted.metadata.id);
+
+    expect((api as { read: ReturnType<typeof vi.fn> }).read)
+      .toHaveBeenCalledOnce();
+    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+      .toHaveBeenCalledOnce();
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      completeReadRequired: false,
+      conflicts: [],
+      pending: [],
+      attempt: null,
+      accepted: { revision: parseRevision('2') },
+    });
+  });
 
   it.each([
     ['anonymous', 'owner-1', true],

@@ -844,6 +844,13 @@ export function createMutationCoordinator(deps: {
     if (conflict === undefined) return;
     deps.store.dropHead(resumeId, conflict.id);
     deps.store.resolveConflict(resumeId, conflictId);
+    if (
+      deps.store.recordFor(resumeId)?.completeReadRequired === true
+      && !await completeReadBarrier(resumeId)
+    ) {
+      return;
+    }
+    await flush(resumeId);
   }
 
   async function applyMine(
@@ -863,7 +870,7 @@ export function createMutationCoordinator(deps: {
       confirmation,
     );
     if (replacement === null) return;
-    deps.store.adoptComplete(resumeId, latest.accepted);
+    deps.store.adoptCompleteRead(resumeId, latest.accepted);
     deps.store.dropHead(resumeId, conflict.command.id);
     deps.store.enqueue(resumeId, replacement);
     deps.store.resolveConflict(resumeId, conflictId);
