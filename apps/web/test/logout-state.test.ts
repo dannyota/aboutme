@@ -82,8 +82,11 @@ describe('logout state transition', () => {
     await flushPromises();
     const readsBeforeLogout = meReads;
 
-    expect(wrapper.get('[data-testid="account-menu"]').text()).toContain(
-      'Dev User',
+    expect(wrapper.get('[data-testid="user"]').text()).toContain('Dev User');
+    expect(wrapper.get('[data-testid="account-menu"]').attributes(
+      'aria-label',
+    )).toBe(
+      'Account menu',
     );
     expect(wrapper.get('[data-testid="auth-state"]').text()).toBe(
       'authenticated',

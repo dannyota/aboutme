@@ -27,10 +27,7 @@ export const FIELD_LABELS: Readonly<Record<CustomizationSetPath, string>> = {
   'dateFormat': 'Date format',
 };
 
-export const FIELD_GROUPS: ReadonlyArray<{
-  title: string;
-  paths: readonly string[];
-}> = [
+export const FIELD_GROUPS = [
   { title: 'Type', paths: ['font.family', 'font.baseSizePx'] },
   {
     title: 'Spacing',
@@ -73,7 +70,10 @@ export const FIELD_GROUPS: ReadonlyArray<{
       'colors.surface',
     ],
   },
-];
+] as const satisfies ReadonlyArray<{
+  title: string;
+  paths: readonly CustomizationSetPath[];
+}>;
 
 const KNOWN_ENUM_LABELS: Readonly<Record<string, string>> = {
   a4: 'A4',

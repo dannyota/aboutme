@@ -587,7 +587,15 @@ describe('useResumeList', () => {
         },
         global: { stubs: { NuxtLink: true } },
       });
-      expect(wrapper.get('[data-testid="resume-list"]')).toBeTruthy();
+      const list = wrapper.get('[data-testid="resume-list"]');
+      expect(list.classes()).toEqual(expect.arrayContaining([
+        'mx-auto',
+        'w-full',
+        'max-w-7xl',
+        'px-6',
+        'py-8',
+        'space-y-8',
+      ]));
       const sheets = wrapper.findAll('[data-testid^="resume-row-"]');
       expect(sheets).toHaveLength(3);
       expect(sheets[0]!.classes()).toEqual(

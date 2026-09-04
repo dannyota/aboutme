@@ -30,6 +30,45 @@ afterEach(() => {
 });
 
 describe('EditorPreview', () => {
+  it('restarts page counting when a hidden phone preview becomes active',
+    async () => {
+      const host = document.createElement('div');
+      host.style.visibility = 'hidden';
+      document.body.append(host);
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        attachTo: host,
+        props: {
+          active: false,
+          document: accepted.document,
+          lng: accepted.metadata.lng,
+        },
+        global: {
+          stubs: {
+            ResumeDocument: defineComponent({
+              template: [
+                '<article class="resume-page" ',
+                'data-page-index="0"></article>',
+              ].join(''),
+            }),
+          },
+        },
+      });
+
+      await animationFrames(3);
+      expect(wrapper.get('[data-testid="page-count"]').text())
+        .toContain('— pages');
+
+      host.style.visibility = 'visible';
+      await wrapper.setProps({ active: true });
+      await animationFrames(3);
+      expect(wrapper.get('[data-testid="page-count"]').text())
+        .toContain('1 page');
+
+      wrapper.unmount();
+      host.remove();
+    });
+
   it('renders the page-count mark under the sheet without a header bar', () => {
     const accepted = acceptedFixture();
     const wrapper = mount(EditorPreview, {
@@ -227,3 +266,11 @@ describe('EditorPreview', () => {
     expect(wrapper.html()).not.toContain('private-object.jpg');
   });
 });
+
+async function animationFrames(count: number): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+  }
+}

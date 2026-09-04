@@ -48,6 +48,20 @@ const cssPixels = (styles: CSSStyleDeclaration, name: string): number => {
   return measuredNumber(Number(raw.slice(0, -2)), true, name);
 };
 
+const renderedScale = (root: HTMLElement): number => {
+  const layoutWidth = root.offsetWidth;
+  const renderedWidth = root.getBoundingClientRect().width;
+  if (
+    !Number.isFinite(layoutWidth)
+    || layoutWidth <= 0
+    || !Number.isFinite(renderedWidth)
+    || renderedWidth <= 0
+  ) {
+    return 1;
+  }
+  return renderedWidth / layoutWidth;
+};
+
 const gapFor = (
   block: BlockRef,
   previous: BlockRef | undefined,
@@ -72,6 +86,7 @@ export async function measurePagination(
   );
 
   const styles = getComputedStyle(root);
+  const scale = renderedScale(root);
   const sectionGapPx = cssPixels(styles, '--gap-section');
   const headingGapPx = cssPixels(styles, '--gap-heading');
   const entryGapPx = cssPixels(styles, '--gap-entry');
@@ -83,7 +98,7 @@ export async function measurePagination(
     );
   }
   const headerHeightPx = measuredNumber(
-    header.getBoundingClientRect().height,
+    header.getBoundingClientRect().height / scale,
     true,
     'Header height',
   );
@@ -101,7 +116,7 @@ export async function measurePagination(
     const measured: MeasuredBlock = {
       ...block,
       heightPx: measuredNumber(
-        element.getBoundingClientRect().height,
+        element.getBoundingClientRect().height / scale,
         false,
         `Block ${index} height`,
       ),

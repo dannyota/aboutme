@@ -108,6 +108,31 @@ async function gotoHydrated(page: Page, url: string): Promise<void> {
   await waitForHydration(page);
 }
 
+async function provePasswordVisibilityToggle(
+  page: Page,
+  label: string,
+): Promise<void> {
+  const passwordInput = page.getByLabel(label, { exact: true });
+  const showToggle = page.getByRole('button', {
+    name: `Show ${label.toLowerCase()}`,
+    exact: true,
+  });
+  await expect(passwordInput).toHaveAttribute('type', 'password');
+  await expect(showToggle).toBeVisible();
+  await showToggle.click();
+  await expect(passwordInput).toHaveAttribute('type', 'text');
+  await expect(page.getByRole('button', {
+    name: `Hide ${label.toLowerCase()}`,
+    exact: true,
+  })).toBeVisible();
+  await page.getByRole('button', {
+    name: `Hide ${label.toLowerCase()}`,
+    exact: true,
+  }).click();
+  await expect(passwordInput).toHaveAttribute('type', 'password');
+  await expect(showToggle).toBeVisible();
+}
+
 test('proves password authentication over native HTTPS', async ({
   browser,
   context,
@@ -137,6 +162,7 @@ test('proves password authentication over native HTTPS', async ({
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByLabel('Confirm password', { exact: true }).fill(password);
+  await provePasswordVisibilityToggle(page, 'Password');
   await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByTestId('register-success')).toContainText(
     'Check your email',

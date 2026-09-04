@@ -91,7 +91,9 @@ describe('stylesheet contract (decisions U2)', () => {
   it('defines tokens on the document root for both themes', () => {
     const theme = css('theme.css');
     expect(theme).toMatch(/:root\s*\{[^}]*--background:/);
-    expect(theme).toMatch(/html\[data-theme='dark'\]\s*\{[^}]*--background:/);
+    expect(theme).toMatch(
+      /html\[data-theme=(?:'dark'|"dark")\]\s*\{[^}]*--background:/,
+    );
     expect(theme).toContain('--color-background: var(--background);');
   });
 
