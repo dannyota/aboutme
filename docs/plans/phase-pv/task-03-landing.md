@@ -55,7 +55,8 @@ Signed-in state comes from the existing session composable the shell already
 uses (`useAuth`), read only after hydration; the server render is the signed-out
 variant, as the shell does today. The sheet is `zoom: 0.6` at 1440 and
 `zoom: 0.5` below 42 rem, where the section stacks to one column with the sheet
-under the headline. The seal overlaps the sheet's lower-right corner by a third
+under the headline. At 390 px and below it is `zoom: 0.44` so the full A4 width
+fits the viewport. The seal overlaps the sheet's lower-right corner by a third
 of its diameter. Headline is `text-3xl` at 1440 and `text-2xl` below 42 rem,
 `text-wrap: balance`. `useHead` keeps the title and description meta from the
 current page.
@@ -76,8 +77,8 @@ rendered name "Ada Lovelace" inside `[data-testid="landing-sample"]`, the seal
 `aria-label`, the three points with held text, the three publish choices, the
 license; a signed-in render shows "Open your resumes" and neither entry button;
 the page module imports no `useFetch`, `useAsyncData`, or `$fetch` (assert on
-the source text); the response headers from a Nuxt test-utils `fetch('/')` carry
-the base CSP unchanged.
+the source text), and does not set a page-local Content-Security-Policy. T10's
+transport check proves the base CSP on the served page.
 
 ## Ownership and checks
 
