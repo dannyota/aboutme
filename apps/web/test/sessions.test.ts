@@ -97,28 +97,26 @@ describe('sessions.vue', () => {
     expect(otherRow.get('[data-testid="revoke-button"]').text()).toBe('Revoke');
   });
 
-  it('renders devices as a table with a current-device badge', async () => {
-    const wrapper = await mountSuspended(SessionsPage);
-    await flushPromises();
+  it(
+    'renders devices as ruled list rows with current-device context',
+    async () => {
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
 
-    const current = wrapper.get('[data-testid="session-row-sess-1"]');
-    expect(current.element.tagName).toBe('TR');
-    expect(current.text()).toContain('This device');
-    expect(current.find('[data-testid="revoke-button"]').exists()).toBe(false);
-    expect(wrapper.get('[data-slot="table"]').classes()).toContain(
-      'table-fixed',
-    );
-    expect(current.get('[data-slot="table-cell"]').classes()).toContain(
-      'whitespace-normal',
-    );
-    expect(
-      current.get('[data-testid="session-user-agent"]').classes(),
-    ).toContain('break-words');
-    const lastSeen = current.get('[data-testid="session-last-seen"]');
-    expect(lastSeen.text()).toBe('Last seen 2026-08-01T00:00:00Z');
-    expect(lastSeen.classes()).toContain('whitespace-normal');
-    expect(lastSeen.classes()).toContain('break-words');
-  });
+      const current = wrapper.get('[data-testid="session-row-sess-1"]');
+      expect(current.element.tagName).toBe('LI');
+      expect(current.text()).toContain('This device');
+      expect(current.find('[data-testid="revoke-button"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.find('[data-slot="table"]').exists()).toBe(false);
+      expect(current.get('[data-testid="session-description"]').attributes(
+        'title',
+      )).toBe('Chrome on macOS');
+      const lastSeen = current.get('[data-testid="session-last-seen"]');
+      expect(lastSeen.text()).toMatch(/^Last seen /);
+    },
+  );
 
   it('revokes another session, sending the CSRF header', async () => {
     let receivedHeader: string | undefined;

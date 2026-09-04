@@ -16,7 +16,6 @@
 import PasswordField from './PasswordField.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader } from '../ui/card';
 import {
   PasswordSettingsActionsKey,
   type PasswordSettingsFailure,
@@ -160,134 +159,138 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
 </script>
 
 <template>
-  <Card data-testid="password-settings">
-    <CardHeader>
-      <h2 class="leading-none font-semibold">
-        Password
-      </h2>
-    </CardHeader>
-    <CardContent class="grid gap-4">
-      <p data-testid="password-status">
-        {{ hasPassword ? "You have a password." : "No password set." }}
-      </p>
+  <div
+    data-testid="password-settings"
+    class="grid gap-4"
+  >
+    <h2
+      id="password-title"
+      class="text-lg font-semibold"
+    >
+      Password
+    </h2>
+    <p data-testid="password-status">
+      {{ hasPassword ? "You have a password." : "No password set." }}
+    </p>
 
-      <StatusBanner
-        v-if="successMessage"
-        kind="success"
-        testid="password-success"
-      >
-        {{ successMessage }}
-      </StatusBanner>
-      <StatusBanner
-        v-if="errorMessage"
-        kind="error"
-        testid="password-error"
-        focus-on-mount
-      >
-        {{ errorMessage }}
-      </StatusBanner>
+    <StatusBanner
+      v-if="successMessage"
+      kind="success"
+      testid="password-success"
+    >
+      {{ successMessage }}
+    </StatusBanner>
+    <StatusBanner
+      v-if="errorMessage"
+      kind="error"
+      testid="password-error"
+      focus-on-mount
+    >
+      {{ errorMessage }}
+    </StatusBanner>
 
-      <Button
-        v-if="mode === 'idle'"
-        data-testid="password-action"
-        type="button"
-        @click="start"
-      >
-        {{ hasPassword ? "Change password" : "Add a password" }}
-      </Button>
+    <Button
+      v-if="mode === 'idle'"
+      data-testid="password-action"
+      type="button"
+      @click="start"
+    >
+      {{ hasPassword ? "Change password" : "Add a password" }}
+    </Button>
 
-      <form
-        v-else-if="mode === 'set'"
-        data-testid="password-form"
-        class="grid gap-4"
-        novalidate
-        @submit.prevent="submitSet"
-      >
-        <PasswordField
-          id="password-new"
-          ref="passwordField"
-          v-model="newPassword"
-          label="New password"
-          autocomplete="new-password"
-          confirm
-        />
-        <div class="flex gap-2">
-          <Button
-            data-testid="password-set-submit"
-            :disabled="pending"
-            type="submit"
-          >
-            {{ pending ? "Saving…" : "Save password" }}
-          </Button>
-          <Button
-            data-testid="password-cancel"
-            type="button"
-            variant="ghost"
-            @click="cancel"
-          >
-            Cancel
-          </Button>
-        </div>
-      </form>
-
-      <form
-        v-else-if="mode === 'reauth-password'"
-        data-testid="password-form"
-        class="grid gap-4"
-        novalidate
-        @submit.prevent="submitReauth"
-      >
-        <PasswordField
-          id="password-current"
-          v-model="currentPassword"
-          label="Current password"
-          autocomplete="current-password"
-        />
-        <div class="flex gap-2">
-          <Button
-            data-testid="password-reauth-submit"
-            :disabled="pending"
-            type="submit"
-          >
-            {{ pending ? "Checking…" : "Continue" }}
-          </Button>
-          <Button
-            data-testid="password-cancel"
-            type="button"
-            variant="ghost"
-            @click="cancel"
-          >
-            Cancel
-          </Button>
-        </div>
-      </form>
-
-      <div
-        v-else-if="mode === 'reauth-provider'"
-        class="grid gap-3"
-      >
-        <p>Sign in again with your provider to continue.</p>
-        <div class="flex flex-wrap gap-2">
-          <Button
-            v-for="provider in providers"
-            :key="provider"
-            :data-testid="`password-provider-reauth-${provider}`"
-            :disabled="pending"
-            type="button"
-            @click="submitProviderReauth(provider)"
-          >
-            {{ `Continue with ${PROVIDER_LABELS[provider]}` }}
-          </Button>
-          <Button
-            data-testid="password-cancel"
-            type="button"
-            variant="ghost"
-            @click="cancel"
-          >
-            Cancel
-          </Button>
-        </div>
+    <form
+      v-else-if="mode === 'set'"
+      data-testid="password-form"
+      class="grid gap-4"
+      novalidate
+      @submit.prevent="submitSet"
+    >
+      <PasswordField
+        id="password-new"
+        ref="passwordField"
+        v-model="newPassword"
+        label="New password"
+        autocomplete="new-password"
+        confirm
+      />
+      <div class="flex gap-2">
+        <Button
+          data-testid="password-set-submit"
+          :disabled="pending"
+          variant="secondary"
+          type="submit"
+        >
+          {{ pending ? "Saving…" : "Save password" }}
+        </Button>
+        <Button
+          data-testid="password-cancel"
+          type="button"
+          variant="ghost"
+          @click="cancel"
+        >
+          Cancel
+        </Button>
       </div>
-    </CardContent>
-  </Card>
+    </form>
+
+    <form
+      v-else-if="mode === 'reauth-password'"
+      data-testid="password-form"
+      class="grid gap-4"
+      novalidate
+      @submit.prevent="submitReauth"
+    >
+      <PasswordField
+        id="password-current"
+        v-model="currentPassword"
+        label="Current password"
+        autocomplete="current-password"
+      />
+      <div class="flex gap-2">
+        <Button
+          data-testid="password-reauth-submit"
+          :disabled="pending"
+          variant="secondary"
+          type="submit"
+        >
+          {{ pending ? "Checking…" : "Continue" }}
+        </Button>
+        <Button
+          data-testid="password-cancel"
+          type="button"
+          variant="ghost"
+          @click="cancel"
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+
+    <div
+      v-else-if="mode === 'reauth-provider'"
+      class="grid gap-3"
+    >
+      <p>Sign in again with your provider to continue.</p>
+      <div class="flex flex-wrap gap-2">
+        <Button
+          v-for="provider in providers"
+          :key="provider"
+          :data-testid="`password-provider-reauth-${provider}`"
+          :disabled="pending"
+          type="button"
+          @click="submitProviderReauth(provider)"
+        >
+          {{ `Continue with ${PROVIDER_LABELS[provider]}` }}
+        </Button>
+        <Button
+          data-testid="password-cancel"
+          type="button"
+          variant="ghost"
+          @click="cancel"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  </div>
 </template>

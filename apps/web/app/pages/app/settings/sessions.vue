@@ -2,25 +2,8 @@
 import type { AuthProvider } from '../../../composables/useAuth';
 import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
 import ConnectedAgents from '../../../components/settings/ConnectedAgents.vue';
-import PageHeader from '../../../components/app/PageHeader.vue';
 import StatusBanner from '../../../components/app/StatusBanner.vue';
-import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-} from '../../../components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../../components/ui/table';
 import {
   type PasswordSettingsActions,
   PasswordSettingsActionsKey,
@@ -29,9 +12,12 @@ import {
   mapSetPasswordError,
 } from '../../../composables/passwordSettings';
 import { useCapabilities } from '../../../composables/useCapabilities';
+import { useNow } from '../../../composables/useNow';
 import {
   validateAuthorizeUrl,
 } from '../../../composables/providerAuthorization';
+import { formatRelativeTime } from '../../../utils/relativeTime';
+import { describeUserAgent } from '../../../utils/userAgent';
 
 interface SessionInfo {
   id: string;
@@ -54,6 +40,8 @@ interface AuthStartEnvelope {
 }
 
 const allProviders: AuthProvider[] = ['google', 'github', 'linkedin'];
+const props = defineProps<{ now?: Date }>();
+const now = props.now ?? useNow();
 
 const route = useRoute();
 const {
@@ -286,166 +274,166 @@ const linkErrorMessage = computed(() => {
 </script>
 
 <template>
-  <main class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-5 py-10">
-    <PageHeader
-      title="Settings"
-      description="Signed-in devices, your password, and connected agents."
-    />
-    <StatusBanner
-      v-if="revokeError"
-      kind="error"
-      testid="revoke-error"
+  <main
+    class="mx-auto w-full max-w-3xl px-6 py-10"
+    data-testid="settings-page"
+  >
+    <h1 class="text-xl font-semibold">
+      Settings
+    </h1>
+
+    <section
+      aria-labelledby="devices-title"
+      class="border-t py-8"
     >
-      {{ revokeError }}
-    </StatusBanner>
-    <StatusBanner
-      v-if="linkErrorMessage"
-      kind="error"
-      testid="link-error"
-    >
-      {{ linkErrorMessage }}
-    </StatusBanner>
-    <StatusBanner
-      v-if="providerLogin && reauthRequired && reauthProvider"
-      kind="error"
-      testid="reauth-prompt"
-    >
-      {{ reauthMessage }}
-      <Button
-        class="mt-2"
-        :disabled="!csrfToken || startPending"
-        size="sm"
-        variant="outline"
-        @click="startOAuth(reauthProvider, 'reauth')"
+      <h2
+        id="devices-title"
+        class="text-lg font-semibold"
       >
-        Sign in again with {{ reauthProvider }}
-      </Button>
-    </StatusBanner>
-
-    <Card>
-      <CardHeader>
-        <h2 class="leading-none font-semibold">
-          Signed-in devices
-        </h2>
-        <CardDescription>
-          Every browser with an active session for your account.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table class="table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Device</TableHead>
-              <TableHead class="w-48">
-                Last seen
-              </TableHead>
-              <TableHead class="w-40 text-right">
-                <span class="sr-only">Actions</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow
-              v-for="session in sessions"
-              :key="session.id"
-              :data-testid="`session-row-${session.id}`"
-            >
-              <TableCell class="whitespace-normal">
-                <span
-                  class="text-muted-foreground break-words"
-                  data-testid="session-user-agent"
-                >{{ session.ua ?? "Unknown device" }}</span>
-                <Badge
-                  v-if="session.current"
-                  class="ml-2"
-                  variant="secondary"
-                >
-                  This device
-                </Badge>
-              </TableCell>
-              <TableCell
-                class="text-muted-foreground whitespace-normal break-words"
-                data-testid="session-last-seen"
-              >
-                Last seen {{ session.lastSeenAt }}
-              </TableCell>
-              <TableCell class="text-right">
-                <Button
-                  v-if="session.current"
-                  :disabled="!csrfToken"
-                  size="sm"
-                  variant="ghost"
-                  @click="logout"
-                >
-                  Log out
-                </Button>
-                <Button
-                  v-else
-                  data-testid="revoke-button"
-                  :disabled="!csrfToken"
-                  size="sm"
-                  variant="ghost"
-                  @click="revokeSession(session.id)"
-                >
-                  Revoke
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-        <div
-          v-if="providerLogin && unlinkedProviders.length"
-          class="mt-4"
+        Signed-in devices
+      </h2>
+      <StatusBanner
+        v-if="revokeError"
+        kind="error"
+        testid="revoke-error"
+      >
+        {{ revokeError }}
+      </StatusBanner>
+      <ul class="mt-4 divide-y">
+        <li
+          v-for="session in sessions"
+          :key="session.id"
+          :data-testid="`session-row-${session.id}`"
+          class="grid grid-cols-[1fr_auto] gap-4 py-3"
         >
+          <div>
+            <span
+              data-testid="session-description"
+              :title="session.ua ?? 'Unknown device'"
+            >{{ describeUserAgent(session.ua ?? "") }}</span>
+            <span
+              v-if="session.current"
+              class="ml-2 text-xs text-muted-foreground"
+            >
+              This device
+            </span>
+            <span
+              class="block text-xs text-muted-foreground tabular-nums"
+              data-testid="session-last-seen"
+            >Last seen {{ formatRelativeTime(session.lastSeenAt, now) }}</span>
+          </div>
           <Button
-            v-if="!showAddProvider"
-            data-testid="add-provider-button"
-            size="sm"
-            variant="outline"
-            @click="openAddProvider"
+            v-if="session.current"
+            :disabled="!csrfToken"
+            variant="secondary"
+            @click="logout"
           >
-            Add another sign-in provider
+            Log out
           </Button>
-          <ul
+          <Button
             v-else
-            class="flex flex-wrap gap-2"
+            data-testid="revoke-button"
+            :disabled="!csrfToken"
+            variant="secondary"
+            @click="revokeSession(session.id)"
           >
-            <li
-              v-for="provider in unlinkedProviders"
-              :key="provider"
-            >
-              <Button
-                :disabled="!csrfToken || startPending"
-                size="sm"
-                variant="outline"
-                @click="startOAuth(provider, 'link')"
-              >
-                Link {{ provider }}
-              </Button>
-            </li>
-          </ul>
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button
-          data-testid="revoke-all-button"
-          :disabled="!csrfToken"
-          variant="outline"
-          @click="revokeAll"
-        >
-          Log out everywhere
-        </Button>
-      </CardFooter>
-    </Card>
+            Revoke
+          </Button>
+        </li>
+      </ul>
+      <Button
+        data-testid="revoke-all-button"
+        class="mt-4 text-destructive"
+        :disabled="!csrfToken"
+        variant="outline"
+        @click="revokeAll"
+      >
+        Log out everywhere
+      </Button>
+    </section>
 
-    <PasswordSettings
-      :has-password="user?.hasPassword ?? false"
-      :providers="passwordProviders"
-      @updated="onPasswordUpdated"
-    />
-    <ConnectedAgents
+    <section
+      aria-labelledby="password-title"
+      class="border-t py-8"
+    >
+      <PasswordSettings
+        :has-password="user?.hasPassword ?? false"
+        :providers="passwordProviders"
+        @updated="onPasswordUpdated"
+      />
+    </section>
+
+    <section
       v-if="agentAccess"
-      data-testid="connected-agents"
-    />
+      aria-labelledby="agents-title"
+      class="border-t py-8"
+    >
+      <ConnectedAgents />
+    </section>
+
+    <section
+      v-if="providerLogin"
+      aria-labelledby="providers-title"
+      class="border-t py-8"
+    >
+      <h2
+        id="providers-title"
+        class="text-lg font-semibold"
+      >
+        Sign-in providers
+      </h2>
+      <StatusBanner
+        v-if="linkErrorMessage"
+        kind="error"
+        testid="link-error"
+      >
+        {{ linkErrorMessage }}
+      </StatusBanner>
+      <StatusBanner
+        v-if="reauthRequired && reauthProvider"
+        kind="error"
+        testid="reauth-prompt"
+      >
+        {{ reauthMessage }}
+        <Button
+          class="mt-2"
+          :disabled="!csrfToken || startPending"
+          variant="outline"
+          @click="startOAuth(reauthProvider, 'reauth')"
+        >
+          Sign in again with {{ reauthProvider }}
+        </Button>
+      </StatusBanner>
+      <div
+        v-if="unlinkedProviders.length"
+        class="mt-4"
+      >
+        <Button
+          v-if="!showAddProvider"
+          data-testid="add-provider-button"
+          variant="outline"
+          @click="openAddProvider"
+        >
+          Add another sign-in provider
+        </Button>
+        <ul
+          v-else
+          class="flex flex-wrap gap-2"
+        >
+          <li
+            v-for="provider in unlinkedProviders"
+            :key="provider"
+          >
+            <Button
+              :disabled="!csrfToken || startPending"
+              variant="outline"
+              @click="startOAuth(provider, 'link')"
+            >
+              Link {{ provider }}
+            </Button>
+          </li>
+        </ul>
+      </div>
+    </section>
   </main>
 </template>

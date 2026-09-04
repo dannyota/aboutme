@@ -6,7 +6,6 @@ import LoadingState from '../app/LoadingState.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader } from '../ui/card';
 import {
   type AgentGrant,
   type AgentGrantScope,
@@ -117,92 +116,95 @@ async function refreshAfterAction(): Promise<void> {
 </script>
 
 <template>
-  <Card data-testid="connected-agents">
-    <CardHeader>
-      <h2 class="leading-none font-semibold">
-        Connected agents
-      </h2>
-    </CardHeader>
-    <CardContent class="grid gap-4">
-      <LoadingState
-        v-if="loading"
-        label="Loading connected agents…"
-        testid="agents-loading"
+  <div
+    data-testid="connected-agents"
+    class="grid gap-4"
+  >
+    <h2
+      id="agents-title"
+      class="text-lg font-semibold"
+    >
+      Connected agents
+    </h2>
+    <LoadingState
+      v-if="loading"
+      label="Loading connected agents…"
+      testid="agents-loading"
+    />
+
+    <template v-else>
+      <template v-if="unavailable">
+        <StatusBanner
+          kind="error"
+          testid="agents-error"
+        >
+          Connected agents are unavailable. Try again.
+        </StatusBanner>
+        <Button
+          data-testid="agents-retry"
+          type="button"
+          variant="outline"
+          @click="load"
+        >
+          Retry
+        </Button>
+      </template>
+
+      <EmptyState
+        v-if="!unavailable && grants.length === 0"
+        title="No connected agents."
+        description="Agents connect through MCP after you approve access."
       />
 
-      <template v-else>
-        <template v-if="unavailable">
-          <StatusBanner
-            kind="error"
-            testid="agents-error"
-          >
-            Connected agents are unavailable. Try again.
-          </StatusBanner>
-          <Button
-            data-testid="agents-retry"
-            type="button"
-            variant="outline"
-            @click="load"
-          >
-            Retry
-          </Button>
-        </template>
-
-        <EmptyState
-          v-if="!unavailable && grants.length === 0"
-          title="No connected agents."
-          description="Agents connect through MCP after you approve access."
-        />
-
+      <div
+        v-if="grants.length > 0"
+        class="grid gap-3"
+      >
         <div
-          v-if="grants.length > 0"
-          class="grid gap-3"
+          v-for="grant in grants"
+          :key="grant.id"
+          data-testid="agent-row"
+          class="grid gap-3 border-b py-4 last:border-b-0"
         >
-          <div
-            v-for="grant in grants"
-            :key="grant.id"
-            data-testid="agent-row"
-            class="grid gap-3 rounded-lg border p-4"
-          >
-            <h3 class="font-medium">
-              {{ grant.clientName }}
-            </h3>
-            <div class="flex flex-wrap gap-2">
-              <Badge
-                v-for="scope in grant.scopes"
-                :key="scope"
-                variant="secondary"
-              >
-                {{ scopeLabels[scope] }}
-              </Badge>
-            </div>
-            <p class="text-muted-foreground text-sm">
-              Created
-              <time :datetime="grant.createdAt">{{
-                formatTime(grant.createdAt)
-              }}</time>
-            </p>
-            <p class="text-muted-foreground text-sm">
-              Last used
-              <time
-                v-if="grant.lastUsedAt !== null"
-                :datetime="grant.lastUsedAt"
-              >{{ formatTime(grant.lastUsedAt) }}</time>
-              <span v-else>Never</span>
-            </p>
-            <Button
-              data-testid="agent-revoke"
-              :disabled="!csrfToken || revokePending"
-              type="button"
-              variant="outline"
-              @click="openConfirmation(grant)"
+          <h3 class="font-medium">
+            {{ grant.clientName }}
+          </h3>
+          <div class="flex flex-wrap gap-2">
+            <Badge
+              v-for="scope in grant.scopes"
+              :key="scope"
+              variant="secondary"
             >
-              Revoke
-            </Button>
+              {{ scopeLabels[scope] }}
+            </Badge>
           </div>
+          <p class="text-muted-foreground text-sm">
+            Created
+            <time :datetime="grant.createdAt">{{
+              formatTime(grant.createdAt)
+            }}</time>
+          </p>
+          <p class="text-muted-foreground text-sm">
+            Last used
+            <time
+              v-if="grant.lastUsedAt !== null"
+              :datetime="grant.lastUsedAt"
+            >{{ formatTime(grant.lastUsedAt) }}</time>
+            <span v-else>Never</span>
+          </p>
+          <Button
+            data-testid="agent-revoke"
+            :disabled="!csrfToken || revokePending"
+            type="button"
+            variant="secondary"
+            @click="openConfirmation(grant)"
+          >
+            Revoke
+          </Button>
         </div>
-      </template>
-    </CardContent>
+      </div>
+    </template>
+
     <ConfirmDialog
       :open="selected !== null"
       title="Revoke access"
@@ -215,5 +217,5 @@ async function refreshAfterAction(): Promise<void> {
       @confirm="confirmRevoke"
       @cancel="closeConfirmation"
     />
-  </Card>
+  </div>
 </template>
