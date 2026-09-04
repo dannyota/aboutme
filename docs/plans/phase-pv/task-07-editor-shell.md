@@ -25,9 +25,10 @@ Session-lost keeps its markup and `data-action`s.
 
 - Rail buttons wrap in `Tooltip` with their `aria-label`; the pressed state is
   `bg-secondary text-primary`. Nothing green.
-- Outline rows use `iconFor(section.type)` from `components/resume/icons.ts`
-  (`personal` uses `User`), fall back to `PanelsTopLeft`, and keep
-  `data-outline-key` and `aria-current`.
+- Outline rows carry each section's optional `iconKey` and resolve it with
+  `iconFor(section.iconKey ?? '')` from `components/resume/icons.ts`. The
+  personal row uses `iconFor('user')`. All unresolved icons fall back to
+  `PanelsTopLeft`; rows keep `data-outline-key` and `aria-current`.
 - `EditorPreview.vue` drops its header bar. The canvas is `bg-background`
   padding 24 px; the sheet wrapper is
   `rounded-[var(--radius-sheet)] shadow-[var(--shadow-paper)] bg-white` (the

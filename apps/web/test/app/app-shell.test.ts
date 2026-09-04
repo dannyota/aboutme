@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mockNuxtImport,
   mountSuspended,
@@ -48,6 +48,11 @@ function links(
 }
 
 describe('AppShell', () => {
+  beforeEach(() => {
+    clearNuxtData();
+    vi.mocked(navigateTo).mockClear();
+  });
+
   it('shows sign-in and registration while signed out', async () => {
     meStatus = 401;
     const wrapper = await mountSuspended(AppShell);
@@ -81,9 +86,7 @@ describe('AppShell', () => {
     expect(found['Settings']).toBe('/app/settings/sessions');
     expect(found['Sign in']).toBeUndefined();
     expect(found['Create account']).toBeUndefined();
-    expect(wrapper.get('[data-testid="account-menu"]').text()).toContain(
-      '<img src=x onerror=alert(1)>',
-    );
+    expect(wrapper.get('[aria-label="Account menu"]').exists()).toBe(true);
     expect(
       document.body.querySelector('[data-testid="account-menu"] [onerror]'),
     ).toBeNull();
@@ -111,6 +114,24 @@ describe('AppShell', () => {
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPromises();
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+  });
+  it('moves signed-in theme control into the account menu', async () => {
+    meStatus = 200;
+    const wrapper = await mountSuspended(AppShell);
+    await flushPromises();
+    expect(wrapper.find('[aria-label^="Switch to"]').exists()).toBe(false);
+
+    await wrapper.get('[aria-label="Account menu"]').trigger('click');
+    await flushPromises();
+    const toggle = document.body.querySelector<HTMLElement>(
+      '[data-testid="theme-toggle"]',
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.textContent).toMatch(/Dark theme|Light theme/);
+    toggle?.click();
+    await flushPromises();
+    expect(document.documentElement.dataset.theme).toMatch(/dark|light/);
+    wrapper.unmount();
   });
   it('keeps brand link and theme toggle in both states', async () => {
     meStatus = 401;

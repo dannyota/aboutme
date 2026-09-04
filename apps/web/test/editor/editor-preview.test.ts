@@ -1,11 +1,84 @@
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import EditorPreview from '../../app/components/editor/EditorPreview.vue';
 import { acceptedFixture } from './fixture';
 
+const resize = vi.hoisted(() => ({
+  callback: null as ResizeObserverCallback | null,
+}));
+const initialWindowWidth = window.innerWidth;
+
+class ResizeObserverMock {
+  constructor(callback: ResizeObserverCallback) {
+    resize.callback = callback;
+  }
+
+  disconnect = vi.fn();
+  observe = vi.fn();
+  unobserve = vi.fn();
+}
+
+afterEach(() => {
+  resize.callback = null;
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: initialWindowWidth,
+  });
+  vi.unstubAllGlobals();
+});
+
 describe('EditorPreview', () => {
+  it('renders the page-count mark under the sheet without a header bar', () => {
+    const accepted = acceptedFixture();
+    const wrapper = mount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: accepted.metadata.lng,
+      },
+      global: { stubs: { ResumeDocument: true } },
+    });
+
+    expect(wrapper.find('[data-preview-header]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="page-count"]').text()).toMatch(
+      /— pages/,
+    );
+    expect(wrapper.get('[data-testid="preview-sheet"]').classes()).toEqual(
+      expect.arrayContaining([
+        'rounded-[var(--radius-sheet)]',
+        'shadow-[var(--shadow-paper)]',
+        'bg-white',
+      ]),
+    );
+  });
+
+  it('fits the whole A4 sheet inside a 390 px preview', async () => {
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 390,
+    });
+    const accepted = acceptedFixture();
+    const wrapper = mount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: accepted.metadata.lng,
+      },
+      global: { stubs: { ResumeDocument: true } },
+    });
+
+    await nextTick();
+    resize.callback?.([
+      { contentRect: { width: 390 } } as ResizeObserverEntry,
+    ], {} as ResizeObserver);
+    await nextTick();
+
+    const sheet = wrapper.get('[data-testid="preview-sheet"]');
+    expect(Number(sheet.attributes('data-sheet-zoom'))).toBeLessThan(1);
+    expect(Number(sheet.attributes('data-scaled-width'))).toBeLessThan(390);
+  });
+
   it('passes only the optimistic document and paged render context', () => {
     const accepted = acceptedFixture();
     const wrapper = mount(EditorPreview, {
