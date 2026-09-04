@@ -13,11 +13,13 @@ mockNuxtImport('useHead', () => vi.fn());
 const TOKEN = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg';
 
 describe('verify-email.vue (fragment handling)', () => {
-  it('composes the auth card and shared error banner', async () => {
+  it('composes the auth page and shared error banner', async () => {
     window.location.hash = '';
     const wrapper = await mountSuspended(VerifyEmailPage);
 
-    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    const main = wrapper.get('[data-testid="verify-email-page"]');
+    expect(main.find('[data-slot="card"]').exists()).toBe(false);
+    expect(main.get('[data-page-title]').text()).toBe('Verify email');
     expect(wrapper.get('[data-testid="verify-error"]').attributes('role')).toBe(
       'alert',
     );

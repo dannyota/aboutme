@@ -14,11 +14,13 @@ const TOKEN = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg';
 const NEW_PASSWORD = 'correct horse battery staple';
 
 describe('reset-password.vue (fragment handling)', () => {
-  it('composes the auth card and shared error banner', async () => {
+  it('composes the auth page and shared error banner', async () => {
     window.location.hash = '';
     const wrapper = await mountSuspended(ResetPasswordPage);
 
-    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    const main = wrapper.get('[data-testid="reset-password-page"]');
+    expect(main.find('[data-slot="card"]').exists()).toBe(false);
+    expect(main.get('[data-page-title]').text()).toBe('Reset password');
     expect(wrapper.get('[data-testid="reset-error"]').attributes('role')).toBe(
       'alert',
     );
@@ -52,6 +54,9 @@ describe('reset-password.vue (fragment handling)', () => {
         },
       });
       const wrapper = await mountSuspended(ResetPasswordPage);
+      expect(wrapper.get('[aria-label="Show new password"]').exists()).toBe(
+        true,
+      );
       await wrapper.get('#reset-password').setValue(NEW_PASSWORD);
       await wrapper.get('#reset-password-confirm').setValue(NEW_PASSWORD);
       await wrapper.get('[data-testid="reset-form"]').trigger('submit');

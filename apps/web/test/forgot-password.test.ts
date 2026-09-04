@@ -14,10 +14,18 @@ async function submit(wrapper: Awaited<ReturnType<typeof mountSuspended>>) {
 }
 
 describe('forgot-password.vue', () => {
-  it('composes the auth card and shared form field', async () => {
+  it('composes the auth page and shared form field', async () => {
     const wrapper = await mountSuspended(ForgotPasswordPage);
 
-    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    const main = wrapper.get('[data-testid="forgot-password-page"]');
+    expect(main.find('[data-slot="card"]').exists()).toBe(false);
+    const title = main.get('[data-page-title]');
+    const form = main.get('[data-testid="forgot-form"]');
+    expect(title.text()).toBe('Forgot password');
+    expect(
+      (title.element.compareDocumentPosition(form.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    ).toBe(true);
     expect(wrapper.get('#forgot-email').attributes('id')).toBe('forgot-email');
   });
 

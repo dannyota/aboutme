@@ -6,9 +6,7 @@ import {
   OAuthConsentFailure,
   useOAuthConsent,
 } from '../composables/useOAuthConsent';
-import AuthCard from '@/components/auth/AuthCard.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
 const route = useRoute();
@@ -49,7 +47,9 @@ function parseQuery(): OAuthConsentRequest | null {
     || codeChallenge === null
     || codeChallengeMethod !== 'S256'
     || (stateValue !== undefined && typeof stateValue !== 'string')
-  ) return null;
+  ) {
+    return null;
+  }
 
   return {
     client_id: clientId,
@@ -90,10 +90,11 @@ async function load(): Promise<void> {
       loginForSession();
       return;
     }
-    state.value = failure instanceof OAuthConsentFailure
-      && failure.kind === 'invalid-request'
-      ? 'invalid'
-      : 'unavailable';
+    state.value
+      = failure instanceof OAuthConsentFailure
+        && failure.kind === 'invalid-request'
+        ? 'invalid'
+        : 'unavailable';
     await focusError();
   }
 }
@@ -113,10 +114,11 @@ async function submit(decision: OAuthConsentDecision): Promise<void> {
       loginForSession();
       return;
     }
-    state.value = failure instanceof OAuthConsentFailure
-      && failure.kind === 'invalid-request'
-      ? 'invalid'
-      : 'unavailable';
+    state.value
+      = failure instanceof OAuthConsentFailure
+        && failure.kind === 'invalid-request'
+        ? 'invalid'
+        : 'unavailable';
     await focusError();
   } finally {
     pending.value = false;
@@ -129,16 +131,28 @@ onMounted(() => {
 </script>
 
 <template>
-  <AuthCard title="Allow access">
-    <template #description>
-      <template v-if="view">
-        <strong data-testid="consent-client-name">{{ view.clientName }}</strong>
-        is requesting access to your resumes.
-      </template>
-    </template>
+  <main
+    class="mx-auto w-full max-w-[26rem] px-6 py-16"
+    data-testid="authorize-page"
+  >
+    <h1
+      class="border-b pb-4 text-xl font-semibold"
+      data-page-title
+    >
+      {{
+        view ? `Allow ${view.clientName} to edit your resumes?` : 'Allow access'
+      }}
+    </h1>
+    <p
+      v-if="view"
+      class="mt-4 text-base text-muted-foreground"
+    >
+      <strong data-testid="consent-client-name">{{ view.clientName }}</strong>
+      is requesting access to your resumes.
+    </p>
     <p
       v-if="state === 'loading'"
-      class="text-sm text-muted-foreground"
+      class="mt-8 text-base text-muted-foreground"
     >
       Loading authorization…
     </p>
@@ -146,48 +160,60 @@ onMounted(() => {
       v-else-if="state === 'invalid' || state === 'unavailable'"
       ref="errorSummary"
       :focus-on-mount="true"
+      class="mt-6"
       kind="error"
       testid="consent-error"
     >
-      {{ state === "invalid" ? INVALID_COPY : UNAVAILABLE_COPY }}
+      {{ state === 'invalid' ? INVALID_COPY : UNAVAILABLE_COPY }}
     </StatusBanner>
     <form
       v-else-if="view"
-      class="grid gap-4"
+      class="mt-8 grid gap-6"
       data-testid="consent-form"
+      novalidate
       @submit.prevent="submit('approve')"
     >
-      <ul
+      <dl
         aria-label="Requested permissions"
-        class="flex flex-wrap gap-2"
+        class="divide-y border-y"
+        data-testid="consent-scopes"
       >
-        <li
+        <template
           v-for="scope in view.scopes"
           :key="scope"
         >
-          <Badge variant="secondary">
-            {{ scope === "resumes:read" ? "Read resumes" : "Write resumes" }}
-          </Badge>
-        </li>
-      </ul>
+          <dt class="pt-3 font-medium first:pt-4">
+            {{ scope === 'resumes:read' ? 'Read resumes' : 'Write resumes' }}
+          </dt>
+          <dd class="pb-3 text-sm text-muted-foreground last:pb-4">
+            {{
+              scope === 'resumes:read'
+                ? 'View your resumes.'
+                : 'Create and edit your resumes.'
+            }}
+          </dd>
+        </template>
+      </dl>
       <div class="flex flex-wrap gap-2">
         <Button
+          class="h-9"
           data-decision="approve"
           :disabled="pending"
           type="submit"
         >
-          {{ pending ? "Working…" : "Approve" }}
+          {{ pending ? 'Working…' : 'Approve' }}
         </Button>
         <Button
+          class="h-9"
           data-decision="deny"
           :disabled="pending"
           type="button"
-          variant="outline"
+          variant="ghost"
           @click="submit('deny')"
         >
           Deny
         </Button>
       </div>
     </form>
-  </AuthCard>
+  </main>
 </template>

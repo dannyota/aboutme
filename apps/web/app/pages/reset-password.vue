@@ -8,7 +8,6 @@
  * replaced with an empty string. A malformed or missing fragment renders a
  * local error and no form.
  */
-import AuthCard from '@/components/auth/AuthCard.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
@@ -101,12 +100,22 @@ async function onSubmit() {
 </script>
 
 <template>
-  <AuthCard
-    description="Choose a new password for your account."
-    title="Reset password"
+  <main
+    class="mx-auto w-full max-w-[26rem] px-6 py-16"
+    data-testid="reset-password-page"
   >
+    <h1
+      class="border-b pb-4 text-xl font-semibold"
+      data-page-title
+    >
+      Reset password
+    </h1>
+    <p class="mt-4 text-base text-muted-foreground">
+      Choose a new password for your account.
+    </p>
     <StatusBanner
       v-if="tokenError || errorMessage"
+      class="mt-6"
       kind="error"
       testid="reset-error"
     >
@@ -114,6 +123,7 @@ async function onSubmit() {
     </StatusBanner>
     <StatusBanner
       v-if="success"
+      class="mt-6"
       kind="success"
       testid="reset-success"
     >
@@ -121,7 +131,7 @@ async function onSubmit() {
     </StatusBanner>
     <form
       v-else-if="!tokenError"
-      class="grid gap-4"
+      class="mt-8 grid gap-6"
       data-testid="reset-form"
       novalidate
       @submit.prevent="onSubmit"
@@ -135,14 +145,14 @@ async function onSubmit() {
         label="New password"
       />
       <Button
-        class="mt-1 w-full"
+        class="h-9 w-full"
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? "Resetting…" : "Reset password" }}
+        {{ pending ? 'Resetting…' : 'Reset password' }}
       </Button>
     </form>
-    <template #footer>
+    <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
         v-if="success"
         class="text-primary underline-offset-4 hover:underline"
@@ -150,6 +160,6 @@ async function onSubmit() {
       >
         Sign in
       </NuxtLink>
-    </template>
-  </AuthCard>
+    </nav>
+  </main>
 </template>

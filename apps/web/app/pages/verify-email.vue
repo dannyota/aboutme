@@ -13,7 +13,6 @@ import {
   type PasswordAuthFailure,
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
-import AuthCard from '@/components/auth/AuthCard.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 
 useHead({
@@ -44,7 +43,8 @@ if (import.meta.client) {
 }
 
 if (token !== '') {
-  usePasswordAuth().verify(token)
+  usePasswordAuth()
+    .verify(token)
     .then(() => {
       status.value = 'success';
     })
@@ -72,12 +72,22 @@ function copyFor(failure: PasswordAuthFailure): string {
 </script>
 
 <template>
-  <AuthCard
-    description="Follow the link in your email to verify your address."
-    title="Verify email"
+  <main
+    class="mx-auto w-full max-w-[26rem] px-6 py-16"
+    data-testid="verify-email-page"
   >
+    <h1
+      class="border-b pb-4 text-xl font-semibold"
+      data-page-title
+    >
+      Verify email
+    </h1>
+    <p class="mt-4 text-base text-muted-foreground">
+      Follow the link in your email to verify your address.
+    </p>
     <StatusBanner
       v-if="status === 'error'"
+      class="mt-6"
       kind="error"
       testid="verify-error"
     >
@@ -85,6 +95,7 @@ function copyFor(failure: PasswordAuthFailure): string {
     </StatusBanner>
     <StatusBanner
       v-else-if="status === 'success'"
+      class="mt-6"
       kind="success"
       testid="verify-success"
     >
@@ -92,17 +103,17 @@ function copyFor(failure: PasswordAuthFailure): string {
     </StatusBanner>
     <p
       v-else
-      class="text-sm text-muted-foreground"
+      class="mt-8 text-base text-muted-foreground"
     >
       Verifying your email address…
     </p>
-    <template #footer>
+    <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
         to="/login"
       >
         Sign in
       </NuxtLink>
-    </template>
-  </AuthCard>
+    </nav>
+  </main>
 </template>

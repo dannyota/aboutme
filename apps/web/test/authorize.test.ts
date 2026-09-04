@@ -58,13 +58,15 @@ beforeEach(() => {
 });
 
 describe('/authorize', () => {
-  it('composes the auth card and shared banner', async () => {
+  it('composes the consent page and shared banner', async () => {
     const wrapper = await mountSuspended(AuthorizePage, {
       route: '/authorize?client_id=only-one-field',
     });
     await flushPromises();
 
-    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    const main = wrapper.get('[data-testid="authorize-page"]');
+    expect(main.find('[data-slot="card"]').exists()).toBe(false);
+    expect(main.get('[data-page-title]').text()).toBe('Allow access');
     expect(
       wrapper.get('[data-testid="consent-error"]').attributes('role'),
     ).toBe(
@@ -82,9 +84,18 @@ describe('/authorize', () => {
     expect(wrapper.get('[data-testid="consent-client-name"]').text()).toBe(
       '<img src=x onerror=alert(1)>',
     );
-    expect(wrapper.find('[src]').exists()).toBe(false);
-    expect(wrapper.text()).toContain('Read resumes');
-    expect(wrapper.text()).toContain('Write resumes');
+    expect(wrapper.get('[data-page-title]').text()).toContain(
+      'Allow <img src=x onerror=alert(1)> to edit your resumes?',
+    );
+    expect(descendantNames(wrapper.element)).not.toContain('img');
+    expect(wrapper.get('[data-testid="consent-scopes"]').element.tagName)
+      .toBe('DL');
+    expect(wrapper.get('[data-testid="consent-scopes"]').text()).toContain(
+      'Read resumes',
+    );
+    expect(wrapper.get('[data-testid="consent-scopes"]').text()).toContain(
+      'Write resumes',
+    );
   });
 
   it.each(['approve', 'deny'] as const)(
@@ -214,6 +225,18 @@ describe('/authorize', () => {
       expect(target).toBe(`/login?next=${encodeURIComponent(currentPath)}`);
     });
 });
+
+function descendantNames(root: Element): string[] {
+  const names: string[] = [];
+  const pending = [...root.children];
+  while (pending.length > 0) {
+    const element = pending.pop()!;
+    names.push(element.localName);
+    pending.push(...element.children);
+  }
+  return names;
+}
+
 describe('login next preservation', () => {
   it('keeps provider links bare when next is absent or invalid', async () => {
     const invalid = [

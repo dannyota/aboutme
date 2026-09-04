@@ -190,10 +190,18 @@ describe('usePasswordAuth.register', () => {
 });
 
 describe('register.vue', () => {
-  it('composes the auth card and generated fields', async () => {
+  it('composes the auth page and generated fields', async () => {
     const wrapper = await mountSuspended(RegisterPage);
 
-    expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+    const main = wrapper.get('[data-testid="register-page"]');
+    expect(main.find('[data-slot="card"]').exists()).toBe(false);
+    const title = main.get('[data-page-title]');
+    const form = main.get('[data-testid="register-form"]');
+    expect(title.text()).toBe('Create account');
+    expect(
+      (title.element.compareDocumentPosition(form.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    ).toBe(true);
     expect(wrapper.findAll('[data-slot="input"]').length).toBeGreaterThan(0);
     expect(
       wrapper
@@ -205,18 +213,18 @@ describe('register.vue', () => {
   it('keeps password toggle semantics and native autofill', async () => {
     const wrapper = await mountSuspended(RegisterPage);
     const password = wrapper.get('#register-password');
-    const toggle = wrapper.get('[aria-label="Show Password"]');
+    const toggle = wrapper.get('[aria-label="Show password"]');
 
     expect(password.attributes('autocomplete')).toBe('new-password');
     expect(toggle.attributes('aria-pressed')).toBe('false');
-    expect(toggle.text()).toBe('Show');
+    expect(toggle.text()).toBe('');
     expect(wrapper.html()).not.toContain('@paste');
 
     await toggle.trigger('click');
     expect(password.attributes('type')).toBe('text');
     expect(toggle.attributes('aria-pressed')).toBe('true');
-    expect(toggle.attributes('aria-label')).toBe('Hide Password');
-    expect(toggle.text()).toBe('Hide');
+    expect(toggle.attributes('aria-label')).toBe('Hide password');
+    expect(toggle.text()).toBe('');
   });
 
   it('renders name/email/password/confirm with correct autocomplete',
@@ -233,8 +241,7 @@ describe('register.vue', () => {
       ).toBe('new-password');
       expect(wrapper.get('#register-password').attributes('type'))
         .toBe('password');
-      // Root carries the Nova/Zinc/Emerald theme token wrapper.
-      expect(wrapper.get('[data-slot="card"]').exists()).toBe(true);
+      expect(wrapper.get('[data-testid="register-page"]').exists()).toBe(true);
     });
 
   it('blocks submit with a local error when the passwords do not match',

@@ -7,7 +7,6 @@
  * to fixed copy. The 202 success copy is fixed and reveals nothing about
  * email ownership.
  */
-import AuthCard from '@/components/auth/AuthCard.vue';
 import FormField from '@/components/app/FormField.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -80,14 +79,24 @@ async function onSubmit() {
 </script>
 
 <template>
-  <AuthCard
-    description="Create an account to build and publish your resumes."
-    title="Create account"
+  <main
+    class="mx-auto w-full max-w-[26rem] px-6 py-16"
+    data-testid="register-page"
   >
+    <h1
+      class="border-b pb-4 text-xl font-semibold"
+      data-page-title
+    >
+      Create account
+    </h1>
+    <p class="mt-4 text-base text-muted-foreground">
+      Create an account to build and publish your resumes.
+    </p>
     <StatusBanner
       v-if="errorMessage"
       ref="errorSummary"
       :focus-on-mount="true"
+      class="mt-6"
       kind="error"
       testid="register-error"
     >
@@ -95,13 +104,14 @@ async function onSubmit() {
     </StatusBanner>
     <StatusBanner
       v-if="success"
+      class="mt-6"
       kind="success"
       testid="register-success"
     >
       Check your email to verify your address.
     </StatusBanner>
     <form
-      class="grid gap-4"
+      class="mt-8 grid gap-6"
       data-testid="register-form"
       novalidate
       @submit.prevent="onSubmit"
@@ -143,14 +153,14 @@ async function onSubmit() {
         label="Password"
       />
       <Button
-        class="mt-1 w-full"
+        class="h-9 w-full"
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? "Creating account…" : "Create account" }}
+        {{ pending ? 'Creating account…' : 'Create account' }}
       </Button>
     </form>
-    <template #footer>
+    <nav class="mt-6 flex justify-between gap-3 text-sm">
       <span>Already have an account?</span>
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
@@ -158,6 +168,6 @@ async function onSubmit() {
       >
         Sign in
       </NuxtLink>
-    </template>
-  </AuthCard>
+    </nav>
+  </main>
 </template>
