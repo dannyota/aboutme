@@ -29,7 +29,7 @@ tests pass a fixed date.
     <Button data-testid="create-resume" :disabled="items.length >= 3" @click="$emit('create')">Create resume</Button>
   </PageHeader>
   <ul aria-label="Your resumes" class="grid gap-6 md:grid-cols-3">
-    <li v-for="item in items" :data-testid="`resume-row-${item.id}`" class="sheet relative">   <!-- white, radius-dialog, shadow-paper -->
+    <li v-for="item in items" :data-testid="`resume-row-${item.id}`" class="sheet relative rounded-[var(--radius-dialog)] bg-white shadow-[var(--shadow-paper)]">
       <NuxtLink :to="`/app/resumes/${encodeURIComponent(item.id)}`" class="sheet-face after:absolute after:inset-0">
         <span class="text-lg font-semibold">{{ item.title }}</span>
         <span class="text-xs text-muted-foreground tabular-nums">Updated {{ formatRelativeTime(item.updatedAt, now) }}</span>
@@ -44,13 +44,13 @@ tests pass a fixed date.
       </DropdownMenu>
     </li>
     <li v-for="n in 3 - items.length" :key="`slot-${n}`" class="sheet sheet--empty">  <!-- dashed --border, no shadow -->
-      <button type="button" @click="$emit('create')">
+      <Button type="button" variant="ghost" data-action="create-resume-slot" @click="$emit('create')">
         <template v-if="items.length === 0 && n === 1">
           <span role="status">No resumes yet.</span>
           <span>Create your first resume. You can keep up to three.</span>
         </template>
         <span v-else>Create resume</span>
-      </button>
+      </Button>
     </li>
   </ul>
 </section>
