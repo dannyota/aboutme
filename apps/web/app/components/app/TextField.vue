@@ -12,7 +12,7 @@ const props = withDefaults(
     readonly modelValue?: string;
     readonly id?: string;
     readonly name?: string;
-    readonly type?: 'text' | 'email' | 'url';
+    readonly type?: 'text' | 'email' | 'password' | 'url';
     readonly multiline?: boolean;
     readonly rows?: number;
     readonly autocomplete?: string;
@@ -28,7 +28,10 @@ const props = withDefaults(
   }>(),
   { type: 'text', rows: 3 },
 );
-const emit = defineEmits<{ intent: [intent: FieldIntent<string>] }>();
+const emit = defineEmits<{
+  'intent': [intent: FieldIntent<string>];
+  'update:modelValue': [value: string];
+}>();
 const draft = ref(props.modelValue ?? '');
 const dirty = ref(false);
 const mounted = ref(true);
@@ -43,6 +46,7 @@ watch(
 function onInput(value: string | number): void {
   draft.value = String(value);
   dirty.value = draft.value !== (props.modelValue ?? '');
+  emit('update:modelValue', draft.value);
 }
 function commit(): void {
   if (!mounted.value || !dirty.value) return;

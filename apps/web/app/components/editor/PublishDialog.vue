@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
+import FormDialog from '@/components/app/FormDialog.vue';
+import SwitchField from '@/components/app/SwitchField.vue';
+import TextField from '@/components/app/TextField.vue';
+import { Button } from '@/components/ui/button';
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
 import {
   canonicalPublicPath,
@@ -28,8 +32,7 @@ const password = ref('');
 const actionBusy = ref(false);
 const providerLinkActivated = ref(false);
 const initialLive = ref(false);
-const slugInput = ref<HTMLInputElement | null>(null);
-const returnFocus = ref<HTMLElement | null>(null);
+const restoreFocus = ref(true);
 
 const state = computed(() => props.actions.publish.state.value);
 const busy = computed(
@@ -42,6 +45,14 @@ const slugValid = computed(
   () =>
     (slug.value === '' && !live.value)
     || canonicalPublicPath(slug.value) !== null,
+);
+const slugError = computed(() =>
+  slugValid.value
+    ? undefined
+    : [
+        'Use 4–30 lowercase ASCII letters or numbers,',
+        'separated by single hyphens.',
+      ].join(' '),
 );
 const submitDisabled = computed(
   () =>
@@ -88,21 +99,11 @@ function syncMetadata(metadata: ResumeRecord['accepted']['metadata']): void {
 watch(
   () => props.open,
   (open) => {
-    if (open) {
-      const metadata = props.record.accepted.metadata;
-      syncMetadata(metadata);
-      password.value = '';
-      providerLinkActivated.value = false;
-      returnFocus.value
-        = document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
-      void nextTick(() => slugInput.value?.focus());
-    } else if (returnFocus.value !== null) {
-      const target = returnFocus.value;
-      returnFocus.value = null;
-      void nextTick(() => target.focus());
-    }
+    if (!open) return;
+    syncMetadata(props.record.accepted.metadata);
+    password.value = '';
+    providerLinkActivated.value = false;
+    restoreFocus.value = true;
   },
   { immediate: true },
 );
@@ -130,39 +131,6 @@ function close(): void {
   if (busy.value) return;
   props.actions.publish.cancel();
   emit('close');
-}
-
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    close();
-    return;
-  }
-  if (event.key !== 'Tab') return;
-  const dialog = event.currentTarget instanceof HTMLElement
-    ? event.currentTarget.querySelector<HTMLElement>('[role="dialog"]')
-    : null;
-  if (dialog === null) return;
-  const focusable = [...dialog.querySelectorAll<HTMLElement>(
-    [
-      'a[href]',
-      'button:not(:disabled)',
-      'input:not(:disabled)',
-      'select:not(:disabled)',
-      'textarea:not(:disabled)',
-    ].join(', '),
-  )];
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (first === undefined || last === undefined) return;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
 }
 
 async function run(action: () => Promise<unknown>): Promise<void> {
@@ -213,7 +181,7 @@ function retryProvider(): void {
 }
 
 function focusIssue(path: string): void {
-  returnFocus.value = null;
+  restoreFocus.value = false;
   close();
   emit('focus-issue', path);
 }
@@ -282,329 +250,312 @@ function failureMessage(code: string): string {
 </script>
 
 <template>
-  <div
-    v-if="open"
-    class="publish-dialog-backdrop"
-    @keydown="onKeydown"
+  <FormDialog
+    :open="open"
+    class="publish-dialog"
+    title="Publish resume"
+    description="Choose how this resume is shared publicly."
+    :submit-label="primaryAction"
+    cancel-label="Close"
+    :busy="busy"
+    :submit-disabled="submitDisabled"
+    :restore-focus="restoreFocus"
+    :show-close-button="false"
+    submit-action="publish-submit"
+    cancel-action="publish-close"
+    @submit="submit"
+    @cancel="close"
   >
-    <section
-      class="publish-dialog"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="publish-dialog-title"
-      aria-describedby="publish-dialog-description"
-    >
-      <h2 id="publish-dialog-title">
-        Publish resume
-      </h2>
-      <p id="publish-dialog-description">
-        Choose how this resume is shared publicly.
+    <div class="grid gap-4">
+      <TextField
+        v-model="slug"
+        label="Slug"
+        name="slug"
+        autocomplete="off"
+        :disabled="busy"
+        :error="slugError"
+        :control-attrs="{
+          'data-action': 'publish-slug',
+          'minlength': '4',
+          'maxlength': '30',
+          'pattern': '[a-z0-9]+(-[a-z0-9]+)*',
+        }"
+      />
+
+      <fieldset class="grid gap-3">
+        <legend class="mb-1 text-sm font-medium">
+          Publish options
+        </legend>
+        <SwitchField
+          :model-value="live"
+          label="Public resume"
+          name="live"
+          data-action="publish-live"
+          :disabled="busy"
+          :description="[
+            'Public resumes may be delivered through a global',
+            'content-delivery network.',
+          ].join(' ')"
+          @update:model-value="setLive"
+        />
+        <SwitchField
+          v-model="downloadEnabled"
+          label="PDF download"
+          name="downloadEnabled"
+          data-action="publish-download"
+          :disabled="busy || !live"
+        />
+        <SwitchField
+          v-model="seoGeoEnabled"
+          label="SEO and GEO"
+          name="seoGeoEnabled"
+          data-action="publish-seo-geo"
+          :disabled="busy || !live"
+          :description="[
+            'SEO and GEO allow search crawlers and AI answer engines',
+            'to discover and reuse public resume content.',
+          ].join(' ')"
+        />
+      </fieldset>
+
+      <div
+        v-if="passwordReauth"
+        class="grid gap-3"
+      >
+        <TextField
+          v-model="password"
+          label="Current password"
+          type="password"
+          autocomplete="current-password"
+          :disabled="busy"
+        />
+        <Button
+          type="button"
+          data-action="publish-password-reauth"
+          :disabled="busy || password === ''"
+          @click="submitPassword"
+        >
+          Reauthenticate and publish
+        </Button>
+      </div>
+
+      <div
+        v-else-if="
+          (state.kind === 'reauth-required'
+            || state.kind === 'reauth-rate-limited')
+            && state.method === 'provider'
+        "
+        class="grid gap-3"
+      >
+        <p>Continue with your linked provider to reauthenticate.</p>
+        <Button
+          type="button"
+          data-action="publish-provider-start"
+          :disabled="busy"
+          @click="startProvider"
+        >
+          Start provider reauthentication
+        </Button>
+      </div>
+
+      <div
+        v-else-if="state.kind === 'provider-started'"
+        class="grid gap-3"
+      >
+        <a
+          :href="state.authorizeUrl"
+          data-action="publish-provider-link"
+          target="_blank"
+          rel="noopener noreferrer"
+          @click="providerLinkActivated = true"
+        >
+          Continue reauthentication in a new tab
+        </a>
+        <p v-if="providerLinkActivated">
+          Finish reauthentication in the new tab, return to the editor, and
+          choose Retry publish.
+        </p>
+        <Button
+          v-if="providerLinkActivated"
+          type="button"
+          data-action="publish-provider-retry"
+          :disabled="busy"
+          @click="retryProvider"
+        >
+          Retry publish
+        </Button>
+      </div>
+
+      <p
+        v-if="state.kind === 'reauth-wrong-password'"
+        role="alert"
+      >
+        That password was not accepted. Try again.
+      </p>
+      <p
+        v-if="
+          state.kind === 'reauth-rate-limited'
+            || state.kind === 'provider-started-rate-limited'
+        "
+        role="alert"
+      >
+        Reauthentication is temporarily rate limited. Try again shortly.
+      </p>
+      <p
+        v-if="
+          state.kind === 'reauth-unavailable'
+            || state.kind === 'provider-start-invalid'
+        "
+        role="alert"
+      >
+        Reauthentication is unavailable. Try again later.
       </p>
 
-      <form @submit.prevent="submit">
-        <label>
-          Slug
-          <input
-            ref="slugInput"
-            v-model="slug"
-            data-action="publish-slug"
-            name="slug"
-            minlength="4"
-            maxlength="30"
-            pattern="[a-z0-9]+(-[a-z0-9]+)*"
-            autocomplete="off"
-            :aria-invalid="!slugValid"
-            :disabled="busy"
-          >
-        </label>
+      <p
+        v-if="state.kind === 'blocked'"
+        role="alert"
+      >
+        {{ blockedMessage(state.reason) }}
+      </p>
+      <div
+        v-if="state.kind === 'invalid'"
+        role="alert"
+        class="grid gap-2"
+      >
+        <p>The resume cannot be published yet.</p>
+        <Button
+          v-for="issue in state.issues"
+          :key="`${issue.path}-${issue.code}`"
+          type="button"
+          variant="outline"
+          data-action="focus-publish-issue"
+          :disabled="busy"
+          @click="focusIssue(issue.path)"
+        >
+          {{ issueMessage(issue.code) }}
+        </Button>
+      </div>
+      <p
+        v-if="state.kind === 'slug-taken'"
+        role="alert"
+      >
+        That public slug is already in use. Choose another slug.
+      </p>
+      <p
+        v-if="state.kind === 'stale'"
+        role="alert"
+      >
+        The resume changed elsewhere. Review the latest version before
+        publishing again.
+      </p>
+      <p
+        v-if="
+          state.kind === 'rate-limited' || state.kind === 'public-state-busy'
+        "
+        role="alert"
+      >
+        Publishing is temporarily unavailable. Try again shortly.
+      </p>
+      <p
+        v-if="state.kind === 'unknown'"
+        role="alert"
+      >
+        We could not confirm publication. Retry publish to check safely.
+      </p>
+      <p
+        v-if="state.kind === 'session-lost'"
+        role="alert"
+      >
+        Your session ended. Sign in again before publishing.
+      </p>
+      <p
+        v-if="state.kind === 'failed'"
+        role="alert"
+      >
+        {{ failureMessage(state.code) }}
+      </p>
 
-        <fieldset :disabled="busy">
-          <legend>Publish options</legend>
-          <label>
-            <input
-              type="checkbox"
-              data-action="publish-live"
-              name="live"
-              :checked="live"
-              @change="setLive(($event.target as HTMLInputElement).checked)"
-            >
-            Public resume
-          </label>
-          <label>
-            <input
-              v-model="downloadEnabled"
-              type="checkbox"
-              data-action="publish-download"
-              name="downloadEnabled"
-              :disabled="!live"
-            >
-            PDF download
-          </label>
-          <label>
-            <input
-              v-model="seoGeoEnabled"
-              type="checkbox"
-              data-action="publish-seo-geo"
-              name="seoGeoEnabled"
-              :disabled="!live"
-            >
-            SEO and GEO
-          </label>
-        </fieldset>
+      <p
+        v-if="state.kind === 'accepted'"
+        class="publish-dialog__success"
+        role="status"
+        aria-live="polite"
+      >
+        <template v-if="state.resume.metadata.live">
+          Published successfully.
+        </template>
+        <template v-else>
+          Resume is private.
+        </template>
+        <a
+          v-if="publicHref !== null"
+          :href="publicHref"
+        >
+          View public resume
+        </a>
+      </p>
 
-        <p>
-          Public resumes may be delivered through a global content-delivery
-          network.
-        </p>
-        <p>
-          SEO and GEO allow search crawlers and AI answer engines to discover
-          and reuse public resume content.
-        </p>
+      <p
+        v-if="busy"
+        role="status"
+        aria-live="polite"
+      >
+        Publishing…
+      </p>
+    </div>
 
-        <p
-          v-if="!slugValid"
-          role="alert"
-          aria-live="polite"
-        >
-          Use 4–30 lowercase ASCII letters or numbers, separated by single
-          hyphens.
-        </p>
-
-        <div
-          v-if="passwordReauth"
-          class="publish-dialog__reauth"
-        >
-          <label>
-            Current password
-            <input
-              v-model="password"
-              type="password"
-              autocomplete="current-password"
-              :disabled="busy"
-            >
-          </label>
-          <button
-            type="button"
-            data-action="publish-password-reauth"
-            :disabled="busy || password === ''"
-            @click="submitPassword"
-          >
-            Reauthenticate and publish
-          </button>
-        </div>
-
-        <div
-          v-else-if="
-            (state.kind === 'reauth-required'
-              || state.kind === 'reauth-rate-limited')
-              && state.method === 'provider'
-          "
-          class="publish-dialog__reauth"
-        >
-          <p>Continue with your linked provider to reauthenticate.</p>
-          <button
-            type="button"
-            data-action="publish-provider-start"
-            :disabled="busy"
-            @click="startProvider"
-          >
-            Start provider reauthentication
-          </button>
-        </div>
-
-        <div
-          v-else-if="state.kind === 'provider-started'"
-          class="publish-dialog__reauth"
-        >
-          <a
-            :href="state.authorizeUrl"
-            data-action="publish-provider-link"
-            target="_blank"
-            rel="noopener noreferrer"
-            @click="providerLinkActivated = true"
-          >
-            Continue reauthentication in a new tab
-          </a>
-          <p v-if="providerLinkActivated">
-            Finish reauthentication in the new tab, return to the editor, and
-            choose Retry publish.
-          </p>
-          <button
-            v-if="providerLinkActivated"
-            type="button"
-            data-action="publish-provider-retry"
-            :disabled="busy"
-            @click="retryProvider"
-          >
-            Retry publish
-          </button>
-        </div>
-
-        <p
-          v-if="state.kind === 'reauth-wrong-password'"
-          role="alert"
-        >
-          That password was not accepted. Try again.
-        </p>
-        <p
-          v-if="
-            state.kind === 'reauth-rate-limited'
-              || state.kind === 'provider-started-rate-limited'
-          "
-          role="alert"
-        >
-          Reauthentication is temporarily rate limited. Try again shortly.
-        </p>
-        <p
-          v-if="
-            state.kind === 'reauth-unavailable'
-              || state.kind === 'provider-start-invalid'
-          "
-          role="alert"
-        >
-          Reauthentication is unavailable. Try again later.
-        </p>
-
-        <p
-          v-if="state.kind === 'blocked'"
-          role="alert"
-        >
-          {{ blockedMessage(state.reason) }}
-        </p>
-        <div
-          v-if="state.kind === 'invalid'"
-          role="alert"
-        >
-          <p>The resume cannot be published yet.</p>
-          <button
-            v-for="issue in state.issues"
-            :key="`${issue.path}-${issue.code}`"
-            type="button"
-            data-action="focus-publish-issue"
-            :disabled="busy"
-            @click="focusIssue(issue.path)"
-          >
-            {{ issueMessage(issue.code) }}
-          </button>
-        </div>
-        <p
-          v-if="state.kind === 'slug-taken'"
-          role="alert"
-        >
-          That public slug is already in use. Choose another slug.
-        </p>
-        <p
-          v-if="state.kind === 'stale'"
-          role="alert"
-        >
-          The resume changed elsewhere. Review the latest version before
-          publishing again.
-        </p>
-        <p
-          v-if="
-            state.kind === 'rate-limited' || state.kind === 'public-state-busy'
-          "
-          role="alert"
-        >
-          Publishing is temporarily unavailable. Try again shortly.
-        </p>
-        <p
-          v-if="state.kind === 'unknown'"
-          role="alert"
-        >
-          We could not confirm publication. Retry publish to check safely.
-        </p>
-        <p
-          v-if="state.kind === 'session-lost'"
-          role="alert"
-        >
-          Your session ended. Sign in again before publishing.
-        </p>
-        <p
-          v-if="state.kind === 'failed'"
-          role="alert"
-        >
-          {{ failureMessage(state.code) }}
-        </p>
-
-        <p
-          v-if="state.kind === 'accepted'"
-          class="publish-dialog__success"
-          role="status"
-          aria-live="polite"
-        >
-          <template v-if="state.resume.metadata.live">
-            Published successfully.
-          </template>
-          <template v-else>
-            Resume is private.
-          </template>
-          <a
-            v-if="publicHref !== null"
-            :href="publicHref"
-          >
-            View public resume
-          </a>
-        </p>
-
-        <div class="publish-dialog__actions">
-          <button
-            v-if="
-              !passwordReauth
-                && !providerReauth
-                && state.kind !== 'provider-started'
-                && state.kind !== 'unknown'
-            "
-            type="submit"
-            data-action="publish-submit"
-            :disabled="submitDisabled"
-          >
-            {{ primaryAction }}
-          </button>
-          <button
-            v-if="
-              state.kind === 'unknown'
-                || state.kind === 'rate-limited'
-                || state.kind === 'public-state-busy'
-                || state.kind === 'slug-taken'
-            "
-            type="button"
-            :disabled="busy"
-            @click="retry"
-          >
-            Retry publish
-          </button>
-          <button
-            v-if="
-              (state.kind === 'reauth-unavailable'
-                && state.method === 'provider')
-                || state.kind === 'provider-start-invalid'
-                || state.kind === 'provider-started-rate-limited'
-            "
-            type="button"
-            data-action="publish-provider-start"
-            :disabled="busy"
-            @click="startProvider"
-          >
-            Try provider reauthentication again
-          </button>
-          <button
-            type="button"
-            data-action="publish-close"
-            :disabled="busy"
-            @click="close"
-          >
-            Close
-          </button>
-        </div>
-        <p
-          v-if="busy"
-          role="status"
-          aria-live="polite"
-        >
-          Publishing…
-        </p>
-      </form>
-    </section>
-  </div>
+    <template #footer>
+      <Button
+        v-if="
+          !passwordReauth
+            && !providerReauth
+            && state.kind !== 'provider-started'
+            && state.kind !== 'unknown'
+        "
+        type="submit"
+        data-action="publish-submit"
+        :disabled="submitDisabled"
+      >
+        {{ primaryAction }}
+      </Button>
+      <Button
+        v-if="
+          state.kind === 'unknown'
+            || state.kind === 'rate-limited'
+            || state.kind === 'public-state-busy'
+            || state.kind === 'slug-taken'
+        "
+        type="button"
+        variant="outline"
+        :disabled="busy"
+        @click="retry"
+      >
+        Retry publish
+      </Button>
+      <Button
+        v-if="
+          (state.kind === 'reauth-unavailable'
+            && state.method === 'provider')
+            || state.kind === 'provider-start-invalid'
+            || state.kind === 'provider-started-rate-limited'
+        "
+        type="button"
+        variant="outline"
+        data-action="publish-provider-start"
+        :disabled="busy"
+        @click="startProvider"
+      >
+        Try provider reauthentication again
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        data-action="publish-close"
+        :disabled="busy"
+        @click="close"
+      >
+        Close
+      </Button>
+    </template>
+  </FormDialog>
 </template>

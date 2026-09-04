@@ -30,11 +30,14 @@ describe('EditorShell', () => {
   });
 
   it('opens the publish dialog from the editor topbar', async () => {
-    const wrapper = mountShell();
+    const wrapper = mountShell({}, { attachTo: document.body });
 
     await wrapper.get('[data-action="publish"]').trigger('click');
+    await wrapper.vm.$nextTick();
 
-    expect(wrapper.get('[role="dialog"]').text()).toContain('Publish resume');
+    expect(document.body.querySelector('[role="dialog"]')?.textContent)
+      .toContain('Publish resume');
+    wrapper.unmount();
   });
 
   it('places each editor region in an explicit grid cell', () => {

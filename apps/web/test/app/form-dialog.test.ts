@@ -1,9 +1,9 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import FormDialog from '../../app/components/app/FormDialog.vue';
-import { Dialog } from '../../app/components/ui/dialog';
+import { Dialog, DialogContent } from '../../app/components/ui/dialog';
 
 function open(props: Record<string, unknown> = {}) {
   return mount(FormDialog, {
@@ -63,6 +63,13 @@ describe('FormDialog', () => {
     await nextTick();
     await nextTick();
     expect(document.activeElement?.id).toBe('title');
+    wrapper.unmount();
+  });
+  it('can leave focus for a caller-selected control after close', () => {
+    const wrapper = open({ restoreFocus: false });
+    const event = { preventDefault: vi.fn() };
+    wrapper.findComponent(DialogContent).vm.$emit('closeAutoFocus', event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
     wrapper.unmount();
   });
 });
