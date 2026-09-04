@@ -18,7 +18,11 @@ import {
   pageDiagnosticsAttacher,
   waitForHydration,
 } from "./harness-lib";
-import { ALLOWED_ORIGIN, isExpectedAnonymousMeConsole } from "./network-policy";
+import {
+  ALLOWED_ORIGIN,
+  httpFailureStatus,
+  isExpectedAnonymousMeConsole,
+} from "./network-policy";
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = "/evidence/publish-proof.json";
@@ -40,6 +44,7 @@ const steps = {
   signOut: false,
   accessibility: false,
   keyboard: false,
+  longInvalidLayout: false,
 };
 
 const statuses = {
@@ -109,6 +114,25 @@ function isExpectedRevokedPublicConsole(
   );
 }
 
+function isExpectedSyntheticPublishInvalidConsole(
+  message: ConsoleMessage,
+  resumeID: string | undefined,
+): boolean {
+  let location: URL;
+  try {
+    location = new URL(message.location().url);
+  } catch {
+    return false;
+  }
+  return (
+    resumeID !== undefined &&
+    httpFailureStatus(message.text()) === 422 &&
+    location.origin === ORIGIN &&
+    location.pathname === `/api/v1/resumes/${resumeID}/publish` &&
+    location.search === ""
+  );
+}
+
 async function installPublicGuards(
   context: BrowserContext,
   counters: ReturnType<typeof newDiagnosticCounters>,
@@ -145,10 +169,13 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   let publicContext: BrowserContext | undefined;
   let revocationElapsed = 0;
   let publishMutationCount = 0;
+  let syntheticInvalidRequest = false;
+  let syntheticInvalidConsoleBudget = 0;
   const requestListener = (request: Request): void => {
     const url = new URL(request.url());
     if (url.origin !== ORIGIN) return;
     if (request.method() === "POST" && url.pathname.endsWith("/publish")) {
+      if (syntheticInvalidRequest) return;
       events.push("publish-request");
       const present = mutationHeaderPresence(request);
       publishMutationCount += 1;
@@ -191,8 +218,19 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   };
   await installPublicGuards(context, counters);
   pageDiagnosticsAttacher(counters, {
-    countConsoleError: (message) =>
-      !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+    countConsoleError: (message) => {
+      if (
+        syntheticInvalidConsoleBudget > 0 &&
+        isExpectedSyntheticPublishInvalidConsole(message, resumeID)
+      ) {
+        syntheticInvalidConsoleBudget -= 1;
+        return false;
+      }
+      return !isExpectedAnonymousMeConsole(
+        message.text(),
+        message.location().url,
+      );
+    },
   })(page);
   page.on("request", requestListener);
   page.on("response", responseListener);
@@ -330,7 +368,70 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       .press("Enter");
     await expect(page.locator('[data-action="publish"]')).toBeFocused();
     await page.locator('[data-action="publish"]').press("Enter");
-    const updateDialog = page.getByRole("dialog", { name: "Publish resume" });
+    let updateDialog = page.getByRole("dialog", { name: "Publish resume" });
+    await expect(updateDialog).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    syntheticInvalidRequest = true;
+    syntheticInvalidConsoleBudget = 1;
+    await page.route(
+      `**/api/v1/resumes/${resumeID}/publish`,
+      async (route) => {
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          headers: { "cache-control": "no-store, no-transform" },
+          body: JSON.stringify({
+            error: {
+              code: "publish_invalid",
+              message: "resume cannot be published",
+              details: {
+                issues: Array.from({ length: 24 }, (_, index) => ({
+                  path: `content.work.entries.${index}.title`,
+                  code: "required",
+                })),
+              },
+            },
+          }),
+        });
+      },
+      { times: 1 },
+    );
+    await updateDialog
+      .getByRole("button", { name: "Update publication", exact: true })
+      .press("Enter");
+    const issueActions = updateDialog.locator(
+      '[data-action="focus-publish-issue"]',
+    );
+    await expect(issueActions).toHaveCount(24);
+    syntheticInvalidRequest = false;
+    const dialogLayout = await updateDialog.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return {
+        bottom: bounds.bottom,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        top: bounds.top,
+      };
+    });
+    expect(dialogLayout.top).toBeGreaterThanOrEqual(0);
+    expect(dialogLayout.bottom).toBeLessThanOrEqual(844);
+    expect(dialogLayout.scrollHeight).toBeGreaterThan(
+      dialogLayout.clientHeight,
+    );
+    const invalidClose = updateDialog.getByRole("button", {
+      name: "Close",
+      exact: true,
+    });
+    await invalidClose.scrollIntoViewIfNeeded();
+    await expect(invalidClose).toBeInViewport();
+    await invalidClose.press("Enter");
+    steps.longInvalidLayout = true;
+    stage("long-invalid-layout");
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.locator('[data-action="publish"]').press("Enter");
+    updateDialog = page.getByRole("dialog", { name: "Publish resume" });
     await expect(updateDialog).toBeVisible();
     await updateDialog.getByLabel("SEO and GEO").press("Space");
     const discoveryResponse = page.waitForResponse((response) => {

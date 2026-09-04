@@ -340,6 +340,7 @@ const expected = mode === 'auth' ? {
     signOut: true,
     accessibility: true,
     keyboard: true,
+    longInvalidLayout: true,
   },
   statuses: {
     publish: 200,

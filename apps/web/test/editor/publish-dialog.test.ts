@@ -27,24 +27,15 @@ class DialogHarness {
 
   private root(): DOMWrapper<Element> {
     if (!this.element.isConnected) {
-      const dialogs = document.body.querySelectorAll('[role="dialog"]');
-      const latest = dialogs.item(dialogs.length - 1);
-      if (latest === null) throw new Error('publish dialog is not mounted');
-      this.element = latest;
+      throw new Error('publish dialog is not mounted');
     }
     return new DOMWrapper(this.element);
   }
 
-  get(selector: string, options?: { text: string }) {
-    if (options === undefined) {
-      const root = this.root();
-      if (root.element.matches(selector)) return root;
-      return root.get(selector);
-    }
-    const match = this.root().findAll(selector)
-      .find((element) => element.text() === options.text);
-    if (match === undefined) throw new Error(`Unable to get ${options.text}`);
-    return match;
+  get(selector: string) {
+    const root = this.root();
+    if (root.element.matches(selector)) return root;
+    return root.get(selector);
   }
 
   find(selector: string) {
@@ -103,6 +94,30 @@ describe('PublishDialog', () => {
         + 'and reuse public resume content.',
       );
     });
+
+  it('bounds and scrolls long dialog content within the viewport', async () => {
+    const record = editorRecord();
+    const context = actionsFor(record, {
+      kind: 'invalid',
+      issues: Array.from({ length: 20 }, (_, index) => ({
+        path: `content.work.entries.${index}.title`,
+        code: 'required',
+        message: 'server text is not rendered',
+      })),
+    });
+    const wrapper = await mountDialog(record, context.actions);
+
+    expect(wrapper.get('[role="dialog"]').classes()).toEqual(
+      expect.arrayContaining([
+        'max-h-[calc(100dvh-2rem)]',
+        'overflow-y-auto',
+        'sm:max-w-[38rem]',
+      ]),
+    );
+    expect(wrapper.findAll('[data-action="focus-publish-issue"]'))
+      .toHaveLength(20);
+    expect(wrapper.get('[data-action="publish-close"]').exists()).toBe(true);
+  });
 
   it('initializes never-published and canonical publication metadata',
     async () => {
@@ -227,7 +242,7 @@ describe('PublishDialog', () => {
       expect(wrapper.text()).toContain('Use 4–30 lowercase ASCII letters');
       expect(submit.attributes('disabled')).toBeDefined();
       await slug.setValue('ada-lovelace');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-action="publish-submit"]').trigger('click');
       expect(actions.publish.submit).toHaveBeenCalledWith({
         slug: 'ada-lovelace',
         live: false,
@@ -244,7 +259,7 @@ describe('PublishDialog', () => {
     await wrapper.get('[data-action="publish-live"]').trigger('click');
     await wrapper.get('[data-action="publish-download"]').trigger('click');
     await wrapper.get('[data-action="publish-seo-geo"]').trigger('click');
-    await wrapper.get('form').trigger('submit');
+    await wrapper.get('[data-action="publish-submit"]').trigger('click');
 
     expect(actions.publish.submit).toHaveBeenCalledOnce();
     expect(actions.publish.submit).toHaveBeenCalledWith({
@@ -298,7 +313,8 @@ describe('PublishDialog', () => {
         attempt: {} as never,
       });
       const wrapper = await mountDialog(record, context.actions);
-      await wrapper.get('input[type="password"]').setValue('current-password');
+      await wrapper.get('[data-action="publish-password"]')
+        .setValue('current-password');
       await wrapper
         .get('[data-action="publish-password-reauth"]')
         .trigger('click');
@@ -360,7 +376,8 @@ describe('PublishDialog', () => {
         wrapper.find('[data-action="publish-provider-link"]').exists(),
       ).toBe(false);
       expect(wrapper.text()).toContain('Reauthentication is unavailable.');
-      expect(wrapper.findAll('a')).toHaveLength(0);
+      expect(wrapper.findAll('[data-action="publish-provider-link"]'))
+        .toHaveLength(0);
       expect(wrapper.findAll('[data-action="publish-provider-start"]'))
         .toHaveLength(1);
     });
@@ -373,9 +390,10 @@ describe('PublishDialog', () => {
         winner: {} as never,
       });
       const staleWrapper = await mountDialog(record, stale.actions);
-      expect(staleWrapper.findAll('button').filter((button) =>
-        button.text() === 'Retry publish')).toHaveLength(0);
-      await staleWrapper.get('form').trigger('submit');
+      expect(staleWrapper.findAll('[data-action="publish-retry"]'))
+        .toHaveLength(0);
+      await staleWrapper.get('[data-action="publish-submit"]')
+        .trigger('click');
       expect(stale.actions.publish.submit).toHaveBeenCalledOnce();
 
       const unknown = actionsFor(record, {
@@ -385,7 +403,7 @@ describe('PublishDialog', () => {
       const unknownWrapper = await mountDialog(record, unknown.actions);
       expect(unknownWrapper.find('[data-action="publish-submit"]').exists())
         .toBe(false);
-      await unknownWrapper.get('button', { text: 'Retry publish' })
+      await unknownWrapper.get('[data-action="publish-retry"]')
         .trigger('click');
       expect(unknown.actions.publish.retryUncertain).toHaveBeenCalledOnce();
     });
@@ -646,9 +664,9 @@ describe('PublishDialog', () => {
         resume: liveAccepted,
       });
       const wrapper = await mountDialog(record, context.actions);
-      expect(wrapper.get('.publish-dialog__success a').attributes('href')).toBe(
-        '/canonical-slug',
-      );
+      expect(
+        wrapper.get('[data-action="view-public-resume"]').attributes('href'),
+      ).toBe('/canonical-slug');
 
       context.state.value = {
         kind: 'accepted',
@@ -661,7 +679,8 @@ describe('PublishDialog', () => {
         }),
       };
       await wrapper.vm.$nextTick();
-      expect(wrapper.find('.publish-dialog__success a').exists()).toBe(false);
+      expect(wrapper.find('[data-action="view-public-resume"]').exists())
+        .toBe(false);
 
       context.state.value = {
         kind: 'accepted',
@@ -675,7 +694,8 @@ describe('PublishDialog', () => {
       };
       await wrapper.vm.$nextTick();
       expect(wrapper.text()).toContain('Resume is private.');
-      expect(wrapper.find('.publish-dialog__success a').exists()).toBe(false);
+      expect(wrapper.find('[data-action="view-public-resume"]').exists())
+        .toBe(false);
 
       const transitionRecord = editorRecord({
         live: true,
@@ -768,8 +788,8 @@ describe('PublishDialog', () => {
       await wrapper.get('[data-action="publish-slug"]')
         .setValue('ada-lovelace');
       await wrapper.get('[data-action="publish-live"]').trigger('click');
-      await wrapper.get('form').trigger('submit');
-      await wrapper.get('form').trigger('submit');
+      await wrapper.get('[data-action="publish-submit"]').trigger('click');
+      await wrapper.get('[data-action="publish-submit"]').trigger('click');
       expect(context.actions.publish.submit).toHaveBeenCalledOnce();
       deferred.resolve(undefined);
     });
@@ -779,6 +799,9 @@ async function mountDialog(
   record: ResumeRecord,
   actions: ResumeEditorActions,
 ): Promise<DialogHarness> {
+  const existing = new Set(
+    document.body.querySelectorAll('[role="dialog"]'),
+  );
   const wrapper = mount(PublishDialog, {
     attachTo: document.body,
     props: { open: true, actions, record },
@@ -786,9 +809,9 @@ async function mountDialog(
   mounted.push(wrapper);
   await nextTick();
   await nextTick();
-  const dialogs = document.body.querySelectorAll('[role="dialog"]');
-  const element = dialogs.item(dialogs.length - 1);
-  if (element === null) throw new Error('publish dialog is not mounted');
+  const element = [...document.body.querySelectorAll('[role="dialog"]')]
+    .find((candidate) => !existing.has(candidate));
+  if (element === undefined) throw new Error('publish dialog is not mounted');
   return new DialogHarness(wrapper, element);
 }
 

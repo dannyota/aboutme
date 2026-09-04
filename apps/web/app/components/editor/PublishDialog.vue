@@ -252,7 +252,8 @@ function failureMessage(code: string): string {
 <template>
   <FormDialog
     :open="open"
-    class="publish-dialog"
+    class="publish-dialog max-h-[calc(100dvh-2rem)] overflow-y-auto
+      sm:max-w-[38rem]"
     title="Publish resume"
     description="Choose how this resume is shared publicly."
     :submit-label="primaryAction"
@@ -328,6 +329,7 @@ function failureMessage(code: string): string {
           type="password"
           autocomplete="current-password"
           :disabled="busy"
+          :control-attrs="{ 'data-action': 'publish-password' }"
         />
         <Button
           type="button"
@@ -490,6 +492,7 @@ function failureMessage(code: string): string {
         <a
           v-if="publicHref !== null"
           :href="publicHref"
+          data-action="view-public-resume"
         >
           View public resume
         </a>
@@ -527,6 +530,7 @@ function failureMessage(code: string): string {
         "
         type="button"
         variant="outline"
+        data-action="publish-retry"
         :disabled="busy"
         @click="retry"
       >

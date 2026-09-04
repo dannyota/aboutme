@@ -172,6 +172,7 @@ function sectionLabel(type: string): string {
     ]"
   >
     <header
+      data-region="topbar"
       :class="[
         'editor-topbar col-span-full grid',
         'grid-cols-[auto_minmax(12rem,1fr)_auto_auto_auto] items-center gap-5',
@@ -228,7 +229,10 @@ function sectionLabel(type: string): string {
           Preview
         </Button>
       </div>
-      <div class="editor-account-actions flex items-center gap-2">
+      <div
+        class="editor-account-actions flex items-center gap-2"
+        data-region="account-actions"
+      >
         <AccountMenu />
         <ThemeToggle />
       </div>
