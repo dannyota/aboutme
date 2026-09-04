@@ -7,7 +7,7 @@ Bring the 46 commits of `codex/phase-pu` (`0187aff^..a4c9d21`) onto current
 had on `main`. Integration owner only; no worker touches Git.
 
 1. From `main` at the candidate SHA, create branch `pv/rebase-pu` and run
-   `git rebase --onto main cad75aa codex/phase-pu` in a fresh worktree
+   `git rebase --onto main cad75aa` on that branch in a fresh worktree
    (`.worktrees/pv-rebase`), never in the main tree. Verify the base:
    `git merge-base --is-ancestor main HEAD`.
 2. Resolve conflicts in favor of PU's structure and `main`'s behavior. Expected
