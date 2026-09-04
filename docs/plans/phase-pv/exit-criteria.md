@@ -21,8 +21,10 @@ the affected sequence is rerun.
 
 - [ ] `AC-UI-001` through `AC-UI-013` are `PROVEN` with exact evidence.
 - [ ] `grep -rn "positive\|chart-" apps/web/app/assets/css` returns nothing;
-      `--seal` appears only in `AppSeal.vue`, `StateMark.vue`, and the Publish
-      control's variant.
+      `--seal` is defined and mapped only in `theme.css` and consumed directly
+      only by `AppSeal.vue`; `StateMark.vue` and the accepted Publish state
+      compose `AppSeal`, while publish buttons use the mapped colors through the
+      Button `seal` variant.
 - [ ] Landing HTML from `curl -s http://localhost:20080/` contains the rendered
       sample resume, the seal `aria-label`, and no `/api/v1` request in the
       server log for that response.
