@@ -52,6 +52,7 @@ describe('StateMark', () => {
     expect(wrapper.get('[data-public-link]').text()).toBe(
       'aboutme.vn/ada-lovelace',
     );
+    expect(wrapper.attributes('role')).toBeUndefined();
   });
 
   it('requires a link for the public state', () => {

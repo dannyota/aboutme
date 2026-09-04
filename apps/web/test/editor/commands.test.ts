@@ -1,4 +1,5 @@
 import type { Section } from '@aboutme/schema';
+import { isProxy, reactive } from 'vue';
 import { describe, expect, it } from 'vitest';
 
 import { captureCommand, replayCommand } from '../../app/editor/commands';
@@ -33,6 +34,29 @@ const workEntry: Section['entries'][number] = {
 };
 
 describe('command capture', () => {
+  it('copies reactive contact details into plain command data', () => {
+    const details = reactive([
+      {
+        id: '11111111-1111-4111-8111-111111111112',
+        type: 'email' as const,
+        value: '',
+        isHidden: false,
+      },
+    ]);
+
+    const { command } = capture({
+      kind: 'personalField',
+      path: 'details',
+      value: { present: true, value: details },
+    });
+
+    expect(command.value).toEqual({ present: true, value: details });
+    if (command.value.present) {
+      expect(isProxy(command.value.value)).toBe(false);
+      expect(() => structuredClone(command.value.value)).not.toThrow();
+    }
+  });
+
   it('captures before replay and preserves absence distinctly', () => {
     const accepted = acceptedFixture({
       document: {

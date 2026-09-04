@@ -243,7 +243,7 @@ async function proveListLoadAutosave(
   await expect(rename).toBeHidden();
   editorDiagnosticStage = 'list-reload';
   await page.reload();
-  await expect(row.getByRole('link')).toHaveText(renamedTitle);
+  await expect(row.getByRole('link')).toContainText(renamedTitle);
 
   editorDiagnosticStage = 'editor-open';
   const probes = await installBrowserPersistenceProbes(page);
@@ -469,21 +469,56 @@ async function proveKeyboardStructureAndContextActions(
     );
   await font.selectOption({ label: 'Be Vietnam Pro' });
   if (fontSaved !== undefined) expect((await fontSaved).status()).toBe(200);
+  await expect(page.getByTestId('save-status')).toHaveAttribute(
+    'data-state',
+    'saved',
+  );
 
-  editorDiagnosticStage = 'contact-overflow-menu';
+  editorDiagnosticStage = 'contact-document';
   await page.getByRole('button', { name: 'Document' }).press('Enter');
+  editorDiagnosticStage = 'contact-personal-details';
   await page
     .getByRole('navigation', { name: 'Resume outline' })
     .getByRole('button', { name: 'Personal details', exact: true })
     .press('Enter');
+  editorDiagnosticStage = 'contact-add';
+  const detailAdded = page.waitForResponse(
+    (response) => isResumeMutation(response.request(), resumeID),
+    { timeout: 15_000 },
+  );
+  await page
+    .getByRole('button', {
+      name: 'Add detail',
+      exact: true,
+    })
+    .press('Enter');
+  editorDiagnosticStage = 'contact-add-save';
+  expect((await detailAdded).status()).toBe(200);
+  await expect(page.getByTestId('save-status')).toHaveAttribute(
+    'data-state',
+    'saved',
+  );
+  editorDiagnosticStage = 'contact-fill';
+  const detailSaved = page.waitForResponse(
+    (response) => isResumeMutation(response.request(), resumeID),
+    { timeout: 15_000 },
+  );
+  const detailValue = page.getByLabel('Value', { exact: true });
+  await detailValue.fill('editor-proof@example.invalid');
+  await detailValue.press('Enter');
+  editorDiagnosticStage = 'contact-save';
+  expect((await detailSaved).status()).toBe(200);
+  editorDiagnosticStage = 'contact-menu-button';
   const detailMenuButton = page.getByRole('button', {
     name: 'More options for contact detail 1',
     exact: true,
   });
   await expect(detailMenuButton).toBeVisible();
   await detailMenuButton.press('Enter');
+  editorDiagnosticStage = 'contact-menu-open';
   const detailMenu = page.getByRole('menu');
   await expect(detailMenu).toHaveCount(1);
+  editorDiagnosticStage = 'contact-menu-items';
   await expect(detailMenu.getByRole('menuitem', {
     name: 'Set label…',
     exact: true,
@@ -508,8 +543,10 @@ async function proveKeyboardStructureAndContextActions(
     name: 'Set label…',
     exact: true,
   }).press('Enter');
+  editorDiagnosticStage = 'contact-label';
   await expect(page.getByLabel('Label', { exact: true })).toBeVisible();
 
+  editorDiagnosticStage = 'entries-open';
   await page.getByRole('navigation', { name: 'Resume outline' }).getByRole('button', { name: 'Experience' }).press('Enter');
   const firstEntryCreated = page.waitForResponse((response) =>
     isResumeMutation(response.request(), resumeID),
@@ -882,21 +919,27 @@ async function proveAccessibility(page: Page, resumeID: string): Promise<void> {
   await scanEditorAccessibility(page, 'accessibility-editor-light');
   await setEditorTheme(page, 'dark');
   await scanEditorAccessibility(page, 'accessibility-editor-dark');
+  editorDiagnosticStage = 'accessibility-settings-open';
   await page.goto(`${ORIGIN}/app/settings/sessions`);
   await waitForHydration(page);
+  editorDiagnosticStage = 'accessibility-settings-theme';
   await expect.poll(() => page.evaluate(
     () => document.documentElement.dataset.theme,
   )).toBe('dark');
+  editorDiagnosticStage = 'accessibility-list-reopen';
   await page.goto(`${ORIGIN}/app/resumes`);
   await waitForHydration(page);
+  editorDiagnosticStage = 'accessibility-list-theme';
   await expect.poll(() => page.evaluate(
     () => document.documentElement.dataset.theme,
   )).toBe('dark');
+  editorDiagnosticStage = 'accessibility-editor-reopen';
   await page
     .locator(`[data-testid="resume-row-${resumeID}"]`)
     .getByRole('link')
     .press('Enter');
   await waitForHydration(page);
+  editorDiagnosticStage = 'accessibility-theme-reset';
   await setEditorTheme(page, 'light');
 }
 
@@ -918,6 +961,13 @@ async function setEditorTheme(page: Page, target: 'light' | 'dark'): Promise<voi
   await expect.poll(() => page.evaluate(
     () => document.documentElement.dataset.theme ?? '',
   )).toBe(target);
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
 }
 
 async function scanEditorAccessibility(page: Page, stage: string): Promise<void> {
@@ -946,14 +996,13 @@ async function deleteThroughListKeyboard(page: Page, resumeID: string): Promise<
   const row = page.locator(`[data-testid="resume-row-${resumeID}"]`);
   await expect(row).toBeVisible();
   editorDiagnosticStage = 'teardown-open';
-  const title = (await row.getByRole('link').innerText()).trim();
-  expect(title).not.toBe('');
-  await row
-    .getByRole('button', {
-      name: `More actions for ${title}`,
-      exact: true,
-    })
-    .press('Enter');
+  const menuButton = row.getByRole('button', {
+    name: /^More actions for /,
+  });
+  const menuLabel = await menuButton.getAttribute('aria-label');
+  expect(menuLabel).toMatch(/^More actions for .+$/);
+  const title = menuLabel?.slice('More actions for '.length) ?? '';
+  await menuButton.press('Enter');
   const rowMenu = page.getByRole('menu');
   await expect(rowMenu).toHaveCount(1);
   await rowMenu

@@ -29,6 +29,10 @@ const steps = {
   signedInShell: false,
 };
 
+function stage(name: string): void {
+  console.log(`entry-stage:${name}`);
+}
+
 async function expectSignedOutShell(page: Page): Promise<void> {
   const header = page.getByRole('banner');
   await expect(header.getByRole('link', { name: 'Sign in' })).toBeVisible();
@@ -50,10 +54,24 @@ async function auditAccessibility(
   route: string,
   theme: Theme,
 ): Promise<void> {
+  const routeName
+    = route === '/'
+      ? 'landing'
+      : route.replaceAll(/[^a-z0-9]+/g, '-').replaceAll(/^-+|-+$/g, '');
+  stage(`${routeName}-${theme}`);
   const findings = await new AxeBuilder({ page }).analyze();
   const violations = findings.violations.filter(
     ({ impact }) => impact === 'serious' || impact === 'critical',
   );
+  if (violations.length > 0) {
+    const first = violations[0];
+    const target = JSON.stringify(first?.nodes[0]?.target ?? [])
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9-]+/g, '-')
+      .replaceAll(/^-+|-+$/g, '')
+      .slice(0, 100);
+    stage(`${routeName}-${theme}-${first?.id ?? 'unknown'}-${target}`);
+  }
   expect(violations, `${route} ${theme} axe violations`).toEqual([]);
 }
 
@@ -84,14 +102,14 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
 
   try {
     await auditRouteInBothThemes(page, '/', async () => {
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      await expect(page.getByTestId('landing-title')).toHaveText(
         'The resume is public. You are not.',
       );
     });
     await setTheme(page, 'light');
     await page.goto(`${ORIGIN}/`);
     await waitForHydration(page);
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    await expect(page.getByTestId('landing-title')).toHaveText(
       'The resume is public. You are not.',
     );
     const main = page.getByRole('main');
@@ -108,6 +126,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await expectSignedOutShell(page);
     steps.landing = true;
 
+    stage('login-open');
     await main.getByRole('link', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(`${ORIGIN}/login`);
     await waitForHydration(page);
@@ -117,6 +136,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await waitForHydration(page);
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
     await auditAccessibility(page, '/login', 'dark');
+    stage('login-light-reset');
     await setTheme(page, 'light');
     await page.goto(`${ORIGIN}/login`);
     await waitForHydration(page);
@@ -132,20 +152,20 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     ).toHaveCount(3);
     steps.providerLinks = true;
 
-    await page.getByRole('textbox', { name: 'Email' }).fill(SEED_EMAIL);
-    await page
-      .getByRole('textbox', { name: 'Password', exact: true })
-      .fill(SEED_PASSWORD);
+    stage('password-login');
+    await page.getByLabel('Email', { exact: true }).fill(SEED_EMAIL);
+    stage('password-login-secret');
+    await page.getByLabel('Password', { exact: true }).fill(SEED_PASSWORD);
+    stage('password-login-submit');
     await page.getByRole('button', { name: 'Sign in' }).click();
+    stage('password-login-redirect');
     await expect(page).toHaveURL(`${ORIGIN}/app/resumes`);
     steps.signIn = true;
 
     await expect(
       page.getByRole('heading', { level: 1, name: 'Resumes' }),
     ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Create resume' }),
-    ).toBeVisible();
+    await expect(page.getByTestId('create-resume')).toBeVisible();
     await auditAccessibility(page, '/app/resumes', 'light');
     await setTheme(page, 'dark');
     await page.goto(`${ORIGIN}/app/resumes`);

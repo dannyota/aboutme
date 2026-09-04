@@ -71,6 +71,17 @@ describe('theme preference boundary', () => {
     expect(controller.theme.value).toBe('dark');
   });
 
+  it('writes the selected mode to the browser cookie', async () => {
+    const wrapper = await mountSuspended(ThemeToggle);
+
+    await wrapper.get('[data-slot="button"]').trigger('click');
+    await flushPromises();
+
+    expect(document.cookie).toMatch(
+      /(?:^|; )aboutme-theme=(?:light|dark)(?:;|$)/,
+    );
+  });
+
   it(
     'renders a labelled native control with text that states the current mode',
     async () => {

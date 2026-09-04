@@ -37,7 +37,7 @@ export function useTheme() {
     default: () => undefined,
     path: '/',
     sameSite: 'lax',
-    watch: false,
+    watch: 'shallow',
   });
   const systemTheme = ref<Theme>(readSystemTheme());
   const controller = createThemeController(preference, systemTheme);

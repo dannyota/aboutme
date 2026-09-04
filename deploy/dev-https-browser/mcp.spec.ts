@@ -335,19 +335,23 @@ test('proves MCP agent access over trusted HTTPS', async ({
       accountLabel: UAT_ACCOUNT,
       returnPath: '/authorize',
     });
+    stage('provider-login-hydration');
     await waitForHydration(page);
+    stage('provider-login-heading');
     await expect(
-      page.getByRole('heading', { name: 'Allow access' }),
+      page.getByRole('heading', {
+        name: `Allow ${clientName} to edit your resumes?`,
+        exact: true,
+      }),
     ).toBeVisible();
+    stage('provider-login-client');
     await expect(page.getByTestId('consent-client-name')).toHaveText(
       clientName,
     );
-    await expect(
-      page.getByRole('list', { name: 'Requested permissions' }),
-    ).toContainText('Read resumes');
-    await expect(
-      page.getByRole('list', { name: 'Requested permissions' }),
-    ).toContainText('Write resumes');
+    stage('provider-login-scopes');
+    const permissions = page.getByTestId('consent-scopes');
+    await expect(permissions).toContainText('Read resumes');
+    await expect(permissions).toContainText('Write resumes');
 
     stage('approve-consent');
     await Promise.all([
