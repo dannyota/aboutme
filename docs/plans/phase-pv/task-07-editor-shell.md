@@ -83,7 +83,7 @@ Owned paths:
 - `apps/web/app/components/app/AppShell.vue`, `AccountMenu.vue`
 - `apps/web/app/app.vue` (route list only)
 - `apps/web/test/editor/editor-shell.test.ts`,
-  `test/editor/editor-preview.test.ts`, `test/app-chrome.test.ts`
+  `test/editor/editor-preview.test.ts`, `test/app/app-shell.test.ts`
 
 Acceptance: `AC-UI-011`, `AC-UI-004` and `AC-UI-005` re-proof.
 
@@ -91,8 +91,8 @@ Run:
 
 ```sh
 cd apps/web
-npx vitest run test/editor/editor-shell.test.ts test/editor/editor-preview.test.ts test/app-chrome.test.ts
-npx eslint app/components/editor/EditorShell.vue app/components/editor/EditorPreview.vue app/components/app app/app.vue test/editor test/app-chrome.test.ts
+npx vitest run test/editor/editor-shell.test.ts test/editor/editor-preview.test.ts test/app/app-shell.test.ts
+npx eslint app/components/editor/EditorShell.vue app/components/editor/EditorPreview.vue app/components/app app/app.vue test/editor test/app/app-shell.test.ts
 npx vue-tsc --noEmit
 ```
 

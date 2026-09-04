@@ -2,7 +2,7 @@
 
 ## Contract
 
-Bring the 46 commits of `codex/phase-pu` (`0187aff..a4c9d21`) onto current
+Bring the 46 commits of `codex/phase-pu` (`0187aff^..a4c9d21`) onto current
 `main` as one reviewed sequence, then give the result the fresh review PU never
 had on `main`. Integration owner only; no worker touches Git.
 

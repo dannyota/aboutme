@@ -57,10 +57,11 @@ description.
 
 ### Theme at server render
 
-`app.vue` sets `data-theme` on `<html>` from the theme cookie at server render
-for every route where `isAppSurface` is true (PU's `useTheme` already reads the
-cookie on the client; add the `useHead({ htmlAttrs })` read on the server). Add
-`/app/settings/**` to `isAppSurface` if the rebased `app.vue` lacks it.
+`app.vue` sets `data-theme` on `<html>` from the `aboutme-theme` cookie at
+server render for every route where `isAppSurface` is true (PU's `useTheme`
+already reads the cookie on the client; add the `useHead({ htmlAttrs })` read on
+the server). Add `/app/settings/**` to `isAppSurface` if the rebased `app.vue`
+lacks it.
 
 Strings held: "Signed-in devices", "This device", "Log out", "Revoke", "Log out
 everywhere", "Change password", "You have a password.", and every string
@@ -78,7 +79,7 @@ Chrome, empty string, a 4 KB string, and non-ASCII. Write
 an injected `now`, "This device" only on the current row, one Log out and n−1
 Revoke buttons, the raw UA in `title`; the agents section renders only when
 `agentAccess`; the providers section only when `providerLogin`; a server render
-with cookie `theme=dark` yields `data-theme="dark"` on `<html>`.
+with cookie `aboutme-theme=dark` yields `data-theme="dark"` on `<html>`.
 
 ## Ownership and checks
 
