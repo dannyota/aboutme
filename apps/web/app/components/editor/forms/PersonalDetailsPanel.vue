@@ -15,6 +15,12 @@ const props = defineProps<{
 }>();
 
 const panel = ref<{ $el?: HTMLElement } | null>(null);
+const contactList = ref<{
+  focusField?: (
+    index: number,
+    field: ContactField,
+  ) => Promise<void>;
+} | null>(null);
 const issues = computed(() =>
   Object.values(props.actions.record.value?.issues ?? {}).flat(),
 );
@@ -64,7 +70,7 @@ function issueFor(field: 'fullName' | 'headline'): string | undefined {
   return issue === undefined ? undefined : messageForCode(issue.code);
 }
 
-function focusField(path: string): void {
+async function focusField(path: string): Promise<void> {
   const textField = textFieldForIssue(path);
   if (textField !== undefined) {
     panel.value?.$el?.querySelector<HTMLElement>(
@@ -74,6 +80,13 @@ function focusField(path: string): void {
   }
   const contactField = contactFieldForIssue(path);
   if (contactField === undefined) return;
+  if (contactList.value?.focusField !== undefined) {
+    await contactList.value.focusField(
+      contactField.index,
+      contactField.field,
+    );
+    return;
+  }
   panel.value?.$el?.querySelector<HTMLElement>(
     `[data-detail-index="${contactField.index}"] `
     + `[data-detail-${contactField.field}]`,
@@ -169,6 +182,7 @@ function messageForCode(code: string): string {
       Contact details
     </h3>
     <ContactList
+      ref="contactList"
       :details="personal.details"
       :create-entity-id="actions.createEntityId"
       @change="editDetails"

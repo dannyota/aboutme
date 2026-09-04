@@ -60,8 +60,11 @@ describe('PersonalDetailsPanel', () => {
     await wrapper.get('[data-detail-value]').trigger('blur');
     await wrapper.get('[data-action="add-detail"]').trigger('click');
     await wrapper
-      .findAll('[data-action="move-detail-up"]')[1]
-      ?.trigger('click');
+      .get('[aria-label="More options for contact detail 2"]')
+      .trigger('click');
+    document.body.querySelector<HTMLElement>('[data-action="move-detail-up"]')
+      ?.click();
+    await wrapper.vm.$nextTick();
 
     expect(edit).toHaveBeenLastCalledWith({
       kind: 'personalField',
@@ -85,6 +88,82 @@ describe('PersonalDetailsPanel', () => {
       },
     });
   });
+
+  it(
+    'uses the contact overflow menu for label, hide, move, and remove',
+    async () => {
+      const wrapper = mount(ContactList, {
+        props: {
+          createEntityId: () => 'detail-3',
+          details: [
+            { id: 'detail-1', type: 'email', value: 'a@b.c', isHidden: false },
+            { id: 'detail-2', type: 'phone', value: '123', isHidden: false },
+          ],
+        },
+        attachTo: document.body,
+      });
+
+      await wrapper.get('[aria-label="More options for contact detail 1"]')
+        .trigger('click');
+      expect(document.body.querySelector('[data-action="move-detail-up"]'))
+        .toBeTruthy();
+      expect(document.body.querySelector('[data-action="move-detail-down"]'))
+        .toBeTruthy();
+      expect(document.body.querySelector('[data-action="remove-detail"]'))
+        .toBeTruthy();
+      document.body.querySelector<HTMLElement>('[role="menuitem"]')?.click();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find('[data-detail-label]').exists()).toBe(true);
+
+      await wrapper.get('[data-detail-label]').setValue('Work');
+      await wrapper.get('[data-detail-label]').trigger('blur');
+      expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([
+        {
+          id: 'detail-1', type: 'email', value: 'a@b.c', label: 'Work',
+          isHidden: false,
+        },
+        { id: 'detail-2', type: 'phone', value: '123', isHidden: false },
+      ]);
+
+      await wrapper.get('[aria-label="More options for contact detail 1"]')
+        .trigger('click');
+      const hide = document.body.querySelector('[data-detail-hide]');
+      expect(hide?.getAttribute('role')).toBe('menuitemcheckbox');
+      (hide as HTMLElement | null)?.click();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([
+        {
+          id: 'detail-1', type: 'email', value: 'a@b.c', label: 'Work',
+          isHidden: true,
+        },
+        { id: 'detail-2', type: 'phone', value: '123', isHidden: false },
+      ]);
+
+      document.body.querySelector<HTMLElement>(
+        '[data-action="move-detail-down"]',
+      )
+        ?.click();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([
+        { id: 'detail-2', type: 'phone', value: '123', isHidden: false },
+        {
+          id: 'detail-1', type: 'email', value: 'a@b.c', label: 'Work',
+          isHidden: true,
+        },
+      ]);
+
+      await wrapper
+        .get('[aria-label="More options for contact detail 2"]')
+        .trigger('click');
+      document.body.querySelector<HTMLElement>('[data-action="remove-detail"]')
+        ?.click();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([
+        { id: 'detail-2', type: 'phone', value: '123', isHidden: false },
+      ]);
+      wrapper.unmount();
+    },
+  );
 
   it('allocates one immutable contact ID at Add', async () => {
     const edit = vi.fn();
@@ -145,6 +224,11 @@ describe('PersonalDetailsPanel', () => {
         props: { actions: actionsFor(edit), personal },
       });
 
+      await wrapper
+        .get('[aria-label="More options for contact detail 1"]')
+        .trigger('click');
+      await document.body.querySelector('[data-action="set-detail-label"]')
+        ?.dispatchEvent(new Event('click', { bubbles: true }));
       await wrapper.get('[data-detail-label]').setValue('Site');
       await wrapper.get('[data-detail-label]').trigger('blur');
 
@@ -235,6 +319,11 @@ describe('PersonalDetailsPanel', () => {
         },
       });
 
+      await wrapper
+        .get('[aria-label="More options for contact detail 1"]')
+        .trigger('click');
+      await document.body.querySelector('[data-action="set-detail-label"]')
+        ?.dispatchEvent(new Event('click', { bubbles: true }));
       await wrapper.get('[data-detail-label]').trigger('focus');
       await wrapper.get('[data-detail-label]').trigger('blur');
 
@@ -253,6 +342,11 @@ describe('PersonalDetailsPanel', () => {
       },
     });
 
+    await wrapper
+      .get('[aria-label="More options for contact detail 1"]')
+      .trigger('click');
+    await document.body.querySelector('[data-action="set-detail-label"]')
+      ?.dispatchEvent(new Event('click', { bubbles: true }));
     const label = wrapper.get('[data-detail-label]');
     await label.setValue('');
     await label.trigger('blur');
@@ -260,11 +354,14 @@ describe('PersonalDetailsPanel', () => {
       id: 'detail-1', type: 'email', value: 'a@b.c', isHidden: false,
     }]);
 
-    const hidden = wrapper.get('[data-detail-is-hidden]');
-    expect(hidden.attributes('role')).toBe('checkbox');
-    expect(hidden.attributes('aria-checked')).toBe('false');
-    await hidden.trigger('click');
-    expect(hidden.attributes('aria-checked')).toBe('true');
+    await wrapper
+      .get('[aria-label="More options for contact detail 1"]')
+      .trigger('click');
+    const hidden = document.body.querySelector('[data-detail-hide]');
+    expect(hidden?.getAttribute('role')).toBe('menuitemcheckbox');
+    expect(hidden?.getAttribute('aria-checked')).toBe('false');
+    await hidden?.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(hidden?.getAttribute('aria-checked')).toBe('true');
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([{
       id: 'detail-1', type: 'email', value: 'a@b.c', isHidden: true,
     }]);
@@ -352,10 +449,37 @@ describe('PersonalDetailsPanel', () => {
     },
   );
 
+  it('reveals and focuses a hidden contact label issue', async () => {
+    const wrapper = mount(PersonalDetailsPanel, {
+      props: {
+        actions: actionsFor(vi.fn(), {
+          contact: [{
+            path: 'personalDetails.details[0].label', code: 'format',
+          }],
+        }),
+        personal: {
+          details: [{
+            id: 'detail-1', type: 'email', value: '', isHidden: false,
+          }],
+        },
+      },
+      attachTo: document.body,
+    });
+
+    expect(wrapper.find('[data-detail-label]').exists()).toBe(false);
+    await wrapper
+      .get('[data-issue="personalDetails.details[0].label"]')
+      .trigger('click');
+
+    expect(wrapper.find('[data-detail-label]').exists()).toBe(true);
+    expect(document.activeElement?.matches('[data-detail-label]')).toBe(true);
+    wrapper.unmount();
+  });
+
   it.each([
     ['label', '[data-detail-label]'],
     ['type', '[data-detail-type]'],
-    ['isHidden', '[data-detail-is-hidden]'],
+    ['isHidden', '[data-detail-hide]'],
   ] as const)(
     'focuses the mapped contact %s control',
     async (field, selector) => {
@@ -374,10 +498,20 @@ describe('PersonalDetailsPanel', () => {
         attachTo: document.body,
       });
 
-      const input = wrapper.get(`[data-detail-index="0"] ${selector}`);
+      if (field === 'label' || field === 'isHidden') {
+        await wrapper
+          .get('[aria-label="More options for contact detail 1"]')
+          .trigger('click');
+        if (field === 'label') {
+          await document.body
+            .querySelector('[data-action="set-detail-label"]')
+            ?.dispatchEvent(new Event('click', { bubbles: true }));
+        }
+        await wrapper.vm.$nextTick();
+      }
       await wrapper.get(`[data-issue="${path}"]`).trigger('click');
 
-      expect(document.activeElement).toBe(input.element);
+      expect(document.activeElement?.matches(selector)).toBe(true);
     },
   );
 

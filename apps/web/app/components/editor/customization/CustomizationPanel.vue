@@ -9,17 +9,10 @@ import type {
 } from '../../../editor/commands';
 import type { JsonValue } from '../../../editor/types';
 import type { ResumeRecord } from '../../../stores/resumes';
-import CheckboxField from '../../app/CheckboxField.vue';
 import FormField from '../../app/FormField.vue';
 import SelectField from '../../app/SelectField.vue';
 import SwitchField from '../../app/SwitchField.vue';
 import { Button } from '../../ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '../../ui/card';
 import { Input } from '../../ui/input';
 import InspectorPanel from '../InspectorPanel.vue';
 import {
@@ -27,6 +20,7 @@ import {
   type CustomizationField,
 } from './fields';
 import ColorField from './ColorField.vue';
+import { enumLabel, FIELD_GROUPS, FIELD_LABELS } from './labels';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -42,46 +36,6 @@ const customization = computed(
   () => record.value?.current.document.customization,
 );
 const issues = computed(() => Object.values(record.value?.issues ?? {}).flat());
-const LABELS: Readonly<Partial<Record<CustomizationSetPath, string>>> = {
-  'font.family': 'Font family',
-  'font.baseSizePx': 'Base size (px)',
-  'spacing.sectionGap': 'Section gap',
-  'spacing.entryGap': 'Entry gap',
-  'spacing.lineHeight': 'Line height',
-  'heading.style': 'Heading style',
-  'heading.showRule': 'Show heading rule',
-  'layout.columns': 'Columns',
-  'layout.surfaceTarget': 'Surface target',
-  'sectionDisplay.skill.style': 'Skill display',
-  'sectionDisplay.language.style': 'Language display',
-  'pageFormat': 'Page format',
-  'dateFormat': 'Date format',
-};
-
-const GROUPS = [
-  { title: 'Typography', fields: ['font.family', 'font.baseSizePx'] },
-  { title: 'Colors', fields: [] },
-  {
-    title: 'Spacing',
-    fields: ['spacing.sectionGap', 'spacing.entryGap', 'spacing.lineHeight'],
-  },
-  {
-    title: 'Headings and header',
-    fields: ['heading.style', 'heading.showRule'],
-  },
-  {
-    title: 'Layout',
-    fields: [
-      'layout.columns',
-      'layout.surfaceTarget',
-      'sectionDisplay.skill.style',
-      'sectionDisplay.language.style',
-      'pageFormat',
-      'dateFormat',
-    ],
-  },
-] as const;
-
 function commit(deltas: readonly CustomizationDelta[]): void {
   props.actions.edit({ kind: 'customization', deltas });
 }
@@ -224,7 +178,15 @@ function localError(path: CustomizationSetPath): string {
 }
 
 function labelFor(path: CustomizationSetPath): string {
-  return LABELS[path] ?? path;
+  return FIELD_LABELS[path];
+}
+
+function isDeferredPath(path: string): boolean {
+  return path === 'spacing.pageMargin.x'
+    || path === 'spacing.pageMargin.y'
+    || path === 'header.align'
+    || path === 'header.detailsLayout'
+    || path === 'header.iconStyle';
 }
 
 function colorValue(path: string): string | undefined {
@@ -265,7 +227,8 @@ function focusIssue(path: string): void {
   if (field === undefined) return;
   const selector = `[data-field="${field}"] input, `
     + `[data-field="${field}"] select, `
-    + `[data-field="${field}"] [role="checkbox"]`;
+    + `[data-field="${field}"] [role="checkbox"], `
+    + `[data-field="${field}"] [role="switch"]`;
   root.value?.querySelector<HTMLElement>(selector)?.focus();
 }
 
@@ -302,32 +265,36 @@ function customizationValue(): Customization | undefined {
     title-id="customization-title"
   >
     <div ref="root">
-      <Card
-        v-for="group in GROUPS"
+      <fieldset
+        v-for="group in FIELD_GROUPS"
         :key="group.title"
+        :data-customization-group="group.title"
+        class="grid gap-4"
       >
-        <CardHeader><CardTitle>{{ group.title }}</CardTitle></CardHeader>
-        <CardContent class="grid gap-4">
+        <legend class="text-sm font-medium">
+          {{ group.title }}
+        </legend>
+        <div class="grid gap-4">
           <template v-if="group.title === 'Colors'">
             <div
               v-for="color in [
-                ['colors.primary', 'Primary color', true],
-                ['colors.text', 'Text color', true],
-                ['colors.background', 'Background color', true],
-                ['colors.accent', 'Accent color', false],
-                ['colors.surface', 'Surface color', false],
+                ['colors.primary', true],
+                ['colors.text', true],
+                ['colors.background', true],
+                ['colors.accent', false],
+                ['colors.surface', false],
               ]"
               :key="color[0]"
               :data-field="color[0]"
             >
               <ColorField
                 :field-id="color[0]"
-                :label="color[1]"
+                :label="labelFor(pathFor(color[0]))"
                 :fallback="color[0] === 'colors.accent'
                   ? customizationValue()?.colors.primary
                   : customizationValue()?.colors.background"
                 :model-value="colorValue(color[0])"
-                :required="color[2]"
+                :required="color[1]"
                 :unset-action="color[0] === 'colors.accent'
                   ? 'unset-accent' : 'unset-surface'"
                 @set="commit([{
@@ -339,51 +306,60 @@ function customizationValue(): Customization | undefined {
           </template>
           <template v-else>
             <template
-              v-for="path in group.fields"
+              v-for="path in group.paths"
               :key="path"
             >
-              <CheckboxField
-                v-if="fieldFor(path)?.kind === 'boolean'"
-                :id="fieldId(path)"
-                :label="labelFor(path)"
-                :model-value="displayValue(path, false) === true"
-                :name="path"
-                @update:model-value="commitBoolean(fieldFor(path)!, $event)"
-              />
-              <SelectField
-                v-else-if="fieldFor(path)?.kind === 'enum'"
-                :id="fieldId(path)"
-                :error="localError(path) || undefined"
-                :label="labelFor(path)"
-                :model-value="typedDisplay(
-                  path, path === 'layout.surfaceTarget' ? 'none' : '',
-                )"
-                :name="path"
-                :options="valuesFor(fieldFor(path)!).map((value) => ({
-                  value, label: String(value),
-                }))"
-                @update:model-value="commitEnum(fieldFor(path)!, $event)"
-              />
-              <FormField
-                v-else
-                :id="fieldId(path)"
-                v-slot="{ id, describedBy, invalid }"
-                :error="localError(path) || undefined"
-                :label="labelFor(path)"
-                :name="path"
-              >
-                <Input
-                  :id="id"
-                  :aria-describedby="describedBy"
-                  :aria-invalid="invalid"
-                  :max="fieldFor(path)?.maximum"
-                  :min="fieldFor(path)?.minimum"
-                  :model-value="typedDisplay(path, 0)"
-                  :step="fieldFor(path)?.kind === 'integer' ? 1 : 'any'"
-                  type="number"
-                  @change="changeField(fieldFor(path)!, $event)"
+              <template v-if="!isDeferredPath(path)">
+                <div
+                  v-if="fieldFor(path)?.kind === 'boolean'"
+                  :data-field="path"
+                >
+                  <SwitchField
+                    :id="fieldId(pathFor(path))"
+                    :label="labelFor(pathFor(path))"
+                    :model-value="displayValue(pathFor(path), false) === true"
+                    @update:model-value="commitBoolean(
+                      fieldFor(path)!, $event,
+                    )"
+                  />
+                </div>
+                <SelectField
+                  v-else-if="fieldFor(path)?.kind === 'enum'"
+                  :id="fieldId(pathFor(path))"
+                  :error="localError(pathFor(path)) || undefined"
+                  :label="labelFor(pathFor(path))"
+                  :model-value="typedDisplay(
+                    pathFor(path),
+                    path === 'layout.surfaceTarget' ? 'none' : '',
+                  )"
+                  :name="path"
+                  :options="valuesFor(fieldFor(path)!).map((value) => ({
+                    value, label: enumLabel(path, value),
+                  }))"
+                  @update:model-value="commitEnum(fieldFor(path)!, $event)"
                 />
-              </FormField>
+                <FormField
+                  v-else
+                  :id="fieldId(pathFor(path))"
+                  v-slot="{ id, describedBy, invalid }"
+                  :error="localError(pathFor(path)) || undefined"
+                  :label="labelFor(pathFor(path))"
+                  :name="path"
+                >
+                  <Input
+                    :id="id"
+                    :aria-describedby="describedBy"
+                    :aria-invalid="invalid"
+                    :max="fieldFor(pathFor(path))?.maximum"
+                    :min="fieldFor(pathFor(path))?.minimum"
+                    :model-value="typedDisplay(pathFor(path), 0)"
+                    :step="fieldFor(pathFor(path))?.kind === 'integer'
+                      ? 1 : 'any'"
+                    type="number"
+                    @change="changeField(fieldFor(pathFor(path))!, $event)"
+                  />
+                </FormField>
+              </template>
             </template>
             <SwitchField
               v-if="group.title === 'Spacing'"
@@ -406,7 +382,8 @@ function customizationValue(): Customization | undefined {
                 v-slot="{ id, describedBy, invalid }"
                 :error="localError(pathFor(path)) || undefined"
                 :label="path.endsWith('.x')
-                  ? 'Horizontal margin' : 'Vertical margin'"
+                  ? labelFor('spacing.pageMargin.x')
+                  : labelFor('spacing.pageMargin.y')"
                 :name="path"
               >
                 <Input
@@ -423,7 +400,7 @@ function customizationValue(): Customization | undefined {
               </FormField>
             </div>
             <SwitchField
-              v-if="group.title === 'Headings and header'"
+              v-if="group.title === 'Headings'"
               data-action="header"
               label="Header"
               :model-value="customizationValue()?.header !== undefined"
@@ -431,7 +408,7 @@ function customizationValue(): Customization | undefined {
                 ? enableHeader() : unsetHeader()"
             />
             <div
-              v-if="group.title === 'Headings and header'
+              v-if="group.title === 'Headings'
                 && customizationValue()?.header !== undefined"
               class="grid gap-4"
             >
@@ -444,10 +421,7 @@ function customizationValue(): Customization | undefined {
                 <SelectField
                   :id="fieldId(pathFor(path))"
                   :error="localError(pathFor(path)) || undefined"
-                  :label="path === 'header.align'
-                    ? 'Header alignment'
-                    : path === 'header.detailsLayout'
-                      ? 'Contact layout' : 'Icon style'"
+                  :label="labelFor(pathFor(path))"
                   :model-value="typedDisplay(
                     pathFor(path), path === 'header.align' ? 'left'
                       : path === 'header.detailsLayout' ? 'inline' : 'outline',
@@ -455,7 +429,7 @@ function customizationValue(): Customization | undefined {
                   :name="path"
                   :options="valuesFor(fieldFor(pathFor(path))!).map(
                     (value) => ({
-                      value, label: String(value),
+                      value, label: enumLabel(path, value),
                     }))"
                   @update:model-value="commitEnum(
                     fieldFor(pathFor(path))!, $event,
@@ -474,8 +448,8 @@ function customizationValue(): Customization | undefined {
               Remove surface target
             </Button>
           </template>
-        </CardContent>
-      </Card>
+        </div>
+      </fieldset>
     </div>
 
     <ul v-if="issues.length > 0">

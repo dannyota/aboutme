@@ -136,9 +136,44 @@ describe('CustomizationPanel', () => {
   it('labels scalar fields for people, not paths', () => {
     const { wrapper } = mountPanel();
     expect(wrapper.get('[data-field="font.family"] label').text()).toBe(
-      'Font family',
+      'Font',
     );
     expect(wrapper.text()).not.toContain('font.baseSizePx');
+  });
+
+  it('groups customization controls and humanizes enum options', () => {
+    const wrapper = mount(CustomizationPanel, {
+      props: {
+        actions: actionsFor(vi.fn()),
+        record: recordFor({ font: { family: 'be-vietnam-pro' } }),
+      },
+    });
+    expect(wrapper.findAll('[data-customization-group]')).toHaveLength(5);
+    expect(wrapper.find('[data-customization-group="Type"]').text())
+      .toContain('Type');
+    expect(wrapper.find('[data-customization-group="Spacing"]').text())
+      .toContain('Spacing');
+    expect(wrapper.find('[data-customization-group="Headings"]').text())
+      .toContain('Headings');
+    expect(wrapper.find('[data-customization-group="Layout"]').text())
+      .toContain('Layout');
+    expect(wrapper.find('[data-customization-group="Colors"]').text())
+      .toContain('Colors');
+
+    const family = wrapper.get('[data-field="font.family"]');
+    const familySelect = family.get('[data-field-input]').element as
+      HTMLSelectElement;
+    expect(familySelect.selectedOptions[0]?.textContent).toBe(
+      'Be Vietnam Pro',
+    );
+    expect(familySelect.selectedOptions[0]?.value).toBe('be-vietnam-pro');
+    const barOption = Array.from(
+      (wrapper.get(
+        '[data-field="sectionDisplay.skill.style"] [data-field-input]',
+      ).element as HTMLSelectElement).options,
+    ).find((option) => option.value === 'bar');
+    expect(barOption?.textContent)
+      .toBe('Bar');
   });
 
   it('rejects an unknown enum with a linked local error', async () => {
@@ -179,7 +214,7 @@ describe('CustomizationPanel', () => {
         .get('[data-issue="/customization/heading/showRule"]')
         .trigger('click');
       expect(document.activeElement).toBe(
-        wrapper.get('[data-field="heading.showRule"] [role="checkbox"]')
+        wrapper.get('[data-field="heading.showRule"] [role="switch"]')
           .element,
       );
       const edit = vi.fn();
@@ -218,7 +253,10 @@ describe('CustomizationPanel', () => {
       });
       const next = nextValue(field, valueAt(record, field.path));
       const control = field.kind === 'boolean'
-        ? wrapper.get(`[data-field="${field.path}"] [role="checkbox"]`)
+        ? wrapper.get(
+            `[data-field="${field.path}"] [role="checkbox"], `
+            + `[data-field="${field.path}"] [role="switch"]`,
+          )
         : wrapper.get(
             `[data-field="${field.path}"] input, `
             + `[data-field="${field.path}"] select`,
