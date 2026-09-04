@@ -199,12 +199,16 @@ describe('EditorShell', () => {
       });
       const editor = wrapper.get('[data-responsive-region="editor"]');
       const preview = wrapper.get('[data-responsive-region="preview"]');
+      const rail = wrapper.get('[data-region="app-rail"]');
       await wrapper.get('[data-action="show-preview"]').trigger('click');
 
       expect(editor.exists()).toBe(true);
       expect(preview.exists()).toBe(true);
       expect(editor.attributes('data-narrow-active')).toBe('false');
       expect(preview.attributes('data-narrow-active')).toBe('true');
+      expect(rail.classes()).toContain(
+        'max-[72rem]:data-[narrow-active=false]:opacity-0',
+      );
     },
   );
 
