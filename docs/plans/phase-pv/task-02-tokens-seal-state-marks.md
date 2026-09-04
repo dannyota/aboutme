@@ -19,8 +19,11 @@ every shadcn semantic name the primitives read (`--background`, `--foreground`,
 `--positive`, `--positive-foreground`, and `--chart-1` through `--chart-5`. In
 `@theme inline` set
 `--font-sans: 'Be Vietnam Pro', 'Inter', system-ui, sans-serif` and map
-`--color-seal`, `--color-seal-foreground`, `--shadow-paper`, and the two radii.
-`--muted` equals `--secondary`.
+`--color-seal` and `--color-seal-foreground`. Keep `--shadow-paper`,
+`--radius-sheet`, and `--radius-dialog` as live semantic properties in the light
+and dark blocks. Do not self-alias those names in `@theme inline`; consumers use
+arbitrary-value utilities such as `shadow-[var(--shadow-paper)]`. `--muted`
+equals `--secondary`.
 
 Add the type scale as `--text-xs` 0.75rem, `--text-sm` 0.8125rem, `--text-base`
 0.875rem, `--text-md` 1rem, `--text-lg` 1.25rem, `--text-xl` 1.5rem,
@@ -51,7 +54,8 @@ strokes (2 px and 1 px) in `currentColor`, ring text on a `<textPath>` reading
 group rotated by `rotate`. `mark`: 20 px viewBox, one filled circle and a 2 px
 check path in `--seal-foreground`, no text. Color comes from
 `color: var(--seal)` on the root; the component sets nothing else. Fonts inherit
-the chrome family.
+the chrome family. Add stable data hooks for the two rings, center text, and
+check path so tests do not depend on SVG tag order.
 
 ### `apps/web/app/components/app/StateMark.vue`
 
@@ -69,8 +73,9 @@ with `aria-live="polite"`; `failed` "Save failed" in `text-destructive` with
 `` `aboutme.vn${link}` `` as a link to `link`. Text color is
 `--muted-foreground` except `failed`. Replace `SaveStatus.vue` with a re-export
 of `StateMark` mapping the editor's `saveState` (`'idle' | 'saved'` to `saved`,
-`'saving'` to `saving`, `'failed'` to `failed`) so existing shell tests keep
-passing.
+`'saving'` to `saving`, `'dirty'` to `draft`, and
+`'offline' | 'error' | 'conflict' | 'session-lost'` to `failed`) so existing
+shell tests keep passing.
 
 ### Fonts
 
@@ -89,7 +94,8 @@ in the design table with its exact value in both blocks, the absence of
 the `aria-label`; `mark` renders no text and has the label; `rotate` defaults to
 `-8`; hostile link text renders as text. Write `test/app/state-mark.test.ts`:
 each state's text, `aria-live` on `saving`, `role="alert"` on `failed`, the seal
-mark and link on `public`, and that `SaveStatus` maps the three editor states.
+mark and link on `public`, and that `SaveStatus` maps every current editor
+state.
 
 Adversarial: the dark-sheet case from
 [`adversarial-coverage.md`](adversarial-coverage.md) (render `ResumeDocument`
@@ -114,7 +120,8 @@ Run:
 ```sh
 cd apps/web
 npx vitest run test/app/theme.test.ts test/app/seal.test.ts test/app/state-mark.test.ts test/renderer
-npx eslint app/assets app/components/app app/components/editor/SaveStatus.vue test/app
+npx prettier --check app/assets/css/theme.css
+npx eslint app/components/app app/components/editor/SaveStatus.vue app/components/ui/button/index.ts test/app
 npx vue-tsc --noEmit
 ```
 
