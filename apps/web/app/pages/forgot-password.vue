@@ -8,7 +8,6 @@
  * email is registered.
  */
 import { usePasswordAuth } from '../composables/usePasswordAuth';
-import AuthCard from '@/components/auth/AuthCard.vue';
 import FormField from '@/components/app/FormField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
@@ -41,12 +40,22 @@ async function onSubmit() {
 </script>
 
 <template>
-  <AuthCard
-    description="Enter your email to receive a reset link if an account exists."
-    title="Forgot password"
+  <main
+    class="mx-auto w-full max-w-[26rem] px-6 py-16"
+    data-testid="forgot-password-page"
   >
+    <h1
+      class="border-b pb-4 text-xl font-semibold"
+      data-page-title
+    >
+      Forgot password
+    </h1>
+    <p class="mt-4 text-base text-muted-foreground">
+      Enter your email to receive a reset link if an account exists.
+    </p>
     <StatusBanner
       v-if="errorMessage"
+      class="mt-6"
       kind="error"
       testid="forgot-error"
     >
@@ -54,6 +63,7 @@ async function onSubmit() {
     </StatusBanner>
     <StatusBanner
       v-if="success"
+      class="mt-6"
       kind="success"
       testid="forgot-success"
     >
@@ -61,7 +71,7 @@ async function onSubmit() {
     </StatusBanner>
     <form
       v-else
-      class="grid gap-4"
+      class="mt-8 grid gap-6"
       data-testid="forgot-form"
       novalidate
       @submit.prevent="onSubmit"
@@ -81,20 +91,20 @@ async function onSubmit() {
         />
       </FormField>
       <Button
-        class="mt-1 w-full"
+        class="h-9 w-full"
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? "Sending…" : "Send reset link" }}
+        {{ pending ? 'Sending…' : 'Send reset link' }}
       </Button>
     </form>
-    <template #footer>
+    <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
         to="/login"
       >
         Back to sign in
       </NuxtLink>
-    </template>
-  </AuthCard>
+    </nav>
+  </main>
 </template>

@@ -15,11 +15,10 @@
  * The password form sends closed copy for every failure and never retains
  * the password after a successful login.
  */
-import AuthCard from '@/components/auth/AuthCard.vue';
 import FormField from '@/components/app/FormField.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -61,14 +60,16 @@ const providers = [
 ] as const;
 
 const errorMessages: Record<string, string> = {
-  auth_failed: 'Something went wrong while signing you in. Please try '
-    + 'again.',
-  email_not_verified: 'Your email address must be verified with your '
+  auth_failed:
+    'Something went wrong while signing you in. Please try ' + 'again.',
+  email_not_verified:
+    'Your email address must be verified with your '
     + 'provider before you can sign in.',
   cancelled: 'Sign-in was cancelled.',
   // Deliberately does not name the existing provider — naming it hands an
   // attacker a targeted-phishing hint (spec: OAuth email-collision rule).
-  email_already_registered: 'An account with this email already '
+  email_already_registered:
+    'An account with this email already '
     + 'exists. Sign in with the provider you used originally.',
 };
 
@@ -130,12 +131,22 @@ async function onSubmit() {
 </script>
 
 <template>
-  <AuthCard
-    description="Use the email and password for your account."
-    title="Sign in"
+  <main
+    class="mx-auto w-full max-w-[26rem] px-6 py-16"
+    data-testid="login-page"
   >
+    <h1
+      class="border-b pb-4 text-xl font-semibold"
+      data-page-title
+    >
+      Sign in
+    </h1>
+    <p class="mt-4 text-base text-muted-foreground">
+      Use the email and password for your account.
+    </p>
     <StatusBanner
       v-if="errorMessage"
+      class="mt-6"
       kind="error"
       testid="login-error"
     >
@@ -143,13 +154,14 @@ async function onSubmit() {
     </StatusBanner>
     <StatusBanner
       v-if="formError"
+      class="mt-6"
       kind="error"
       testid="login-form-error"
     >
       {{ formError }}
     </StatusBanner>
     <form
-      class="grid gap-4"
+      class="mt-8 grid gap-6"
       data-testid="login-form"
       novalidate
       @submit.prevent="onSubmit"
@@ -175,44 +187,45 @@ async function onSubmit() {
         label="Password"
       />
       <Button
-        class="mt-1 w-full"
+        class="h-9 w-full"
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? "Signing in…" : "Sign in" }}
+        {{ pending ? 'Signing in…' : 'Sign in' }}
       </Button>
     </form>
     <template v-if="providerLogin">
       <div
-        class="flex items-center gap-3 text-xs
-          text-muted-foreground"
+        class="mt-8 flex items-center gap-3 text-xs text-muted-foreground"
         data-testid="login-divider"
       >
         <Separator class="flex-1" />
         or
         <Separator class="flex-1" />
       </div>
-      <ul class="grid gap-2">
+      <ul class="mt-4 grid gap-2">
         <li
           v-for="provider in providers"
           :key="provider.id"
         >
-          <a
-            :class="buttonVariants({ variant: 'outline', class: 'w-full' })"
+          <Button
+            as="a"
+            class="w-full"
             :href="
               explicitNext
-                ? `/api/v1/auth/${provider.id}/start?next=${
-                  encodeURIComponent(explicitNext)
-                }`
+                ? `/api/v1/auth/${provider.id}/start?next=${encodeURIComponent(
+                  explicitNext,
+                )}`
                 : `/api/v1/auth/${provider.id}/start`
             "
+            variant="outline"
           >
             {{ provider.label }}
-          </a>
+          </Button>
         </li>
       </ul>
     </template>
-    <template #footer>
+    <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
         to="/forgot-password"
@@ -225,6 +238,6 @@ async function onSubmit() {
       >
         Create account
       </NuxtLink>
-    </template>
-  </AuthCard>
+    </nav>
+  </main>
 </template>

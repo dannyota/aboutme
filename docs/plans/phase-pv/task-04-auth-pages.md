@@ -30,7 +30,7 @@ Rules:
   input, `aria-label="Show password"` / `"Hide password"`; the visible text
   "Show" is replaced by the label. Hook change: tests that click by text "Show"
   now click by `aria-label`.
-- Success states (`auth-success`) become `StatusBanner tone="success"` in
+- Success states (`auth-success`) become `StatusBanner kind="success"` in
   `--foreground` with a pencil tick, not green.
 - The provider block on `login.vue` keeps its `v-if="providerLogin"` gate and
   renders providers as `Button variant="outline"` links.

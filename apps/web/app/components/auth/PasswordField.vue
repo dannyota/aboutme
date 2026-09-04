@@ -5,7 +5,7 @@
  *
  * The caller supplies `autocomplete` (`current-password` or `new-password`)
  * so password managers see the right intent. The show/hide toggle reports
- * `aria-pressed` and a labelled text so its state is accessible. Pasting and
+ * `aria-pressed` and a labelled icon so its state is accessible. Pasting and
  * autofill are native — no `@paste.prevent`, no re-typing shims. The model is
  * bound with Vue's native `v-model`, which already defers updates across IME
  * composition, so there is no composition rewrite here.
@@ -14,7 +14,8 @@
  * (for a page's submit-time check) but never submitted by any parent, and no
  * strength score or character-class hint is ever rendered.
  */
-import { Button } from '@/components/ui/button';
+import { Eye, EyeOff } from '@lucide/vue';
+import IconButton from '@/components/app/IconButton.vue';
 import FormField from '@/components/app/FormField.vue';
 import { Input } from '@/components/ui/input';
 
@@ -38,6 +39,9 @@ const confirmValue = ref('');
 const visible = ref(false);
 
 const inputType = computed(() => (visible.value ? 'text' : 'password'));
+const visibilityLabel = computed(
+  () => `${visible.value ? 'Hide' : 'Show'} ${props.label.toLowerCase()}`,
+);
 
 const confirmMismatch = computed(
   () =>
@@ -59,25 +63,33 @@ function toggleVisibility(): void {
     v-slot="{ id: fieldId, describedBy, invalid }"
     :label="label"
   >
-    <div class="flex gap-2">
+    <div class="relative">
       <Input
         :id="fieldId"
         v-model="model"
         :aria-describedby="describedBy"
         :aria-invalid="invalid"
         :autocomplete="autocomplete"
+        class="pr-10"
         :type="inputType"
       />
-      <Button
-        size="sm"
-        type="button"
+      <IconButton
+        class="absolute right-0 top-1/2 -translate-y-1/2"
+        :label="visibilityLabel"
+        :pressed="visible"
+        size="icon"
         variant="ghost"
-        :aria-label="visible ? `Hide ${label}` : `Show ${label}`"
-        :aria-pressed="visible"
         @click="toggleVisibility"
       >
-        {{ visible ? "Hide" : "Show" }}
-      </Button>
+        <EyeOff
+          v-if="visible"
+          aria-hidden="true"
+        />
+        <Eye
+          v-else
+          aria-hidden="true"
+        />
+      </IconButton>
     </div>
 
     <template v-if="confirm">

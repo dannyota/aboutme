@@ -103,14 +103,22 @@ describe('login.vue', () => {
     );
   });
 
-  it('composes the auth card, shared banner, and generated inputs',
+  it('composes the auth page, shared banner, and generated inputs',
     async () => {
       const wrapper = await mountSuspended(LoginPage, {
         route: '/login?error=cancelled',
       });
       await flushPromises();
 
-      expect(wrapper.find('[data-slot="card"]').exists()).toBe(true);
+      const main = wrapper.get('[data-testid="login-page"]');
+      expect(main.find('[data-slot="card"]').exists()).toBe(false);
+      const title = main.get('[data-page-title]');
+      const form = main.get('[data-testid="login-form"]');
+      expect(title.text()).toBe('Sign in');
+      expect(
+        (title.element.compareDocumentPosition(form.element)
+          & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      ).toBe(true);
       expect(
         wrapper.get('[data-testid="login-error"]').attributes('role'),
       ).toBe(
@@ -121,6 +129,7 @@ describe('login.vue', () => {
           .findAll('[data-slot="input"]')
           .every((input) => input.attributes('id') !== undefined),
       ).toBe(true);
+      expect(wrapper.get('[aria-label="Show password"]').exists()).toBe(true);
     });
 
   it('does not resolve a prototype property as a valid error code',
