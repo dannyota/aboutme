@@ -1,6 +1,6 @@
-import { mount, type VueWrapper } from '@vue/test-utils';
-import { computed, ref, type Ref } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils';
+import { computed, nextTick, ref, type Ref } from 'vue';
 
 import PublishDialog from '../../app/components/editor/PublishDialog.vue';
 import type {
@@ -13,49 +13,114 @@ import type {
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
-describe('PublishDialog', () => {
-  it('renders exactly the three product choices and both disclosures', () => {
-    const record = editorRecord();
-    const { actions } = actionsFor(record);
-    const wrapper = mountDialog(record, actions);
+const mounted: VueWrapper[] = [];
 
-    const choices = wrapper.get('fieldset').findAll('input');
-    expect(choices).toHaveLength(3);
-    expect(wrapper.get('fieldset').text()).toContain('Public resume');
-    expect(wrapper.get('fieldset').text()).toContain('PDF download');
-    expect(wrapper.get('fieldset').text()).toContain('SEO and GEO');
-    expect(wrapper.text()).toContain(
-      'Public resumes may be delivered through a global '
-      + 'content-delivery network.',
-    );
-    expect(wrapper.text()).toContain(
-      'SEO and GEO allow search crawlers and AI answer engines to discover '
-      + 'and reuse public resume content.',
-    );
-  });
+afterEach(() => {
+  for (const wrapper of mounted.splice(0)) wrapper.unmount();
+});
+
+class DialogHarness {
+  constructor(
+    readonly component: VueWrapper,
+    private element: Element,
+  ) {}
+
+  private root(): DOMWrapper<Element> {
+    if (!this.element.isConnected) {
+      const dialogs = document.body.querySelectorAll('[role="dialog"]');
+      const latest = dialogs.item(dialogs.length - 1);
+      if (latest === null) throw new Error('publish dialog is not mounted');
+      this.element = latest;
+    }
+    return new DOMWrapper(this.element);
+  }
+
+  get(selector: string, options?: { text: string }) {
+    if (options === undefined) {
+      const root = this.root();
+      if (root.element.matches(selector)) return root;
+      return root.get(selector);
+    }
+    const match = this.root().findAll(selector)
+      .find((element) => element.text() === options.text);
+    if (match === undefined) throw new Error(`Unable to get ${options.text}`);
+    return match;
+  }
+
+  find(selector: string) {
+    return this.root().find(selector);
+  }
+
+  findAll(selector: string) {
+    return this.root().findAll(selector);
+  }
+
+  text(): string {
+    return this.root().text();
+  }
+
+  setProps(props: Record<string, unknown>) {
+    return this.component.setProps(props);
+  }
+
+  emitted(name: string) {
+    return this.component.emitted(name);
+  }
+
+  get vm() {
+    return this.component.vm;
+  }
+
+  unmount(): void {
+    this.component.unmount();
+  }
+}
+
+function dialog(): DOMWrapper<Element> {
+  const element = document.body.querySelector('[role="dialog"]');
+  if (element === null) throw new Error('publish dialog is not mounted');
+  return new DOMWrapper(element);
+}
+
+describe('PublishDialog', () => {
+  it('renders exactly the three product choices and both disclosures',
+    async () => {
+      const record = editorRecord();
+      const { actions } = actionsFor(record);
+      await mountDialog(record, actions);
+
+      const choices = dialog().findAll('[role="switch"]');
+      expect(choices).toHaveLength(3);
+      expect(dialog().text()).toContain('Public resume');
+      expect(dialog().text()).toContain('PDF download');
+      expect(dialog().text()).toContain('SEO and GEO');
+      expect(dialog().text()).toContain(
+        'Public resumes may be delivered through a global '
+        + 'content-delivery network.',
+      );
+      expect(dialog().text()).toContain(
+        'SEO and GEO allow search crawlers and AI answer engines to discover '
+        + 'and reuse public resume content.',
+      );
+    });
 
   it('initializes never-published and canonical publication metadata',
     async () => {
       const neverPublished = editorRecord();
       const never = actionsFor(neverPublished);
-      const wrapper = mountDialog(neverPublished, never.actions);
+      const wrapper = await mountDialog(neverPublished, never.actions);
       expect(
-        (wrapper.get('[data-action="publish-live"]')
-          .element as HTMLInputElement)
-          .checked,
-      ).toBe(false);
+        wrapper.get('[data-action="publish-live"]')
+          .attributes('aria-checked'),
+      ).toBe('false');
       expect(
-        (
-          wrapper.get('[data-action="publish-download"]')
-            .element as HTMLInputElement
-        ).checked,
-      ).toBe(false);
+        wrapper.get('[data-action="publish-download"]')
+          .attributes('aria-checked'),
+      ).toBe('false');
       expect(
-        (
-          wrapper.get('[data-action="publish-seo-geo"]')
-            .element as HTMLInputElement
-        ).checked,
-      ).toBe(false);
+        wrapper.get('[data-action="publish-seo-geo"]')
+          .attributes('aria-checked'),
+      ).toBe('false');
 
       const published = editorRecord({
         live: true,
@@ -71,22 +136,17 @@ describe('PublishDialog', () => {
         actions: existing.actions,
       });
       expect(
-        (wrapper.get('[data-action="publish-live"]')
-          .element as HTMLInputElement)
-          .checked,
-      ).toBe(true);
+        wrapper.get('[data-action="publish-live"]')
+          .attributes('aria-checked'),
+      ).toBe('true');
       expect(
-        (
-          wrapper.get('[data-action="publish-download"]')
-            .element as HTMLInputElement
-        ).checked,
-      ).toBe(true);
+        wrapper.get('[data-action="publish-download"]')
+          .attributes('aria-checked'),
+      ).toBe('true');
       expect(
-        (
-          wrapper.get('[data-action="publish-seo-geo"]')
-            .element as HTMLInputElement
-        ).checked,
-      ).toBe(true);
+        wrapper.get('[data-action="publish-seo-geo"]')
+          .attributes('aria-checked'),
+      ).toBe('true');
       expect(
         (wrapper.get('[data-action="publish-slug"]')
           .element as HTMLInputElement)
@@ -103,14 +163,13 @@ describe('PublishDialog', () => {
         slug: 'ada-lovelace',
       });
       const { actions } = actionsFor(record);
-      const wrapper = mountDialog(record, actions);
-      await wrapper.get('[data-action="publish-live"]').setValue(false);
+      const wrapper = await mountDialog(record, actions);
+      await wrapper.get('[data-action="publish-live"]').trigger('click');
 
       for (const action of ['publish-download', 'publish-seo-geo']) {
-        const input = wrapper.get(`[data-action="${action}"]`)
-          .element as HTMLInputElement;
-        expect(input.checked).toBe(false);
-        expect(input.disabled).toBe(true);
+        const input = wrapper.get(`[data-action="${action}"]`);
+        expect(input.attributes('aria-checked')).toBe('false');
+        expect(input.attributes('disabled')).toBeDefined();
       }
     });
 
@@ -118,16 +177,19 @@ describe('PublishDialog', () => {
     async () => {
       const privateRecord = editorRecord();
       const privateContext = actionsFor(privateRecord);
-      const privateWrapper = mountDialog(privateRecord, privateContext.actions);
+      const privateWrapper = await mountDialog(
+        privateRecord,
+        privateContext.actions,
+      );
       expect(privateWrapper.get('[data-action="publish-submit"]').text())
         .toBe('Publish');
 
       const liveRecord = editorRecord({ live: true, slug: 'ada-lovelace' });
       const liveContext = actionsFor(liveRecord);
-      const liveWrapper = mountDialog(liveRecord, liveContext.actions);
+      const liveWrapper = await mountDialog(liveRecord, liveContext.actions);
       expect(liveWrapper.get('[data-action="publish-submit"]').text())
         .toBe('Update publication');
-      await liveWrapper.get('[data-action="publish-live"]').setValue(false);
+      await liveWrapper.get('[data-action="publish-live"]').trigger('click');
       expect(liveWrapper.get('[data-action="publish-submit"]').text())
         .toBe('Unpublish');
     });
@@ -136,9 +198,9 @@ describe('PublishDialog', () => {
     async () => {
       const record = editorRecord();
       const { actions } = actionsFor(record);
-      const wrapper = mountDialog(record, actions);
+      const wrapper = await mountDialog(record, actions);
       const live = wrapper.get('[data-action="publish-live"]');
-      await live.setValue(true);
+      await live.trigger('click');
       const slug = wrapper.get('[data-action="publish-slug"]');
       const submit = wrapper.get('[data-action="publish-submit"]');
 
@@ -160,7 +222,7 @@ describe('PublishDialog', () => {
         expect(submit.attributes('disabled')).toBeUndefined();
       }
 
-      await live.setValue(false);
+      await live.trigger('click');
       await slug.setValue('abc');
       expect(wrapper.text()).toContain('Use 4–30 lowercase ASCII letters');
       expect(submit.attributes('disabled')).toBeDefined();
@@ -177,11 +239,11 @@ describe('PublishDialog', () => {
   it('submits the exact frozen command through the controller', async () => {
     const record = editorRecord();
     const { actions } = actionsFor(record);
-    const wrapper = mountDialog(record, actions);
+    const wrapper = await mountDialog(record, actions);
     await wrapper.get('[data-action="publish-slug"]').setValue('ada-lovelace');
-    await wrapper.get('[data-action="publish-live"]').setValue(true);
-    await wrapper.get('[data-action="publish-download"]').setValue(true);
-    await wrapper.get('[data-action="publish-seo-geo"]').setValue(true);
+    await wrapper.get('[data-action="publish-live"]').trigger('click');
+    await wrapper.get('[data-action="publish-download"]').trigger('click');
+    await wrapper.get('[data-action="publish-seo-geo"]').trigger('click');
     await wrapper.get('form').trigger('submit');
 
     expect(actions.publish.submit).toHaveBeenCalledOnce();
@@ -197,7 +259,7 @@ describe('PublishDialog', () => {
     async () => {
       const record = editorRecord();
       const context = actionsFor(record, { kind: 'saving' });
-      const wrapper = mountDialog(record, context.actions);
+      const wrapper = await mountDialog(record, context.actions);
       await wrapper.get('[role="dialog"]').trigger('keydown.esc');
       await wrapper.get('[data-action="publish-close"]').trigger('click');
 
@@ -218,7 +280,7 @@ describe('PublishDialog', () => {
         },
       ],
     });
-    const wrapper = mountDialog(record, context.actions);
+    const wrapper = await mountDialog(record, context.actions);
     expect(wrapper.text()).not.toContain('secret server detail');
     await wrapper.get('[data-action="focus-publish-issue"]').trigger('click');
     expect(wrapper.emitted('close')).toHaveLength(1);
@@ -235,7 +297,7 @@ describe('PublishDialog', () => {
         method: 'password',
         attempt: {} as never,
       });
-      const wrapper = mountDialog(record, context.actions);
+      const wrapper = await mountDialog(record, context.actions);
       await wrapper.get('input[type="password"]').setValue('current-password');
       await wrapper
         .get('[data-action="publish-password-reauth"]')
@@ -255,7 +317,7 @@ describe('PublishDialog', () => {
         method: 'provider',
         attempt: {} as never,
       });
-      const wrapper = mountDialog(record, context.actions);
+      const wrapper = await mountDialog(record, context.actions);
       const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
       await wrapper
         .get('[data-action="publish-provider-start"]')
@@ -285,22 +347,23 @@ describe('PublishDialog', () => {
       openSpy.mockRestore();
     });
 
-  it('does not render a provider anchor for missing or rejected starts', () => {
-    const record = editorRecord();
-    const context = actionsFor(record, {
-      kind: 'provider-start-invalid',
-      method: 'provider',
-      attempt: {} as never,
+  it('does not render a provider anchor for missing or rejected starts',
+    async () => {
+      const record = editorRecord();
+      const context = actionsFor(record, {
+        kind: 'provider-start-invalid',
+        method: 'provider',
+        attempt: {} as never,
+      });
+      const wrapper = await mountDialog(record, context.actions);
+      expect(
+        wrapper.find('[data-action="publish-provider-link"]').exists(),
+      ).toBe(false);
+      expect(wrapper.text()).toContain('Reauthentication is unavailable.');
+      expect(wrapper.findAll('a')).toHaveLength(0);
+      expect(wrapper.findAll('[data-action="publish-provider-start"]'))
+        .toHaveLength(1);
     });
-    const wrapper = mountDialog(record, context.actions);
-    expect(wrapper.find('[data-action="publish-provider-link"]').exists()).toBe(
-      false,
-    );
-    expect(wrapper.text()).toContain('Reauthentication is unavailable.');
-    expect(wrapper.findAll('a')).toHaveLength(0);
-    expect(wrapper.findAll('[data-action="publish-provider-start"]'))
-      .toHaveLength(1);
-  });
 
   it('keeps stale review on a fresh submit and unknown on uncertain retry',
     async () => {
@@ -309,7 +372,7 @@ describe('PublishDialog', () => {
         kind: 'stale',
         winner: {} as never,
       });
-      const staleWrapper = mountDialog(record, stale.actions);
+      const staleWrapper = await mountDialog(record, stale.actions);
       expect(staleWrapper.findAll('button').filter((button) =>
         button.text() === 'Retry publish')).toHaveLength(0);
       await staleWrapper.get('form').trigger('submit');
@@ -319,7 +382,7 @@ describe('PublishDialog', () => {
         kind: 'unknown',
         reason: 'transport',
       });
-      const unknownWrapper = mountDialog(record, unknown.actions);
+      const unknownWrapper = await mountDialog(record, unknown.actions);
       expect(unknownWrapper.find('[data-action="publish-submit"]').exists())
         .toBe(false);
       await unknownWrapper.get('button', { text: 'Retry publish' })
@@ -335,7 +398,7 @@ describe('PublishDialog', () => {
       slug: 'old-slug',
     });
     const context = actionsFor(record);
-    const wrapper = mountDialog(record, context.actions);
+    const wrapper = await mountDialog(record, context.actions);
 
     record.accepted = acceptedFixture({
       metadata: {
@@ -357,13 +420,13 @@ describe('PublishDialog', () => {
     await wrapper.vm.$nextTick();
 
     expect(
-      (wrapper.get('[data-action="publish-download"]')
-        .element as HTMLInputElement).checked,
-    ).toBe(false);
+      wrapper.get('[data-action="publish-download"]')
+        .attributes('aria-checked'),
+    ).toBe('false');
     expect(
-      (wrapper.get('[data-action="publish-seo-geo"]')
-        .element as HTMLInputElement).checked,
-    ).toBe(true);
+      wrapper.get('[data-action="publish-seo-geo"]')
+        .attributes('aria-checked'),
+    ).toBe('true');
     expect(
       (wrapper.get('[data-action="publish-slug"]')
         .element as HTMLInputElement).value,
@@ -536,7 +599,7 @@ describe('PublishDialog', () => {
 
       for (const testCase of cases) {
         const context = actionsFor(record, testCase.state);
-        const wrapper = mountDialog(record, context.actions);
+        const wrapper = await mountDialog(record, context.actions);
         expect(wrapper.text(), testCase.name)
           .not.toContain('secret server text');
         expect(wrapper.get('[role="alert"]').exists(), testCase.name)
@@ -582,7 +645,7 @@ describe('PublishDialog', () => {
         kind: 'accepted',
         resume: liveAccepted,
       });
-      const wrapper = mountDialog(record, context.actions);
+      const wrapper = await mountDialog(record, context.actions);
       expect(wrapper.get('.publish-dialog__success a').attributes('href')).toBe(
         '/canonical-slug',
       );
@@ -619,7 +682,7 @@ describe('PublishDialog', () => {
         slug: 'old-slug',
       });
       const transition = actionsFor(transitionRecord);
-      const transitionWrapper = mountDialog(
+      const transitionWrapper = await mountDialog(
         transitionRecord,
         transition.actions,
       );
@@ -635,15 +698,15 @@ describe('PublishDialog', () => {
       };
       await transitionWrapper.vm.$nextTick();
       expect(
-        (transitionWrapper.get('[data-action="publish-live"]')
-          .element as HTMLInputElement).checked,
-      ).toBe(false);
+        transitionWrapper.get('[data-action="publish-live"]')
+          .attributes('aria-checked'),
+      ).toBe('false');
       expect(transitionWrapper.get('[data-action="publish-submit"]').text())
         .toBe('Publish');
 
       const newRecord = editorRecord();
       const newPublication = actionsFor(newRecord);
-      const newWrapper = mountDialog(newRecord, newPublication.actions);
+      const newWrapper = await mountDialog(newRecord, newPublication.actions);
       newPublication.state.value = {
         kind: 'accepted',
         resume: acceptedFixture({
@@ -666,7 +729,7 @@ describe('PublishDialog', () => {
       opener.focus();
       const record = editorRecord();
       const context = actionsFor(record);
-      const wrapper = mountDialog(record, context.actions, true);
+      const wrapper = await mountDialog(record, context.actions);
       await wrapper.vm.$nextTick();
       expect(document.activeElement).toBe(
         wrapper.get('[data-action="publish-slug"]').element,
@@ -686,6 +749,8 @@ describe('PublishDialog', () => {
       expect(wrapper.emitted('close')).toHaveLength(1);
       await wrapper.setProps({ open: false });
       await wrapper.vm.$nextTick();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
       expect(document.activeElement).toBe(opener);
       wrapper.unmount();
       opener.remove();
@@ -699,10 +764,10 @@ describe('PublishDialog', () => {
       vi.mocked(context.actions.publish.submit).mockReturnValue(
         deferred.promise as never,
       );
-      const wrapper = mountDialog(record, context.actions);
+      const wrapper = await mountDialog(record, context.actions);
       await wrapper.get('[data-action="publish-slug"]')
         .setValue('ada-lovelace');
-      await wrapper.get('[data-action="publish-live"]').setValue(true);
+      await wrapper.get('[data-action="publish-live"]').trigger('click');
       await wrapper.get('form').trigger('submit');
       await wrapper.get('form').trigger('submit');
       expect(context.actions.publish.submit).toHaveBeenCalledOnce();
@@ -710,15 +775,21 @@ describe('PublishDialog', () => {
     });
 });
 
-function mountDialog(
+async function mountDialog(
   record: ResumeRecord,
   actions: ResumeEditorActions,
-  attachToBody = false,
-): VueWrapper {
-  return mount(PublishDialog, {
-    attachTo: attachToBody ? document.body : undefined,
+): Promise<DialogHarness> {
+  const wrapper = mount(PublishDialog, {
+    attachTo: document.body,
     props: { open: true, actions, record },
   });
+  mounted.push(wrapper);
+  await nextTick();
+  await nextTick();
+  const dialogs = document.body.querySelectorAll('[role="dialog"]');
+  const element = dialogs.item(dialogs.length - 1);
+  if (element === null) throw new Error('publish dialog is not mounted');
+  return new DialogHarness(wrapper, element);
 }
 
 function editorRecord(

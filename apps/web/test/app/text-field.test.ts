@@ -18,6 +18,18 @@ describe('TextField commit rule (decisions U4)', () => {
       [{ kind: 'set', value: 'Ada' }],
     ]);
   });
+  it('supports a controlled value without changing the intent commit rule',
+    async () => {
+      const wrapper = field('Ada');
+      await input(wrapper).setValue('Grace');
+      expect(wrapper.emitted('update:modelValue')).toEqual([['Grace']]);
+      expect(wrapper.emitted('intent')).toBeUndefined();
+
+      await input(wrapper).trigger('blur');
+      expect(wrapper.emitted('intent')).toEqual([
+        [{ kind: 'set', value: 'Grace' }],
+      ]);
+    });
   it('sets on Enter in a single-line field', async () => {
     const wrapper = field('Ada');
     await input(wrapper).setValue('Ada Lovelace');

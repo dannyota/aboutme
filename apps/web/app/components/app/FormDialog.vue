@@ -20,11 +20,13 @@ const props = withDefaults(
     readonly cancelLabel?: string;
     readonly busy?: boolean;
     readonly submitDisabled?: boolean;
+    readonly restoreFocus?: boolean;
+    readonly showCloseButton?: boolean;
     readonly submitAction?: string;
     readonly cancelAction?: string;
     readonly class?: string;
   }>(),
-  { cancelLabel: 'Cancel' },
+  { cancelLabel: 'Cancel', restoreFocus: true, showCloseButton: true },
 );
 const emit = defineEmits<{ submit: []; cancel: [] }>();
 const form = ref<HTMLFormElement | null>(null);
@@ -40,6 +42,9 @@ function onOpenAutoFocus(event: Event): void {
     ?.querySelector<HTMLElement>('input, select, textarea, button')
     ?.focus();
 }
+function onCloseAutoFocus(event: Event): void {
+  if (!props.restoreFocus) event.preventDefault();
+}
 </script>
 
 <template>
@@ -49,7 +54,8 @@ function onOpenAutoFocus(event: Event): void {
   >
     <DialogContent
       :class="cn(props.class)"
-      :show-close-button="!busy"
+      :show-close-button="showCloseButton && !busy"
+      @close-auto-focus="onCloseAutoFocus"
       @open-auto-focus="onOpenAutoFocus"
     >
       <DialogHeader>
