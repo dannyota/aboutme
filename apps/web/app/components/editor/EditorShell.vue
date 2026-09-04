@@ -36,6 +36,8 @@ import StateMark from '../app/StateMark.vue';
 import { iconFor } from '../resume/icons';
 
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
+import { useStamp } from '../../composables/useStamp';
+import { canonicalPublicPath } from '../../editor/publishApi';
 import type { SaveState } from '../../editor/types';
 import type { ResumeRecord } from '../../stores/resumes';
 import AccountMenu from '../app/AccountMenu.vue';
@@ -70,6 +72,12 @@ const outlineOpen = ref(true);
 const publishOpen = ref(false);
 const zoom = ref<'fit' | 'full'>('fit');
 const document = computed(() => props.record.current.document);
+const publicLink = computed(() =>
+  props.record.accepted.metadata.live
+    ? canonicalPublicPath(props.record.accepted.metadata.slug)
+    : null,
+);
+const { displayLink, stampState } = useStamp(publicLink);
 const placement = computed(() => document.value.customization.layout.sections);
 const outline = computed(() => [
   {
@@ -209,10 +217,11 @@ function sectionLabel(type: string): string {
         :state="saveState"
       />
       <StateMark
-        v-if="record.current.metadata.live && record.current.metadata.slug"
+        v-if="displayLink !== null"
         class="shrink-0 max-[42rem]:hidden"
+        :data-stamp="stampState === 'idle' ? undefined : stampState"
         data-testid="public-mark"
-        :link="`/${record.current.metadata.slug}`"
+        :link="displayLink"
         state="public"
       />
       <span class="flex-1" />
@@ -413,6 +422,8 @@ function sectionLabel(type: string): string {
         :lng="record.current.metadata.lng"
         :photo-read="record.photoRead"
         :photo-url="photoUrl"
+        :public-link="displayLink"
+        :stamp-state="stampState"
         :zoom="zoom"
       />
     </div>

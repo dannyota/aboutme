@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { computed, type ComputedRef } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import EditorShell from '../../app/components/editor/EditorShell.vue';
 import type {
@@ -11,6 +11,11 @@ import type {
 } from '../../app/editor/publishController';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('EditorShell', () => {
   it('renders the four-region editor with its stamped top bar', () => {
@@ -41,6 +46,8 @@ describe('EditorShell', () => {
       const record = editorRecord();
       record.current.metadata.live = true;
       record.current.metadata.slug = 'ada-lovelace';
+      record.accepted.metadata.live = true;
+      record.accepted.metadata.slug = 'ada-lovelace';
       const live = mount(EditorShell, {
         props: { actions: actionsFor(record), record },
         global: { stubs: heavyStubs() },
@@ -50,6 +57,57 @@ describe('EditorShell', () => {
       );
     },
   );
+
+  it('lands and lifts both accepted canonical marks together', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    const record = editorRecord();
+    const wrapper = mount(EditorShell, {
+      props: { actions: actionsFor(record), record },
+      global: { stubs: heavyStubs({ preview: false }) },
+    });
+
+    const published = editorRecord();
+    published.accepted.metadata.live = true;
+    published.accepted.metadata.slug = 'canonical-slug';
+    published.current.metadata.live = true;
+    published.current.metadata.slug = 'canonical-slug';
+    await wrapper.setProps({ record: published });
+
+    const titleMark = wrapper.get('[data-testid="public-mark"]');
+    const previewMark = wrapper.get('[data-testid="preview-stamp"]');
+    expect(titleMark.get('[data-public-link]').attributes('href'))
+      .toBe('/canonical-slug');
+    expect(titleMark.attributes('data-stamp')).toBe('landing');
+    expect(previewMark.attributes('data-stamp')).toBe('landing');
+
+    vi.advanceTimersByTime(180);
+    await wrapper.vm.$nextTick();
+    expect(titleMark.attributes('data-stamp')).toBeUndefined();
+    expect(previewMark.attributes('data-stamp')).toBeUndefined();
+
+    const unpublished = editorRecord();
+    unpublished.accepted.metadata.slug = 'canonical-slug';
+    unpublished.current.metadata.slug = 'canonical-slug';
+    await wrapper.setProps({ record: unpublished });
+    expect(wrapper.get('[data-testid="public-mark"]').attributes('data-stamp'))
+      .toBe('lifting');
+    expect(wrapper.get('[data-testid="preview-stamp"]').attributes(
+      'data-stamp',
+    )).toBe('lifting');
+
+    vi.advanceTimersByTime(120);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="public-mark"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
+      false,
+    );
+    wrapper.unmount();
+  });
 
   it('opens the publish dialog from the editor topbar', async () => {
     const wrapper = mountShell({}, { attachTo: document.body });

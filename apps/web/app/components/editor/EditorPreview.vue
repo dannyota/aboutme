@@ -11,7 +11,9 @@ import {
 } from 'vue';
 
 import { observeSettledVisiblePageCount } from '../../editor/pageCountObserver';
+import type { StampState } from '../../composables/useStamp';
 import type { PhotoReadState } from '../../stores/resumes';
+import AppSeal from '../app/AppSeal.vue';
 import ResumeDocument from '../resume/ResumeDocument.vue';
 import { previewProjection } from './previewProjection';
 
@@ -21,6 +23,8 @@ const props = withDefaults(defineProps<{
   readonly zoom?: 'fit' | 'full';
   readonly photoUrl?: string;
   readonly photoRead?: PhotoReadState;
+  readonly publicLink?: string | null;
+  readonly stampState?: StampState;
 }>(), { zoom: 'fit' });
 const emit = defineEmits<{
   pages: [count: number];
@@ -131,7 +135,7 @@ onBeforeUnmount(() => {
         class="mx-auto w-fit"
       >
         <div
-          class="rounded-[var(--radius-sheet)] bg-white
+          class="relative rounded-[var(--radius-sheet)] bg-white
             shadow-[var(--shadow-paper)]"
           :data-scaled-width="scaledWidth.toFixed(2)"
           :data-sheet-zoom="sheetZoom.toFixed(4)"
@@ -141,6 +145,14 @@ onBeforeUnmount(() => {
           <ResumeDocument
             :context="context"
             :document="projected"
+          />
+          <AppSeal
+            v-if="publicLink"
+            class="pointer-events-none absolute right-5 bottom-5"
+            :data-stamp="stampState === 'idle' ? undefined : stampState"
+            data-testid="preview-stamp"
+            :link="publicLink"
+            size="stamp"
           />
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-3">
