@@ -228,6 +228,10 @@ describe('private photo controls', () => {
       });
       const target = wrapper.get('[data-crop-stage]');
       const rectangle = wrapper.get('[data-crop-rectangle]');
+      expect(rectangle.classes()).toEqual(
+        expect.arrayContaining(['border-primary', 'bg-primary/10']),
+      );
+      expect(rectangle.classes().join(' ')).not.toContain('positive');
       Object.defineProperty(target.element, 'getBoundingClientRect', {
         value: () => ({ left: 0, top: 0, width: 100, height: 100 }),
       });

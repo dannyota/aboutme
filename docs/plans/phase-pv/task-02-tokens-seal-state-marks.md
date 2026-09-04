@@ -25,6 +25,13 @@ and dark blocks. Do not self-alias those names in `@theme inline`; consumers use
 arbitrary-value utilities such as `shadow-[var(--shadow-paper)]`. `--muted`
 equals `--secondary`.
 
+Replace every retained `--positive` consumer when the token is removed:
+`StatusBanner` success uses the neutral pencil-tick mark in foreground ink, and
+the photo crop rectangle uses primary signature ink. The account avatar uses
+foreground ink, and the selected editor outline item uses the neutral accent.
+Update the older theme boundary test so it asserts that positive and chart
+tokens stay absent across application source.
+
 Add the type scale as `--text-xs` 0.75rem, `--text-sm` 0.8125rem, `--text-base`
 0.875rem, `--text-md` 1rem, `--text-lg` 1.25rem, `--text-xl` 1.5rem,
 `--text-2xl` 2rem, `--text-3xl` 2.75rem with the line heights 1.5 for body steps
@@ -97,6 +104,10 @@ each state's text, `aria-live` on `saving`, `role="alert"` on `failed`, the seal
 mark and link on `public`, and that `SaveStatus` maps every current editor
 state.
 
+Update `test/editor/theme.test.ts`, `test/app/status-banner.test.ts`, and the
+crop assertion in `test/editor/photo-panel.test.ts` for the retained consumers
+of the deleted positive token.
+
 Adversarial: the dark-sheet case from
 [`adversarial-coverage.md`](adversarial-coverage.md) (render `ResumeDocument`
 with the `full` fixture under `data-theme="dark"` and assert the root's inline
@@ -111,7 +122,13 @@ Owned paths:
 - `apps/web/app/components/app/AppSeal.vue`
 - `apps/web/app/components/app/StateMark.vue`
 - `apps/web/app/components/editor/SaveStatus.vue`
+- `apps/web/app/components/app/StatusBanner.vue`
+- `apps/web/app/components/app/AccountMenu.vue`
+- `apps/web/app/components/editor/EditorShell.vue`
+- `apps/web/app/components/editor/photo/CropEditor.vue`
 - `apps/web/test/app/theme.test.ts`, `seal.test.ts`, `state-mark.test.ts`
+- `apps/web/test/editor/theme.test.ts`, `test/app/status-banner.test.ts`, and
+  `test/editor/photo-panel.test.ts`
 
 Acceptance: `AC-UI-007`.
 
@@ -120,8 +137,9 @@ Run:
 ```sh
 cd apps/web
 npx vitest run test/app/theme.test.ts test/app/seal.test.ts test/app/state-mark.test.ts test/renderer
+npx vitest run test/editor/theme.test.ts test/app/status-banner.test.ts test/editor/photo-panel.test.ts
 npx prettier --check app/assets/css/theme.css
-npx eslint app/components/app app/components/editor/SaveStatus.vue app/components/ui/button/index.ts test/app
+npx eslint app/components/app app/components/editor/EditorShell.vue app/components/editor/SaveStatus.vue app/components/editor/photo/CropEditor.vue app/components/ui/button/index.ts test/app test/editor/theme.test.ts test/editor/photo-panel.test.ts
 npx vue-tsc --noEmit
 ```
 

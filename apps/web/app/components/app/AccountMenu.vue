@@ -41,7 +41,7 @@ function signOut(): void {
         variant="ghost"
       >
         <Avatar class="size-7">
-          <AvatarFallback class="bg-secondary text-xs text-positive">
+          <AvatarFallback class="bg-secondary text-xs text-foreground">
             <UserRound
               v-if="!user?.name && !user?.email"
               aria-hidden="true"
