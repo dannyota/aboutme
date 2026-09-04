@@ -492,7 +492,7 @@ async function proveKeyboardStructureAndContextActions(
   const missingConflict = page.locator('[data-conflict]').first();
   await expect(missingConflict).toBeVisible();
   const missingConflictKind = await missingConflict.getAttribute('data-conflict');
-  editorDiagnosticStage = missingConflictKind === 'identity-missing:entryField'
+  editorDiagnosticStage = missingConflictKind === 'membership-changed:entryField'
     ? 'entries-missing-select'
     : missingConflictKind === 'target-changed:entryUpsert'
       ? 'entries-missing-recreate'
