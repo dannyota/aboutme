@@ -31,8 +31,8 @@ the affected sequence is rerun.
 - [ ] At 390 px the editor shows the whole preview sheet in Preview view and no
       clipped inspector text in Edit view.
 - [ ] Publish and unpublish through the dialog add and remove the seal mark
-      beside the title; with `prefers-reduced-motion: reduce` the change is
-      instant.
+      beside the title and the stamp at the preview sheet's foot; with
+      `prefers-reduced-motion: reduce` the change is instant.
 - [ ] Every page passes the axe scan in light and dark with no serious or
       critical violation.
 

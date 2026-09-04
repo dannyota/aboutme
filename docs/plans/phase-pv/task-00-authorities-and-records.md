@@ -35,7 +35,7 @@ phase its acceptance rows.
    | AC-UI-009 | The resume list shows each resume's publish state and canonical link from `ResumeSummary` only, up to three sheet slots, with Rename and Delete in an overflow menu                                            | PV T05     |
    | AC-UI-010 | Settings describes devices as browser and OS with an injected-clock relative time, and the theme cookie is honored at server render on every `/app/**` page                                                    | PV T06     |
    | AC-UI-011 | The editor top bar has exactly one `--seal` control; at 390 px the preview sheet is whole and the edit view is unclipped behind a fixed bottom switch                                                          | PV T07     |
-   | AC-UI-012 | Publish success shows the stamp with the canonical link and Copy link; the title mark appears in one press and instantly under reduced motion                                                                  | PV T09     |
+   | AC-UI-012 | Publish success shows the stamp with the canonical link and Copy link; the title mark and preview-sheet stamp appear in one press and instantly under reduced motion                                           | PV T09     |
    | AC-UI-013 | The Impeccable detector, finish review (`ship`), and documenter (`DESIGN.md`) ran on the candidate; captures exist for desktop and mobile                                                                      | PV T10     |
 
 6. Add the PV row to `docs/plans/implementation-plan.md` State and Delivery

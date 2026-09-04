@@ -29,14 +29,16 @@ tests pass a fixed date.
     <Button data-testid="create-resume" :disabled="items.length >= 3" @click="$emit('create')">Create resume</Button>
   </PageHeader>
   <ul aria-label="Your resumes" class="grid gap-6 md:grid-cols-3">
-    <li v-for="item in items" :data-testid="`resume-row-${item.id}`" class="sheet">   <!-- white, radius-dialog, shadow-paper -->
-      <NuxtLink :to="`/app/resumes/${encodeURIComponent(item.id)}`" class="sheet-face">
+    <li v-for="item in items" :data-testid="`resume-row-${item.id}`" class="sheet relative">   <!-- white, radius-dialog, shadow-paper -->
+      <NuxtLink :to="`/app/resumes/${encodeURIComponent(item.id)}`" class="sheet-face after:absolute after:inset-0">
         <span class="text-lg font-semibold">{{ item.title }}</span>
         <span class="text-xs text-muted-foreground tabular-nums">Updated {{ formatRelativeTime(item.updatedAt, now) }}</span>
+      </NuxtLink>
+      <span class="relative z-10">
         <StateMark v-if="item.live && item.slug" state="public" :link="`/${item.slug}`" />
         <StateMark v-else state="draft" />
-      </NuxtLink>
-      <DropdownMenu>   <!-- trigger: IconButton aria-label="More actions for {title}" -->
+      </span>
+      <DropdownMenu class="relative z-10">   <!-- trigger: IconButton aria-label="More actions for {title}" -->
         <DropdownMenuItem :aria-label="`Rename ${item.title}`" @select="$emit('rename', item)">Rename</DropdownMenuItem>
         <DropdownMenuItem :aria-label="`Delete ${item.title}`" class="text-destructive" @select="$emit('remove', item)">Delete</DropdownMenuItem>
       </DropdownMenu>
@@ -54,10 +56,12 @@ tests pass a fixed date.
 </section>
 ```
 
-The `sheet-face` link covers the sheet; the menu trigger sits in the top-right
-corner outside the link. Busy items (`busyIds`) disable the menu trigger. Hook
-changes: the old row buttons "Rename"/"Delete" move into the menu with the same
-`aria-label`s; `role="status"` text "No resumes yet." is held. The dialogs
+The `sheet-face` link covers the sheet through its stretched pseudo-element. The
+public state link and menu are sibling interactive elements above that
+pseudo-element, never anchors nested inside the editor link. The menu trigger
+sits in the top-right corner. Busy items (`busyIds`) disable the menu trigger.
+Hook changes: the old row buttons "Rename"/"Delete" move into the menu with the
+same `aria-label`s; `role="status"` text "No resumes yet." is held. The dialogs
 (`CreateResumeDialog`, `RenameResumeDialog`, `DeleteResumeDialog`) already use
 PU's `FormDialog`/`ConfirmDialog`; keep them.
 
