@@ -108,6 +108,42 @@ describe('measurePagination', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it('normalizes measurements taken inside a zoomed preview', async () => {
+    const root = document.createElement('div');
+    root.style.setProperty('--gap-section', '20px');
+    root.style.setProperty('--gap-heading', '8px');
+    root.style.setProperty('--gap-entry', '6px');
+    root.getBoundingClientRect = () => ({ ...rect(100), width: 50 });
+    Object.defineProperty(root, 'offsetWidth', { value: 100 });
+    Object.defineProperty(root.ownerDocument, 'fonts', {
+      configurable: true,
+      value: {
+        load: async () => [{} as FontFace],
+        ready: Promise.resolve(),
+      },
+    });
+    document.body.replaceChildren(root);
+
+    const header = document.createElement('div');
+    header.dataset.paginationHeader = '';
+    header.getBoundingClientRect = () => rect(20);
+    root.append(header);
+    for (const [index, height] of [9, 26].entries()) {
+      const block = document.createElement('div');
+      block.dataset.paginationBlockIndex = String(index);
+      block.getBoundingClientRect = () => rect(height);
+      root.append(block);
+    }
+
+    await expect(measurePagination(root, request())).resolves.toMatchObject({
+      headerHeightPx: 40,
+      blocks: [
+        { heightPx: 18 },
+        { heightPx: 52 },
+      ],
+    });
+  });
+
   it('fails closed when the measurement tree is incomplete', async () => {
     const root = document.createElement('div');
     root.style.setProperty('--gap-section', '20px');

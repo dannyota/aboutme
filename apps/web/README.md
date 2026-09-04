@@ -13,6 +13,36 @@ npm workspace. Intended UI and renderer boundaries live in the
 - A committed TypeScript API client generated from
   [`docs/api/openapi.yaml`](../../docs/api/openapi.yaml).
 
+The landing page server-renders a compiled-in sample resume through the shared
+renderer and places its public seal on the sheet without fetching data. The
+authenticated shell, built from `AppShell` and the shared `components/app`
+composites, switches between signed-out and signed-in navigation after the
+client session read. `AccountMenu` and `ThemeToggle` provide account actions
+and the persisted theme choice; `PageHeader`, fields, status/loading states,
+empty states, menus, and dialogs keep page behavior and focus handling shared.
+
+`EditorShell` provides the top bar, account menu, publish action, tool rail,
+resume outline, preview, and inspector. `EditorPreview` keeps the rendered
+resume on a whole white sheet, reports the settled estimated page count, and
+shows the public seal or photo state without exposing a photo key. `ResumeList`
+uses paper-like cards with title, update time, a public seal/link or Draft mark,
+empty create slots, and Rename/Delete menus. The sessions settings page uses
+the shared settings and status components for devices, password changes,
+provider linking, and connected-agent revocation. `PublishDialog` exposes the
+slug, Public resume, PDF download, and SEO and GEO choices, then shows the seal,
+public link, and Copy link after success.
+
+The chrome uses Tailwind CSS v4 without Preflight and generated shadcn-vue /
+reka-ui primitives. Its desk and paper tokens are cool grey and white in light
+mode, lamp-lit in dark mode; signature blue-black is reserved for the person's
+actions, while seal red is reserved for public state and publishing. `Be
+Vietnam Pro` is the chrome font. At narrow widths the editor collapses the
+rail and outline, switches between Edit and Preview, and stacks the inspector;
+the sheet scales to the viewport down to 390 px and is never cropped.
+
+The product and built-surface records are [`PRODUCT.md`](../../PRODUCT.md),
+[`DESIGN.md`](../../DESIGN.md), and the [Impeccable surface briefs](../../.impeccable/surfaces/).
+
 ## UI conventions
 
 The application UI has three layers:

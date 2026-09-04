@@ -104,15 +104,39 @@ and the revoked token's closed 401 over the trusted local HTTPS origin. The
 proof writes only bounded boolean/error-count evidence and cleans its reserved
 user, resume, client, grant, code, and token rows.
 
-The application chrome uses Tailwind without Preflight and a generated
-shadcn-vue/Reka primitive layer. Shared application composites provide the
-accessible fields, status regions, menus, and dialogs used by pages and editor
-panels. The web shell renders a signed-out variant (Sign in, Create account)
-until the session read resolves and a signed-in variant (Resumes, Settings,
-account) afterward. The login and settings pages show provider and
-connected-agent controls only when the capabilities read enables them. Local
-native development and HTTPS proof commands seed one account and one private
-sample resume; Compose and cloud never run the seed.
+Local native development and HTTPS proof commands seed one account and one
+private sample resume; Compose and cloud never run the seed.
+
+## Implemented application chrome
+
+The application chrome uses Tailwind CSS v4 without Preflight and generated
+shadcn-vue primitives backed by reka-ui. Generated primitives under
+`app/components/ui/` own low-level behavior; shared composites under
+`app/components/app/` own the shell, page headers, fields, status and loading
+states, empty states, menus, and dialogs; pages and editor panels compose those
+layers with layout utilities. `AppShell` renders the signed-out navigation (Sign
+in, Create account, and theme toggle) until the session read resolves, then the
+signed-in navigation (Resumes, Settings, and the account menu). The signed-in
+theme action moves into the account menu. Capability-gated provider and
+connected-agent controls remain hidden when their capability is false.
+
+The chrome tokens describe a cool-grey desk (`#EDEFEB`) with white paper, ink
+(`#171A18`), pencil text (`#5F6763`), hairlines (`#D8DDD9`), and signature
+blue-black actions (`#1F2A44` in light mode and `#D7DEEE` in dark mode). Dark
+mode uses a lamp-lit desk (`#121614`) and panels (`#1A1F1C`); the renderer keeps
+its own document background. `Be Vietnam Pro`, then Inter and system fallbacks,
+is the chrome font. `AppSeal` is the only public-state red mark (`#C8102E`): its
+round SVG seal carries the public link, while `StateMark` uses the seal for
+public resumes and a pencil tick or text for saved, saving, failed, and draft
+states. Publish and destructive actions keep their distinct controls. The
+landing page renders a compiled-in Ada Lovelace sample through the pure renderer
+at server render and shows the seal without a data fetch.
+
+The chrome follows an 8 px module and keeps the preview sheet whole. At narrow
+widths the editor collapses its tool rail and outline, switches between Edit and
+Preview tabs, and stacks the inspector below the sections control; the sheet
+scales to the available viewport down to 390 px. Dialogs, menus, focus, and
+reduced-motion behavior stay on the shared accessible component boundary.
 
 ## Implemented resume data layer
 
@@ -210,6 +234,22 @@ a stale winner is adopted without automatic republish. A live-slug rename uses
 the account's supported recent-reauthentication factor. Provider handoff is
 capability-gated, stable-first, allowlisted, and opened only by a second user
 action. Structured completeness issues return focus to the owning editor field.
+
+`EditorShell` composes the editor top bar, account menu, publish action, tool
+rail, collapsible resume outline, preview region, and inspector panels. The
+outline and inspector use section icons and preserve the selected field when an
+error summary focuses an issue. `EditorPreview` renders the pure document
+projection on a white, never-cropped sheet, reports the settled estimated page
+count, shows photo availability without exposing an object key, and places an
+`AppSeal` at the sheet foot when the resume is public. `ResumeList` presents up
+to three paper-like resume cards with title, relative update time, a public
+seal/link or pencil Draft mark, empty create slots, and an overflow menu for
+Rename and Delete. The sessions settings page uses shared headers, status
+banners, fields, and dialogs for signed-in devices, password changes, provider
+linking, and connected-agent revocation. `PublishDialog` combines the slug field
+and three independent switches with human-readable explanations,
+reauthentication states, the seal-colored publish action, and a successful
+public link with Copy link.
 
 ## Implemented public publish and SSR
 

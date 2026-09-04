@@ -24,7 +24,11 @@ import {
   type AcceptedResume,
   type BrowserPersistenceProbe,
 } from './editor-fixtures';
-import { newDiagnosticCounters, pageDiagnosticsAttacher } from './harness-lib';
+import {
+  newDiagnosticCounters,
+  pageDiagnosticsAttacher,
+  waitForHydration,
+} from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
@@ -216,7 +220,17 @@ async function proveListLoadAutosave(
   const row = page.locator(`[data-testid="resume-row-${created.metadata.id}"]`);
   await expect(row).toBeVisible();
   editorDiagnosticStage = 'list-rename-open';
-  await row.getByRole('button', { name: `Rename ${initialTitle}` }).press('Enter');
+  await row
+    .getByRole('button', {
+      name: `More actions for ${initialTitle}`,
+      exact: true,
+    })
+    .press('Enter');
+  const rowMenu = page.getByRole('menu');
+  await expect(rowMenu).toHaveCount(1);
+  await rowMenu
+    .getByRole('menuitem', { name: `Rename ${initialTitle}`, exact: true })
+    .press('Enter');
   const rename = page.getByRole('dialog', { name: 'Rename resume' });
   const renamedTitle = uniqueTitle();
   await rename.getByLabel('Title').fill(renamedTitle);
@@ -244,11 +258,13 @@ async function proveListLoadAutosave(
   expect(body.data?.schemaVersion).toBe(Number(SCHEMA_VERSION));
   await expect(page.locator('[data-resume-title]')).toHaveText(renamedTitle);
   await expect.poll(headers.acceptEncoding).not.toBe('');
-  await expect(page.getByText('Estimated pages', { exact: true })).toBeVisible();
+  const pageCountMark = page.getByTestId('page-count');
+  await expect(pageCountMark).toBeVisible();
   await expect.poll(async () => {
     const settled = await settledVisiblePageCount(page);
-    const displayed = await page.getByLabel('Estimated page count').textContent();
-    return displayed === String(settled) ? settled : -1;
+    const displayed = (await pageCountMark.textContent())?.trim();
+    const expected = `${settled} page${settled === 1 ? '' : 's'}`;
+    return displayed === expected ? settled : -1;
   }).toBeGreaterThan(0);
   const baseline = await readURLBaseline(page);
   await probes.reset();
@@ -432,6 +448,68 @@ async function proveKeyboardStructureAndContextActions(
 
   editorDiagnosticStage = 'entries-open';
   await page.getByRole('button', { name: 'Document' }).press('Enter');
+  await proveResponsiveEditorSurface(page, baseline.href);
+  editorDiagnosticStage = 'customization-labels';
+  await page.getByRole('button', { name: 'Design' }).press('Enter');
+  for (const groupName of ['Type', 'Spacing', 'Headings', 'Layout', 'Colors']) {
+    await expect(page.getByRole('group', { name: groupName })).toBeVisible();
+  }
+  const typeGroup = page.getByRole('group', { name: 'Type' });
+  await expect(typeGroup.getByLabel('Font', { exact: true })).toBeVisible();
+  await expect(typeGroup.getByLabel('Base size (px)', { exact: true }))
+    .toBeVisible();
+  const font = typeGroup.getByLabel('Font', { exact: true });
+  await expect(font.getByRole('option', { name: 'Be Vietnam Pro', exact: true }))
+    .toHaveAttribute('value', 'be-vietnam-pro');
+  const currentFont = await font.inputValue();
+  const fontSaved = currentFont === 'be-vietnam-pro'
+    ? undefined
+    : page.waitForResponse((response) =>
+      isResumeMutation(response.request(), resumeID),
+    );
+  await font.selectOption({ label: 'Be Vietnam Pro' });
+  if (fontSaved !== undefined) expect((await fontSaved).status()).toBe(200);
+
+  editorDiagnosticStage = 'contact-overflow-menu';
+  await page.getByRole('button', { name: 'Document' }).press('Enter');
+  await page
+    .getByRole('navigation', { name: 'Resume outline' })
+    .getByRole('button', { name: 'Personal details', exact: true })
+    .press('Enter');
+  const detailMenuButton = page.getByRole('button', {
+    name: 'More options for contact detail 1',
+    exact: true,
+  });
+  await expect(detailMenuButton).toBeVisible();
+  await detailMenuButton.press('Enter');
+  const detailMenu = page.getByRole('menu');
+  await expect(detailMenu).toHaveCount(1);
+  await expect(detailMenu.getByRole('menuitem', {
+    name: 'Set label…',
+    exact: true,
+  })).toBeVisible();
+  await expect(detailMenu.getByRole('menuitemcheckbox', {
+    name: 'Hide this detail',
+    exact: true,
+  })).toBeVisible();
+  await expect(detailMenu.getByRole('menuitem', {
+    name: 'Move up',
+    exact: true,
+  })).toBeVisible();
+  await expect(detailMenu.getByRole('menuitem', {
+    name: 'Move down',
+    exact: true,
+  })).toBeVisible();
+  await expect(detailMenu.getByRole('menuitem', {
+    name: 'Remove detail',
+    exact: true,
+  })).toBeVisible();
+  await detailMenu.getByRole('menuitem', {
+    name: 'Set label…',
+    exact: true,
+  }).press('Enter');
+  await expect(page.getByLabel('Label', { exact: true })).toBeVisible();
+
   await page.getByRole('navigation', { name: 'Resume outline' }).getByRole('button', { name: 'Experience' }).press('Enter');
   const firstEntryCreated = page.waitForResponse((response) =>
     isResumeMutation(response.request(), resumeID),
@@ -723,6 +801,54 @@ async function provePhotoSessionPersistence(
   return reauthPage;
 }
 
+async function proveResponsiveEditorSurface(
+  page: Page,
+  href: string,
+): Promise<void> {
+  const narrowPage = await page.context().newPage();
+  try {
+    await narrowPage.setViewportSize({ width: 390, height: 844 });
+    await narrowPage.goto(href);
+    await waitForHydration(narrowPage);
+    await expect(narrowPage.getByTestId('save-status')).toBeVisible();
+
+    const switcher = narrowPage.getByRole('tablist', { name: 'Editor view' });
+    await expect(switcher).toBeVisible();
+    await expect(switcher).toHaveCSS('position', 'fixed');
+    const editTab = switcher.getByRole('tab', { name: 'Edit', exact: true });
+    const previewTab = switcher.getByRole('tab', {
+      name: 'Preview',
+      exact: true,
+    });
+    await expect(editTab).toHaveAttribute('data-action', 'show-editor');
+    await expect(previewTab).toHaveAttribute('data-action', 'show-preview');
+
+    await previewTab.press('Enter');
+    await expect(previewTab).toHaveAttribute('aria-pressed', 'true');
+    const sheet = narrowPage.getByTestId('preview-sheet');
+    await expect(sheet).toBeVisible();
+    await expect.poll(async () =>
+      Number(await sheet.getAttribute('data-sheet-zoom')),
+    ).toBeLessThan(1);
+    await expect.poll(async () =>
+      Number(await sheet.getAttribute('data-scaled-width')),
+    ).toBeLessThan(390);
+    await expect(narrowPage.getByTestId('page-count')).not.toContainText('—');
+
+    await editTab.press('Enter');
+    const inspector = narrowPage.locator('[data-region="inspector"]');
+    await expect(inspector).toHaveAttribute('data-narrow-active', 'true');
+    const dimensions = await inspector.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(dimensions.clientWidth).toBeLessThanOrEqual(390);
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+  } finally {
+    await narrowPage.close();
+  }
+}
+
 async function proveAccessibility(page: Page, resumeID: string): Promise<void> {
   editorDiagnosticStage = 'accessibility-list';
   await page.getByRole('link', { name: 'aboutme' }).press('Enter');
@@ -752,25 +878,66 @@ async function proveAccessibility(page: Page, resumeID: string): Promise<void> {
     .locator(`[data-testid="resume-row-${resumeID}"]`)
     .getByRole('link')
     .press('Enter');
-  editorDiagnosticStage = 'accessibility-editor-audit';
-  const editorFindings = await new AxeBuilder({ page }).analyze();
-  const editorViolations = seriousOrCritical(editorFindings.violations);
-  if (editorViolations.length > 0) {
-    const first = editorFindings.violations.find(
-      ({ id }) => id === editorViolations[0]?.id,
-    );
+  await setEditorTheme(page, 'light');
+  await scanEditorAccessibility(page, 'accessibility-editor-light');
+  await setEditorTheme(page, 'dark');
+  await scanEditorAccessibility(page, 'accessibility-editor-dark');
+  await page.goto(`${ORIGIN}/app/settings/sessions`);
+  await waitForHydration(page);
+  await expect.poll(() => page.evaluate(
+    () => document.documentElement.dataset.theme,
+  )).toBe('dark');
+  await page.goto(`${ORIGIN}/app/resumes`);
+  await waitForHydration(page);
+  await expect.poll(() => page.evaluate(
+    () => document.documentElement.dataset.theme,
+  )).toBe('dark');
+  await page
+    .locator(`[data-testid="resume-row-${resumeID}"]`)
+    .getByRole('link')
+    .press('Enter');
+  await waitForHydration(page);
+  await setEditorTheme(page, 'light');
+}
+
+async function setEditorTheme(page: Page, target: 'light' | 'dark'): Promise<void> {
+  await expect.poll(() => page.evaluate(
+    () => document.documentElement.dataset.theme ?? '',
+  )).not.toBe('');
+  const current = await page.evaluate(
+    () => document.documentElement.dataset.theme,
+  );
+  if (current === target) return;
+  await page.getByRole('button', { name: 'Account menu' }).press('Enter');
+  const menu = page.getByRole('menu');
+  await expect(menu).toHaveCount(1);
+  await menu.getByRole('menuitem', {
+    name: target === 'dark' ? 'Dark theme' : 'Light theme',
+    exact: true,
+  }).press('Enter');
+  await expect.poll(() => page.evaluate(
+    () => document.documentElement.dataset.theme ?? '',
+  )).toBe(target);
+}
+
+async function scanEditorAccessibility(page: Page, stage: string): Promise<void> {
+  editorDiagnosticStage = stage;
+  const findings = await new AxeBuilder({ page }).analyze();
+  const violations = seriousOrCritical(findings.violations);
+  if (violations.length > 0) {
+    const first = findings.violations.find(({ id }) => id === violations[0]?.id);
     const safeTarget = JSON.stringify(first?.nodes[0]?.target ?? [])
       .replaceAll(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, 'resume-id')
       .toLowerCase()
       .replaceAll(/[^a-z0-9-]+/g, '-')
       .replaceAll(/^-+|-+$/g, '')
       .slice(0, 120);
-    editorDiagnosticStage = `accessibility-editor-${editorViolations
+    editorDiagnosticStage = `${stage}-${violations
       .map(({ id }) => id)
       .sort()
       .join('-')}-${safeTarget || 'unknown'}`;
   }
-  expect(editorViolations).toEqual([]);
+  expect(violations).toEqual([]);
 }
 
 async function deleteThroughListKeyboard(page: Page, resumeID: string): Promise<void> {
@@ -781,7 +948,17 @@ async function deleteThroughListKeyboard(page: Page, resumeID: string): Promise<
   editorDiagnosticStage = 'teardown-open';
   const title = (await row.getByRole('link').innerText()).trim();
   expect(title).not.toBe('');
-  await row.getByRole('button', { name: `Delete ${title}` }).press('Enter');
+  await row
+    .getByRole('button', {
+      name: `More actions for ${title}`,
+      exact: true,
+    })
+    .press('Enter');
+  const rowMenu = page.getByRole('menu');
+  await expect(rowMenu).toHaveCount(1);
+  await rowMenu
+    .getByRole('menuitem', { name: `Delete ${title}`, exact: true })
+    .press('Enter');
   const dialog = page.getByRole('alertdialog', { name: 'Delete resume' });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Current title').fill(title);

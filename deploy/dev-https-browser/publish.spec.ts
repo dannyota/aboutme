@@ -217,6 +217,10 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       events.push("edit-accepted");
   };
   await installPublicGuards(context, counters);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: ORIGIN,
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   pageDiagnosticsAttacher(counters, {
     countConsoleError: (message) => {
       if (
@@ -273,23 +277,24 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       .press("Enter");
     await page.getByLabel("Full name").fill("Publish proof resume");
     await page.getByLabel("Full name").press("Tab");
-    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+    await expect(page.getByTestId("save-status")).toContainText("Saved");
     await page.getByRole("button", { name: "Structure" }).press("Enter");
     await page.getByLabel("Section type").selectOption("work");
     await page.locator('[data-action="create"]').press("Enter");
-    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+    await expect(page.getByTestId("save-status")).toContainText("Saved");
     await page.getByRole("button", { name: "Document" }).press("Enter");
     await page
       .getByRole("navigation", { name: "Resume outline" })
       .getByRole("button", { name: "Experience" })
       .press("Enter");
     await page.getByRole("button", { name: "Add entry" }).press("Enter");
-    const entry = page.locator("[data-entry-id]").first();
+    const entry = page.locator("[data-entry-id]");
+    await expect(entry).toHaveCount(1);
     await entry.getByLabel("Job title").fill("Engineer");
     await entry.getByLabel("Job title").press("Tab");
     await entry.getByLabel("Employer", { exact: true }).fill("Example Corp");
     await entry.getByLabel("Employer", { exact: true }).press("Tab");
-    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+    await expect(page.getByTestId("save-status")).toContainText("Saved");
     steps.complete = true;
     stage("resume-complete");
 
@@ -299,6 +304,8 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       .getByRole("button", { name: "Personal details", exact: true })
       .press("Enter");
     await page.getByLabel("Headline").fill("Accepted before publication");
+    await expect(page.getByTestId("public-mark")).toHaveCount(0);
+    await expect(page.getByTestId("preview-stamp")).toHaveCount(0);
     await page.locator('[data-action="publish"]').press("Enter");
     const dialog = page.getByRole("dialog", { name: "Publish resume" });
     await expect(dialog).toBeVisible();
@@ -308,6 +315,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await auditDialog(page);
     steps.accessibility = true;
     stage("dialog-audited");
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByLabel("Slug").fill(slug);
     const live = page.getByLabel("Public resume");
     const download = page.getByLabel("PDF download");
@@ -331,18 +339,51 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     const acceptedPublish = await publishResponse;
     statuses.publish = acceptedPublish.status();
     expect(statuses.publish).toBe(200);
-    await expect(dialog.getByText("Published successfully.")).toBeVisible();
+    await expect(dialog.getByRole("status")).toHaveText(
+      "Published successfully.",
+    );
     const editAccepted = events.indexOf("edit-accepted");
     const publishRequested = events.indexOf("publish-request");
     expect(editAccepted).toBeGreaterThanOrEqual(0);
     expect(publishRequested).toBeGreaterThan(editAccepted);
     steps.saveFirst = true;
     steps.headers = Object.values(headerPresence).slice(0, 5).every(Boolean);
+
+    const publicMark = page.getByTestId("public-mark");
+    const previewStamp = page.getByTestId("preview-stamp");
+    await Promise.all([
+      expect(publicMark).toBeVisible(),
+      expect(previewStamp).toBeVisible(),
+    ]);
+    await expect(
+      publicMark.getByRole("link", {
+        name: `aboutme.vn/${slug}`,
+        exact: true,
+      }),
+    ).toHaveAttribute("href", `/${slug}`);
+    await expect(previewStamp).toHaveAttribute(
+      "aria-label",
+      `Public at aboutme.vn/${slug}`,
+    );
+    await expect(publicMark).not.toHaveAttribute("data-stamp");
+    await expect(previewStamp).not.toHaveAttribute("data-stamp");
+
+    const link = dialog.getByRole("link", {
+      name: `aboutme.vn/${slug}`,
+      exact: true,
+    });
+    await expect(link).toHaveAttribute("href", `/${slug}`);
+    await dialog
+      .getByRole("button", { name: "Copy link", exact: true })
+      .press("Enter");
+    await expect(
+      dialog.getByRole("button", { name: "Copied", exact: true }),
+    ).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(`${ORIGIN}/${slug}`);
     steps.published = true;
     stage("published");
-
-    const link = dialog.getByRole("link", { name: "View public resume" });
-    await expect(link).toHaveAttribute("href", `/${slug}`);
     publicContext = await browser.newContext();
     const publicCounters = counters;
     await installPublicGuards(publicContext, publicCounters);
@@ -358,13 +399,13 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     expect(privateResponse?.headers()["x-robots-tag"]).toBe(
       "noindex, noarchive",
     );
-    expect(await publicPage.locator("#public-resume").count()).toBe(1);
+    expect(await publicPage.getByRole("main").count()).toBe(1);
     await waitForHydration(publicPage, "public-resume");
     steps.noindex = true;
     stage("noindex");
 
     await dialog
-      .getByRole("button", { name: "Close", exact: true })
+      .getByRole("button", { name: "Cancel", exact: true })
       .press("Enter");
     await expect(page.locator('[data-action="publish"]')).toBeFocused();
     await page.locator('[data-action="publish"]').press("Enter");
@@ -420,7 +461,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       dialogLayout.clientHeight,
     );
     const invalidClose = updateDialog.getByRole("button", {
-      name: "Close",
+      name: "Cancel",
       exact: true,
     });
     await invalidClose.scrollIntoViewIfNeeded();
@@ -449,14 +490,14 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     statuses.publicDiscoverable = discoverableResponse?.status() ?? 0;
     expect(statuses.publicDiscoverable).toBe(200);
     expect(discoverableResponse?.headers()["x-robots-tag"] ?? "").toBe("");
-    expect(
-      await publicPage.locator('script[type="application/ld+json"]').count(),
-    ).toBe(1);
+    expect(await publicPage.content()).toContain(
+      '<script type="application/ld+json">',
+    );
     steps.discovery = true;
     stage("discovery");
 
     await updateDialog
-      .getByRole("button", { name: "Close", exact: true })
+      .getByRole("button", { name: "Cancel", exact: true })
       .press("Enter");
     await page.locator('[data-action="publish"]').press("Enter");
     const unpublishDialog = page.getByRole("dialog", {
@@ -464,6 +505,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     });
     await expect(unpublishDialog).toBeVisible();
     await unpublishDialog.getByLabel("Public resume").press("Space");
+    await page.emulateMedia({ reducedMotion: "reduce" });
     const unpublishResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -477,6 +519,8 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     statuses.unpublish = (await unpublishResponse).status();
     expect(statuses.unpublish).toBe(200);
     await expect(unpublishDialog.getByLabel("Slug")).toHaveValue(slug);
+    await expect(publicMark).toHaveCount(0);
+    await expect(previewStamp).toHaveCount(0);
     const started = Date.now();
     const revokedResponse = await publicPage.goto(`${ORIGIN}/${slug}`);
     const elapsed = Date.now() - started;
@@ -491,15 +535,15 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await publicContext.close();
     publicContext = undefined;
     await unpublishDialog
-      .getByRole("button", { name: "Close", exact: true })
+      .getByRole("button", { name: "Cancel", exact: true })
       .press("Enter");
     await deleteRecordedResume(page, resumeID);
     steps.cleanup = true;
     stage("cleanup");
     await page.goto(`${ORIGIN}/app/settings/sessions`);
     await page
+      .getByTestId("settings-page")
       .getByRole("button", { name: "Log out", exact: true })
-      .first()
       .press("Enter");
     await expect(page).toHaveURL(`${ORIGIN}/login`);
     steps.signOut = true;

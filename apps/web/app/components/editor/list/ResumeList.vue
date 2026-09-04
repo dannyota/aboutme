@@ -70,6 +70,7 @@ watch(
   <section
     ref="root"
     aria-labelledby="resume-list-title"
+    class="mx-auto w-full max-w-7xl space-y-8 px-6 py-8"
     data-testid="resume-list"
   >
     <PageHeader

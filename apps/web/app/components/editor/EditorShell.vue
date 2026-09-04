@@ -418,6 +418,7 @@ function sectionLabel(type: string): string {
       :data-narrow-active="narrowRegion === 'preview'"
     >
       <EditorPreview
+        :active="narrowRegion === 'preview'"
         :document="document"
         :lng="record.current.metadata.lng"
         :photo-read="record.photoRead"

@@ -8,6 +8,7 @@ import {
   onMounted,
   ref,
   shallowRef,
+  watch,
 } from 'vue';
 
 import { observeSettledVisiblePageCount } from '../../editor/pageCountObserver';
@@ -25,7 +26,8 @@ const props = withDefaults(defineProps<{
   readonly photoRead?: PhotoReadState;
   readonly publicLink?: string | null;
   readonly stampState?: StampState;
-}>(), { zoom: 'fit' });
+  readonly active?: boolean;
+}>(), { zoom: 'fit', active: true });
 const emit = defineEmits<{
   pages: [count: number];
 }>();
@@ -78,6 +80,18 @@ const updateWindowWidth = (): void => {
   windowWidth.value = window.innerWidth;
 };
 
+function startPageCountObservation(): void {
+  stopObserving?.();
+  if (previewRoot.value === null) return;
+  stopObserving = observeSettledVisiblePageCount(
+    previewRoot.value,
+    (count) => {
+      estimatedPages.value = count;
+      emit('pages', count);
+    },
+  );
+}
+
 onErrorCaptured(() => {
   renderFailed.value = true;
   return false;
@@ -88,13 +102,7 @@ onMounted(async () => {
   updateWindowWidth();
   window.addEventListener('resize', updateWindowWidth);
   if (previewRoot.value !== null) {
-    stopObserving = observeSettledVisiblePageCount(
-      previewRoot.value,
-      (count) => {
-        estimatedPages.value = count;
-        emit('pages', count);
-      },
-    );
+    startPageCountObservation();
     viewportWidth.value = previewRoot.value.clientWidth || window.innerWidth;
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(([entry]) => {
@@ -103,6 +111,12 @@ onMounted(async () => {
       resizeObserver.observe(previewRoot.value);
     }
   }
+});
+
+watch(() => props.active, async (active) => {
+  if (!active) return;
+  await nextTick();
+  startPageCountObservation();
 });
 
 onBeforeUnmount(() => {
