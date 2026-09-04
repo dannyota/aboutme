@@ -43,7 +43,10 @@ const points = [
 </script>
 
 <template>
-  <main class="landing mx-auto w-full max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+  <main
+    class="landing mx-auto w-full max-w-7xl px-5 py-12 sm:px-8 sm:py-16"
+    data-testid="landing"
+  >
     <section
       class="grid items-center gap-12 min-[42rem]:grid-cols-12
         min-[42rem]:gap-8"
@@ -195,6 +198,7 @@ const points = [
     >
       Open source under
       <a
+        class="text-primary underline underline-offset-4"
         data-testid="landing-license-link"
         href="https://github.com/dannyota/aboutme"
         rel="noopener noreferrer"

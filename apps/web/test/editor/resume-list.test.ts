@@ -690,6 +690,10 @@ describe('useResumeList', () => {
     expect(sheetLink.contains(publicLink)).toBe(false);
     expect(draftRow.text()).toContain('Draft');
     expect(draftRow.text()).not.toContain('aboutme.vn');
+    expect(
+      draftRow.get('[data-state-mark="draft"]').element.parentElement
+        ?.classList.contains('pointer-events-none'),
+    ).toBe(true);
     wrapper.unmount();
   });
 

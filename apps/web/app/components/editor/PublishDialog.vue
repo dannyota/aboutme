@@ -422,6 +422,7 @@ onBeforeUnmount(resetCopyState);
       >
         <a
           :href="state.authorizeUrl"
+          class="text-primary underline underline-offset-4"
           data-action="publish-provider-link"
           target="_blank"
           rel="noopener noreferrer"
@@ -555,6 +556,7 @@ onBeforeUnmount(resetCopyState);
           />
           <a
             :href="publicHref"
+            class="text-primary underline underline-offset-4"
             data-action="view-public-resume"
           >aboutme.vn{{ publicHref }}</a>
           <Button
