@@ -36,14 +36,14 @@ lane, resume HTTP and media, the authenticated editor, publish and public SSR,
 password authentication, the native HTTPS development harness, and the v1 entry
 experience, including MCP agent access and the owner publish UX.
 
-| Phase | Work                                              | State                                                 |
-| ----- | ------------------------------------------------- | ----------------------------------------------------- |
-| PV    | [Application visual identity](phase-pv/README.md) | Active; design approved 2026-09-04; paused before T01 |
-| P6    | Realtime: SSE transport, refetch, unpublish       | Not started                                           |
-| P7    | Print worker, public PDF and images               | Not started                                           |
-| P8    | Privacy lifecycle                                 | Not started                                           |
-| P9    | [Local UAT](phase-9/README.md)                    | Harness complete; isolated port-443 UAT remains       |
-| PI    | [Infrastructure](phase-pi/README.md)              | Adopted, not executed; no cloud mutation              |
+| Phase | Work                                              | State                                           |
+| ----- | ------------------------------------------------- | ----------------------------------------------- |
+| PV    | [Application visual identity](phase-pv/README.md) | Active; W4 implementation in progress           |
+| P6    | Realtime: SSE transport, refetch, unpublish       | Not started                                     |
+| P7    | Print worker, public PDF and images               | Not started                                     |
+| P8    | Privacy lifecycle                                 | Not started                                     |
+| P9    | [Local UAT](phase-9/README.md)                    | Harness complete; isolated port-443 UAT remains |
+| PI    | [Infrastructure](phase-pi/README.md)              | Adopted, not executed; no cloud mutation        |
 
 ## Delivery order
 

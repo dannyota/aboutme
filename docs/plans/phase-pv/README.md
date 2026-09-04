@@ -1,8 +1,7 @@
 # Phase PV — Application visual identity
 
 Status: **Revision 1, active** (2026-09-04). The human owner approved
-[`design.md`](design.md) on 2026-09-04; T00 records are in the tree; work is
-paused before T01.
+[`design.md`](design.md) on 2026-09-04; W4 implementation is in progress.
 
 PV replaces the application chrome's look with the stamped-document identity and
 finishes the unmerged toolkit rebuild. Every page and editor panel outside the
@@ -50,7 +49,7 @@ holds that branch at `a4c9d21`.
 | T05  | [Resume list](task-05-resume-list.md)                                                                               | Implementer                                                                 | T02         | `cd apps/web && npx vitest run test/editor/resume-list.test.ts test/app/relative-time.test.ts`                                                                                     |
 | T06  | [Settings](task-06-settings.md)                                                                                     | Implementer                                                                 | T02         | `cd apps/web && npx vitest run test/password-settings.test.ts test/connected-agents.test.ts test/sessions-settings.test.ts test/app/user-agent.test.ts test/sessions.test.ts`      |
 | T07  | [Editor shell and narrow layout](task-07-editor-shell.md)                                                           | High-judgment author                                                        | T02         | `cd apps/web && npx vitest run test/editor/editor-shell.test.ts test/editor/editor-preview.test.ts test/app/app-shell.test.ts`                                                     |
-| T08  | [Inspector labels and grouping](task-08-inspector-labels.md)                                                        | Implementer                                                                 | T07         | `cd apps/web && npx vitest run test/editor/customization-panel.test.ts test/editor/personal-details.test.ts test/editor/field-labels.test.ts`                                      |
+| T08  | [Inspector labels and grouping](task-08-inspector-labels.md)                                                        | Implementer                                                                 | T07         | `cd apps/web && npx vitest run test/editor/customization-controls.test.ts test/editor/personal-details.test.ts test/editor/field-labels.test.ts`                                   |
 | T09  | [Publish dialog and the stamp](task-09-publish-dialog.md)                                                           | Implementer                                                                 | T07         | `cd apps/web && npx vitest run test/editor/publish-dialog.test.ts test/editor/use-stamp.test.ts test/editor/editor-shell.test.ts test/editor/editor-preview.test.ts`               |
 | T10  | [Finish review, browser proofs, records, exit](task-10-finish-review-records-exit.md)                               | Integration owner; Impeccable reviewer and documenter; fresh phase reviewer | T03–T09     | [`exit-criteria.md`](exit-criteria.md)                                                                                                                                             |
 
