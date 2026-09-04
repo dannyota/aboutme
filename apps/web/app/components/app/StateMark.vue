@@ -66,3 +66,42 @@ const publicLink = computed(() => {
     </template>
   </span>
 </template>
+
+<style>
+@keyframes aboutme-stamp-land {
+  from {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes aboutme-stamp-lift {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+[data-stamp='landing'] {
+  animation: aboutme-stamp-land 180ms ease-out;
+  transform-origin: center;
+}
+
+[data-stamp='lifting'] {
+  animation: aboutme-stamp-lift 120ms ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-stamp] {
+    animation: none;
+  }
+}
+</style>

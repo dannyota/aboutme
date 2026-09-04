@@ -14,9 +14,19 @@ import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
 const mounted: VueWrapper[] = [];
+const clipboardDescriptor = Object.getOwnPropertyDescriptor(
+  navigator,
+  'clipboard',
+);
 
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
+  if (clipboardDescriptor === undefined) {
+    Reflect.deleteProperty(navigator, 'clipboard');
+  } else {
+    Object.defineProperty(navigator, 'clipboard', clipboardDescriptor);
+  }
+  vi.useRealTimers();
 });
 
 class DialogHarness {
@@ -90,10 +100,34 @@ describe('PublishDialog', () => {
         + 'content-delivery network.',
       );
       expect(dialog().text()).toContain(
+        'Whether visitors can download the PDF. '
+        + 'You can always export your own.',
+      );
+      expect(dialog().text()).toContain(
         'SEO and GEO allow search crawlers and AI answer engines to discover '
         + 'and reuse public resume content.',
       );
     });
+
+  it('renders the slug prefix and reserves seal ink for Publish', async () => {
+    const record = editorRecord();
+    const { actions } = actionsFor(record);
+    const wrapper = await mountDialog(record, actions);
+
+    const prefix = wrapper.get('[data-testid="publish-slug-prefix"]');
+    const slug = wrapper.get('[data-action="publish-slug"]');
+    expect(prefix.text()).toBe('aboutme.vn/');
+    expect(prefix.attributes('aria-hidden')).toBe('true');
+    expect(slug.attributes('aria-describedby')?.split(' '))
+      .toContain(prefix.attributes('id'));
+
+    const sealActions = wrapper.findAll('[data-variant="seal"]');
+    expect(sealActions).toHaveLength(1);
+    expect(sealActions[0]?.text()).toBe('Publish');
+    const cancel = wrapper.get('[data-action="publish-close"]');
+    expect(cancel.text()).toBe('Cancel');
+    expect(cancel.attributes('data-variant')).toBe('ghost');
+  });
 
   it('bounds and scrolls long dialog content within the viewport', async () => {
     const record = editorRecord();
@@ -741,6 +775,53 @@ describe('PublishDialog', () => {
       expect(newWrapper.get('[data-action="publish-submit"]').text())
         .toBe('Update publication');
     });
+
+  it('copies only the accepted canonical absolute link', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const record = editorRecord();
+    const accepted = acceptedFixture({
+      metadata: {
+        ...acceptedFixture().metadata,
+        live: true,
+        slug: 'canonical-slug',
+      },
+    });
+    const context = actionsFor(record, {
+      kind: 'accepted',
+      resume: accepted,
+    });
+    const wrapper = await mountDialog(record, context.actions);
+
+    expect(wrapper.get('[data-app-seal="stamp"]').attributes('aria-label'))
+      .toBe('Public at aboutme.vn/canonical-slug');
+    const link = wrapper.get('[data-action="view-public-resume"]');
+    expect(link.attributes('href')).toBe('/canonical-slug');
+    expect(link.text()).toBe('aboutme.vn/canonical-slug');
+
+    vi.useFakeTimers();
+    await wrapper.get('[data-action="copy-link"]').trigger('click');
+    await Promise.resolve();
+    await wrapper.vm.$nextTick();
+    expect(writeText).toHaveBeenCalledWith(
+      `${location.origin}/canonical-slug`,
+    );
+    expect(wrapper.get('[data-action="copy-link"]').text()).toBe('Copied');
+    vi.advanceTimersByTime(2_000);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[data-action="copy-link"]').text()).toBe('Copy link');
+
+    writeText.mockRejectedValueOnce(new Error('denied'));
+    await wrapper.get('[data-action="copy-link"]').trigger('click');
+    await Promise.resolve();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'Copy failed. Select the link to copy it.',
+    );
+  });
 
   it('returns focus on close and contains Tab focus inside the dialog',
     async () => {

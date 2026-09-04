@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 
+import AppSeal from '@/components/app/AppSeal.vue';
 import FormDialog from '@/components/app/FormDialog.vue';
 import SwitchField from '@/components/app/SwitchField.vue';
 import TextField from '@/components/app/TextField.vue';
@@ -33,6 +34,10 @@ const actionBusy = ref(false);
 const providerLinkActivated = ref(false);
 const initialLive = ref(false);
 const restoreFocus = ref(true);
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle');
+const slugInputId = `publish-slug-${useId()}`;
+const slugPrefixId = `${slugInputId}-prefix`;
+let copyResetTimer: ReturnType<typeof setTimeout> | undefined;
 
 const state = computed(() => props.actions.publish.state.value);
 const busy = computed(
@@ -54,6 +59,10 @@ const slugError = computed(() =>
         'separated by single hyphens.',
       ].join(' '),
 );
+const slugDescribedBy = computed(() => [
+  slugPrefixId,
+  ...(slugError.value === undefined ? [] : [`${slugInputId}-error`]),
+].join(' '));
 const submitDisabled = computed(
   () =>
     busy.value
@@ -118,6 +127,8 @@ watch(state, (next) => {
     syncMetadata(props.record.accepted.metadata);
   }
 });
+
+watch(publicHref, () => resetCopyState());
 
 function setLive(value: boolean): void {
   live.value = value;
@@ -186,6 +197,30 @@ function focusIssue(path: string): void {
   emit('focus-issue', path);
 }
 
+async function copyLink(): Promise<void> {
+  const path = publicHref.value;
+  if (path === null) return;
+  resetCopyState();
+  try {
+    await navigator.clipboard.writeText(`${location.origin}${path}`);
+    copyState.value = 'copied';
+    copyResetTimer = setTimeout(() => {
+      copyState.value = 'idle';
+      copyResetTimer = undefined;
+    }, 2_000);
+  } catch {
+    copyState.value = 'failed';
+  }
+}
+
+function resetCopyState(): void {
+  if (copyResetTimer !== undefined) {
+    clearTimeout(copyResetTimer);
+    copyResetTimer = undefined;
+  }
+  copyState.value = 'idle';
+}
+
 function issueMessage(code: string): string {
   switch (code) {
     case 'required_for_live':
@@ -247,6 +282,8 @@ function failureMessage(code: string): string {
       return 'Publishing failed. Try again.';
   }
 }
+
+onBeforeUnmount(resetCopyState);
 </script>
 
 <template>
@@ -257,7 +294,7 @@ function failureMessage(code: string): string {
     title="Publish resume"
     description="Choose how this resume is shared publicly."
     :submit-label="primaryAction"
-    cancel-label="Close"
+    cancel-label="Cancel"
     :busy="busy"
     :submit-disabled="submitDisabled"
     :restore-focus="restoreFocus"
@@ -268,20 +305,35 @@ function failureMessage(code: string): string {
     @cancel="close"
   >
     <div class="grid gap-4">
-      <TextField
-        v-model="slug"
-        label="Slug"
-        name="slug"
-        autocomplete="off"
-        :disabled="busy"
-        :error="slugError"
-        :control-attrs="{
-          'data-action': 'publish-slug',
-          'minlength': '4',
-          'maxlength': '30',
-          'pattern': '[a-z0-9]+(-[a-z0-9]+)*',
-        }"
-      />
+      <div
+        class="relative"
+        data-testid="publish-slug-field"
+      >
+        <TextField
+          :id="slugInputId"
+          v-model="slug"
+          label="Slug"
+          name="slug"
+          autocomplete="off"
+          :disabled="busy"
+          :error="slugError"
+          :control-attrs="{
+            'aria-describedby': slugDescribedBy,
+            'class': 'pl-28',
+            'data-action': 'publish-slug',
+            'minlength': '4',
+            'maxlength': '30',
+            'pattern': '[a-z0-9]+(-[a-z0-9]+)*',
+          }"
+        />
+        <span
+          :id="slugPrefixId"
+          aria-hidden="true"
+          class="pointer-events-none absolute bottom-2 left-3 text-sm
+            text-muted-foreground"
+          data-testid="publish-slug-prefix"
+        >aboutme.vn/</span>
+      </div>
 
       <fieldset class="grid gap-3">
         <legend class="mb-1 text-sm font-medium">
@@ -305,6 +357,10 @@ function failureMessage(code: string): string {
           name="downloadEnabled"
           data-action="publish-download"
           :disabled="busy || !live"
+          :description="[
+            'Whether visitors can download the PDF.',
+            'You can always export your own.',
+          ].join(' ')"
         />
         <SwitchField
           v-model="seoGeoEnabled"
@@ -477,26 +533,47 @@ function failureMessage(code: string): string {
         {{ failureMessage(state.code) }}
       </p>
 
-      <p
+      <div
         v-if="state.kind === 'accepted'"
-        class="publish-dialog__success"
-        role="status"
-        aria-live="polite"
+        class="publish-dialog__success grid justify-items-start gap-3"
       >
-        <template v-if="state.resume.metadata.live">
-          Published successfully.
-        </template>
-        <template v-else>
-          Resume is private.
-        </template>
-        <a
-          v-if="publicHref !== null"
-          :href="publicHref"
-          data-action="view-public-resume"
+        <p
+          aria-live="polite"
+          role="status"
         >
-          View public resume
-        </a>
-      </p>
+          <template v-if="state.resume.metadata.live">
+            Published successfully.
+          </template>
+          <template v-else>
+            Resume is private.
+          </template>
+        </p>
+        <template v-if="publicHref !== null">
+          <AppSeal
+            :link="publicHref"
+            size="stamp"
+          />
+          <a
+            :href="publicHref"
+            data-action="view-public-resume"
+          >aboutme.vn{{ publicHref }}</a>
+          <Button
+            data-action="copy-link"
+            type="button"
+            variant="secondary"
+            @click="copyLink"
+          >
+            {{ copyState === 'copied' ? 'Copied' : 'Copy link' }}
+          </Button>
+          <p
+            v-if="copyState === 'failed'"
+            data-testid="copy-link-error"
+            role="alert"
+          >
+            Copy failed. Select the link to copy it.
+          </p>
+        </template>
+      </div>
 
       <p
         v-if="busy"
@@ -518,6 +595,7 @@ function failureMessage(code: string): string {
         type="submit"
         data-action="publish-submit"
         :disabled="submitDisabled"
+        variant="seal"
       >
         {{ primaryAction }}
       </Button>
@@ -529,7 +607,7 @@ function failureMessage(code: string): string {
             || state.kind === 'slug-taken'
         "
         type="button"
-        variant="outline"
+        variant="secondary"
         data-action="publish-retry"
         :disabled="busy"
         @click="retry"
@@ -544,7 +622,7 @@ function failureMessage(code: string): string {
             || state.kind === 'provider-started-rate-limited'
         "
         type="button"
-        variant="outline"
+        variant="secondary"
         data-action="publish-provider-start"
         :disabled="busy"
         @click="startProvider"
@@ -553,12 +631,12 @@ function failureMessage(code: string): string {
       </Button>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         data-action="publish-close"
         :disabled="busy"
         @click="close"
       >
-        Close
+        Cancel
       </Button>
     </template>
   </FormDialog>
