@@ -20,6 +20,8 @@ type Representation string
 const (
 	// RepresentationJSON is the public JSON resume representation.
 	RepresentationJSON Representation = "json"
+	// RepresentationSSE is the public revision notification stream.
+	RepresentationSSE Representation = "sse"
 	// RepresentationPhoto is the public resume photo representation.
 	RepresentationPhoto Representation = "photo"
 	// RepresentationHTML is the public HTML resume representation.

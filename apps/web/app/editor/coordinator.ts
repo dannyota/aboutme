@@ -1,9 +1,6 @@
 import type { useAuth } from '../composables/useAuth';
 import { toRaw } from 'vue';
-import {
-  dependencyIdsForNewCommand,
-  nextSequence,
-} from '../stores/resumes';
+import { dependencyIdsForNewCommand, nextSequence } from '../stores/resumes';
 import type { ResumeRecord, useResumeStore } from '../stores/resumes';
 import {
   captureCommand,
@@ -14,6 +11,7 @@ import type {
   AttemptFailureCode,
   AttemptResult,
   FrozenAttempt,
+  ResumeReadResult,
   ResumeSummary,
 } from './attempt';
 import { freezeAttempt, freezeCreateAttempt } from './resumeApi';
@@ -24,15 +22,15 @@ import {
   reconcileTemplateGroup,
   type ConflictConfirmation,
 } from './reconcile';
-import { compareRevision } from './revision';
-import type { ResumeApi } from './resumeApi';
+import { compareRevision, parentETag } from './revision';
+import type { ResumeApi, ResumeConditionalReadResult } from './resumeApi';
 import {
   advanceTemplateGroup,
   nextTemplateChild,
   type EditorQueueItem,
   type TemplateGroupCommand,
 } from './templateGroup';
-import type { AcceptedResume, EditorRuntime } from './types';
+import type { AcceptedResume, EditorRuntime, ParentETag } from './types';
 
 const DEBOUNCE_MS = 1_000;
 const UNKNOWN_REPLAY_DELAY_MS = 250;
@@ -72,7 +70,11 @@ export interface ResumeMutationCoordinator {
   flush(resumeId: string): Promise<void>;
   completeRead(resumeId: string): Promise<boolean>;
   retry(resumeId: string, commandId: string): Promise<void>;
-  refreshAndReconcile(resumeId: string): Promise<void>;
+  refreshAndReconcile(resumeId: string): Promise<ResumeReadResult>;
+  refreshConditionalAndReconcile?: (
+    resumeId: string,
+    etag?: ParentETag,
+  ) => Promise<ResumeConditionalReadResult>;
   acceptLatest(resumeId: string, conflictId: string): Promise<void>;
   applyMine(
     resumeId: string,
@@ -129,12 +131,10 @@ export function createMutationCoordinator(deps: {
     for (;;) {
       const record = deps.store.recordFor(resumeId);
       if (
-        !canDrain(
-          record,
-          deps.auth.authState.value,
-          deps.auth.user.value?.id,
-        )
-      ) return;
+        !canDrain(record, deps.auth.authState.value, deps.auth.user.value?.id)
+      ) {
+        return;
+      }
       if (record.completeReadRequired) return;
       const queueItem = toRaw(record.pending[0]!);
       if (!dependenciesAcknowledged(record, queueItem)) return;
@@ -171,7 +171,7 @@ export function createMutationCoordinator(deps: {
         }
         const command = nextTemplateChild(queueItem, record.templateState);
         if (command === null) return;
-        if (!await dispatchCommand(resumeId, queueItem, command)) return;
+        if (!(await dispatchCommand(resumeId, queueItem, command))) return;
         continue;
       }
       const decision = reconcileCommand(queueItem, record.accepted);
@@ -183,7 +183,7 @@ export function createMutationCoordinator(deps: {
         deps.store.markConflict(resumeId, decision.conflict);
         return;
       }
-      if (!await dispatchCommand(resumeId, queueItem, queueItem)) return;
+      if (!(await dispatchCommand(resumeId, queueItem, queueItem))) return;
     }
   }
 
@@ -194,11 +194,7 @@ export function createMutationCoordinator(deps: {
   ): Promise<boolean> {
     const record = deps.store.recordFor(resumeId);
     let csrfToken = dispatchToken(resumeId, queueItem.ownerId);
-    if (
-      record !== undefined
-      && csrfToken === null
-      && !record.sessionLost
-    ) {
+    if (record !== undefined && csrfToken === null && !record.sessionLost) {
       try {
         await deps.auth.refresh();
       } catch {
@@ -517,21 +513,51 @@ export function createMutationCoordinator(deps: {
       );
       return;
     }
-    if (
-      command.kind === 'metadataField'
-      || command.kind === 'resumeDelete'
-      || compareRevision(winner.revision, record.accepted.revision) <= 0
-    ) {
-      await refreshAndReconcile(resumeId);
-      return;
+    let snapshot: AcceptedResume;
+    if (command.kind === 'metadataField' || command.kind === 'resumeDelete') {
+      const complete = await deps.api.read(resumeId);
+      if (complete.kind === 'session-lost') {
+        stopForSessionLoss(resumeId);
+        return;
+      }
+      if (complete.kind === 'rate-limited') {
+        deps.store.holdAttempt(resumeId, {
+          kind: 'retry-later',
+          queueItem,
+          command,
+          attempt,
+          reason: 'rate-limited',
+          retryAfterMs: complete.retryAfterMs,
+        });
+        return;
+      }
+      if (complete.kind !== 'complete') {
+        deps.store.holdAttempt(resumeId, {
+          kind: 'unknown',
+          queueItem,
+          command,
+          attempt,
+          reason: 'server',
+        });
+        return;
+      }
+      const adoption = deps.store.adoptComplete(resumeId, complete.accepted);
+      snapshot = adoption.kind === 'adopted'
+        ? adoption.accepted
+        : adoption.winner;
+    } else {
+      snapshot = compareRevision(winner.revision, record.accepted.revision) <= 0
+        ? record.accepted
+        : {
+            document: winner.document,
+            revision: winner.revision,
+            metadata: record.accepted.metadata,
+            metadataFreshness: 'stale',
+          };
+      if (snapshot !== record.accepted) {
+        deps.store.adoptStaleWinner(resumeId, snapshot);
+      }
     }
-    const snapshot: AcceptedResume = {
-      document: winner.document,
-      revision: winner.revision,
-      metadata: record.accepted.metadata,
-      metadataFreshness: 'stale',
-    };
-    deps.store.adoptStaleWinner(resumeId, snapshot);
     const decision = reconcileCommand(command, snapshot);
     if (decision.kind === 'satisfied') {
       deps.store.dropHead(resumeId, queueItem.id);
@@ -563,24 +589,63 @@ export function createMutationCoordinator(deps: {
     );
   }
 
-  async function refreshAndReconcile(resumeId: string): Promise<void> {
+  async function refreshAndReconcile(
+    resumeId: string,
+  ): Promise<ResumeReadResult> {
     const result = await deps.api.read(resumeId);
     if (result.kind === 'session-lost') {
       stopForSessionLoss(resumeId);
-      return;
+      return result;
     }
-    if (result.kind !== 'complete') return;
+    if (result.kind !== 'complete') return result;
     const record = deps.store.recordFor(resumeId);
-    if (record === undefined) return;
-    deps.store.adoptComplete(resumeId, result.accepted);
+    if (record === undefined) return result;
+    const latest = adoptAndReconcile(resumeId, result.accepted);
+    return latest === undefined
+      ? result
+      : { kind: 'complete', accepted: latest };
+  }
+
+  function adoptAndReconcile(
+    resumeId: string,
+    accepted: AcceptedResume,
+  ): AcceptedResume | undefined {
+    const record = deps.store.recordFor(resumeId);
+    if (record === undefined) return undefined;
+    const adoption = deps.store.adoptComplete(resumeId, accepted);
+    const latest
+      = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
     const active = deps.store.recordFor(resumeId)?.attempt;
-    if (active === null || active === undefined) return;
-    const decision = reconcileCommand(toRaw(active.command), result.accepted);
+    if (active === null || active === undefined) return latest;
+    const decision = reconcileCommand(toRaw(active.command), latest);
     if (decision.kind === 'satisfied') {
       deps.store.dropHead(resumeId, active.queueItem.id);
     } else if (decision.kind === 'conflict') {
       deps.store.markConflict(resumeId, decision.conflict);
     }
+    return latest;
+  }
+
+  async function refreshConditionalAndReconcile(
+    resumeId: string,
+    etag?: ParentETag,
+  ): Promise<ResumeConditionalReadResult> {
+    const result = await deps.api.readConditional(resumeId, etag);
+    if (result.kind === 'session-lost') {
+      stopForSessionLoss(resumeId);
+      return result;
+    }
+    if (result.kind !== 'complete') return result;
+    const record = deps.store.recordFor(resumeId);
+    if (record === undefined) return result;
+    const latest = adoptAndReconcile(resumeId, result.accepted);
+    return latest === undefined
+      ? result
+      : {
+          kind: 'complete',
+          accepted: latest,
+          etag: parentETag(latest.revision),
+        };
   }
 
   async function completeReadBarrier(resumeId: string): Promise<boolean> {
@@ -846,7 +911,7 @@ export function createMutationCoordinator(deps: {
     deps.store.resolveConflict(resumeId, conflictId);
     if (
       deps.store.recordFor(resumeId)?.completeReadRequired === true
-      && !await completeReadBarrier(resumeId)
+      && !(await completeReadBarrier(resumeId))
     ) {
       return;
     }
@@ -870,12 +935,16 @@ export function createMutationCoordinator(deps: {
       confirmation,
     );
     if (replacement === null) return;
-    if (!deps.store.replaceActiveAfterCompleteRead(
-      resumeId,
-      conflict.command.id,
-      latest.accepted,
-      replacement,
-    )) return;
+    if (
+      !deps.store.replaceActiveAfterCompleteRead(
+        resumeId,
+        conflict.command.id,
+        latest.accepted,
+        replacement,
+      )
+    ) {
+      return;
+    }
     deps.store.resolveConflict(resumeId, conflictId);
     schedule(resumeId);
   }
@@ -922,7 +991,9 @@ export function createMutationCoordinator(deps: {
       token !== null
       && deps.auth.authState.value === 'authenticated'
       && deps.auth.user.value?.id === ownerId
-    ) return token;
+    ) {
+      return token;
+    }
     if (
       resumeId !== undefined
       && (deps.auth.authState.value === 'anonymous'
@@ -951,6 +1022,7 @@ export function createMutationCoordinator(deps: {
     completeRead: completeReadBarrier,
     retry,
     refreshAndReconcile,
+    refreshConditionalAndReconcile,
     acceptLatest,
     applyMine,
     resumeAfterAuth,

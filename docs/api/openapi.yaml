@@ -10,7 +10,9 @@ info:
 
     ## Response envelope
 
-    Every response body is one of:
+    JSON response bodies use one of these envelopes. Realtime endpoints
+    explicitly use `text/event-stream` instead.
+
 
     - Success: `Envelope` — `{"data": ...}`.
     - Failure: `Error` — `{"error": {"code": "...", "message": "..."}}`.
@@ -121,6 +123,110 @@ tags:
       shared public generation gate. They never expose owner resume objects or
       private media keys.
 paths:
+  /events:
+    get:
+      operationId: getOwnerEvents
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+      summary: Observe revision changes for the signed-in account
+      description: >-
+        Use EventSource. Each revision event contains version 1, resume_id,
+        decimal-string revision, and deleted. No document content is sent.
+        A heartbeat with version 1 is flushed immediately and every 25 seconds.
+        Initial connection and every reconnect require an unconditional resume
+        refetch. Last-Event-ID is not a replay cursor. A deleted event uses the
+        last stored revision plus one, clamped at the int64 ceiling; the deleted
+        flag always triggers a refetch even at an equal revision.
+        Sessions are rechecked before every
+        revision and heartbeat; expiry, revocation, dependency failure, listener
+        loss, or slow consumption closes the stream. Limits are 20 connections
+        per account, 100 per canonical IP, and 2,000 per server task, with at
+        least 25% file descriptor headroom. Unsupported methods return 405.
+      responses:
+        "200":
+          description: Account-scoped metadata stream; no-store, no-transform.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: heartbeat
+                data: {"version":1}
+
+                event: revision
+                id: 22222222-2222-4222-8222-222222222222:2
+                data: {"version":1,"resume_id":"22222222-2222-4222-8222-222222222222","revision":"2","deleted":false}
+
+        "400":
+          $ref: "#/components/responses/RealtimeInvalid"
+        "401":
+          description: A valid session is required; invalid cookies are cleared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "405":
+          $ref: "#/components/responses/RealtimeMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/RealtimeLimited"
+        "500":
+          description: Session authentication dependency failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/RealtimeUnavailable"
+  /live/{slug}:
+    get:
+      operationId: getPublicEvents
+      tags: [public]
+      security: []
+      summary: Observe revision changes for one live public slug
+      description: >-
+        Use EventSource. Cookies are ignored. Missing, private, renamed, deleted,
+        and malformed slugs return the same 404. Revision event data contains
+        only version 1 and a decimal-string revision; it contains no account ID,
+        private resume ID, or document content. A heartbeat with version 1 is
+        flushed immediately and every 25 seconds. Initial connection and every
+        reconnect require an unconditional public JSON refetch. Last-Event-ID
+        is not a replay cursor. Unpublish, rename, and delete close the stream
+        through the public revocation fence before the mutation succeeds; the
+        next live refetch returns 404. Listener loss and slow consumption also
+        close streams. Limits are 100 connections per canonical IP and 2,000
+        per server task, with at least 25% file descriptor headroom.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+      responses:
+        "200":
+          description: Public revision stream; no-store, no-transform.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: heartbeat
+                data: {"version":1}
+
+                event: revision
+                id: 2
+                data: {"version":1,"revision":"2"}
+
+        "400":
+          $ref: "#/components/responses/RealtimeInvalid"
+        "404":
+          description: public_not_found; no-store, no-transform.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "405":
+          $ref: "#/components/responses/RealtimeMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/RealtimeLimited"
+        "503":
+          $ref: "#/components/responses/RealtimeUnavailable"
   /healthz:
     servers:
       - url: https://aboutme.vn
@@ -2787,6 +2893,45 @@ paths:
 
 components:
   responses:
+    RealtimeInvalid:
+      description: Invalid canonical client IP; no-store, no-transform.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RealtimeMethodNotAllowed:
+      description: Only GET is allowed; no-store, no-transform.
+      headers:
+        Allow:
+          schema:
+            type: string
+            const: GET
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RealtimeLimited:
+      description: Connection or request limit reached; no-store, no-transform.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RealtimeUnavailable:
+      description: A dependency or public admission fence is unavailable; no-store, no-transform.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+            const: 5
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     AuthStartRateLimited:
       description: >-
         The start routes' own rate limit is exhausted. Anonymous sign-in

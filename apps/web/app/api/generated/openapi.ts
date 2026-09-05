@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Observe revision changes for the signed-in account
+         * @description Use EventSource. Each revision event contains version 1, resume_id, decimal-string revision, and deleted. No document content is sent. A heartbeat with version 1 is flushed immediately and every 25 seconds. Initial connection and every reconnect require an unconditional resume refetch. Last-Event-ID is not a replay cursor. A deleted event uses the last stored revision plus one, clamped at the int64 ceiling; the deleted flag always triggers a refetch even at an equal revision. Sessions are rechecked before every revision and heartbeat; expiry, revocation, dependency failure, listener loss, or slow consumption closes the stream. Limits are 20 connections per account, 100 per canonical IP, and 2,000 per server task, with at least 25% file descriptor headroom. Unsupported methods return 405.
+         */
+        get: operations["getOwnerEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/live/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Observe revision changes for one live public slug
+         * @description Use EventSource. Cookies are ignored. Missing, private, renamed, deleted, and malformed slugs return the same 404. Revision event data contains only version 1 and a decimal-string revision; it contains no account ID, private resume ID, or document content. A heartbeat with version 1 is flushed immediately and every 25 seconds. Initial connection and every reconnect require an unconditional public JSON refetch. Last-Event-ID is not a replay cursor. Unpublish, rename, and delete close the stream through the public revocation fence before the mutation succeeds; the next live refetch returns 404. Listener loss and slow consumption also close streams. Limits are 100 connections per canonical IP and 2,000 per server task, with at least 25% file descriptor headroom.
+         */
+        get: operations["getPublicEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -1647,6 +1687,45 @@ export interface components {
         };
     };
     responses: {
+        /** @description Invalid canonical client IP; no-store, no-transform. */
+        RealtimeInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Only GET is allowed; no-store, no-transform. */
+        RealtimeMethodNotAllowed: {
+            headers: {
+                Allow?: "GET";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Connection or request limit reached; no-store, no-transform. */
+        RealtimeLimited: {
+            headers: {
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A dependency or public admission fence is unavailable; no-store, no-transform. */
+        RealtimeUnavailable: {
+            headers: {
+                "Retry-After"?: 5;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The start routes' own rate limit is exhausted. Anonymous sign-in `GET` starts are keyed by client IP. Authenticated link and reauthentication `POST` starts are keyed by `(account, client IP)`. Both are tighter than the whole-server default because each accepted start writes a database row. Carries `Retry-After` in whole seconds. */
         AuthStartRateLimited: {
             headers: {
@@ -2924,6 +3003,103 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getOwnerEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account-scoped metadata stream; no-store, no-transform. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example event: heartbeat
+                     *     data: {"version":1}
+                     *
+                     *     event: revision
+                     *     id: 22222222-2222-4222-8222-222222222222:2
+                     *     data: {"version":1,"resume_id":"22222222-2222-4222-8222-222222222222","revision":"2","deleted":false}
+                     */
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["RealtimeInvalid"];
+            /** @description A valid session is required; invalid cookies are cleared. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            405: components["responses"]["RealtimeMethodNotAllowed"];
+            429: components["responses"]["RealtimeLimited"];
+            /** @description Session authentication dependency failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["RealtimeUnavailable"];
+        };
+    };
+    getPublicEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public revision stream; no-store, no-transform. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example event: heartbeat
+                     *     data: {"version":1}
+                     *
+                     *     event: revision
+                     *     id: 2
+                     *     data: {"version":1,"revision":"2"}
+                     */
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["RealtimeInvalid"];
+            /** @description public_not_found; no-store, no-transform. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            405: components["responses"]["RealtimeMethodNotAllowed"];
+            429: components["responses"]["RealtimeLimited"];
+            503: components["responses"]["RealtimeUnavailable"];
+        };
+    };
     getHealthz: {
         parameters: {
             query?: never;

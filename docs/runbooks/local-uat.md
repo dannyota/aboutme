@@ -1,14 +1,14 @@
-# Local UAT
+# Local HTTPS checks
 
-Status: **blocked for acceptance**. The local UAT contract requires the complete
-image-based deployment at an HTTPS origin on port 443. The current Compose
-Caddyfile exposes HTTP only, so it cannot produce valid authentication or
-end-to-end UAT evidence. The native HTTPS checks below are the available feature
-proofs at `https://localhost:20443`; they do not close this port-443 acceptance
-gate.
+Status: **available for feature verification**. Native authenticated checks run
+at `https://localhost:20443`. Complete product UAT runs in AWS during
+[Phase 10](../plans/phase-10/README.md), after Phase 9 cost research.
+[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md) replaces the old
+local port-443 acceptance prerequisite; no host sysctl change is needed for this
+plan.
 
-Do not mark a UAT criterion `PASS` against the current HTTP origin. Do not
-weaken Secure cookies or the HTTPS requirement to bypass the blocker.
+Keep Secure cookies, normal TLS verification, and the local network allowlist.
+The HTTP Compose smoke does not prove authenticated browser behavior.
 
 ## Native HTTPS feature checks
 
@@ -63,16 +63,17 @@ a run or updating a selector:
   `Page size`, not schema paths or raw enum IDs.
 
 The entry, editor, and publish proofs include these current selectors and
-strings. A local UAT record must identify the exact proof file and command; a
-selector list alone is not a passing result.
+strings. A local feature-check record must identify the exact proof file and
+command; a selector list alone is not a passing result.
 
 The publish check seeds the same development account, creates a uniquely named
 complete resume through the editor, and proves save-before-publish ordering. It
-publishes with discovery off, enables discovery, unpublishes, and observes the
-uniform public `404` within five seconds. Its `finally` cleanup deletes only the
-resume created for that run with a fresh CSRF token, current revision, and new
-idempotency key. The check signs out and leaves the shared account and sample
-resume intact.
+publishes with discovery off, verifies a second editor tab updates the owner and
+public views without a page reload or scroll reset, enables discovery, then
+unpublishes and observes automatic public `404` navigation within five seconds.
+Its `finally` cleanup deletes only the resume created for that run with a fresh
+CSRF token, current revision, and new idempotency key. The check signs out and
+leaves the shared account and sample resume intact.
 
 The browser image imports only the root exported by this harness. It uses no TLS
 bypass and permits network traffic only to the fixed HTTPS origin. Each check
@@ -109,9 +110,9 @@ the working tree without the hermetic tar (`ARGS="print.spec.ts"` selects specs,
 last Nuxt build for spec-only edits). It is a development loop, not a gate; the
 hermetic `make web-e2e` remains the gate.
 
-This check supports authenticated feature development. It does not replace the
-complete image-based port-443 deployment, isolated resources, frozen scenario
-set, or exit evidence required below.
+This check supports authenticated feature development. Complete product and
+operational acceptance belong to the hosted AWS Phase 10 environment; see the
+[handoff below](#handoff-to-hosted-uat).
 
 ## Current Compose smoke check
 
@@ -143,61 +144,19 @@ the daily development environment. Restore the shared database only after
 Compose teardown, and only when later work needs it. A worker never performs
 this handoff or stops the shared database.
 
-## Acceptance entry conditions
+## Handoff to hosted UAT
 
-Local UAT can start only when all of these are true:
+These checks remain local and use only the shared development database. Do not
+point their seed, reset, or cleanup commands at AWS. Phase 10 supplies a
+separate hosted harness for `https://uat.aboutme.vn`, with synthetic fixtures
+and bounded cleanup, after its local infrastructure checks pass.
 
-- the UAT deployment serves `https://localhost` on port 443 through the real
-  route table;
-- the future `make uat-up`, `make uat-reset`, and `make uat-down` targets exist
-  and manage only the isolated `aboutme-uat` project and its disposable data;
-- rootless Podman can bind 443, and the isolated browser profile trusts the
-  recorded UAT Caddy root without certificate-error bypass flags;
-- the complete product slice and frozen UAT scenarios are present;
-- the exact candidate contains `apps/server/migrations/.uat-baseline`, which
-  freezes every existing migration after that candidate lands;
-- `make ci` passes at the exact candidate commit;
-- the integration owner has every live-database worker's idle acknowledgment,
-  has stopped the native stack and `aboutme-test-db`, and has verified that no
-  other aboutme PostgreSQL container is running;
-- image IDs, migration head, configuration names without values, and tool
-  versions can be recorded;
-- the scripted headless Playwright harness can reach the HTTPS origin;
-- no AWS, Cloudflare, certificate, DNS, registry, or staging mutation is
-  required.
+The migration baseline marker must be committed before the first hosted UAT
+migration. Phase 10 records candidate/image identities and proves complete user
+workflows, SES delivery, and the live operational drills. The owner has already
+authorized that Singapore UAT environment and its Cloudflare DNS; production
+promotion is Phase 11 and requires separate approval.
 
-The native HTTPS targets above exist, but these separate `uat-*` targets do not
-exist yet. Update this runbook and the deployment together when the port-443
-overlay lands.
-
-## Required execution shape
-
-At the accepted candidate commit, the main session will:
-
-1. After `make ci`, wait for live-worker acknowledgments, stop the native stack
-   and shared test database, verify the one-database handoff, then build and
-   start the complete Compose deployment on HTTPS port 443. The future
-   `make uat-up` target must fail closed if another aboutme PostgreSQL container
-   is running.
-2. Record the commit, image IDs, migration head, commands, timestamps, tool
-   versions, configuration names, and every state change.
-3. Run each frozen scenario through the scripted headless Playwright suites and
-   attach accessibility, screenshot, console, network, request-ID, server-log,
-   and database evidence as required by that criterion.
-4. Record expected and observed results with `PASS`, `FAIL`, or `BLOCKED`.
-   Missing evidence and `BLOCKED` both fail the gate.
-5. Send the pinned evidence to a fresh independent reviewer for a live,
-   read-only probe while the deployment still runs.
-6. After that live review passes, tear down the isolated deployment with the
-   future `make uat-down` target.
-7. Have the reviewer verify cleanup and issue the final cleanup verdict.
-8. Verify the final manifest and reviewer digest at the candidate commit.
-9. Restore `aboutme-test-db` only after UAT teardown and the cleanup verdict,
-   and only when later work needs it.
-
-A later product-code change makes evidence stale for every changed path. Rerun
-those scenarios at the commit being shipped.
-
-Only after local UAT and its evidence review pass may the owner be asked to
-authorize external resource creation. Production launch needs separate later
-approval.
+Use the [email runbook](email.md) for the existing SES setup. Its sandbox and
+runtime IAM/adoption requirements are part of the hosted UAT handoff, not a
+reason to contact SES from native feature checks.

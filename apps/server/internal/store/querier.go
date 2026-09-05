@@ -245,6 +245,7 @@ type Querier interface {
 	// The generation and eligible slug set are selected by one PostgreSQL
 	// statement so aggregate discovery admission cannot pair different commits.
 	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
+	GetPublicRealtimeResume(ctx context.Context, slug string) (GetPublicRealtimeResumeRow, error)
 	GetPublicResumeByOwner(ctx context.Context, arg GetPublicResumeByOwnerParams) (Resume, error)
 	// Missing, never-published, private, renamed, and deleted rows all surface as
 	// pgx.ErrNoRows. Representation-specific flags are checked after this live

@@ -397,7 +397,14 @@ const resumeStore = defineStore('resumes', {
         | ResumeRecord
         | undefined;
       if (record === undefined) return;
-      record.conflicts = [...record.conflicts, copy(conflict)];
+      const existing = record.conflicts.findIndex(
+        (candidate) => candidate.id === conflict.id,
+      );
+      record.conflicts = existing === -1
+        ? [...record.conflicts, copy(conflict)]
+        : record.conflicts.map((candidate, index) =>
+            index === existing ? copy(conflict) : candidate,
+          );
       replay(record);
     },
 

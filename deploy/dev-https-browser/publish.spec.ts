@@ -45,6 +45,9 @@ const steps = {
   accessibility: false,
   keyboard: false,
   longInvalidLayout: false,
+  publicRealtime: false,
+  ownerRealtime: false,
+  scroll: false,
 };
 
 const statuses = {
@@ -109,7 +112,11 @@ function isExpectedRevokedPublicConsole(
     message.text() ===
       "Failed to load resource: the server responded with a status of 404 ()" &&
     location.origin === ORIGIN &&
-    location.pathname === `/${slug}` &&
+    [
+      `/${slug}`,
+      `/api/v1/public/resumes/${slug}`,
+      `/api/v1/live/${slug}`,
+    ].includes(location.pathname) &&
     location.search === ""
   );
 }
@@ -129,6 +136,26 @@ function isExpectedSyntheticPublishInvalidConsole(
     httpFailureStatus(message.text()) === 422 &&
     location.origin === ORIGIN &&
     location.pathname === `/api/v1/resumes/${resumeID}/publish` &&
+    location.search === ""
+  );
+}
+
+function isExpectedRevokingPublicConsole(
+  message: ConsoleMessage,
+  slug: string,
+): boolean {
+  let location: URL;
+  try {
+    location = new URL(message.location().url);
+  } catch {
+    return false;
+  }
+  return (
+    httpFailureStatus(message.text()) === 503 &&
+    location.origin === ORIGIN &&
+    [`/api/v1/public/resumes/${slug}`, `/api/v1/live/${slug}`].includes(
+      location.pathname,
+    ) &&
     location.search === ""
   );
 }
@@ -167,10 +194,33 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   const slug = `publish-${crypto.randomUUID().slice(0, 8)}`;
   let loggedIn = false;
   let publicContext: BrowserContext | undefined;
+  let secondEditor: Page | undefined;
   let revocationElapsed = 0;
   let publishMutationCount = 0;
+  let revokingPublic = false;
   let syntheticInvalidRequest = false;
   let syntheticInvalidConsoleBudget = 0;
+  let consoleFailure: string | undefined;
+  const recordConsoleFailure = (message: ConsoleMessage): void => {
+    let path = "";
+    try {
+      path = new URL(message.location().url).pathname;
+    } catch {
+      /* No URL in this diagnostic. */
+    }
+    const route =
+      path === `/api/v1/resumes/${resumeID}`
+        ? "owner-read"
+        : path === `/api/v1/public/resumes/${slug}`
+          ? "public-read"
+          : path === `/api/v1/live/${slug}`
+            ? "public-stream"
+            : path === "/api/v1/events"
+              ? "owner-stream"
+              : "other";
+    const status = httpFailureStatus(message.text());
+    consoleFailure = `console-${status ?? "non-http"}-${route}`;
+  };
   const requestListener = (request: Request): void => {
     const url = new URL(request.url());
     if (url.origin !== ORIGIN) return;
@@ -223,6 +273,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   pageDiagnosticsAttacher(counters, {
+    onCountedConsoleError: recordConsoleFailure,
     countConsoleError: (message) => {
       if (
         syntheticInvalidConsoleBudget > 0 &&
@@ -407,10 +458,20 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await installPublicGuards(publicContext, publicCounters);
     const publicPage = await publicContext.newPage();
     pageDiagnosticsAttacher(counters, {
+      onCountedConsoleError: recordConsoleFailure,
       countConsoleError: (message) =>
         !isExpectedAnonymousMeConsole(message.text(), message.location().url) &&
-        !isExpectedRevokedPublicConsole(message, slug),
+        !(
+          revokingPublic &&
+          (isExpectedRevokedPublicConsole(message, slug) ||
+            isExpectedRevokingPublicConsole(message, slug))
+        ),
     })(publicPage);
+    const publicStream = publicPage.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/v1/live/${slug}` &&
+        response.status() === 200,
+    );
     const privateResponse = await publicPage.goto(`${ORIGIN}/${slug}`);
     statuses.publicPrivate = privateResponse?.status() ?? 0;
     expect(statuses.publicPrivate).toBe(200);
@@ -419,6 +480,9 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     );
     expect(await publicPage.getByRole("main").count()).toBe(1);
     await waitForHydration(publicPage, "public-resume");
+    expect((await publicStream).headers()["content-type"]).toContain(
+      "text/event-stream",
+    );
     steps.noindex = true;
     stage("noindex");
 
@@ -428,6 +492,80 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     stage("published-close");
     await expect(page.locator('[data-action="publish"]')).toBeFocused();
     stage("published-focus-restored");
+
+    secondEditor = await context.newPage();
+    stage("realtime-second-tab-created");
+    pageDiagnosticsAttacher(counters, {
+      onCountedConsoleError: recordConsoleFailure,
+    })(secondEditor);
+    const ownerStream = secondEditor.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/v1/events" &&
+        response.status() === 200,
+    );
+    await secondEditor.goto(`${ORIGIN}/app/resumes/${resumeID}`);
+    stage("realtime-second-tab-loaded");
+    await waitForHydration(secondEditor);
+    stage("realtime-second-tab-hydrated");
+    expect((await ownerStream).headers()["content-type"]).toContain(
+      "text/event-stream",
+    );
+    stage("realtime-owner-stream");
+    await secondEditor
+      .getByRole("navigation", { name: "Resume outline" })
+      .getByRole("button", { name: "Personal details", exact: true })
+      .click();
+    stage("realtime-second-tab-panel");
+    await publicPage.setViewportSize({ width: 900, height: 100 });
+    const scrollBefore = await publicPage.evaluate(() => {
+      document
+        .querySelector("#public-resume")
+        ?.setAttribute("data-realtime-proof", "kept");
+      window.scrollTo(0, 180);
+      return window.scrollY;
+    });
+    expect(scrollBefore).toBeGreaterThan(0);
+    stage("realtime-scrolled");
+    const ownerRefresh = page.waitForResponse(
+      (response) =>
+        response.request().method() === "GET" &&
+        new URL(response.url()).pathname === `/api/v1/resumes/${resumeID}` &&
+        response.status() === 200 &&
+        response.request().headers()["if-none-match"] === undefined,
+    );
+    const publicRefresh = publicPage.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === `/api/v1/public/resumes/${slug}` &&
+        response.status() === 200 &&
+        response.request().headers()["if-none-match"] === undefined,
+    );
+    await secondEditor.getByLabel("Headline").fill("Updated in another editor");
+    await secondEditor.getByLabel("Headline").press("Tab");
+    stage("realtime-edit-submitted");
+    await expect(secondEditor.getByTestId("save-status")).toContainText(
+      "Saved",
+    );
+    await Promise.all([ownerRefresh, publicRefresh]);
+    stage("realtime-refetched");
+    await expect(page.getByLabel("Headline")).toHaveValue(
+      "Updated in another editor",
+    );
+    await expect(publicPage.getByRole("main")).toContainText(
+      "Updated in another editor",
+    );
+    await expect(publicPage.locator("#public-resume")).toHaveAttribute(
+      "data-realtime-proof",
+      "kept",
+    );
+    expect(await publicPage.evaluate(() => window.scrollY)).toBe(scrollBefore);
+    steps.ownerRealtime = true;
+    steps.publicRealtime = true;
+    steps.scroll = true;
+    stage("realtime-refresh");
+    await secondEditor.close();
+    secondEditor = undefined;
+    await page.bringToFront();
+
     await page.locator('[data-action="publish"]').press("Enter");
     stage("update-reopen");
     let updateDialog = page.getByRole("dialog", { name: "Publish resume" });
@@ -468,6 +606,11 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     );
     await expect(issueActions).toHaveCount(24);
     syntheticInvalidRequest = false;
+    await updateDialog.evaluate(async (element) => {
+      await Promise.all(
+        element.getAnimations().map((animation) => animation.finished),
+      );
+    });
     const dialogLayout = await updateDialog.evaluate((element) => {
       const bounds = element.getBoundingClientRect();
       return {
@@ -535,6 +678,14 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
         url.pathname === `/api/v1/resumes/${resumeID}/publish`
       );
     });
+    const revokedNavigation = publicPage.waitForResponse(
+      (response) =>
+        response.request().isNavigationRequest() &&
+        new URL(response.url()).pathname === `/${slug}` &&
+        response.status() === 404,
+    );
+    const started = Date.now();
+    revokingPublic = true;
     await unpublishDialog
       .getByRole("button", { name: "Unpublish", exact: true })
       .press("Enter");
@@ -543,8 +694,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await expect(unpublishDialog.getByLabel("Slug")).toHaveValue(slug);
     await expect(publicMark).toHaveCount(0);
     await expect(previewStamp).toHaveCount(0);
-    const started = Date.now();
-    const revokedResponse = await publicPage.goto(`${ORIGIN}/${slug}`);
+    const revokedResponse = await revokedNavigation;
     const elapsed = Date.now() - started;
     revocationElapsed = elapsed;
     statuses.revoked = revokedResponse?.status() ?? 0;
@@ -559,6 +709,10 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await unpublishDialog
       .getByRole("button", { name: "Cancel", exact: true })
       .press("Enter");
+    await page.goto(`${ORIGIN}/app/resumes`);
+    await expect(
+      page.getByRole("heading", { name: "Resumes", exact: true }),
+    ).toBeVisible();
     await deleteRecordedResume(page, resumeID);
     steps.cleanup = true;
     stage("cleanup");
@@ -571,7 +725,15 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     steps.signOut = true;
     loggedIn = false;
     stage("signed-out");
+  } catch (error) {
+    const sourceLine =
+      error instanceof Error
+        ? /publish\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? "")?.[1]
+        : undefined;
+    if (sourceLine !== undefined) stage(`failure-at-line-${sourceLine}`);
+    throw error;
   } finally {
+    if (secondEditor !== undefined) await secondEditor.close();
     if (publicContext !== undefined) await publicContext.close();
     if (resumeID !== undefined && loggedIn && !steps.cleanup) {
       await deleteRecordedResume(page, resumeID);
@@ -579,7 +741,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   }
 
   if (counters.certificateErrors !== 0) stage("certificate-errors");
-  if (counters.consoleErrors !== 0) stage("console-errors");
+  if (counters.consoleErrors !== 0) stage(consoleFailure ?? "console-errors");
   if (counters.externalRequests !== 0) stage("external-requests");
   if (counters.pageErrors !== 0) stage("page-errors");
   for (const [name, present] of [

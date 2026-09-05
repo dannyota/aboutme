@@ -29,6 +29,7 @@ type ServiceDependencies struct {
 	PublicOrigin   publicresume.PublicOrigin
 	AppDigest      string
 	RendererDigest string
+	Live           http.Handler
 }
 
 var _ store.PublicReadQueries = (*store.Queries)(nil)
@@ -42,6 +43,7 @@ type Service struct {
 	sitemap  http.Handler
 	robots   http.Handler
 	llms     http.Handler
+	live     http.Handler
 }
 
 // NewService creates the public-route dispatcher from its dependencies.
@@ -73,7 +75,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	service := &Service{html: html, markdown: markdown, sitemap: sitemap, robots: robots, llms: llms}
+	service := &Service{html: html, markdown: markdown, sitemap: sitemap, robots: robots, llms: llms, live: dependencies.Live}
 	service.json = service.newJSONHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest)
 	service.photo = service.newPhotoHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest)
 	return service, nil

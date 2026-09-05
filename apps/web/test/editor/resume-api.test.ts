@@ -142,19 +142,17 @@ describe('resume API transport', () => {
   );
 
   it('accepts only a matching complete owner response', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        response(
-          201,
-          { data: resumeData() },
-          {
-            ...cacheHeaders,
-            'ETag': '"r1"',
-            'X-Resume-Schema-Version': String(CURRENT_VERSION),
-          },
-        ),
-      );
+    const fetcher = vi.fn().mockResolvedValue(
+      response(
+        201,
+        { data: resumeData() },
+        {
+          ...cacheHeaders,
+          'ETag': '"r1"',
+          'X-Resume-Schema-Version': String(CURRENT_VERSION),
+        },
+      ),
+    );
 
     await expect(
       createResumeApi(fetcher).dispatch(createAttempt(), 'csrf'),
@@ -379,20 +377,58 @@ describe('resume API transport', () => {
     ).resolves.toEqual({ kind: 'session-lost' });
     await expect(
       createResumeApi(
-        vi
-          .fn()
-          .mockResolvedValue(
-            response(429, error('rate_limited'), {
-              ...cacheHeaders,
-              'Retry-After': '3',
-            }),
-          ),
+        vi.fn().mockResolvedValue(
+          response(429, error('rate_limited'), {
+            ...cacheHeaders,
+            'Retry-After': '3',
+          }),
+        ),
       ).read('resume-1'),
     ).resolves.toEqual({
       kind: 'rate-limited',
       retryAfterMs: 3000,
     });
   });
+
+  it('supports conditional owner reads with strict 304 handling', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response(304, null, {
+        'Cache-Control': 'no-store, no-transform',
+        'ETag': '"r1"',
+      }),
+    );
+    const api = createResumeApi(fetcher);
+
+    await expect(api.readConditional('resume-1', '"r1"')).resolves.toEqual({
+      kind: 'not-modified',
+      etag: '"r1"',
+    });
+    const request = fetcher.mock.calls[0]?.[0] as Request;
+    expect(request.headers.get('If-None-Match')).toBe('"r1"');
+    expect(request.credentials).toBe('include');
+  });
+
+  it.each([
+    [undefined, '"r1"'],
+    ['"r1"', '"r2"'],
+  ] as const)(
+    'rejects a 304 whose validator was not sent or does not match',
+    async (sent, received) => {
+      const api = createResumeApi(
+        vi.fn().mockResolvedValue(
+          response(304, null, {
+            'Cache-Control': 'no-store, no-transform',
+            'ETag': received,
+          }),
+        ),
+      );
+
+      await expect(api.readConditional('resume-1', sent)).resolves.toEqual({
+        kind: 'failed',
+        reason: 'response-invalid',
+      });
+    },
+  );
 
   it('requires and retains required download and discovery flags', async () => {
     const data = {
@@ -429,24 +465,28 @@ describe('resume API transport', () => {
     });
     await expect(
       createResumeApi(
-        vi.fn().mockResolvedValue(
-          response(
-            200,
-            { data: [{ ...data, downloadEnabled: undefined }] },
-            listHeaders,
+        vi
+          .fn()
+          .mockResolvedValue(
+            response(
+              200,
+              { data: [{ ...data, downloadEnabled: undefined }] },
+              listHeaders,
+            ),
           ),
-        ),
       ).list(),
     ).resolves.toEqual({ kind: 'failed', reason: 'response-invalid' });
     await expect(
       createResumeApi(
-        vi.fn().mockResolvedValue(
-          response(
-            200,
-            { data: { ...data, seoGeoEnabled: 'false' } },
-            readHeaders,
+        vi
+          .fn()
+          .mockResolvedValue(
+            response(
+              200,
+              { data: { ...data, seoGeoEnabled: 'false' } },
+              readHeaders,
+            ),
           ),
-        ),
       ).read('resume-1'),
     ).resolves.toEqual({ kind: 'failed', reason: 'response-invalid' });
   });
@@ -462,14 +502,16 @@ describe('resume API transport', () => {
     ).resolves.toEqual({ kind: 'failed', reason: 'response-invalid' });
     await expect(
       createResumeApi(
-        vi
-          .fn()
-          .mockResolvedValue(
-            response(200, { data: [] }, {
+        vi.fn().mockResolvedValue(
+          response(
+            200,
+            { data: [] },
+            {
               ...cacheHeaders,
               'Cache-Control': 'no-store',
-            }),
+            },
           ),
+        ),
       ).list(),
     ).resolves.toEqual({ kind: 'failed', reason: 'response-invalid' });
   });
@@ -477,33 +519,23 @@ describe('resume API transport', () => {
   it.each([
     [200, { 'Content-Type': 'image/png', 'ETag': '"photo-1"' }, 'bytes'],
     [304, { ETag: '"photo-1"' }, 'not-modified'],
-    [
-      304,
-      { 'ETag': '"photo-1"', 'Content-Type': 'text/html' },
-      'unavailable',
-    ],
+    [304, { 'ETag': '"photo-1"', 'Content-Type': 'text/html' }, 'unavailable'],
     [
       200,
       { 'Content-Type': 'image/svg+xml', 'ETag': '"photo-1"' },
       'unavailable',
     ],
-    [
-      200,
-      { 'Content-Type': 'text/html', 'ETag': '"photo-1"' },
-      'unavailable',
-    ],
+    [200, { 'Content-Type': 'text/html', 'ETag': '"photo-1"' }, 'unavailable'],
   ] as const)('maps owner photo %s to %s', async (status, headers, kind) => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          status === 200 ? new Uint8Array([0x89, 0x50, 0x4e, 0x47]) : null,
-          {
-            status,
-            headers: { 'Cache-Control': 'no-store, no-transform', ...headers },
-          },
-        ),
-      );
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        status === 200 ? new Uint8Array([0x89, 0x50, 0x4e, 0x47]) : null,
+        {
+          status,
+          headers: { 'Cache-Control': 'no-store, no-transform', ...headers },
+        },
+      ),
+    );
     expect(
       (await createResumeApi(fetcher).readOwnerPhoto('resume-1')).kind,
     ).toBe(kind);

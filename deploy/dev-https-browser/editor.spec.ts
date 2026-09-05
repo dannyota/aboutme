@@ -67,6 +67,7 @@ interface Diagnostics {
   armPhotoReadFailure(): void;
   armTemplateFailure(): void;
   expectHTTPFailure(method: string, pathname: string, status: 401 | 412): void;
+  pauseNextMutation(method: string, pathname: string): PausedPhotoRequest;
   pauseNextPhotoCrop(): PausedPhotoRequest;
   pauseNextPhotoUpload(): PausedPhotoUpload;
 }
@@ -349,40 +350,87 @@ async function proveConflictAndTemplate(
 ): Promise<void> {
   editorDiagnosticStage = 'conflict-safe-rebase';
   await page.getByRole('button', { name: 'Document' }).press('Enter');
-  await mutateRemoteMetadata(page, accepted.metadata.id, uniqueTitle());
+  const personalPath
+    = `/api/v1/resumes/${accepted.metadata.id}/personal-details`;
   diagnostics.expectHTTPFailure(
     'PATCH',
-    `/api/v1/resumes/${accepted.metadata.id}/personal-details`,
+    personalPath,
     412,
+  );
+  const safeRebasePause = diagnostics.pauseNextMutation('PATCH', personalPath);
+  const staleSafeRebase = page.waitForResponse((response) =>
+    response.status() === 412
+    && new URL(response.url()).pathname === personalPath,
   );
   const headline = page.getByLabel('Headline');
   await headline.fill('Safe stale rebase');
   await headline.press('Tab');
+  editorDiagnosticStage = 'conflict-safe-local-submitted';
+  await safeRebasePause.waitUntilPaused();
+  editorDiagnosticStage = 'conflict-safe-local-paused';
+  try {
+    await mutateRemoteMetadata(page, accepted.metadata.id, uniqueTitle());
+  } finally {
+    safeRebasePause.release();
+  }
+  editorDiagnosticStage = 'conflict-safe-remote-complete';
+  expect((await staleSafeRebase).status()).toBe(412);
+  editorDiagnosticStage = 'conflict-safe-stale-complete';
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
 
   editorDiagnosticStage = 'conflict-accept-latest';
-  await mutateRemoteHeadline(page, accepted.metadata.id, 'Remote conflict winner');
   diagnostics.expectHTTPFailure(
     'PATCH',
-    `/api/v1/resumes/${accepted.metadata.id}/personal-details`,
+    personalPath,
     412,
+  );
+  const acceptLatestPause = diagnostics.pauseNextMutation('PATCH', personalPath);
+  const staleAcceptLatest = page.waitForResponse((response) =>
+    response.status() === 412
+    && new URL(response.url()).pathname === personalPath,
   );
   await headline.fill('Local conflict value');
   await headline.press('Tab');
+  await acceptLatestPause.waitUntilPaused();
+  try {
+    await mutateRemoteHeadline(
+      page,
+      accepted.metadata.id,
+      'Remote conflict winner',
+    );
+  } finally {
+    acceptLatestPause.release();
+  }
+  expect((await staleAcceptLatest).status()).toBe(412);
   const conflict = page.getByRole('status').filter({ hasText: 'Review changes' });
   await expect(conflict).toBeVisible();
   await conflict.getByRole('button', { name: 'Accept latest' }).press('Enter');
   await expect(conflict).toBeHidden();
 
   editorDiagnosticStage = 'conflict-apply-mine';
-  await mutateRemoteHeadline(page, accepted.metadata.id, 'Second remote winner');
   diagnostics.expectHTTPFailure(
     'PATCH',
-    `/api/v1/resumes/${accepted.metadata.id}/personal-details`,
+    personalPath,
     412,
+  );
+  const applyMinePause = diagnostics.pauseNextMutation('PATCH', personalPath);
+  const staleApplyMine = page.waitForResponse((response) =>
+    response.status() === 412
+    && new URL(response.url()).pathname === personalPath,
   );
   await headline.fill('Apply mine value');
   await headline.press('Tab');
+  await applyMinePause.waitUntilPaused();
+  try {
+    await mutateRemoteHeadline(
+      page,
+      accepted.metadata.id,
+      'Second remote winner',
+    );
+  } finally {
+    applyMinePause.release();
+  }
+  expect((await staleApplyMine).status()).toBe(412);
   await expect(page.getByRole('button', { name: 'Apply my value' })).toBeVisible();
   await page.getByRole('button', { name: 'Apply my value' }).press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
@@ -583,14 +631,23 @@ async function proveKeyboardStructureAndContextActions(
     `/api/v1/resumes/${resumeID}/entries/work`,
     412,
   );
-  await firstTitle.fill('Deleted remotely');
-  await firstTitle.press('Tab');
-  editorDiagnosticStage = 'entries-missing-conflict';
+  const pausedEntryPatch = diagnostics.pauseNextMutation(
+    'PATCH',
+    `/api/v1/resumes/${resumeID}/entries/work`,
+  );
   const staleEntryMutation = page.waitForResponse((response) =>
     response.status() === 412
     && isResumeMutation(response.request(), resumeID),
   );
-  await deleteRemoteEntry(page, resumeID, 'work', deletedEntryID);
+  await firstTitle.fill('Deleted remotely');
+  await firstTitle.press('Tab');
+  await pausedEntryPatch.waitUntilPaused();
+  editorDiagnosticStage = 'entries-missing-conflict';
+  try {
+    await deleteRemoteEntry(page, resumeID, 'work', deletedEntryID);
+  } finally {
+    pausedEntryPatch.release();
+  }
   expect((await staleEntryMutation).status()).toBe(412);
   const saveStatus = page.locator('[role="status"][data-state]');
   await expect.poll(
@@ -612,8 +669,15 @@ async function proveKeyboardStructureAndContextActions(
     : missingConflictKind === 'target-changed:entryUpsert'
       ? 'entries-missing-recreate'
       : 'entries-missing-unexpected';
-  await expect(page.getByRole('button', { name: 'Select another entry' })).toBeVisible();
-  await page.getByRole('button', { name: 'Select another entry' }).press('Enter');
+  const selectAnother = page.getByRole('button', {
+    name: 'Select another entry',
+  });
+  const selectAnotherCount = await selectAnother.count();
+  editorDiagnosticStage
+    = `entries-missing-select-count-${Math.min(selectAnotherCount, 3)}`;
+  await expect(selectAnother).toHaveCount(1);
+  await expect(selectAnother).toBeVisible();
+  await selectAnother.press('Enter');
 
   const reorderEntryCreated = page.waitForResponse((response) =>
     isResumeMutation(response.request(), resumeID),
@@ -632,13 +696,25 @@ async function proveKeyboardStructureAndContextActions(
   const remoteDeletedID = await requiredAttribute(page.locator('[data-entry-id]').nth(1), 'data-entry-id');
   editorDiagnosticStage = 'entries-reorder-conflict';
   await page.getByRole('button', { name: 'Structure' }).press('Enter');
-  await deleteRemoteEntry(page, resumeID, 'work', remoteDeletedID);
+  const structurePath = `/api/v1/resumes/${resumeID}/sections/work`;
   diagnostics.expectHTTPFailure(
     'PATCH',
-    `/api/v1/resumes/${resumeID}/sections/work`,
+    structurePath,
     412,
   );
+  const reorderPause = diagnostics.pauseNextMutation('PATCH', structurePath);
+  const staleReorder = page.waitForResponse((response) =>
+    response.status() === 412
+    && new URL(response.url()).pathname === structurePath,
+  );
   await page.locator('[data-entry-order="work"]').getByRole('button', { name: 'Move entry down' }).first().press('Enter');
+  await reorderPause.waitUntilPaused();
+  try {
+    await deleteRemoteEntry(page, resumeID, 'work', remoteDeletedID);
+  } finally {
+    reorderPause.release();
+  }
+  expect((await staleReorder).status()).toBe(412);
   await expect(page.getByRole('button', { name: 'Reopen entry order' })).toBeVisible();
   await page.getByRole('button', { name: 'Reopen entry order' }).press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
@@ -1057,6 +1133,9 @@ async function installDiagnostics(
   let failTemplateChildAt: number | undefined;
   let templateChildCount = 0;
   let templateSecondChildForced = false;
+  let pausedMutation:
+    | (PendingRequestGate & { readonly method: string; readonly pathname: string })
+    | undefined;
   let pausedPhotoCrop: PendingRequestGate | undefined;
   let pausedPhotoUpload: PendingRequestGate | undefined;
   const expectedRequestFailures: {
@@ -1138,7 +1217,18 @@ async function installDiagnostics(
       const [expected] = expectedRequestFailures.splice(expectedRequestIndex, 1);
       expectConsoleFailure(request.url(), expected!.status);
     }
-    if (failPhotoRead && isPhotoReadRequest(request)) {
+    if (
+      pausedMutation !== undefined
+      && request.method() === pausedMutation.method
+      && requestURL.pathname === pausedMutation.pathname
+    ) {
+      const gate = pausedMutation;
+      pausedMutation = undefined;
+      gate.resolvePaused();
+      await gate.releasePromise;
+      await route.continue();
+      return;
+    } else if (failPhotoRead && isPhotoReadRequest(request)) {
       failPhotoRead = false;
       expectConsoleFailure(request.url(), 500);
       await route.fulfill({
@@ -1216,6 +1306,17 @@ async function installDiagnostics(
       status: 401 | 412,
     ): void => {
       expectedRequestFailures.push({ method, pathname, status });
+    },
+    pauseNextMutation: (
+      method: string,
+      pathname: string,
+    ): PausedPhotoRequest => {
+      if (pausedMutation !== undefined) {
+        throw new Error('mutation pause already armed');
+      }
+      const gate = createPendingRequestGate();
+      pausedMutation = { ...gate.pending, method, pathname };
+      return gate.control;
     },
     pauseNextPhotoCrop: (): PausedPhotoRequest => {
       if (pausedPhotoCrop !== undefined) {

@@ -342,6 +342,9 @@ const expected = mode === 'auth' ? {
     accessibility: true,
     keyboard: true,
     longInvalidLayout: true,
+    publicRealtime: true,
+    ownerRealtime: true,
+    scroll: true,
   },
   statuses: {
     publish: 200,

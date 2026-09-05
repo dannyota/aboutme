@@ -97,6 +97,421 @@ describe('resume editor actions', () => {
 });
 
 describe('mutation coordinator', () => {
+  // eslint-disable-next-line max-len -- exact failure-path regression name.
+  it('holds the same metadata attempt when its stale complete read fails', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const intent = {
+      kind: 'metadataField' as const,
+      field: 'title' as const,
+      value: 'Local title',
+    };
+    const command = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        dependencyIds: [],
+        intent,
+      },
+      { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+    );
+    const store = useResumeStore();
+    store.initialize(accepted);
+    store.enqueue(accepted.metadata.id, command);
+    const api = {
+      dispatch: vi.fn().mockResolvedValue({
+        kind: 'stale',
+        status: 412,
+        winner: {
+          document: accepted.document,
+          revision: parseRevision('2'),
+        },
+      }),
+      read: vi.fn().mockResolvedValue({
+        kind: 'failed',
+        reason: 'network',
+      }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
+
+    await coordinator.flush(accepted.metadata.id);
+
+    expect(store.recordFor(accepted.metadata.id)?.attempt).toMatchObject({
+      kind: 'unknown',
+      reason: 'server',
+      command: {
+        id: 'command-1',
+        intended: { target: { value: 'Local title' } },
+      },
+      attempt: { idempotencyKey: 'attempt-1' },
+    });
+    expect(store.saveStateFor(accepted.metadata.id)).not.toBe('saving');
+  });
+
+  it('rebases metadata after its stale response complete read', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const winner = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        personalDetails: {
+          ...accepted.document.personalDetails,
+          headline: 'Remote headline',
+        },
+      },
+      revision: parseRevision('2'),
+    };
+    const intent = {
+      kind: 'metadataField' as const,
+      field: 'title' as const,
+      value: 'Local title',
+    };
+    const command = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        dependencyIds: [],
+        intent,
+      },
+      { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+    );
+    const store = useResumeStore();
+    store.initialize(accepted);
+    store.enqueue(accepted.metadata.id, command);
+    let resolveStale!: (value: never) => void;
+    const staleResponse = new Promise<never>((resolve) => {
+      resolveStale = resolve;
+    });
+    const completed = {
+      ...applyIntent(winner, intent),
+      revision: parseRevision('3'),
+    };
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockReturnValueOnce(staleResponse)
+        .mockResolvedValueOnce({
+          kind: 'complete',
+          status: 200,
+          accepted: completed,
+        }),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: winner }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
+
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    resolveStale!({
+      kind: 'stale',
+      status: 412,
+      winner: { document: winner.document, revision: winner.revision },
+    } as never);
+    await flushing;
+
+    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+      .toHaveBeenCalledTimes(2);
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      accepted: { revision: parseRevision('3') },
+      attempt: null,
+      pending: [],
+      conflicts: [],
+    });
+  });
+
+  it('rebases when SSE adopted the stale winner before the 412', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const winner = {
+      ...accepted,
+      metadata: { ...accepted.metadata, title: 'Remote title' },
+      revision: parseRevision('2'),
+    };
+    const intent = {
+      kind: 'personalField' as const,
+      path: 'headline' as const,
+      value: { present: true as const, value: 'Local headline' },
+    };
+    const command = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        dependencyIds: [],
+        intent,
+      },
+      { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+    );
+    const store = useResumeStore();
+    store.initialize(accepted);
+    store.enqueue(accepted.metadata.id, command);
+    let resolveStale!: (value: never) => void;
+    const staleResponse = new Promise<never>((resolve) => {
+      resolveStale = resolve;
+    });
+    const completed = {
+      ...applyIntent(winner, intent),
+      revision: parseRevision('3'),
+    };
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockReturnValueOnce(staleResponse)
+        .mockResolvedValueOnce({
+          kind: 'complete',
+          status: 200,
+          accepted: completed,
+        }),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: winner }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
+
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    resolveStale!({
+      kind: 'stale',
+      status: 412,
+      winner: { document: winner.document, revision: winner.revision },
+    } as never);
+    await flushing;
+
+    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+      .toHaveBeenCalledTimes(2);
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      accepted: { revision: parseRevision('3') },
+      attempt: null,
+      pending: [],
+      conflicts: [],
+    });
+  });
+
+  // eslint-disable-next-line max-len -- exact concurrency regression name.
+  it('keeps one conflict when SSE adoption races a stale response', async () => {
+    setActivePinia(createPinia());
+    const base = acceptedFixture();
+    const accepted = {
+      ...base,
+      document: {
+        ...base.document,
+        content: {
+          work: {
+            sectionType: 'work' as const,
+            entries: [{ id: 'entry-1', jobTitle: 'Original' }],
+          },
+        },
+        customization: {
+          ...base.document.customization,
+          layout: {
+            ...base.document.customization.layout,
+            sections: { main: ['work'], sidebar: [] },
+          },
+        },
+      },
+    };
+    const winner = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        content: { work: { sectionType: 'work' as const, entries: [] } },
+      },
+      revision: parseRevision('2'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    const command = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        dependencyIds: [],
+        intent: {
+          kind: 'entryField',
+          sectionKey: 'work',
+          entryId: 'entry-1',
+          path: 'jobTitle',
+          value: { present: true, value: 'Local' },
+        },
+      },
+      { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+    );
+    store.enqueue(accepted.metadata.id, command);
+    let resolveStale!: (value: never) => void;
+    const staleResponse = new Promise<never>((resolve) => {
+      resolveStale = resolve;
+    });
+    const api = {
+      dispatch: vi.fn(() => staleResponse),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: winner }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
+
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    resolveStale!({
+      kind: 'stale',
+      status: 412,
+      winner: { document: winner.document, revision: winner.revision },
+    } as never);
+    await flushing;
+
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toMatchObject([
+      {
+        id: 'command-1',
+        kind: 'membership-changed',
+        command: {
+          kind: 'entryField',
+          intended: { target: { value: 'Local' } },
+        },
+      },
+    ]);
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toHaveLength(1);
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('reconciles a stale racing read against the latest adopted snapshot', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const store = useResumeStore();
+    store.initialize(accepted);
+    const intent = {
+      kind: 'metadataField' as const,
+      field: 'title' as const,
+      value: 'Local title',
+    };
+    const command = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        dependencyIds: [],
+        intent,
+      },
+      { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+    );
+    store.enqueue(accepted.metadata.id, command);
+    let resolveDispatch!: (value: never) => void;
+    const dispatch = new Promise<never>((resolve) => {
+      resolveDispatch = resolve;
+    });
+    let resolveOlder!: (value: never) => void;
+    let resolveNewer!: (value: never) => void;
+    const olderRead = new Promise<never>((resolve) => {
+      resolveOlder = resolve;
+    });
+    const newerRead = new Promise<never>((resolve) => {
+      resolveNewer = resolve;
+    });
+    const api = {
+      dispatch: vi.fn(() => dispatch),
+      read: vi
+        .fn()
+        .mockReturnValueOnce(olderRead)
+        .mockReturnValueOnce(newerRead),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    const first = coordinator.refreshAndReconcile(accepted.metadata.id);
+    const second = coordinator.refreshAndReconcile(accepted.metadata.id);
+    const intended = applyIntent(accepted, intent);
+    resolveNewer!({
+      kind: 'complete',
+      accepted: { ...accepted, revision: parseRevision('3') },
+    } as never);
+    await second;
+    resolveOlder!({
+      kind: 'complete',
+      accepted: { ...intended, revision: parseRevision('2') },
+    } as never);
+    await expect(first).resolves.toMatchObject({
+      kind: 'complete',
+      accepted: { revision: parseRevision('3') },
+    });
+
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      accepted: { revision: parseRevision('3') },
+      attempt: { command: { id: 'command-1' } },
+      conflicts: [],
+    });
+
+    resolveDispatch!({ kind: 'unknown', reason: 'server' } as never);
+    await flushing;
+  });
+
   // eslint-disable-next-line max-len -- exact regression name.
   it('conflicts a second crop when the accepted photo is replaced', async () => {
     setActivePinia(createPinia());
@@ -139,12 +554,16 @@ describe('mutation coordinator', () => {
     const store = useResumeStore();
     store.initialize(accepted);
     const api = {
-      dispatch: vi.fn()
+      dispatch: vi
+        .fn()
         .mockResolvedValueOnce({
-          kind: 'complete', status: 200, accepted: first,
+          kind: 'complete',
+          status: 200,
+          accepted: first,
         })
         .mockResolvedValueOnce({
-          kind: 'stale', status: 412,
+          kind: 'stale',
+          status: 412,
           winner: { document: winner.document, revision: winner.revision },
         }),
     } as never;
@@ -160,7 +579,10 @@ describe('mutation coordinator', () => {
       authState: computed(() => 'authenticated'),
     } as never;
     const coordinator = createMutationCoordinator({
-      api, store, auth, runtime,
+      api,
+      store,
+      auth,
+      runtime,
     });
     const actions = createResumeEditorActions({
       resumeId: accepted.metadata.id,
@@ -170,20 +592,25 @@ describe('mutation coordinator', () => {
       runtime,
     });
 
-    expect(actions.edit({
-      kind: 'photoCrop',
-      crop: { x: 0, y: 0, width: 0.75, height: 1 },
-    })).toMatchObject({ kind: 'enqueued' });
+    expect(
+      actions.edit({
+        kind: 'photoCrop',
+        crop: { x: 0, y: 0, width: 0.75, height: 1 },
+      }),
+    ).toMatchObject({ kind: 'enqueued' });
     await coordinator.flush(accepted.metadata.id);
-    expect(actions.edit({
-      kind: 'photoCrop',
-      crop: { x: 0, y: 0, width: 0.5, height: 1 },
-    })).toMatchObject({ kind: 'enqueued' });
+    expect(
+      actions.edit({
+        kind: 'photoCrop',
+        crop: { x: 0, y: 0, width: 0.5, height: 1 },
+      }),
+    ).toMatchObject({ kind: 'enqueued' });
     expect(store.saveStateFor(accepted.metadata.id)).toBe('dirty');
     await coordinator.flush(accepted.metadata.id);
 
-    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-      .toHaveBeenCalledTimes(2);
+    expect(
+      (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+    ).toHaveBeenCalledTimes(2);
     expect(store.recordFor(accepted.metadata.id)).toMatchObject({
       accepted: {
         document: { personalDetails: { photo: { key: 'photo-b' } } },
@@ -193,107 +620,110 @@ describe('mutation coordinator', () => {
     });
   });
 
-  it('marks a template partial when a later child is definitively rejected',
-    async () => {
-      setActivePinia(createPinia());
-      const fixture = acceptedFixture();
-      const accepted = {
-        ...fixture,
-        document: {
-          ...fixture.document,
-          content: { skill: { sectionType: 'skill' as const, entries: [] } },
-          customization: {
-            ...fixture.document.customization,
-            layout: {
-              ...fixture.document.customization.layout,
-              sections: { main: ['skill'], sidebar: [] },
-            },
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('marks a template partial when a later child is definitively rejected', async () => {
+    setActivePinia(createPinia());
+    const fixture = acceptedFixture();
+    const accepted = {
+      ...fixture,
+      document: {
+        ...fixture.document,
+        content: { skill: { sectionType: 'skill' as const, entries: [] } },
+        customization: {
+          ...fixture.document.customization,
+          layout: {
+            ...fixture.document.customization.layout,
+            sections: { main: ['skill'], sidebar: [] },
           },
         },
-      };
-      const ids = ['group-1', 'structure-1', 'customization-1'];
-      const runtime = {
-        nowEpochMs: () => 0,
-        uuid: () => ids.shift()!,
-        delay: async () => {},
-      };
-      const group = captureTemplateGroup({
-        resumeId: accepted.metadata.id,
-        ownerId: 'owner-1',
-        sequence: 1,
-        current: accepted,
-        preset,
-        dependencyIds: [],
-        runtime,
-      })!;
-      expect(group.children).toHaveLength(2);
-      const intermediate = {
-        ...applyIntent(accepted, group.children[0]!),
-        revision: parseRevision('2'),
-        metadataFreshness: 'complete' as const,
-      };
-      expect(
-        advanceTemplateGroup(
-          group,
-          { kind: 'queued', nextChild: 0 },
-          intermediate,
-        ),
-      ).toMatchObject({ kind: 'running', nextChild: 1 });
-      const store = useResumeStore();
-      store.initialize(accepted);
-      store.enqueue(accepted.metadata.id, group);
-      const api = {
-        dispatch: vi.fn()
-          .mockResolvedValueOnce({
-            kind: 'complete', status: 200, accepted: intermediate,
-          })
-          .mockResolvedValueOnce({
-            kind: 'validation-rejected',
-            issues: [{ path: 'customization', code: 'invalid' }],
-          }),
-      } as never;
-      const coordinator = createMutationCoordinator({
-        api,
-        store,
-        auth: {
-          user: computed(() => ({ id: 'owner-1' })),
-          csrfToken: computed(() => 'csrf-1'),
-          authState: computed(() => 'authenticated'),
-        } as never,
-        runtime,
-      });
+      },
+    };
+    const ids = ['group-1', 'structure-1', 'customization-1'];
+    const runtime = {
+      nowEpochMs: () => 0,
+      uuid: () => ids.shift()!,
+      delay: async () => {},
+    };
+    const group = captureTemplateGroup({
+      resumeId: accepted.metadata.id,
+      ownerId: 'owner-1',
+      sequence: 1,
+      current: accepted,
+      preset,
+      dependencyIds: [],
+      runtime,
+    })!;
+    expect(group.children).toHaveLength(2);
+    const intermediate = {
+      ...applyIntent(accepted, group.children[0]!),
+      revision: parseRevision('2'),
+      metadataFreshness: 'complete' as const,
+    };
+    expect(
+      advanceTemplateGroup(
+        group,
+        { kind: 'queued', nextChild: 0 },
+        intermediate,
+      ),
+    ).toMatchObject({ kind: 'running', nextChild: 1 });
+    const store = useResumeStore();
+    store.initialize(accepted);
+    store.enqueue(accepted.metadata.id, group);
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          kind: 'complete',
+          status: 200,
+          accepted: intermediate,
+        })
+        .mockResolvedValueOnce({
+          kind: 'validation-rejected',
+          issues: [{ path: 'customization', code: 'invalid' }],
+        }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+      runtime,
+    });
 
-      await coordinator.flush(accepted.metadata.id);
+    await coordinator.flush(accepted.metadata.id);
 
-      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-        .toHaveBeenCalledTimes(2);
-      const record = store.recordFor(accepted.metadata.id)!;
-      expect(record.templateState).toEqual({
-        kind: 'partial',
-        accepted: intermediate,
-        nextChild: 1,
-        reason: 'child-failed',
-      });
-      expect(record.attempt).toBeNull();
-      expect(record.pending[0]?.id).toBe(group.id);
-      expect(record.issues[group.id]).toEqual([
-        { path: 'customization', code: 'invalid' },
-      ]);
-      const actions = createResumeEditorActions({
-        resumeId: accepted.metadata.id,
-        store,
-        coordinator,
-        auth: {
-          user: computed(() => ({ id: 'owner-1' })),
-        } as never,
-        runtime,
-      });
-      expect(actions.recoverTemplate('keep-partial')).toEqual({
-        kind: 'keep-partial',
-      });
-      expect(store.recordFor(accepted.metadata.id)!.issues).toEqual({});
-    },
-  );
+    expect(
+      (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+    ).toHaveBeenCalledTimes(2);
+    const record = store.recordFor(accepted.metadata.id)!;
+    expect(record.templateState).toEqual({
+      kind: 'partial',
+      accepted: intermediate,
+      nextChild: 1,
+      reason: 'child-failed',
+    });
+    expect(record.attempt).toBeNull();
+    expect(record.pending[0]?.id).toBe(group.id);
+    expect(record.issues[group.id]).toEqual([
+      { path: 'customization', code: 'invalid' },
+    ]);
+    const actions = createResumeEditorActions({
+      resumeId: accepted.metadata.id,
+      store,
+      coordinator,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+      } as never,
+      runtime,
+    });
+    expect(actions.recoverTemplate('keep-partial')).toEqual({
+      kind: 'keep-partial',
+    });
+    expect(store.recordFor(accepted.metadata.id)!.issues).toEqual({});
+  });
 
   it('dispatches once one second after the last local edit', async () => {
     vi.useFakeTimers();
@@ -573,8 +1003,10 @@ describe('mutation coordinator', () => {
   it('holds a frozen create after its one replay until cutoff', async () => {
     let now = 0;
     const api = {
-      // eslint-disable-next-line max-len
-      dispatch: vi.fn().mockResolvedValue({ kind: 'unknown', reason: 'server' }),
+
+      dispatch: vi
+        .fn()
+        .mockResolvedValue({ kind: 'unknown', reason: 'server' }),
       list: vi.fn().mockResolvedValue({ kind: 'ready', items: [] }),
     } as never;
     const coordinator = createMutationCoordinator({
@@ -600,22 +1032,31 @@ describe('mutation coordinator', () => {
     };
 
     await expect(coordinator.createResume(intent)).resolves.toEqual({
-      kind: 'blocked', intentId: intent.id, reason: 'unknown',
+      kind: 'blocked',
+      intentId: intent.id,
+      reason: 'unknown',
     });
-    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-      .toHaveBeenCalledTimes(2);
+    expect(
+      (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+    ).toHaveBeenCalledTimes(2);
     await expect(coordinator.retryCreate(intent.id)).resolves.toEqual({
-      kind: 'blocked', intentId: intent.id, reason: 'unknown',
+      kind: 'blocked',
+      intentId: intent.id,
+      reason: 'unknown',
     });
-    // eslint-disable-next-line max-len
-    expect((api as { list: ReturnType<typeof vi.fn> }).list).not.toHaveBeenCalled();
+
+    expect(
+      (api as { list: ReturnType<typeof vi.fn> }).list,
+    ).not.toHaveBeenCalled();
 
     now = 23 * 60 * 60 * 1_000;
     await expect(coordinator.retryCreate(intent.id)).resolves.toMatchObject({
-      kind: 'opaque-create', outcome: { kind: 'create-cutoff', intent },
+      kind: 'opaque-create',
+      outcome: { kind: 'create-cutoff', intent },
     });
-    expect((api as { list: ReturnType<typeof vi.fn> }).list)
-      .toHaveBeenCalledOnce();
+    expect(
+      (api as { list: ReturnType<typeof vi.fn> }).list,
+    ).toHaveBeenCalledOnce();
   });
 
   it.each(['anonymous', 'error'] as const)(
@@ -636,8 +1077,12 @@ describe('mutation coordinator', () => {
             dependencyIds: [],
             intent: { kind: 'metadataField', field: 'title', value: 'Ada' },
           },
-          // eslint-disable-next-line max-len
-          { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+
+          {
+            nowEpochMs: () => 0,
+            uuid: () => 'command-1',
+            delay: async () => {},
+          },
         ),
       );
       const api = { dispatch: vi.fn() } as never;
@@ -649,14 +1094,19 @@ describe('mutation coordinator', () => {
           csrfToken: computed(() => 'stale-csrf'),
           authState: computed(() => authState),
         } as never,
-        // eslint-disable-next-line max-len
-        runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
+
+        runtime: {
+          nowEpochMs: () => 0,
+          uuid: () => 'attempt-1',
+          delay: async () => {},
+        },
       });
 
       await coordinator.flush(accepted.metadata.id);
 
-      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-        .not.toHaveBeenCalled();
+      expect(
+        (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+      ).not.toHaveBeenCalled();
       expect(store.recordFor(accepted.metadata.id)!.pending).toHaveLength(1);
     },
   );
@@ -690,115 +1140,226 @@ describe('mutation coordinator', () => {
         csrfToken: computed(() => 'stale-csrf'),
         authState: computed(() => 'authenticated'),
       } as never,
-      // eslint-disable-next-line max-len
-      runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
+
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
     });
 
     await coordinator.flush(accepted.metadata.id);
 
-    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-      .not.toHaveBeenCalled();
+    expect(
+      (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+    ).not.toHaveBeenCalled();
     expect(store.recordFor(accepted.metadata.id)!.pending).toHaveLength(1);
   });
 
-  it('reads a complete winner before dispatching after a bodyless child ack',
-    async () => {
-      setActivePinia(createPinia());
-      const base = acceptedFixture();
-      const accepted = {
-        ...base,
-        document: {
-          ...base.document,
-          content: {
-            profile: {
-              sectionType: 'profile' as const,
-              entries: [{ id: 'entry-1', text: 'Existing' }],
-            },
-          },
-          customization: {
-            ...base.document.customization,
-            layout: {
-              ...base.document.customization.layout,
-              sections: { main: ['profile'], sidebar: [] },
-            },
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('reads a complete winner before dispatching after a bodyless child ack', async () => {
+    setActivePinia(createPinia());
+    const base = acceptedFixture();
+    const accepted = {
+      ...base,
+      document: {
+        ...base.document,
+        content: {
+          profile: {
+            sectionType: 'profile' as const,
+            entries: [{ id: 'entry-1', text: 'Existing' }],
           },
         },
-      };
-      const complete = {
-        ...accepted,
-        document: {
-          ...accepted.document,
-          content: {
-            profile: { sectionType: 'profile' as const, entries: [] },
+        customization: {
+          ...base.document.customization,
+          layout: {
+            ...base.document.customization.layout,
+            sections: { main: ['profile'], sidebar: [] },
           },
         },
-        revision: parseRevision('2'),
-      };
-      const store = useResumeStore();
-      store.initialize(accepted);
-      const deleted = captureCommand(
-        accepted,
-        {
-          resumeId: accepted.metadata.id,
-          ownerId: 'owner-1',
-          sequence: 1,
-          dependencyIds: [],
-          // eslint-disable-next-line max-len
-          intent: { kind: 'entryDelete', sectionKey: 'profile', entryId: 'entry-1' },
+      },
+    };
+    const complete = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        content: {
+          profile: { sectionType: 'profile' as const, entries: [] },
         },
-        { nowEpochMs: () => 0, uuid: () => 'delete-1', delay: async () => {} },
-      );
-      const later = captureCommand(
-        accepted,
-        {
-          resumeId: accepted.metadata.id,
-          ownerId: 'owner-1',
-          sequence: 2,
-          dependencyIds: [],
-          intent: { kind: 'metadataField', field: 'title', value: 'Ada' },
+      },
+      revision: parseRevision('2'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    const deleted = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        dependencyIds: [],
+
+        intent: {
+          kind: 'entryDelete',
+          sectionKey: 'profile',
+          entryId: 'entry-1',
         },
-        { nowEpochMs: () => 0, uuid: () => 'later-1', delay: async () => {} },
-      );
-      store.enqueue(accepted.metadata.id, deleted);
-      store.enqueue(accepted.metadata.id, later);
-      const api = {
-        dispatch: vi.fn()
-          .mockResolvedValueOnce({
-            kind: 'child-ack', status: 204, scope: 'entry', etag: '"r2"',
-          })
-          .mockResolvedValueOnce({ kind: 'validation-rejected', issues: [] }),
-        // eslint-disable-next-line max-len
-        read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: complete }),
-      } as never;
-      const coordinator = createMutationCoordinator({
-        api,
-        store,
-        auth: {
-          user: computed(() => ({ id: 'owner-1' })),
-          csrfToken: computed(() => 'csrf-1'),
-          authState: computed(() => 'authenticated'),
-        } as never,
-        // eslint-disable-next-line max-len
-        runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
-      });
+      },
+      { nowEpochMs: () => 0, uuid: () => 'delete-1', delay: async () => {} },
+    );
+    const later = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 2,
+        dependencyIds: [],
+        intent: { kind: 'metadataField', field: 'title', value: 'Ada' },
+      },
+      { nowEpochMs: () => 0, uuid: () => 'later-1', delay: async () => {} },
+    );
+    store.enqueue(accepted.metadata.id, deleted);
+    store.enqueue(accepted.metadata.id, later);
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          kind: 'child-ack',
+          status: 204,
+          scope: 'entry',
+          etag: '"r2"',
+        })
+        .mockResolvedValueOnce({ kind: 'validation-rejected', issues: [] }),
 
-      await coordinator.flush(accepted.metadata.id);
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: complete }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
 
-      const dispatch = (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
-      const read = (api as { read: ReturnType<typeof vi.fn> }).read;
-      expect(read).toHaveBeenCalledOnce();
-      expect(read.mock.invocationCallOrder[0])
-        .toBeLessThan(dispatch.mock.invocationCallOrder[1]!);
-    },
-  );
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
 
-  it('treats revision 10 as newer than revision 9 during stale rebase',
-    async () => {
-      setActivePinia(createPinia());
-      const accepted = acceptedFixture({ revision: parseRevision('9') });
-      const store = useResumeStore();
-      store.initialize(accepted);
-      const command = captureCommand(
+    await coordinator.flush(accepted.metadata.id);
+
+    const dispatch = (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const read = (api as { read: ReturnType<typeof vi.fn> }).read;
+    expect(read).toHaveBeenCalledOnce();
+    expect(read.mock.invocationCallOrder[0]).toBeLessThan(
+      dispatch.mock.invocationCallOrder[1]!,
+    );
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('treats revision 10 as newer than revision 9 during stale rebase', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture({ revision: parseRevision('9') });
+    const store = useResumeStore();
+    store.initialize(accepted);
+    const command = captureCommand(
+      accepted,
+      {
+        resumeId: accepted.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        dependencyIds: [],
+        intent: {
+          kind: 'personalField',
+          path: 'headline',
+          value: { present: true, value: 'Ada' },
+        },
+      },
+      { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
+    );
+    store.enqueue(accepted.metadata.id, command);
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          kind: 'stale',
+          status: 412,
+
+          winner: {
+            document: accepted.document,
+            revision: parseRevision('10'),
+          },
+        })
+        .mockResolvedValueOnce({ kind: 'validation-rejected', issues: [] }),
+      read: vi.fn(),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
+
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
+
+    await coordinator.flush(accepted.metadata.id);
+
+    expect(
+      (api as { read: ReturnType<typeof vi.fn> }).read,
+    ).not.toHaveBeenCalled();
+    expect(
+      (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+    ).toHaveBeenCalledTimes(2);
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('completes a stale-winner read before continuing after accept latest', async () => {
+    setActivePinia(createPinia());
+    const base = acceptedFixture();
+    const accepted = {
+      ...base,
+      document: {
+        ...base.document,
+        content: {
+          work: {
+            sectionType: 'work' as const,
+            entries: [{ id: 'entry-1', jobTitle: 'Original' }],
+          },
+        },
+        customization: {
+          ...base.document.customization,
+          layout: {
+            ...base.document.customization.layout,
+            sections: { main: ['work'], sidebar: [] },
+          },
+        },
+      },
+    };
+    const winner = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        content: {
+          work: { sectionType: 'work' as const, entries: [] },
+        },
+      },
+      revision: parseRevision('2'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    store.enqueue(
+      accepted.metadata.id,
+      captureCommand(
         accepted,
         {
           resumeId: accepted.metadata.id,
@@ -806,185 +1367,108 @@ describe('mutation coordinator', () => {
           sequence: 1,
           dependencyIds: [],
           intent: {
-            kind: 'personalField', path: 'headline',
-            value: { present: true, value: 'Ada' },
+            kind: 'entryField',
+            sectionKey: 'work',
+            entryId: 'entry-1',
+            path: 'jobTitle',
+            value: { present: true, value: 'Local' },
           },
         },
+
         { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
-      );
-      store.enqueue(accepted.metadata.id, command);
-      const api = {
-        dispatch: vi.fn()
-          .mockResolvedValueOnce({
-            kind: 'stale', status: 412,
-            // eslint-disable-next-line max-len
-            winner: { document: accepted.document, revision: parseRevision('10') },
-          })
-          .mockResolvedValueOnce({ kind: 'validation-rejected', issues: [] }),
-        read: vi.fn(),
-      } as never;
-      const coordinator = createMutationCoordinator({
-        api,
-        store,
-        auth: {
-          user: computed(() => ({ id: 'owner-1' })),
-          csrfToken: computed(() => 'csrf-1'),
-          authState: computed(() => 'authenticated'),
-        } as never,
-        // eslint-disable-next-line max-len
-        runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
-      });
-
-      await coordinator.flush(accepted.metadata.id);
-
-      expect((api as { read: ReturnType<typeof vi.fn> }).read)
-        .not.toHaveBeenCalled();
-      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-        .toHaveBeenCalledTimes(2);
-    },
-  );
-
-  it('completes a stale-winner read before continuing after accept latest',
-    async () => {
-      setActivePinia(createPinia());
-      const base = acceptedFixture();
-      const accepted = {
-        ...base,
-        document: {
-          ...base.document,
-          content: {
-            work: {
-              sectionType: 'work' as const,
-              entries: [{ id: 'entry-1', jobTitle: 'Original' }],
-            },
-          },
-          customization: {
-            ...base.document.customization,
-            layout: {
-              ...base.document.customization.layout,
-              sections: { main: ['work'], sidebar: [] },
-            },
-          },
-        },
-      };
-      const winner = {
-        ...accepted,
-        document: {
-          ...accepted.document,
-          content: {
-            work: { sectionType: 'work' as const, entries: [] },
-          },
-        },
-        revision: parseRevision('2'),
-      };
-      const store = useResumeStore();
-      store.initialize(accepted);
-      store.enqueue(
-        accepted.metadata.id,
-        captureCommand(
-          accepted,
-          {
-            resumeId: accepted.metadata.id,
-            ownerId: 'owner-1',
-            sequence: 1,
-            dependencyIds: [],
-            intent: {
-              kind: 'entryField',
-              sectionKey: 'work',
-              entryId: 'entry-1',
-              path: 'jobTitle',
-              value: { present: true, value: 'Local' },
-            },
-          },
-          // eslint-disable-next-line max-len
-          { nowEpochMs: () => 0, uuid: () => 'command-1', delay: async () => {} },
-        ),
-      );
-      const api = {
-        dispatch: vi.fn()
-          .mockResolvedValueOnce({
-            kind: 'stale',
-            status: 412,
-            winner: { document: winner.document, revision: winner.revision },
-          })
-          .mockResolvedValueOnce({
-            kind: 'complete',
-            status: 200,
-            accepted: {
-              ...winner,
-              document: {
-                ...winner.document,
-                content: {
-                  work: {
-                    sectionType: 'work' as const,
-                    entries: [{ id: 'entry-2' }],
-                  },
+      ),
+    );
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          kind: 'stale',
+          status: 412,
+          winner: { document: winner.document, revision: winner.revision },
+        })
+        .mockResolvedValueOnce({
+          kind: 'complete',
+          status: 200,
+          accepted: {
+            ...winner,
+            document: {
+              ...winner.document,
+              content: {
+                work: {
+                  sectionType: 'work' as const,
+                  entries: [{ id: 'entry-2' }],
                 },
               },
-              revision: parseRevision('3'),
             },
-          }),
-        read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: winner }),
-      } as never;
-      const coordinator = createMutationCoordinator({
-        api,
-        store,
-        auth: {
-          user: computed(() => ({ id: 'owner-1' })),
-          csrfToken: computed(() => 'csrf-1'),
-          authState: computed(() => 'authenticated'),
-        } as never,
-        // eslint-disable-next-line max-len
-        runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
-      });
-
-      await coordinator.flush(accepted.metadata.id);
-
-      expect(store.recordFor(accepted.metadata.id)?.conflicts).toMatchObject([
-        { kind: 'membership-changed', command: { kind: 'entryField' } },
-      ]);
-      expect(store.saveStateFor(accepted.metadata.id)).toBe('conflict');
-      const conflictId
-        = store.recordFor(accepted.metadata.id)!.conflicts[0]!.id;
-      const accepting = coordinator.acceptLatest(
-        accepted.metadata.id,
-        conflictId,
-      );
-      store.enqueue(
-        accepted.metadata.id,
-        captureCommand(
-          store.recordFor(accepted.metadata.id)!.current,
-          {
-            resumeId: accepted.metadata.id,
-            ownerId: 'owner-1',
-            sequence: 2,
-            dependencyIds: [],
-            intent: {
-              kind: 'entryUpsert',
-              sectionKey: 'work',
-              entry: { id: 'entry-2' },
-            },
+            revision: parseRevision('3'),
           },
-          // eslint-disable-next-line max-len
-          { nowEpochMs: () => 0, uuid: () => 'command-2', delay: async () => {} },
-        ),
-      );
+        }),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: winner }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never,
 
-      await accepting;
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
+    });
 
-      expect((api as { read: ReturnType<typeof vi.fn> }).read)
-        .toHaveBeenCalledOnce();
-      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-        .toHaveBeenCalledTimes(2);
-      expect(store.recordFor(accepted.metadata.id)).toMatchObject({
-        completeReadRequired: false,
-        conflicts: [],
-        pending: [],
-        attempt: null,
-        accepted: { revision: parseRevision('3') },
-      });
-    },
-  );
+    await coordinator.flush(accepted.metadata.id);
+
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toHaveLength(1);
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toMatchObject([
+      { kind: 'membership-changed', command: { kind: 'entryField' } },
+    ]);
+    expect(store.saveStateFor(accepted.metadata.id)).toBe('conflict');
+    const conflictId = store.recordFor(accepted.metadata.id)!.conflicts[0]!.id;
+    const accepting = coordinator.acceptLatest(
+      accepted.metadata.id,
+      conflictId,
+    );
+    store.enqueue(
+      accepted.metadata.id,
+      captureCommand(
+        store.recordFor(accepted.metadata.id)!.current,
+        {
+          resumeId: accepted.metadata.id,
+          ownerId: 'owner-1',
+          sequence: 2,
+          dependencyIds: [],
+          intent: {
+            kind: 'entryUpsert',
+            sectionKey: 'work',
+            entry: { id: 'entry-2' },
+          },
+        },
+
+        { nowEpochMs: () => 0, uuid: () => 'command-2', delay: async () => {} },
+      ),
+    );
+
+    await accepting;
+
+    expect(
+      (api as { read: ReturnType<typeof vi.fn> }).read,
+    ).toHaveBeenCalledOnce();
+    expect(
+      (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+    ).toHaveBeenCalledTimes(2);
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      completeReadRequired: false,
+      conflicts: [],
+      pending: [],
+      attempt: null,
+      accepted: { revision: parseRevision('3') },
+    });
+  });
 
   it('clears the stale-winner read barrier before applying mine', async () => {
     setActivePinia(createPinia());
@@ -1057,23 +1541,28 @@ describe('mutation coordinator', () => {
         csrfToken: computed(() => 'csrf-1'),
         authState: computed(() => 'authenticated'),
       } as never,
-      // eslint-disable-next-line max-len
-      runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
+
+      runtime: {
+        nowEpochMs: () => 0,
+        uuid: () => 'attempt-1',
+        delay: async () => {},
+      },
     });
 
     await coordinator.flush(accepted.metadata.id);
-    const conflictId
-      = store.recordFor(accepted.metadata.id)!.conflicts[0]!.id;
+    const conflictId = store.recordFor(accepted.metadata.id)!.conflicts[0]!.id;
     await coordinator.applyMine(accepted.metadata.id, conflictId, {
       kind: 'reorder',
       members: ['entry-1'],
     });
     await coordinator.flush(accepted.metadata.id);
 
-    expect((api as { read: ReturnType<typeof vi.fn> }).read)
-      .toHaveBeenCalledOnce();
-    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-      .toHaveBeenCalledOnce();
+    expect(
+      (api as { read: ReturnType<typeof vi.fn> }).read,
+    ).toHaveBeenCalledOnce();
+    expect(
+      (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+    ).toHaveBeenCalledOnce();
     expect(store.recordFor(accepted.metadata.id)).toMatchObject({
       completeReadRequired: false,
       conflicts: [],
@@ -1100,7 +1589,8 @@ describe('mutation coordinator', () => {
         value: 'Newer title',
       },
     ],
-  ])('keeps a %s edit made during the apply-mine read',
+  ])(
+    'keeps a %s edit made during the apply-mine read',
     async (_case, newerIntent) => {
       setActivePinia(createPinia());
       const accepted = acceptedFixture();
@@ -1149,17 +1639,22 @@ describe('mutation coordinator', () => {
         releaseRead = resolve;
       });
       const api = {
-        dispatch: vi.fn()
+        dispatch: vi
+          .fn()
           .mockResolvedValueOnce({
             kind: 'stale',
             status: 412,
             winner: { document: winner.document, revision: winner.revision },
           })
           .mockResolvedValueOnce({
-            kind: 'complete', status: 200, accepted: mine,
+            kind: 'complete',
+            status: 200,
+            accepted: mine,
           })
           .mockResolvedValueOnce({
-            kind: 'complete', status: 200, accepted: newest,
+            kind: 'complete',
+            status: 200,
+            accepted: newest,
           }),
         read: vi.fn(async () => {
           await readGate;
@@ -1188,8 +1683,9 @@ describe('mutation coordinator', () => {
         { kind: 'field' },
       );
       await vi.waitFor(() => {
-        expect((api as { read: ReturnType<typeof vi.fn> }).read)
-          .toHaveBeenCalledOnce();
+        expect(
+          (api as { read: ReturnType<typeof vi.fn> }).read,
+        ).toHaveBeenCalledOnce();
       });
       store.enqueue(
         accepted.metadata.id,
@@ -1202,8 +1698,12 @@ describe('mutation coordinator', () => {
             dependencyIds: [conflictCommand.id],
             intent: newerIntent,
           },
-          // eslint-disable-next-line max-len
-          { nowEpochMs: () => 1, uuid: () => 'command-2', delay: async () => {} },
+
+          {
+            nowEpochMs: () => 1,
+            uuid: () => 'command-2',
+            delay: async () => {},
+          },
         ),
       );
       releaseRead();
@@ -1211,8 +1711,9 @@ describe('mutation coordinator', () => {
       await applying;
       await coordinator.flush(accepted.metadata.id);
 
-      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-        .toHaveBeenCalledTimes(3);
+      expect(
+        (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+      ).toHaveBeenCalledTimes(3);
       expect(store.recordFor(accepted.metadata.id)).toMatchObject({
         accepted: newest,
         attempt: null,
@@ -1251,7 +1752,8 @@ describe('mutation coordinator', () => {
       const currentUser = ref<string | undefined>('owner-1');
       const api = {
         dispatch: vi.fn().mockResolvedValue({
-          kind: 'rate-limited', retryAfterMs: null,
+          kind: 'rate-limited',
+          retryAfterMs: null,
         }),
       } as never;
       const coordinator = createMutationCoordinator({
@@ -1265,8 +1767,12 @@ describe('mutation coordinator', () => {
           csrfToken: computed(() => 'stale-csrf'),
           authState: computed(() => currentState.value),
         } as never,
-        // eslint-disable-next-line max-len
-        runtime: { nowEpochMs: () => 0, uuid: () => 'attempt-1', delay: async () => {} },
+
+        runtime: {
+          nowEpochMs: () => 0,
+          uuid: () => 'attempt-1',
+          delay: async () => {},
+        },
       });
 
       await coordinator.flush(accepted.metadata.id);
@@ -1274,8 +1780,9 @@ describe('mutation coordinator', () => {
       currentUser.value = userId;
       await coordinator.retry(accepted.metadata.id, command.id);
 
-      expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
-        .toHaveBeenCalledOnce();
+      expect(
+        (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+      ).toHaveBeenCalledOnce();
       expect(store.recordFor(accepted.metadata.id)).toMatchObject({
         sessionLost,
         attempt: { command },

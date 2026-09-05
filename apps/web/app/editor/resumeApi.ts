@@ -7,6 +7,7 @@ import type {
   FrozenAttempt,
   ObjectETag,
   OwnerPhotoReadResult,
+  ResumeConditionalReadResult,
   ResumeListResult,
   ResumeReadResult,
   ResumeSummary,
@@ -14,7 +15,10 @@ import type {
   ValidatedStaleWinner,
 } from './attempt';
 import { applyIntent } from './commands';
-import { parseCurrentDocument } from './documentValidation';
+import {
+  parseCurrentDocument,
+  UnknownDocumentVersionError,
+} from './documentValidation';
 import {
   compareRevision,
   parentETag,
@@ -30,6 +34,7 @@ export type {
   FrozenAttempt,
   ObjectETag,
   OwnerPhotoReadResult,
+  ResumeConditionalReadResult,
   ResumeListResult,
   ResumeReadResult,
   ResumeSummary,
@@ -40,6 +45,10 @@ export type {
 export interface ResumeApi {
   list(): Promise<ResumeListResult>;
   read(id: string): Promise<ResumeReadResult>;
+  readConditional(
+    id: string,
+    etag?: ParentETag,
+  ): Promise<ResumeConditionalReadResult>;
   dispatch(attempt: FrozenAttempt, csrfToken: string): Promise<AttemptResult>;
   readOwnerPhoto(id: string, etag?: ObjectETag): Promise<OwnerPhotoReadResult>;
 }
@@ -221,7 +230,71 @@ export function createResumeApi(fetcher: typeof fetch = fetch): ResumeApi {
           kind: 'complete',
           accepted: await parseAcceptedResponse(response),
         };
+      } catch (error) {
+        if (error instanceof UnknownDocumentVersionError) {
+          return { kind: 'unknown-version' };
+        }
+        return { kind: 'failed', reason: 'response-invalid' };
+      }
+    },
+
+    async readConditional(
+      id: string,
+      etag?: ParentETag,
+    ): Promise<ResumeConditionalReadResult> {
+      const headers = new Headers({
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      });
+      if (etag !== undefined) headers.set('If-None-Match', etag);
+      let response: Response;
+      try {
+        const request = new Request(
+          `/api/v1/resumes/${encodeURIComponent(id)}`,
+          { cache: 'no-store', credentials: 'include' },
+        );
+        for (const [name, value] of headers) request.headers.set(name, value);
+        response = await fetcher(request);
       } catch {
+        return { kind: 'failed', reason: 'network' };
+      }
+      if (!hasExactCachePolicy(response)) {
+        return { kind: 'failed', reason: 'response-invalid' };
+      }
+      if (response.status === 401) return { kind: 'session-lost' };
+      if (response.status === 404) return { kind: 'unavailable' };
+      if (response.status === 429) {
+        return { kind: 'rate-limited', retryAfterMs: retryAfterMs(response) };
+      }
+      try {
+        if (response.status === 304) {
+          if (
+            response.headers.get('Content-Type') !== null
+            || (await response.arrayBuffer()).byteLength !== 0
+          ) {
+            throw new Error('unexpected 304 body');
+          }
+          const responseETag = parseParentETag(response.headers.get('ETag'));
+          if (etag === undefined || responseETag !== etag) {
+            throw new Error('unexpected 304 validator');
+          }
+          return {
+            kind: 'not-modified',
+            etag: responseETag,
+          };
+        }
+        if (response.status !== 200) {
+          return { kind: 'failed', reason: 'response-invalid' };
+        }
+        const accepted = await parseAcceptedResponse(response);
+        return {
+          kind: 'complete',
+          accepted,
+          etag: parentETag(accepted.revision),
+        };
+      } catch (error) {
+        if (error instanceof UnknownDocumentVersionError) {
+          return { kind: 'unknown-version' };
+        }
         return { kind: 'failed', reason: 'response-invalid' };
       }
     },

@@ -11,7 +11,12 @@ import {
   type AtomicCommandIntent,
   type AtomicEditorCommand,
 } from '../editor/commands';
-import { createResumeApi } from '../editor/resumeApi';
+import {
+  createResumeApi,
+  type ResumeConditionalReadResult,
+  type ResumeReadResult,
+} from '../editor/resumeApi';
+import type { ParentETag, EditorRuntime } from '../editor/types';
 import { createPublishApi } from '../editor/publishApi';
 import {
   createPublishController,
@@ -25,7 +30,6 @@ import {
   type TemplateRecovery,
 } from '../editor/templateGroup';
 import type { ConflictConfirmation } from '../editor/reconcile';
-import type { EditorRuntime } from '../editor/types';
 import {
   dependencyIdsForNewCommand,
   nextSequence,
@@ -72,6 +76,10 @@ export interface ResumeEditorActions {
     confirmation: ConflictConfirmation,
   ): Promise<void>;
   resumeAfterAuth(): Promise<void>;
+  refresh(): Promise<ResumeReadResult>;
+  refreshConditional?: (
+    etag?: ParentETag,
+  ) => Promise<ResumeConditionalReadResult>;
   discard(): void;
   readonly publish: PublishController;
 }
@@ -197,9 +205,8 @@ export function createResumeEditorActions(
       deps.store.replaceHead(deps.resumeId, result.group);
       deps.store.setTemplateState(deps.resumeId, {
         kind: 'queued',
-        nextChild: result.group.id === group.id
-          ? state.templateState.nextChild
-          : 0,
+        nextChild:
+          result.group.id === group.id ? state.templateState.nextChild : 0,
       });
       deps.coordinator.schedule(deps.resumeId);
     }
@@ -239,6 +246,15 @@ export function createResumeEditorActions(
     applyMine: (conflictId, confirmation) =>
       deps.coordinator.applyMine(deps.resumeId, conflictId, confirmation),
     resumeAfterAuth: () => deps.coordinator.resumeAfterAuth(deps.resumeId),
+    refresh: () => deps.coordinator.refreshAndReconcile(deps.resumeId),
+    refreshConditional:
+      deps.coordinator.refreshConditionalAndReconcile === undefined
+        ? undefined
+        : (etag) =>
+            deps.coordinator.refreshConditionalAndReconcile!(
+              deps.resumeId,
+              etag,
+            ),
     discard: () => deps.coordinator.discard(deps.resumeId),
     publish,
   };
