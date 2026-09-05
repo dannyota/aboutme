@@ -111,6 +111,7 @@ p5a-native-fixture seed --database-url "$FIXTURE_DATABASE_URL" --media-root "$FI
 
 info "--- starting isolated native stack"
 ABOUTME_DEV_DATABASE_URL="$FIXTURE_DATABASE_URL" \
+  ABOUTME_DEV_AUTO_SEED=0 \
   ABOUTME_DEV_STATE_DIR="$FIXTURE_RUNTIME" \
   ABOUTME_DEV_MEDIA_DIR="$FIXTURE_MEDIA" \
   bash scripts/dev-native.sh up >/dev/null
