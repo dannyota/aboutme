@@ -201,7 +201,16 @@ func TestNoRouteAnswers501(t *testing.T) {
 		path := concreteRoutePath(route.Pattern)
 		t.Run(route.Method+" "+path, func(t *testing.T) {
 			unauthenticated := h.request(t, route.Method, path, nil, false, false)
-			assertRouteError(t, unauthenticated, http.StatusUnauthorized, "session_required")
+			if route.Method == http.MethodHead {
+				if unauthenticated.status != http.StatusUnauthorized {
+					t.Fatalf("unauthenticated HEAD status = %d, want 401", unauthenticated.status)
+				}
+				if len(unauthenticated.body) != 0 {
+					t.Fatalf("unauthenticated HEAD body = %q, want empty", unauthenticated.body)
+				}
+			} else {
+				assertRouteError(t, unauthenticated, http.StatusUnauthorized, "session_required")
+			}
 
 			if route.Mutation {
 				var body io.Reader

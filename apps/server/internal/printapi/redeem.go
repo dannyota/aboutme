@@ -68,10 +68,10 @@ func (h *redeemHandler) ServeHTTP(response http.ResponseWriter, request *http.Re
 	deadline := time.Now().Add(redeemRequestDeadline)
 	controller := http.NewResponseController(response)
 	if controller.SetReadDeadline(deadline) == nil {
-		defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
+		defer controller.SetReadDeadline(time.Time{}) //nolint:errcheck // Deadline cleanup is best effort after the fixed response; retrying cannot repair it.
 	}
 	if controller.SetWriteDeadline(deadline) == nil {
-		defer func() { _ = controller.SetWriteDeadline(time.Time{}) }()
+		defer controller.SetWriteDeadline(time.Time{}) //nolint:errcheck // Deadline cleanup is best effort after the fixed response; retrying cannot repair it.
 	}
 	ctx, cancel := context.WithDeadline(request.Context(), deadline)
 	defer cancel()
@@ -215,7 +215,7 @@ func decodeRedemptionBody(body []byte) (uuid.UUID, string, bool) {
 			return uuid.Nil, "", false
 		}
 		var value string
-		if err := decoder.Decode(&value); err != nil {
+		if decodeErr := decoder.Decode(&value); decodeErr != nil {
 			return uuid.Nil, "", false
 		}
 		fields[key] = value
@@ -368,5 +368,5 @@ func writeRedeemResponse(response http.ResponseWriter, status int, body []byte, 
 		header.Set("Allow", http.MethodPost)
 	}
 	response.WriteHeader(status)
-	_, _ = response.Write(body)
+	_, _ = response.Write(body) //nolint:errcheck // The response is committed; retrying can duplicate bytes, and this private boundary must not log details.
 }

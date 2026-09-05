@@ -14,8 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/google/uuid"
+
+	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 )
 
 func TestPinnedBrowserOutputIsByteDeterministic(t *testing.T) {
@@ -27,7 +28,7 @@ func TestPinnedBrowserOutputIsByteDeterministic(t *testing.T) {
 		case "/print/00000000-0000-0000-0000-000000000001":
 			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			writer.Header().Set("Content-Security-Policy", printContentSecurityPolicy)
-			_, _ = writer.Write([]byte(`<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true"><h1>Resume</h1></main></body></html>`))
+			writeTestResponse(t, writer, `<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true"><h1>Resume</h1></main></body></html>`)
 		case "/_nuxt/assets/print-fonts.css", "/_nuxt/assets/print.css":
 			writer.Header().Set("Content-Type", "text/css")
 		default:
@@ -92,13 +93,13 @@ func TestPinnedBrowserClosedNetworkAndCapture(t *testing.T) {
 			}
 			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			writer.Header().Set("Content-Security-Policy", printContentSecurityPolicy)
-			_, _ = writer.Write([]byte(`<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true"><h1>Resume</h1><img alt="pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="></main></body></html>`))
+			writeTestResponse(t, writer, `<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true"><h1>Resume</h1><img alt="pixel" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="></main></body></html>`)
 		case "/_nuxt/assets/print-fonts.css":
 			writer.Header().Set("Content-Type", "text/css")
-			_, _ = writer.Write([]byte("@font-face{font-family:unused;src:url('/_nuxt/fonts/inter-var.woff2')}"))
+			writeTestResponse(t, writer, "@font-face{font-family:unused;src:url('/_nuxt/fonts/inter-var.woff2')}")
 		case "/_nuxt/assets/print.css":
 			writer.Header().Set("Content-Type", "text/css")
-			_, _ = writer.Write([]byte("@page{size:A4;margin:15mm}html,body{margin:0;background:white}h1{color:#123456}"))
+			writeTestResponse(t, writer, "@page{size:A4;margin:15mm}html,body{margin:0;background:white}h1{color:#123456}")
 		default:
 			http.Error(writer, "not found", http.StatusNotFound)
 		}
@@ -151,7 +152,7 @@ func TestPinnedBrowserCancelsMaliciousSubresource(t *testing.T) {
 		}
 		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 		writer.Header().Set("Content-Security-Policy", printContentSecurityPolicy)
-		_, _ = writer.Write([]byte(`<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/evil.css"></head><body><main data-print-document="true">Resume</main></body></html>`))
+		writeTestResponse(t, writer, `<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/evil.css"></head><body><main data-print-document="true">Resume</main></body></html>`)
 	}))
 	defer server.Close()
 	renderer := newPinnedTestRenderer(t, server.URL)
@@ -205,16 +206,16 @@ func TestPinnedBrowserRejectsFailedFontsAndImages(t *testing.T) {
 				case "/print/00000000-0000-0000-0000-000000000001":
 					writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 					writer.Header().Set("Content-Security-Policy", printContentSecurityPolicy)
-					_, _ = writer.Write([]byte(`<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true">Resume<img alt="test" src="` + test.image + `"></main></body></html>`))
+					writeTestResponse(t, writer, `<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true">Resume<img alt="test" src="`+test.image+`"></main></body></html>`)
 				case "/_nuxt/assets/print-fonts.css":
 					writer.Header().Set("Content-Type", "text/css")
-					_, _ = writer.Write([]byte(test.fontCSS))
+					writeTestResponse(t, writer, test.fontCSS)
 				case "/_nuxt/assets/print.css":
 					writer.Header().Set("Content-Type", "text/css")
 				case "/_nuxt/fonts/inter-var.woff2":
 					fontRequested.Store(true)
 					writer.Header().Set("Content-Type", "font/woff2")
-					_, _ = writer.Write([]byte(test.fontBody))
+					writeTestResponse(t, writer, test.fontBody)
 				default:
 					http.Error(writer, "not found", http.StatusNotFound)
 				}
@@ -251,14 +252,21 @@ func TestPinnedBrowserRejectsFailedStylesheets(t *testing.T) {
 				case "/print/00000000-0000-0000-0000-000000000001":
 					writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 					writer.Header().Set("Content-Security-Policy", printContentSecurityPolicy)
-					_, _ = writer.Write([]byte(`<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true">Resume</main></body></html>`))
+					writeTestResponse(t, writer, `<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true">Resume</main></body></html>`)
 				case "/_nuxt/assets/print-fonts.css":
 					writer.Header().Set("Content-Type", "text/css")
 				case "/_nuxt/assets/print.css":
 					if test.disconnect {
-						connection, _, err := writer.(http.Hijacker).Hijack()
+						hijacker, ok := writer.(http.Hijacker)
+						if !ok {
+							t.Error("response writer does not support hijacking")
+							return
+						}
+						connection, _, err := hijacker.Hijack()
 						if err == nil {
-							_ = connection.Close()
+							if closeErr := connection.Close(); closeErr != nil {
+								t.Error(closeErr)
+							}
 						}
 						return
 					}
@@ -277,6 +285,13 @@ func TestPinnedBrowserRejectsFailedStylesheets(t *testing.T) {
 				t.Fatalf("error = %v, want ErrRenderFailed", err)
 			}
 		})
+	}
+}
+
+func writeTestResponse(t *testing.T, writer http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := writer.Write([]byte(body)); err != nil {
+		t.Error(err)
 	}
 }
 

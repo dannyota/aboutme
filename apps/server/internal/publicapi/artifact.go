@@ -143,6 +143,7 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 			return
 		}
 
+		//nolint:contextcheck // The lease context derives from request.Context and adds revocation cancellation.
 		result, err := s.dependencies.Queue.Render(lease.Context(), renderjob.Request{
 			Format: contract.format,
 			Prepare: func(ctx context.Context) (renderjob.Snapshot, error) {
@@ -155,13 +156,13 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 						return renderjob.Snapshot{}, readErr
 					}
 				}
-				envelope, err := printsnapshot.FromPublic(snapshot, photo, contentType)
-				if err != nil {
-					return renderjob.Snapshot{}, err
+				envelope, snapshotErr := printsnapshot.FromPublic(snapshot, photo, contentType)
+				if snapshotErr != nil {
+					return renderjob.Snapshot{}, snapshotErr
 				}
-				payload, err := printsnapshot.Marshal(envelope)
-				if err != nil {
-					return renderjob.Snapshot{}, err
+				payload, marshalErr := printsnapshot.Marshal(envelope)
+				if marshalErr != nil {
+					return renderjob.Snapshot{}, marshalErr
 				}
 				return renderjob.Snapshot{
 					ResumeID: snapshot.ResumeID, Revision: snapshot.Revision,
@@ -246,7 +247,7 @@ func servePublicRateError(w http.ResponseWriter, request *http.Request, retry in
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(http.StatusTooManyRequests)
 	if request.Method != http.MethodHead {
-		_, _ = w.Write(body)
+		_, _ = w.Write(body) //nolint:errcheck // The response is committed; a replacement status or retry cannot recover it.
 	}
 }
 
@@ -285,14 +286,15 @@ func serveLeasedArtifact(w http.ResponseWriter, request *http.Request, lease *pu
 		close(armed)
 		select {
 		case <-lease.Context().Done():
-			_ = controller.SetWriteDeadline(time.Now())
+			// Unsupported deadline cancellation leaves the handler and lease active so the mutation drain times out.
+			_ = controller.SetWriteDeadline(time.Now()) //nolint:errcheck // There is no fallback that can interrupt this committed write.
 		case <-stop:
 		}
 	}()
 	<-armed
 	writeArtifactHeader(responseHeader, header)
 	w.WriteHeader(response.Status)
-	_, _ = w.Write(response.Body)
+	_, _ = w.Write(response.Body) //nolint:errcheck // The response is committed; cancellation and cleanup still require the join below.
 	close(stop)
 	<-joined
 }

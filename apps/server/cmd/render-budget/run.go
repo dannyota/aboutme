@@ -20,31 +20,34 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 )
 
-func run(ctx context.Context, config config) error {
-	if err := prepareOutputDirectory(config.RepositoryRoot, config.OutputDirectory); err != nil {
+func run(ctx context.Context, settings config) (resultErr error) {
+	if err := prepareOutputDirectory(settings.RepositoryRoot, settings.OutputDirectory); err != nil {
 		return err
 	}
-	fixtures, err := buildFixtureCorpus(config.RepositoryRoot)
+	fixtures, err := buildFixtureCorpus(settings.RepositoryRoot)
 	if err != nil {
 		return err
 	}
 	cgroup, cgroupErr := readCgroupEvidence()
-	browserVersion, versionErr := readBrowserVersion(ctx, config.BrowserExecutable)
+	browserVersion, versionErr := readBrowserVersion(ctx, settings.BrowserExecutable)
 	mode := modeFull
-	if config.Probe {
+	if settings.Probe {
 		mode = modeProbe
 	}
 	evidence := newEvidence(mode, runtime.Version(), browserVersion, cgroup, fixtures)
 	if cgroupErr != nil || versionErr != nil {
 		evidence.Gate = gateEvidence{Passed: false, FailureCodes: []string{"environment_invalid"}}
-		_ = writeEvidence(config.OutputDirectory, evidence)
+		if evidenceErr := writeEvidence(settings.OutputDirectory, evidence); evidenceErr != nil {
+			return evidenceErr
+		}
 		return errors.New("environment_invalid")
 	}
 	origin, err := directrender.ParseRenderOrigin(fixedRenderOrigin, "development")
 	if err != nil {
 		return errors.New("renderer_initialization_failed")
 	}
-	renderer, err := printrender.New(printrender.Config{BrowserExecutable: config.BrowserExecutable, RenderOrigin: origin})
+	//nolint:contextcheck // New owns a fixed constructor-validation deadline independent of measurement cancellation.
+	renderer, err := printrender.New(printrender.Config{BrowserExecutable: settings.BrowserExecutable, RenderOrigin: origin})
 	if err != nil {
 		return errors.New("renderer_initialization_failed")
 	}
@@ -53,18 +56,20 @@ func run(ctx context.Context, config config) error {
 		return errors.New("queue_initialization_failed")
 	}
 
-	server, done, err := startPrivateServer(queue)
+	server, done, err := startPrivateServer(ctx, queue)
 	if err != nil {
-		_ = queue.Close()
+		if closeErr := queue.Close(); closeErr != nil {
+			return errors.New("shutdown_failed")
+		}
 		return errors.New("private_server_failed")
 	}
 	stopped := false
-	stop := func() error {
+	stop := func(parent context.Context) error {
 		if stopped {
 			return nil
 		}
 		stopped = true
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
 		defer cancel()
 		shutdownErr := server.Shutdown(shutdownCtx)
 		serveErr := <-done
@@ -74,7 +79,11 @@ func run(ctx context.Context, config config) error {
 		}
 		return nil
 	}
-	defer func() { _ = stop() }()
+	defer func() {
+		if stopErr := stop(ctx); stopErr != nil {
+			resultErr = errors.Join(resultErr, stopErr)
+		}
+	}()
 
 	artifacts := map[string]bool{}
 	for _, item := range fixtures {
@@ -83,14 +92,14 @@ func run(ctx context.Context, config config) error {
 				series := seriesEvidence{Fixture: item.Name, Format: format, Round: round}
 				cold := measureSample(ctx, queue, item, format, round, sampleCold, 1, false)
 				evidence.SerialSamples = append(evidence.SerialSamples, cold.row)
-				if err := saveFirstArtifact(config.OutputDirectory, artifacts, item.Name, format, cold); err != nil {
+				if err := saveFirstArtifact(settings.OutputDirectory, artifacts, item.Name, format, cold); err != nil {
 					return err
 				}
 				series.ColdDurationNanoseconds = cold.row.DurationNanoseconds
 				for index := 1; index <= evidence.Protocol.WarmupsPerSeries; index++ {
 					warmup := measureSample(ctx, queue, item, format, round, sampleWarmup, index, true)
 					evidence.SerialSamples = append(evidence.SerialSamples, warmup.row)
-					if err := saveFirstArtifact(config.OutputDirectory, artifacts, item.Name, format, warmup); err != nil {
+					if err := saveFirstArtifact(settings.OutputDirectory, artifacts, item.Name, format, warmup); err != nil {
 						return err
 					}
 				}
@@ -99,7 +108,7 @@ func run(ctx context.Context, config config) error {
 					sample := measureSample(ctx, queue, item, format, round, sampleMeasured, index, false)
 					evidence.SerialSamples = append(evidence.SerialSamples, sample.row)
 					measured = append(measured, sample.row)
-					if err := saveFirstArtifact(config.OutputDirectory, artifacts, item.Name, format, sample); err != nil {
+					if err := saveFirstArtifact(settings.OutputDirectory, artifacts, item.Name, format, sample); err != nil {
 						return err
 					}
 				}
@@ -112,14 +121,14 @@ func run(ctx context.Context, config config) error {
 	if evidence.Protocol.QueuedWaveCalls > 0 {
 		evidence.QueuedWave = measureQueuedWave(ctx, queue, fixtures[len(fixtures)-1], evidence.Protocol.QueuedWaveCalls)
 	}
-	if err := stop(); err != nil {
+	if err := stop(ctx); err != nil {
 		return err
 	}
 	if err := finishCgroupEvidence(&evidence.Cgroup); err != nil {
 		return err
 	}
 	evidence.Gate = evaluateGate(evidence)
-	if err := writeEvidence(config.OutputDirectory, evidence); err != nil {
+	if err := writeEvidence(settings.OutputDirectory, evidence); err != nil {
 		return err
 	}
 	if !evidence.Gate.Passed {
@@ -238,12 +247,12 @@ func classifyFailure(err error) failureCode {
 	}
 }
 
-func startPrivateServer(queue *renderjob.Queue) (*http.Server, <-chan error, error) {
+func startPrivateServer(ctx context.Context, queue *renderjob.Queue) (*http.Server, <-chan error, error) {
 	handler, err := printapi.NewRedeemHandler(queue)
 	if err != nil {
 		return nil, nil, err
 	}
-	listener, err := net.Listen("tcp", fixedPrintAddress)
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", fixedPrintAddress)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -277,7 +286,7 @@ func saveArtifact(outputDirectory, fixtureName string, format renderjob.Format, 
 		return errors.New("artifact_write_failed")
 	}
 	path := filepath.Join(outputDirectory, fixtureName+"."+string(format))
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return errors.New("artifact_write_failed")
 	}
 	return nil
@@ -289,7 +298,7 @@ func writeEvidence(outputDirectory string, evidence evidenceDocument) error {
 		return errors.New("evidence_write_failed")
 	}
 	path := filepath.Join(outputDirectory, "evidence.json")
-	if err := os.WriteFile(path, encoded, 0o644); err != nil {
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
 		return errors.New("evidence_write_failed")
 	}
 	return nil

@@ -73,13 +73,18 @@ func readTrimmed(path string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func readMemoryEvents(path string) (map[string]uint64, error) {
+func readMemoryEvents(path string) (result map[string]uint64, resultErr error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	result := map[string]uint64{}
+	defer func() {
+		if closeErr := file.Close(); resultErr == nil && closeErr != nil {
+			result = nil
+			resultErr = closeErr
+		}
+	}()
+	result = map[string]uint64{}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())

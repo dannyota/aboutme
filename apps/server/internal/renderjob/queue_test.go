@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"math"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -623,6 +625,26 @@ func TestTokenEncodingIsCanonicalRawURLForThirtyTwoBytes(t *testing.T) {
 		return testSnapshot(resumeID, []byte("snapshot")), nil
 	}}); err != nil {
 		t.Fatalf("Render() error = %v", err)
+	}
+}
+
+func TestWriteInt64PreservesSignedBigEndianBytes(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		value int64
+		want  string
+	}{
+		{value: math.MinInt64, want: "8000000000000000"},
+		{value: -1, want: "ffffffffffffffff"},
+		{value: 0, want: "0000000000000000"},
+		{value: math.MaxInt64, want: "7fffffffffffffff"},
+	} {
+		var encoded bytes.Buffer
+		writeInt64(&encoded, test.value)
+		if got := hex.EncodeToString(encoded.Bytes()); got != test.want {
+			t.Fatalf("writeInt64(%d) = %s, want %s", test.value, got, test.want)
+		}
 	}
 }
 

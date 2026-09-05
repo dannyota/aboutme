@@ -34,8 +34,8 @@ func TestBrowserChildEnvironmentContainsOnlyFixedValues(t *testing.T) {
 	if cmd.Env == nil || len(cmd.Env) != 0 {
 		t.Fatal("launcher environment is not explicitly empty")
 	}
-	if err := cmd.Run(); err != nil {
-		t.Fatal(err)
+	if runErr := cmd.Run(); runErr != nil {
+		t.Fatal(runErr)
 	}
 	got, err := os.ReadFile(filepath.Join(directory, "browser-environment"))
 	if err != nil {
@@ -72,7 +72,10 @@ func TestBrowserFlagsKeepSandboxAndDeterminismPins(t *testing.T) {
 			t.Fatalf("flag %q = %#v, want %#v", name, got, want)
 		}
 	}
-	features, _ := flags["disable-features"].(string)
+	features, ok := flags["disable-features"].(string)
+	if !ok {
+		t.Fatal("disabled feature flag is not a string")
+	}
 	for _, feature := range []string{"PreconnectToSearch", "Prerender2", "SpeculationRulesPrefetchProxy"} {
 		if !strings.Contains(features, feature) {
 			t.Fatalf("disabled features omit %q: %q", feature, features)

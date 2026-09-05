@@ -134,7 +134,8 @@ func (r *Reader) ReadPhoto(ctx context.Context, snapshot Snapshot) ([]byte, stri
 	body, contentType, err := r.media.Get(ctx, snapshot.photoKey)
 	if err != nil {
 		if body != nil {
-			_ = body.Close()
+			// Both storage and close failures map to the same opaque response.
+			_ = body.Close() //nolint:errcheck // The storage read already failed; cleanup cannot change its result.
 		}
 		return nil, "", ErrUnavailable
 	}

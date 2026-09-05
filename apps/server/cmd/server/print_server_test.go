@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -12,14 +13,19 @@ import (
 )
 
 func TestServePairSeparatesPublicAndPrivateRoutesAndJoins(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	listen := func() net.Listener {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		var listenConfig net.ListenConfig
+		listener, err := listenConfig.Listen(ctx, "tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = listener.Close() })
+		t.Cleanup(func() {
+			if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+				t.Error(closeErr)
+			}
+		})
 		return listener
 	}
 	publicListener, privateListener := listen(), listen()
@@ -42,7 +48,7 @@ func TestServePairSeparatesPublicAndPrivateRoutesAndJoins(t *testing.T) {
 		{privateListener, "POST", "/internal-render/print/redeem", 204},
 		{privateListener, "GET", "/healthz", 404},
 	} {
-		request, err := http.NewRequest(check.method, "http://"+check.listener.Addr().String()+check.path, nil)
+		request, err := http.NewRequestWithContext(ctx, check.method, "http://"+check.listener.Addr().String()+check.path, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -50,7 +56,9 @@ func TestServePairSeparatesPublicAndPrivateRoutesAndJoins(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_ = response.Body.Close()
+		if closeErr := response.Body.Close(); closeErr != nil {
+			t.Fatal(closeErr)
+		}
 		if response.StatusCode != check.want {
 			t.Fatalf("%s status=%d, want%d", check.path, response.StatusCode, check.want)
 		}
@@ -68,9 +76,12 @@ func TestServePairSeparatesPublicAndPrivateRoutesAndJoins(t *testing.T) {
 		t.Fatalf("stop count=%d", stops.Load())
 	}
 	for _, listener := range []net.Listener{publicListener, privateListener} {
-		connection, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
+		dialer := net.Dialer{Timeout: time.Second}
+		connection, err := dialer.DialContext(t.Context(), "tcp", listener.Addr().String())
 		if err == nil {
-			_ = connection.Close()
+			if closeErr := connection.Close(); closeErr != nil {
+				t.Error(closeErr)
+			}
 			t.Fatal("listener still open")
 		}
 	}

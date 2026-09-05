@@ -73,7 +73,7 @@ func TestMissingAuthorityNeverReachesRedemption(t *testing.T) {
 	// This fails if an ID-only request can consume or retrieve a private snapshot.
 	redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
 	handler := mustHandler(t, redeemer)
-	request := validRequest()
+	request := validRequest(t)
 	request.Header.Del("Authorization")
 	response := httptest.NewRecorder()
 
@@ -90,7 +90,7 @@ func TestSuccessfulRedemptionReturnsExactFrozenPayload(t *testing.T) {
 	snapshot := validSnapshot(t)
 	redeemer := &recordingRedeemer{snapshot: snapshot}
 	handler := mustHandler(t, redeemer)
-	request := validRequest()
+	request := validRequest(t)
 	response := httptest.NewRecorder()
 
 	handler.ServeHTTP(response, request)
@@ -171,7 +171,7 @@ func TestRequestAuthorityAndTransportShapeFailClosed(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
-			request := validRequest()
+			request := validRequest(t)
 			test.mutate(request)
 			response := httptest.NewRecorder()
 			mustHandler(t, redeemer).ServeHTTP(response, request)
@@ -195,8 +195,12 @@ func TestRequestPathMethodAndQueryAreExact(t *testing.T) {
 	} {
 		t.Run(target, func(t *testing.T) {
 			redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
-			request := validRequest()
-			request.URL, _ = request.URL.Parse(target)
+			request := validRequest(t)
+			parsedURL, parseErr := request.URL.Parse(target)
+			if parseErr != nil {
+				t.Fatal(parseErr)
+			}
+			request.URL = parsedURL
 			response := httptest.NewRecorder()
 			mustHandler(t, redeemer).ServeHTTP(response, request)
 			assertFailure(t, response, http.StatusNotFound, false)
@@ -209,7 +213,7 @@ func TestRequestPathMethodAndQueryAreExact(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		t.Run(method, func(t *testing.T) {
 			redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
-			request := validRequest()
+			request := validRequest(t)
 			request.Method = method
 			response := httptest.NewRecorder()
 			mustHandler(t, redeemer).ServeHTTP(response, request)
@@ -225,7 +229,7 @@ func TestRequestBodyIsClosedAndBoundedBeforeRedemption(t *testing.T) {
 	// These cases catch permissive decoding, body smuggling, and reads above the 128-byte limit.
 	valid := `{"resumeId":"` + testResumeID + `","audience":"nuxt-print"}`
 	t.Run("exact limit", func(t *testing.T) {
-		request := requestWithBody(valid + strings.Repeat(" ", 128-len(valid)))
+		request := requestWithBody(t, valid+strings.Repeat(" ", 128-len(valid)))
 		response := httptest.NewRecorder()
 		mustHandler(t, &recordingRedeemer{snapshot: validSnapshot(t)}).ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
@@ -260,7 +264,7 @@ func TestRequestBodyIsClosedAndBoundedBeforeRedemption(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
-			request := requestWithBody(test.body)
+			request := requestWithBody(t, test.body)
 			response := httptest.NewRecorder()
 			mustHandler(t, redeemer).ServeHTTP(response, request)
 			assertFailure(t, response, http.StatusNotFound, false)
@@ -272,7 +276,7 @@ func TestRequestBodyIsClosedAndBoundedBeforeRedemption(t *testing.T) {
 
 	t.Run("declared too large", func(t *testing.T) {
 		redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
-		request := validRequest()
+		request := validRequest(t)
 		request.ContentLength = 129
 		response := httptest.NewRecorder()
 		mustHandler(t, redeemer).ServeHTTP(response, request)
@@ -284,7 +288,7 @@ func TestRequestBodyIsClosedAndBoundedBeforeRedemption(t *testing.T) {
 
 	t.Run("understated length", func(t *testing.T) {
 		redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
-		request := validRequest()
+		request := validRequest(t)
 		request.ContentLength--
 		response := httptest.NewRecorder()
 		mustHandler(t, redeemer).ServeHTTP(response, request)
@@ -296,7 +300,7 @@ func TestRequestBodyIsClosedAndBoundedBeforeRedemption(t *testing.T) {
 
 	t.Run("read failure", func(t *testing.T) {
 		redeemer := &recordingRedeemer{snapshot: validSnapshot(t)}
-		request := validRequest()
+		request := validRequest(t)
 		request.Body = io.NopCloser(failingReader{})
 		response := httptest.NewRecorder()
 		mustHandler(t, redeemer).ServeHTTP(response, request)
@@ -362,7 +366,7 @@ func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
 			test.mutate(&snapshot)
 			redeemer := &recordingRedeemer{snapshot: snapshot}
 			response := httptest.NewRecorder()
-			mustHandler(t, redeemer).ServeHTTP(response, validRequest())
+			mustHandler(t, redeemer).ServeHTTP(response, validRequest(t))
 			assertFailure(t, response, http.StatusNotFound, false)
 			if calls := redeemer.callCount(); calls != 1 {
 				t.Fatalf("Redeem calls = %d, want 1", calls)
@@ -375,7 +379,7 @@ func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
 		snapshot.PublicGeneration = snapshot.Revision
 		snapshot.Payload = bytes.Replace(snapshot.Payload, []byte(`"publicGeneration":null`), []byte(`"publicGeneration":"7"`), 1)
 		response := httptest.NewRecorder()
-		mustHandler(t, &recordingRedeemer{snapshot: snapshot}).ServeHTTP(response, validRequest())
+		mustHandler(t, &recordingRedeemer{snapshot: snapshot}).ServeHTTP(response, validRequest(t))
 		if response.Code != http.StatusOK || !bytes.Equal(response.Body.Bytes(), snapshot.Payload) {
 			t.Fatalf("public response = %d %q", response.Code, response.Body.String())
 		}
@@ -384,7 +388,7 @@ func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
 	t.Run("redeemer error", func(t *testing.T) {
 		redeemer := &recordingRedeemer{err: errors.New("secret token and database detail")}
 		response := httptest.NewRecorder()
-		mustHandler(t, redeemer).ServeHTTP(response, validRequest())
+		mustHandler(t, redeemer).ServeHTTP(response, validRequest(t))
 		assertFailure(t, response, http.StatusNotFound, false)
 		if strings.Contains(response.Body.String(), "secret") {
 			t.Fatalf("response leaked dependency error: %q", response.Body.String())
@@ -401,12 +405,12 @@ func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
 		})
 		handler := mustHandler(t, redeemer)
 		first := httptest.NewRecorder()
-		handler.ServeHTTP(first, validRequest())
+		handler.ServeHTTP(first, validRequest(t))
 		if first.Code != http.StatusOK {
 			t.Fatalf("first status = %d", first.Code)
 		}
 		second := httptest.NewRecorder()
-		handler.ServeHTTP(second, validRequest())
+		handler.ServeHTTP(second, validRequest(t))
 		assertFailure(t, second, http.StatusNotFound, false)
 	})
 }
@@ -421,7 +425,7 @@ func TestDeadlineAndCancellationArePassedAndJoined(t *testing.T) {
 		})
 		writer := newDeadlineRecorder()
 		before := time.Now()
-		mustHandler(t, redeemer).ServeHTTP(writer, validRequest())
+		mustHandler(t, redeemer).ServeHTTP(writer, validRequest(t))
 		after := time.Now()
 		if writer.Code != http.StatusOK {
 			t.Fatalf("status = %d, want %d", writer.Code, http.StatusOK)
@@ -441,7 +445,7 @@ func TestDeadlineAndCancellationArePassedAndJoined(t *testing.T) {
 			return renderjob.Snapshot{}, ctx.Err()
 		})
 		ctx, cancel := context.WithCancel(context.Background())
-		request := validRequest().WithContext(ctx)
+		request := validRequest(t).WithContext(ctx)
 		response := httptest.NewRecorder()
 		handler := mustHandler(t, redeemer)
 		done := make(chan struct{})
@@ -473,7 +477,7 @@ func TestDeadlineAndCancellationArePassedAndJoined(t *testing.T) {
 			return renderjob.Snapshot{}, errors.New("stopped")
 		})
 		ctx, cancel := context.WithCancel(context.Background())
-		request := validRequest().WithContext(ctx)
+		request := validRequest(t).WithContext(ctx)
 		handler := mustHandler(t, redeemer)
 		done := make(chan struct{})
 		go func() {
@@ -515,12 +519,12 @@ func TestRealHTTPContractAndSlowBodyDeadline(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("POST status = %d", response.StatusCode)
 	}
-	gotBody, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
+	gotBody, bodyReadErr := io.ReadAll(response.Body)
+	if bodyReadErr != nil {
+		t.Fatal(bodyReadErr)
 	}
-	if err := response.Body.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := response.Body.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	if !bytes.Equal(gotBody, snapshot.Payload) {
 		t.Fatalf("POST body differs: %q", gotBody)
@@ -533,16 +537,21 @@ func TestRealHTTPContractAndSlowBodyDeadline(t *testing.T) {
 	if response.StatusCode != http.StatusMethodNotAllowed || response.Header.Get("Allow") != http.MethodPost {
 		t.Fatalf("GET response = %d Allow %q", response.StatusCode, response.Header.Get("Allow"))
 	}
-	if err := response.Body.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := response.Body.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 
 	beforeCalls := redeemer.callCount()
-	connection, err := net.Dial("tcp", address)
-	if err != nil {
-		t.Fatal(err)
+	dialer := &net.Dialer{}
+	connection, dialErr := dialer.DialContext(t.Context(), "tcp", address)
+	if dialErr != nil {
+		t.Fatal(dialErr)
 	}
-	defer connection.Close()
+	defer func() {
+		if closeErr := connection.Close(); closeErr != nil {
+			t.Errorf("close slow request connection: %v", closeErr)
+		}
+	}()
 	partial := "POST /internal-render/print/redeem HTTP/1.1\r\n" +
 		"Host: " + address + "\r\n" +
 		"Authorization: RenderCapability " + testCapability + "\r\n" +
@@ -551,11 +560,11 @@ func TestRealHTTPContractAndSlowBodyDeadline(t *testing.T) {
 		"Content-Length: " + strconv.Itoa(len(body)) + "\r\n" +
 		"Connection: close\r\n\r\n{"
 	started := time.Now()
-	if _, err := io.WriteString(connection, partial); err != nil {
-		t.Fatal(err)
+	if _, writeErr := io.WriteString(connection, partial); writeErr != nil {
+		t.Fatal(writeErr)
 	}
-	if err := connection.SetReadDeadline(started.Add(7 * time.Second)); err != nil {
-		t.Fatal(err)
+	if deadlineErr := connection.SetReadDeadline(started.Add(7 * time.Second)); deadlineErr != nil {
+		t.Fatal(deadlineErr)
 	}
 	slowResponse, readErr := http.ReadResponse(bufio.NewReader(connection), &http.Request{Method: http.MethodPost})
 	elapsed := time.Since(started)
@@ -563,10 +572,10 @@ func TestRealHTTPContractAndSlowBodyDeadline(t *testing.T) {
 		t.Fatalf("slow body closed after %s, want about five seconds; error = %v", elapsed, readErr)
 	}
 	if readErr == nil {
-		defer slowResponse.Body.Close()
 		got, bodyErr := io.ReadAll(slowResponse.Body)
-		if bodyErr != nil {
-			t.Fatal(bodyErr)
+		closeErr := slowResponse.Body.Close()
+		if err := errors.Join(bodyErr, closeErr); err != nil {
+			t.Fatal(err)
 		}
 		if slowResponse.StatusCode != http.StatusNotFound || string(got) != notFoundBody {
 			t.Fatalf("slow body response = %d %q", slowResponse.StatusCode, got)
@@ -618,15 +627,19 @@ func validRequestBody() string {
 	return `{"resumeId":"` + testResumeID + `","audience":"nuxt-print"}`
 }
 
-func requestWithBody(body string) *http.Request {
-	request := httptest.NewRequest(http.MethodPost, "/internal-render/print/redeem", strings.NewReader(body))
+func requestWithBody(t *testing.T, body string) *http.Request {
+	t.Helper()
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/internal-render/print/redeem", strings.NewReader(body))
 	request.Header.Set("Authorization", "RenderCapability "+testCapability)
 	request.Header.Set("X-Render-Job-ID", testJobID)
 	request.Header.Set("Content-Type", "application/json")
 	return request
 }
 
-func validRequest() *http.Request { return requestWithBody(validRequestBody()) }
+func validRequest(t *testing.T) *http.Request {
+	t.Helper()
+	return requestWithBody(t, validRequestBody())
+}
 
 func mustHandler(t *testing.T, redeemer Redeemer) http.Handler {
 	t.Helper()
@@ -702,18 +715,17 @@ func assertFiveSecondDeadline(t *testing.T, name string, got, before, after time
 
 func rawRequest(t *testing.T, address, request string) *http.Response {
 	t.Helper()
-	connection, err := net.Dial("tcp", address)
-	if err != nil {
-		t.Fatal(err)
+	dialer := &net.Dialer{}
+	connection, dialErr := dialer.DialContext(t.Context(), "tcp", address)
+	if dialErr != nil {
+		t.Fatal(dialErr)
 	}
-	if _, err := io.WriteString(connection, request); err != nil {
-		_ = connection.Close()
-		t.Fatal(err)
+	if _, writeErr := io.WriteString(connection, request); writeErr != nil {
+		t.Fatal(errors.Join(writeErr, connection.Close()))
 	}
-	response, err := http.ReadResponse(bufio.NewReader(connection), &http.Request{})
-	if err != nil {
-		_ = connection.Close()
-		t.Fatal(err)
+	response, responseErr := http.ReadResponse(bufio.NewReader(connection), &http.Request{})
+	if responseErr != nil {
+		t.Fatal(errors.Join(responseErr, connection.Close()))
 	}
 	response.Body = struct {
 		io.Reader

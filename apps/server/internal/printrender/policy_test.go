@@ -101,14 +101,14 @@ func TestRequestPolicyRequiresSuccessfulStylesheetAndFontResponses(t *testing.T)
 		{name: "wrong URL", mutate: func(value *pausedResponse) { value.url = origin + "/_nuxt/assets/print-fonts.css" }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			policy := newPolicy(t)
+			testPolicy := newPolicy(t)
 			response := validResponses[0]
 			response.headers = network.Headers{"Content-Type": "text/css"}
 			test.mutate(&response)
-			if policy.acceptResponse(response) {
+			if testPolicy.acceptResponse(response) {
 				t.Fatal("accepted invalid asset response")
 			}
-			if policy.assetsComplete() {
+			if testPolicy.assetsComplete() {
 				t.Fatal("invalid response completed asset set")
 			}
 		})
