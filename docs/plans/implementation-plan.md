@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 31, active** (2026-09-05).
+Status: **Revision 32, active** (2026-09-05).
 
 The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -46,7 +46,7 @@ UI toolkit, and the application visual identity.
 | Phase | Work                                                                   | State                                                  |
 | ----- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
 | 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                       |
-| 7     | Print worker, public PDF and images                                    | Not started                                            |
+| 7     | [Print worker, public PDF and images](phase-7/README.md)               | Active: contracts and bounded queue                    |
 | 8     | Privacy lifecycle                                                      | Not started                                            |
 | 9     | [AWS Singapore cost research](phase-9/README.md)                       | Planned; research not run                              |
 | 10    | [Infrastructure and AWS UAT](phase-10/README.md)                       | Planned; UAT scope authorized; no deployment performed |
@@ -84,7 +84,7 @@ feeds internal print SSR.
 | Production launch authorization                           | Human owner                               | After Phase 10 passes                                                                                      |
 
 No other approval blocks development. Design v4, the template contract v2, and
-ADRs 0001–0031 are accepted, subject to recorded supersessions.
+ADRs 0001–0032 are accepted, subject to recorded supersessions.
 
 ## Dependency graph
 
