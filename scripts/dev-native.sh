@@ -38,6 +38,11 @@ readonly PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20030
 # Native development and tests use separate logical databases.
 DEV_DATABASE_URL=${ABOUTME_DEV_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable}
 DEV_LOG_LEVEL=${ABOUTME_DEV_LOG_LEVEL:-info}
+DEV_AUTO_SEED=${ABOUTME_DEV_AUTO_SEED:-1}
+case $DEV_AUTO_SEED in
+0 | 1) ;;
+*) die 'ABOUTME_DEV_AUTO_SEED must be 0 or 1' ;;
+esac
 
 resolve_repository_path() {
   local raw=$1 label=$2 candidate lexical resolved
@@ -514,7 +519,9 @@ cmd_up() {
   mkdir -p "$DEV_DIR" "$BIN_DIR" "$MEDIA_DIR"
   ensure_database
   run_migrations
-  seed_dev_account
+  if [ "$DEV_AUTO_SEED" = 1 ]; then
+    seed_dev_account
+  fi
   ensure_secrets
   start_mail_capture
   start_server

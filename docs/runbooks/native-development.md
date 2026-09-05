@@ -45,6 +45,10 @@ The stack seeds one account, `dev@aboutme.invalid` with password
 `aboutme-dev-password-1`, and one private sample resume. `make dev-seed` repeats
 the seed on its own; it never overwrites edits you made to the sample resume.
 
+Isolated capture harnesses that seed their own fixture database set
+`ABOUTME_DEV_AUTO_SEED=0` for startup. Daily development defaults to `1`;
+`make dev-seed` remains an explicit request to seed `aboutme_dev`.
+
 The command is idempotent. It starts or reuses `aboutme-test-db`, creates the
 `aboutme_dev` database if needed, applies goose migrations, builds the Go
 binary, then starts the authentication-mail-capture server, Go, Nuxt, and Caddy.
