@@ -8,11 +8,12 @@ renderer-owned (`tokens.md` §1).
 
 ## 1. Three targets, one renderer
 
-| Target           | Route         | Pagination model                                                                               | Authority            |
-| ---------------- | ------------- | ---------------------------------------------------------------------------------------------- | -------------------- |
-| Editor preview   | `/app/**`     | JS measure-and-break at entry boundaries, selected A4/Letter page, `transform: scale()` to fit | approximate          |
-| Public SSR page  | `/[slug]`     | continuous flow, no pagination                                                                 | not paginated at all |
-| PDF and og-image | `/print/[id]` | CSS `@page` plus fragmentation properties                                                      | **authoritative**    |
+| Target          | Route         | Pagination model                                                                               | Authority               |
+| --------------- | ------------- | ---------------------------------------------------------------------------------------------- | ----------------------- |
+| Editor preview  | `/app/**`     | JS measure-and-break at entry boundaries, selected A4/Letter page, `transform: scale()` to fit | approximate             |
+| Public SSR page | `/[slug]`     | continuous flow, no pagination                                                                 | not paginated at all    |
+| PDF             | `/print/[id]` | CSS `@page` plus fragmentation properties                                                      | **authoritative**       |
+| Share image     | `/print/[id]` | Fixed 1200 by 630 pixel viewport; top crop, no page fragmentation                              | One fixed image variant |
 
 The [renderer boundary](../system.md#renderer-boundary) makes editor pagination
 an approximation and Chromium print pagination authoritative. JavaScript
@@ -203,10 +204,19 @@ that can vary is pinned.
 | Print parameters   | `preferCSSPageSize: true`, `printBackground: true`, `displayHeaderFooter: false`, `scale: 1`, zero job margins so `@page` wins |
 | Contrast clamp     | pure function, fixed step size (`colors.md` §5); its outputs are pinned by the snapshots                                       |
 
+PDF metadata dates are fixed to `D:19700101000000+00'00'`. After bounded
+capture, the controller resolves the pinned PDF 1.4 classic xref table and its
+trailer Info object, then replaces the two UTC date values without changing byte
+lengths or offsets. Unsupported or ambiguous PDF structures fail the job.
+Repeated real PDF and PNG captures must match byte for byte.
+
 The og-image render uses the same pipeline and the same pinned environment, at
 its own viewport rather than `@page`; it inherits every determinism rule here.
+The exact image path, live-state gate, and crop are defined by
+[ADR 0032](../../adr/0032-public-share-image.md).
 
 Operationally, prints run one at a time inside the Go task's 512 MiB whole-task
-budget, with a 20-second timeout and process-group kill. The
+budget, with a configured 20-second cancellation deadline from admission and
+process-group kill. Every result waits for joined teardown. The
 [numeric budgets](../budgets.md) own those values. A template that exceeds them
 is defective; every golden fixture must print within the limits.

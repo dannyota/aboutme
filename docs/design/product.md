@@ -129,12 +129,13 @@ The publish dialog exposes three independent choices:
 2. **PDF download** controls the public PDF. The owner can always export a PDF.
 3. **SEO and GEO** controls indexing and discovery surfaces. It defaults off.
 
-| State                    | Public behavior                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes          |
-| Live, discovery disabled | Shareable HTML with `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown returns `404` |
-| Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                          |
-| Download enabled         | The public PDF route is available; otherwise it returns `404`                                                      |
+| State                    | Public behavior                                                                                                        |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes              |
+| Live, discovery disabled | Shareable HTML with `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown returns `404`     |
+| Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                              |
+| Download enabled         | The public PDF route is available; otherwise it returns `404`                                                          |
+| Share image              | One 1200 by 630 PNG top-viewport capture is available when live, independent of download and discovery flags; ADR 0032 |
 
 Deleted, renamed, tombstoned, and never-published slugs all return the same
 public `404`. The service does not expose which internal state caused absence.
