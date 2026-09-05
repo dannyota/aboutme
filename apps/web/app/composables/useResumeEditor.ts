@@ -19,6 +19,10 @@ import {
 import type { ParentETag, EditorRuntime } from '../editor/types';
 import { createPublishApi } from '../editor/publishApi';
 import {
+  createPdfDownloadController,
+  type PdfDownloadController,
+} from '../editor/pdfDownload';
+import {
   createPublishController,
   type PublishController,
 } from '../editor/publishController';
@@ -81,6 +85,7 @@ export interface ResumeEditorActions {
     etag?: ParentETag,
   ) => Promise<ResumeConditionalReadResult>;
   discard(): void;
+  readonly downloadPdf: PdfDownloadController;
   readonly publish: PublishController;
 }
 
@@ -105,6 +110,12 @@ export function createResumeEditorActions(
     runtime: deps.runtime,
     api: createPublishApi(),
     providerLogin: deps.providerLogin ?? computed(() => false),
+  });
+  const downloadPdf = createPdfDownloadController({
+    resumeId: deps.resumeId,
+    record,
+    flush: () => deps.coordinator.flush(deps.resumeId),
+    auth: deps.auth,
   });
   const blocked = (
     reason: Extract<EditorActionResult, { kind: 'blocked' }>['reason'],
@@ -256,6 +267,7 @@ export function createResumeEditorActions(
               etag,
             ),
     discard: () => deps.coordinator.discard(deps.resumeId),
+    downloadPdf,
     publish,
   };
 }

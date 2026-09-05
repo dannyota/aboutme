@@ -27,6 +27,7 @@ die() {
 # Fixed ports keep PUBLIC_ORIGIN-derived cookies, CSRF, and redirects aligned.
 readonly CADDY_PORT=20080
 readonly SERVER_PORT=20081
+readonly PRINT_LISTEN_ADDR=127.0.0.1:20082
 readonly WEB_PORT=20030
 readonly MAIL_CAPTURE_PORT=20091
 readonly MAIL_CAPTURE_ADDR="127.0.0.1:${MAIL_CAPTURE_PORT}"
@@ -431,6 +432,8 @@ start_mail_capture() {
 }
 
 start_server() {
+  local chromium_path
+  chromium_path=$(node "$ROOT/scripts/chromium-path.mjs") || die "pinned Chromium is unavailable"
   if service_pid server >/dev/null 2>&1; then
     info "server already running (pid $(service_pid server))"
     return 0
@@ -449,6 +452,8 @@ start_server() {
     ENV=dev \
     PUBLIC_ORIGIN="$PUBLIC_ORIGIN" \
     PUBLIC_RENDER_ORIGIN="$PUBLIC_RENDER_ORIGIN" \
+    PRINT_LISTEN_ADDR="$PRINT_LISTEN_ADDR" \
+    CHROMIUM_PATH="$chromium_path" \
     APP_BUILD_DIGEST="$APP_BUILD_DIGEST" \
     PUBLIC_RENDERER_BUILD_DIGEST="$PUBLIC_RENDERER_BUILD_DIGEST" \
     TRUSTED_PROXY_CIDRS=127.0.0.1/32 \
@@ -477,7 +482,7 @@ start_web() {
   # --port/--host on the command line beat nuxt.config.ts's devServer.port,
   # so the Nuxt config stays untouched.
   start_service web "$ROOT/apps/web" \
-    npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
+    env NUXT_PRINT_ORIGIN="http://$PRINT_LISTEN_ADDR" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
   # First request compiles the app, so this is the slow one.
   wait_http web "http://127.0.0.1:$WEB_PORT/" 240
   info "web ready on http://127.0.0.1:$WEB_PORT"

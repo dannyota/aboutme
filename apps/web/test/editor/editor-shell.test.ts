@@ -9,6 +9,7 @@ import type {
 import type {
   PublishControllerState,
 } from '../../app/editor/publishController';
+import type { PdfDownloadController } from '../../app/editor/pdfDownload';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
@@ -33,6 +34,9 @@ describe('EditorShell', () => {
     expect(publish.text()).toBe('Publish');
     expect(publish.attributes('data-variant')).toBe('seal');
     expect(wrapper.findAll('[data-action="publish"]')).toHaveLength(1);
+    const download = wrapper.get('[data-action="download-pdf"]');
+    expect(download.text()).toBe('Download PDF');
+    expect(download.attributes('aria-label')).toBe('Download PDF');
     expect(wrapper.text()).not.toMatch(/Undo all|Redo/);
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
@@ -467,6 +471,7 @@ function actionsFor(
     applyMine: vi.fn(),
     resumeAfterAuth: vi.fn(),
     discard: vi.fn(),
+    downloadPdf: downloadController(),
     publish: {
       state: publishState,
       submit: vi.fn(),
@@ -476,6 +481,14 @@ function actionsFor(
       retryAfterProviderReauth: vi.fn(),
       cancel: vi.fn(),
     },
+  };
+}
+
+function downloadController(): PdfDownloadController {
+  return {
+    state: computed(() => ({ kind: 'idle' })),
+    download: vi.fn(),
+    dispose: vi.fn(),
   };
 }
 

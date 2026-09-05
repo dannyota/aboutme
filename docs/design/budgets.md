@@ -4,100 +4,106 @@ Each owning component enforces its rows. Staging rehearsal repeats
 production-shaped latency and resource measurements. A hard-budget breach fails
 the gate; changing a number requires a reviewed change with evidence.
 
-| Budget                                    | Target                                              | Where enforced                                        |
-| ----------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
-| API p95 latency (read, warm)              | ≤ 150 ms                                            | Staging synthetic benchmark                           |
-| API p95 latency (granular PATCH)          | ≤ 250 ms                                            | Staging synthetic benchmark                           |
-| Public SSR page p95 (origin, uncached)    | ≤ 400 ms                                            | Staging synthetic benchmark                           |
-| PDF render wall time                      | ≤ 20 s hard timeout, p95 ≤ 8 s                      | Print worker (planned)                                |
-| Concurrent renders                        | 1 (v1)                                              | Print worker (planned)                                |
-| Render queue depth                        | ≤ 8, then 503 + readiness unhealthy                 | Print worker (planned)                                |
-| Whole server task memory (Go + Chromium)  | ≤ 512 MiB cgroup                                    | Print worker (planned); staging benchmark             |
-| pgx pool size                             | ≤ 20, below Postgres max_connections                | Server pool configuration                             |
-| SSE concurrent connections per task       | ≤ 2000                                              | SSE transport; local churn measurement                |
-| SSE file descriptors headroom             | ≥ 25% below ulimit                                  | SSE transport; local churn measurement                |
-| SSE concurrent connections per client IP  | ≤ 100                                               | SSE admission                                         |
-| SSE concurrent connections per account    | ≤ 20                                                | SSE admission                                         |
-| SSE queued notifications per connection   | ≤ 8, then disconnect                                | Local hub                                             |
-| SSE write deadline                        | ≤ 2 s per flush                                     | SSE writer                                            |
-| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)                    | SSE transport; hosted edge check in Phase 10          |
-| Request body                              | ≤ 256 KB                                            | API middleware                                        |
-| Global API requests per client IP         | ≤ 300/min                                           | API middleware                                        |
-| In-memory rate-limiter keys per instance  | ≤ 10,000                                            | Every rate-limiter instance                           |
-| Anonymous login starts per client IP      | ≤ 30/min                                            | Auth service                                          |
-| Privileged OAuth starts/account and IP    | ≤ 30/min                                            | Auth service                                          |
-| Public revocation drain                   | ≤ 5 s hard, then fail before mutation               | Publish transitions                                   |
-| Public render `canonicalOrigin`           | ≤ 512 ASCII bytes                                   | Public render boundary (Go and Nuxt)                  |
-| Internal public-render JSON               | ≤ 532,480 bytes                                     | Public render boundary (Go and Nuxt)                  |
-| Internal public-render HTML               | ≤ 2,097,152 bytes; provisional gate                 | Public render corpus test                             |
-| Direct public-render wall time            | ≤ 5 s hard; cancel and join                         | Direct-render client                                  |
-| Slug claim/rename attempts                | ≤ 30/account/hour                                   | Slug route limiter                                    |
-| OAuth cleanup batch                       | ≤ 200 rows/start                                    | Auth service                                          |
-| Resume photo multipart body               | ≤ 2,162,688 bytes                                   | Photo route                                           |
-| Resume photo file / normalized object     | ≤ 2,097,152 bytes                                   | Media package                                         |
-| Resume photo source edge / pixels         | ≤ 8,192 px / 16,777,216 pixels                      | Media package                                         |
-| Resume photo normalized edge              | ≤ 2,048 px opaque / 1,024 px alpha                  | Media package                                         |
-| Concurrent photo intake                   | 1 per server task; wait ≤ 1 s                       | Media package                                         |
-| Photo body read / object write            | ≤ 60 s / 5 s hard deadline                          | Media package                                         |
-| Photo candidate create-to-commit lifetime | ≤ 5 min hard deadline                               | Media package                                         |
-| Photo normalization                       | ≤ 5 s; synchronous                                  | Media package; controlled-host and staging benchmarks |
-| Photo normalization peak RSS delta        | ≤ 192 MiB                                           | Media package; controlled-host and staging benchmarks |
-| Resume document total                     | ≤ 512 KB                                            | Resume store                                          |
-| Resume title length                       | ≤ 160 characters                                    | Database constraint and resume store                  |
-| `lng` tag length                          | ≤ 35 characters                                     | Database constraint                                   |
-| Idempotency record TTL                    | 24 h                                                | Resume store                                          |
-| Idempotency cleanup batch                 | ≤ 200 rows/mutation                                 | Idempotency store                                     |
-| Retained idempotency records/account      | ≤ 50,000 after new-key insert                       | Idempotency store                                     |
-| Retained idempotency stored bytes/account | ≤ 1 GiB after new-key insert                        | Idempotency store                                     |
-| Global idempotency expiry sweep           | hourly; 1,000/page; 10,000/run                      | Privacy sweep (planned)                               |
-| Resume reads per account and IP           | ≤ 600/min                                           | Resume route limiters                                 |
-| Resume writes per account and IP          | ≤ 240/min                                           | Resume route limiters                                 |
-| Photo uploads per account and IP          | ≤ 20/h                                              | Resume route limiters                                 |
-| Structure commands per request            | ≤ 100                                               | Resume handlers                                       |
-| Customization deltas per request          | ≤ 100                                               | Resume handlers                                       |
-| Media orphan minimum age                  | ≥ 48 h                                              | Media jobs (planned)                                  |
-| Media orphan sweep page / run             | 1,000 / 10,000 objects                              | Media jobs (planned)                                  |
-| Media orphan delete concurrency           | ≤ 4                                                 | Media jobs (planned)                                  |
-| Media deletion physical-removal target    | ≤ 24 h from reference revocation                    | Media jobs (planned)                                  |
-| Media deletion queue page / run           | 200 / 2,000 jobs                                    | Media jobs (planned)                                  |
-| Media deletion retry / concurrency        | 1/run, ≤ 6 h backoff / ≤ 4                          | Media jobs (planned)                                  |
-| Password route body                       | ≤ 4,096 bytes                                       | Password routes                                       |
-| Canonical account email                   | 5–254 ASCII bytes, stored lowercase                 | Account email parser                                  |
-| Registration name                         | 1–100 code points after NFC; ≤ 400 raw UTF-8 bytes  | Account email parser                                  |
-| Password input                            | ≤ 1,024 UTF-8 bytes; 15–128 code points after NFC   | Password policy                                       |
-| Argon2id cost                             | 64 MiB, 3 iterations, parallelism 1                 | Password hasher                                       |
-| Argon2id encoding                         | 16 B salt, 32 B result, PHC ≤ 192 ASCII bytes       | Password hasher                                       |
-| Hash admission                            | 2 running, 16 queued                                | Password hasher                                       |
-| Bundled blocklist                         | 99,840 lines; pinned commit and SHA-256             | Password blocklist                                    |
-| HIBP range lookup                         | 5 s deadline, 128 KiB response cap                  | HIBP lookup                                           |
-| HIBP prefix cache                         | 256 prefixes, 16 MiB entries, 24 h                  | HIBP lookup                                           |
-| Bearer token                              | 32 random bytes → 43-char base64url; 32-byte digest | Password tokens                                       |
-| Registration token expiry                 | 24 h                                                | Password store                                        |
-| Reset token expiry                        | 30 min                                              | Password store                                        |
-| Encoded password hash                     | 1–192 bytes                                         | Password store                                        |
-| Outbox plaintext / ciphertext             | ≤ 4,096 / ≤ 4,112 bytes                             | Auth mail outbox                                      |
-| Outbox key ring                           | 1 active + ≤ 1 previous 32-byte key                 | Auth mail outbox                                      |
-| Mail claim batch / concurrency            | ≤ 10 / ≤ 2 sends                                    | Auth mail worker                                      |
-| Mail lease / send deadline                | 30 s / 10 s                                         | Auth mail worker                                      |
-| Mail retry backoff                        | min(30 s × 2^(n−1), 1 h); terminal at attempt 8     | Auth mail worker                                      |
-| Expired auth cleanup                      | ≤ 200 rows/tick                                     | Auth mail worker                                      |
-| Login admission                           | 30/min/IP                                           | Password rate policies                                |
-| Login failures                            | 10/15 min per email HMAC                            | Password rate policies                                |
-| Register/forgot                           | 5/h per email, 20/h per IP                          | Password rate policies                                |
-| Verify/reset token consumption            | 10/h per IP                                         | Password rate policies                                |
-| Add/change/reauth                         | 10/h per (account, IP)                              | Password rate policies                                |
-| Local mail capture                        | ≤ 50 messages, ≤ 256 KiB total, ≤ 16 KiB/message    | Local mail capture                                    |
-| Capture ports                             | 127.0.0.1:20091 native; 127.0.0.1:20444 HTTPS       | Local mail capture                                    |
-| `/oauth/register` per IP                  | ≤ 5/hour                                            | OAuth and MCP rate policies                           |
-| `/oauth/token` per IP                     | ≤ 30/min                                            | OAuth and MCP rate policies                           |
-| Failed grants per client                  | ≤ 10 per 15 min                                     | OAuth and MCP rate policies                           |
-| `/mcp` tool calls per token               | ≤ 120/min                                           | OAuth and MCP rate policies                           |
-| `/mcp` tool calls per user                | ≤ 240/min                                           | OAuth and MCP rate policies                           |
-| Concurrent `/mcp` requests/user           | ≤ 4                                                 | OAuth and MCP rate policies                           |
-| Live grants per user                      | ≤ 10 (11th consent refused)                         | Consent handler                                       |
-| `/mcp` request body                       | ≤ 4,194,304 bytes                                   | OAuth and MCP routes                                  |
-| OAuth request bodies                      | ≤ 4,096 bytes                                       | OAuth and MCP routes                                  |
-| Idle-client GC                            | 24 h idle; ≤ 200 rows/sweep                         | OAuth server                                          |
+| Budget                                          | Target                                              | Where enforced                                        |
+| ----------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
+| API p95 latency (read, warm)                    | ≤ 150 ms                                            | Staging synthetic benchmark                           |
+| API p95 latency (granular PATCH)                | ≤ 250 ms                                            | Staging synthetic benchmark                           |
+| Public SSR page p95 (origin, uncached)          | ≤ 400 ms                                            | Staging synthetic benchmark                           |
+| PDF render deadline and latency                 | 20 s cancellation deadline; p95 ≤ 8 s               | Print queue and Chromium                              |
+| Concurrent renders                              | 1 (v1)                                              | Print queue and Chromium                              |
+| Render queue depth                              | ≤ 8, then 503 + readiness unhealthy                 | Print queue and Chromium                              |
+| Whole server task memory (Go + Chromium)        | ≤ 512 MiB cgroup                                    | Print queue and Chromium; hosted Phase 10 benchmark   |
+| Print capability lifetime                       | ≤ 60 s; job deadline remains 20 s                   | Render queue                                          |
+| Private print JSON / HTML                       | ≤ 3,407,872 / 6,291,456 bytes                       | Snapshot encoder and Nuxt print boundary              |
+| PDF / share-image bytes                         | ≤ 16,777,216 / 4,194,304 bytes                      | Streamed PDF and PNG validation                       |
+| Owner PDF requests per account and IP           | ≤ 10/min                                            | Owner PDF route                                       |
+| Public artifact requests / render misses per IP | ≤ 300/min / 20/min                                  | Public artifact routes                                |
+| Public artifact cache                           | ≤ 128 entries, 32 MiB bodies, 60 s TTL              | Shared public cache                                   |
+| pgx pool size                                   | ≤ 20, below Postgres max_connections                | Server pool configuration                             |
+| SSE concurrent connections per task             | ≤ 2000                                              | SSE transport; local churn measurement                |
+| SSE file descriptors headroom                   | ≥ 25% below ulimit                                  | SSE transport; local churn measurement                |
+| SSE concurrent connections per client IP        | ≤ 100                                               | SSE admission                                         |
+| SSE concurrent connections per account          | ≤ 20                                                | SSE admission                                         |
+| SSE queued notifications per connection         | ≤ 8, then disconnect                                | Local hub                                             |
+| SSE write deadline                              | ≤ 2 s per flush                                     | SSE writer                                            |
+| SSE heartbeat interval                          | 25 s (< CloudFront idle timeout)                    | SSE transport; hosted edge check in Phase 10          |
+| Request body                                    | ≤ 256 KB                                            | API middleware                                        |
+| Global API requests per client IP               | ≤ 300/min                                           | API middleware                                        |
+| In-memory rate-limiter keys per instance        | ≤ 10,000                                            | Every rate-limiter instance                           |
+| Anonymous login starts per client IP            | ≤ 30/min                                            | Auth service                                          |
+| Privileged OAuth starts/account and IP          | ≤ 30/min                                            | Auth service                                          |
+| Public revocation drain                         | ≤ 5 s hard, then fail before mutation               | Publish transitions                                   |
+| Public render `canonicalOrigin`                 | ≤ 512 ASCII bytes                                   | Public render boundary (Go and Nuxt)                  |
+| Internal public-render JSON                     | ≤ 532,480 bytes                                     | Public render boundary (Go and Nuxt)                  |
+| Internal public-render HTML                     | ≤ 2,097,152 bytes; provisional gate                 | Public render corpus test                             |
+| Direct public-render wall time                  | ≤ 5 s hard; cancel and join                         | Direct-render client                                  |
+| Slug claim/rename attempts                      | ≤ 30/account/hour                                   | Slug route limiter                                    |
+| OAuth cleanup batch                             | ≤ 200 rows/start                                    | Auth service                                          |
+| Resume photo multipart body                     | ≤ 2,162,688 bytes                                   | Photo route                                           |
+| Resume photo file / normalized object           | ≤ 2,097,152 bytes                                   | Media package                                         |
+| Resume photo source edge / pixels               | ≤ 8,192 px / 16,777,216 pixels                      | Media package                                         |
+| Resume photo normalized edge                    | ≤ 2,048 px opaque / 1,024 px alpha                  | Media package                                         |
+| Concurrent photo intake                         | 1 per server task; wait ≤ 1 s                       | Media package                                         |
+| Photo body read / object write                  | ≤ 60 s / 5 s hard deadline                          | Media package                                         |
+| Photo candidate create-to-commit lifetime       | ≤ 5 min hard deadline                               | Media package                                         |
+| Photo normalization                             | ≤ 5 s; synchronous                                  | Media package; controlled-host and staging benchmarks |
+| Photo normalization peak RSS delta              | ≤ 192 MiB                                           | Media package; controlled-host and staging benchmarks |
+| Resume document total                           | ≤ 512 KB                                            | Resume store                                          |
+| Resume title length                             | ≤ 160 characters                                    | Database constraint and resume store                  |
+| `lng` tag length                                | ≤ 35 characters                                     | Database constraint                                   |
+| Idempotency record TTL                          | 24 h                                                | Resume store                                          |
+| Idempotency cleanup batch                       | ≤ 200 rows/mutation                                 | Idempotency store                                     |
+| Retained idempotency records/account            | ≤ 50,000 after new-key insert                       | Idempotency store                                     |
+| Retained idempotency stored bytes/account       | ≤ 1 GiB after new-key insert                        | Idempotency store                                     |
+| Global idempotency expiry sweep                 | hourly; 1,000/page; 10,000/run                      | Privacy sweep (planned)                               |
+| Resume reads per account and IP                 | ≤ 600/min                                           | Resume route limiters                                 |
+| Resume writes per account and IP                | ≤ 240/min                                           | Resume route limiters                                 |
+| Photo uploads per account and IP                | ≤ 20/h                                              | Resume route limiters                                 |
+| Structure commands per request                  | ≤ 100                                               | Resume handlers                                       |
+| Customization deltas per request                | ≤ 100                                               | Resume handlers                                       |
+| Media orphan minimum age                        | ≥ 48 h                                              | Media jobs (planned)                                  |
+| Media orphan sweep page / run                   | 1,000 / 10,000 objects                              | Media jobs (planned)                                  |
+| Media orphan delete concurrency                 | ≤ 4                                                 | Media jobs (planned)                                  |
+| Media deletion physical-removal target          | ≤ 24 h from reference revocation                    | Media jobs (planned)                                  |
+| Media deletion queue page / run                 | 200 / 2,000 jobs                                    | Media jobs (planned)                                  |
+| Media deletion retry / concurrency              | 1/run, ≤ 6 h backoff / ≤ 4                          | Media jobs (planned)                                  |
+| Password route body                             | ≤ 4,096 bytes                                       | Password routes                                       |
+| Canonical account email                         | 5–254 ASCII bytes, stored lowercase                 | Account email parser                                  |
+| Registration name                               | 1–100 code points after NFC; ≤ 400 raw UTF-8 bytes  | Account email parser                                  |
+| Password input                                  | ≤ 1,024 UTF-8 bytes; 15–128 code points after NFC   | Password policy                                       |
+| Argon2id cost                                   | 64 MiB, 3 iterations, parallelism 1                 | Password hasher                                       |
+| Argon2id encoding                               | 16 B salt, 32 B result, PHC ≤ 192 ASCII bytes       | Password hasher                                       |
+| Hash admission                                  | 2 running, 16 queued                                | Password hasher                                       |
+| Bundled blocklist                               | 99,840 lines; pinned commit and SHA-256             | Password blocklist                                    |
+| HIBP range lookup                               | 5 s deadline, 128 KiB response cap                  | HIBP lookup                                           |
+| HIBP prefix cache                               | 256 prefixes, 16 MiB entries, 24 h                  | HIBP lookup                                           |
+| Bearer token                                    | 32 random bytes → 43-char base64url; 32-byte digest | Password tokens                                       |
+| Registration token expiry                       | 24 h                                                | Password store                                        |
+| Reset token expiry                              | 30 min                                              | Password store                                        |
+| Encoded password hash                           | 1–192 bytes                                         | Password store                                        |
+| Outbox plaintext / ciphertext                   | ≤ 4,096 / ≤ 4,112 bytes                             | Auth mail outbox                                      |
+| Outbox key ring                                 | 1 active + ≤ 1 previous 32-byte key                 | Auth mail outbox                                      |
+| Mail claim batch / concurrency                  | ≤ 10 / ≤ 2 sends                                    | Auth mail worker                                      |
+| Mail lease / send deadline                      | 30 s / 10 s                                         | Auth mail worker                                      |
+| Mail retry backoff                              | min(30 s × 2^(n−1), 1 h); terminal at attempt 8     | Auth mail worker                                      |
+| Expired auth cleanup                            | ≤ 200 rows/tick                                     | Auth mail worker                                      |
+| Login admission                                 | 30/min/IP                                           | Password rate policies                                |
+| Login failures                                  | 10/15 min per email HMAC                            | Password rate policies                                |
+| Register/forgot                                 | 5/h per email, 20/h per IP                          | Password rate policies                                |
+| Verify/reset token consumption                  | 10/h per IP                                         | Password rate policies                                |
+| Add/change/reauth                               | 10/h per (account, IP)                              | Password rate policies                                |
+| Local mail capture                              | ≤ 50 messages, ≤ 256 KiB total, ≤ 16 KiB/message    | Local mail capture                                    |
+| Capture ports                                   | 127.0.0.1:20091 native; 127.0.0.1:20444 HTTPS       | Local mail capture                                    |
+| `/oauth/register` per IP                        | ≤ 5/hour                                            | OAuth and MCP rate policies                           |
+| `/oauth/token` per IP                           | ≤ 30/min                                            | OAuth and MCP rate policies                           |
+| Failed grants per client                        | ≤ 10 per 15 min                                     | OAuth and MCP rate policies                           |
+| `/mcp` tool calls per token                     | ≤ 120/min                                           | OAuth and MCP rate policies                           |
+| `/mcp` tool calls per user                      | ≤ 240/min                                           | OAuth and MCP rate policies                           |
+| Concurrent `/mcp` requests/user                 | ≤ 4                                                 | OAuth and MCP rate policies                           |
+| Live grants per user                            | ≤ 10 (11th consent refused)                         | Consent handler                                       |
+| `/mcp` request body                             | ≤ 4,194,304 bytes                                   | OAuth and MCP routes                                  |
+| OAuth request bodies                            | ≤ 4,096 bytes                                       | OAuth and MCP routes                                  |
+| Idle-client GC                                  | 24 h idle; ≤ 200 rows/sweep                         | OAuth server                                          |
 
 **Document and idempotency rows.** The
 [data design](data.md#bounds-and-invariants) owns the 512 KiB document limit.
@@ -265,11 +271,15 @@ applicable target under this protocol and retain the raw evidence.
 | Evidence           | Raw results retained locally and cited from the phase exit checklist                                                                                                                                                                                                                     |
 
 **Hard safety limits vs measured gates and SLOs.** The 512 MiB cgroup, render
-timeout, queue depth, and pgx pool ceiling are hard runtime limits.
-Normalization's five-second ceiling is a measured provisional gate and staging
-launch gate because its in-process decoder cannot be killed safely. The latency
-numbers are service-level objectives (SLOs), measured against the corpus above
-and not enforced per request.
+timeout, queue depth, and pgx pool ceiling are hard runtime limits. The render
+timer is configured for 20 seconds from admission. At timeout the queue cancels
+the job and returns only after browser teardown joins. Scheduler delay and
+joined teardown are measured separately from that configured deadline. Timeout
+failures never count as successful latency samples; a successful result above 20
+seconds fails the render benchmark. Normalization's five-second ceiling is a
+measured provisional gate and staging launch gate because its in-process decoder
+cannot be killed safely. The latency numbers are service-level objectives
+(SLOs), measured against the corpus above and not enforced per request.
 
 **Baseline before freeze.** The riskiest limits (512 MiB whole-task memory with
 Chromium, 2000 SSE connections) are **baselined with a real measurement by the

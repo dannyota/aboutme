@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
@@ -29,6 +31,9 @@ type ServiceDependencies struct {
 	PublicOrigin   publicresume.PublicOrigin
 	AppDigest      string
 	RendererDigest string
+	PrintQueue     RenderQueue
+	TrustedProxies api.TrustedProxies
+	Clock          func() time.Time
 	Live           http.Handler
 }
 
@@ -38,6 +43,8 @@ var _ store.PublicReadQueries = (*store.Queries)(nil)
 type Service struct {
 	json     http.Handler
 	photo    http.Handler
+	pdf      http.Handler
+	png      http.Handler
 	html     http.Handler
 	markdown http.Handler
 	sitemap  http.Handler
@@ -78,6 +85,15 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	service := &Service{html: html, markdown: markdown, sitemap: sitemap, robots: robots, llms: llms, live: dependencies.Live}
 	service.json = service.newJSONHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest)
 	service.photo = service.newPhotoHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest)
+	artifacts, artifactErr := newArtifactHandlers(ArtifactDependencies{
+		Reader: dependencies.Reader, Cache: dependencies.Cache, Queue: dependencies.PrintQueue,
+		AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest,
+		TrustedProxies: dependencies.TrustedProxies, Clock: dependencies.Clock,
+	})
+	if artifactErr != nil {
+		return nil, artifactErr
+	}
+	service.pdf, service.png = artifacts.pdf, artifacts.png
 	return service, nil
 }
 

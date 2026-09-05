@@ -349,7 +349,10 @@ async function proveConflictAndTemplate(
   baseline: URLBaseline,
 ): Promise<void> {
   editorDiagnosticStage = 'conflict-safe-rebase';
-  await page.getByRole('button', { name: 'Document' }).press('Enter');
+  await page
+    .getByRole('navigation', { name: 'Resume outline' })
+    .getByRole('button', { name: 'Personal details', exact: true })
+    .press('Enter');
   const personalPath
     = `/api/v1/resumes/${accepted.metadata.id}/personal-details`;
   diagnostics.expectHTTPFailure(
@@ -481,21 +484,28 @@ async function proveKeyboardStructureAndContextActions(
   baseline: URLBaseline,
 ): Promise<void> {
   editorDiagnosticStage = 'structure-open';
-  await page.getByRole('button', { name: 'Structure' }).press('Enter');
+  await page
+    .getByRole('button', { name: '+ Add section', exact: true })
+    .press('Enter');
   await page.getByLabel('Section type').selectOption('work');
   editorDiagnosticStage = 'structure-add-work';
-  await page.locator('[data-action="create"]').press('Enter');
+  await page
+    .getByTestId('section-create-form')
+    .getByRole('button', { name: 'Add section', exact: true })
+    .press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
   await page.getByLabel('Section type').selectOption('skill');
   editorDiagnosticStage = 'structure-add-skill';
-  await page.locator('[data-action="create"]').press('Enter');
+  await page
+    .getByTestId('section-create-form')
+    .getByRole('button', { name: 'Add section', exact: true })
+    .press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
   editorDiagnosticStage = 'structure-move';
   await page.locator('[data-section="work"]').getByRole('button', { name: 'Move to sidebar' }).press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
 
   editorDiagnosticStage = 'entries-open';
-  await page.getByRole('button', { name: 'Document' }).press('Enter');
   await proveResponsiveEditorSurface(page, baseline.href);
   editorDiagnosticStage = 'customization-labels';
   await page.getByRole('button', { name: 'Design' }).press('Enter');
@@ -523,7 +533,6 @@ async function proveKeyboardStructureAndContextActions(
   );
 
   editorDiagnosticStage = 'contact-document';
-  await page.getByRole('button', { name: 'Document' }).press('Enter');
   editorDiagnosticStage = 'contact-personal-details';
   await page
     .getByRole('navigation', { name: 'Resume outline' })
@@ -695,7 +704,9 @@ async function proveKeyboardStructureAndContextActions(
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
   const remoteDeletedID = await requiredAttribute(page.locator('[data-entry-id]').nth(1), 'data-entry-id');
   editorDiagnosticStage = 'entries-reorder-conflict';
-  await page.getByRole('button', { name: 'Structure' }).press('Enter');
+  await page
+    .getByRole('button', { name: '+ Add section', exact: true })
+    .press('Enter');
   const structurePath = `/api/v1/resumes/${resumeID}/sections/work`;
   diagnostics.expectHTTPFailure(
     'PATCH',

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # One entry point for the trusted-browser proofs (auth, transport, editor,
-# public, password-auth, MCP, entry, and publish). Stages an immutable per-run copy of
-# the spec
-# sources and mounts it into the pinned browser image, so editing a spec
+# public, password-auth, MCP, entry, publish, and exports). Stages an immutable
+# per-run copy of the spec sources and mounts it into the pinned browser image,
+# so editing a spec
 # never requires an image rebuild; the image manifest gates only the
 # image-side sources (Dockerfile, run.sh, package manifests).
 set -Eeuo pipefail
@@ -38,6 +38,7 @@ readonly -a SPEC_SOURCES=(
   mcp.spec.ts
   entry.spec.ts
   publish.spec.ts
+  exports.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -65,9 +66,10 @@ password-auth)
 mcp) evidence_prefix=mcp ;;
 entry) evidence_prefix=entry ;;
 publish) evidence_prefix=publish ;;
+exports) evidence_prefix=exports ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports'
   ;;
 esac
 

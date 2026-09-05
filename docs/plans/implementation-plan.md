@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 31, active** (2026-09-05).
+Status: **Revision 33, active** (2026-09-06).
 
 The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -15,7 +15,7 @@ runs in AWS at `https://uat.aboutme.vn`, under
 Use OpenTofu for infrastructure and prefer managed AWS services. Phase 9
 compares their cost, workload fit, and operating effort before selecting sizes.
 Deployment code will live in a separate private `aboutme-infra` repository. This
-is future planning; the next implementation work is Phase 7, then Phase 8.
+is future planning; the next implementation work is Phase 8.
 
 A phase's plan lives in `phase-<number>/` while the phase is active. When the
 phase exits, its plan directory is deleted; git history keeps it. What the phase
@@ -46,7 +46,7 @@ UI toolkit, and the application visual identity.
 | Phase | Work                                                                   | State                                                  |
 | ----- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
 | 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                       |
-| 7     | Print worker, public PDF and images                                    | Not started                                            |
+| 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete locally                                       |
 | 8     | Privacy lifecycle                                                      | Not started                                            |
 | 9     | [AWS Singapore cost research](phase-9/README.md)                       | Planned; research not run                              |
 | 10    | [Infrastructure and AWS UAT](phase-10/README.md)                       | Planned; UAT scope authorized; no deployment performed |
@@ -58,8 +58,7 @@ lettered identifiers remain historical evidence and are not reassigned.
 
 ## Delivery order
 
-1. Phase 7: task 7.1 owner print worker, then 7.2 public PDF and images; Phase 8
-   privacy lifecycle.
+1. Phase 8 privacy lifecycle.
 2. Phase 9 cost research using the completed runtime's resource measurements.
    Read-only pricing research may start earlier; final sizing uses those
    results.
@@ -69,8 +68,7 @@ lettered identifiers remain historical evidence and are not reassigned.
 
 Security controls are delivered inside every route-owning phase and verified end
 to end in Phase 10. The Go sanitizer runs on every write and on the public read
-that feeds public SSR; task 7.1 proves the same conformance on the read that
-feeds internal print SSR.
+that feeds public SSR and the read that feeds internal print SSR.
 
 ## Remaining gates
 
@@ -84,7 +82,7 @@ feeds internal print SSR.
 | Production launch authorization                           | Human owner                               | After Phase 10 passes                                                                                      |
 
 No other approval blocks development. Design v4, the template contract v2, and
-ADRs 0001–0031 are accepted, subject to recorded supersessions.
+ADRs 0001–0032 are accepted, subject to recorded supersessions.
 
 ## Dependency graph
 

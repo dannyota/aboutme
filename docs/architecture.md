@@ -178,8 +178,7 @@ the client wrapper builds DOMPurify policy from the same data and is a byte-
 preserving passthrough on server-side rendering. Author and independent suites
 cover the corpus, parser boundaries, exact anchor hardening, idempotence, and
 deterministic arbitrary input. The Go sanitizer runs before every resume write
-and on the public-read projection. Internal-print re-sanitizing awaits the print
-worker.
+and on the public-read and private-print projections.
 
 The web package contains the licensed font catalog, a pure Vue renderer with
 continuous and deterministic paged modes, and a generated registry for all 20
@@ -292,6 +291,27 @@ Session loss stops owner retries, and browser Back restoration restarts public
 updates. See the [realtime runbook](runbooks/realtime.md) for bounds and local
 measurement evidence.
 
+## Resume exports
+
+Owner PDF export flushes pending editor changes before requesting the authorized
+saved snapshot. A private listener redeems one-use, attempt-bound capabilities
+for an immutable, sanitized document with its normalized photo inline. Nuxt
+renders the shared continuous Vue components in a bounded worker thread.
+
+The Go render queue admits one active job and eight queued jobs. Its 20-second
+deadline includes queue time. Each job uses a fresh non-root sandboxed Chromium
+process, a deny-by-default proxy, and exact document, CSS, and font requests.
+Its environment contains only the fixed timezone and locale values; server
+credentials are never forwarded to Chromium. Cleanup joins browser processes,
+callbacks, private requests, and queue work.
+
+Public PDF requires a live resume with download enabled. The fixed 1200×630
+share image requires only a live resume. Both artifacts pass the current public
+generation gate before cache reuse or conditional responses and hold a lease
+through body delivery. Revocation cancels and drains old work before a mutation
+commits. The shared cache holds at most 128 entries and 32 MiB for 60 seconds.
+See the [export runbook](runbooks/exports.md) for checks and resource evidence.
+
 ## Known delivery gaps
 
 - Complete product UAT and live operational evidence remain planned for Phase 10
@@ -301,5 +321,5 @@ measurement evidence.
 
 ## Not implemented
 
-Production PDF and image rendering, privacy workers, production infrastructure,
-staging, production deployment, and Flutter remain planned.
+Privacy workers, production infrastructure, staging, production deployment, and
+Flutter remain planned.
