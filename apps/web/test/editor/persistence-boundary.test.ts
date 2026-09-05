@@ -9,6 +9,7 @@ import type {
 import {
   shouldRetainEditorOnSessionLoss,
 } from '../../app/composables/useUnsavedNavigationGuard';
+import type { PdfDownloadController } from '../../app/editor/pdfDownload';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
@@ -140,6 +141,7 @@ function actionsFor(record: ResumeRecord): ResumeEditorActions {
     applyMine: vi.fn(),
     resumeAfterAuth: vi.fn(),
     discard: vi.fn(),
+    downloadPdf: downloadController(),
     publish: {
       state: computed(() => ({ kind: 'idle' })) as never,
       submit: vi.fn(),
@@ -149,6 +151,14 @@ function actionsFor(record: ResumeRecord): ResumeEditorActions {
       retryAfterProviderReauth: vi.fn(),
       cancel: vi.fn(),
     },
+  };
+}
+
+function downloadController(): PdfDownloadController {
+  return {
+    state: computed(() => ({ kind: 'idle' })),
+    download: vi.fn(),
+    dispose: vi.fn(),
   };
 }
 

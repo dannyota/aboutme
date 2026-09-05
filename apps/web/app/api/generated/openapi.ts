@@ -718,6 +718,30 @@ export interface paths {
         patch: operations["updateResumeCustomization"];
         trace?: never;
     };
+    "/resumes/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the owner's saved resume as PDF
+         * @description Exports the current saved owner document, including private drafts, through the shared renderer. The immutable snapshot is selected after admission to the bounded render queue. The response is at most 16,777,216 bytes. There is one active job, eight queued jobs, and a 20-second deadline from admission. Limits are 10 requests per minute per account and per trusted client IP. HEAD performs the same export and returns its headers without body bytes. Query parameters, request bodies, conditional headers, and schema-version negotiation are rejected.
+         */
+        get: operations["downloadResumePDF"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Read headers for the owner's saved resume PDF
+         * @description Performs the same owner authorization, admission, snapshot selection, and rendering as GET. Returns the selected status and headers, including Content-Length for a 200 response, without body bytes.
+         */
+        head: operations["headResumePDF"];
+        patch?: never;
+        trace?: never;
+    };
     "/resumes/{id}/photo": {
         parameters: {
             query?: never;
@@ -805,6 +829,54 @@ export interface paths {
          * @description Performs the same admission, object read, byte validation, and conditional comparison as GET. It sends the GET representation's status and headers, including Content-Length, but no body bytes.
          */
         head: operations["headPublicResumePhoto"];
+        patch?: never;
+        trace?: never;
+    };
+    "/public/resumes/{slug}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a published resume's PDF
+         * @description Requires the current slug, live state, and download_enabled=true. The full saved document is exported as PDF. The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
+         */
+        get: operations["getPublicResumePDF"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Read published PDF headers
+         * @description Performs the same admission, rendering, and conditional comparison as GET. Sends the selected status and headers, including Content-Length for a 200 response, without body bytes.
+         */
+        head: operations["headPublicResumePDF"];
+        patch?: never;
+        trace?: never;
+    };
+    "/public/resumes/{slug}/og.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a published resume's share image
+         * @description Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background. The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
+         */
+        get: operations["getPublicResumeShareImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Read published share image headers
+         * @description Performs the same admission, rendering, and conditional comparison as GET. Sends the selected status and headers, including Content-Length for a 200 response, without body bytes.
+         */
+        head: operations["headPublicResumeShareImage"];
         patch?: never;
         trace?: never;
     };
@@ -1263,8 +1335,7 @@ export interface components {
         } & (unknown & unknown);
         /** @description Current-version sanitized HTML. The server also enforces the 16 KiB UTF-8 field budget before emitting public bytes. */
         PublicRichText: string;
-        /** Format: uri */
-        PublicLink: string;
+        PublicLink: string | "";
         PublicProfileEntry: {
             /** Format: uuid */
             id: string;
@@ -1885,6 +1956,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description `invalid_client_ip`, or `request_invalid` for a malformed resume id, query, body, schema header, or conditional request. Owner PDF export accepts only a saved snapshot request with no variants. */
+        PDFReadBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description `invalid_client_ip`, or `request_invalid` for a malformed resume id or an `If-None-Match` that is repeated, comma-folded, weak, or otherwise malformed. */
         PhotoReadBadRequest: {
             headers: {
@@ -2310,6 +2390,124 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The exact generated PDF bytes, bounded at 16777216 bytes. */
+        PublicPDFRead: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                ETag: components["headers"]["PublicBodyETag"];
+                "Content-Disposition": components["headers"]["ResumePDFAttachment"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/pdf": string;
+            };
+        };
+        /** @description The strong tag matches the selected PDF bytes. No body or Content-Length. */
+        PublicPDFNotModified: {
+            headers: {
+                "Content-Disposition": components["headers"]["ResumePDFAttachment"];
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                /**
+                 * @description Media type of the selected GET representation.
+                 * @example application/pdf
+                 */
+                "Content-Type"?: "application/pdf";
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description The exact generated PNG bytes, bounded at 4194304 bytes. */
+        PublicPNGRead: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "image/png": string;
+            };
+        };
+        /** @description The strong tag matches the selected PNG bytes. No body or Content-Length. */
+        PublicPNGNotModified: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                /**
+                 * @description Media type of the selected GET representation.
+                 * @example image/png
+                 */
+                "Content-Type"?: "image/png";
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /** @description The public artifact IP request or render-miss budget is exhausted. */
+        PublicArtifactRateLimited: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The bounded queue or rendering dependency is unavailable. */
+        OwnerPDFUnavailable: {
+            headers: {
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 1
+                 */
+                "Retry-After"?: 1;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "internal_error",
+                 *         "message": "PDF export is temporarily unavailable"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Only GET and HEAD are accepted for owner PDF. */
+        MethodNotAllowedPDF: {
+            headers: {
+                /**
+                 * @description Registered methods this path serves.
+                 * @example GET, HEAD
+                 */
+                Allow?: "GET, HEAD";
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The exact unencoded public JSON representation. */
         PublicResumeRead: {
             headers: {
@@ -2403,7 +2601,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `method_not_allowed`: the recognized public JSON or photo path accepts only GET and HEAD. Dispatch happens before resource lookup or body read. */
+        /** @description `method_not_allowed`: the recognized public representation path accepts only GET and HEAD. Dispatch happens before resource lookup or body read. */
         PublicMethodNotAllowed: {
             headers: {
                 /**
@@ -2950,7 +3148,7 @@ export interface components {
          */
         EntryID: string;
         /**
-         * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+         * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
          *
          *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
          *
@@ -2968,6 +3166,11 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /**
+         * @description Fixed resume PDF download filename.
+         * @example attachment; filename="resume.pdf"
+         */
+        ResumePDFAttachment: "attachment; filename=\"resume.pdf\"";
         /**
          * @description The owning resume's revision as a strong entity tag, `"r<revision>"`. Send it back as `If-Match` on the next mutation.
          * @example "r43"
@@ -4397,7 +4600,7 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4461,7 +4664,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4550,7 +4753,7 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4598,7 +4801,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4657,7 +4860,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4723,7 +4926,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4790,7 +4993,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4861,7 +5064,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -4932,7 +5135,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -5001,7 +5204,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -5081,7 +5284,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -5145,7 +5348,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -5200,6 +5403,78 @@ export interface operations {
             428: components["responses"]["ResumePreconditionRequired"];
             429: components["responses"]["ResumeRateLimited"];
             500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    downloadResumePDF: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The PDF of the saved resume. */
+            200: {
+                headers: {
+                    /** @description Owner exports are never cached. */
+                    "Cache-Control"?: "no-store, no-transform";
+                    "Content-Disposition": components["headers"]["ResumePDFAttachment"];
+                    "Content-Length": components["headers"]["RepresentationContentLength"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["PDFReadBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPDF"];
+            429: components["responses"]["ResumeRateLimited"];
+            503: components["responses"]["OwnerPDFUnavailable"];
+        };
+    };
+    headResumePDF: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The PDF of the saved resume. */
+            200: {
+                headers: {
+                    /** @description Owner exports are never cached. */
+                    "Cache-Control"?: "no-store, no-transform";
+                    "Content-Disposition": components["headers"]["ResumePDFAttachment"];
+                    "Content-Length": components["headers"]["RepresentationContentLength"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["PDFReadBadRequest"];
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ResumeNotFound"];
+            405: components["responses"]["MethodNotAllowedPDF"];
+            429: components["responses"]["ResumeRateLimited"];
+            503: components["responses"]["OwnerPDFUnavailable"];
         };
     };
     getResumePhoto: {
@@ -5271,7 +5546,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -5337,7 +5612,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -5398,7 +5673,7 @@ export interface operations {
                  */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
                 /**
-                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo read is outside this contract.
+                 * @description The resume document version this request speaks. Absent means the server's current version. It appears on every JSON resume read and every mutation, including bodyless deletes, because a mutation resolves it into its idempotency fingerprint. The binary photo and PDF reads are outside this contract.
                  *
                  *     A value outside the accepted set is `400 unsupported_schema_version` with `details.acceptedVersions`.
                  *
@@ -5568,6 +5843,134 @@ export interface operations {
             400: components["responses"]["PublicBadRequest"];
             404: components["responses"]["PublicNotFound"];
             405: components["responses"]["PublicMethodNotAllowed"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    getPublicResumePDF: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicPDFRead"];
+            304: components["responses"]["PublicPDFNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            429: components["responses"]["PublicArtifactRateLimited"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    headPublicResumePDF: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicPDFRead"];
+            304: components["responses"]["PublicPDFNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            429: components["responses"]["PublicArtifactRateLimited"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    getPublicResumeShareImage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicPNGRead"];
+            304: components["responses"]["PublicPNGNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            429: components["responses"]["PublicArtifactRateLimited"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    headPublicResumeShareImage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicPNGRead"];
+            304: components["responses"]["PublicPNGNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            429: components["responses"]["PublicArtifactRateLimited"];
             503: components["responses"]["PublicUnavailable"];
         };
     };

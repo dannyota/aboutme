@@ -9,6 +9,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.1
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.66.6
 	github.com/aws/smithy-go v1.27.8
+	github.com/chromedp/cdproto v0.0.0-20260321001828-e3e3800016bc
+	github.com/chromedp/chromedp v0.15.1
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/dannyota/aboutme/packages/schema/gen/go v0.0.0
 	github.com/go-jose/go-jose/v4 v4.1.4
@@ -42,6 +44,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.5 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
+	github.com/chromedp/sysutil v1.1.0 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433 // indirect
+	github.com/gobwas/httphead v0.1.0 // indirect
+	github.com/gobwas/pool v0.2.1 // indirect
+	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

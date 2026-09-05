@@ -9,7 +9,6 @@ import { parse } from 'yaml';
 
 type Schema = Record<string, unknown>;
 
-const publicResumeRef = '#/components/schemas/PublicResume';
 const ucs2LengthRequire
   = /const (\w+) = require\("ajv\/dist\/runtime\/ucs2length"\)\.default;/u;
 const uriFormatRequire
@@ -85,6 +84,19 @@ const rewriteRefs = (value: unknown): unknown => {
  * artifact: no hand-written mirror of the public DTO is used at runtime.
  */
 export function buildPublicResumeValidator(buildDir: string): string {
+  return buildValidator(buildDir, 'PublicResume', 'public-resume');
+}
+
+/** Builds the private print document validator from the same OpenAPI source. */
+export function buildPrintDocumentValidator(buildDir: string): string {
+  return buildValidator(buildDir, 'PublicResumeDocument', 'print-document');
+}
+
+function buildValidator(
+  buildDir: string,
+  rootName: string,
+  outputName: string,
+): string {
   const source = parse(readFileSync(openapiPath, 'utf8')) as {
     components?: { schemas?: Record<string, Schema> };
   };
@@ -92,7 +104,7 @@ export function buildPublicResumeValidator(buildDir: string): string {
   if (schemas === undefined) {
     throw new Error('OpenAPI components.schemas is absent');
   }
-  const pending = [refName(publicResumeRef)];
+  const pending = [rootName];
   const closure = new Set<string>();
   while (pending.length > 0) {
     const name = pending.pop()!;
@@ -109,9 +121,15 @@ export function buildPublicResumeValidator(buildDir: string): string {
   const definitions = Object.fromEntries(
     [...closure].sort().map((name) => [name, rewriteRefs(schemas[name]!)]),
   );
+  if (rootName === 'PublicResumeDocument') {
+    definitions.PublicContent = {
+      ...definitions.PublicContent as Schema,
+      minProperties: 0,
+    };
+  }
   const schema: Schema = {
-    $id: 'aboutme-public-resume',
-    $ref: '#/$defs/PublicResume',
+    $id: `aboutme-${outputName}`,
+    $ref: `#/$defs/${rootName}`,
     $defs: definitions,
   };
   const ajv = new Ajv({
@@ -121,11 +139,11 @@ export function buildPublicResumeValidator(buildDir: string): string {
   });
   addFormats(ajv);
   const validate = ajv.compile(schema);
-  const output = resolve(buildDir, 'public-resume-validator.mjs');
+  const output = resolve(buildDir, `${outputName}-validator.mjs`);
   mkdirSync(buildDir, { recursive: true });
   writeFileSync(output, nativeESM(standaloneCode(ajv, validate)));
   writeFileSync(
-    resolve(buildDir, 'public-resume-validator.d.ts'),
+    resolve(buildDir, `${outputName}-validator.d.ts`),
     [
       'declare const validate: (value: unknown) => boolean;',
       'export default validate;',

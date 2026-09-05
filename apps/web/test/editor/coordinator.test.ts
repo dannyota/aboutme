@@ -48,6 +48,7 @@ describe('resume editor actions', () => {
       coordinator,
       auth: {
         user: computed(() => ({ id: 'owner-1' })),
+        authState: computed(() => 'authenticated'),
       } as never,
       runtime: {
         nowEpochMs: () => 0,
@@ -87,7 +88,10 @@ describe('resume editor actions', () => {
       resumeId: accepted.metadata.id,
       store,
       coordinator: { schedule: vi.fn() } as never,
-      auth: { user: computed(() => ({ id: 'owner-1' })) } as never,
+      auth: {
+        user: computed(() => ({ id: 'owner-1' })),
+        authState: computed(() => 'authenticated'),
+      } as never,
       runtime: { nowEpochMs: () => 0, uuid, delay: async () => {} },
     });
 
@@ -716,6 +720,7 @@ describe('mutation coordinator', () => {
       coordinator,
       auth: {
         user: computed(() => ({ id: 'owner-1' })),
+        authState: computed(() => 'authenticated'),
       } as never,
       runtime,
     });

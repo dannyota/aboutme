@@ -23,8 +23,8 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 	t.Parallel()
 
 	routes := registeredRoutes()
-	if len(routes) != 16 {
-		t.Fatalf("registered route count = %d, want 16", len(routes))
+	if len(routes) != 18 {
+		t.Fatalf("registered route count = %d, want 18", len(routes))
 	}
 	mutations := 0
 	var got []string
@@ -53,6 +53,8 @@ func TestRouteInventoryIsCompleteAndImplemented(t *testing.T) {
 		http.MethodPatch + " /api/v1/resumes/{id}/customization",
 		http.MethodDelete + " /api/v1/resumes/{id}/photo",
 		http.MethodGet + " /api/v1/resumes/{id}/photo",
+		http.MethodGet + " /api/v1/resumes/{id}/pdf",
+		http.MethodHead + " /api/v1/resumes/{id}/pdf",
 		http.MethodPatch + " /api/v1/resumes/{id}/photo",
 		http.MethodPost + " /api/v1/resumes/{id}/photo",
 	}
@@ -133,7 +135,7 @@ func TestRouteWireVersionPolicyIsComplete(t *testing.T) {
 		if route.AcceptsWireVersion != wantAccepts {
 			t.Errorf("%s AcceptsWireVersion = %v, want %v", route.Operation, route.AcceptsWireVersion, wantAccepts)
 		}
-		wantEmits := route.Operation != "getResumePhoto" && route.Operation != "deleteResume"
+		wantEmits := route.Operation != "getResumePhoto" && route.Operation != "downloadResumePDF" && route.Operation != "headResumePDF" && route.Operation != "deleteResume"
 		if route.EmitsWireVersion != wantEmits {
 			t.Errorf("%s EmitsWireVersion = %v, want %v", route.Operation, route.EmitsWireVersion, wantEmits)
 		}
@@ -155,6 +157,7 @@ func TestRouteInventoryEqualsOpenAPI(t *testing.T) {
 	}
 	type pathItem struct {
 		Get    *operation `yaml:"get"`
+		Head   *operation `yaml:"head"`
 		Post   *operation `yaml:"post"`
 		Patch  *operation `yaml:"patch"`
 		Delete *operation `yaml:"delete"`
@@ -171,7 +174,7 @@ func TestRouteInventoryEqualsOpenAPI(t *testing.T) {
 			continue
 		}
 		for method, operation := range map[string]*operation{
-			http.MethodGet: operations.Get, http.MethodPost: operations.Post,
+			http.MethodGet: operations.Get, http.MethodHead: operations.Head, http.MethodPost: operations.Post,
 			http.MethodPatch: operations.Patch, http.MethodDelete: operations.Delete,
 		} {
 			if operation != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
+	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -45,6 +46,8 @@ type Options struct {
 	Coordinator *publicstate.Coordinator
 	// RecoveryPool opens an independent connection for ambiguous outcomes.
 	RecoveryPool *store.Pool
+	// PrintQueue performs bounded private rendering after owner authorization.
+	PrintQueue PrintQueue
 }
 
 // Service owns the authenticated resume HTTP surface and its write-safety
@@ -67,6 +70,8 @@ type Service struct {
 	photoNormalizationDuration func(time.Duration)
 	coordinator                *publicstate.Coordinator
 	recoveryPool               *store.Pool
+	printQueue                 PrintQueue
+	pdfAdmission               api.Middleware
 	slugAttempts               slugAttemptLimiter
 	transactionOrderHook       func(string)
 	publishPreflightOrderHook  func(string)
@@ -85,6 +90,11 @@ type idempotencyBoundary interface {
 	Recheck(context.Context, uuid.UUID, string, uuid.UUID, [32]byte) (resume.RecheckResult, error)
 	Execute(context.Context, uuid.UUID, string, uuid.UUID, [32]byte,
 		func(*store.Queries) (resume.StoredResponse, error)) (resume.ExecuteResult, error)
+}
+
+// PrintQueue is the narrow owner-export rendering dependency.
+type PrintQueue interface {
+	Render(context.Context, renderjob.Request) (renderjob.Result, error)
 }
 
 // New constructs the resume API service. RegisterRoutes installs its routes.
@@ -123,6 +133,8 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 		photoNormalizationDuration: opts.PhotoNormalizationDuration,
 		coordinator:                opts.Coordinator,
 		recoveryPool:               opts.RecoveryPool,
+		printQueue:                 opts.PrintQueue,
+		pdfAdmission:               newOwnerPDFAdmission(opts),
 		slugAttempts:               limiter,
 	}
 }
@@ -149,6 +161,7 @@ type routeSpec struct {
 	Operation          string
 	Mutation           bool
 	Upload             bool
+	Render             bool
 	OperationKind      operationKind
 	AcceptsWireVersion bool
 	EmitsWireVersion   bool
@@ -164,6 +177,7 @@ func registeredRoutes() []routeSpec {
 	routes = append(routes, personalDetailsRoutes()...)
 	routes = append(routes, customizationRoutes()...)
 	routes = append(routes, photoRoutes()...)
+	routes = append(routes, pdfRoutes()...)
 	return routes
 }
 
@@ -190,16 +204,19 @@ func (s *Service) dispatch(routes []routeSpec, chains routeChains) http.Handler 
 	allowed := make([]string, 0, len(routes))
 	for _, route := range routes {
 		route := route
-		base := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var base http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			route.Handler(s, w, r)
 		})
+		if route.Render {
+			base = s.wrapPDFAdmission(base)
+		}
 		handlers[route.Method] = chains.wrap(route, base)
 		allowed = append(allowed, route.Method)
 	}
 	sort.Strings(allowed)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method := r.Method
-		if method == http.MethodHead {
+		if method == http.MethodHead && handlers[method] == nil {
 			method = http.MethodGet
 		}
 		if handler, ok := handlers[method]; ok {

@@ -424,6 +424,34 @@ func TestPublicHTMLRejectsHostileMetaAndInlineCSS(t *testing.T) {
 	}
 }
 
+func TestPublicHTMLRequiresExactSocialImageMetadata(t *testing.T) {
+	// This fails if renderer HTML omits, duplicates, or changes share metadata.
+	origin := mustPublicOrigin(t)
+	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada <&>"}}}
+	jsonLD, err := publicformat.JSONLD(resume, origin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := validHTML("Ada &lt;&amp;&gt;", "https://aboutme.example/ada", "1", "")
+	if !validPublicHTML([]byte(valid), resume, origin, jsonLD, false) {
+		t.Fatal("valid escaped social metadata was rejected")
+	}
+	for _, test := range []struct {
+		name, html string
+	}{
+		{"missing", strings.Replace(valid, `<meta property="og:image:height" content="630">`, "", 1)},
+		{"duplicate", strings.Replace(valid, "</head>", `<meta name="twitter:card" content="summary_large_image"></head>`, 1)},
+		{"attacker controlled URL", strings.Replace(valid, "/ada/og.png", "/other/og.png", 1)},
+		{"wrong width", strings.Replace(valid, `content="1200"`, `content="1201"`, 1)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if validPublicHTML([]byte(test.html), resume, origin, jsonLD, false) {
+				t.Fatal("invalid social metadata was accepted")
+			}
+		})
+	}
+}
+
 func mustPublicOrigin(t *testing.T) publicresume.PublicOrigin {
 	t.Helper()
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
@@ -434,5 +462,7 @@ func mustPublicOrigin(t *testing.T) publicresume.PublicOrigin {
 }
 
 func validHTML(name, canonical, revision, dataScript string) string {
-	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs\"></script></body></html>"
+	imageURL := strings.TrimSuffix(canonical, "/"+strings.Split(canonical, "/")[3]) + "/api/v1/public/resumes/" + strings.Split(canonical, "/")[3] + "/og.png"
+	social := `<meta property="og:image" content="` + imageURL + `"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="` + imageURL + `">`
+	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + social + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs\"></script></body></html>"
 }
