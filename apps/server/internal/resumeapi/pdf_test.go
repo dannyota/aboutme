@@ -69,7 +69,7 @@ func (b *pdfBackend) Get(_ context.Context, key string) (io.ReadCloser, string, 
 
 func pdfRequest(t *testing.T, method string, resumeID uuid.UUID, body io.Reader) *http.Request {
 	t.Helper()
-	req := httptest.NewRequest(method, apiResumePath+"/"+resumeID.String()+"/pdf", body)
+	req := httptest.NewRequestWithContext(t.Context(), method, apiResumePath+"/"+resumeID.String()+"/pdf", body)
 	req.SetPathValue("id", resumeID.String())
 	req = req.WithContext(auth.ContextWithSession(req.Context(), store.Session{UserID: uuid.MustParse("10000000-0000-4000-8000-000000000001")}))
 	return req
@@ -132,10 +132,13 @@ func TestPDFGetAndHeadEmitFixedDownloadResponse(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			service.handleDownloadResumePDF(recorder, pdfRequest(t, method, resumeID, nil))
 			response := recorder.Result()
-			defer response.Body.Close()
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				t.Fatal(err)
+			body, readErr := io.ReadAll(response.Body)
+			closeErr := response.Body.Close()
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if closeErr != nil {
+				t.Fatal(closeErr)
 			}
 			if response.StatusCode != http.StatusOK {
 				t.Fatalf("status = %d body=%s", response.StatusCode, body)
@@ -465,7 +468,9 @@ func TestPDFPreparationClassifiesOwnerAbsenceWithoutLeakingErrors(t *testing.T) 
 	resumeID := uuid.MustParse("20000000-0000-4000-8000-000000000003")
 	rawQueueError := "queue-private-sentinel"
 	queue := pdfQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
-		_, _ = request.Prepare(ctx)
+		if _, err := request.Prepare(ctx); !errors.Is(err, errOwnerPDFPreparation) {
+			t.Fatalf("Prepare() error = %v, want sanitized preparation failure", err)
+		}
 		return renderjob.Result{}, errors.New(rawQueueError)
 	})
 	service := &Service{
@@ -578,7 +583,9 @@ func TestPDFRejectsInvalidPhotoBeforeBackendRead(t *testing.T) {
 	row := resume.Resume{ID: resumeID, UserID: uuid.MustParse("10000000-0000-4000-8000-000000000001"), Revision: 1, Doc: document}
 	backend := &pdfBackend{}
 	queue := pdfQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
-		_, _ = request.Prepare(ctx)
+		if _, err := request.Prepare(ctx); !errors.Is(err, errOwnerPDFPreparation) {
+			t.Fatalf("Prepare() error = %v, want sanitized preparation failure", err)
+		}
 		return renderjob.Result{}, errors.New("masked")
 	})
 	recorder := httptest.NewRecorder()
@@ -618,7 +625,9 @@ func TestPDFPhotoFailuresStayOpaqueAndCloseBodies(t *testing.T) {
 				backend.body = test.body
 			}
 			queue := pdfQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
-				_, _ = request.Prepare(ctx)
+				if _, err := request.Prepare(ctx); !errors.Is(err, errOwnerPDFPreparation) {
+					t.Fatalf("Prepare() error = %v, want sanitized preparation failure", err)
+				}
 				return renderjob.Result{}, errors.New("queue-masked-sentinel")
 			})
 			recorder := httptest.NewRecorder()
@@ -732,7 +741,7 @@ func TestPDFAdmissionLimitsAccountAndIPIndependently(t *testing.T) {
 	now := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	request := func(t *testing.T, handler http.Handler, accountID, remoteAddr string) *httptest.ResponseRecorder {
 		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 		req.RemoteAddr = remoteAddr
 		req = req.WithContext(api.WithAccountID(req.Context(), accountID))
 		recorder := httptest.NewRecorder()

@@ -174,7 +174,9 @@ func TestValidateDataPhotoRejectsOversizeEncodingBeforeAllocation(t *testing.T) 
 	result := testing.Benchmark(func(b *testing.B) {
 		b.ReportAllocs()
 		for range b.N {
-			_ = validateDataPhoto(photo)
+			if validationErr := validateDataPhoto(photo); validationErr == nil {
+				b.Fatal("oversize base64 photo accepted during allocation measurement")
+			}
 		}
 	})
 	if allocated := result.AllocedBytesPerOp(); allocated > 64*1024 {
@@ -273,8 +275,8 @@ func TestMarshalClosedFieldsAndBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(encoded, &fields); err != nil {
-		t.Fatal(err)
+	if decodeErr := json.Unmarshal(encoded, &fields); decodeErr != nil {
+		t.Fatal(decodeErr)
 	}
 	wantKeys := []string{"document", "lng", "publicGeneration", "resumeId", "revision", "version"}
 	if len(fields) != len(wantKeys) {
@@ -301,23 +303,23 @@ func TestMarshalClosedFieldsAndBounds(t *testing.T) {
 		func() Envelope { v := envelope; v.Document.SchemaVersion = schema.CurrentVersion + 1; return v }(),
 	}
 	for index, value := range invalid {
-		if _, err := Marshal(value); err == nil {
+		if _, marshalErr := Marshal(value); marshalErr == nil {
 			t.Errorf("invalid envelope %d accepted", index)
 		}
 	}
 
 	atMaxRevision := envelope
 	atMaxRevision.Revision = strconv.FormatInt(math.MaxInt64, 10)
-	if _, err := Marshal(atMaxRevision); err != nil {
-		t.Fatalf("max int64 revision rejected: %v", err)
+	if _, marshalErr := Marshal(atMaxRevision); marshalErr != nil {
+		t.Fatalf("max int64 revision rejected: %v", marshalErr)
 	}
 	atMaxLanguage := envelope
 	atMaxLanguage.Lng = "x-abcdefgh-abcdefgh-abcdefgh-abcdef"
 	if utf8.RuneCountInString(atMaxLanguage.Lng) != MaxLanguageCharacters {
 		t.Fatalf("language test setup has %d characters", utf8.RuneCountInString(atMaxLanguage.Lng))
 	}
-	if _, err := Marshal(atMaxLanguage); err != nil {
-		t.Fatalf("language at limit rejected: %v", err)
+	if _, marshalErr := Marshal(atMaxLanguage); marshalErr != nil {
+		t.Fatalf("language at limit rejected: %v", marshalErr)
 	}
 
 	base := envelope

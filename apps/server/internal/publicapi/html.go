@@ -173,21 +173,18 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 							return
 						}
 						ogImageMeta++
-						break
 					case "og:image:width":
 						if attribute(node, "content") != "1200" {
 							valid = false
 							return
 						}
 						ogImageWidthMeta++
-						break
 					case "og:image:height":
 						if attribute(node, "content") != "630" {
 							valid = false
 							return
 						}
 						ogImageHeightMeta++
-						break
 					default:
 						valid = false
 						return
@@ -202,14 +199,12 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 							return
 						}
 						twitterCardMeta++
-						break
 					case "twitter:image":
 						if attribute(node, "content") != imageURL {
 							valid = false
 							return
 						}
 						twitterImageMeta++
-						break
 					default:
 						valid = false
 						return

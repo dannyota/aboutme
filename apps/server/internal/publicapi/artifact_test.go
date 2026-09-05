@@ -98,7 +98,7 @@ func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			get := httptest.NewRequest(http.MethodGet, test.path, nil)
+			get := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path, nil)
 			get.RemoteAddr = "192.0.2.1:1234"
 			response := httptest.NewRecorder()
 			test.handler.ServeHTTP(response, get)
@@ -110,7 +110,7 @@ func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) 
 			}
 			tag := response.Header().Get("ETag")
 
-			head := httptest.NewRequest(http.MethodHead, test.path, nil)
+			head := httptest.NewRequestWithContext(t.Context(), http.MethodHead, test.path, nil)
 			head.RemoteAddr = "192.0.2.1:1234"
 			headResponse := httptest.NewRecorder()
 			test.handler.ServeHTTP(headResponse, head)
@@ -118,7 +118,7 @@ func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) 
 				t.Fatalf("HEAD response = %d headers=%v body=%q", headResponse.Code, headResponse.Header(), headResponse.Body.Bytes())
 			}
 
-			conditional := httptest.NewRequest(http.MethodGet, test.path, nil)
+			conditional := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path, nil)
 			conditional.RemoteAddr = "192.0.2.1:1234"
 			conditional.Header.Set("If-None-Match", tag)
 			conditionalResponse := httptest.NewRecorder()
@@ -156,7 +156,7 @@ func TestPublicArtifactsRejectOptionsMethodsAndDisabledPDFBeforeQueue(t *testing
 		{name: "body", method: http.MethodGet, path: "/api/v1/public/resumes/ada-lovelace/og.png", body: strings.NewReader("x")},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			req := httptest.NewRequest(test.method, test.path, test.body)
+			req := httptest.NewRequestWithContext(t.Context(), test.method, test.path, test.body)
 			req.RemoteAddr = "192.0.2.2:1234"
 			response := httptest.NewRecorder()
 			handlers.png.ServeHTTP(response, req)
@@ -172,7 +172,7 @@ func TestPublicArtifactsRejectOptionsMethodsAndDisabledPDFBeforeQueue(t *testing
 			}
 		})
 	}
-	pdfRequest := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	pdfRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	pdfRequest.RemoteAddr = "192.0.2.2:1234"
 	pdfResponse := httptest.NewRecorder()
 	handlers.pdf.ServeHTTP(pdfResponse, pdfRequest)
@@ -188,7 +188,7 @@ func TestPublicArtifactRejectsMalformedConditionalAfterGateBeforeCacheOrRender(t
 		return renderjob.Result{}, errors.New("must not render")
 	})
 	handlers, backing, _ := newArtifactHarness(t, queue, 2, time.Now)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	request.RemoteAddr = "192.0.2.12:1234"
 	request.Header.Set("If-None-Match", "W/\"weak\"")
 	response := httptest.NewRecorder()
@@ -227,7 +227,7 @@ func TestPublicArtifactRejectsIndeterminateBodyWithoutReading(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			body := &blockingArtifactRequestBody{started: make(chan struct{}), release: make(chan struct{})}
-			request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", body)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", body)
 			request.RemoteAddr = "192.0.2.17:1234"
 			test.mutate(request)
 			response := httptest.NewRecorder()
@@ -257,7 +257,7 @@ func TestPublicArtifactRejectsEmptyQueryMarker(t *testing.T) {
 	handlers, _, _ := newArtifactHarness(t, artifactQueueFunc(func(context.Context, renderjob.Request) (renderjob.Result, error) {
 		return renderjob.Result{}, errors.New("must not render")
 	}), 2, time.Now)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png?", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png?", nil)
 	request.RemoteAddr = "192.0.2.18:1234"
 	response := httptest.NewRecorder()
 	handlers.png.ServeHTTP(response, request)
@@ -292,8 +292,8 @@ func TestPublicArtifactPrepareReadsNormalizedPhotoUnderLease(t *testing.T) {
 	}
 	backing.row.PersonalDetails = encoded
 	var photo bytes.Buffer
-	if err := png.Encode(&photo, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
-		t.Fatal(err)
+	if encodeErr := png.Encode(&photo, image.NewRGBA(image.Rect(0, 0, 1, 1))); encodeErr != nil {
+		t.Fatal(encodeErr)
 	}
 	backend := &artifactPhotoBackend{body: photo.Bytes(), contentType: "image/png"}
 	origin := mustPublicOrigin(t)
@@ -308,9 +308,9 @@ func TestPublicArtifactPrepareReadsNormalizedPhotoUnderLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	queue := artifactQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
-		snapshot, err := request.Prepare(ctx)
-		if err != nil {
-			return renderjob.Result{}, err
+		snapshot, prepareErr := request.Prepare(ctx)
+		if prepareErr != nil {
+			return renderjob.Result{}, prepareErr
 		}
 		if !bytes.Contains(snapshot.Payload, []byte("\"url\":\"data:image/png;base64,")) {
 			t.Fatalf("snapshot does not contain an inline normalized photo: %s", snapshot.Payload)
@@ -323,7 +323,7 @@ func TestPublicArtifactPrepareReadsNormalizedPhotoUnderLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
 	request.RemoteAddr = "192.0.2.13:1234"
 	response := httptest.NewRecorder()
 	handlers.png.ServeHTTP(response, request)
@@ -340,12 +340,12 @@ func TestPublicArtifactsRejectChangedCompletion(t *testing.T) {
 		if err != nil {
 			return renderjob.Result{}, err
 		}
-		transition, err := coordinator.Begin(context.Background(), publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: backing.row.ID, ExpectedRevision: backing.row.Revision, Class: publicstate.NonDraining}}})
+		transition, err := coordinator.Begin(ctx, publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: backing.row.ID, ExpectedRevision: backing.row.Revision, Class: publicstate.NonDraining}}})
 		if err != nil {
 			return renderjob.Result{}, err
 		}
-		if err := transition.Close(context.Background(), time.Now().Add(time.Second)); err != nil {
-			return renderjob.Result{}, err
+		if closeErr := transition.Close(ctx, time.Now().Add(time.Second)); closeErr != nil {
+			return renderjob.Result{}, closeErr
 		}
 		backing.row.Revision++
 		if err := transition.Commit(publicstate.CommittedState{ResumeRevisions: map[uuid.UUID]int64{backing.row.ID: backing.row.Revision}}); err != nil {
@@ -358,7 +358,7 @@ func TestPublicArtifactsRejectChangedCompletion(t *testing.T) {
 	})
 	handlers, store, state := newArtifactHarness(t, queue, 2, time.Now)
 	backing, coordinator = store, state
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	request.RemoteAddr = "192.0.2.3:1234"
 	response := httptest.NewRecorder()
 	handlers.pdf.ServeHTTP(response, request)
@@ -382,7 +382,7 @@ func TestPublicPDFRejectsEligibilityRevokedAtCompletion(t *testing.T) {
 	})
 	handlers, store, _ := newArtifactHarness(t, queue, 2, time.Now)
 	backing = store
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	request.RemoteAddr = "192.0.2.15:1234"
 	response := httptest.NewRecorder()
 	handlers.pdf.ServeHTTP(response, request)
@@ -393,7 +393,7 @@ func TestPublicPDFRejectsEligibilityRevokedAtCompletion(t *testing.T) {
 
 func TestPublicArtifactUnavailableQueueReturnsOpaque503AfterLiveGate(t *testing.T) {
 	handlers, backing, _ := newArtifactHarness(t, nil, 2, time.Now)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
 	request.RemoteAddr = "192.0.2.16:1234"
 	response := httptest.NewRecorder()
 	handlers.png.ServeHTTP(response, request)
@@ -431,7 +431,7 @@ func TestPublicArtifactOutputBoundsAndErrorsStayOpaque(t *testing.T) {
 			if test.format == renderjob.PNG {
 				handler, path = handlers.png, "/api/v1/public/resumes/ada-lovelace/og.png"
 			}
-			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 			request.RemoteAddr = "192.0.2.4:1234"
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
@@ -463,7 +463,7 @@ func TestPublicArtifactMissLimitIsSharedAcrossFormats(t *testing.T) {
 		if index%2 == 1 {
 			handler, path = handlers.png, "/api/v1/public/resumes/ada-lovelace/og.png"
 		}
-		request := httptest.NewRequest(http.MethodGet, path, nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 		request.RemoteAddr = "192.0.2.5:1234"
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
@@ -487,7 +487,7 @@ func TestPublicArtifactHitLimitRunsBeforeLiveStateRead(t *testing.T) {
 	})
 	handlers, backing, _ := newArtifactHarness(t, queue, 2, now)
 	for index := 0; index <= publicArtifactRequestsPerMinute; index++ {
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 		request.RemoteAddr = "192.0.2.6:1234"
 		response := httptest.NewRecorder()
 		handlers.pdf.ServeHTTP(response, request)
@@ -521,7 +521,7 @@ func TestPublicArtifactOldGenerationCacheCannotAnswer(t *testing.T) {
 		ResumeID: backing.row.ID, Generation: 1, FormatVersion: publicPDFFormatVersion,
 		AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 	}, publiccache.Value{Status: stale.Status, Header: stale.Header, Body: stale.Body})
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	request.RemoteAddr = "192.0.2.7:1234"
 	response := httptest.NewRecorder()
 	handlers.pdf.ServeHTTP(response, request)
@@ -536,7 +536,7 @@ func TestPublicArtifactRenameUnpublishAndDeleteAreIndistinguishable(t *testing.T
 	})
 	handlers, backing, _ := newArtifactHarness(t, queue, 2, time.Now)
 	request := func() *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
 		req.RemoteAddr = "192.0.2.8:1234"
 		response := httptest.NewRecorder()
 		handlers.png.ServeHTTP(response, req)
@@ -573,7 +573,7 @@ func TestPublicArtifactLeaseCancellationStopsQueueStages(t *testing.T) {
 				return renderjob.Result{}, ctx.Err()
 			})
 			handlers, backing, coordinator := newArtifactHarness(t, queue, 2, time.Now)
-			request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
 			request.RemoteAddr = "192.0.2.9:1234"
 			response := httptest.NewRecorder()
 			handlerDone := make(chan struct{})
@@ -621,7 +621,7 @@ func TestCanceledPublicArtifactResultIsNotCachedOrServed(t *testing.T) {
 	})
 	handlers, backing, coordinator := newArtifactHarness(t, queue, 2, time.Now)
 	request := func() *http.Request {
-		r := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 		r.RemoteAddr = "192.0.2.14:1234"
 		return r
 	}
@@ -686,7 +686,7 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 		AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 	}, publiccache.Value{Status: cached.Status, Header: cached.Header, Body: cached.Body})
 
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	request.RemoteAddr = "192.0.2.15:1234"
 	response := httptest.NewRecorder()
 	handlerDone := make(chan struct{})
@@ -804,9 +804,9 @@ func TestPublicArtifactPrecommitRevocationWrites503BeforeArmingDeadline(t *testi
 		t.Fatal(err)
 	}
 	leaseCanceled := make(chan struct{})
-	if err := lease.OnCancel(func() { close(leaseCanceled) }); err != nil {
+	if cancelHookErr := lease.OnCancel(func() { close(leaseCanceled) }); cancelHookErr != nil {
 		lease.Release()
-		t.Fatal(err)
+		t.Fatal(cancelHookErr)
 	}
 	closeDone := make(chan error, 1)
 	writer := &deadlineEnforcingArtifactWriter{
@@ -830,7 +830,7 @@ func TestPublicArtifactPrecommitRevocationWrites503BeforeArmingDeadline(t *testi
 		lease.Release()
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	serveLeasedArtifact(writer, request, lease, response)
 	lease.Release()
 	if err := <-closeDone; err != nil {
@@ -907,7 +907,7 @@ func TestPublicArtifactRevocationCancelsAndJoinsBlockedOriginWrite(t *testing.T)
 		return renderjob.Result{Bytes: []byte("png"), Revision: snapshot.Revision}, err
 	})
 	handlers, backing, coordinator := newArtifactHarness(t, queue, 2, time.Now)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
 	request.RemoteAddr = "192.0.2.10:1234"
 	writer := newDeadlineBlockingWriter()
 	handlerDone := make(chan struct{})
@@ -943,7 +943,7 @@ func TestPublicArtifactUnsupportedWriteCancellationPreservesDrainFailure(t *test
 		return renderjob.Result{Bytes: []byte("pdf"), Revision: snapshot.Revision}, err
 	})
 	handlers, backing, coordinator := newArtifactHarness(t, queue, 2, time.Now)
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	request.RemoteAddr = "192.0.2.11:1234"
 	writer := &unsupportedBlockingWriter{header: make(http.Header), writeStart: make(chan struct{}), release: make(chan struct{})}
 	handlerDone := make(chan struct{})
@@ -981,25 +981,27 @@ func TestPublicArtifactRealHTTPSlowAndAbortedViewersReleaseLease(t *testing.T) {
 
 	address := strings.TrimPrefix(server.URL, "http://")
 	for _, abortFirst := range []bool{false, true} {
-		connection, err := net.Dial("tcp", address)
+		connection, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", address)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fmt.Fprintf(connection, "GET /api/v1/public/resumes/ada-lovelace/pdf HTTP/1.1\r\nHost: test\r\n\r\n"); err != nil {
-			t.Fatal(err)
+		if _, writeErr := fmt.Fprintf(connection, "GET /api/v1/public/resumes/ada-lovelace/pdf HTTP/1.1\r\nHost: test\r\n\r\n"); writeErr != nil {
+			t.Fatal(writeErr)
 		}
 		reader := bufio.NewReader(connection)
 		for {
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				t.Fatal(err)
+			line, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				t.Fatal(readErr)
 			}
 			if line == "\r\n" {
 				break
 			}
 		}
 		if abortFirst {
-			_ = connection.Close()
+			if closeErr := connection.Close(); closeErr != nil {
+				t.Fatal(closeErr)
+			}
 		}
 		transition, err := coordinator.Begin(context.Background(), publicstate.Plan{Resumes: []publicstate.ResumeTarget{{
 			ID: backing.row.ID, ExpectedRevision: backing.row.Revision, Class: publicstate.Revoking,
@@ -1010,7 +1012,11 @@ func TestPublicArtifactRealHTTPSlowAndAbortedViewersReleaseLease(t *testing.T) {
 		if err := transition.Close(context.Background(), time.Now().Add(2*time.Second)); err != nil {
 			t.Fatalf("abortFirst=%t: real HTTP viewer did not release lease: %v", abortFirst, err)
 		}
-		_ = connection.Close()
+		if !abortFirst {
+			if closeErr := connection.Close(); closeErr != nil {
+				t.Fatal(closeErr)
+			}
+		}
 		if err := transition.Rollback(); err != nil {
 			t.Fatal(err)
 		}

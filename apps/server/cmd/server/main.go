@@ -128,7 +128,12 @@ func run() error {
 	if err != nil {
 		return errors.New("initialize print queue")
 	}
-	defer func() { _ = printQueue.Close() }()
+	closePrintQueue := func() {
+		if closeErr := printQueue.Close(); closeErr != nil {
+			logger.Error("close print queue failed")
+		}
+	}
+	defer closePrintQueue()
 	printHandler, err := printapi.NewRedeemHandler(printQueue)
 	if err != nil {
 		return errors.New("initialize private print handler")
@@ -158,11 +163,12 @@ func run() error {
 	readiness := publicstate.NewReadiness(coordinator, publicstate.ReadinessDependencies{
 		PingDatabase: pool.Ping,
 		ProbeRenderer: func(probeCtx context.Context) error {
-			if err := printQueue.Ready(); err != nil {
-				return err
+			if queueErr := printQueue.Ready(); queueErr != nil {
+				return queueErr
 			}
-			if err := printRenderer.Ready(); err != nil {
-				return err
+			// The cached startup probe has its own bound; a canceled caller must not poison readiness.
+			if readyErr := printRenderer.Ready(); readyErr != nil { //nolint:contextcheck // Ready owns the one-time browser probe context.
+				return readyErr
 			}
 			return renderer.Probe(probeCtx, readinessRenderRequest(runtime.PublicOrigin))
 		},
@@ -202,12 +208,20 @@ func run() error {
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
 
-	defer func() { _ = ln.Close() }()
+	defer func() {
+		if closeErr := ln.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			logger.Error("close public listener failed")
+		}
+	}()
 	printListener, err := lc.Listen(ctx, "tcp", cfg.PrintListenAddr)
 	if err != nil {
 		return errors.New("listen on private print address")
 	}
-	defer func() { _ = printListener.Close() }()
+	defer func() {
+		if closeErr := printListener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			logger.Error("close private print listener failed")
+		}
+	}()
 
 	// The mail worker runs for the life of the server: SIGINT/SIGTERM cancels
 	// workerCtx (via ctx), and Run joins its in-flight sends before returning.
@@ -230,7 +244,7 @@ func run() error {
 	}()
 
 	logger.Info("starting", "env", cfg.Env)
-	err = servePair(ctx, logger, ln, handler, printListener, printHandler, func() { _ = printQueue.Close() })
+	err = servePair(ctx, logger, ln, handler, printListener, printHandler, closePrintQueue)
 	cancelWorker()
 	<-workerDone
 	<-listenerDone

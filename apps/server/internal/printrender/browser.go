@@ -19,6 +19,7 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
+
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 )
 
@@ -123,7 +124,7 @@ func configureBrowserCommand(executable string) func(*exec.Cmd) {
 }
 
 func readyBrowser(ctx context.Context, renderer *Renderer) (resultErr error) {
-	proxy, err := startAttemptProxy(proxyConfig{
+	proxy, err := startAttemptProxy(ctx, proxyConfig{
 		origin: renderer.origin, forwardOrigin: renderer.forwardOrigin,
 		initialURL: renderer.origin + "/forbidden-readiness-navigation",
 		capability: "readiness-does-not-have-render-authority", jobID: "00000000-0000-0000-0000-000000000000",
@@ -158,7 +159,7 @@ func (r *Renderer) renderAttempt(parent context.Context, navigation renderjob.Na
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	initialURL := r.origin + "/print/" + navigation.ResumeID.String()
-	proxy, err := startAttemptProxy(proxyConfig{
+	proxy, err := startAttemptProxy(ctx, proxyConfig{
 		origin: r.origin, forwardOrigin: r.forwardOrigin, initialURL: initialURL,
 		capability: navigation.Capability, jobID: navigation.JobID.String(),
 	})
@@ -277,18 +278,18 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 		}
 	})
 
-	if err := chromedp.Run(ctx,
+	if runErr := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(actionCtx context.Context) error {
 			browserCtx := cdp.WithExecutor(actionCtx, chromedp.FromContext(actionCtx).Browser)
 			return target.SetAutoAttach(true, true).WithFlatten(true).Do(browserCtx)
 		}),
 		fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*", RequestStage: fetch.RequestStageRequest}}),
 		network.SetCacheDisabled(true),
-	); err != nil {
-		return err
+	); runErr != nil {
+		return runErr
 	}
-	if err := configureCaptureEnvironment(targetCtx, navigation.Format); err != nil {
-		return err
+	if configureErr := configureCaptureEnvironment(targetCtx, navigation.Format); configureErr != nil {
+		return configureErr
 	}
 	response, err := chromedp.RunResponse(targetCtx, chromedp.Navigate(initialURL))
 	if err != nil {
@@ -297,11 +298,11 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 	if response == nil || validatePrintResponse(response.Status, response.FromServiceWorker, response.Headers) != nil {
 		return ErrRenderFailed
 	}
-	if err := configureCaptureEnvironment(targetCtx, navigation.Format); err != nil {
-		return err
+	if configureErr := configureCaptureEnvironment(targetCtx, navigation.Format); configureErr != nil {
+		return configureErr
 	}
-	if err := awaitPageReadiness(targetCtx); err != nil {
-		return err
+	if readinessErr := awaitPageReadiness(targetCtx); readinessErr != nil {
+		return readinessErr
 	}
 	if failure.failed() {
 		return ErrRenderFailed
@@ -376,7 +377,8 @@ func handlePausedRequest(ctx context.Context, cancel context.CancelFunc, failure
 	})
 	if !decision.allow {
 		failure.fail()
-		_ = fetch.FailRequest(event.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+		//nolint:errcheck // Denial already fails and cancels the whole render attempt.
+		fetch.FailRequest(event.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
 		cancel()
 		return
 	}

@@ -66,14 +66,17 @@ func prepareOutputDirectory(repositoryRoot, outputDirectory string) error {
 	if !cleanAbsolute(repositoryRoot) || !cleanAbsolute(outputDirectory) || !pathBelow(base, outputDirectory) {
 		return errors.New("invalid_output_directory")
 	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
+	if err := os.MkdirAll(base, 0o700); err != nil {
 		return errors.New("output_directory_failed")
 	}
 	resolvedBase, err := filepath.EvalSymlinks(base)
 	if err != nil {
 		return errors.New("output_directory_failed")
 	}
-	relative, _ := filepath.Rel(base, outputDirectory)
+	relative, err := filepath.Rel(base, outputDirectory)
+	if err != nil {
+		return errors.New("invalid_output_directory")
+	}
 	current := base
 	for _, part := range strings.Split(relative, string(filepath.Separator)) {
 		current = filepath.Join(current, part)
@@ -85,8 +88,12 @@ func prepareOutputDirectory(repositoryRoot, outputDirectory string) error {
 			return errors.New("invalid_output_directory")
 		}
 	}
-	if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
+	if mkdirErr := os.MkdirAll(outputDirectory, 0o700); mkdirErr != nil {
 		return errors.New("output_directory_failed")
+	}
+	outputInfo, err := os.Stat(outputDirectory)
+	if err != nil || !outputInfo.IsDir() || outputInfo.Mode().Perm() != 0o700 {
+		return errors.New("invalid_output_directory")
 	}
 	resolvedOutput, err := filepath.EvalSymlinks(outputDirectory)
 	if err != nil || !pathBelow(resolvedBase, resolvedOutput) {

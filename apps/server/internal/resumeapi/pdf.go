@@ -150,7 +150,7 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 	if r.Method == http.MethodHead {
 		return
 	}
-	_, _ = w.Write(result.Bytes)
+	_, _ = w.Write(result.Bytes) //nolint:errcheck // The response is committed; retrying can duplicate bytes, and this owner boundary must not log details.
 }
 
 func validateOwnerPDFRequest(r *http.Request) error {
@@ -199,7 +199,8 @@ func (s *Service) readOwnerPDFPhoto(ctx context.Context, row resume.Resume) ([]b
 	body, contentType, err := s.blobs.Get(ctx, photo.Key)
 	if err != nil {
 		if body != nil {
-			_ = body.Close()
+			// Both storage and close failures map to the same opaque response.
+			_ = body.Close() //nolint:errcheck // The storage read already failed; cleanup cannot change its result.
 		}
 		return nil, "", errOwnerPDFPreparation
 	}

@@ -92,11 +92,25 @@ func TestPrepareOutputDirectoryRefusesExistingContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	empty := filepath.Join(base, "empty")
-	if err := os.Mkdir(empty, 0o755); err != nil {
+	if err := os.Mkdir(empty, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := prepareOutputDirectory(root, empty); err != nil {
 		t.Fatalf("prepareOutputDirectory(empty) error = %v", err)
+	}
+	info, err := os.Stat(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o700 {
+		t.Fatalf("directory %q mode = %o, want 700", empty, got)
+	}
+	loose := filepath.Join(base, "loose")
+	if err := os.Mkdir(loose, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareOutputDirectory(root, loose); err == nil {
+		t.Fatal("prepareOutputDirectory(loose) error = nil")
 	}
 	nonempty := filepath.Join(base, "nonempty")
 	if err := os.Mkdir(nonempty, 0o755); err != nil {
@@ -107,6 +121,26 @@ func TestPrepareOutputDirectoryRefusesExistingContent(t *testing.T) {
 	}
 	if err := prepareOutputDirectory(root, nonempty); err == nil {
 		t.Fatal("prepareOutputDirectory(nonempty) error = nil")
+	}
+}
+
+func TestArtifactsAndEvidenceArePrivate(t *testing.T) {
+	t.Parallel()
+	output := t.TempDir()
+	if err := saveArtifact(output, "minimal", renderjob.PDF, []byte("artifact")); err != nil {
+		t.Fatalf("saveArtifact() error = %v", err)
+	}
+	if err := writeEvidence(output, newEvidence(modeProbe, "go-test", "Chromium 151.0.7922.34", cgroupEvidence{}, nil)); err != nil {
+		t.Fatalf("writeEvidence() error = %v", err)
+	}
+	for _, name := range []string{"minimal.pdf", "evidence.json"} {
+		info, err := os.Stat(filepath.Join(output, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("file %q mode = %o, want 600", name, got)
+		}
 	}
 }
 

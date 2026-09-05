@@ -403,7 +403,7 @@ func TestCanceledRendererJoinsBeforePermitReuse(t *testing.T) {
 	var calls atomic.Int64
 	var queue *Queue
 	renderer := rendererFunc(func(ctx context.Context, navigation Navigation) ([]byte, error) {
-		if _, err := queue.Redeem(context.Background(), Redemption{
+		if _, err := queue.Redeem(ctx, Redemption{
 			ResumeID: resumeID, JobID: navigation.JobID, Audience: audiencePrint, Capability: navigation.Capability,
 		}); err != nil {
 			return nil, err
@@ -469,7 +469,7 @@ func TestCloseWaitsForRendererJoin(t *testing.T) {
 	allowRendererReturn := make(chan struct{})
 	var queue *Queue
 	renderer := rendererFunc(func(ctx context.Context, navigation Navigation) ([]byte, error) {
-		if _, err := queue.Redeem(context.Background(), Redemption{
+		if _, err := queue.Redeem(ctx, Redemption{
 			ResumeID: resumeID, JobID: navigation.JobID, Audience: audiencePrint, Capability: navigation.Capability,
 		}); err != nil {
 			return nil, err
@@ -619,21 +619,21 @@ func TestFormatSpecificBoundsAndPublicGenerationBinding(t *testing.T) {
 		{ResumeID: uuid.New(), Revision: 7, SchemaVersion: 2, PublicGeneration: 6, Payload: []byte("snapshot")},
 		{ResumeID: uuid.New(), Revision: 7, SchemaVersion: 2, PublicGeneration: 7, Payload: []byte("snapshot")},
 	} {
-		_, err := queue.Render(context.Background(), Request{Format: PNG, Prepare: func(context.Context) (Snapshot, error) {
+		_, renderErr := queue.Render(context.Background(), Request{Format: PNG, Prepare: func(context.Context) (Snapshot, error) {
 			return snapshot, nil
 		}})
-		if !errors.Is(err, ErrInvalidRequest) {
-			t.Fatalf("Render(public generation %d) error = %v, want ErrInvalidRequest", snapshot.PublicGeneration, err)
+		if !errors.Is(renderErr, ErrInvalidRequest) {
+			t.Fatalf("Render(public generation %d) error = %v, want ErrInvalidRequest", snapshot.PublicGeneration, renderErr)
 		}
 	}
 
 	resumeID := uuid.New()
 	var boundedQueue *Queue
 	renderer := rendererFunc(func(ctx context.Context, navigation Navigation) ([]byte, error) {
-		if _, err := boundedQueue.Redeem(ctx, Redemption{
+		if _, redeemErr := boundedQueue.Redeem(ctx, Redemption{
 			ResumeID: resumeID, JobID: navigation.JobID, Audience: audiencePrint, Capability: navigation.Capability,
-		}); err != nil {
-			return nil, err
+		}); redeemErr != nil {
+			return nil, redeemErr
 		}
 		return []byte("four"), nil
 	})

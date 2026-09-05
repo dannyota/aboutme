@@ -22,14 +22,22 @@ const (
 	// PNG is the fixed 1200 by 630 share-image format.
 	PNG Format = "png"
 
+	// MaxConcurrentRenders is the fixed v1 browser concurrency limit.
 	MaxConcurrentRenders = 1
-	MaxQueueDepth        = 8
-	MaxAdmittedJobs      = MaxConcurrentRenders + MaxQueueDepth
-	MaxJobTimeout        = 20 * time.Second
-	MaxCapabilityTTL     = 60 * time.Second
-	MaxSnapshotBytes     = 3_407_872
-	PDFMaxBytes          = 16_777_216
-	PNGMaxBytes          = 4_194_304
+	// MaxQueueDepth is the fixed v1 waiting-job limit.
+	MaxQueueDepth = 8
+	// MaxAdmittedJobs includes the running render and waiting queue.
+	MaxAdmittedJobs = MaxConcurrentRenders + MaxQueueDepth
+	// MaxJobTimeout sets the cancellation deadline from admission; joined cleanup may finish later.
+	MaxJobTimeout = 20 * time.Second
+	// MaxCapabilityTTL bounds an unused print capability.
+	MaxCapabilityTTL = 60 * time.Second
+	// MaxSnapshotBytes bounds one frozen render snapshot.
+	MaxSnapshotBytes = 3_407_872
+	// PDFMaxBytes bounds one completed PDF artifact.
+	PDFMaxBytes = 16_777_216
+	// PNGMaxBytes bounds one completed share-image artifact.
+	PNGMaxBytes = 4_194_304
 
 	capabilityBytes = 32
 	audiencePrint   = "nuxt-print"
@@ -267,9 +275,9 @@ func New(config Config) (*Queue, error) {
 }
 
 // Render prepares, queues, renders, and completes one attempt.
-func (q *Queue) Render(ctx context.Context, request Request) (result Result, err error) {
-	if err := ctx.Err(); err != nil {
-		return Result{}, err
+func (q *Queue) Render(ctx context.Context, request Request) (Result, error) {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return Result{}, contextErr
 	}
 	if !validFormat(request.Format) || request.Prepare == nil {
 		return Result{}, ErrInvalidRequest
@@ -280,7 +288,8 @@ func (q *Queue) Render(ctx context.Context, request Request) (result Result, err
 	}
 	defer q.releaseAttempt(attempt)
 
-	snapshot, prepareErr := callPrepare(attempt.ctx, request.Prepare)
+	// attempt.ctx is the context.WithCancel(ctx) child created by q.admit.
+	snapshot, prepareErr := callPrepare(attempt.ctx, request.Prepare) //nolint:contextcheck
 	if prepareErr != nil {
 		if attemptErr := q.attemptError(attempt); attemptErr != nil {
 			return Result{}, attemptErr
@@ -291,8 +300,8 @@ func (q *Queue) Render(ctx context.Context, request Request) (result Result, err
 		return Result{}, ErrInvalidRequest
 	}
 	snapshot.Payload = append([]byte(nil), snapshot.Payload...)
-	if err := q.attemptError(attempt); err != nil {
-		return Result{}, err
+	if attemptErr := q.attemptError(attempt); attemptErr != nil {
+		return Result{}, attemptErr
 	}
 
 	jobID, err := q.newJobID()
@@ -322,7 +331,8 @@ func (q *Queue) Render(ctx context.Context, request Request) (result Result, err
 		return Result{}, err
 	}
 
-	output, renderErr := callRenderer(attempt.ctx, q.renderer, Navigation{
+	// attempt.ctx is the context.WithCancel(ctx) child created by q.admit.
+	output, renderErr := callRenderer(attempt.ctx, q.renderer, Navigation{ //nolint:contextcheck
 		ResumeID: snapshot.ResumeID, JobID: jobID, Capability: capability, Format: request.Format,
 	})
 	if renderErr != nil {
@@ -335,7 +345,8 @@ func (q *Queue) Render(ctx context.Context, request Request) (result Result, err
 	if err := q.attemptError(attempt); err != nil {
 		return Result{}, err
 	}
-	return q.complete(attempt.ctx, jobID, controller, output)
+	// attempt.ctx is the context.WithCancel(ctx) child created by q.admit.
+	return q.complete(attempt.ctx, jobID, controller, output) //nolint:contextcheck
 }
 
 // Redeem atomically consumes a matching one-use capability.
@@ -425,7 +436,7 @@ func (q *Queue) admit(parent context.Context) (*attempt, error) {
 		return nil, ErrSaturated
 	}
 	q.attempts[active] = struct{}{}
-	q.trackParentCancellationLocked(active, parent)
+	q.trackParentCancellationLocked(parent, active)
 	q.trackTimerLocked(active, q.jobTimeout, func() { q.cancelAttempt(active, context.DeadlineExceeded) })
 	q.mu.Unlock()
 	return active, nil
@@ -470,7 +481,7 @@ func (q *Queue) complete(ctx context.Context, jobID uuid.UUID, controller string
 		q.mu.Unlock()
 		return Result{}, ErrNotActive
 	}
-	if cancelErr := q.completionCancellationLocked(stored, ctx); cancelErr != nil {
+	if cancelErr := q.completionCancellationLocked(ctx, stored); cancelErr != nil {
 		q.mu.Unlock()
 		return Result{}, cancelErr
 	}
@@ -496,7 +507,7 @@ func (q *Queue) complete(ctx context.Context, jobID uuid.UUID, controller string
 			}
 			return Result{}, ErrNotActive
 		}
-		if cancelErr := q.completionCancellationLocked(stored, ctx); cancelErr != nil {
+		if cancelErr := q.completionCancellationLocked(ctx, stored); cancelErr != nil {
 			q.mu.Unlock()
 			return Result{}, cancelErr
 		}
@@ -519,7 +530,7 @@ func (q *Queue) complete(ctx context.Context, jobID uuid.UUID, controller string
 		}
 		return Result{}, ErrNotActive
 	}
-	if cancelErr := q.completionCancellationLocked(stored, ctx); cancelErr != nil {
+	if cancelErr := q.completionCancellationLocked(ctx, stored); cancelErr != nil {
 		q.mu.Unlock()
 		return Result{}, cancelErr
 	}
@@ -528,7 +539,7 @@ func (q *Queue) complete(ctx context.Context, jobID uuid.UUID, controller string
 	return result, nil
 }
 
-func (q *Queue) completionCancellationLocked(stored *job, ctx context.Context) error {
+func (q *Queue) completionCancellationLocked(ctx context.Context, stored *job) error {
 	if err := q.attemptErrorLocked(stored.attempt); err != nil {
 		q.cancelAttemptLocked(stored.attempt, err)
 		return err
@@ -597,7 +608,7 @@ func (q *Queue) releaseAttempt(active *attempt) {
 	close(active.done)
 }
 
-func (q *Queue) trackParentCancellationLocked(active *attempt, parent context.Context) {
+func (q *Queue) trackParentCancellationLocked(parent context.Context, active *attempt) {
 	callback := newTrackedCallback()
 	callback.stop = context.AfterFunc(parent, func() {
 		defer callback.finish()
@@ -701,26 +712,32 @@ func decodeAuthority(token string) ([]byte, bool) {
 
 func bindingDigest(stored *job) [32]byte {
 	hash := sha256.New()
-	_, _ = hash.Write(stored.snapshot.ResumeID[:])
-	_, _ = hash.Write(stored.attempt.jobID[:])
+	writeDigest(hash, stored.snapshot.ResumeID[:])
+	writeDigest(hash, stored.attempt.jobID[:])
 	writeInt64(hash, stored.snapshot.Revision)
 	writeInt64(hash, int64(stored.snapshot.SchemaVersion))
 	writeInt64(hash, stored.snapshot.PublicGeneration)
-	_, _ = hash.Write([]byte(stored.format))
-	_, _ = hash.Write([]byte(audiencePrint))
+	writeDigest(hash, []byte(stored.format))
+	writeDigest(hash, []byte(audiencePrint))
 	writeInt64(hash, stored.expiresAt.UnixNano())
-	_, _ = hash.Write(stored.snapshotDigest[:])
-	_, _ = hash.Write(stored.capabilityHash[:])
-	_, _ = hash.Write(stored.controllerHash[:])
+	writeDigest(hash, stored.snapshotDigest[:])
+	writeDigest(hash, stored.capabilityHash[:])
+	writeDigest(hash, stored.controllerHash[:])
 	var result [32]byte
 	copy(result[:], hash.Sum(nil))
 	return result
 }
 
 func writeInt64(writer io.Writer, value int64) {
-	var encoded [8]byte
-	binary.BigEndian.PutUint64(encoded[:], uint64(value))
-	_, _ = writer.Write(encoded[:])
+	if err := binary.Write(writer, binary.BigEndian, value); err != nil {
+		panic("renderjob: digest encoding failed")
+	}
+}
+
+func writeDigest(writer io.Writer, value []byte) {
+	if _, err := writer.Write(value); err != nil {
+		panic("renderjob: digest write failed")
+	}
 }
 
 func boundedInt(value, maximum int) (int, error) {

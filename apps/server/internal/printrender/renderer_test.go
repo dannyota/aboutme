@@ -9,9 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
-	"github.com/google/uuid"
 )
 
 func TestNewValidatesConfigurationWithoutGeneratingAuthority(t *testing.T) {

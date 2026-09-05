@@ -1,6 +1,7 @@
 package printrender
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -28,17 +29,24 @@ type proxyAdmission struct {
 }
 
 type attemptProxy struct {
-	listener  net.Listener
-	server    *http.Server
-	transport *http.Transport
-	done      chan error
-	handlers  joinGroup
-	closeOnce sync.Once
-	closeErr  error
-	admission *proxyAdmission
+	listener   net.Listener
+	server     *http.Server
+	transport  proxyTransport
+	done       chan error
+	handlers   joinGroup
+	closeOnce  sync.Once
+	closeErr   error
+	handlerMu  sync.Mutex
+	handlerErr error
+	admission  *proxyAdmission
 }
 
-func startAttemptProxy(config proxyConfig) (*attemptProxy, error) {
+type proxyTransport interface {
+	http.RoundTripper
+	CloseIdleConnections()
+}
+
+func startAttemptProxy(ctx context.Context, config proxyConfig) (*attemptProxy, error) {
 	origin, err := url.Parse(config.origin)
 	if err != nil {
 		return nil, err
@@ -51,7 +59,7 @@ func startAttemptProxy(config proxyConfig) (*attemptProxy, error) {
 	if err != nil || forward.Scheme != "http" || forward.Host == "" || forward.Path != "" {
 		return nil, ErrRenderFailed
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
@@ -105,14 +113,17 @@ func (p *attemptProxy) serveHTTP(writer http.ResponseWriter, request *http.Reque
 		http.Error(writer, "bad gateway", http.StatusBadGateway)
 		return
 	}
-	defer response.Body.Close()
+	defer func() {
+		p.recordHandlerError(response.Body.Close())
+	}()
 	for name, values := range response.Header {
 		for _, value := range values {
 			writer.Header().Add(name, value)
 		}
 	}
 	writer.WriteHeader(response.StatusCode)
-	_, _ = io.Copy(writer, response.Body)
+	_, copyErr := io.Copy(writer, response.Body)
+	p.recordHandlerError(copyErr)
 }
 
 func (a *proxyAdmission) admit(request *http.Request) (bool, bool) {
@@ -181,9 +192,27 @@ func (p *attemptProxy) close() error {
 		if serveErr != nil {
 			closeErrors = append(closeErrors, serveErr)
 		}
+		if handlerErr := p.joinedHandlerError(); handlerErr != nil {
+			closeErrors = append(closeErrors, handlerErr)
+		}
 		p.closeErr = errors.Join(closeErrors...)
 	})
 	return p.closeErr
+}
+
+func (p *attemptProxy) recordHandlerError(err error) {
+	if err == nil {
+		return
+	}
+	p.handlerMu.Lock()
+	p.handlerErr = errors.Join(p.handlerErr, err)
+	p.handlerMu.Unlock()
+}
+
+func (p *attemptProxy) joinedHandlerError() error {
+	p.handlerMu.Lock()
+	defer p.handlerMu.Unlock()
+	return p.handlerErr
 }
 
 type joinGroup struct {

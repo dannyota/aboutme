@@ -81,6 +81,7 @@ HOST=127.0.0.1 PORT=20030 NUXT_PRINT_ORIGIN=http://127.0.0.1:20082 \
 
 Run the Go queue and Chromium together with no swap and half a CPU. Choose a new
 output directory for every run; an existing nonempty directory is refused.
+Output directories use mode 0700; artifact and evidence files use mode 0600.
 
 ```sh
 systemd-run --user --scope --collect \
@@ -118,22 +119,22 @@ full server workload before hosted activation.
 
 The final repeated run passed all 156 serial calls under the 512 MiB, no-swap,
 half-CPU limits. Seven of nine queued calls completed; two reached the
-configured 20-second deadline and joined cleanup within 17 ms. Those timeout
-outcomes remain explicit in the evidence. Peak cgroup memory was 330,780,672
-bytes (315.5 MiB), with no out-of-memory events. Each fixture/format pair had
+configured 20-second deadline and joined cleanup within 27 ms. Those timeout
+outcomes remain explicit in the evidence. Peak cgroup memory was 324,501,504
+bytes (309.5 MiB), with no out-of-memory events. Each fixture/format pair had
 identical bytes across 26 calls, matching the earlier inspected baseline.
 
 | Fixture | PDF p95 | PNG p95 | PDF bytes | PNG bytes |
 | ------- | ------- | ------- | --------- | --------- |
-| Minimal | 1.911 s | 1.811 s | 14,426    | 7,227     |
-| Full    | 1.963 s | 1.924 s | 183,975   | 72,080    |
-| Maximum | 3.002 s | 2.389 s | 220,424   | 36,898    |
+| Minimal | 1.809 s | 1.865 s | 14,426    | 7,227     |
+| Full    | 2.091 s | 1.988 s | 183,975   | 72,080    |
+| Maximum | 3.014 s | 2.400 s | 220,424   | 36,898    |
 
 Each p95 is the larger of the two measured series. The full PDF has two Letter
 pages, its normalized photo, and two columns. The maximum PDF has 128 A4 pages;
 text extraction finds all 1,536 unique entry labels. Both PDFs use epoch dates.
 Visual inspection confirms wrapped long text and the fixed share-image crop. Raw
-evidence and artifacts remain under `.dev/phase-7/resource-20260906-4/`; the
+evidence and artifacts remain under `.dev/phase-7/resource-20260906-5/`; the
 runbook commands reproduce the protocol.
 
 ## Failure handling

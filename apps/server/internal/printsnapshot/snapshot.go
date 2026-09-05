@@ -186,7 +186,7 @@ func validateDataPhoto(photo *publicresume.PublicPhoto) error {
 	if photo == nil {
 		return nil
 	}
-	contentType := ""
+	var contentType string
 	switch {
 	case strings.HasPrefix(photo.URL, "data:image/jpeg;base64,"):
 		contentType = "image/jpeg"
