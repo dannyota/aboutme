@@ -149,8 +149,8 @@ because their execution costs differ:
   one `pageFormat: "letter"`, and one dense/small-type preset. A preset outside
   the subset is still covered by string goldens; what it loses is pixel-level
   regression detection.
-- P9's browser UAT exercises **the same named subset**, not all twenty presets,
-  so the three coverage surfaces cannot drift apart.
+- Phase 10 browser UAT exercises **the same named subset**, not all twenty
+  presets, so the three coverage surfaces cannot drift apart.
 
 ## 5. Accessibility floor
 

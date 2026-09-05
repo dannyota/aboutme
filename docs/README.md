@@ -50,6 +50,7 @@ entry points and project policy.
 - [Self-hosting guide](guides/self-hosting.md)
 - [Native development runbook](runbooks/native-development.md)
 - [Local UAT runbook](runbooks/local-uat.md)
+- [Authentication email runbook](runbooks/email.md)
 
 Design v4 is approved. Changing a decision needs a new ADR; see the
 [design index](design/README.md#approval-rule).

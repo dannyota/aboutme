@@ -297,6 +297,6 @@ hours. Overdue deletion is audited, alerted, and retried. Weekly orphan
 reconciliation covers crash candidates and queue/accounting gaps without making
 object existence an authority.
 
-Secrets never enter source, Terraform state where avoidable, URLs, or logs.
+Secrets never enter source, OpenTofu state where avoidable, URLs, or logs.
 Production fails closed when trusted proxies, provider credentials, origin
 settings, or origin-secret configuration is incomplete.

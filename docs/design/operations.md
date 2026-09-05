@@ -64,11 +64,12 @@ staging. Dashboards without a tested notification path do not satisfy the gate.
   drift.
 - Hostile-corpus and browser tests cover rich-text and content security policy.
 - Golden and visual tests cover renderer determinism.
-- Phase acceptance runs an immutable criterion catalog and fails closed on
-  missing evidence.
-- Local UAT drives the complete HTTPS Podman deployment through the browser.
-- Staging proves production infrastructure, restore, rotation, migration,
-  rollback, alarms, and edge behavior.
+- Phase acceptance uses one fresh review and a correctable exit checklist under
+  ADR 0024; missing required evidence fails the gate.
+- Native HTTPS browser checks prove features locally. Phase 10 drives the
+  complete product through `https://uat.aboutme.vn` in AWS Singapore.
+- The same UAT environment proves infrastructure, restore, rotation, migration,
+  rollback, alarms, real email, and edge behavior before production.
 
 The tracked engineering gates are summarized in
 [`../standards/engineering.md`](../standards/engineering.md).

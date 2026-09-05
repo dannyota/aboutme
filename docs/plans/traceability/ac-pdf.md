@@ -6,4 +6,4 @@ and the full prefix index.
 
 | ID         | Spec clause | Statement                                                                         | Phase/task | Test / UAT reference |
 | ---------- | ----------- | --------------------------------------------------------------------------------- | ---------- | -------------------- |
-| AC-PDF-001 | §2          | Renders bounded: 1 concurrent, timeout kill, readiness on saturation, no outbound | P7A        | (pending)            |
+| AC-PDF-001 | §2          | Renders bounded: 1 concurrent, timeout kill, readiness on saturation, no outbound | 7.1        | (pending)            |

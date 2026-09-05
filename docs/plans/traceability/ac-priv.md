@@ -6,4 +6,4 @@ and the full prefix index.
 
 | ID          | Spec clause | Statement                                                               | Phase/task | Test / UAT reference |
 | ----------- | ----------- | ----------------------------------------------------------------------- | ---------- | -------------------- |
-| AC-PRIV-001 | §9          | DELETE /me purges account, resumes, media, sessions; creates tombstones | P8-priv    | (pending)            |
+| AC-PRIV-001 | §9          | DELETE /me purges account, resumes, media, sessions; creates tombstones | Phase 8    | (pending)            |

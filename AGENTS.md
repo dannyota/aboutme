@@ -37,9 +37,12 @@ for fast correct delivery, not token cost.
   phase exit checklist once at the candidate commit before pushing.
 - **Parallel by default, up to 20 workers, at most 3 build-heavy.** Builds,
   tests, linters, Semgrep, and browsers are heavy; queue the rest.
-- **Every feature is built and verified locally first.** No AWS, Cloudflare,
-  DNS, registry, or staging mutation before local UAT passes and the human owner
-  authorizes the exact scope.
+- **Every feature is built and verified locally first.** Phase 9 researches AWS
+  Singapore costs; Phase 10 deploys UAT at `uat.aboutme.vn` with Cloudflare DNS
+  under the owner's authorization. Local checks and the cost decision precede
+  activation. Production is Phase 11 and needs separate approval. Use OpenTofu
+  and prefer managed AWS services; see
+  [ADR 0031](docs/adr/0031-aws-cost-research-and-hosted-uat.md).
 - Match review and checks to risk. Do not invent extra gates.
 
 ## Delivery gates
@@ -67,16 +70,21 @@ acceptance catalog and no separate acceptance worker.
 
 Model assignment depends on the coordinator:
 
-| Work                                                                                 | Claude Code | Codex                   |
-| ------------------------------------------------------------------------------------ | ----------- | ----------------------- |
-| High-judgment work across files, including new components, concurrency, and security | Opus        | `gpt-5.6-sol`           |
-| Code review (defect and phase review)                                                | Sonnet      | `gpt-5.6-sol` subagent  |
-| Implementation from a complete contract                                              | Haiku       | `gpt-5.6-luna` subagent |
-| Search, exploration, and summaries                                                   | Haiku       | `gpt-5.6-luna` subagent |
+| Work                                                                 | Claude Code | Codex                                      |
+| -------------------------------------------------------------------- | ----------- | ------------------------------------------ |
+| Complex implementation, debugging, design, concurrency, and security | Opus        | `gpt-5.6-sol` subagent                     |
+| Plan, defect, code, and phase review                                 | Sonnet      | `gpt-5.6-sol` subagent                     |
+| Bounded implementation from a complete contract                      | Haiku       | `gpt-5.6-terra` or `gpt-5.6-luna` subagent |
+| Search, exploration, summaries, and narrow checks                    | Haiku       | `gpt-5.6-luna` subagent                    |
 
-Codex uses Sol for every plan, defect, and phase review. Terra and Luna are
-limited to non-review worker roles. Claude Code uses Sonnet and Haiku: Haiku
-writes the mechanical implementation from a complete contract for speed, and
+Use multiple Codex workers for independent tasks with disjoint ownership. Prefer
+Sol for complex jobs and use Sol for every review. Terra and Luna handle bounded
+implementation and supporting work; they never review. Only Sol, Terra, and Luna
+may be used as Codex subagents. The integration owner keeps planning,
+coordination, verification, Git operations, and the final answer. Parallel
+workers must still obey the build-heavy and RAM limits below.
+
+Claude Code uses Sonnet and Haiku: Haiku implements complete contracts, and
 Sonnet reviews the result. When unsure, use the coordinator's high-judgment
 model.
 
@@ -191,20 +199,20 @@ commit; the repository is public.
 
 Run the narrowest relevant checks:
 
-| Change area                     | Command or evidence                                                                                                                                               |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Integration handoff, owner only | `make ci`; workers never run it                                                                                                                                   |
-| Markdown or YAML                | Prettier and markdownlint on owned paths; the owner runs `make docs-fmt`                                                                                          |
-| Local instructions              | `npx prettier --check --ignore-path /dev/null AGENTS.md CLAUDE.md`, then `npx markdownlint-cli2` on both                                                          |
-| Resume schema/generated types   | `make schema-check`                                                                                                                                               |
-| OpenAPI                         | `make api-check`                                                                                                                                                  |
-| Go server                       | `make server-build server-vet server-test`                                                                                                                        |
-| Store or migrations             | Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test`                                                                       |
-| Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`                                                                                                                  |
-| Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                                                                  |
-| Authenticated UI                | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check` (scripted headless Playwright); full P9 port-443 UAT overlay pending |
-| Public surface                  | `make p5a-native-http-check` and `make dev-https-public-check`                                                                                                    |
-| Phase gate or security work     | `make scan` with `SEMGREP_APP_TOKEN` (connected SAST, SCA, secrets, full-history gitleaks)                                                                        |
+| Change area                     | Command or evidence                                                                                                                                                  |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Integration handoff, owner only | `make ci`; workers never run it                                                                                                                                      |
+| Markdown or YAML                | Prettier and markdownlint on owned paths; the owner runs `make docs-fmt`                                                                                             |
+| Local instructions              | `npx prettier --check --ignore-path /dev/null AGENTS.md CLAUDE.md`, then `npx markdownlint-cli2` on both                                                             |
+| Resume schema/generated types   | `make schema-check`                                                                                                                                                  |
+| OpenAPI                         | `make api-check`                                                                                                                                                     |
+| Go server                       | `make server-build server-vet server-test`                                                                                                                           |
+| Store or migrations             | Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test`                                                                          |
+| Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`                                                                                                                     |
+| Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                                                                     |
+| Authenticated UI                | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check` (scripted headless Playwright); complete hosted UAT belongs to Phase 10 |
+| Public surface                  | `make p5a-native-http-check` and `make dev-https-public-check`                                                                                                       |
+| Phase gate or security work     | `make scan` with `SEMGREP_APP_TOKEN` (connected SAST, SCA, secrets, full-history gitleaks)                                                                           |
 
 Reusable browser automation is scripted headless Playwright, committed and run
 through `make web-e2e`, `make dev-https-auth-check`,

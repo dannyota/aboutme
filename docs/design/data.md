@@ -178,10 +178,11 @@ There is no separate declarative relational schema file. Reading migrations and
 sqlc queries together gives the applied schema and typed access layer without a
 second schema source that can drift.
 
-Before the first local UAT baseline, migration history is development-only. The
+Before the first UAT baseline, migration history is development-only. The
 integration owner may correct it and recreate the shared development database
 after every live-database worker is idle. The first UAT candidate adds
-`apps/server/migrations/.uat-baseline`. After that marker lands, the integration
-gate rejects changing the marker or any existing migration; only new forward
-migrations may be added. Goose tracks applied versions, not file checksums, at
-runtime.
+`apps/server/migrations/.uat-baseline` before the first hosted UAT migration, as
+clarified by [ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). After
+that marker lands, the integration gate rejects changing the marker or any
+existing migration; only new forward migrations may be added. Goose tracks
+applied versions, not file checksums, at runtime.

@@ -4,19 +4,25 @@ The repository is a monorepo with explicit authorities and one-way dependency
 rules. This page describes ownership; [`../architecture.md`](../architecture.md)
 describes what is implemented now.
 
-| Path                          | Responsibility and authority                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------- |
-| `apps/server/`                | Go HTTP, auth, domain stores, publishing, realtime, media, and bounded rendering |
-| `apps/web/`                   | Nuxt SSR, authenticated UI, editor, and the shared Vue renderer                  |
-| `apps/mobile/`                | Deferred Flutter client                                                          |
-| `packages/schema/`            | Resume JSON Schema, immutable releases, generators, fixtures, and preset JSON    |
-| `apps/server/migrations/`     | Sole relational schema source; goose SQL frozen by the first UAT baseline        |
-| `apps/server/sql/queries.sql` | sqlc query source                                                                |
-| `docs/api/openapi.yaml`       | Implemented HTTP contract                                                        |
-| `docs/design/`                | Intended product and architecture                                                |
-| `docs/adr/`                   | Proposed and accepted decision rationale                                         |
-| `docs/plans/`                 | Execution order, task ownership, gates, and acceptance traceability              |
-| `deploy/`                     | UAT/self-host deployment artifacts and future production infrastructure          |
+| Path                          | Responsibility and authority                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| `apps/server/`                | Go HTTP, auth, domain stores, publishing, realtime, media, and bounded rendering     |
+| `apps/web/`                   | Nuxt SSR, authenticated UI, editor, and the shared Vue renderer                      |
+| `apps/mobile/`                | Deferred Flutter client                                                              |
+| `packages/schema/`            | Resume JSON Schema, immutable releases, generators, fixtures, and preset JSON        |
+| `apps/server/migrations/`     | Sole relational schema source; goose SQL frozen by the first UAT baseline            |
+| `apps/server/sql/queries.sql` | sqlc query source                                                                    |
+| `docs/api/openapi.yaml`       | Implemented HTTP contract                                                            |
+| `docs/design/`                | Intended product and architecture                                                    |
+| `docs/adr/`                   | Proposed and accepted decision rationale                                             |
+| `docs/plans/`                 | Execution order, task ownership, gates, and acceptance traceability                  |
+| `deploy/`                     | Shared application images, local/self-host deployment tools, and deployment contract |
+
+AWS OpenTofu, environment configuration, and publication/deployment workflows
+belong in the planned private `aboutme-infra` repository under
+[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). It consumes an
+explicit app commit and builds deployment images on GitHub's native ARM64
+runner. The public app's checks require neither that repository nor AWS access.
 
 Generated files are committed but never hand-edited. Document types derive from
 JSON Schema. Store types derive from migrations and sqlc queries. Web API types

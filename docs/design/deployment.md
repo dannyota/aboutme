@@ -6,21 +6,22 @@ in [`../architecture.md`](../architecture.md) and operator guides.
 
 ## Environment model
 
-| Environment        | Shape                                                                                       | User origin                       |
-| ------------------ | ------------------------------------------------------------------------------------------- | --------------------------------- |
-| Tests              | One capped PostgreSQL container; native test processes; optional isolated service harnesses | Kernel-assigned or `20090+` ports |
-| Native development | Shared test DB container plus native Go, Nuxt, and Caddy processes                          | `http://localhost:20080`          |
-| Local UAT          | Complete image-based Podman Compose deployment; created only for the UAT session            | HTTPS on port `443`               |
-| Self-hosted        | Podman Compose with operator-supplied credentials and TLS configuration                     | Operator-defined HTTPS origin     |
-| Production         | CloudFront, Caddy on ECS/EC2 Graviton, Go, Nuxt, RDS PostgreSQL, and private S3             | `https://aboutme.vn`              |
+| Environment         | Shape                                                                                       | User origin                       |
+| ------------------- | ------------------------------------------------------------------------------------------- | --------------------------------- |
+| Tests               | One capped PostgreSQL container; native test processes; optional isolated service harnesses | Kernel-assigned or `20090+` ports |
+| Native development  | Shared test DB container plus native Go, Nuxt, and Caddy processes                          | `http://localhost:20080`          |
+| Native HTTPS checks | Shared DB, native processes, and disposable browser                                         | `https://localhost:20443`         |
+| AWS UAT             | Phase 9 costed topology, provisioned in Singapore in Phase 10                               | `https://uat.aboutme.vn`          |
+| Self-hosted         | Podman Compose with operator-supplied credentials and TLS configuration                     | Operator-defined HTTPS origin     |
+| Production          | CloudFront, Caddy on ECS/EC2 Graviton, Go, Nuxt, RDS PostgreSQL, and private S3             | `https://aboutme.vn`              |
 
 Native development uses ports `20432` (PostgreSQL), `20081` (Go), `20030`
 (Nuxt), and `20080` (Caddy). The test and development databases are separate
-logical databases in the one container. Local UAT does not reuse this native
-process stack; it creates the full deployment and tears it down at session end.
-The native script idempotently seeds `aboutme_dev` with one development account
-and one private sample resume. The command refuses any other database and is
-never run by Compose or cloud environments.
+logical databases in the one container. AWS UAT has separate data and media; it
+never receives a copy of the native development account or database. The native
+script idempotently seeds `aboutme_dev` with one development account and one
+private sample resume. The command refuses any other database and is never run
+by Compose or cloud environments.
 
 `PROVIDER_LOGIN_ENABLED` defaults to false and accepts only `true`, `false`, or
 blank. The native HTTPS harness sets it to true for provider authentication
@@ -29,9 +30,38 @@ it unset for the password-only v1 surface.
 
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI
-and API work. Auth and complete user workflows run in the HTTPS UAT origin.
+and API work. Auth feature checks run at the native HTTPS origin. Complete
+product acceptance runs at the AWS UAT origin.
+
+## Build and deployment architecture
+
+Daily development and feature checks run on the laptop. GitHub Actions runs the
+existing app CI jobs and builds AWS deployment images natively on
+`ubuntu-24.04-arm`, targeting `linux/arm64`. The pinned AMD64 Playwright
+baseline job stays on AMD64. ARM64 container smoke tests cover runtime
+compatibility, including Chromium and fonts; they do not replace the browser
+baseline gate.
+
+The planned private `aboutme-infra` repository owns image publication and
+deployment workflows, per
+[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). Builds consume an
+explicit tested app commit and record both app and infrastructure commits with
+the image digests. UAT deploys those digests; production promotion reuses the
+UAT-proven images without rebuilding them. Public app checks stay independent of
+AWS and the private repository.
+
+Native ARM64 builds avoid emulation overhead. Graviton runtime cost and
+performance still depend on instance size and workload: Phase 9 prices the
+Singapore options, and Phase 10 measures the selected configuration. GitHub
+build machines are separate from the Singapore application and data region.
 
 ## Production topology
+
+The topology below is the accepted comparison baseline for Phase 9. OpenTofu is
+the infrastructure tool. Prefer managed AWS services when they meet resource,
+security, and cost requirements. Phase 9 compares options and records any
+architecture change in a follow-up ADR before Phase 10 implementation; the
+existing EC2 shape is not a cost-research conclusion.
 
 ```mermaid
 graph LR
@@ -176,7 +206,14 @@ standard runtime credential chain and never enter repository files.
 
 Native development starts a loopback-only mail-capture command that retains a
 bounded number of messages and never initializes AWS. Real SES and DNS changes
-remain gated on local UAT and explicit owner authorization.
+follow the owner's recorded UAT authorization and SES handoff under
+[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). The
+[email runbook](../runbooks/email.md) records an existing Singapore SES sandbox
+setup. Preserve its Google Workspace root DNS and SES resources. Phase 10 adds
+runtime IAM, adopts existing infrastructure without overlapping ownership, and
+proves application mail with approved recipients. Unrestricted production mail
+requires SES production access; a simulator smoke does not prove a user's
+verification or reset flow.
 
 ## Database and releases
 
@@ -209,10 +246,13 @@ when this test passes.
 
 Application secrets use AWS Systems Manager Parameter Store `SecureString`
 values in `ap-southeast-1` and are injected at runtime. They do not enter
-images, source, command lines, logs, or Terraform state where the platform
+images, source, command lines, logs, or OpenTofu state where the platform
 permits a reference instead. Secret names and rotation procedures are tracked;
 values are never evidence artifacts.
 
-No AWS, Cloudflare, certificate, DNS, or deployment mutation occurs before the
-local UAT gate and its independent review pass and the human owner authorizes
-resource creation. Production launch requires a later, separate approval.
+Phase 9 settles Singapore cost, sizes, and UAT lifetime before activation. The
+owner has authorized Phase 10 AWS UAT and Cloudflare DNS at `uat.aboutme.vn`.
+Local candidate checks and infrastructure simulation precede deployment;
+complete UAT and operational drills follow it. Production launch in Phase 11
+requires separate approval. The local port-443 UAT gate is superseded by
+[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md).

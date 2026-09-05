@@ -1,19 +1,25 @@
 # aboutme implementation plan
 
-Status: **Revision 28, active** (2026-09-05).
+Status: **Revision 30, active** (2026-09-05).
 
-The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
+The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
 plan owns delivery order, phase state, and gates. A plan cannot redefine the
 design: a phase that changes a decision amends the Approved v4 text and records
 an ADR first.
 
-We work agile and local-first: build a working slice, review it, improve it, and
-keep everything runnable on the laptop until the whole product works there.
+We build and verify features locally. Complete user acceptance testing (UAT)
+runs in AWS at `https://uat.aboutme.vn`, under
+[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md).
 
-A phase's plan lives in `phase-<id>/` while the phase is active. When the phase
-exits, its plan directory is deleted; git history keeps it. What the phase built
-is described by [the architecture](../architecture.md), the code, and the
+Use OpenTofu for infrastructure and prefer managed AWS services. Phase 9
+compares their cost, workload fit, and operating effort before selecting sizes.
+Deployment code will live in a separate private `aboutme-infra` repository. This
+is future planning; the next implementation work is Phase 6, then 7 and 8.
+
+A phase's plan lives in `phase-<number>/` while the phase is active. When the
+phase exits, its plan directory is deleted; git history keeps it. What the phase
+built is described by [the architecture](../architecture.md), the code, and the
 [traceability rows](traceability/README.md) it proved.
 
 ## v1 release scope
@@ -21,11 +27,11 @@ is described by [the architecture](../architecture.md), the code, and the
 Decided 2026-09-01 by the human owner:
 
 - **v1 authentication is password-only.** Provider (OAuth) login stays in the
-  code base behind a configuration flag and is disabled for v1. Phase PF added
-  the flag and UI gating; the provider code and tests remain so providers can
-  return without a new phase.
+  code base behind a configuration flag and is disabled for v1. The entry phase
+  added the flag and UI gating; the provider code and tests remain so providers
+  can return without a new phase.
 - **MCP agent access ships in v1.** Users bring their own agents, which build
-  resumes through an authenticated MCP server over the resume API. Phase PM
+  resumes through an authenticated MCP server over the resume API. The MCP phase
   delivered it and its native HTTPS proof.
 
 ## State
@@ -37,52 +43,63 @@ password authentication, the native HTTPS development harness, and the v1 entry
 experience, including MCP agent access and the owner publish UX, the application
 UI toolkit, and the application visual identity.
 
-| Phase | Work                                        | State                                           |
-| ----- | ------------------------------------------- | ----------------------------------------------- |
-| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                     |
-| P7    | Print worker, public PDF and images         | Not started                                     |
-| P8    | Privacy lifecycle                           | Not started                                     |
-| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains |
-| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation        |
+| Phase | Work                                                             | State                                                  |
+| ----- | ---------------------------------------------------------------- | ------------------------------------------------------ |
+| 6     | [Realtime: SSE transport, refetch, unpublish](phase-6/README.md) | In progress; local implementation and tests            |
+| 7     | Print worker, public PDF and images                              | Not started                                            |
+| 8     | Privacy lifecycle                                                | Not started                                            |
+| 9     | [AWS Singapore cost research](phase-9/README.md)                 | Planned; research not run                              |
+| 10    | [Infrastructure and AWS UAT](phase-10/README.md)                 | Planned; UAT scope authorized; no deployment performed |
+| 11    | Production promotion                                             | After Phase 10 and separate launch approval            |
+| 12    | Flutter app                                                      | Deferred beyond web v1                                 |
+
+Active phases and tasks use numbers, such as Phase 7 and task 7.1. Completed
+lettered identifiers remain historical evidence and are not reassigned.
 
 ## Delivery order
 
-1. P6 realtime.
-2. P7 print and images, and P8 privacy lifecycle.
-3. P9 local UAT over the complete product, then human cloud authorization, PI
-   activation, P9A staging rehearsal, and P10 production.
+1. Phase 6: task 6.1 SSE transport, then 6.2 refetch and unpublish.
+2. Phase 7: task 7.1 owner print worker, then 7.2 public PDF and images; Phase 8
+   privacy lifecycle.
+3. Phase 9 cost research using the completed runtime's resource measurements.
+   Read-only pricing research may start earlier; final sizing uses those
+   results.
+4. Phase 10: refresh infrastructure contracts from Phase 9, build and check them
+   locally, deploy AWS UAT, then run complete workflows and operational drills.
+5. Phase 11 production promotion after its legal and launch gates.
 
 Security controls are delivered inside every route-owning phase and verified end
-to end in P9 and P9A. The Go sanitizer runs on every write and on the public
-read that feeds public SSR; P7 proves the same conformance on the read that
+to end in Phase 10. The Go sanitizer runs on every write and on the public read
+that feeds public SSR; task 7.1 proves the same conformance on the read that
 feeds internal print SSR.
 
 ## Remaining gates
 
-| Gate                              | Owner                                     | Due                                        |
-| --------------------------------- | ----------------------------------------- | ------------------------------------------ |
-| Human authorization of cloud work | Human owner                               | After local UAT, before any AWS/DNS change |
-| Product name and trademark review | Human owner                               | Before P10 production promotion            |
-| Privacy and disclosure review     | Qualified privacy counsel and human owner | Before P10 production promotion            |
+| Item                                                      | Owner                                     | State or due                                                                                               |
+| --------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| AWS UAT in Singapore; Cloudflare DNS for `uat.aboutme.vn` | Human owner                               | Authorized 2026-09-05; scope in ADR 0031                                                                   |
+| Sizes, cost assumptions, UAT lifetime and spending limit  | Phase 9 and human owner                   | Before Phase 10 activation; no amount approved yet                                                         |
+| SES application integration                               | Phase 10                                  | [Email runbook](../runbooks/email.md) available; sandbox, runtime IAM and controlled stack adoption remain |
+| Product name and trademark review                         | Human owner                               | Before Phase 11 promotion                                                                                  |
+| Privacy and disclosure review                             | Qualified privacy counsel and human owner | Before Phase 11 promotion                                                                                  |
+| Production launch authorization                           | Human owner                               | After Phase 10 passes                                                                                      |
 
 No other approval blocks development. Design v4, the template contract v2, and
-ADRs 0001–0028 are accepted.
+ADRs 0001–0031 are accepted, subject to recorded supersessions.
 
 ## Dependency graph
 
 ```mermaid
 graph TD
-    P6A[P6A SSE transport] --> P6B[P6B refetch and unpublish]
-    P6B --> P9
-    P7A[P7A owner print worker] --> P7B[P7B public PDF and images]
-    P7B --> P9
-    P8[P8 privacy lifecycle] --> P9
-    PI[PI local IaC] --> P9
-    P9 --> AUTH{Human authorizes cloud resources}
-    AUTH --> P9A[P9A staging rehearsal]
-    P9A --> LAUNCH{Human approves launch}
-    LAUNCH --> P10[P10 production]
-    P10 --> P11[P11 Flutter]
+    P6[Phase 6 realtime] --> P9[Phase 9 AWS cost research]
+    P7[Phase 7 exports] --> P9
+    P8[Phase 8 privacy] --> P9
+    P9 --> PREP[Phase 10 local infrastructure checks]
+    PREP --> UAT[Phase 10 AWS deployment and UAT]
+    SES[Owner SES documentation] --> UAT
+    UAT --> LAUNCH{Owner approves production}
+    LAUNCH --> P11[Phase 11 production]
+    P11 --> P12[Phase 12 Flutter - deferred]
 ```
 
 ## Gates
@@ -104,16 +121,27 @@ reviewer confirms those invariants by name.
 Daily work uses the native stack at `http://localhost:20080` and one shared
 PostgreSQL container. Authenticated browser checks use the native HTTPS harness
 at `https://localhost:20443`; see the
-[local UAT runbook](../runbooks/local-uat.md). Neither may bypass TLS or the
-external-request firewall. The isolated port-443 whole-product UAT belongs to
-P9.
+[local checks runbook](../runbooks/local-uat.md). Preserve TLS, network
+restrictions, and the laptop's resource limits. Run heavy gates serially.
 
-P9 validates complete user workflows locally and records browser, network,
-console, server, and database evidence. Only after it passes may the human owner
-authorize AWS, Cloudflare, certificate, DNS, image-push, or staging changes. P9A
-proves production topology and the restore, rollback, alarm, origin-secret,
-migration-lock, and edge-routing drills. Production promotion needs a separate
-human approval.
+GitHub Actions builds deployment images natively on `ubuntu-24.04-arm` for
+`linux/arm64`. The existing AMD64 browser baseline gate stays on AMD64. Tasks
+10.8 and 10.13 cover native image smoke checks and workflow checks; task 10.12
+deploys the tested digests without a rebuild. The private `aboutme-infra` build
+minutes and storage are part of task 9.1's cost model. See the
+[build contract](phase-10/infrastructure/contracts.md#build-and-runner-contract).
+
+Phase 10 uses `https://uat.aboutme.vn`, Cloudflare DNS, and AWS Singapore. It
+proves complete workflows, SES delivery, edge routing, restore, rollback,
+alarms, origin-secret rotation, and concurrent migration safety. It replaces the
+separate local port-443 UAT and staging rehearsal. Its local infrastructure
+checkpoint precedes activation; completed UAT is not a provisioning
+prerequisite.
+
+The [email runbook](../runbooks/email.md) records the owner's SES setup. Phase
+10 consumes that handoff and inventories existing resources before adding
+missing integration. Production promotion needs separate human approval after
+Phase 10 passes.
 
 Before dispatching a phase, create its directory, task files, and acceptance
 rows. [Traceability](traceability/README.md) owns acceptance ownership;
