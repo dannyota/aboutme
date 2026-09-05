@@ -3,9 +3,9 @@
 Status: **blocked for acceptance**. The local UAT contract requires the complete
 image-based deployment at an HTTPS origin on port 443. The current Compose
 Caddyfile exposes HTTP only, so it cannot produce valid authentication or
-end-to-end UAT evidence. The native HTTPS checks below are the available PV
-feature proofs at `https://localhost:20443`; they do not close this port-443
-acceptance gate.
+end-to-end UAT evidence. The native HTTPS checks below are the available feature
+proofs at `https://localhost:20443`; they do not close this port-443 acceptance
+gate.
 
 Do not mark a UAT criterion `PASS` against the current HTTP origin. Do not
 weaken Secure cookies or the HTTPS requirement to bypass the blocker.
@@ -42,8 +42,8 @@ the `Create account` then `Sign in` hero order, the password toggle labels,
 sign-in, both-theme axe scans for `/`, `/login`, `/app/resumes`, and
 `/app/settings/sessions`, the signed-in shell, and sign-out; it deletes nothing.
 
-The current PV UI proof vocabulary is part of the contract. Use these names when
-inspecting a run or updating a selector:
+The UI proof vocabulary is part of the contract. Use these names when inspecting
+a run or updating a selector:
 
 - Landing: heading `The resume is public. You are not.`, links `Create account`
   and `Sign in`, signed-in link `Open your resumes`, and
@@ -65,28 +65,6 @@ inspecting a run or updating a selector:
 The entry, editor, and publish proofs include these current selectors and
 strings. A local UAT record must identify the exact proof file and command; a
 selector list alone is not a passing result.
-
-## PV visual captures
-
-The T10 finish review captures are local review artifacts, not UAT evidence.
-After the native stack is ready and motion has settled, capture the landing,
-list, settings, and editor at the named viewports and open each image once:
-
-```text
-.impeccable/review/desktop.png       # landing, 1440 px
-.impeccable/review/mobile.png        # landing, 390 px
-.impeccable/review/list-desktop.png  # list, desktop
-.impeccable/review/list-mobile.png   # list, 390 px
-.impeccable/review/settings-desktop.png
-.impeccable/review/editor-desktop.png
-.impeccable/review/editor-mobile.png # editor, 390 px
-.impeccable/review/desktop-dark.png  # landing, dark theme
-.impeccable/review/editor-dark.png   # editor, dark theme
-```
-
-The finish reviewer records `ship`, `recapture`, `fix`, or `rebuild`; keep any
-open finding and its owner decision in the exit report. Do not commit `.dev/`
-evidence or substitute these captures for the port-443 UAT scenarios.
 
 The publish check seeds the same development account, creates a uniquely named
 complete resume through the editor, and proves save-before-publish ordering. It
