@@ -6,7 +6,7 @@ How a template behaves under Chromium's print engine, which is the authoritative
 rendering. Everything here applies to every template, because print geometry is
 renderer-owned (`tokens.md` §1).
 
-## 1. Three targets, one renderer
+## 1. Render targets
 
 | Target          | Route         | Pagination model                                                                               | Authority               |
 | --------------- | ------------- | ---------------------------------------------------------------------------------------------- | ----------------------- |
