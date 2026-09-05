@@ -116,22 +116,24 @@ full server workload before hosted activation.
 
 ### Local baseline, 2026-09-06
 
-The repeated run passed all 156 serial calls and all nine queued calls under the
-512 MiB, no-swap, half-CPU limits. Peak cgroup memory was 302,411,776 bytes
-(288.4 MiB), with no out-of-memory events. The last queued call returned after
-16.923 seconds. Each fixture/format pair had identical bytes across 26 calls.
+The final repeated run passed all 156 serial calls under the 512 MiB, no-swap,
+half-CPU limits. Seven of nine queued calls completed; two reached the
+configured 20-second deadline and joined cleanup within 17 ms. Those timeout
+outcomes remain explicit in the evidence. Peak cgroup memory was 330,780,672
+bytes (315.5 MiB), with no out-of-memory events. Each fixture/format pair had
+identical bytes across 26 calls, matching the earlier inspected baseline.
 
 | Fixture | PDF p95 | PNG p95 | PDF bytes | PNG bytes |
 | ------- | ------- | ------- | --------- | --------- |
-| Minimal | 1.119 s | 1.131 s | 14,426    | 7,227     |
-| Full    | 1.262 s | 1.218 s | 183,975   | 72,080    |
-| Maximum | 2.202 s | 1.578 s | 220,424   | 36,898    |
+| Minimal | 1.911 s | 1.811 s | 14,426    | 7,227     |
+| Full    | 1.963 s | 1.924 s | 183,975   | 72,080    |
+| Maximum | 3.002 s | 2.389 s | 220,424   | 36,898    |
 
 Each p95 is the larger of the two measured series. The full PDF has two Letter
 pages, its normalized photo, and two columns. The maximum PDF has 128 A4 pages;
 text extraction finds all 1,536 unique entry labels. Both PDFs use epoch dates.
 Visual inspection confirms wrapped long text and the fixed share-image crop. Raw
-evidence and artifacts remain under `.dev/phase-7/resource-20260906-2/`; the
+evidence and artifacts remain under `.dev/phase-7/resource-20260906-4/`; the
 runbook commands reproduce the protocol.
 
 ## Failure handling
