@@ -154,7 +154,7 @@ export function useAuth(): UseAuthReturn {
     options: MutateOptions,
   ): Promise<T> {
     const attempt = (): Promise<T> =>
-      $fetch<T>(url, {
+      $fetch<T, string>(url, {
         ...options,
         credentials: 'include',
         headers: csrfHeaders(csrfToken.value, options.body !== undefined),

@@ -52,6 +52,7 @@ import EditorPreview from './EditorPreview.vue';
 import ErrorSummary from './ErrorSummary.vue';
 import SaveStatus from './SaveStatus.vue';
 import PublishDialog from './PublishDialog.vue';
+import PDFDownloadButton from './PDFDownloadButton.vue';
 
 type InspectorPanel
   = | { readonly kind: 'personal' }
@@ -225,6 +226,7 @@ function sectionLabel(type: string): string {
         state="public"
       />
       <span class="flex-1" />
+      <PDFDownloadButton :controller="actions.downloadPdf" />
       <Button
         class="editor-publish-action"
         data-action="publish"

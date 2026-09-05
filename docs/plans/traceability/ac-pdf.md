@@ -1,9 +1,14 @@
 # AC-PDF traceability rows
 
-1 acceptance-criterion rows with the `AC-PDF-` prefix, in their original matrix
+6 acceptance-criterion rows with the `AC-PDF-` prefix, in their original matrix
 order. See [README.md](./README.md) for the matrix purpose, maintenance rules,
 and the full prefix index.
 
-| ID         | Spec clause | Statement                                                                         | Phase/task | Test / UAT reference |
-| ---------- | ----------- | --------------------------------------------------------------------------------- | ---------- | -------------------- |
-| AC-PDF-001 | §2          | Renders bounded: 1 concurrent, timeout kill, readiness on saturation, no outbound | 7.1        | (pending)            |
+| ID         | Spec clause                     | Statement                                                                                                                                                                   | Phase/task | Test / UAT reference                                                                               |
+| ---------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| AC-PDF-001 | §2                              | Renders bounded: 1 concurrent, timeout kill, readiness on saturation, no outbound                                                                                           | 7.1        | `renderjob`, `printrender` race tests; real Chromium suite; export resource benchmark              |
+| AC-PDF-002 | ADR 0023                        | One-use capabilities bind the frozen snapshot and attempt; expiry and every terminal path remove authority and release capacity                                             | 7.1        | `renderjob` admission, redemption, expiry, and cancellation tests; `printapi` HTTP tests           |
+| AC-PDF-003 | ADR 0023                        | Only the in-process controller can complete a consumed job; output digest is recomputed, public generation checked, and duplicates rejected without retained terminal state | 7.1        | `renderjob/completion_test.go` and queue cleanup race tests                                        |
+| AC-PDF-004 | Product: export; template print | Owner PDF uses the authorized snapshot, shared renderer, page format, local fonts, and decoded normalized photo within measured output and memory bounds                    | 7.1        | `printsnapshot`, `resumeapi/pdf_test.go`, Nuxt print tests; `make dev-https-exports-check`         |
+| AC-PDF-005 | ADR 0022                        | Public PDF and PNG pass the current generation gate before cache reuse, render completion, conditional response, and body delivery; revocation cancels and drains old work  | 7.2        | `publicapi/artifact_test.go`, `publicresume/reader_test.go`; `make dev-https-exports-check`        |
+| AC-PDF-006 | ADR 0032                        | One live-gated 1200×630 PNG and fixed social metadata use the shared renderer independently of download and discovery flags                                                 | 7.2        | `printrender` PNG tests, public artifact and social metadata tests; `make dev-https-exports-check` |

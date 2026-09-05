@@ -38,6 +38,10 @@ headers. Use chromedp v0.15.1, with root adding the manifest dependency.
   extensions, sync, component updates, default apps, first-run actions, metrics,
   crash uploads, speculative/preconnect networking, and browser automation
   features that initiate unrelated network traffic.
+- Launch Chromium and its version probe with only `TZ=UTC`, `LANG=C.UTF-8`, and
+  `LC_ALL=C.UTF-8`. Clear the launcher environment too. A synthetic parent
+  secret must not reach the executed child; test failures never print raw
+  environment values.
 - Set a new process group and parent-death SIGKILL. Replace command cancellation
   with SIGKILL of the negative process-group ID. Always cancel and wait for the
   allocator and process group before returning, including successful capture.

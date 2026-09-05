@@ -26,6 +26,8 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/mcpapi"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
+	"github.com/dannyota/aboutme/apps/server/internal/printapi"
+	"github.com/dannyota/aboutme/apps/server/internal/printrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
@@ -33,6 +35,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/realtime"
 	"github.com/dannyota/aboutme/apps/server/internal/realtimeapi"
+	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
@@ -115,6 +118,21 @@ func run() error {
 		return fmt.Errorf("create public cache: %w", err)
 	}
 	renderer := directrender.New(runtime.RenderOrigin, nil)
+	printRenderer, err := printrender.New(printrender.Config{
+		BrowserExecutable: cfg.ChromiumPath, RenderOrigin: runtime.RenderOrigin,
+	})
+	if err != nil {
+		return errors.New("initialize private browser renderer")
+	}
+	printQueue, err := renderjob.New(renderjob.Config{Renderer: printRenderer})
+	if err != nil {
+		return errors.New("initialize print queue")
+	}
+	defer func() { _ = printQueue.Close() }()
+	printHandler, err := printapi.NewRedeemHandler(printQueue)
+	if err != nil {
+		return errors.New("initialize private print handler")
+	}
 	sessionManager := auth.NewSessionManagerWithPool(pool)
 	hub, err := realtime.NewHub(realtime.Config{})
 	if err != nil {
@@ -131,7 +149,8 @@ func run() error {
 	publicService, err := publicapi.NewService(publicapi.ServiceDependencies{
 		Reader: reader, DiscoveryStore: queries, Coordinator: coordinator, Cache: cache, Renderer: renderer,
 		PublicOrigin: runtime.PublicOrigin, AppDigest: runtime.AppDigest, RendererDigest: runtime.RendererDigest,
-		Live: streams.PublicHandler(),
+		Live: streams.PublicHandler(), PrintQueue: printQueue,
+		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Clock: time.Now,
 	})
 	if err != nil {
 		return fmt.Errorf("create public service: %w", err)
@@ -139,6 +158,12 @@ func run() error {
 	readiness := publicstate.NewReadiness(coordinator, publicstate.ReadinessDependencies{
 		PingDatabase: pool.Ping,
 		ProbeRenderer: func(probeCtx context.Context) error {
+			if err := printQueue.Ready(); err != nil {
+				return err
+			}
+			if err := printRenderer.Ready(); err != nil {
+				return err
+			}
 			return renderer.Probe(probeCtx, readinessRenderRequest(runtime.PublicOrigin))
 		},
 	})
@@ -154,6 +179,7 @@ func run() error {
 			TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
 			Coordinator:    coordinator,
 			RecoveryPool:   pool,
+			PrintQueue:     printQueue,
 		},
 	)
 	agentRoutes, err := newAgentAccessRoutes(ctx, cfg, pool, queries, resumeService, sessionManager)
@@ -176,6 +202,13 @@ func run() error {
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
 
+	defer func() { _ = ln.Close() }()
+	printListener, err := lc.Listen(ctx, "tcp", cfg.PrintListenAddr)
+	if err != nil {
+		return errors.New("listen on private print address")
+	}
+	defer func() { _ = printListener.Close() }()
+
 	// The mail worker runs for the life of the server: SIGINT/SIGTERM cancels
 	// workerCtx (via ctx), and Run joins its in-flight sends before returning.
 	workerCtx, cancelWorker := context.WithCancel(ctx)
@@ -197,7 +230,7 @@ func run() error {
 	}()
 
 	logger.Info("starting", "env", cfg.Env)
-	err = serve(ctx, logger, ln, handler)
+	err = servePair(ctx, logger, ln, handler, printListener, printHandler, func() { _ = printQueue.Close() })
 	cancelWorker()
 	<-workerDone
 	<-listenerDone
@@ -410,11 +443,13 @@ func newMediaBackend(ctx context.Context, cfg config.Config) (media.Backend, err
 // can be exercised directly in tests without touching real OS signals or
 // binding a fixed port.
 func serve(ctx context.Context, logger *slog.Logger, ln net.Listener, handler http.Handler) error {
-	srv := &http.Server{
+	return serveHTTP(ctx, logger, ln, &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
-	}
+	})
+}
 
+func serveHTTP(ctx context.Context, logger *slog.Logger, ln net.Listener, srv *http.Server) error {
 	serveErr := make(chan error, 1)
 	go func() {
 		logger.Info("server starting", "addr", ln.Addr().String())

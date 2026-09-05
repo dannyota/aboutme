@@ -1,5 +1,5 @@
 # General Compose and self-hosting stack. Its current edge is HTTP-only, so it
-# is not the P9 UAT deployment. See deploy/README.md.
+# is not the Phase 10 UAT deployment. See deploy/README.md.
 #
 # Caddy fronts one origin and the route table in deploy/caddy/Caddyfile.
 #
@@ -35,8 +35,9 @@
 #     subnet with `edge`, so web is never a trusted proxy of the Go server.
 #   - media:    minio, media-init, server — private object storage is not
 #     reachable from Caddy, Nuxt, or Postgres and is never host-published.
-#   - render:   server, web — private Go-to-Nuxt render calls only. Go does
-#     not listen on this network and the subnet is never trusted or published.
+#   - render:   server, web — Go requests Nuxt pages/assets; Nuxt redeems
+#     one-use print capabilities on the private Go listener. This subnet is
+#     never trusted for client-IP headers or host-published.
 
 name: aboutme
 
@@ -160,6 +161,9 @@ services:
       - media
 
   server:
+    init: true
+    mem_limit: 512m
+    shm_size: 128m
     build:
       context: ..
       dockerfile: deploy/server.Dockerfile
@@ -189,6 +193,8 @@ services:
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:${CADDY_HTTP_PORT:-80}}
       MCP_ENABLED: ${MCP_ENABLED:-false}
       PUBLIC_RENDER_ORIGIN: http://web:3000
+      PRINT_LISTEN_ADDR: 10.91.0.2:8081
+      CHROMIUM_PATH: /opt/chromium/chrome
       APP_BUILD_DIGEST: ${APP_BUILD_DIGEST:?APP_BUILD_DIGEST is required}
       PUBLIC_RENDERER_BUILD_DIGEST: ${PUBLIC_RENDERER_BUILD_DIGEST:?PUBLIC_RENDERER_BUILD_DIGEST is required}
       ENV: dev
@@ -220,7 +226,8 @@ services:
       edge:
         ipv4_address: 10.90.0.2
       media: {}
-      render: {}
+      render:
+        ipv4_address: 10.91.0.2
 
   web:
     build:
@@ -232,6 +239,7 @@ services:
       HOST: "0.0.0.0"
       PORT: "3000"
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api/v1}
+      NUXT_PRINT_ORIGIN: http://10.91.0.2:8081
     # Kept in sync with web.Dockerfile's HEALTHCHECK: this compose-level
     # definition takes precedence over the image's, so both must agree.
     healthcheck:
@@ -289,8 +297,8 @@ networks:
   # minio, media-init, server — private object storage only. No edge or
   # frontend peer can reach it, and no media port is published to the host.
   media: {}
-  # server and web only. Internal and untrusted: Go calls Nuxt here, but Go
-  # binds only its fixed edge address and no render port is host-published.
+  # server and web only. Go requests Nuxt pages/assets; Nuxt calls the private
+  # Go redemption listener. No render port is host-published or trusted for IP.
   render:
     internal: true
     ipam:

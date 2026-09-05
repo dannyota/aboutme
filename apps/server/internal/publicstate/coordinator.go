@@ -28,6 +28,10 @@ const (
 	RepresentationHTML Representation = "html"
 	// RepresentationMarkdown is the public Markdown resume representation.
 	RepresentationMarkdown Representation = "markdown"
+	// RepresentationPDF is the download-gated public PDF representation.
+	RepresentationPDF Representation = "pdf"
+	// RepresentationPNG is the live-gated public share-image representation.
+	RepresentationPNG Representation = "png"
 	// RepresentationSitemap is the public sitemap representation.
 	RepresentationSitemap Representation = "sitemap"
 	// RepresentationRobots is the public robots.txt representation.

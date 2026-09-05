@@ -14,6 +14,8 @@ const (
 	publicRouteNone publicRoute = iota
 	publicRouteJSON
 	publicRoutePhoto
+	publicRoutePDF
+	publicRoutePNG
 	publicRouteHTML
 	publicRouteMarkdown
 	publicRouteSitemap
@@ -41,6 +43,10 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		s.json.ServeHTTP(w, request)
 	case publicRoutePhoto:
 		s.photo.ServeHTTP(w, request)
+	case publicRoutePDF:
+		s.pdf.ServeHTTP(w, request)
+	case publicRoutePNG:
+		s.png.ServeHTTP(w, request)
 	case publicRouteHTML:
 		s.html.ServeHTTP(w, request)
 	case publicRouteMarkdown:
@@ -74,6 +80,18 @@ func classifyPublicRoute(path string) publicRoute {
 	const prefix = "/api/v1/public/resumes/"
 	if strings.HasPrefix(path, prefix) {
 		rest := strings.TrimPrefix(path, prefix)
+		if strings.HasSuffix(rest, "/og.png") {
+			if validPublicSlug(strings.TrimSuffix(rest, "/og.png")) {
+				return publicRoutePNG
+			}
+			return publicRouteNone
+		}
+		if strings.HasSuffix(rest, "/pdf") {
+			if validPublicSlug(strings.TrimSuffix(rest, "/pdf")) {
+				return publicRoutePDF
+			}
+			return publicRouteNone
+		}
 		if strings.HasSuffix(rest, "/photo") {
 			if validPublicSlug(strings.TrimSuffix(rest, "/photo")) {
 				return publicRoutePhoto

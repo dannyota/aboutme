@@ -94,6 +94,11 @@ describe.skipIf(!hasApiGen)("generated API client wiring", () => {
 });
 
 describe("Phase 5A generated public contract", () => {
+  it("keeps optional public links constrained to string values", () => {
+    const alias = generatedClient.match(/PublicLink: ([^;\n]+);/u)?.[1];
+    expect(alias).toMatch(/^string(?: \| (?:string|""))*$/u);
+  });
+
   it("contains the publish request and closed public resume types", () => {
     expect(generatedClient).toContain("PublishResumeRequest:");
     expect(generatedClient).toContain("PublicResume:");

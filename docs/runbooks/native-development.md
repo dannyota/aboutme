@@ -11,6 +11,7 @@ container.
 | `20432` | Shared PostgreSQL container  |
 | `20080` | Browser origin through Caddy |
 | `20081` | Go server                    |
+| `20082` | Private print redemption     |
 | `20030` | Nuxt development server      |
 | `20091` | Authentication mail capture  |
 
@@ -23,11 +24,11 @@ ignored `.dev/` directory.
 
 Install the versions in [`.tool-versions`](../../.tool-versions), plus Podman,
 `curl`, `ss`, and `setsid`. Verify the native stack's tools and install web
-dependencies once:
+dependencies and the pinned Chromium once:
 
 ```sh
 make tools-check ARGS=dev
-(cd apps/web && npm ci)
+(cd apps/web && npm ci && npx playwright install chromium)
 ```
 
 Provider credentials are optional in development. Export them before startup if
@@ -75,8 +76,8 @@ development database.
 The development browser harness runs on a separate trusted stack at
 `https://localhost:20443` with a deterministic local Google account and a pinned
 headless Chromium: `make dev-https-auth-check`, `dev-https-transport-check`,
-`dev-https-editor-check`, `dev-https-public-check`, and
-`dev-https-password-check`. The native public HTTP capture is
+`dev-https-editor-check`, `dev-https-public-check`, `dev-https-password-check`,
+and `dev-https-exports-check`. The native public HTTP capture is
 `make p5a-native-http-check`. These are proof targets, not daily drivers; run
 them only when their surface changes. The password proof additionally seeds and
 cleans three deterministic accounts and reads authentication mail from the

@@ -36,6 +36,11 @@ assert.deepEqual(networkNames(services.server).sort(), ['db', 'edge', 'media', '
 assert.equal(services.server.networks.edge.ipv4_address, '10.90.0.2');
 assert.equal(services.server.environment.LISTEN_HOST, '10.90.0.2');
 assert.equal(services.server.environment.PUBLIC_RENDER_ORIGIN, 'http://web:3000');
+assert.equal(services.server.networks.render.ipv4_address, '10.91.0.2');
+assert.equal(services.server.environment.PRINT_LISTEN_ADDR, '10.91.0.2:8081');
+assert.equal(services.web.environment.NUXT_PRINT_ORIGIN, 'http://10.91.0.2:8081');
+assert.equal(services.server.mem_limit, '512m');
+assert.equal(services.server.init, true);
 assert.equal(services.server.environment.MCP_ENABLED, '${MCP_ENABLED:-false}');
 assert.match(services.server.environment.APP_BUILD_DIGEST, /^\$\{APP_BUILD_DIGEST:/);
 assert.match(

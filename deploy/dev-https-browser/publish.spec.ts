@@ -330,11 +330,15 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await page.getByLabel("Full name").fill("Publish proof resume");
     await page.getByLabel("Full name").press("Tab");
     await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page.getByRole("button", { name: "Structure" }).press("Enter");
+    await page
+      .getByRole("button", { name: "+ Add section", exact: true })
+      .press("Enter");
     await page.getByLabel("Section type").selectOption("work");
-    await page.locator('[data-action="create"]').press("Enter");
+    await page
+      .getByTestId("section-create-form")
+      .getByRole("button", { name: "Add section", exact: true })
+      .press("Enter");
     await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page.getByRole("button", { name: "Document" }).press("Enter");
     await page
       .getByRole("navigation", { name: "Resume outline" })
       .getByRole("button", { name: "Experience" })
