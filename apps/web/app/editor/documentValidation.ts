@@ -12,7 +12,23 @@ addFormats(ajv);
 // not run it — and thus does not trip a CSP violation — at module load.
 let validateSchema: ReturnType<typeof ajv.compile> | undefined;
 
+export class UnknownDocumentVersionError extends Error {
+  constructor() {
+    super('invalid current document');
+  }
+}
+
 export function parseCurrentDocument(value: unknown): Resume {
+  if (
+    typeof value === 'object'
+    && value !== null
+    && 'schemaVersion' in value
+    && typeof value.schemaVersion === 'number'
+    && Number.isInteger(value.schemaVersion)
+    && value.schemaVersion !== CURRENT_VERSION
+  ) {
+    throw new UnknownDocumentVersionError();
+  }
   validateSchema ??= ajv.compile(currentSchema);
   if (
     !validateSchema(value)

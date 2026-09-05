@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 30, active** (2026-09-05).
+Status: **Revision 31, active** (2026-09-05).
 
 The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -15,7 +15,7 @@ runs in AWS at `https://uat.aboutme.vn`, under
 Use OpenTofu for infrastructure and prefer managed AWS services. Phase 9
 compares their cost, workload fit, and operating effort before selecting sizes.
 Deployment code will live in a separate private `aboutme-infra` repository. This
-is future planning; the next implementation work is Phase 6, then 7 and 8.
+is future planning; the next implementation work is Phase 7, then Phase 8.
 
 A phase's plan lives in `phase-<number>/` while the phase is active. When the
 phase exits, its plan directory is deleted; git history keeps it. What the phase
@@ -43,30 +43,29 @@ password authentication, the native HTTPS development harness, and the v1 entry
 experience, including MCP agent access and the owner publish UX, the application
 UI toolkit, and the application visual identity.
 
-| Phase | Work                                                             | State                                                  |
-| ----- | ---------------------------------------------------------------- | ------------------------------------------------------ |
-| 6     | [Realtime: SSE transport, refetch, unpublish](phase-6/README.md) | In progress; local implementation and tests            |
-| 7     | Print worker, public PDF and images                              | Not started                                            |
-| 8     | Privacy lifecycle                                                | Not started                                            |
-| 9     | [AWS Singapore cost research](phase-9/README.md)                 | Planned; research not run                              |
-| 10    | [Infrastructure and AWS UAT](phase-10/README.md)                 | Planned; UAT scope authorized; no deployment performed |
-| 11    | Production promotion                                             | After Phase 10 and separate launch approval            |
-| 12    | Flutter app                                                      | Deferred beyond web v1                                 |
+| Phase | Work                                                                   | State                                                  |
+| ----- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
+| 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                       |
+| 7     | Print worker, public PDF and images                                    | Not started                                            |
+| 8     | Privacy lifecycle                                                      | Not started                                            |
+| 9     | [AWS Singapore cost research](phase-9/README.md)                       | Planned; research not run                              |
+| 10    | [Infrastructure and AWS UAT](phase-10/README.md)                       | Planned; UAT scope authorized; no deployment performed |
+| 11    | Production promotion                                                   | After Phase 10 and separate launch approval            |
+| 12    | Flutter app                                                            | Deferred beyond web v1                                 |
 
 Active phases and tasks use numbers, such as Phase 7 and task 7.1. Completed
 lettered identifiers remain historical evidence and are not reassigned.
 
 ## Delivery order
 
-1. Phase 6: task 6.1 SSE transport, then 6.2 refetch and unpublish.
-2. Phase 7: task 7.1 owner print worker, then 7.2 public PDF and images; Phase 8
+1. Phase 7: task 7.1 owner print worker, then 7.2 public PDF and images; Phase 8
    privacy lifecycle.
-3. Phase 9 cost research using the completed runtime's resource measurements.
+2. Phase 9 cost research using the completed runtime's resource measurements.
    Read-only pricing research may start earlier; final sizing uses those
    results.
-4. Phase 10: refresh infrastructure contracts from Phase 9, build and check them
+3. Phase 10: refresh infrastructure contracts from Phase 9, build and check them
    locally, deploy AWS UAT, then run complete workflows and operational drills.
-5. Phase 11 production promotion after its legal and launch gates.
+4. Phase 11 production promotion after its legal and launch gates.
 
 Security controls are delivered inside every route-owning phase and verified end
 to end in Phase 10. The Go sanitizer runs on every write and on the public read

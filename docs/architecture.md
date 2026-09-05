@@ -1,7 +1,7 @@
 # Current-state architecture
 
 This document describes the current integration candidate, verified on
-2026-09-03. The [design](design/README.md) owns intended behavior.
+2026-09-05. The [design](design/README.md) owns intended behavior.
 
 ## Running system
 
@@ -39,8 +39,10 @@ the host trust store or use a certificate bypass.
 The Compose deployment has four long-lived containers plus a one-shot migration
 container. PostgreSQL is not published to the host. Caddy is the only published
 service. The current Compose Caddyfile serves HTTP; this is suitable for
-deployment smoke checks but does not yet satisfy the local UAT contract of an
-HTTPS origin on port 443.
+deployment smoke checks. Complete hosted UAT is planned for Phase 10 at
+`https://uat.aboutme.vn` after Phase 9 AWS cost research; see
+[ADR 0031](adr/0031-aws-cost-research-and-hosted-uat.md). No AWS application
+deployment is claimed by these local checks.
 
 ## Implemented HTTP surface
 
@@ -69,6 +71,8 @@ includes:
 - owner-only publish, unpublish, rename, and slug delete, with public JSON,
   photo, HTML, Markdown, sitemap, robots, and llms.txt reads gated by publish
   state, SEO/GEO, and download flags;
+- owner and anonymous public Server-Sent Events (SSE) carrying revision
+  metadata;
 - JSON envelopes, request IDs, body bounds, security and cache headers,
   trusted-proxy client-IP handling, and rate limiting.
 
@@ -273,15 +277,29 @@ exact resume and signs out on success, and its `finally` path attempts the same
 exact cleanup after a failed assertion. Connected agents still have no publish,
 unpublish, or public-read tool.
 
+## Implemented realtime
+
+One pooled PostgreSQL LISTEN connection fans committed resume notifications into
+an in-process hub. Owner streams recheck sessions; public streams expose only
+revision metadata and hold a revocable lease. Unpublish, rename, and delete wait
+for the public writer to close before returning. Listener loss closes streams
+and rejects new admission until LISTEN recovers.
+
+Browsers refetch on every connection, reconnect, and newer revision. Repeated
+errors or silence activate conditional polling. Editor refresh reconciles with
+pending work; public refresh updates the mounted view and preserves scroll.
+Session loss stops owner retries, and browser Back restoration restarts public
+updates. See the [realtime runbook](runbooks/realtime.md) for bounds and local
+measurement evidence.
+
 ## Known delivery gaps
 
-- The current Compose route serves HTTP. Local UAT requires the complete
-  image-based deployment at an HTTPS origin on port 443 with isolated data and
-  services. The native 20443 authentication harness supports development but
-  does not close this gap.
+- Complete product UAT and live operational evidence remain planned for Phase 10
+  at `https://uat.aboutme.vn` in AWS Singapore. Native HTTPS checks support
+  development; the missing release evidence is hosted UAT, not a local port-443
+  deployment.
 
 ## Not implemented
 
-Server-Sent Events, production PDF and image rendering, privacy workers,
-production infrastructure, staging, production deployment, and Flutter remain
-planned.
+Production PDF and image rendering, privacy workers, production infrastructure,
+staging, production deployment, and Flutter remain planned.

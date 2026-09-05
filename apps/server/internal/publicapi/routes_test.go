@@ -1,10 +1,24 @@
 package publicapi
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 )
+
+func TestPublicLiveMissingHandlerUsesStreamErrorContract(t *testing.T) {
+	t.Parallel()
+
+	routes := &Service{}
+	response := httptest.NewRecorder()
+	routes.ServeHTTP(response, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/live/ada-lovelace", nil))
+	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Cache-Control") != "no-store, no-transform" || response.Header().Get("Retry-After") != "5" {
+		t.Fatalf("missing live handler response = %d %#v", response.Code, response.Header())
+	}
+}
 
 func TestPublicRoutesRecognizesOnlyCaddyPublicPaths(t *testing.T) {
 	t.Parallel()
@@ -15,6 +29,8 @@ func TestPublicRoutesRecognizesOnlyCaddyPublicPaths(t *testing.T) {
 		want bool
 	}{
 		{"/api/v1/public/resumes/ada-lovelace", true},
+		{"/api/v1/live/ada-lovelace", true},
+		{"/api/v1/live/%61da-lovelace", true},
 		{"/api/v1/public/resumes/ada-lovelace/photo", true},
 		{"/ada-lovelace", true},
 		{"/ada-lovelace.md", true},

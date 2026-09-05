@@ -1909,6 +1909,23 @@ func (q *Queries) GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDisc
 	return i, err
 }
 
+const getPublicRealtimeResume = `-- name: GetPublicRealtimeResume :one
+SELECT id, revision FROM resumes
+WHERE slug = $1::text AND live = true
+`
+
+type GetPublicRealtimeResumeRow struct {
+	ID       uuid.UUID
+	Revision int64
+}
+
+func (q *Queries) GetPublicRealtimeResume(ctx context.Context, slug string) (GetPublicRealtimeResumeRow, error) {
+	row := q.db.QueryRow(ctx, getPublicRealtimeResume, slug)
+	var i GetPublicRealtimeResumeRow
+	err := row.Scan(&i.ID, &i.Revision)
+	return i, err
+}
+
 const getPublicResumeByOwner = `-- name: GetPublicResumeByOwner :one
 SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes
 WHERE user_id = $1::uuid

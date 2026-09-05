@@ -501,6 +501,10 @@ RETURNING discovery_generation;
 SELECT * FROM resumes
 WHERE slug = sqlc.arg(slug)::text AND live = true;
 
+-- name: GetPublicRealtimeResume :one
+SELECT id, revision FROM resumes
+WHERE slug = sqlc.arg(slug)::text AND live = true;
+
 -- name: GetPublicResumeByOwner :one
 SELECT * FROM resumes
 WHERE user_id = sqlc.arg(user_id)::uuid

@@ -31,6 +31,8 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
+	"github.com/dannyota/aboutme/apps/server/internal/realtime"
+	"github.com/dannyota/aboutme/apps/server/internal/realtimeapi"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
@@ -113,9 +115,23 @@ func run() error {
 		return fmt.Errorf("create public cache: %w", err)
 	}
 	renderer := directrender.New(runtime.RenderOrigin, nil)
+	sessionManager := auth.NewSessionManagerWithPool(pool)
+	hub, err := realtime.NewHub(realtime.Config{})
+	if err != nil {
+		return fmt.Errorf("create realtime hub: %w", err)
+	}
+	defer hub.Close()
+	streams, err := realtimeapi.New(realtimeapi.Dependencies{
+		Hub: hub, Store: queries, Sessions: sessionManager, Coordinator: coordinator,
+		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
+	})
+	if err != nil {
+		return fmt.Errorf("create realtime service: %w", err)
+	}
 	publicService, err := publicapi.NewService(publicapi.ServiceDependencies{
 		Reader: reader, DiscoveryStore: queries, Coordinator: coordinator, Cache: cache, Renderer: renderer,
 		PublicOrigin: runtime.PublicOrigin, AppDigest: runtime.AppDigest, RendererDigest: runtime.RendererDigest,
+		Live: streams.PublicHandler(),
 	})
 	if err != nil {
 		return fmt.Errorf("create public service: %w", err)
@@ -126,7 +142,6 @@ func run() error {
 			return renderer.Probe(probeCtx, readinessRenderRequest(runtime.PublicOrigin))
 		},
 	})
-	sessionManager := auth.NewSessionManagerWithPool(pool)
 	resumeService := resumeapi.New(
 		resume.NewStore(pool, projector),
 		resume.NewIdempotencyStore(pool),
@@ -152,7 +167,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, capabilitiesRegistrar(cfg))
+	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -166,6 +181,13 @@ func run() error {
 	workerCtx, cancelWorker := context.WithCancel(ctx)
 	defer cancelWorker()
 	workerDone := make(chan struct{})
+	listenerDone := make(chan struct{})
+	go func() {
+		defer close(listenerDone)
+		if listenErr := realtime.RunListener(workerCtx, pool, hub); listenErr != nil {
+			logger.Error("realtime listener stopped unexpectedly")
+		}
+	}()
 	go func() {
 		defer close(workerDone)
 		if runErr := passwordAuth.worker.Run(workerCtx); runErr != nil {
@@ -178,6 +200,7 @@ func run() error {
 	err = serve(ctx, logger, ln, handler)
 	cancelWorker()
 	<-workerDone
+	<-listenerDone
 	return err
 }
 

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 )
 
@@ -18,6 +19,7 @@ const (
 	publicRouteSitemap
 	publicRouteRobots
 	publicRouteLLMS
+	publicRouteLive
 )
 
 // Recognizes reports whether escapedPath belongs to a public route.
@@ -27,6 +29,14 @@ func (s *Service) Recognizes(escapedPath string) bool {
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	switch classifyPublicRoute(request.URL.EscapedPath()) {
+	case publicRouteLive:
+		if s.live == nil {
+			w.Header().Set("Cache-Control", "no-store, no-transform")
+			w.Header().Set("Retry-After", "5")
+			api.WriteError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "service temporarily unavailable")
+			return
+		}
+		s.live.ServeHTTP(w, request)
 	case publicRouteJSON:
 		s.json.ServeHTTP(w, request)
 	case publicRoutePhoto:
@@ -47,6 +57,9 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 }
 
 func classifyPublicRoute(path string) publicRoute {
+	if strings.HasPrefix(path, "/api/v1/live/") {
+		return publicRouteLive
+	}
 	switch path {
 	case "/sitemap.xml":
 		return publicRouteSitemap
@@ -94,24 +107,5 @@ func publicSlug(path string) string {
 }
 
 func validPublicSlug(slug string) bool {
-	if len(slug) < 4 || len(slug) > 30 || publicroots.Reserved(slug) || slug[0] == '-' || slug[len(slug)-1] == '-' {
-		return false
-	}
-	previousHyphen := false
-	for i := range slug {
-		letter := slug[i] >= 'a' && slug[i] <= 'z'
-		digit := slug[i] >= '0' && slug[i] <= '9'
-		if slug[i] == '-' {
-			if previousHyphen {
-				return false
-			}
-			previousHyphen = true
-			continue
-		}
-		if !letter && !digit {
-			return false
-		}
-		previousHyphen = false
-	}
-	return true
+	return publicroots.ValidSlug(slug)
 }

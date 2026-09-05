@@ -40,3 +40,29 @@ fence before returning success. An open JavaScript client still converges
 through its uncached refetch; a crawler or no-JavaScript visitor gets the same
 immediate live-state decision without SSE.
 [ADR 0022](../adr/0022-public-artifact-revocation.md) owns that boundary.
+
+## Stream contract
+
+The [OpenAPI contract](../api/openapi.yaml) defines `GET /events` for the
+signed-in account and anonymous `GET /live/{slug}`. Revision frames carry
+version 1 and a decimal-string revision. Owner frames also carry the resume ID
+and deletion flag. Public frames contain neither account IDs nor private resume
+IDs. Heartbeat frames carry only version 1 and flush immediately on admission.
+
+Three consecutive transport errors or 60 seconds without a delivered frame
+enable conditional polling every 30 seconds. A delivered heartbeat restores the
+streaming path. Refetches coalesce and preserve one follow-up when an event
+arrives during an active read. Failed reads remain retryable; receiving an event
+does not prove its revision was adopted.
+
+A transaction trigger publishes insert, update, and delete metadata. One LISTEN
+connection uses the existing pool budget. Listener loss closes subscriptions;
+admission resumes after LISTEN succeeds. Each stream queues at most eight
+events, then disconnects instead of silently dropping invalidations. Caps are
+2,000 per task, 100 per canonical client IP, and 20 per authenticated account.
+Unused admission keys are removed when their last connection closes.
+
+Owner streams recheck session validity before every revision and heartbeat.
+Public streams hold a metadata-only lease for their lifetime. Writes have a
+two-second deadline, cleared after each flush, so idle streams remain open and a
+slow writer cannot exceed the five-second public revocation drain.

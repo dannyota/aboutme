@@ -315,6 +315,8 @@ apps/web/app/pages/reset-password.vue
 apps/web/app/pages/verify-email.vue
 apps/web/app/public-roots.generated.ts
 apps/web/app/public/public-resume.client.ts
+apps/web/app/realtime/controller.ts
+apps/web/app/realtime/owner.ts
 apps/web/app/stores/resumes.ts
 apps/web/app/utils/csp.ts
 apps/web/app/utils/fontCatalog.ts

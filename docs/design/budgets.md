@@ -14,9 +14,13 @@ the gate; changing a number requires a reviewed change with evidence.
 | Render queue depth                        | ≤ 8, then 503 + readiness unhealthy                 | Print worker (planned)                                |
 | Whole server task memory (Go + Chromium)  | ≤ 512 MiB cgroup                                    | Print worker (planned); staging benchmark             |
 | pgx pool size                             | ≤ 20, below Postgres max_connections                | Server pool configuration                             |
-| SSE concurrent connections per task       | ≤ 2000                                              | SSE transport (planned); stress test                  |
-| SSE file descriptors headroom             | ≥ 25% below ulimit                                  | SSE transport (planned); stress test                  |
-| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)                    | SSE transport (planned); staging benchmark            |
+| SSE concurrent connections per task       | ≤ 2000                                              | SSE transport; local churn measurement                |
+| SSE file descriptors headroom             | ≥ 25% below ulimit                                  | SSE transport; local churn measurement                |
+| SSE concurrent connections per client IP  | ≤ 100                                               | SSE admission                                         |
+| SSE concurrent connections per account    | ≤ 20                                                | SSE admission                                         |
+| SSE queued notifications per connection   | ≤ 8, then disconnect                                | Local hub                                             |
+| SSE write deadline                        | ≤ 2 s per flush                                     | SSE writer                                            |
+| SSE heartbeat interval                    | 25 s (< CloudFront idle timeout)                    | SSE transport; hosted edge check in Phase 10          |
 | Request body                              | ≤ 256 KB                                            | API middleware                                        |
 | Global API requests per client IP         | ≤ 300/min                                           | API middleware                                        |
 | In-memory rate-limiter keys per instance  | ≤ 10,000                                            | Every rate-limiter instance                           |
@@ -231,6 +235,17 @@ the photo-route precedent. The decoded image is still bounded by the unchanged
 media limits. All rate policies compose the ADR 0018 bounded limiter, share its
 10,000-key store, and key on the canonical Caddy client address, token, user, or
 client as stated.
+
+**Realtime admission rows.** Twenty owner connections allow several editor tabs
+without letting one account exhaust the task. The larger 100-connection IP cap
+supports shared networks. Both are lower than the unchanged 2,000 task ceiling;
+keys disappear when the last subscriber leaves. Eight queued metadata events
+bound a slow consumer independently of document size. Overflow disconnects it so
+the next unconditional read repairs the missed changes. A two-second write
+deadline stays within the five-second revocation drain and is cleared after
+flush, preserving quiet connections. A process FD probe rejects admission when
+25% headroom cannot be established. Phase 6 tests these bounds under churn;
+Phase 10 repeats resource measurements on the selected AWS runtime.
 
 ## Benchmark protocol
 

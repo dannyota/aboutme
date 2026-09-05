@@ -802,7 +802,7 @@ JSON
   "origin": "https://localhost:20443",
   "scenario": "native-https-publish",
   "schemaVersion": 1,
-  "steps": {"auth": true, "complete": true, "published": true, "saveFirst": true, "headers": true, "noindex": true, "discovery": true, "unpublish": true, "revocation": true, "cleanup": true, "signOut": true, "accessibility": true, "keyboard": true, "longInvalidLayout": true},
+  "steps": {"auth": true, "complete": true, "published": true, "saveFirst": true, "headers": true, "noindex": true, "discovery": true, "unpublish": true, "revocation": true, "cleanup": true, "signOut": true, "accessibility": true, "keyboard": true, "longInvalidLayout": true, "publicRealtime": true, "ownerRealtime": true, "scroll": true},
   "statuses": {"publish": 200, "publicPrivate": 200, "publicDiscoverable": 200, "unpublish": 200, "revoked": 404},
   "elapsedMs": {"revocation": 1},
   "headers": {"publishContentType": true, "publishCSRF": true, "publishIfMatch": true, "publishIdempotency": true, "publishSchema": true, "unpublishContentType": true, "unpublishCSRF": true, "unpublishIfMatch": true, "unpublishIdempotency": true, "unpublishSchema": true}

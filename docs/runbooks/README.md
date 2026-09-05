@@ -3,10 +3,12 @@
 Runbooks contain exact commands, checks, stop conditions, and cleanup for
 operations the repository supports now.
 
-| Runbook                                     | State                  | Purpose                                                  |
-| ------------------------------------------- | ---------------------- | -------------------------------------------------------- |
-| [Native development](native-development.md) | Runnable               | Start, inspect, and stop the daily local stack           |
-| [Local UAT](local-uat.md)                   | Blocked for acceptance | Smoke-check Compose and state the missing HTTPS/443 gate |
+| Runbook                                     | State       | Purpose                                                |
+| ------------------------------------------- | ----------- | ------------------------------------------------------ |
+| [Native development](native-development.md) | Runnable    | Start, inspect, and stop the daily local stack         |
+| [Local HTTPS checks](local-uat.md)          | Runnable    | Verify native features before hosted Phase 10 UAT      |
+| [Realtime](realtime.md)                     | Runnable    | Check stream bounds, recovery, refresh, and revocation |
+| [Authentication email](email.md)            | SES sandbox | Verify and operate Google Workspace and AWS SES        |
 
 Cloud deploy, rollback, restore, EIP recovery, and secret rotation procedures
 will be written when their infrastructure exists. Planned behavior belongs in

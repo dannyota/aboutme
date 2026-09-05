@@ -129,7 +129,23 @@ export type ResumeReadResult
     | {
       readonly kind: 'failed';
       readonly reason: 'network' | 'response-invalid';
-    };
+    }
+    | { readonly kind: 'unknown-version' };
+
+export type ResumeConditionalReadResult
+  = | {
+    readonly kind: 'complete';
+    readonly accepted: AcceptedResume;
+    readonly etag: ParentETag;
+  }
+  | { readonly kind: 'not-modified'; readonly etag: ParentETag }
+  | Extract<ResumeReadResult, { kind: 'unavailable' | 'session-lost' }>
+  | { readonly kind: 'rate-limited'; readonly retryAfterMs: number | null }
+  | {
+    readonly kind: 'failed';
+    readonly reason: 'network' | 'response-invalid';
+  }
+  | { readonly kind: 'unknown-version' };
 
 export type ObjectETag = string & { readonly __objectETag: unique symbol };
 
