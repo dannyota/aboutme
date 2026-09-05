@@ -1,4 +1,4 @@
-# Task 11: DNS + certificate glue — `cf` apply script from Terraform outputs
+# Task 10.11: DNS + certificate glue — `cf` apply script from OpenTofu outputs
 
 **Files:** `deploy/aws/scripts/dns-apply.sh`, `.env.example` diff
 (`CLOUDFLARE_API_TOKEN=` name-only; token scope Zone:DNS:Edit on `aboutme.vn`
@@ -7,18 +7,18 @@ only — D13) for the integration owner (owner-serialized).
 **Steps:**
 
 - [ ] Failing-first: script test harness (pure-bash, no network) feeding a
-      fixture `terraform output -json` document and asserting the rendered `cf`
-      commands for: `origin-staging` A → EIP (grey-cloud/DNS-only), ACM
-      validation CNAMEs, `staging` CNAME/alias → CloudFront domain. Production
-      names render from the same code path with production outputs (parity).
+      fixture `tofu output -json` document and asserting the rendered `cf`
+      commands for: `origin-uat` A → EIP (grey-cloud/DNS-only), ACM validation
+      CNAMEs, `uat` CNAME/alias → CloudFront domain. Production names render
+      from the same code path with production outputs (parity).
 - [ ] Implement with `--check` (diff live DNS vs outputs, exit nonzero on drift
-      — this becomes a P9A/P10 pre-flight) and two apply stages; `cf` CLI v0.5+
-      per D19; never a Cloudflare Terraform provider. `--apply-foundation`
-      writes only the DNS-only origin A record and ACM validation CNAMEs.
-      `--apply-aliases` writes apex/staging and canonical redirect aliases only
-      after Terraform outputs a deployed distribution domain. Grey-cloud is
-      enforced on every record.
-- [ ] Document and test the two Terraform stages in the script header. The
+      — this becomes a Phase 10 operational rehearsal/Phase 11 pre-flight) and
+      two apply stages; `cf` CLI v0.5+ per D19; never a Cloudflare provider.
+      `--apply-foundation` writes only the DNS-only origin A record and ACM
+      validation CNAMEs. `--apply-aliases` writes UAT and canonical redirect
+      aliases only after OpenTofu outputs a deployed distribution domain.
+      Grey-cloud is enforced on every record.
+- [ ] Document and test the two OpenTofu stages in the script header. The
       foundation saved plan has `services_enabled=false` and
       `distribution_enabled=false`, but creates the EIP, persistent data plane,
       and ACM certificate and outputs validation records. Apply it, run
@@ -29,4 +29,4 @@ only — D13) for the integration owner (owner-serialized).
       14 and the production promotion use this same staged contract.
 
 **Verification:** script harness green in CI (no network); shellcheck.
-Real-AWS/Cloudflare execution happens in Task 14 (stated).
+Real-AWS/Cloudflare execution happens in Task 10.15 (stated).

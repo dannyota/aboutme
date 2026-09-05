@@ -1,9 +1,10 @@
-# Task 10: Scheduled jobs, restore verification, TLS, and drift
+# Task 10.10: Scheduled jobs, restore verification, TLS, and drift
 
 AC-INF-006; drift-detector half of D6.
 
-**Tier:** High risk. This task owns retention authority, IAM, database restore
-isolation, and overlap handling.
+**Task gate:** One author writes the failing checks first and runs the affected
+checks. The fresh Phase 10 review covers retention authority, IAM, database
+restore isolation, and overlap handling.
 
 **Files:** `deploy/aws/modules/jobs/**` (+ tests),
 `deploy/aws/scripts/{restore-verify,cidr-drift-check,tls-expiry-check}.sh`,
@@ -11,8 +12,8 @@ script tests, and `docs/runbooks/restore-drill.md` seed.
 
 ## Schedule contract
 
-Task 10 dispatches only after P8 privacy has shipped and its exact server CLI is
-available. The module pins these enabled schedules at activation:
+Task 10.10 dispatches only after Phase 8 privacy has shipped and its exact
+server CLI is available. The module pins these enabled schedules at activation:
 
 | Job                   | Command                    | Cadence   | Lock and heartbeat                                                      |
 | --------------------- | -------------------------- | --------- | ----------------------------------------------------------------------- |
@@ -26,7 +27,7 @@ available. The module pins these enabled schedules at activation:
 The first three use the server image and its task role. The other three use the
 ops image and the job task role. Flexible windows are off and Scheduler retry
 attempts are zero: a missed or failed run must alarm, not hide behind retries.
-Local Terraform authoring may use services disabled, but Task 14 cannot close
+Local OpenTofu authoring may use services disabled, but Task 10.15 cannot close
 until all six schedules are enabled and their task commands resolve in the
 candidate images.
 
@@ -65,7 +66,7 @@ candidate images.
       stale- debris path cannot delete the winner.
 - [ ] `cidr-drift-check.sh`: compare set equality between the live
       `com.amazonaws.global.cloudfront.origin-facing` entries and the injected
-      Terraform baseline, emit heartbeat on equality, drift plus nonzero exit on
+      OpenTofu baseline, emit heartbeat on equality, drift plus nonzero exit on
       mismatch. It never calls SSM.
 - [ ] `tls-expiry-check.sh`: connect to `127.0.0.1:443` with SNI and hostname
       equal to the configured origin FQDN, five-second connect/read limits,
@@ -74,10 +75,10 @@ candidate images.
 - [ ] Every script supports `--plan`, is shellcheck-clean, and has deterministic
       fake-command tests for arguments, timeouts, exit paths, metrics, overlap,
       cleanup ownership, and secret-free stdout/stderr. Seed
-      `docs/runbooks/restore-drill.md` with manual P9A timing and stale-target
-      adjudication.
+      `docs/runbooks/restore-drill.md` with manual Phase 10 operational
+      rehearsal timing and stale-target adjudication.
 
-**Verification:** `terraform test`, `terraform validate`, shellcheck, script
-tests, parity, and docs gates. Real restore timing remains P9A AC-OPS-018; Task
-14 proves the enabled schedules, task definitions, roles, and heartbeat sources
-resolve.
+**Verification:** `tofu test`, `tofu validate`, shellcheck, script tests,
+parity, and docs gates. Real restore timing remains Phase 10 operational
+rehearsal AC-OPS-018; Task 14 proves the enabled schedules, task definitions,
+roles, and heartbeat sources resolve.

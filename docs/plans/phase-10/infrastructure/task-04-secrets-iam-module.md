@@ -1,4 +1,4 @@
-# Task 4: Secrets & IAM module — SSM contract, scoped roles, bootstrap script
+# Task 10.4: Secrets & IAM module — SSM contract, scoped roles, bootstrap script
 
 AC-INF-004.
 
@@ -7,9 +7,9 @@ AC-INF-004.
 seed, `.env.example` diff (names only) for the integration owner
 (owner-serialized — see "Shared-file serialization").
 
-Task 3 supplies the private media bucket ARN and the fixed `resumes/` prefix.
-Per [ADR 0019](../../adr/0019-private-media-delivery.md), object existence never
-grants read access and CloudFront has no media permission.
+Task 10.3 supplies the private media bucket ARN and the fixed `resumes/` prefix.
+Per [ADR 0019](../../../adr/0019-private-media-delivery.md), object existence
+never grants read access and CloudFront has no media permission.
 
 **SSM name contract (module-exported as outputs, single source):**
 
@@ -22,12 +22,12 @@ grants read access and CloudFront has no media permission.
 /aboutme/<env>/edge/origin-secret-next
 /aboutme/<env>/edge/cloudflare-api-token  (caddy task secret, DNS-01 — Zone:DNS:Edit on aboutme.vn ONLY, D13)
 /aboutme/<env>/edge/staging-gate-sha256   (SHA-256 of the exact Basic Authorization value; unused when disabled)
-/aboutme/<env>/edge/cloudfront-origin-cidrs (PLAIN String, Terraform-written — drift baseline, D6; not a secret)
+/aboutme/<env>/edge/cloudfront-origin-cidrs (PLAIN String, OpenTofu-written — drift baseline, D6; not a secret)
 ```
 
 **Steps:**
 
-- [ ] Failing `terraform test` (mocked) first: SSM/KMS permissions used by ECS
+- [ ] Failing `tofu test` (mocked) first: SSM/KMS permissions used by ECS
       `secrets`/`valueFrom` exist only on task **execution roles**. The server
       execution role reads exactly `/aboutme/<env>/db/app-password` and
       `/aboutme/<env>/db/migrator-password`, because the task contains separate
@@ -54,9 +54,9 @@ grants read access and CloudFront has no media permission.
   role, so it needs no broader role.
 
 - [ ] The server task role may call `cloudfront:CreateInvalidation` only on the
-      Task 6 distribution ARN. No other task or CI role receives that action.
+      Task 10.6 distribution ARN. No other task or CI role receives that action.
       The exact-policy tests reject wildcard distributions and neighbouring
-      principals. Task 5 injects the matching distribution ID, and the P5A
+      principals. Task 10.5 injects the matching distribution ID, and the P5A
       publish owner supplies bounded coalescing/retry behavior.
 
 - [ ] Compare every role trust policy, not only attached permissions. ECS
@@ -66,7 +66,7 @@ grants read access and CloudFront has no media permission.
       conditions. Do not invent a cluster-specific ECS source ARN that AWS does
       not support.
 
-- [ ] Freeze the database-principal contract consumed by Task 8's bootstrap
+- [ ] Freeze the database-principal contract consumed by Task 10.8's bootstrap
       script: `aboutme_migrator` owns the application schema and may run goose
       DDL; `aboutme_app` receives only the exact runtime connect/schema/DML/
       sequence privileges, including default privileges for future migrator-
@@ -76,15 +76,15 @@ grants read access and CloudFront has no media permission.
       migrator environment variable nor can read its SSM name.
 
 - [ ] Implement roles and consume the persistent per-environment secrets-key ARN
-      from Task 1. Secret-valued parameters are **not** Terraform resources and
-      are **not** data-sourced at plan time for mere existence (a plan-time read
-      would pull values into state — the contradiction the round-1 review
-      flagged): existence is verified exclusively by
-      `secrets-bootstrap.sh --check`, and a value is read by Terraform only
-      where it is actually consumed — ephemerally for `password_wo` (D10), and
-      as a regular `sensitive` data source solely for the CloudFront custom
-      header (D9's documented exception). The drift-baseline parameter is
-      non-secret and IS a Terraform resource.
+      from Task 10.1. Secret-valued parameters are **not** OpenTofu resources
+      and are **not** data-sourced at plan time for mere existence (a plan-time
+      read would pull values into state — the contradiction identified in the
+      earlier baseline): existence is verified exclusively by
+      `secrets-bootstrap.sh --check`, and a value is read by OpenTofu only where
+      it is actually consumed — ephemerally for `password_wo` (D10), and as a
+      regular `sensitive` data source solely for the CloudFront custom header
+      (D9's documented exception). The drift-baseline parameter is non-secret
+      and IS an OpenTofu resource.
 - [ ] `secrets-bootstrap.sh`: prompts/reads values (never echoes), writes
       SecureStrings idempotently (`--overwrite` only with an explicit flag),
       generates high-entropy origin secrets (`openssl rand -base64 32`). It
@@ -98,10 +98,10 @@ grants read access and CloudFront has no media permission.
       (origin secret current/next promotion; DB master rotation =
       bootstrap-write + bump `db_master_password_version`; app-password
       rotation; **note that the state bucket's noncurrent-version expiration
-      (D2) is what ages rotated values out of old state versions**; the P9A
-      drill hook — AC-OPS-016). Docs gates green.
+      (D2) is what ages rotated values out of old state versions**; the Phase 10
+      operational rehearsal drill hook — AC-OPS-016). Docs gates green.
 
-**Verification:** `terraform test`, `validate`, shellcheck, parity, docs gates.
-The IAM tests compare the media action, resource, principal, and prefix sets
-exactly. After authorization and Task 1's bootstrap apply, the real-AWS
-bootstrap-write and `--check` complete before Task 14 starts.
+**Verification:** `tofu test`, `validate`, shellcheck, parity, docs gates. The
+IAM tests compare the media action, resource, principal, and prefix sets
+exactly. After authorization and Task 10.1's bootstrap apply, the real-AWS
+bootstrap-write and `--check` complete before Task 10.15 starts.

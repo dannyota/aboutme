@@ -1,8 +1,10 @@
-# Task 6: Edge module — CloudFront behavior matrix, ORPs, HSTS, staging gate, ACM
+# Task 10.6: Edge module — CloudFront behavior matrix, ORPs, HSTS, UAT gate, ACM
 
-AC-INF-002; AC-INF-007/008 (the D25 gate + noindex, PI-attributed rows).
+AC-INF-002; AC-INF-007/008 (the D25 gate + noindex, Phase 10
+infrastructure-attributed rows).
 
-**Tier:** High risk. This task owns viewer authentication, canonical-origin
+**Task gate:** One author writes the failing checks first and runs the affected
+checks. The fresh Phase 10 review covers viewer access, canonical-origin
 redirects, cache invalidation, and the CloudFront-to-origin trust path.
 
 **Files:** `deploy/aws/modules/edge/**` (incl. the viewer-gate CloudFront
@@ -10,25 +12,30 @@ Function code, D25) (+ tests), env-root wiring (aliased `us-east-1` provider
 passed from the roots).
 
 The behavior matrix, reconciled with the
-[deployment design](../../design/deployment.md#cloudfront-behavior) and
-[ADR 0019](../../adr/0019-private-media-delivery.md), has Caddy origins only.
+[deployment design](../../../design/deployment.md#cloudfront-behavior) and
+[ADR 0019](../../../adr/0019-private-media-delivery.md), has Caddy origins only.
 There is no S3 origin, OAC, or `/assets/*` behavior. Public and owner photo
 requests reach Go through the applicable API behavior.
+
+The D25 access behavior below is a proposed baseline only. Phase 9 and the
+pre-dispatch refresh must resolve the UAT access mechanism and its interaction
+with Basic Authorization before this task is dispatched; this task does not
+choose that mechanism silently.
 
 The matrix includes the **origin-request-policy (ORP) column**, because
 cookie/header/query forwarding is governed by the ORP, not the cache policy
 (with CachingDisabled and no ORP, `/api/v1/*` would forward **no** cookies and
-authenticated traffic would break — review blocking 7). Two custom ORPs are
-defined in this module. `orp-no-cookie`: all query strings, zero cookies, header
-allowlist including `Accept`, `Content-Type`, and `Last-Event-ID` (SSE resume).
-`orp-auth-api` (Rev 3, replaces managed AllViewerExceptHostHeader): all cookies,
-all query strings, and viewer headers forwarded **except `Host`, `X-Real-IP`,
-and `Forwarded`**. Removing viewer `Host` makes CloudFront send the
+authenticated traffic would break — a header-forwarding hazard). Two custom ORPs
+are defined in this module. `orp-no-cookie`: all query strings, zero cookies,
+header allowlist including `Accept`, `Content-Type`, and `Last-Event-ID` (SSE
+resume). `orp-auth-api` (Rev 3, replaces managed AllViewerExceptHostHeader): all
+cookies, all query strings, and viewer headers forwarded **except `Host`,
+`X-Real-IP`, and `Forwarded`**. Removing viewer `Host` makes CloudFront send the
 origin-domain host that Caddy's production site block expects. CloudFront
 overwrites a viewer header that has the same name as a configured custom origin
 header, so a viewer `X-Origin-Secret` becomes exactly the configured value. The
 ORP must not also name that custom header. The trust-header exclusions are
-pinned by `terraform test`, and Task 14 proves the `allExcept` policy applies
+pinned by `tofu test`, and Task 10.15 proves the `allExcept` policy applies
 successfully. This table is the review artifact — any deviation is a design
 question, not an implementation choice:
 
@@ -42,39 +49,39 @@ question, not an implementation choice:
 | default    | `*` (HTML/md/og/PDF/sitemap)   | caddy     | `GET`, `HEAD`, `OPTIONS`     | `GET`, `HEAD`  | TTL min 0 / default 0 / **max 60 s**, respect origin `Cache-Control` | `orp-no-cookie` (custom) | none              | never cache `Set-Cookie`; minimal key                                                                        |
 
 **HSTS placement:** the
-[production topology](../../design/deployment.md#production-topology) requires
-HTTP Strict Transport Security. A CloudFront **response-headers policy**
-attached to every behavior sets
+[production topology](../../../design/deployment.md#production-topology)
+requires HTTP Strict Transport Security. A CloudFront **response-headers
+policy** attached to every behavior sets
 `Strict-Transport-Security: max-age=31536000; includeSubDomains` — edge-owned so
 it also covers edge-cached responses; app/route-level security headers (CSP
-etc.) remain P8-sec's scope and are not duplicated here. The same policy carries
-the blanket `X-Robots-Tag: noindex, nofollow` **when `var.noindex_all` is true**
-(staging; D25).
+etc.) remain the owning route phase's scope and are not duplicated here. The
+same policy carries the blanket `X-Robots-Tag: noindex, nofollow` **when
+`var.noindex_all` is true** (UAT baseline; D25).
 
-**One viewer-request function serves both host canonicalization and the staging
+**One viewer-request function serves both host canonicalization and the UAT
 gate.** It runs on every behavior in both environments. First, a request whose
 host is in `var.redirect_hosts` (production: only `www.aboutme.vn`) returns
 `308` to `https://aboutme.vn` with the path and semantic query parameters
 preserved. This happens before authentication or origin processing, so no
 cookie, authorization header, or request reaches Caddy. Other hosts proceed to
-the optional staging gate. The gate uses CloudFront Functions JavaScript runtime
-2.0 and `crypto.createHash("sha256")` over the exact single `Authorization`
-header value. It compares the 64-character lowercase digest against the SSM-
-stored digest with a fixed-length accumulator, rejects missing, malformed, or
-repeated credentials, and returns `401` with
-`WWW-Authenticate: Basic realm="aboutme-staging", charset="UTF-8"` and
+the optional UAT gate. The gate uses CloudFront Functions JavaScript runtime 2.0
+and `crypto.createHash("sha256")` over the exact single `Authorization` header
+value. It compares the 64-character lowercase digest against the SSM- stored
+digest with a fixed-length accumulator, rejects missing, malformed, or repeated
+credentials, and returns `401` with
+`WWW-Authenticate: Basic realm="aboutme-uat", charset="UTF-8"` and
 `Cache-Control: no-store`. On success it deletes `Authorization` before origin
 forwarding. Plaintext username/password values exist only as protected GitHub
-environment/operator secrets for smoke requests; they never enter SSM, Terraform
+environment/operator secrets for smoke requests; they never enter SSM, OpenTofu
 state, function code, logs, or evidence.
 
 **Steps:**
 
-- [ ] Failing `terraform test` (mocked, `override_data` for the SSM
-      origin-secret read) first: behaviors exist in exactly this precedence
-      order; every behavior's `allowed_methods` and `cached_methods` match the
-      table, so authenticated `POST`, `PUT`, `PATCH`, and `DELETE` reach Go
-      while only `GET` and `HEAD` are cache-eligible; **each behavior's
+- [ ] Failing `tofu test` (mocked, `override_data` for the SSM origin-secret
+      read) first: behaviors exist in exactly this precedence order; every
+      behavior's `allowed_methods` and `cached_methods` match the table, so
+      authenticated `POST`, `PUT`, `PATCH`, and `DELETE` reach Go while only
+      `GET` and `HEAD` are cache-eligible; **each behavior's
       `origin_request_policy_id` matches the ORP column** (`orp-no-cookie`
       forwards zero cookies, all query strings, and includes `Last-Event-ID` in
       its header allowlist; `orp-auth-api` forwards all cookies and all query
@@ -96,30 +103,31 @@ state, function code, logs, or evidence.
       viewer-request function association exists on every behavior in both
       environments**. Unit fixtures prove the `www` 308 runs before the gate,
       preserves path/query semantics, and never yields an origin request; the
-      Basic gate applies iff `var.viewer_gate_enabled` (true in staging, false
-      in production), rejects wrong/missing/repeated headers, uses the exact
-      runtime-2.0 SHA-256 contract above, and strips `Authorization` after
-      success. The distribution contains only `caddy` and `caddy-sse` origins
-      and has no OAC or `/assets/*` behavior; aliases + ACM certificate ARN come
-      from variables; the origin domain is `var.origin_fqdn`
-      (`origin-staging.aboutme.vn` / `origin.aboutme.vn`).
+      UAT gate applies iff `var.viewer_gate_enabled` (true in the staging-shaped
+      UAT environment, false in production), rejects wrong/missing/repeated
+      headers, uses the exact runtime-2.0 SHA-256 contract above, and strips
+      `Authorization` after success. The distribution contains only `caddy` and
+      `caddy-sse` origins and has no OAC or `/assets/*` behavior; aliases + ACM
+      certificate ARN come from variables; the origin domain is
+      `var.origin_fqdn` (`origin-uat.aboutme.vn` / `origin.aboutme.vn`).
 - [ ] Implement distribution + custom ORP + response-headers policy + the
       basic-auth viewer-request CloudFront Function (credential hash injected
       from SSM at apply; function code contains the hash, never the plaintext) +
       `aws_acm_certificate` (us-east-1 provider alias) with DNS validation
       records **exported as outputs** for the D19 `cf` script — no Cloudflare
       provider. Export the distribution ID, ARN, domain, and certificate
-      validation records; the ID/ARN feed only Task 5's server environment and
-      Task 4's exact invalidation policy.
+      validation records; the ID/ARN feed only Task 10.5's server environment
+      and Task 10.4's exact invalidation policy.
 - [ ] Origin-secret value: **regular `data "aws_ssm_parameter"` marked
       `sensitive`** feeding the custom origin header (an ephemeral value cannot
       populate a persistent CloudFront argument — this is D9's documented,
       mitigated exception; keep it out of _outputs_ and mark related variables
       `sensitive`).
 
-**Verification:** `terraform test`, `validate`, parity. Real CloudFront behavior
-(matrix observed through a live edge) is **P9A's row AC-OPS-015** (plus
-AC-OPS-002 live bypass rejection); PI's cheapest safe check is the mocked
-assertion set above, which pins the configuration content. Task 14 must prove
-AWS accepted the custom `allExcept` policy before PI can close. The test also
-fails if any S3 origin, OAC, or `/assets/*` behavior appears.
+**Verification:** `tofu test`, `validate`, parity. Real CloudFront behavior
+(matrix observed through a live edge) is **Phase 10 operational rehearsal's row
+AC-OPS-015** (plus AC-OPS-002 live bypass rejection); Phase 10 infrastructure's
+cheapest safe check is the mocked assertion set above, which pins the
+configuration content. Task 10.15 must prove AWS accepted the custom `allExcept`
+policy before Phase 10 infrastructure can close. The test also fails if any S3
+origin, OAC, or `/assets/*` behavior appears.

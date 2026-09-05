@@ -1,10 +1,10 @@
-# Task 7: **BLOCKING** — production Caddy client-IP boundary, fail-closed config, prod image, simulated-edge e2e test
+# Task 10.7: **BLOCKING** — production Caddy client-IP boundary, fail-closed config, prod image, simulated-edge e2e test
 
-AC-INF-001; mechanism half of AC-OPS-002. This task is the reason PI cannot
-slip: promoting the dev Caddyfile unchanged recreates a cross-tenant DoS (master
-plan, Phase 0 security review). The prod Caddy image (`deploy/caddy.Dockerfile`)
-is authored **here**, not in Task 8, because `Caddyfile.prod` can only be
-validated inside it (review blocking 11).
+AC-INF-001; mechanism half of AC-OPS-002. This task is the reason Phase 10
+infrastructure cannot slip: promoting the dev Caddyfile unchanged recreates a
+cross-tenant DoS (master plan, Phase 0 security review). The prod Caddy image
+(`deploy/caddy.Dockerfile`) is authored **here**, not in Task 10.8, because
+`Caddyfile.prod` can only be validated inside it (security-boundary check).
 
 **Files:**
 `deploy/caddy/{routes.caddy,boundary.caddy,Caddyfile.prod,Caddyfile.boundary-test,caddy-entrypoint.sh}`,
@@ -58,7 +58,7 @@ guard must implement):**
    admin API would expose the adapted config — secrets included — to any
    host-namespace process), and defines a loopback-only health vhost
    `http://127.0.0.1:2020` answering `200` at `/caddy-health` (the ECS container
-   health check target, Task 5).
+   health check target, Task 10.5).
 7. `deploy/caddy.Dockerfile` (D13): pinned xcaddy builds Caddy **2.11.4**
    `--with github.com/caddy-dns/cloudflare@<pinned>`; runtime from the pinned
    alpine digest; non-root; entrypoint `caddy-entrypoint.sh` (the fail-closed
@@ -67,7 +67,7 @@ guard must implement):**
    starting Caddy — the bridge-gateway default (`172.17.0.1`, D24) is the plan's
    riskiest real-AWS assumption, and a missing address must refuse start rather
    than silently bind-fail into a restart loop (Caddy's own bind error is the
-   second layer; Task 14 verifies the address live).
+   second layer; Task 10.15 verifies the address live).
 8. **Credential-free structured access logs:** both origin listeners emit JSON
    to stdout with only timestamp/logger, listener (`external` or `internal`),
    route marker, host, method, path, status, request ID, canonical client IP,
@@ -107,7 +107,7 @@ guard must implement):**
 | 9   | Secret=cur; malformed XFF (`X-Forwarded-For: not-an-ip`)                                                                                                        | Upstream `X-Real-IP` is a valid IP (peer fallback) or the request is rejected — never garbage forwarded (Go rejects malformed values regardless, AC-OPS-008; assert the boundary doesn't rely on that)                                                                                                                |
 | 10  | Secret=cur; route checks through the boundary: `/api/v1/x` → go-backend, `/` → web-backend, `/print/x`, `/internal-render`, and `/internal-render/public` → 404 | Route table identical to dev; both private roots are denied before the default web proxy (shared `routes.caddy` proven in the prod wrapper too)                                                                                                                                                                       |
 | 11  | **NEXT unset** (env absent); secret=cur                                                                                                                         | 200 — steady state (no rotation in progress) still authenticates the real secret                                                                                                                                                                                                                                      |
-| 12  | **NEXT unset**; no `X-Origin-Secret` header                                                                                                                     | `403` — absent header must not match the empty NEXT placeholder (the `"" == ""` fail-open, review blocking 1)                                                                                                                                                                                                         |
+| 12  | **NEXT unset**; no `X-Origin-Secret` header                                                                                                                     | `403` — absent header must not match the empty NEXT placeholder (the `"" == ""` fail-open guard)                                                                                                                                                                                                                      |
 | 13  | **NEXT unset**; header present with empty value (`X-Origin-Secret:`)                                                                                            | `403` — an empty presented value never authenticates                                                                                                                                                                                                                                                                  |
 | 14  | **CURRENT and NEXT both unset**; any request, correct-looking or not                                                                                            | Every request `403` at the config layer; **separately**, `caddy-entrypoint.sh` with the same env exits nonzero before starting Caddy (bash unit test in this task)                                                                                                                                                    |
 | 15  | **`CLOUDFRONT_ORIGIN_CIDRS` unset/empty**; secret correct; forged XFF                                                                                           | Caddy refuses to load the config **or** every derived `X-Real-IP` equals the socket peer and never an XFF value — the test pins whichever the pinned Caddy version does with an explicit assertion; **and** the entrypoint guard exits nonzero on this env, so the deployed image can never reach the ambiguous state |
@@ -115,9 +115,9 @@ guard must implement):**
 | 17  | **Duplicated `X-Origin-Secret` instances**: (a) wrong then right; (b) right then wrong                                                                          | `403` in both orders — multiple credential instances never authenticate (D8)                                                                                                                                                                                                                                          |
 | 18  | **Internal listener (D24):** request to `{$INTERNAL_API_LISTEN}` `/api/v1/x` with forged `X-Real-IP`/XFF/`Forwarded`, no origin secret                          | 200; upstream sees exactly one `X-Real-IP` == the socket peer address; all forged headers absent                                                                                                                                                                                                                      |
 | 19  | Connection attempt to the admin API port                                                                                                                        | Refused — `admin off` is in effect (config asserted AND connection probed)                                                                                                                                                                                                                                            |
-| 20  | `GET http://127.0.0.1:2020/caddy-health`                                                                                                                        | `200` — the loopback health vhost the ECS health check targets (Task 5)                                                                                                                                                                                                                                               |
+| 20  | `GET http://127.0.0.1:2020/caddy-health`                                                                                                                        | `200` — the loopback health vhost the ECS health check targets (Task 10.5)                                                                                                                                                                                                                                            |
 | 21  | External OAuth callback with sentinel query values plus Cookie, Authorization, CSRF, forwarding, and origin-secret headers; one internal SSR request            | Captured JSON has the exact allowlisted keys, path without query, distinct listener markers, canonical IP and request ID; no sentinel, raw query, request/response header map, cookie, credential, or secret appears anywhere                                                                                         |
-| 22  | Run the production container with Task 5's security options and host port 443 in the staging-shaped harness                                                     | Caddy UID is 10001, only `CAP_NET_BIND_SERVICE` remains, writable Caddy/log mounts have the pinned owner/mode, and the listener accepts TLS on 443                                                                                                                                                                    |
+| 22  | Run the production container with Task 10.5's security options and host port 443 in the staging-shaped harness                                                  | Caddy UID is 10001, only `CAP_NET_BIND_SERVICE` remains, writable Caddy/log mounts have the pinned owner/mode, and the listener accepts TLS on 443                                                                                                                                                                    |
 
 Run:
 `cd apps/server && CADDY_BIN=caddy go test ./internal/routetable/   -run ProdBoundary -count=1`
@@ -140,10 +140,10 @@ Run:
       `podman run --rm -v "$PWD/deploy/caddy:/cfg:ro,Z" <image> caddy     validate --config /cfg/Caddyfile.prod`
       with dummy env — the vanilla caddy binary cannot validate `Caddyfile.prod`
       (unknown `dns.providers.cloudflare` module), which is why the image lives
-      in this task (review blocking 11).
+      in this task (security-boundary check).
 - [ ] Author the Makefile diff (`route-table-test-prod` mirroring
       `route-table-test` with `-run ProdBoundary`) and hand it to the
-      integration owner. Task 13 wires the CI job.
+      integration owner. Task 10.13 wires the CI job.
 
 **Verification:** both Caddy test suites green with a pinned caddy 2.11.4
 binary; the entrypoint-guard bash unit test green; the in-image `caddy validate`

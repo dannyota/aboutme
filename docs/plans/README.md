@@ -1,19 +1,20 @@
 # Delivery plans
 
 [`implementation-plan.md`](implementation-plan.md) is the current roadmap. It
-owns phase order, current state, and release gates. A phase directory owns the
-detailed tasks for that phase while the phase is active.
+owns phase order, current state, and release gates. Active phases and tasks use
+numbers, such as Phase 10 and task 10.14. A phase directory owns the detailed
+tasks for that phase while the phase is active.
 
 ## Layout
 
-| Path                                 | Purpose                                       |
-| ------------------------------------ | --------------------------------------------- |
-| `implementation-plan.md`             | Current roadmap, dependencies, and blockers   |
-| `phase-<id>/README.md`               | Active or future phase task index             |
-| `phase-<id>/task-*.md`               | One dispatchable task                         |
-| `phase-<id>/exit-criteria.md`        | Phase exit checklist                          |
-| `phase-<id>/adversarial-coverage.md` | Adversarial cases the owning tasks must cover |
-| `traceability/`                      | Acceptance ownership and evidence             |
+| Path                                     | Purpose                                       |
+| ---------------------------------------- | --------------------------------------------- |
+| `implementation-plan.md`                 | Current roadmap, dependencies, and blockers   |
+| `phase-<number>/README.md`               | Active or future phase task index             |
+| `phase-<number>/task-*.md`               | One dispatchable task                         |
+| `phase-<number>/exit-criteria.md`        | Phase exit checklist                          |
+| `phase-<number>/adversarial-coverage.md` | Adversarial cases the owning tasks must cover |
+| `traceability/`                          | Acceptance ownership and evidence             |
 
 ## Lifecycle
 
