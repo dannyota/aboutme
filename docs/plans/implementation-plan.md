@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 27, active** (2026-09-04).
+Status: **Revision 28, active** (2026-09-05).
 
 The goal is a tested v1 deployed in AWS `ap-southeast-1`. The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -34,23 +34,22 @@ Complete and pushed: foundations, the TypeScript API client, provider
 authentication and its hardening, the resume domain and store, the renderer
 lane, resume HTTP and media, the authenticated editor, publish and public SSR,
 password authentication, the native HTTPS development harness, and the v1 entry
-experience, including MCP agent access and the owner publish UX.
+experience, including MCP agent access and the owner publish UX, the application
+UI toolkit, and the application visual identity.
 
-| Phase | Work                                              | State                                           |
-| ----- | ------------------------------------------------- | ----------------------------------------------- |
-| PV    | [Application visual identity](phase-pv/README.md) | Active; W4 implementation in progress           |
-| P6    | Realtime: SSE transport, refetch, unpublish       | Not started                                     |
-| P7    | Print worker, public PDF and images               | Not started                                     |
-| P8    | Privacy lifecycle                                 | Not started                                     |
-| P9    | [Local UAT](phase-9/README.md)                    | Harness complete; isolated port-443 UAT remains |
-| PI    | [Infrastructure](phase-pi/README.md)              | Adopted, not executed; no cloud mutation        |
+| Phase | Work                                        | State                                           |
+| ----- | ------------------------------------------- | ----------------------------------------------- |
+| P6    | Realtime: SSE transport, refetch, unpublish | Not started                                     |
+| P7    | Print worker, public PDF and images         | Not started                                     |
+| P8    | Privacy lifecycle                           | Not started                                     |
+| P9    | [Local UAT](phase-9/README.md)              | Harness complete; isolated port-443 UAT remains |
+| PI    | [Infrastructure](phase-pi/README.md)        | Adopted, not executed; no cloud mutation        |
 
 ## Delivery order
 
-1. PV application visual identity.
-2. P6 realtime.
-3. P7 print and images, and P8 privacy lifecycle.
-4. P9 local UAT over the complete product, then human cloud authorization, PI
+1. P6 realtime.
+2. P7 print and images, and P8 privacy lifecycle.
+3. P9 local UAT over the complete product, then human cloud authorization, PI
    activation, P9A staging rehearsal, and P10 production.
 
 Security controls are delivered inside every route-owning phase and verified end
@@ -78,7 +77,6 @@ graph TD
     P7A[P7A owner print worker] --> P7B[P7B public PDF and images]
     P7B --> P9
     P8[P8 privacy lifecycle] --> P9
-    PV[PV visual identity] --> P9
     PI[PI local IaC] --> P9
     P9 --> AUTH{Human authorizes cloud resources}
     AUTH --> P9A[P9A staging rehearsal]
