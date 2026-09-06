@@ -21,7 +21,7 @@ func TestApplyCommitResponseLossRetiresWithoutReconnect(t *testing.T) {
 	if err := ProvisionDatabase(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Apply(ctx, db, LocalAdminMigratorIdentity()); err != nil {
+	if _, err := applyFS(ctx, db, enforcementFixtureFS(t), LocalAdminMigratorIdentity()); err != nil {
 		t.Fatal(err)
 	}
 	var database string
@@ -47,7 +47,7 @@ func TestApplyCommitResponseLossRetiresWithoutReconnect(t *testing.T) {
 			t.Errorf("close fault database: %v", err)
 		}
 	})
-	fs15 := embeddedMigrationMap(t, map[string]string{
+	fs15 := enforcementFixtureWith(t, map[string]string{
 		"00015_response_loss.sql": "-- +goose Up\n-- +goose StatementBegin\nSELECT public.runtime_begin_migration_write('migration-00015');\nCREATE TABLE public.response_loss_probe(id integer);\nSELECT public.runtime_finish_write();\n-- +goose StatementEnd\n\n-- +goose Down\n",
 	})
 	if _, err := applyFS(ctx, faultDB, fs15, LocalAdminMigratorIdentity()); err == nil {

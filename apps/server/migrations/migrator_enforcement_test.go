@@ -99,10 +99,10 @@ func TestMigrationPureDDLAdvancesOnceAndRollbackLeavesState(t *testing.T) {
 	if err := ProvisionDatabase(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Apply(ctx, db, LocalAdminMigratorIdentity()); err != nil {
+	if _, err := applyFS(ctx, db, enforcementFixtureFS(t), LocalAdminMigratorIdentity()); err != nil {
 		t.Fatal(err)
 	}
-	fs15 := embeddedMigrationMap(t, map[string]string{
+	fs15 := enforcementFixtureWith(t, map[string]string{
 		"00015_protected_ddl.sql": "-- +goose Up\n-- +goose StatementBegin\nSELECT public.runtime_begin_migration_write('migration-00015');\nCREATE TABLE public.protected_ddl_probe(id integer);\nSELECT public.runtime_finish_write();\n-- +goose StatementEnd\n\n-- +goose Down\n",
 	})
 	results, err := applyFS(ctx, db, fs15, LocalAdminMigratorIdentity())
@@ -113,7 +113,7 @@ func TestMigrationPureDDLAdvancesOnceAndRollbackLeavesState(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT generation FROM public.runtime_write_state WHERE singleton`).Scan(&generation); err != nil {
 		t.Fatal(err)
 	}
-	fs16 := embeddedMigrationMap(t, map[string]string{
+	fs16 := enforcementFixtureWith(t, map[string]string{
 		"00015_protected_ddl.sql": string(fs15["00015_protected_ddl.sql"].Data),
 		"00016_rollback.sql":      "-- +goose Up\n-- +goose StatementBegin\nSELECT public.runtime_begin_migration_write('migration-00016');\nCREATE TABLE public.protected_rollback_probe(id integer);\nSELECT 1/0;\nSELECT public.runtime_finish_write();\n-- +goose StatementEnd\n\n-- +goose Down\n",
 	})

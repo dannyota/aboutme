@@ -79,6 +79,12 @@ Start with [R1.1 cluster role bootstrap](role-bootstrap.md), then
 checked and committed as `f45cf93`; it replaces the raw starter at `986fe44`.
 Live entry, clean reuse and physical discard proof now pass against B1.
 
+After B3, [R1.3 membership schema](membership-schema.md) installs the durable
+membership and lifecycle ledger tables without exposing unimplemented
+operations. Later serialized R1 slices install admission/transition schema and
+the fixed definers; R1 exits only after their complete store and real-role
+proof.
+
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
 preserve existing database rows while converging ownership on runtime_owner.
