@@ -84,8 +84,9 @@ membership and lifecycle ledger tables without exposing unimplemented
 operations. [R1.4 transition schema](transition-schema.md) follows with exact
 targets, acknowledgements and terminal outcomes. Then
 [R1.5 claim schema](claim-schema.md) installs atomic claim scopes and release
-receipts. Later R1 slices install rate schema and the fixed definers; R1 exits
-only after their complete store and real-role proof.
+receipts. [R1.6 rate schema](rate-schema.md) installs exact policies, bounded
+buckets and stored OAuth attempt debt. Later R1 slices install fixed definers;
+R1 exits only after their complete store and real-role proof.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
