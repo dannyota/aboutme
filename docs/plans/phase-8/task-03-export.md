@@ -27,7 +27,10 @@ Read account and documents in one database snapshot, order resumes by
 (created_at,id), project each to the current schema, and freeze bytes before
 success. Get only validated owned media keys, cap each object at 2 MiB, and fail
 if a referenced object is absent or invalid. The complete JSON is at most 12
-MiB; reject overflow before headers. No partial archive or secret metadata.
+MiB; reject overflow before headers. Bound the request at 20 seconds and each
+photo read at five seconds. Cancellation closes the reader and joins cleanup.
+Reject empty or truncated images and validate normalized dimensions before
+decoding pixels. No partial archive or secret metadata.
 
 - [ ] Write missing/foreign/expired auth and exact transport tests; observe red.
 - [ ] Implement the export and projection.

@@ -154,7 +154,7 @@ resume HTTP surface. The implemented boundary provides:
   pre-UAT history remains correctable until the first candidate adds the
   immutable baseline marker required by
   [ADR 0020](adr/0020-uat-migration-baseline.md);
-- sqlc-generated data access from those migrations and `sql/queries.sql`;
+- sqlc-generated data access from those migrations and `sql/` query sources;
 - schema-derived bounds, aggregate validation, and a bounded codec;
 - owner-scoped CRUD primitives, a three-resume cap, and revision
   compare-and-swap (CAS) that persists the complete document aggregate;
@@ -169,8 +169,9 @@ Every mutation uses strict singleton headers, bounded and duplicate-key-safe
 decoding, owner-scoped lookup, revision CAS, and one aggregate sanitizer and
 validator boundary. A released v1 request is upgraded, changed, persisted as a
 complete current-v2 aggregate, and projected back to v1. The fixed customization
-allowlist is derived from the embedded current schema. The authoritative hourly
-global idempotency-expiry sweep is not implemented yet.
+allowlist is derived from the embedded current schema. The hourly global
+idempotency sweep uses the same user-first lock order and releases exact
+retained response bytes in each bounded transaction.
 
 The versioned sanitizer allowlist and hostile corpus generate Go and TypeScript
 artifacts. `internal/sanitize.RichText` builds its Go policy from that artifact;
@@ -312,6 +313,22 @@ through body delivery. Revocation cancels and drains old work before a mutation
 commits. The shared cache holds at most 128 entries and 32 MiB for 60 seconds.
 See the [export runbook](runbooks/exports.md) for checks and resource evidence.
 
+## Account privacy
+
+Settings downloads a bounded JSON copy of the account, complete current-schema
+resumes, and normalized photos from one database snapshot. Credentials and
+backend keys are excluded. Account deletion requires recent reauthentication and
+a fresh typed confirmation. It drains discovery and all affected public resume
+generations, then atomically removes account state, creates slug tombstones,
+queues exact media keys, and records a durable audit event.
+
+Four one-shot server commands run idempotency expiry, queued media deletion,
+orphan reconciliation, and retention. They use PostgreSQL overlap locks and
+bounded work with cancellation cleanup. Pending media jobs never expire;
+completed jobs and lifecycle audits remain for 180 days. Session IP and user
+agent metadata is redacted after 90 days. See the
+[privacy runbook](runbooks/privacy.md) for command bounds and failure handling.
+
 ## Known delivery gaps
 
 - Complete product UAT and live operational evidence remain planned for Phase 10
@@ -321,5 +338,5 @@ See the [export runbook](runbooks/exports.md) for checks and resource evidence.
 
 ## Not implemented
 
-Privacy workers, production infrastructure, staging, production deployment, and
-Flutter remain planned.
+Hosted scheduling, infrastructure, UAT, production deployment, and Flutter
+remain planned.

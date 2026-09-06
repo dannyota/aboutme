@@ -17,7 +17,11 @@ docs/runbook, traceability, future Phase 10 schedule contracts and Git.
       contain the same command entry point. Add hourly media deletion to the
       Phase 10 schedule table and consume the final flags/timeouts.
 - [ ] Author browser tests with a live Playwright MCP inspection, then commit
-      and execute the observed selectors as headless specs.
+      and execute the observed selectors as headless specs. A fresh login is
+      recently reauthenticated. Force one exact DELETE `reauth_required`
+      response to exercise that UI branch, then use real provider
+      reauthentication and explicit confirmed deletion. The live account API
+      tests prove actual stale-session refusal.
 - [ ] Prove export, cancel, reauth and deletion, then old session/grant/public
       HTML/JSON/photo/PDF/share image/discovery absence and tombstone behavior.
       Use synthetic data and bounded non-personal evidence.

@@ -57,6 +57,7 @@ the gate; changing a number requires a reviewed change with evidence.
 | Retained idempotency stored bytes/account       | ≤ 1 GiB after new-key insert                        | Idempotency store                                     |
 | Global idempotency expiry sweep                 | hourly; 1,000/page; 10,000/run                      | Privacy sweep                                         |
 | Account JSON export                             | ≤ 12,582,912 bytes; 5/min per account and IP        | Account export route                                  |
+| Account export / photo read deadline            | 20 s / 5 s; cancel and join                         | Account export route                                  |
 | Account deletion attempts                       | 5/min per account and IP; 3 plan attempts/request   | Account deletion route                                |
 | Privacy job run                                 | ≤ 30 min; cancel and join                           | One-shot job commands                                 |
 | Daily retention per category                    | 1,000/page; 10,000/run                              | Session/audit/completed-job sweeps                    |
@@ -66,12 +67,12 @@ the gate; changing a number requires a reviewed change with evidence.
 | Photo uploads per account and IP                | ≤ 20/h                                              | Resume route limiters                                 |
 | Structure commands per request                  | ≤ 100                                               | Resume handlers                                       |
 | Customization deltas per request                | ≤ 100                                               | Resume handlers                                       |
-| Media orphan minimum age                        | ≥ 48 h                                              | Media jobs (planned)                                  |
-| Media orphan sweep page / run                   | 1,000 / 10,000 objects                              | Media jobs (planned)                                  |
-| Media orphan delete concurrency                 | ≤ 4                                                 | Media jobs (planned)                                  |
-| Media deletion physical-removal target          | ≤ 24 h from reference revocation                    | Media jobs (planned)                                  |
-| Media deletion queue page / run                 | 200 / 2,000 jobs                                    | Media jobs (planned)                                  |
-| Media deletion retry / concurrency              | 1/run, ≤ 6 h backoff / ≤ 4                          | Media jobs (planned)                                  |
+| Media orphan minimum age                        | ≥ 48 h                                              | Media cleanup                                         |
+| Media orphan sweep page / run                   | 1,000 / 10,000 objects                              | Media cleanup                                         |
+| Media orphan delete concurrency                 | ≤ 4                                                 | Media cleanup                                         |
+| Media deletion physical-removal target          | ≤ 24 h from reference revocation                    | Media cleanup                                         |
+| Media deletion queue page / run                 | 200 / 2,000 jobs                                    | Media cleanup                                         |
+| Media deletion retry / concurrency              | 1/run, ≤ 6 h backoff / ≤ 4                          | Media cleanup                                         |
 | Password route body                             | ≤ 4,096 bytes                                       | Password routes                                       |
 | Canonical account email                         | 5–254 ASCII bytes, stored lowercase                 | Account email parser                                  |
 | Registration name                               | 1–100 code points after NFC; ≤ 400 raw UTF-8 bytes  | Account email parser                                  |
