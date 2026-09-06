@@ -64,10 +64,10 @@ the timestamp high-water rule. Rows, object identities and definitions remain
 unchanged. Preserve non-owner effective privileges; ACL comparison permits only
 the expected old/new owner and grantor OID normalization plus explicit
 provisioning/Goose grants. It releases Goose then runtime lock after commit.
-Ambiguous commit or cleanup is not retried; reread resolves the exact
-owner/metadata state. It changes only the enumerated ownership and privilege
-metadata. It never uses REASSIGN OWNED or changes application rows, object
-identities or definitions.
+Ambiguous commit or cleanup never retries mutation. The bounded read-only
+reconciliation below resolves durable convergence. Adoption changes only the
+enumerated ownership and privilege metadata. It never uses REASSIGN OWNED or
+changes application rows, object identities or definitions.
 
 This adoption is allowed only before final-stop authority and before enforcement
 version 1. The command has fixed roles/table/key and accepts no role or SQL
@@ -75,6 +75,58 @@ input. It exists only for the known prebaseline local/test aboutme-owned v13
 class. Hosted fresh UAT uses initial pre-foundation provisioning, owns history
 as migrator, proceeds directly to 00014, and has no adoption task or retained
 admin credential. Adoption preserves existing data; recreation remains optional.
+
+## Adoption result and ambiguous outcomes
+
+`AdoptHistoryOwner(ctx, db, lockOpts...)` returns `(AdoptionResult, error)`. The
+result has private fields, `Outcome()` and `AmbiguousCause()` accessors.
+Outcomes are Applied, AlreadyConverged and ReconciledConverged. The last outcome
+returns nil error only after exact durable convergence is proved; its cause
+retains the original Commit or cleanup error. The CLI emits a fixed warning code
+and succeeds, without printing the cause. Convergence does not establish which
+competing adopter committed.
+
+Before mutation, capture generation G, exact Goose rows through version 13,
+manifest and foundation OIDs, definitions, dependencies and effective ACLs under
+the runtime and Goose locks and fixed manifest table locks. The transaction
+validates the before/after ownership change before commit. Its reviewed program
+contains no application-row DML; only the runtime singleton changes.
+
+On an ambiguous Commit or post-Commit cleanup, first retire the exact mutation
+backend and confirm physical closure. Then permit one new connection with a
+detached five-second deadline for read-only reconciliation. This is the sole
+exception to the runner's no-reconnect rule; it never replays mutation or uses a
+new connection to clean up the old one. Verify the fixed local identity and
+database class and a different PID. In one REPEATABLE READ READ ONLY snapshot:
+
+- Require the complete fixed manifest and foundation ownership, unchanged OIDs,
+  definitions and dependencies. Permit only expected owner/grantor normalization
+  and fixed provisioning/history ACL changes; no runtime_owner schema CREATE.
+- Require the exact version-13 history, no down/extra rows or B3 trigger, gate
+  open, enforcement 0, and recorded history owner runtime_owner.
+- Require generation at least G+1. At G+1 the last writer must be migrator with
+  operation migration-history-adoption. A higher generation may name a later
+  writer. Neither case attributes the adoption to this caller.
+- Commit the read snapshot and verify PID, identity and cleanup. Any ambiguity
+  retires this second backend and fails reconciliation.
+
+Only that conjunction returns ReconciledConverged. Unchanged source ownership
+returns the original error; malformed, mixed or unproved state joins it with the
+reconciliation error. Preserve the original cause first. Later writers may
+change application rows after the mutation backend ends, so row-count or key
+changes are diagnostic, not positive proof of adoption or a reason to rerun it.
+
+A normal invocation that finds exact already-converged state under both locks
+returns AlreadyConverged without advancing generation. This includes a
+concurrent losing adopter and a later explicit invocation after failed
+reconciliation. Partial state is never repaired.
+
+Provision and adoption use fixed BEGIN/COMMIT/ROLLBACK on their pinned Conn.
+Before COMMIT, errors run synchronous ROLLBACK with a detached five-second
+deadline, followed by ordered unlock and identity checks. Rollback ambiguity
+retires the backend. After a COMMIT error, never issue ROLLBACK. Provisioning
+returns the preserved error without reconnecting; only adoption may reconcile.
+No cleanup goroutine may outlive a returned lease.
 
 ## Fixed ownership manifest
 
