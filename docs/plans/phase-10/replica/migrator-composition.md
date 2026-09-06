@@ -9,6 +9,7 @@ Authorities:
 [ADR 0035](../../../adr/0035-replica-coordination-and-uat-lifecycle.md),
 [transaction entry](../../../design/scaling/transaction-entry.md),
 [dedicated migrator](../../../design/scaling/migrator.md),
+[connection retirement](../../../design/scaling/migrator-retirement.md),
 [provisioning and adoption](../../../design/scaling/migration-provisioning.md),
 [fixed manifest](migrator-manifest.md), and pinned Goose v3.27.3 source.
 Acceptance mapping: AC-INF-009 and Task 10.18 write-barrier/migration proof.
@@ -69,7 +70,13 @@ Goose cleanup cannot observe the primary migration result. Every migration
 backend therefore retires through the pinned pgx driver before Goose returns,
 including successful migrations. Bootstrap and protected versions use separate
 ApplyVersion lifecycles; no production path uses unlocked Goose discovery.
-Status uses fixed SQL transaction commands on its pinned Conn so rollback
+Capture the exact close-only socket capability before SQL in SessionLock or a
+manual pinned operation. It survives ErrBadConn making Raw unavailable. Prove
+CleanupDone or exact TCP closure; leave Goose's logical Close to Goose. Every
+admitted early return owns retirement. Status and unambiguous read-only adoption
+reconciliation may cleanly release their connections under the same PID,
+identity, transaction and binding checks. Retain the capability through logical
+Close. Status uses fixed SQL transaction commands on its pinned Conn so rollback
 receives a detached five-second context. Provision and adoption use the same
 bounded server rollback mechanism. Adoption alone may reconcile through one new
 read-only connection after confirmed retirement, using the exact evidence in
@@ -88,6 +95,10 @@ cannot count as peer convergence.
   TestMigrationCommitErrorPreservesPrimaryAndCleanupErrors;
   TestMigrationUnsupportedDriverFailsBeforeMigration;
   TestProtectedApplyVersionUsesFreshPIDAndRechecksEachVersion.
+- Prove async cleanup with a gated CancelRequest and a real TCP proxy: the
+  original socket stays open after driver.ErrBadConn and Raw ErrConnDone until
+  production retirement closes it. Cover all admitted early returns, TLS,
+  unsupported transports and clean logical Close without fabricated errors.
 - TestBootstrapFreshApplyVersionLocksAndSetsIdentityBeforeHistoryCreate;
   TestBootstrapNeverCallsUnlockedProviderDiscovery;
   TestBootstrapEachVersionUsesFreshRetiredBackend;
