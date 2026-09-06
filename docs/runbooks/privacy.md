@@ -20,7 +20,8 @@ logs, tickets, or evidence.
 
 Each run has a 30-minute deadline. PostgreSQL advisory locks make overlap a
 successful skip. Cancellation is propagated and the worker joins its work before
-returning. The command emits a fixed, identifier-free result and metrics surface
+returning. Pool shutdown has a separate five-second limit after the worker
+returns. The command emits a fixed, identifier-free result and metrics surface
 with success, failure, overlap, page or item counts, backlog, oldest age where
 applicable, overdue work, and duration. A command execution failure exits
 nonzero. A completed media sweep can report success with failed items queued for
