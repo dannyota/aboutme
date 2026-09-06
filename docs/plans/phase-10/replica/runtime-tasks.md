@@ -88,6 +88,10 @@ receipts. [R1.6 rate schema](rate-schema.md) installs exact policies, bounded
 buckets and stored OAuth attempt debt. Later R1 slices install fixed definers;
 R1 exits only after their complete store and real-role proof.
 
+[R1.7 registration](replica-registration.md) begins the fixed operations with
+serving/maintenance register and joining-only mark-ready plus typed store
+transport. It follows rate schema 18 and adds no activation or caller wiring.
+
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
 preserve existing database rows while converging ownership on runtime_owner.
