@@ -240,6 +240,10 @@ global cleanup call or caller-selected retention.
 
 ## SQL and Go surface
 
+[Fixed rate operations](rate-operations.md) defines exact composite result
+types, nullable matrices, direct-login checks, error codes and the one-call
+scalar transport. It adds no schema-18 field or production clock input.
+
 All mutations are SECURITY DEFINER, runtime_owner-owned, search_path pg_catalog,
 fully qualified, no dynamic SQL, with PUBLIC/table DML revoked. They run through
 WriteTxRunner and fixed statement triggers. Bookkeeping does not extend
@@ -282,12 +286,14 @@ both cleanup functions. Lifecycle may toggle partitions only through its
 existing capacity definers. No role has direct DML or a generic state-update
 function.
 
-Go defines Policy, RateKey [32]byte, Decision, FailureState, AttemptReservation,
+R5 defines Policy, RateKey [32]byte, Decision, FailureState, AttemptReservation,
 AttemptResolution, and CleanupResult. RateStore exposes AdmitToken,
 FailureState, RecordFailure, ClearFailureSuccess, AdmitChangedSlug,
 ReserveFailedGrant, FinishAttempt, and cleanup only on the maintenance adapter.
 Callers retain their current response mapping and ordering. Store errors remain
 unavailable and never become allow, retry, refund, or identity disclosure.
+Internal/store owns only scalar transport and imports no R5 package. A returned
+runner error exposes a zero result; panic follows bounded cleanup and rethrow.
 
 ## Lock order
 

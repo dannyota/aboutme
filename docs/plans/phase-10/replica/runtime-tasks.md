@@ -108,6 +108,11 @@ policies, integer/rolling state, seeds, stored-pending assertions and bounded
 ordinary/overflow cleanup with an atomic policy_idle result. R1 implements
 store/schema only; R5 and R7b own callers.
 
+[Fixed rate operations](../../../design/scaling/rate-operations.md) fixes nine
+result/role/error matrices, P22 historical replay denial, scalar transport and
+the owner-only database-time test seam. Each returned runner error exposes zero
+authority. The operation migration and R5/R7 callers remain separate slices.
+
 The [shared claim schema](../../../design/scaling/shared-claims.md) and
 [identity contract](../../../design/scaling/claim-identities.md) fix multi-scope
 SSE, queue ordinals, replica binding, receipt retention and bounded ambiguity

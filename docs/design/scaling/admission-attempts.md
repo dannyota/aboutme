@@ -78,7 +78,9 @@ qualified names:
 
 - `runtime_reserve_oauth_failed_grant(uuid,uuid)` takes attempt and client IDs.
   It returns allowed, retry_after_seconds and, only when allowed, bucket_kind
-  and partition. Grant EXECUTE only to app.
+  and partition. The internal result also includes replayed: false for fresh
+  allowance/denial, true for exact retained identity replay. Grant EXECUTE only
+  to app. [Fixed rate results](rate-operations.md) specifies the exact matrix.
 - `runtime_finish_admission_attempt(uuid,text)` takes an attempt and a closed
   outcome enum. It returns one row with resolution and stored_outcome.
   Resolution is `caller_finished`, `caller_replay`, `system_noop` or
@@ -127,6 +129,12 @@ Reserve checks an existing attempt UUID for exact policy/client identity under
 the same lock order. Conflicting reuse fails. Stored replay exists for
 idempotency; an OAuth caller must never use it to authorize an ambiguously
 admitted request.
+
+An exact retained pending or terminal receipt returns its historical admitted
+bucket shape with allowed=true, retry zero and replayed=true. It does not
+reroute through a current bucket or consume another slot. R5 rejects every
+replay for new work. No attempt state or timestamp is added to the result; the
+caller still never retries or reads back an ambiguous reserve to authorize work.
 
 For a new key, legitimately expire debt before allocating the first enabled
 partition with fewer than 10,000 keys. If none has capacity, evaluate the shared
