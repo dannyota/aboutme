@@ -328,6 +328,30 @@ export interface paths {
         get: operations["getMe"];
         put?: never;
         post?: never;
+        /**
+         * Delete the caller’s account and revoke access
+         * @description Requires a live cookie session, exact Origin/CSRF and reauthentication within 15 minutes, rechecked under the account lock. Takes the global discovery fence then every owned resume fence in UUID order, drains active public delivery within one five-second deadline, and atomically deletes account state, retains slug tombstones, queues exact private-media removal and records lifecycle audit. A concurrent new resume retries the complete plan at most three times, then returns account_changed. Media removal targets 24 hours; backups expire on the 30-day schedule. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit. A successful response clears the session and OAuth transaction cookies. An ambiguous database commit is independently resolved before success; unresolved public admission stays closed.
+         */
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the caller’s portable account data
+         * @description Downloads one complete version-1 JSON bundle of the account profile and up to three current-version resume documents, including hidden/private content and incomplete drafts. Each normalized photo is separate standard-base64 data with its crop; document.personalDetails.photo is removed. No backend object keys, provider subjects, password/session/CSRF/OAuth credentials or cleanup data appear. Reads account and documents in one database snapshot and buffers the complete attachment before success. A referenced photo that is missing, invalid or over 2 MiB fails the export. Complete response cap: 12,582,912 bytes. No body, query, schema, conditional or idempotency input is accepted. Separate 5/minute account-and-client-IP limit.
+         */
+        get: operations["getAccountExport"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1517,6 +1541,45 @@ export interface components {
             pageFormat: "a4" | "letter";
             /** @enum {string} */
             dateFormat: "MM/YYYY" | "Mon YYYY" | "YYYY";
+        };
+        AccountExport: {
+            data: {
+                /** @constant */
+                exportVersion: 1;
+                /** Format: date-time */
+                exportedAt: string;
+                account: components["schemas"]["AccountExportProfile"];
+                resumes: components["schemas"]["AccountExportResume"][];
+            };
+        };
+        AccountExportProfile: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            name: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            linkedProviders: ("google" | "github" | "linkedin")[];
+        };
+        AccountExportResume: components["schemas"]["ResumeSummary"] & {
+            document: components["schemas"]["AccountExportDocument"];
+            photo: components["schemas"]["AccountExportPhoto"];
+        };
+        /** @description Full current-version owner document with personalDetails.photo removed; the portable photo is beside the document. All other fields, including hidden/private content, remain. */
+        AccountExportDocument: components["schemas"]["ResumeDocument"] & {
+            personalDetails?: {
+                photo?: never;
+            };
+        };
+        /** @description Portable normalized photo and crop, with no object key. */
+        AccountExportPhoto: null | {
+            /** @enum {string} */
+            mediaType: "image/jpeg" | "image/png";
+            data: string;
+            crop: null | components["schemas"]["PublicPhotoCrop"];
         };
         /**
          * @description One owned resume without its document: enough to list, name, and route to it. Publish state is included because the owner's list shows it; the public slug is null until the resume is published.
@@ -4026,6 +4089,214 @@ export interface operations {
                      *       "error": {
                      *         "code": "session_required",
                      *         "message": "a valid session is required"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account deleted. Zero body bytes. */
+            204: {
+                headers: {
+                    "Cache-Control"?: "no-store, no-transform";
+                    "Clear-Site-Data"?: "\"cookies\", \"storage\"";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bodiless account operation rejects query, body, schema, conditional and idempotency inputs. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "request_invalid",
+                     *         "message": "invalid account request"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["ResumeUnauthorized"];
+            /** @description CSRF validation failed or recent reauthentication is required. No account deletion occurred. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "reauth_required",
+                     *         "message": "recent reauthentication is required"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unsupported method. */
+            405: {
+                headers: {
+                    Allow?: "GET, DELETE";
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "method_not_allowed",
+                     *         "message": "method not allowed"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The complete owned-resume set kept changing during deletion. Confirm and retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "account_changed",
+                     *         "message": "account changed; try again"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            /** @description The account operation could not complete safely. No partial export or unproved deletion is returned. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "account_unavailable",
+                     *         "message": "account operation unavailable; try again"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAccountExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete portable JSON attachment, at most 12 MiB. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store, no-transform";
+                    "Content-Disposition"?: "attachment; filename=\"aboutme-export.json\"";
+                    /**
+                     * @description Current emitted resume schema version.
+                     * @example 2
+                     */
+                    "X-Resume-Schema-Version"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "exportVersion": 1,
+                     *         "exportedAt": "2026-09-06T00:00:00Z",
+                     *         "account": {
+                     *           "id": "018f5b6a-9a3e-7c21-8b1e-000000000001",
+                     *           "email": "example@example.test",
+                     *           "name": "Example",
+                     *           "createdAt": "2026-08-01T00:00:00Z",
+                     *           "updatedAt": "2026-08-01T00:00:00Z",
+                     *           "linkedProviders": []
+                     *         },
+                     *         "resumes": []
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AccountExport"];
+                };
+            };
+            /** @description Bodiless account operation rejects query, body, schema, conditional and idempotency inputs. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "request_invalid",
+                     *         "message": "invalid account request"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["ResumeUnauthorized"];
+            /** @description Unsupported method. */
+            405: {
+                headers: {
+                    Allow?: "GET";
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "method_not_allowed",
+                     *         "message": "method not allowed"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+            /** @description The account operation could not complete safely. No partial export or unproved deletion is returned. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "account_unavailable",
+                     *         "message": "account operation unavailable; try again"
                      *       }
                      *     }
                      */
