@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -11,259 +13,355 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type fakeWriteTx struct {
+type fakeWriteLease struct {
+	events             []string
+	tx                 *fakeRunnerTx
+	beginErr           error
+	gotContext         context.Context
+	gotOptions         pgx.TxOptions
+	releases, destroys int
+	destroyErrAtCall   error
+	destroyDeadline    time.Time
+	destroyHasDeadline bool
+}
+
+func newFakeWriteLease() *fakeWriteLease {
+	l := &fakeWriteLease{}
+	l.tx = &fakeRunnerTx{lease: l}
+	return l
+}
+func (l *fakeWriteLease) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
+	l.events = append(l.events, "begin")
+	l.gotContext = ctx
+	l.gotOptions = o
+	return l.tx, l.beginErr
+}
+func (l *fakeWriteLease) Release() { l.events = append(l.events, "release"); l.releases++ }
+func (l *fakeWriteLease) Destroy(ctx context.Context) {
+	l.events = append(l.events, "destroy")
+	l.destroys++
+	l.destroyErrAtCall = ctx.Err()
+	l.destroyDeadline, l.destroyHasDeadline = ctx.Deadline()
+}
+
+type fakeRunnerTx struct {
 	pgx.Tx
-	events              *[]string
-	entryErr            error
-	callbackErr         error
-	commitErr           error
-	rollbackErr         error
-	entryCtx            context.Context
-	rollbackErrAtCall   error
-	rollbackDeadline    time.Time
-	rollbackHasDeadline bool
-	commitCalls         int
-	rollbacks           int
+	lease                                                         *fakeWriteLease
+	entryErr, callbackQueryErr, finishErr, commitErr, rollbackErr error
+	rollbackErrAtCall                                             error
+	rollbackDeadline                                              time.Time
+	rollbackHasDeadline                                           bool
+	callbacks, finishes, commits, rollbacks                       int
 }
 
-type callerContextKey struct{}
-
-func (tx *fakeWriteTx) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
-	if sql == "SELECT public.runtime_enter_write()" && len(arguments) == 0 {
-		*tx.events = append(*tx.events, "entry")
-		tx.entryCtx = ctx
+func (tx *fakeRunnerTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	switch {
+	case sql == "SELECT public.runtime_enter_write()" && len(args) == 0:
+		tx.lease.events = append(tx.lease.events, "entry")
 		return pgconn.CommandTag{}, tx.entryErr
+	case sql == "SELECT public.runtime_finish_write()" && len(args) == 0:
+		tx.lease.events = append(tx.lease.events, "finish")
+		tx.finishes++
+		return pgconn.CommandTag{}, tx.finishErr
+	default:
+		tx.lease.events = append(tx.lease.events, "callback-query")
+		return pgconn.CommandTag{}, tx.callbackQueryErr
 	}
-	*tx.events = append(*tx.events, "callback-query")
-	return pgconn.CommandTag{}, tx.callbackErr
 }
-
-func (tx *fakeWriteTx) Commit(context.Context) error {
-	*tx.events = append(*tx.events, "commit")
-	tx.commitCalls++
+func (tx *fakeRunnerTx) Commit(context.Context) error {
+	tx.lease.events = append(tx.lease.events, "commit")
+	tx.commits++
 	return tx.commitErr
 }
-
-func (tx *fakeWriteTx) Rollback(ctx context.Context) error {
-	*tx.events = append(*tx.events, "rollback")
+func (tx *fakeRunnerTx) Rollback(ctx context.Context) error {
+	tx.lease.events = append(tx.lease.events, "rollback")
 	tx.rollbacks++
 	tx.rollbackErrAtCall = ctx.Err()
 	tx.rollbackDeadline, tx.rollbackHasDeadline = ctx.Deadline()
 	return tx.rollbackErr
 }
 
-type fakeWriteStarter struct {
-	tx         pgx.Tx
-	err        error
-	events     *[]string
-	gotCtx     context.Context
-	gotOptions pgx.TxOptions
-	beginCalls int
+func fakeRunner(l *fakeWriteLease) WriteTxRunner {
+	return &writeTxRunner{acquire: func(context.Context) (writeTxLease, error) { l.events = append(l.events, "acquire"); return l, nil }}
 }
 
-func (s *fakeWriteStarter) BeginWrite(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error) {
-	*s.events = append(*s.events, "begin")
-	s.gotCtx = ctx
-	s.gotOptions = options
-	s.beginCalls++
-	return s.tx, s.err
-}
-
-func TestPoolWriteTxStarterBeginsThenEntersBeforeReturning(t *testing.T) {
-	ctx := context.WithValue(context.Background(), callerContextKey{}, "caller")
-	options := pgx.TxOptions{IsoLevel: pgx.Serializable, AccessMode: pgx.ReadWrite}
-	events := []string{}
-	tx := &fakeWriteTx{events: &events}
-	var gotCtx context.Context
-	var gotOptions pgx.TxOptions
-	starter := &poolWriteTxStarter{begin: func(ctx context.Context, options pgx.TxOptions) (pgx.Tx, error) {
-		events = append(events, "pool-begin")
-		gotCtx, gotOptions = ctx, options
-		return tx, nil
-	}}
-
-	got, err := starter.BeginWrite(ctx, options)
-	if err != nil {
-		t.Fatalf("BeginWrite() error = %v", err)
-	}
-	if got != tx {
-		t.Fatalf("BeginWrite() tx = %T, want fake transaction", got)
-	}
-	if gotCtx != ctx || tx.entryCtx != ctx {
-		t.Fatal("BeginWrite() did not forward the caller context")
-	}
-	if gotOptions != options {
-		t.Fatalf("BeginWrite() options = %#v, want %#v", gotOptions, options)
-	}
-	assertEvents(t, events, "pool-begin", "entry")
-}
-
-func TestPoolWriteTxStarterBeginFailureExposesNoTransaction(t *testing.T) {
-	wantErr := errors.New("begin failed")
-	events := []string{}
-	starter := &poolWriteTxStarter{begin: func(context.Context, pgx.TxOptions) (pgx.Tx, error) {
-		events = append(events, "pool-begin")
-		return nil, wantErr
-	}}
-
-	tx, err := starter.BeginWrite(context.Background(), pgx.TxOptions{})
-	if tx != nil || !errors.Is(err, wantErr) {
-		t.Fatalf("BeginWrite() = (%v, %v), want (nil, %v)", tx, err, wantErr)
-	}
-	assertEvents(t, events, "pool-begin")
-}
-
-func TestPoolWriteTxStarterEntryFailureRollsBackWithLiveBoundedContext(t *testing.T) {
-	caller, cancel := context.WithCancel(context.Background())
-	cancel()
-	wantErr := errors.New("entry failed")
-	events := []string{}
-	tx := &fakeWriteTx{events: &events, entryErr: wantErr, rollbackErr: errors.New("cleanup failed")}
-	starter := &poolWriteTxStarter{begin: func(context.Context, pgx.TxOptions) (pgx.Tx, error) { return tx, nil }}
-
-	got, err := starter.BeginWrite(caller, pgx.TxOptions{})
-	if got != nil || !errors.Is(err, wantErr) {
-		t.Fatalf("BeginWrite() = (%v, %v), want (nil, %v)", got, err, wantErr)
-	}
-	assertLiveBoundedCleanup(t, tx)
-	assertEvents(t, events, "entry", "rollback")
-}
-
-func TestWithWriteTxBindsQueriesAndCommitsOnce(t *testing.T) {
+func TestWriteTxRunnerSuccessOrderAndBinding(t *testing.T) {
 	ctx := context.Background()
-	options := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, DeferrableMode: pgx.Deferrable}
-	events := []string{}
-	tx := &fakeWriteTx{events: &events}
-	starter := &fakeWriteStarter{tx: tx, events: &events}
-
-	err := WithWriteTx(ctx, starter, options, func(q *Queries) error {
-		events = append(events, "callback")
-		_, queryErr := q.db.Exec(ctx, "UPDATE public.example SET value = 1")
-		return queryErr
+	opts := pgx.TxOptions{IsoLevel: pgx.Serializable, AccessMode: pgx.ReadWrite}
+	l := newFakeWriteLease()
+	err := fakeRunner(l).WithWriteTx(ctx, opts, func(q *Queries) error {
+		l.events = append(l.events, "callback")
+		l.tx.callbacks++
+		_, e := q.db.Exec(ctx, "UPDATE x")
+		return e
 	})
 	if err != nil {
-		t.Fatalf("WithWriteTx() error = %v", err)
+		t.Fatal(err)
 	}
-	if starter.gotCtx != ctx || starter.gotOptions != options {
-		t.Fatalf("BeginWrite arguments = (%v, %#v), want caller context and %#v", starter.gotCtx, starter.gotOptions, options)
+	if l.gotContext != ctx || l.gotOptions != opts {
+		t.Fatal("context/options not forwarded")
 	}
-	if tx.commitCalls != 1 || tx.rollbacks != 0 {
-		t.Fatalf("commit calls = %d, rollbacks = %d, want 1, 0", tx.commitCalls, tx.rollbacks)
-	}
-	assertEvents(t, events, "begin", "callback", "callback-query", "commit")
+	assertEvents(t, l.events, "acquire", "begin", "entry", "callback", "callback-query", "finish", "commit", "release")
+	assertCounts(t, l, 1, 0, 1, 0, 1, 1)
 }
 
-func TestWithWriteTxBeginFailureDoesNotRunCallback(t *testing.T) {
-	wantErr := errors.New("begin failed")
-	events := []string{}
-	starter := &fakeWriteStarter{err: wantErr, events: &events}
+func TestWriteTxRunnerEntryFailureDisposition(t *testing.T) {
+	tests := []struct {
+		name             string
+		entry, rollback  error
+		release, destroy int
+	}{
+		{"55000", &pgconn.PgError{Code: "55000"}, nil, 1, 0}, {"AM001", fmt.Errorf("wrapped: %w", &pgconn.PgError{Code: "AM001"}), nil, 0, 1},
+		{"unknown", errors.New("transport"), nil, 0, 1}, {"cleanup unknown", &pgconn.PgError{Code: "55000"}, errors.New("rollback"), 0, 1}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newFakeWriteLease()
+			l.tx.entryErr = tt.entry
+			l.tx.rollbackErr = tt.rollback
+			calls := 0
+			err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { calls++; return nil })
+			if !errors.Is(err, tt.entry) || calls != 0 {
+				t.Fatalf("err=%v calls=%d", err, calls)
+			}
+			if l.releases != tt.release || l.destroys != tt.destroy {
+				t.Fatalf("release=%d destroy=%d", l.releases, l.destroys)
+			}
+			assertEvents(t, l.events, "acquire", "begin", "entry", "rollback", disposition(tt.destroy))
+		})
+	}
+}
 
-	err := WithWriteTx(context.Background(), starter, pgx.TxOptions{}, func(*Queries) error {
-		t.Fatal("callback ran after begin failure")
-		return nil
+func TestWriteTxRunnerCallbackFailureDispositionAndCause(t *testing.T) {
+	tests := []struct {
+		name               string
+		callback, rollback error
+		release, destroy   int
+	}{
+		{"ordinary", errors.New("callback"), nil, 1, 0}, {"canceled", context.Canceled, nil, 1, 0},
+		{"poison", fmt.Errorf("mutate: %w", &pgconn.PgError{Code: "AM001"}), nil, 0, 1}, {"cleanup unknown", errors.New("callback"), errors.New("rollback"), 0, 1}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newFakeWriteLease()
+			l.tx.rollbackErr = tt.rollback
+			err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { return tt.callback })
+			if !errors.Is(err, tt.callback) {
+				t.Fatalf("lost primary: %v", err)
+			}
+			var want, got *pgconn.PgError
+			if errors.As(tt.callback, &want) && (!errors.As(err, &got) || got.Code != want.Code) {
+				t.Fatalf("lost PgError: %v", err)
+			}
+			if l.releases != tt.release || l.destroys != tt.destroy {
+				t.Fatalf("release=%d destroy=%d", l.releases, l.destroys)
+			}
+			assertEvents(t, l.events, "acquire", "begin", "entry", "rollback", disposition(tt.destroy))
+		})
+	}
+}
+
+func TestWriteTxRunnerFinishAndCommitFailuresDestroyWithoutReplay(t *testing.T) {
+	t.Run("finish", func(t *testing.T) {
+		l := newFakeWriteLease()
+		want := fmt.Errorf("finish: %w", &pgconn.PgError{Code: "08006"})
+		l.tx.finishErr = want
+		err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { return nil })
+		assertCause(t, err, want, "08006")
+		assertEvents(t, l.events, "acquire", "begin", "entry", "finish", "rollback", "destroy")
+		assertCounts(t, l, 0, 1, 1, 1, 0, 0)
 	})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("WithWriteTx() error = %v, want %v", err, wantErr)
-	}
-	assertEvents(t, events, "begin")
+	t.Run("commit", func(t *testing.T) {
+		l := newFakeWriteLease()
+		want := fmt.Errorf("commit: %w", &pgconn.PgError{Code: "08006"})
+		l.tx.commitErr = want
+		calls := 0
+		err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { calls++; return nil })
+		assertCause(t, err, want, "08006")
+		if calls != 1 {
+			t.Fatalf("callbacks=%d", calls)
+		}
+		assertEvents(t, l.events, "acquire", "begin", "entry", "finish", "commit", "destroy")
+		assertCounts(t, l, 0, 1, 1, 0, 0, 1)
+	})
 }
 
-func TestWithWriteTxCallbackFailurePreservesErrorAndRollsBack(t *testing.T) {
-	caller, cancel := context.WithCancel(context.Background())
+func TestWriteTxRunnerCleanupIsIndependentBoundedAndShared(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	wantErr := errors.New("callback failed")
-	events := []string{}
-	tx := &fakeWriteTx{events: &events, rollbackErr: errors.New("cleanup failed")}
-	starter := &fakeWriteStarter{tx: tx, events: &events}
-
-	err := WithWriteTx(caller, starter, pgx.TxOptions{}, func(*Queries) error {
-		events = append(events, "callback")
-		return wantErr
-	})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("WithWriteTx() error = %v, want %v", err, wantErr)
+	l := newFakeWriteLease()
+	l.tx.entryErr = fmt.Errorf("poison: %w", &pgconn.PgError{Code: "AM001"})
+	if err := fakeRunner(l).ExecWrite(ctx, func(*Queries) error { return nil }); err == nil {
+		t.Fatal("expected error")
 	}
-	assertLiveBoundedCleanup(t, tx)
-	assertEvents(t, events, "begin", "callback", "rollback")
+	if l.tx.rollbackErrAtCall != nil || l.destroyErrAtCall != nil {
+		t.Fatalf("canceled cleanup: %v %v", l.tx.rollbackErrAtCall, l.destroyErrAtCall)
+	}
+	if !l.tx.rollbackHasDeadline || !l.destroyHasDeadline || !l.tx.rollbackDeadline.Equal(l.destroyDeadline) {
+		t.Fatal("cleanup did not share deadline")
+	}
+	d := time.Until(l.destroyDeadline)
+	if d <= 0 || d > 5*time.Second {
+		t.Fatalf("deadline=%v", d)
+	}
 }
 
-func TestWithWriteTxPanicRollsBackAndRethrows(t *testing.T) {
-	panicValue := &struct{ message string }{"callback panic"}
-	events := []string{}
-	tx := &fakeWriteTx{events: &events, rollbackErr: pgx.ErrTxClosed}
-	starter := &fakeWriteStarter{tx: tx, events: &events}
-
+func TestWriteTxRunnerPanicCleansUpAndRethrows(t *testing.T) {
+	p := &struct{ v string }{"panic"}
+	l := newFakeWriteLease()
 	func() {
 		defer func() {
-			if got := recover(); got != panicValue {
-				t.Fatalf("recovered panic = %#v, want original %#v", got, panicValue)
+			if got := recover(); got != p {
+				t.Fatalf("panic=%#v", got)
 			}
 		}()
-		if err := WithWriteTx(context.Background(), starter, pgx.TxOptions{}, func(*Queries) error {
-			events = append(events, "callback")
-			panic(panicValue)
-		}); err != nil {
-			t.Fatalf("WithWriteTx() returned after panic: %v", err)
+		if err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { panic(p) }); err != nil {
+			t.Fatal(err)
 		}
 	}()
-
-	if tx.commitCalls != 0 || tx.rollbacks != 1 {
-		t.Fatalf("commit calls = %d, rollbacks = %d, want 0, 1", tx.commitCalls, tx.rollbacks)
-	}
-	assertEvents(t, events, "begin", "callback", "rollback")
+	assertEvents(t, l.events, "acquire", "begin", "entry", "rollback", "release")
+	assertCounts(t, l, 1, 0, 0, 1, 0, 0)
 }
 
-func TestWithWriteTxCommitFailureIsReturnedWithoutRetry(t *testing.T) {
-	wantErr := errors.New("commit outcome unknown")
-	events := []string{}
-	tx := &fakeWriteTx{events: &events, commitErr: wantErr}
-	starter := &fakeWriteStarter{tx: tx, events: &events}
-	callbacks := 0
-
-	err := WithWriteTx(context.Background(), starter, pgx.TxOptions{}, func(*Queries) error {
-		callbacks++
-		events = append(events, "callback")
-		return nil
-	})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("WithWriteTx() error = %v, want %v", err, wantErr)
-	}
-	if starter.beginCalls != 1 || callbacks != 1 || tx.commitCalls != 1 || tx.rollbacks != 0 {
-		t.Fatalf("calls: begin=%d callback=%d commit=%d rollback=%d, want 1,1,1,0", starter.beginCalls, callbacks, tx.commitCalls, tx.rollbacks)
-	}
-	assertEvents(t, events, "begin", "callback", "commit")
+func TestWriteTxRunnerGoexitCleansUpLease(t *testing.T) {
+	l := newFakeWriteLease()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error {
+			runtime.Goexit()
+			return nil
+		}); err != nil {
+			panic(err)
+		}
+		panic("ExecWrite returned after runtime.Goexit")
+	}()
+	<-done
+	assertEvents(t, l.events, "acquire", "begin", "entry", "rollback", "release")
+	assertCounts(t, l, 1, 0, 0, 1, 0, 0)
 }
 
-func TestExecWriteUsesDefaultOptions(t *testing.T) {
-	events := []string{}
-	tx := &fakeWriteTx{events: &events}
-	starter := &fakeWriteStarter{tx: tx, events: &events}
-
-	if err := ExecWrite(context.Background(), starter, func(*Queries) error { return nil }); err != nil {
-		t.Fatalf("ExecWrite() error = %v", err)
+func TestWriteTxRunnerPanicDisposition(t *testing.T) {
+	tests := []struct {
+		name             string
+		panicValue       error
+		rollbackErr      error
+		release, destroy int
+	}{
+		{"wrapped AM001", fmt.Errorf("callback panic: %w", &pgconn.PgError{Code: "AM001"}), nil, 0, 1},
+		{"rollback failure", errors.New("callback panic"), errors.New("rollback failed"), 0, 1},
 	}
-	if starter.gotOptions != (pgx.TxOptions{}) {
-		t.Fatalf("ExecWrite() options = %#v, want zero options", starter.gotOptions)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newFakeWriteLease()
+			l.tx.rollbackErr = tt.rollbackErr
+			func() {
+				defer func() {
+					got, ok := recover().(error)
+					if !ok || !errors.Is(got, tt.panicValue) {
+						t.Fatalf("panic=%#v, want original %#v", got, tt.panicValue)
+					}
+				}()
+				if err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { panic(tt.panicValue) }); err != nil {
+					t.Fatalf("ExecWrite() returned after panic: %v", err)
+				}
+			}()
+			assertEvents(t, l.events, "acquire", "begin", "entry", "rollback", "destroy")
+			assertCounts(t, l, 0, 1, 0, 1, 0, 0)
+		})
 	}
 }
 
+func TestWriteTxRunnerFinishAndCommitDisposition(t *testing.T) {
+	tests := []struct {
+		name       string
+		finishErr  error
+		commitErr  error
+		wantEvents []string
+	}{
+		{"finish AM001", fmt.Errorf("finish: %w", &pgconn.PgError{Code: "AM001"}), nil, []string{"acquire", "begin", "entry", "finish", "rollback", "destroy"}},
+		{"finish 55000", &pgconn.PgError{Code: "55000"}, nil, []string{"acquire", "begin", "entry", "finish", "rollback", "destroy"}},
+		{"canceled finish", context.Canceled, nil, []string{"acquire", "begin", "entry", "finish", "rollback", "destroy"}},
+		{"canceled commit", nil, context.Canceled, []string{"acquire", "begin", "entry", "finish", "commit", "destroy"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := newFakeWriteLease()
+			l.tx.finishErr = tt.finishErr
+			l.tx.commitErr = tt.commitErr
+			err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { return nil })
+			wantErr := tt.finishErr
+			if wantErr == nil {
+				wantErr = tt.commitErr
+			}
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("error=%v, want %v", err, wantErr)
+			}
+			assertEvents(t, l.events, tt.wantEvents...)
+			if l.releases != 0 || l.destroys != 1 {
+				t.Fatalf("release=%d destroy=%d, want 0,1", l.releases, l.destroys)
+			}
+		})
+	}
+}
+
+func TestWriteTxRunnerBeginAcquireAndNilFailures(t *testing.T) {
+	want := errors.New("acquire")
+	var r WriteTxRunner = &writeTxRunner{acquire: func(context.Context) (writeTxLease, error) { return nil, want }}
+	if err := r.ExecWrite(context.Background(), func(*Queries) error { return nil }); !errors.Is(err, want) {
+		t.Fatal(err)
+	}
+	l := newFakeWriteLease()
+	l.beginErr = errors.New("begin")
+	if err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { return nil }); !errors.Is(err, l.beginErr) {
+		t.Fatal(err)
+	}
+	assertEvents(t, l.events, "acquire", "begin", "destroy")
+	l = newFakeWriteLease()
+	r = fakeRunner(l)
+	if err := r.ExecWrite(context.Background(), nil); err == nil {
+		t.Fatal("nil callback accepted")
+	}
+	if len(l.events) != 0 {
+		t.Fatalf("events=%v", l.events)
+	}
+	if err := NewWriteTxRunner(nil).ExecWrite(context.Background(), func(*Queries) error { return nil }); err == nil {
+		t.Fatal("nil pool accepted")
+	}
+}
+
+func TestWriteTxRunnerExecUsesDefaultOptions(t *testing.T) {
+	l := newFakeWriteLease()
+	if err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if l.gotOptions != (pgx.TxOptions{}) {
+		t.Fatalf("options=%#v", l.gotOptions)
+	}
+}
+func disposition(d int) string {
+	if d == 1 {
+		return "destroy"
+	}
+	return "release"
+}
 func assertEvents(t *testing.T, got []string, want ...string) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("events = %v, want %v", got, want)
+		t.Fatalf("events=%v want=%v", got, want)
 	}
 }
-
-func assertLiveBoundedCleanup(t *testing.T, tx *fakeWriteTx) {
+func assertCounts(t *testing.T, l *fakeWriteLease, r, d, f, rb, cb, c int) {
 	t.Helper()
-	if err := tx.rollbackErrAtCall; err != nil {
-		t.Fatalf("cleanup context was canceled during rollback: %v", err)
+	if l.releases != r || l.destroys != d || l.tx.finishes != f || l.tx.rollbacks != rb || l.tx.callbacks != cb || l.tx.commits != c {
+		t.Fatalf("counts=%d,%d,%d,%d,%d,%d want=%d,%d,%d,%d,%d,%d", l.releases, l.destroys, l.tx.finishes, l.tx.rollbacks, l.tx.callbacks, l.tx.commits, r, d, f, rb, cb, c)
 	}
-	if !tx.rollbackHasDeadline {
-		t.Fatal("cleanup context has no deadline")
+}
+func assertCause(t *testing.T, got, want error, code string) {
+	t.Helper()
+	if !errors.Is(got, want) {
+		t.Fatalf("error=%v want=%v", got, want)
 	}
-	remaining := time.Until(tx.rollbackDeadline)
-	if remaining <= 0 || remaining > 5*time.Second {
-		t.Fatalf("cleanup deadline remaining = %v, want within five seconds", remaining)
+	var p *pgconn.PgError
+	if !errors.As(got, &p) || p.Code != code {
+		t.Fatalf("lost PgError: %v", got)
 	}
 }
