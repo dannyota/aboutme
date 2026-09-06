@@ -994,6 +994,8 @@ build_and_migrate() {
     chmod 0755 -- "$BIN_DIR/mail-capture"
     go build -o "$BIN_DIR/server" ./cmd/server
     chmod 0755 -- "$BIN_DIR/server"
+    go build -o "$BIN_DIR/render-browser-supervisor" ./cmd/render-browser-supervisor
+    chmod 0755 -- "$BIN_DIR/render-browser-supervisor"
     env DATABASE_URL="$DATABASE_URL" MIGRATION_IDENTITY=local-aboutme "$BIN_DIR/migrate" provision
     env DATABASE_URL="$DATABASE_URL" MIGRATION_IDENTITY=local-aboutme "$BIN_DIR/migrate"
   )
@@ -1095,6 +1097,7 @@ render_effective_config() {
   printf 'mock_oauth_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/mock-oauth")"
   printf 'mail_capture_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/mail-capture")"
   printf 'server_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/server")"
+  printf 'browser_supervisor_binary_sha256=%s\n' "$(sha256_file "$BIN_DIR/render-browser-supervisor")"
   printf 'caddy_tool_sha256=%s\n' "$(sha256_file "$caddy_bin")"
   printf 'npm_tool_sha256=%s\n' "$(sha256_file "$npm_bin")"
   for name in "${SERVICES[@]}"; do

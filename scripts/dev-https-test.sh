@@ -369,6 +369,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_MUTATIONS" 'go-build:migrate:./cmd/migrate'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:mock-oauth:./cmd/mock-oauth'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:server:./cmd/server'
+  assert_log_line "$FAKE_MUTATIONS" 'go-build:render-browser-supervisor:./cmd/render-browser-supervisor'
   assert_log_line "$FAKE_EFFECTS" 'migrate:db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   awk '/^migrate:operation=provision$/ { ready=1 } /^migrate:operation=apply$/ { if (!ready) exit 1; seen=1 } END { if (!seen) exit 1 }' "$FAKE_EFFECTS" || \
     fail 'database provisioning did not precede apply'

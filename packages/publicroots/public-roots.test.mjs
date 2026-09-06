@@ -116,6 +116,10 @@ test("source manifests are closed and digests use sorted regular files", async (
   );
 
   const appFiles = await collectManifestFiles(repoRoot, app);
+  assert.ok(
+    appFiles.includes("apps/server/cmd/render-browser-supervisor/main.go"),
+    "application identity must cover its browser supervisor executable",
+  );
   const rendererFiles = await collectManifestFiles(repoRoot, renderer);
   assert.deepEqual(appFiles, [...appFiles].sort(byteSort));
   assert.deepEqual(rendererFiles, [...rendererFiles].sort(byteSort));

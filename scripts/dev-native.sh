@@ -444,6 +444,7 @@ start_server() {
   (
     cd "$ROOT/apps/server"
     go build -o "$BIN_DIR/server" ./cmd/server
+    go build -o "$BIN_DIR/render-browser-supervisor" ./cmd/render-browser-supervisor
   )
   start_service server "$ROOT/apps/server" \
     env \

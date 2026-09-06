@@ -46,6 +46,7 @@ type runtimeHooks struct {
 	version          func(context.Context, string) (string, error)
 	ready            func(context.Context, *Renderer) error
 	attempt          func(context.Context, *Renderer, renderjob.Navigation) ([]byte, error)
+	supervisor       supervisorCommand
 }
 
 // Renderer owns a fresh browser and closed network authority for each render.
@@ -54,6 +55,7 @@ type Renderer struct {
 	origin        string
 	forwardOrigin string
 	hooks         *runtimeHooks
+	supervisor    supervisorCommand
 	readyOnce     sync.Once
 	readyErr      error
 	render        func(context.Context, renderjob.Navigation) ([]byte, error)
@@ -90,6 +92,7 @@ func New(config Config) (*Renderer, error) {
 		origin:        config.RenderOrigin.String(),
 		forwardOrigin: config.testForwardOrigin,
 		hooks:         hooks,
+		supervisor:    hooks.supervisor,
 	}
 	renderer.render = func(ctx context.Context, navigation renderjob.Navigation) ([]byte, error) {
 		if hooks.attempt != nil {
@@ -153,13 +156,28 @@ func validNavigation(navigation renderjob.Navigation) bool {
 }
 
 func defaultHooks() *runtimeHooks {
+	serverExecutable, err := os.Executable()
+	supervisorPath := ""
+	if err == nil {
+		supervisorPath = filepath.Join(filepath.Dir(serverExecutable), "render-browser-supervisor")
+	}
+	return defaultHooksWithSupervisor(supervisorCommand{path: supervisorPath})
+}
+
+func defaultHooksWithSupervisor(supervisor supervisorCommand) *runtimeHooks {
 	return &runtimeHooks{
 		euid:             os.Geteuid,
 		sandboxSupported: linuxSandboxSupported,
+		supervisor:       supervisor,
 		version: func(ctx context.Context, executable string) (string, error) {
 			cmd := exec.CommandContext(ctx, executable, "--version")
-			configureBrowserCommand(executable)(cmd)
+			configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
+			configure(cmd)
 			output, err := cmd.Output()
+			if cmd.Process == nil {
+				proof.noChildStarted()
+			}
+			proof.wait()
 			return strings.TrimSpace(string(output)), err
 		},
 	}

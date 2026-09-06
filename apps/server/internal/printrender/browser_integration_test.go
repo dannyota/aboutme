@@ -349,6 +349,7 @@ func newPinnedTestRenderer(t *testing.T, forwardOrigin string) *Renderer {
 	renderer, err := New(Config{
 		BrowserExecutable: executable,
 		RenderOrigin:      testRenderOrigin(t),
+		testHooks:         defaultHooksWithSupervisor(testSupervisorCommand(t)),
 		testForwardOrigin: forwardOrigin,
 	})
 	if err != nil {

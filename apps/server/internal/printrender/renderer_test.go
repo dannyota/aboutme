@@ -49,7 +49,7 @@ if [ -n "${ABOUTME_PARENT_SECRET_SENTINEL+x}" ]; then
 fi
 printf 'Google Chrome for Testing 151.0.7922.34\n'
 `)
-	got, err := defaultHooks().version(context.Background(), executable)
+	got, err := defaultHooksWithSupervisor(testSupervisorCommand(t)).version(context.Background(), executable)
 	if err != nil {
 		t.Fatal(err)
 	}
