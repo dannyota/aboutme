@@ -87,6 +87,12 @@ The [OAuth reservation contract](../../../design/scaling/admission-attempts.md)
 fixes P22 attempt schema, common rate lock order and bounded terminal receipt
 cleanup. R1 implements its store/schema only; R5 and R7b own callers.
 
+The [shared claim schema](../../../design/scaling/shared-claims.md) and
+[identity contract](../../../design/scaling/claim-identities.md) fix multi-scope
+SSE, queue ordinals, replica binding, receipt retention and bounded ambiguity
+resolution. R1 adds their store/schema; R5 and the named caller tasks compose
+it.
+
 Owner paths: root-assigned migration number, apps/server/sql runtime query
 source or approved new SQL files, generated store output, store/migration tests.
 These are normally root-owned; root must explicitly assign and serialize them.
