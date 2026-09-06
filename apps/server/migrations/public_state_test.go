@@ -123,8 +123,8 @@ func TestPublicStateMigrationDownUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider() error: %v", err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatalf("Up() error: %v", err)
+	if _, err := provider.UpTo(ctx, 7); err != nil {
+		t.Fatalf("UpTo(7) error: %v", err)
 	}
 	if _, err := provider.DownTo(ctx, 6); err != nil {
 		t.Fatalf("DownTo(6) error: %v", err)

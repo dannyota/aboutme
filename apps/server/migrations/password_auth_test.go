@@ -91,8 +91,8 @@ func TestPasswordAuthMigrationDownUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider() error: %v", err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatalf("Up() error: %v", err)
+	if _, err := provider.UpTo(ctx, 8); err != nil {
+		t.Fatalf("UpTo(8) error: %v", err)
 	}
 	if _, err := provider.DownTo(ctx, 7); err != nil {
 		t.Fatalf("DownTo(7) error: %v", err)
@@ -157,8 +157,8 @@ func TestPasswordAuthPreflightRejectsNoncanonicalEmail(t *testing.T) {
 				t.Fatalf("insert seeded user: %v", err)
 			}
 
-			if _, err := provider.Up(ctx); err == nil {
-				t.Fatal("Up() error = nil, want preflight failure on a noncanonical email")
+			if _, err := provider.UpTo(ctx, 8); err == nil {
+				t.Fatal("UpTo(8) error = nil, want preflight failure on a noncanonical email")
 			}
 
 			for _, table := range []string{"password_credentials", "password_registrations", "password_reset_tokens", "auth_email_jobs"} {
