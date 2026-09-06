@@ -199,6 +199,19 @@ type Resume struct {
 	UpdatedAt       time.Time
 }
 
+type RuntimeWriteState struct {
+	Singleton                  bool
+	Generation                 int64
+	WriteGate                  string
+	LastWriteAt                time.Time
+	LastAcceptedWriterAt       time.Time
+	LastWriterKind             string
+	LastWriterOperationID      string
+	UpdatedAt                  time.Time
+	MigratorEnforcementVersion int16
+	MigrationHistoryOwner      string
+}
+
 type Session struct {
 	ID                 uuid.UUID
 	UserID             uuid.UUID

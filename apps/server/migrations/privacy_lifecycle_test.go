@@ -94,7 +94,7 @@ func TestPrivacyLifecyclePriorHeadMigration(t *testing.T) {
 	if _, err := db.ExecContext(ctx, `INSERT INTO media_deletion_jobs (resume_id, object_key) VALUES ('00000000-0000-0000-0000-000000000001', 'resumes/00000000-0000-0000-0000-000000000001/photo-00000000000000000000000000000000.png')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
+	if _, err := provider.UpTo(ctx, 11); err != nil {
 		t.Fatal(err)
 	}
 	var pending int
@@ -104,7 +104,7 @@ func TestPrivacyLifecyclePriorHeadMigration(t *testing.T) {
 	if _, err := provider.DownTo(ctx, 10); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
+	if _, err := provider.UpTo(ctx, 11); err != nil {
 		t.Fatal(err)
 	}
 }
