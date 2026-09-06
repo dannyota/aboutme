@@ -291,6 +291,14 @@ receipt independently.
   successful-run watermark. Weekly orphan due always starts RDS and a replica
   because database state alone cannot prove the bucket listing is empty.
 
+## Key rotation
+
+Key changes follow the joint [claim/rate rotation predicate](rate-identities.md)
+while PostgreSQL and private maintenance remain available. Closed application
+admission for rotation is not final write-gate closure or an RDS stop. Existing
+controller ownership and exact target evidence serialize the procedure; it adds
+no lifecycle SQL action or ledger result.
+
 ## Failing-first proof cases and commands not run
 
 - Writer enters before receipt but commits late; writer attempts entry after

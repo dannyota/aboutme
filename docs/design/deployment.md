@@ -274,6 +274,15 @@ images, source, command lines, logs, or OpenTofu state where the platform
 permits a reference instead. Secret names and rotation procedures are tracked;
 values are never evidence artifacts.
 
+Fleet admission uses the private pinned admission/password-email key-version
+tuple from [rate identities](scaling/rate-identities.md). Composition verifies
+loaded versions before readiness; the existing controller checks exact target
+evidence before activation. A key change requires closed admission, joined or
+fenced work and proved zero claim/rate/pending debt. Rotation adds no membership
+or lifecycle SQL. Its executable runbook is written when the infrastructure and
+runtime cleanup operations exist, following the
+[runbook policy](../runbooks/README.md).
+
 The accepted [UAT lifecycle](scaling/uat-lifecycle.md) keeps RDS on during a
 booked campaign and its final 24-hour application writer tail. Application nodes
 and the temporary ALB are removed outside test windows. RDS may stop only after

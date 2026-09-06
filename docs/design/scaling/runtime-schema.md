@@ -26,6 +26,13 @@ local ordering that preserve later generations and proved retirements.
 [Exclusive lifecycle entry](lifecycle-write-entry.md) fixes the two wake
 methods, marker, table/action catalog and historical write-generation results.
 
+[Rate storage](rate-storage.md) fixes owner-controlled shared_rate_policies,
+shared_rate_policy_key_shapes, shared_policy_clocks, shared_rate_partitions,
+shared_rate_buckets, shared_rate_overflow and shared_admission_attempts. App
+receives only fixed admission calls; maintenance receives only bounded cleanup
+calls. Key-version evidence remains private R8 composition input, with no new
+replica column, registration argument or lifecycle ledger field.
+
 ## runtime_replicas
 
 - replica_id uuid primary key, generated randomly by composition at each boot.

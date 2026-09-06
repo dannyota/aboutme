@@ -9,6 +9,8 @@ gates.
 
 1. Composition obtains replica ID and exact EC2/container/task/release identity
    from trusted deployment inputs. Partial or mismatched trio fails startup.
+   Before constructing admission adapters, it verifies both loaded key versions
+   against the single private [deployment tuple](rate-identities.md).
 2. In one transaction lock public_state then runtime capacity, insert joining
    replica and its exact three task rows, and read closing/unresolved
    transitions without locking them. Any such row or unapproved capacity keeps
@@ -19,12 +21,15 @@ gates.
    local Nuxt render probe, Caddy pairing probe, shared admission read/write
    rollback probe, and absence of unresolved transitions.
 5. App marks the exact joined replica ready but stays unready. The lifecycle
-   controller calls activate_replica_capacity. That one transaction locks the
-   singleton, validates desired capacity 1..2, exact instance/release/trio,
-   current active count below desired, no transition/unresolved state, changes
-   joining to active, and enables logical partition one or two for first or
-   second serving activation. Replacement preserves the existing flags. Only
-   after observing commit may Caddy readiness open.
+   controller verifies that exact target's immutable process/key-version
+   evidence against the approved tuple before the existing
+   activate_replica_capacity call. No SQL signature changes. That transaction
+   locks the singleton, validates desired capacity 1..2, exact
+   instance/release/trio, current active count below desired, no
+   transition/unresolved state, changes joining to active, and enables logical
+   partition one or two for first or second serving activation. Replacement
+   preserves the existing flags. Only after observing commit may Caddy readiness
+   open.
 
 ## Capacity/topology handshake
 
