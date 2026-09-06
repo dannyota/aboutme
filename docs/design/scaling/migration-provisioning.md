@@ -93,11 +93,13 @@ validates the before/after ownership change before commit. Its reviewed program
 contains no application-row DML; only the runtime singleton changes.
 
 On an ambiguous Commit or post-Commit cleanup, first retire the exact mutation
-backend and confirm physical closure. Then permit one new connection with a
-detached five-second deadline for read-only reconciliation. This is the sole
-exception to the runner's no-reconnect rule; it never replays mutation or uses a
-new connection to clean up the old one. Verify the fixed local identity and
-database class and a different PID. In one REPEATABLE READ READ ONLY snapshot:
+backend under the [socket retirement contract](migrator-retirement.md). This
+proves local transport closure and requires no remote PID-absence check. Then
+permit one new connection with a detached five-second deadline for read-only
+reconciliation. This is the sole exception to the runner's no-reconnect rule; it
+never replays mutation or uses a new connection to clean up the old one. Verify
+the fixed local identity and database class and a different PID. In one
+REPEATABLE READ READ ONLY snapshot:
 
 - Require the complete fixed manifest and foundation ownership, unchanged OIDs,
   definitions and dependencies. Permit only expected owner/grantor normalization
@@ -126,7 +128,8 @@ Before COMMIT, errors run synchronous ROLLBACK with a detached five-second
 deadline, followed by ordered unlock and identity checks. Rollback ambiguity
 retires the backend. After a COMMIT error, never issue ROLLBACK. Provisioning
 returns the preserved error without reconnecting; only adoption may reconcile.
-No cleanup goroutine may outlive a returned lease.
+No application cleanup goroutine may keep using a returned lease. The pinned
+driver's separate CancelRequest may finish after confirmed data-socket closure.
 
 ## Fixed ownership manifest
 

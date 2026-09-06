@@ -100,21 +100,15 @@ identity reset and retirement. Successful definer execution supplies the
 private-row proof. Unknown execution outcomes destroy the backend, without
 expanding marker grants or the metadata accessor.
 
-Apply and Status support the pinned pgx stdlib driver. Verify exact
-`*stdlib.Conn` through Raw before any identity, lock or Goose work in bootstrap
-and protected Apply, and before Status session authorization or BEGIN.
-Retirement uses sql.Conn.Raw to require that type, calls its exported
-Conn().Close with a separate five-second cleanup context, and confirms IsClosed.
-Never retain the driver handle outside Raw. Return nil from Raw after successful
-physical close so Goose's following sql.Conn.Close does not turn a successful
-migration into ErrConnDone. The dead wrapper cannot execute SQL or pass pgx
-ResetSession. A close error is reported even when IsClosed confirms the socket
-cannot be reused. If the Raw callback runs but IsClosed is false, return
-driver.ErrBadConn so database/sql synchronously closes and discards the wrapper.
-SessionUnlock still returns a cleanup failure and preserves the primary
-migration error. If Raw cannot invoke the callback, report an invariant failure
-and do not retry or claim confirmed backend death without proof. Unsupported
-drivers fail before execution.
+Apply and Status support the pinned pgx stdlib driver over TCP or TLS over TCP.
+The [retirement contract](migrator-retirement.md) requires a close-only socket
+capability captured inside Raw before any SQL on the admitted connection. It
+survives driver.ErrBadConn making later Raw unavailable. Retirement proves
+CleanupDone closed or closure of that exact TCP socket; IsClosed alone is
+insufficient. Driver and protocol handles never escape Raw. Every admitted exit
+owns cleanup, and Goose retains ownership of its logical sql.Conn.Close.
+Preserve real errors and the primary error tree. Unsupported transports fail
+before execution.
 
 There is no reconnect or retry during a failed operation. Bootstrap and
 protected stages use ApplyVersion once per exact embedded version, each on a new
