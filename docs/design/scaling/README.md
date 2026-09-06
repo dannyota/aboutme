@@ -21,6 +21,7 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | [Admission](admission.md)                                 | Fleet rate policies, heavy work, render affinity and realtime         |
 | [Rate storage](rate-storage.md)                           | Exact state, clock arithmetic, pending debt and bounded cleanup       |
 | [Rate identities](rate-identities.md)                     | Canonical key frames, pinned versions and rotation preconditions      |
+| [Claim operations](claim-operations.md)                   | Exact results, role checks, errors and query transport                |
 | [Policy catalog](policy-catalog.md)                       | Exact limiter identities, scopes and existing caller behavior         |
 | [UAT lifecycle](uat-lifecycle.md)                         | Maintenance deadlines, write barriers and final stop receipts         |
 | [Transaction entry](transaction-entry.md)                 | Shared barrier before any row lock or write                           |

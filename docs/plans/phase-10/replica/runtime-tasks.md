@@ -105,6 +105,12 @@ SSE, queue ordinals, replica binding, receipt retention and bounded ambiguity
 resolution. R1 adds their store/schema; R5 and the named caller tasks compose
 it.
 
+[Fixed claim operations](../../../design/scaling/claim-operations.md) supplies
+the result/nullability matrix, direct-login role/kind checks, scoped AM002
+conflicts and one-call query transport. R1 returns no authority on runner
+errors; R5 alone owns ClaimOperation and retry state. The result type belongs in
+a later operation migration, with claim schema 17 unchanged.
+
 The [membership](../../../design/scaling/replica-membership.md),
 [lifecycle](../../../design/scaling/lifecycle-operations.md) and
 [replay](../../../design/scaling/lifecycle-replay.md) contracts fix exact task

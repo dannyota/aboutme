@@ -119,9 +119,10 @@ joined_claim_count integer, recorded_at timestamptz, replayed boolean)
 runtime_fence_result( replica_id uuid, state text, evidence_id text,
 reclaimed_claim_count integer, recorded_at timestamptz, replayed boolean)
 
-All counts are nonnegative. A mismatched replay raises a fixed conflict
-SQLSTATE; closed/stale/unready raises 55000; marker/catalog corruption raises
-AM001. Error details contain no ARN, instance, release or evidence value.
+All counts are nonnegative. A mismatched replay raises AM002 under the
+[fixed operation error contract](claim-operations.md#roles-and-errors);
+closed/stale/unready raises 55000; marker/catalog corruption raises AM001. Error
+details contain no ARN, instance, release or evidence value.
 
 ## Registration and join readiness
 
@@ -159,9 +160,11 @@ nuxt_task_arn text, release_digest text) -> runtime_replica_result
 Lock public_state, capacity and replica. Require joining, exact identity, no
 termination intent, online/starting lifecycle, and admission prerequisites. It
 sets join_ready_at once but leaves state joining. Exact replay is idempotent.
-The private adapter calls this only after normal query, transition listener,
-revision LISTEN, paired Nuxt/Caddy, shared admission rollback and
-unresolved-transition probes pass. SQL cannot infer those local probes.
+Mark-ready replay retains the joining prerequisite; it does not inherit
+registration's later-state replay permission. The private adapter calls this
+only after normal query, transition listener, revision LISTEN, paired
+Nuxt/Caddy, shared admission rollback and unresolved-transition probes pass. SQL
+cannot infer those local probes.
 
 Use the two register functions as wrappers over an owner-only helper. They store
 their fixed replica_kind. Grant runtime_mark_maintenance_replica_join_ready only

@@ -7,6 +7,12 @@ implementation and hosted proof remain Phase 10 gates.
 This contract serializes lifecycle workflows and makes every controller retry
 resolve to one immutable action result.
 
+The [fixed operation error contract](claim-operations.md#roles-and-errors) uses
+AM002 for supplied identity/replay conflict and AM001 for corrupted stored
+argument/result digests or impossible ledger rows. Missing/out-of-order
+predecessors and stale generations use 55000. Existing transition mismatch codes
+remain unchanged.
+
 ## Operation schema and digest
 
 `runtime_lifecycle_operations` has operation_id text primary key, workflow_kind
