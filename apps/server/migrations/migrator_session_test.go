@@ -4,6 +4,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"reflect"
@@ -126,16 +127,8 @@ func TestRuntimeLockerSameBackendOrderAndCleanExit(t *testing.T) {
 		}
 	}
 	assertMigrationEvents(t, events, "goose-lock", "validate", "goose-unlock")
-	var user string
-	var pid int32
-	var locks int
-	if err := conn.QueryRowContext(context.Background(), `SELECT session_user,pg_backend_pid(),(SELECT count(*) FROM pg_locks WHERE pid=pg_backend_pid() AND locktype='advisory' AND ((classid::bigint<<32)|objid::bigint) IN ($1,$2))`, runtimeMigrationLockID, LockID).Scan(&user, &pid, &locks); err != nil {
-		t.Fatal(err)
-	}
-	if user != "aboutme" || pid != initialPID || locks != 0 {
-		t.Fatalf("user=%s pid=%d locks=%d", user, pid, locks)
-	}
-	if err := conn.Close(); err != nil {
+	assertRetiredMigrationConn(t, conn)
+	if err := conn.Close(); err != nil && !errors.Is(err, sql.ErrConnDone) {
 		t.Fatal(err)
 	}
 	reused, err := db.Conn(context.Background())
@@ -147,12 +140,12 @@ func TestRuntimeLockerSameBackendOrderAndCleanExit(t *testing.T) {
 	if err := reused.QueryRowContext(context.Background(), `SELECT pg_backend_pid()`).Scan(&reusedPID); err != nil {
 		t.Fatal(err)
 	}
-	if reusedPID != initialPID {
-		t.Fatalf("PID changed %d to %d", initialPID, reusedPID)
+	if reusedPID == initialPID {
+		t.Fatalf("retired PID %d was reused", initialPID)
 	}
 }
 
-func TestRuntimeLockerEntryFailuresReuseOnlyConfirmed55000(t *testing.T) {
+func TestRuntimeLockerEntryFailureRetiresConfirmed55000(t *testing.T) {
 	_, db := newSessionTestDatabase(t)
 	db.SetMaxOpenConns(2)
 	conn, err := db.Conn(context.Background())
@@ -177,17 +170,11 @@ func TestRuntimeLockerEntryFailuresReuseOnlyConfirmed55000(t *testing.T) {
 	if !errors.As(err, &pgErr) || pgErr.Code != "55000" {
 		t.Fatalf("error=%v", err)
 	}
-	var reusedPID int32
-	if err := conn.QueryRowContext(context.Background(), `SELECT pg_backend_pid()`).Scan(&reusedPID); err != nil {
-		t.Fatal(err)
-	}
-	if reusedPID != pid {
-		t.Fatalf("PID changed")
-	}
+	assertRetiredMigrationConn(t, conn)
 	if _, err := db.ExecContext(context.Background(), `UPDATE public.runtime_write_state SET write_gate='open' WHERE singleton`); err != nil {
 		t.Fatal(err)
 	}
-	if err := conn.Close(); err != nil {
+	if err := conn.Close(); err != nil && !errors.Is(err, sql.ErrConnDone) {
 		t.Fatal(err)
 	}
 }
@@ -207,7 +194,13 @@ func TestMigrationIdentityLiveRejectsWrongAuthenticatedSession(t *testing.T) {
 	if err := direct.SessionLock(context.Background(), conn); err == nil {
 		t.Fatal("direct identity accepted aboutme admin")
 	}
-	var pidBefore, pidAfter int32
+	assertRetiredMigrationConn(t, conn)
+	conn, err = db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	registerSessionConnCleanup(t, conn)
+	var pidBefore int32
 	if err := conn.QueryRowContext(context.Background(), `SELECT pg_backend_pid()`).Scan(&pidBefore); err != nil {
 		t.Fatal(err)
 	}
@@ -221,15 +214,10 @@ func TestMigrationIdentityLiveRejectsWrongAuthenticatedSession(t *testing.T) {
 	if err := local.SessionLock(context.Background(), conn); err == nil {
 		t.Fatal("local identity accepted foreign session")
 	}
-	if err := conn.QueryRowContext(context.Background(), `SELECT pg_backend_pid()`).Scan(&pidAfter); err != nil {
-		t.Fatal(err)
-	}
-	if pidAfter != pidBefore {
-		t.Fatal("definite role denial replaced backend")
-	}
+	assertRetiredMigrationConn(t, conn)
 }
 
-func TestRuntimeLockerAM001PoisonsPhysicalBackend(t *testing.T) {
+func TestRuntimeLockerAM001RetiresPhysicalBackend(t *testing.T) {
 	_, db := newSessionTestDatabase(t)
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
@@ -254,8 +242,8 @@ func TestRuntimeLockerAM001PoisonsPhysicalBackend(t *testing.T) {
 	if !errors.As(err, &pgErr) || pgErr.Code != "AM001" {
 		t.Fatalf("error=%v", err)
 	}
-	if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) {
-		t.Fatalf("poisoned conn error=%v", err)
+	if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) && !errors.Is(err, driver.ErrBadConn) {
+		t.Fatalf("retired conn error=%v", err)
 	}
 	sessionBackendGone(t, db, pid)
 	replacement, err := db.Conn(context.Background())
@@ -268,7 +256,7 @@ func TestRuntimeLockerAM001PoisonsPhysicalBackend(t *testing.T) {
 		t.Fatal(err)
 	}
 	if replacementPID == pid {
-		t.Fatal("poisoned PID reused")
+		t.Fatal("retired PID reused")
 	}
 }
 
@@ -303,9 +291,7 @@ func TestRuntimeLockerExclusiveRuntimeContentionPoisonsCanceledEntry(t *testing.
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("error=%v", err)
 	}
-	if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) {
-		t.Fatalf("pinned conn error=%v", err)
-	}
+	assertRetiredMigrationConn(t, conn)
 	sessionBackendGone(t, db, pid)
 }
 
@@ -335,9 +321,7 @@ func TestRuntimeLockerValidationFailurePoisonsAfterCleanUnlock(t *testing.T) {
 	if !errors.Is(err, want) {
 		t.Fatalf("lost validation cause: %v", err)
 	}
-	if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) {
-		t.Fatalf("pinned conn error=%v", err)
-	}
+	assertRetiredMigrationConn(t, conn)
 	sessionBackendGone(t, db, pid)
 }
 
@@ -363,9 +347,7 @@ func TestRuntimeLockerMissingGooseLockPoisonsBeforeValidator(t *testing.T) {
 	if err == nil || validated {
 		t.Fatalf("error=%v validated=%t", err, validated)
 	}
-	if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) {
-		t.Fatalf("pinned conn error=%v", err)
-	}
+	assertRetiredMigrationConn(t, conn)
 	sessionBackendGone(t, db, pid)
 }
 
@@ -404,9 +386,7 @@ func TestRuntimeLockerGooseContentionCleansRuntimeAndPoisons(t *testing.T) {
 	if err == nil {
 		t.Fatal("Goose contention succeeded")
 	}
-	if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) {
-		t.Fatalf("pinned conn error=%v", err)
-	}
+	assertRetiredMigrationConn(t, conn)
 	sessionBackendGone(t, db, pid)
 }
 
@@ -440,9 +420,7 @@ func TestRuntimeLockerUnlockAmbiguityPoisonsAfterReverseCleanup(t *testing.T) {
 	if !errors.Is(err, want) {
 		t.Fatalf("lost unlock cause: %v", err)
 	}
-	if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) {
-		t.Fatalf("pinned conn error=%v", err)
-	}
+	assertRetiredMigrationConn(t, conn)
 	sessionBackendGone(t, db, pid)
 }
 
@@ -488,11 +466,17 @@ func TestRuntimeLockerExitAndResetFailuresPoison(t *testing.T) {
 			if !errors.Is(err, want) {
 				t.Fatalf("lost cleanup cause: %v", err)
 			}
-			if err := conn.PingContext(context.Background()); !errors.Is(err, sql.ErrConnDone) {
-				t.Fatalf("pinned conn error=%v", err)
-			}
+			assertRetiredMigrationConn(t, conn)
 			sessionBackendGone(t, db, pid)
 		})
+	}
+}
+
+func assertRetiredMigrationConn(t *testing.T, conn *sql.Conn) {
+	t.Helper()
+	err := conn.PingContext(context.Background())
+	if !errors.Is(err, sql.ErrConnDone) && !errors.Is(err, driver.ErrBadConn) {
+		t.Fatalf("retired connection error=%v", err)
 	}
 }
 

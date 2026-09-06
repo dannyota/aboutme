@@ -63,7 +63,11 @@ func newManifestTestDatabase(t *testing.T) *sql.DB {
 	})
 	applyContext, stopApply := context.WithTimeout(context.Background(), 30*time.Second)
 	defer stopApply()
-	if _, applyErr := Apply(applyContext, db); applyErr != nil {
+	provider, providerErr := NewProvider(db, FS)
+	if providerErr != nil {
+		t.Fatalf("create version-13 manifest provider: %v", providerErr)
+	}
+	if _, applyErr := provider.UpTo(applyContext, 13); applyErr != nil {
 		t.Fatalf("apply migrations to manifest database: %v", applyErr)
 	}
 	return db

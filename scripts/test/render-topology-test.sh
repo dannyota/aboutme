@@ -28,6 +28,14 @@ assert.equal(services['db-role-bootstrap'].healthcheck.disable, true);
 assert.deepEqual(services['db-role-bootstrap'].entrypoint, ['/usr/local/bin/db-role-bootstrap']);
 assert.equal(services['db-role-bootstrap'].depends_on.postgres.condition, 'service_healthy');
 assert.equal(services.migrate.depends_on['db-role-bootstrap'].condition, 'service_completed_successfully');
+assert.equal(services.migrate.depends_on['db-provision'].condition, 'service_completed_successfully');
+assert.deepEqual(services['db-provision'].entrypoint, ['/usr/local/bin/migrate', 'provision']);
+assert.equal(services['db-provision'].depends_on['db-role-bootstrap'].condition, 'service_completed_successfully');
+assert.deepEqual(networkNames(services['db-provision']), ['db']);
+assert.equal(services['db-provision'].restart, 'no');
+assert.equal(services['db-provision'].healthcheck.disable, true);
+assert.equal(services['db-provision'].environment.MIGRATION_IDENTITY, 'local-aboutme');
+assert.equal(services.migrate.environment.MIGRATION_IDENTITY, 'local-aboutme');
 assert.match(services['db-role-bootstrap'].environment.CLUSTER_BOOTSTRAP_DATABASE_URL, /@postgres:5432\/postgres\?/);
 assert.deepEqual(Object.keys(services['db-role-bootstrap'].environment).sort(), ['CLUSTER_BOOTSTRAP_DATABASE_URL', 'PGPASSWORD']);
 assert.equal('ports' in services['db-role-bootstrap'], false);
@@ -64,7 +72,7 @@ assert.equal(
 );
 assert.deepEqual(networkNames(services.web).sort(), ['frontend', 'render']);
 assert.equal(networkNames(services.web).includes('edge'), false);
-for (const name of ['postgres', 'db-role-bootstrap', 'migrate', 'media', 'media-init', 'caddy']) {
+for (const name of ['postgres', 'db-role-bootstrap', 'db-provision', 'migrate', 'media', 'media-init', 'caddy']) {
   assert.equal(networkNames(services[name]).includes('render'), false, `${name} joined render`);
 }
 for (const name of ['server', 'web']) {

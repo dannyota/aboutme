@@ -117,7 +117,9 @@ cat >"$out" <<'INNER'
 set -Eeuo pipefail
 name=${0##*/}
 if [ "$name" = migrate ]; then
+  [ "${MIGRATION_IDENTITY:-}" = local-aboutme ] || exit 71
   printf 'migrate:db=%s\n' "$DATABASE_URL" >>"$FAKE_EFFECTS"
+  printf 'migrate:operation=%s\n' "${1:-apply}" >>"$FAKE_EFFECTS"
   exit 0
 fi
 if [ "$name" = mail-capture ]; then
@@ -368,6 +370,8 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_MUTATIONS" 'go-build:mock-oauth:./cmd/mock-oauth'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:server:./cmd/server'
   assert_log_line "$FAKE_EFFECTS" 'migrate:db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
+  awk '/^migrate:operation=provision$/ { ready=1 } /^migrate:operation=apply$/ { if (!ready) exit 1; seen=1 } END { if (!seen) exit 1 }' "$FAKE_EFFECTS" || \
+    fail 'database provisioning did not precede apply'
   assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google db='
   assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   assert_log_line "$FAKE_EFFECTS" 'npm:run dev -- --port 20440 --host 127.0.0.1'

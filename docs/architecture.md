@@ -36,11 +36,12 @@ disposable pinned Playwright image imports the invocation's Caddy root into an
 isolated NSS database and writes only bounded local verdicts. It does not change
 the host trust store or use a certificate bypass.
 
-The Compose deployment has four long-lived containers plus a one-shot migration
-container. PostgreSQL is not published to the host. Caddy is the only published
-service. The current Compose Caddyfile serves HTTP; this is suitable for
-deployment smoke checks. Complete hosted UAT is planned for Phase 10 at
-`https://uat.aboutme.vn` after Phase 9 AWS cost research; see
+The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. Separate
+one-shot commands bootstrap roles, provision database grants, apply migrations
+and initialize media storage. PostgreSQL is not published to the host. Caddy is
+the only published service. The current Compose Caddyfile serves HTTP; this is
+suitable for deployment smoke checks. Complete hosted UAT is planned for Phase
+10 at `https://uat.aboutme.vn` after Phase 9 AWS cost research; see
 [ADR 0031](adr/0031-aws-cost-research-and-hosted-uat.md). No AWS application
 deployment is claimed by these local checks.
 

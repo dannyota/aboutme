@@ -88,6 +88,27 @@ services:
     networks:
       - db
 
+  db-provision:
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+    image: localhost/aboutme/server:dev
+    entrypoint: ["/usr/local/bin/migrate", "provision"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-role-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      MIGRATION_IDENTITY: local-aboutme
+      DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env and set it}
+    healthcheck:
+      disable: true
+    networks:
+      - db
+
   # One-shot migration runner: applies embedded goose migrations (cmd/migrate
   # — spec §3 "Prod migration sequence") once Postgres is reachable, and
   # exits. Same image as `server` (shared build + image tag, built once —
@@ -106,6 +127,8 @@ services:
       postgres:
         condition: service_healthy
       db-role-bootstrap:
+        condition: service_completed_successfully
+      db-provision:
         condition: service_completed_successfully
     environment:
       MIGRATION_IDENTITY: local-aboutme

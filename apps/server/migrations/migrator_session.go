@@ -3,7 +3,6 @@ package migrations
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"errors"
 	"fmt"
 	"sync"
@@ -27,9 +26,11 @@ type runtimeSessionLocker struct {
 	validate runtimePostLockValidator
 	exec     runtimeExecFunc
 
-	mu         sync.Mutex
-	activeConn *sql.Conn
-	backendPID int32
+	mu             sync.Mutex
+	activeConn     *sql.Conn
+	backendPID     int32
+	completedClean bool
+	backend        *migrationBackend
 }
 
 func newRuntimeSessionLocker(identity MigrationIdentity, wrapped lock.SessionLocker, validate runtimePostLockValidator) (*runtimeSessionLocker, error) {
@@ -48,15 +49,29 @@ func newRuntimeSessionLocker(identity MigrationIdentity, wrapped lock.SessionLoc
 }
 
 // SessionLock establishes runtime entry before the wrapped Goose lock.
-func (l *runtimeSessionLocker) SessionLock(ctx context.Context, conn *sql.Conn) error {
+func (l *runtimeSessionLocker) SessionLock(ctx context.Context, conn *sql.Conn) (resultErr error) {
 	if conn == nil {
 		return errors.New("migrations: nil pinned connection")
+	}
+	backend, err := captureMigrationBackend(conn)
+	if err != nil {
+		return err
+	}
+	owned := true
+	defer func() {
+		if owned {
+			resultErr = errors.Join(resultErr, backend.retire(ctx, conn))
+		}
+	}()
+	if verifyErr := verifyMigrationDriver(conn); verifyErr != nil {
+		return verifyErr
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.activeConn != nil {
 		return errors.New("migrations: runtime session locker already active")
 	}
+	l.completedClean = false
 
 	pid, err := l.establishIdentity(ctx, conn)
 	if err != nil {
@@ -74,10 +89,8 @@ func (l *runtimeSessionLocker) SessionLock(ctx context.Context, conn *sql.Conn) 
 			if cleanupErr == nil {
 				return primary
 			}
-			poisonSQLConn(conn)
 			return errors.Join(primary, cleanupErr)
 		}
-		poisonSQLConn(conn)
 		return primary
 	}
 	if err = l.wrapped.SessionLock(ctx, conn); err != nil {
@@ -88,23 +101,22 @@ func (l *runtimeSessionLocker) SessionLock(ctx context.Context, conn *sql.Conn) 
 		cleanupErr = errors.Join(cleanupErr, withRuntimeCleanupContext(ctx, func(cleanupCtx context.Context) error {
 			return l.resetLocalIdentity(cleanupCtx, conn, pid)
 		}))
-		poisonSQLConn(conn)
 		return errors.Join(primary, cleanupErr)
 	}
 	if err = l.verifyLocksHeld(ctx, conn, pid); err != nil {
 		primary := fmt.Errorf("migrations: verify acquired migration locks: %w", err)
 		cleanupErr := l.cleanUnlock(ctx, conn, pid)
-		poisonSQLConn(conn)
 		return errors.Join(primary, cleanupErr)
 	}
 	if err = l.validate(ctx, conn, pid); err != nil {
 		primary := fmt.Errorf("migrations: validate locked migration state: %w", err)
 		cleanupErr := l.cleanUnlock(ctx, conn, pid)
-		poisonSQLConn(conn)
 		return errors.Join(primary, cleanupErr)
 	}
 	l.activeConn = conn
 	l.backendPID = pid
+	l.backend = backend
+	owned = false
 	return nil
 }
 
@@ -114,23 +126,27 @@ func (l *runtimeSessionLocker) SessionUnlock(ctx context.Context, conn *sql.Conn
 	defer l.mu.Unlock()
 	if conn == nil || l.activeConn == nil || conn != l.activeConn {
 		active := l.activeConn
+		activeBackend := l.backend
 		l.activeConn = nil
 		l.backendPID = 0
+		l.backend = nil
+		var retirementErr error
 		if active != nil {
-			poisonSQLConn(active)
+			retirementErr = activeBackend.retire(ctx, active)
 		}
-		if conn != nil && conn != active {
-			poisonSQLConn(conn)
-		}
-		return errors.New("migrations: runtime session unlock connection mismatch")
+		return errors.Join(errors.New("migrations: runtime session unlock connection mismatch"), retirementErr)
 	}
 	pid := l.backendPID
+	backend := l.backend
 	l.activeConn = nil
 	l.backendPID = 0
-	if err := l.cleanUnlock(ctx, conn, pid); err != nil {
-		poisonSQLConn(conn)
-		return err
+	l.backend = nil
+	unlockErr := l.cleanUnlock(ctx, conn, pid)
+	retireErr := backend.retire(ctx, conn)
+	if unlockErr != nil || retireErr != nil {
+		return errors.Join(unlockErr, retireErr)
 	}
+	l.completedClean = true
 	return nil
 }
 
@@ -154,7 +170,6 @@ func (l *runtimeSessionLocker) establishIdentity(ctx context.Context, conn *sql.
 	var sessionUser, superuser string
 	var pid int32
 	if err := conn.QueryRowContext(ctx, `SELECT session_user,current_setting('is_superuser'),pg_backend_pid()`).Scan(&sessionUser, &superuser, &pid); err != nil {
-		poisonSQLConn(conn)
 		return 0, fmt.Errorf("migrations: verify migration identity: %w", err)
 	}
 	switch l.identity.kind {
@@ -167,11 +182,9 @@ func (l *runtimeSessionLocker) establishIdentity(ctx context.Context, conn *sql.
 			return 0, fmt.Errorf("migrations: local identity session_user=%q is_superuser=%q", sessionUser, superuser)
 		}
 		if _, err := l.exec(ctx, conn, `SET SESSION AUTHORIZATION aboutme_migrator`); err != nil {
-			poisonSQLConn(conn)
 			return 0, fmt.Errorf("migrations: assume fixed migrator identity: %w", err)
 		}
 		if err := verifySessionIdentity(ctx, conn, pid, "aboutme_migrator", "off"); err != nil {
-			poisonSQLConn(conn)
 			return 0, err
 		}
 	default:
@@ -251,14 +264,6 @@ func withRuntimeCleanupContext(ctx context.Context, cleanup func(context.Context
 	cleanupCtx, cancel := runtimeCleanupContext(ctx)
 	defer cancel()
 	return cleanup(cleanupCtx)
-}
-
-func poisonSQLConn(conn *sql.Conn) {
-	if conn == nil {
-		return
-	}
-	ignoreMigrationCleanupError(conn.Raw(func(any) error { return driver.ErrBadConn }))
-	ignoreMigrationCleanupError(conn.Close())
 }
 
 func ignoreMigrationCleanupError(error) {}

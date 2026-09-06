@@ -299,7 +299,13 @@ func validateVersion13Dependencies(ctx context.Context, db manifestQueryer, snap
 		"resumes|resume_revision_notification|O|0|notify_resume_revision()|CREATE TRIGGER resume_revision_notification AFTER INSERT OR DELETE OR UPDATE ON resumes FOR EACH ROW EXECUTE FUNCTION notify_resume_revision()",
 		"resumes|resumes_enforce_cap|O|0|enforce_resume_cap()|CREATE TRIGGER resumes_enforce_cap BEFORE INSERT OR UPDATE OF user_id ON resumes FOR EACH ROW EXECUTE FUNCTION enforce_resume_cap()",
 	}
-	if fmt.Sprint(snapshot.triggers) != fmt.Sprint(wantTriggers) {
+	wantProtectedTriggers := []string{
+		"goose_db_version|goose_db_version_insert_guard|O|0|runtime_assert_migration_history_write()|CREATE TRIGGER goose_db_version_insert_guard BEFORE INSERT ON goose_db_version FOR EACH ROW EXECUTE FUNCTION runtime_assert_migration_history_write()",
+		"goose_db_version|goose_db_version_truncate_guard|O|0|runtime_deny_migration_history_write()|CREATE TRIGGER goose_db_version_truncate_guard BEFORE TRUNCATE ON goose_db_version FOR EACH STATEMENT EXECUTE FUNCTION runtime_deny_migration_history_write()",
+		"goose_db_version|goose_db_version_update_delete_guard|O|0|runtime_deny_migration_history_write()|CREATE TRIGGER goose_db_version_update_delete_guard BEFORE DELETE OR UPDATE ON goose_db_version FOR EACH ROW EXECUTE FUNCTION runtime_deny_migration_history_write()",
+		wantTriggers[0], wantTriggers[1],
+	}
+	if fmt.Sprint(snapshot.triggers) != fmt.Sprint(wantTriggers) && fmt.Sprint(snapshot.triggers) != fmt.Sprint(wantProtectedTriggers) {
 		return fmt.Errorf("%w: trigger dependencies %v", errVersion13ManifestMismatch, snapshot.triggers)
 	}
 	var validIdentity bool
@@ -438,7 +444,9 @@ WITH foundation_relations AS (
  SELECT 'type',n.nspname,t.typname,t.oid,t.typowner,concat_ws('|',t.typtype::text,t.typrelid::text,t.typcategory::text),COALESCE((SELECT jsonb_agg(jsonb_build_object('scope','type','public',x.grantee=0,'grantee_oid',x.grantee,'grantee',CASE WHEN x.grantee=0 THEN '' ELSE pg_catalog.pg_get_userbyid(x.grantee) END,'grantor_oid',x.grantor,'grantor',pg_catalog.pg_get_userbyid(x.grantor),'privilege',x.privilege_type,'grant_option',x.is_grantable) ORDER BY x.grantee,x.grantor,x.privilege_type,x.is_grantable)::text FROM pg_catalog.aclexplode(COALESCE(t.typacl,pg_catalog.acldefault('T',t.typowner))) x),'[]'),COALESCE(c.relname,'')
  FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace LEFT JOIN pg_catalog.pg_class c ON c.oid=t.typrelid
  WHERE n.nspname='public' AND t.typname<>'runtime_write_state'
-   AND NOT (t.typelem<>0 AND t.typcategory='A')
+   AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend array_dependency
+     WHERE array_dependency.classid='pg_catalog.pg_type'::regclass AND array_dependency.objid=t.oid
+       AND array_dependency.refclassid='pg_catalog.pg_type'::regclass AND array_dependency.deptype='i')
    AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.classid='pg_catalog.pg_type'::regclass AND d.objid=t.oid AND d.deptype='e')
 )
 SELECT kind,schema_name,identity,oid,pg_catalog.pg_get_userbyid(owner_oid),definition,acl,parent

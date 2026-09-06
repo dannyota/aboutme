@@ -43,6 +43,23 @@ func TestMigrationDriverRejectsUnsupportedBeforeSQL(t *testing.T) {
 	}
 }
 
+func TestApplyRejectsUnsupportedTransportBeforeCatalogSQL(t *testing.T) {
+	var queries, closes atomic.Int32
+	db := sql.OpenDB(&unsupportedMigrationConnector{queries: &queries, closes: &closes})
+	if _, err := Apply(context.Background(), db, LocalAdminMigratorIdentity()); err == nil {
+		t.Fatal("Apply accepted unsupported transport")
+	}
+	if got := queries.Load(); got != 0 {
+		t.Fatalf("queries=%d", got)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := closes.Load(); got != 1 {
+		t.Fatalf("driver closes=%d", got)
+	}
+}
+
 func TestRetireMigrationBackendDisposesUnsupportedDriverWithoutSQL(t *testing.T) {
 	var queries, closes atomic.Int32
 	db := sql.OpenDB(&unsupportedMigrationConnector{queries: &queries, closes: &closes})
@@ -52,8 +69,14 @@ func TestRetireMigrationBackendDisposesUnsupportedDriverWithoutSQL(t *testing.T)
 		}
 	})
 	conn := migrationConnection(t, db)
-	if err := retireMigrationBackend(context.Background(), conn); err == nil {
-		t.Fatal("unsupported driver retirement succeeded")
+	if _, err := captureMigrationBackend(conn); err == nil {
+		t.Fatal("unsupported driver capture succeeded")
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
 	}
 	if got := queries.Load(); got != 0 {
 		t.Fatalf("queries=%d", got)
@@ -68,17 +91,18 @@ func TestRetireMigrationBackendClosesPhysicalConnectionBeforeReturn(t *testing.T
 	db.SetMaxOpenConns(2)
 	db.SetMaxIdleConns(1)
 	conn := migrationConnection(t, db)
+	backend, err := captureMigrationBackend(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var oldPID int32
 	if err := conn.QueryRowContext(context.Background(), `SELECT pg_backend_pid()`).Scan(&oldPID); err != nil {
 		t.Fatal(err)
 	}
-	if err := retireMigrationBackend(context.Background(), conn); err != nil {
+	if err := finalizeMigrationBackend(context.Background(), backend, conn, false); err != nil {
 		t.Fatal(err)
 	}
 	assertMigrationConnectionBackendGone(t, db, oldPID)
-	if err := conn.Close(); err != nil {
-		t.Fatalf("logical connection close=%v", err)
-	}
 
 	replacement := migrationConnection(t, db)
 	var newPID int32
@@ -93,6 +117,10 @@ func TestRetireMigrationBackendClosesPhysicalConnectionBeforeReturn(t *testing.T
 func TestRetireMigrationBackendIgnoresCanceledCaller(t *testing.T) {
 	db := openMigrationConnectionTestDB(t)
 	conn := migrationConnection(t, db)
+	backend, err := captureMigrationBackend(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var oldPID int32
 	if err := conn.QueryRowContext(context.Background(), `SELECT pg_backend_pid()`).Scan(&oldPID); err != nil {
 		t.Fatal(err)
@@ -100,7 +128,7 @@ func TestRetireMigrationBackendIgnoresCanceledCaller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	started := time.Now()
-	if err := retireMigrationBackend(ctx, conn); err != nil {
+	if err := finalizeMigrationBackend(ctx, backend, conn, false); err != nil {
 		t.Fatal(err)
 	}
 	if elapsed := time.Since(started); elapsed >= 5*time.Second {
@@ -110,14 +138,27 @@ func TestRetireMigrationBackendIgnoresCanceledCaller(t *testing.T) {
 }
 
 func TestRetireMigrationBackendReportsUnavailableRawCallback(t *testing.T) {
-	db := openMigrationConnectionTestDB(t)
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("TEST_DATABASE_URL not set")
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	conn := migrationConnection(t, db)
+	backend, err := captureMigrationBackend(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := conn.Close(); err != nil {
 		t.Fatal(err)
 	}
-	err := retireMigrationBackend(context.Background(), conn)
-	if err == nil || !errors.Is(err, sql.ErrConnDone) {
-		t.Fatalf("error=%v", err)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.retire(context.Background(), conn); err != nil {
+		t.Fatalf("retirement after Raw unavailable: %v", err)
 	}
 }
 
@@ -125,8 +166,8 @@ func TestMigrationConnectionRejectsNil(t *testing.T) {
 	if err := verifyMigrationDriver(nil); err == nil {
 		t.Fatal("nil driver admission succeeded")
 	}
-	if err := retireMigrationBackend(context.Background(), nil); err == nil {
-		t.Fatal("nil retirement succeeded")
+	if _, err := captureMigrationBackend(nil); err == nil {
+		t.Fatal("nil capture succeeded")
 	}
 }
 

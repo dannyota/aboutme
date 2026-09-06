@@ -1,3 +1,4 @@
+//nolint:govet // Sequential migration cleanup keeps each error next to its operation.
 package migrations
 
 import (
@@ -69,7 +70,11 @@ func newSessionTestDatabase(t *testing.T) (string, *sql.DB) {
 	})
 	applyCtx, applyCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer applyCancel()
-	if _, err := Apply(applyCtx, db); err != nil {
+	provider, err := NewProvider(db, FS)
+	if err != nil {
+		t.Fatalf("create version-13 session provider: %v", err)
+	}
+	if _, err := provider.UpTo(applyCtx, 13); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	return dsn, db

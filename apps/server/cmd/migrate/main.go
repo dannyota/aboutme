@@ -1,5 +1,5 @@
-// Command migrate applies embedded goose migrations or reports pending work
-// with -check. The provider serializes runners with a PostgreSQL advisory lock.
+// Command migrate applies embedded Goose migrations or reports pending work
+// with -check. Apply serializes each version through the fixed migration locks.
 // See docs/design/data.md and docs/design/deployment.md.
 //
 // Usage:
@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -124,14 +125,22 @@ var runBudgets = defaultBudgets
 func main() {
 	check := flag.Bool("check", false, "report pending migrations without applying them")
 	flag.Parse()
+	command := "apply"
+	if flag.NArg() > 0 {
+		command = flag.Arg(0)
+	}
 
-	if err := run(*check, os.Stdout); err != nil {
+	if err := runCommand(command, *check, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "migrate:", err)
 		os.Exit(1)
 	}
 }
 
 func run(check bool, stdout io.Writer) error {
+	return runCommand("apply", check, stdout)
+}
+
+func runCommand(command string, check bool, stdout io.Writer) error {
 	// Cheapest, dependency-free check first: fail fast and clearly on an
 	// invalid budgets configuration before requiring DATABASE_URL/ENV or a
 	// reachable database at all — see budgets.validate's doc comment for
@@ -139,6 +148,13 @@ func run(check bool, stdout io.Writer) error {
 	b := runBudgets
 	if err := b.validate(); err != nil {
 		return fmt.Errorf("invalid deadline budgets: %w", err)
+	}
+	if command != "apply" && command != "provision" && command != "adopt-history-owner" {
+		return fmt.Errorf("unknown migrate command")
+	}
+	identity, err := migrationIdentityFromEnvironment()
+	if err != nil {
+		return err
 	}
 
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
@@ -148,11 +164,11 @@ func run(check bool, stdout io.Writer) error {
 
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
-		return fmt.Errorf("open database: %w", err)
+		return fmt.Errorf("open database: invalid configuration")
 	}
 	defer func() {
 		if closeErr := db.Close(); closeErr != nil {
-			fmt.Fprintln(os.Stderr, "migrate: close database:", closeErr)
+			fmt.Fprintln(os.Stderr, "migrate: close database failed")
 		}
 	}()
 
@@ -160,22 +176,57 @@ func run(check bool, stdout io.Writer) error {
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("ping database: %w", err)
+		return fmt.Errorf("ping database: connection failed")
+	}
+	if command == "provision" {
+		if check {
+			return fmt.Errorf("provision does not accept -check")
+		}
+		if err := migrations.ProvisionDatabase(ctx, db); err != nil {
+			return fmt.Errorf("database provisioning failed; verify fixed local grants")
+		}
+		return writeLine(stdout, "migrate: database provisioning verified")
+	}
+	if command == "adopt-history-owner" {
+		if check || identity != migrations.LocalAdminMigratorIdentity() {
+			return fmt.Errorf("history adoption requires MIGRATION_IDENTITY=local-aboutme without -check")
+		}
+		adoption, err := migrations.AdoptHistoryOwner(ctx, db, b.lockOpts()...)
+		if err != nil {
+			return fmt.Errorf("history owner adoption failed; inspect local migration state")
+		}
+		if adoption.Outcome() == migrations.ReconciledConverged {
+			if err := writeLine(stdout, "migrate: warning MIGRATION_ADOPTION_RECONCILED"); err != nil {
+				return err
+			}
+		}
+		return writeLine(stdout, "migrate: history owner adopted")
 	}
 
 	// -check never contends for the advisory lock at all (migrations.Status
 	// is lock-free — see its doc comment), so the lock-wait budget below is
 	// only ever built and passed for the apply path.
 	if check {
-		return runCheck(ctx, db, stdout)
+		return runCheck(ctx, db, stdout, identity)
 	}
-	return runApply(ctx, db, stdout, b.lockOpts()...)
+	return runApply(ctx, db, stdout, identity, b.lockOpts()...)
 }
 
-func runApply(ctx context.Context, db *sql.DB, stdout io.Writer, lockOpts ...lock.SessionLockerOption) error {
-	results, err := migrations.Apply(ctx, db, lockOpts...)
+func migrationIdentityFromEnvironment() (migrations.MigrationIdentity, error) {
+	switch strings.TrimSpace(os.Getenv("MIGRATION_IDENTITY")) {
+	case "direct":
+		return migrations.DirectMigratorIdentity(), nil
+	case "local-aboutme":
+		return migrations.LocalAdminMigratorIdentity(), nil
+	default:
+		return migrations.MigrationIdentity{}, fmt.Errorf("MIGRATION_IDENTITY must be direct or local-aboutme")
+	}
+}
+
+func runApply(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrations.MigrationIdentity, lockOpts ...lock.SessionLockerOption) error {
+	results, err := migrations.Apply(ctx, db, identity, lockOpts...)
 	if err != nil {
-		return fmt.Errorf("apply migrations: %w", err)
+		return migrationCommandError(err)
 	}
 
 	if len(results) == 0 {
@@ -197,10 +248,10 @@ func runApply(ctx context.Context, db *sql.DB, stdout io.Writer, lockOpts ...loc
 // a pre-deploy readiness gate that must return promptly even while a
 // concurrent deploy is migrating, not block for the lock-wait budget and
 // then report a false failure.
-func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer) error {
-	statuses, err := migrations.Status(ctx, db)
+func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrations.MigrationIdentity) error {
+	statuses, err := migrations.Status(ctx, db, identity)
 	if err != nil {
-		return fmt.Errorf("check migrations: %w", err)
+		return migrationCommandError(err)
 	}
 
 	for _, s := range statuses {
@@ -213,6 +264,23 @@ func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer) error {
 		return fmt.Errorf("%d migration(s) pending", pending)
 	}
 	return writeLine(stdout, "migrate: up to date")
+}
+
+// migrationCommandError keeps database, driver, and catalog detail out of the
+// command's public output while retaining stable operator guidance.
+func migrationCommandError(err error) error {
+	switch {
+	case errors.Is(err, migrations.ErrMigrationHistoryMissing):
+		return errors.New("migration database is uninitialized; run migrate provision")
+	case errors.Is(err, migrations.ErrHistoryAdoptionRequired):
+		return errors.New("migration history adoption is required; run migrate adopt-history-owner")
+	case errors.Is(err, migrations.ErrMigrationHistoryCorrupt):
+		return errors.New("migration state is corrupt; inspect the database catalog")
+	case errors.Is(err, migrations.ErrMigrationProvisioningDrift):
+		return errors.New("migration database provisioning has drifted")
+	default:
+		return errors.New("migration operation failed")
+	}
 }
 
 // writeLine writes s followed by a newline to w, wrapping any write
