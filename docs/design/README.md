@@ -9,7 +9,7 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. Every ADR
-through 0034 is accepted, subject to recorded supersessions. If a page disagrees
+through 0035 is accepted, subject to recorded supersessions. If a page disagrees
 with an accepted ADR, the ADR controls that decision until this text is
 corrected.
 
@@ -31,7 +31,9 @@ corrected.
 | —       | [Numeric budgets](budgets.md)          | Hard limits, rate policies, SLOs, and benchmarks    |
 
 The [template system](templates/README.md) is the detailed contract for preset
-data, rendering tokens, and print behavior.
+data, rendering tokens, and print behavior. The
+[scaling contract](scaling/README.md) defines replica coordination, admission,
+and the UAT lifecycle under ADR 0035.
 
 ## System summary
 

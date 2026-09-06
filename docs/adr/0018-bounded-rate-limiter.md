@@ -50,3 +50,10 @@ numeric budget source remains [`../design/budgets.md`](../design/budgets.md).
   24-hour idle cap, concurrent admission, and overflow behavior.
 - A multi-node application tier would require a new distributed rate-limit
   decision; v1 is explicitly one node.
+
+## Later decision: replica scaling (2026-09-06)
+
+[ADR 0035](0035-replica-coordination-and-uat-lifecycle.md) supersedes this
+record's process-local time and ownership for fleet rate policies. It preserves
+bounded partitions, overflow admission and debt; database time becomes
+authoritative.

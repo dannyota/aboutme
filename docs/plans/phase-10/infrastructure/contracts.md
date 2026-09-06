@@ -6,14 +6,17 @@ The [runtime handoff](../runtime-refresh.md) records the final Phase 8 inputs
 and concrete gaps in this baseline. Apply its private print, provider startup,
 ARM64, and build-plan checks together with the Phase 9 cost recommendation.
 
-This baseline is proposed until Phase 9 cost research and the final Phase 6.1,
-6.2, 7.1, 7.2, and 8 contracts are available. Before any task dispatch, record
-the refresh outputs in the phase plan:
+Phase 9 and the final Phase 6–8 contracts are available.
+[ADR 0035](../../../adr/0035-replica-coordination-and-uat-lifecycle.md) and the
+[scaling contract](../../../design/scaling/README.md) supersede the baseline
+where they differ. Runtime implementation and local proof precede dependent
+infrastructure dispatch. Before each task dispatch, refresh its remaining
+inputs:
 
 - quantified AWS cost, selected UAT sizing, and the resulting budget decision;
 - a managed-service cost and suitability comparison, including ECS/Fargate, RDS,
-  S3, and SES. The existing ECS-on-EC2 topology is only a proposed baseline; any
-  superseded task is rewritten from the Phase 9 result before dispatch;
+  S3, and SES. ECS on EC2 with fixed Single-AZ RDS is selected; rewrite any
+  superseded task from ADRs 0034/0035 before dispatch;
 - `PUBLIC_RENDER_ORIGIN` versus stale `NUXT_RENDER_ORIGIN` usage, password and
   MCP settings, mail runtime, SES handoff, and the provider-login-disabled
   startup credentials fix;
@@ -198,7 +201,7 @@ patch file is required or present.
 | Budget (budgets.md)                                        | Infrastructure parameter (task)                                                                                                                                                                         |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Server task ≤ 512 MiB (Go + Chromium)                      | ECS **task-definition-level** `memory = 512` (the task cgroup — budgets.md's whole-task semantics); container-level limits left unset or equal so a container can never out-budget the task (Task 10.5) |
-| pgx pool and RDS connection reserve                        | Task 10.18 derives the per-task pool and fleet aggregate for two replicas, jobs, migration, restore, and administration; Tasks 10.3/10.5 assert it                                                      |
+| pgx pool and RDS connection reserve                        | ADR 0035 sets 12 per app task and 60 total including five four-connection auxiliary allowances and 16 administrative sessions; Tasks 10.3/10.5 assert it                                                |
 | SSE ≤ 2000 conns, ≥ 25 % fd headroom                       | `ulimits { nofile soft/hard = 65536 }` on caddy + server containers (Task 10.5)                                                                                                                         |
 | SSE heartbeat 25 s < CF idle timeout                       | `caddy-sse` origin read timeout 60 s; default origin 30 s (Task 10.6, D22)                                                                                                                              |
 | API/SSR p95 SLOs (Phase 10 operational rehearsal-measured) | Instance classes are tfvars (D21) so Phase 10 operational rehearsal benchmark evidence can change them without module edits                                                                             |

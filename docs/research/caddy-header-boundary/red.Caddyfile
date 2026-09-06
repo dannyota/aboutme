@@ -1,0 +1,15 @@
+{
+	admin off
+	persist_config off
+	auto_https off
+	servers {
+		trusted_proxies static 127.0.0.1/32
+		client_ip_headers X-Aboutme-Client-IP
+	}
+}
+http://127.0.0.1:20961 {
+	bind 127.0.0.1
+	@allowed header X-Origin-Secret fixture-current
+	respond @allowed "{client_ip}" 200
+	respond "denied" 403
+}

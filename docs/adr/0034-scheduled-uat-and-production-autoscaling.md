@@ -97,3 +97,10 @@ The one-host deployment remains useful only as historical comparison context and
 an interim UAT implementation if it is never represented as the production
 target or as scaling evidence. Production launch remains Phase 11 and requires
 separate owner approval.
+
+## Later decision: replica scaling (2026-09-06)
+
+[ADR 0035](0035-replica-coordination-and-uat-lifecycle.md) supersedes this
+record's unresolved runtime and lifecycle mechanisms. It specifies fleet
+coordination, paired routing, exact-node scale-in, off-RDS ownership, and
+proof-based UAT shutdown without raising the approved spending ceiling.

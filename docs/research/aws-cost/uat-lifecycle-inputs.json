@@ -1,0 +1,32 @@
+{
+  "status": "proposed",
+  "currency": "USD",
+  "base_schedule": "baseline",
+  "campaign_days": 2,
+  "test_hours": 16,
+  "writer_tail_hours": 24,
+  "hourly_maintenance_node_minutes": 10,
+  "future_daily_node_minutes": 15,
+  "future_daily_rds_hours": 2,
+  "recovery_node_hours": 4,
+  "recovery_rds_hours": 4,
+  "scheduler_invocations": 800,
+  "step_functions_transitions": 50000,
+  "controller_s3_put_equivalent_requests": 10000,
+  "controller_kms_requests": 10000,
+  "fargate": {
+    "lifecycle_and_proof": {
+      "invocations": 500,
+      "minutes": 5,
+      "vcpu": "0.25",
+      "memory_gib": "0.5"
+    },
+    "infrastructure_apply": {
+      "invocations": 10,
+      "minutes": 10,
+      "vcpu": "0.5",
+      "memory_gib": 1
+    }
+  },
+  "uat_ceiling_usd": 30
+}

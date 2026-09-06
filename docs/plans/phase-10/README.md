@@ -1,8 +1,9 @@
 # Phase 10 — Infrastructure and AWS UAT
 
-Status: **In progress: replica design** (2026-09-06). Phase 9 is merged. The
-owner authorized UAT in AWS Singapore and Cloudflare DNS for `uat.aboutme.vn`.
-Task 10.18 design is under review. Nothing has been deployed by this phase.
+Status: **In progress: local replica implementation** (2026-09-06). Phase 9 is
+merged. The owner authorized UAT in AWS Singapore and Cloudflare DNS for
+`uat.aboutme.vn`. Task 10.18 design is accepted under ADR 0035. Local
+implementation is pending. Nothing has been deployed by this phase.
 
 **Goal:** deploy the completed web v1 to `https://uat.aboutme.vn`, prove its
 user workflows, and rehearse the operational requirements before production.
@@ -52,13 +53,14 @@ time to stay within laptop RAM limits.
   details. They refer to this UAT environment, not a second paid deployment.
 - Production DNS cutover and launch belong to Phase 11 and need separate
   approval.
-- UAT application nodes and its ALB are absent between scheduled test windows;
-  RDS is stopped. RDS storage, keys, state, ECR images, and required logs
-  remain. Full-month root-disk and public-IPv4 amounts are conservative cost
-  reserves, not retained-resource claims. Production autoscaling has minimum one
-  and initial maximum two replicas. Its serialized snapshot and migration
-  workflow may drain to zero and must restore at least one healthy replica
-  afterward.
+- UAT application nodes and its ALB are absent between scheduled test windows.
+  RDS stays available through the campaign and final 24-hour writer tail; later
+  stops require the ADR 0035 final receipt and next-due proof. RDS storage,
+  keys, state, ECR images, and required logs remain. Full-month root-disk and
+  public-IPv4 amounts are conservative cost reserves, not retained-resource
+  claims. Production autoscaling has minimum one and initial maximum two
+  replicas. Its serialized snapshot and migration workflow may drain to zero and
+  must restore at least one healthy replica afterward.
 
 ## Required contract refresh
 

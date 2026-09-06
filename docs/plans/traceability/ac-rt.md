@@ -12,3 +12,9 @@ Paths under `internal/` are in `apps/server/`; web test paths are in
 `apps/web/`. [The realtime runbook](../../runbooks/realtime.md) records commands
 and the local connection measurement. Hosted resource and edge evidence belongs
 to Phase 10.
+
+The existing rows prove the local implementation. The accepted
+[scaling contract](../../design/scaling/admission.md) adds Phase 10 Task 10.18
+R2/R3/R6 cross-replica admission, revocation and reconnect checks plus hosted
+loss/reconnect proof. Those extensions remain pending for both rows; no new SSE
+frame is introduced.

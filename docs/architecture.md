@@ -50,7 +50,10 @@ between test windows; production will scale application capacity out and in with
 at least one server. Those controls are not implemented yet. Revocation leases,
 print jobs, event subscribers, and limiters still hold process-local state.
 Phase 10 must implement and prove coordination across replicas before enabling
-autoscaling. RDS compute remains separately sized.
+autoscaling. [ADR 0035](adr/0035-replica-coordination-and-uat-lifecycle.md) and
+the [scaling contract](design/scaling/README.md) settle the target, including
+proof-based UAT shutdown and a 60-connection RDS envelope. These mechanisms
+remain unimplemented. RDS compute remains separately sized.
 
 ## Implemented HTTP surface
 
