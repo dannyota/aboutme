@@ -218,8 +218,10 @@ unfenced terminating replica. Lock target replica before all partition rows.
 - Replacement serving requires a nonnull exact fenced serving predecessor,
   unchanged desired, active serving below desired, no unfinished scale-in and no
   earlier action consuming that predecessor. Change no partition flag.
-- Maintenance requires exact maintenance-wake complete predecessor, zero active
-  maintenance and null replacement. Change no partition flag or desired count.
+- Maintenance requires the exact maintenance-wake complete predecessor, no other
+  maintenance replica in joining, active, draining or terminating state, and
+  null replacement. Retained left/fenced maintenance rows do not block it.
+  Change no partition flag or desired count.
 
 Change target joining to active and set activated_at. A replacement does not
 infer process death; it uses already-recorded fenced membership. Return replica
