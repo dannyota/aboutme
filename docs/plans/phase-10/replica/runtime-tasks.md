@@ -92,6 +92,11 @@ R1 exits only after their complete store and real-role proof.
 serving/maintenance register and joining-only mark-ready plus typed store
 transport. It follows rate schema 18 and adds no activation or caller wiring.
 
+[R1.8 claim operations](claim-operations.md) follows registration migration 19
+with fixed acquire/resolve/promote/release, receipt cleanup and typed transport.
+R5 keeps operation identity and retry state; exact fenced cleanup remains with
+the later lifecycle proof slice.
+
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
 preserve existing database rows while converging ownership on runtime_owner.
