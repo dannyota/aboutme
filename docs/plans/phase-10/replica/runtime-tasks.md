@@ -88,6 +88,13 @@ receipts. [R1.6 rate schema](rate-schema.md) installs exact policies, bounded
 buckets and stored OAuth attempt debt. Later R1 slices install fixed definers;
 R1 exits only after their complete store and real-role proof.
 
+Each ordinary fixed operation that uses WriteTxRunner asserts the existing write
+entry before its first row lock, including replay and readback branches. It
+never acquires the barrier after an inner lock. Real-role tests call the
+function without entry while its first row is held elsewhere and require
+rejection before waiting. Exclusive wake retains its separate entry and
+assertion contract.
+
 [R1.7 registration](replica-registration.md) begins the fixed operations with
 serving/maintenance register and joining-only mark-ready plus typed store
 transport. It follows rate schema 18 and adds no activation or caller wiring.
