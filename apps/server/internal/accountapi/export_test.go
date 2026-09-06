@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 // TestExportRouteRejectsUnsupportedMethod catches a route that admits a
@@ -423,7 +423,7 @@ type exportTestHarness struct {
 func newExportTestHarness(t *testing.T) *exportTestHarness {
 	t.Helper()
 	ctx := context.Background()
-	pool, err := store.NewPool(ctx, os.Getenv("TEST_DATABASE_URL"))
+	pool, err := store.NewPool(ctx, testutil.RequireMigratedTestDatabaseURL(t))
 	if err != nil {
 		t.Fatalf("new pool: %v", err)
 	}

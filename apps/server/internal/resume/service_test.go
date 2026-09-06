@@ -1053,8 +1053,9 @@ func TestMediaDeletionJobs_DueOrderIndexSupportsBoundedClaim(t *testing.T) {
 	}
 
 	// Query-plan evidence: the bounded oldest-due claim shape P8-priv uses
-	// is supported by the (next_attempt_at, id) index. enable_seqscan off
-	// makes the planner's index choice deterministic on a small table.
+	// is supported by the partial active-job (next_attempt_at, id) index.
+	// enable_seqscan off makes the planner's index choice deterministic on a
+	// small table.
 	planTx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin plan tx: %v", err)
@@ -1065,7 +1066,8 @@ func TestMediaDeletionJobs_DueOrderIndexSupportsBoundedClaim(t *testing.T) {
 	}
 	rows, err := planTx.Query(ctx,
 		`EXPLAIN SELECT id FROM media_deletion_jobs
-		 WHERE next_attempt_at <= now() ORDER BY next_attempt_at, id LIMIT 200`)
+		 WHERE completed_at IS NULL AND next_attempt_at <= now()
+		 ORDER BY next_attempt_at, id LIMIT 200`)
 	if err != nil {
 		t.Fatalf("EXPLAIN error: %v", err)
 	}

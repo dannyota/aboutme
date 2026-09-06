@@ -17,7 +17,10 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-const privacyJobTimeout = 30 * time.Minute
+const (
+	privacyJobTimeout        = 30 * time.Minute
+	privacyJobCleanupTimeout = 5 * time.Second
+)
 
 func runCommand(args []string) error {
 	if len(args) == 0 {
@@ -65,7 +68,11 @@ func runPrivacyJob(ctx context.Context, command privacyCommand, getenv func(stri
 	if err != nil {
 		return nil, errors.New("privacy job database configuration is invalid")
 	}
-	defer pool.Close(context.Background())
+	defer func() {
+		cleanupCtx, cancelCleanup := context.WithTimeout(context.WithoutCancel(ctx), privacyJobCleanupTimeout)
+		defer cancelCleanup()
+		pool.Close(cleanupCtx)
+	}()
 	probeCtx, cancelProbe := context.WithTimeout(ctx, 10*time.Second)
 	err = pool.Ping(probeCtx)
 	cancelProbe()

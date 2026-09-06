@@ -73,8 +73,8 @@ func TestPrivacyLifecycleQueueSurvivesAccountDeletion(t *testing.T) {
 	})
 	requireConstraintViolation(t, err, "media_deletion_jobs_lease_check")
 	err = withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
-		_, err := sp.Exec(ctx, `INSERT INTO lifecycle_audit_events (kind, media_job_id) VALUES ('media_deletion_completed', $1)`, jobID)
-		return err
+		_, insertErr := sp.Exec(ctx, `INSERT INTO lifecycle_audit_events (kind, media_job_id) VALUES ('media_deletion_completed', $1)`, jobID)
+		return insertErr
 	})
 	requireConstraintViolation(t, err, "lifecycle_audit_events_job_kind_key")
 }

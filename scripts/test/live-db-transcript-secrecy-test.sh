@@ -52,7 +52,7 @@ transcript_is_secret_free() {
 }
 
 run_case() {
-  local target=$1 expected_require=$2
+  local target=$1 expected_require=$2 expected_calls=$3
   local output status=0 call_count failures_before
 
   : >"$calls"
@@ -83,11 +83,15 @@ run_case() {
   fi
 
   call_count=$(grep -Fc "$target|go test " "$calls" || true)
-  if [ "$call_count" -ne 1 ]; then
-    fail "$target made $call_count recorded Go test calls; expected one"
+  if [ "$call_count" -ne "$expected_calls" ]; then
+    fail "$target made $call_count recorded Go test calls; expected $expected_calls"
   fi
   if ! grep -Fq "|dsn=exact|require=$expected_require" "$calls"; then
     fail "$target did not pass the expected live-DB environment to Go"
+  fi
+  if [ "$target" = server-test-db ] && ! grep -Fxq \
+    'server-test-db|go test ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... -p=1 -race -count=1 -v|dsn=exact|require=1' "$calls"; then
+    fail "$target did not run the serialized privacy packages with live-DB checks"
   fi
 
   if [ "$failures" -ne "$failures_before" ]; then
@@ -102,9 +106,9 @@ run_case() {
   fi
 }
 
-run_case server-test-db 1
-run_case server-test-integration '<unset>'
-run_case server-migration-test '<unset>'
+run_case server-test-db 1 2
+run_case server-test-integration '<unset>' 1
+run_case server-migration-test '<unset>' 1
 
 if transcript_is_secret_free "negative control: $sentinel_dsn"; then
   fail 'the transcript leak detector accepted its sentinel negative control'

@@ -657,6 +657,8 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 	fixedNow := time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC)
 	cacheGetStarted := make(chan struct{})
 	resumeCacheGet := make(chan struct{})
+	var releaseCacheGet sync.Once
+	releaseCache := func() { releaseCacheGet.Do(func() { close(resumeCacheGet) }) }
 	var clockCalls atomic.Int32
 	now := func() time.Time {
 		if clockCalls.Add(1) == 3 {
@@ -686,7 +688,8 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 		AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
 	}, publiccache.Value{Status: cached.Status, Header: cached.Header, Body: cached.Body})
 
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	requestCtx, cancelRequest := context.WithCancel(t.Context())
+	request := httptest.NewRequestWithContext(requestCtx, http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
 	request.RemoteAddr = "192.0.2.15:1234"
 	response := httptest.NewRecorder()
 	handlerDone := make(chan struct{})
@@ -703,11 +706,41 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 	}
 	closeDone := make(chan error, 1)
 	go func() {
-		closeDone <- transition.Close(context.Background(), fixedNow.Add(time.Second))
+		closeDone <- transition.Close(context.Background(), time.Now().Add(2*time.Second))
 	}()
+	closeJoined := false
+	handlerJoined := false
+	rolledBack := false
+	var closeErr error
+	t.Cleanup(func() {
+		releaseCache()
+		cancelRequest()
+		if !closeJoined {
+			select {
+			case closeErr = <-closeDone:
+				closeJoined = true
+			case <-time.After(time.Second):
+				t.Error("transition did not join during cleanup")
+			}
+		}
+		if closeJoined && closeErr == nil && !rolledBack {
+			if err := transition.Rollback(); err != nil {
+				t.Errorf("rollback during cleanup: %v", err)
+			}
+		}
+		if !handlerJoined {
+			select {
+			case <-handlerDone:
+			case <-time.After(time.Second):
+				t.Error("handler did not join during cleanup")
+			}
+		}
+	})
+	admissionCtx, cancelAdmission := context.WithTimeout(t.Context(), time.Second)
+	defer cancelAdmission()
 	for {
 		probe, acquireErr := coordinator.AcquireResume(
-			context.Background(), backing.row.ID, backing.row.Revision, publicstate.RepresentationPDF,
+			admissionCtx, backing.row.ID, backing.row.Revision, publicstate.RepresentationPDF,
 		)
 		if errors.Is(acquireErr, publicstate.ErrAdmissionClosed) {
 			break
@@ -717,20 +750,23 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 		}
 		probe.Release()
 	}
-	close(resumeCacheGet)
+	releaseCache()
 	select {
-	case err := <-closeDone:
-		if err != nil {
-			t.Fatal(err)
+	case closeErr = <-closeDone:
+		closeJoined = true
+		if closeErr != nil {
+			t.Fatal(closeErr)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("transition did not drain canceled cache hit")
 	}
 	<-handlerDone
+	handlerJoined = true
 	assertCanceledArtifactResponse(t, response, "cached-old-generation")
 	if err := transition.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+	rolledBack = true
 }
 
 func assertCanceledArtifactResponse(t *testing.T, response *httptest.ResponseRecorder, forbidden string) {
