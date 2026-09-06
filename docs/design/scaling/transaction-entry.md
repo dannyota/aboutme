@@ -79,6 +79,22 @@ entry generation, dirty and accepted-write flags, bounded operation ID, and
 finished state. Exact entry before finish is idempotent; entry after finish is
 contamination. Exact repeated finish cannot advance generation again.
 
+Finish also takes a transaction advisory lock in the reserved two-int namespace
+`295306100`, with `pg_backend_pid()` as the second key. The namespace is the
+first four big-endian SHA-256 bytes of `aboutme.runtime-write-finish.v1`; it is
+distinct from media cleanup's `0x61626d65`. No other operation uses this
+namespace. Finish uses `pg_try_advisory_xact_lock` before the final state-row
+lock; an occupied key fails AM001 rather than waiting. Entry and migration begin
+reject a guard already held by this backend. An unfinished marker with a held
+guard is contamination; repeated finish requires a valid finished marker and its
+guard.
+
+The guard survives `DISCARD TEMP`, which can remove even an owner-created marker
+after its deferred trigger has fired. Pending trigger events prevent discard
+before finish. The guard prevents discard after finish from allowing re-entry in
+the same transaction. Commit, rollback and savepoint rollback release the
+corresponding transaction lock with the marker/state changes.
+
 Forced constraint checking before finish fails. Savepoint recovery may catch
 that error, but cannot remove the outer transaction's finish requirement.
 Rollback of dirty work or finish restores the marker and generation together.
@@ -204,6 +220,9 @@ shared barrier before Goose or table reads, checks the gate and creates an
 owner-validated temporary session marker with ON COMMIT PRESERVE ROWS. Exit
 clears it and releases exactly one lock. Entry exceptions unlock; ambiguity or
 marker mismatch closes the physical backend. No reconnect may continue a run.
+The pinned-connection runner calls exit as a standalone autocommit statement
+after migration transactions end. SQL rejects an active write marker or missing
+session lock; it does not infer autocommit from timestamps or transaction IDs.
 
 Each transactional Up after migration 00013 starts with
 runtime_begin_migration_write and ends with runtime_finish_write. Begin marks
@@ -234,6 +253,16 @@ Missing history and absent runtime state report an uninitialized database
 without creating a provider or version-zero row. Runtime state with missing or
 malformed history is corruption; apply/check/status fail before any repair.
 Apply alone may initialize a fresh database before migration 00013.
+
+Before foundation installation, database provisioning grants migrator CONNECT,
+TEMPORARY and CREATE on the target database, schema USAGE and CREATE WITH GRANT
+OPTION, and runtime_owner database TEMPORARY. Migrator grants runtime_owner
+schema CREATE only within an object-transfer transaction and revokes it before
+commit. A bounded read-only metadata function exposes gate, generation,
+enforcement version and history owner to migrator without direct state-table
+access. Existing prebaseline local/test history owned by aboutme uses a fixed,
+data-preserving adoption under the runtime barrier; fresh hosted databases use
+the direct migrator path.
 
 Migration 00013 installs the barrier and migrator primitives as the sole
 schema-installer exception. No migration 00014 lands until dedicated-backend
