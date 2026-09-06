@@ -66,13 +66,18 @@ functions.
   write_gate text check in ('open','closing','closed'); last_write_at and
   last_accepted_writer_at timestamptz not null; last_writer_kind bounded enum;
   last_writer_operation_id text bounded; updated_at timestamptz.
+- migrator_enforcement_version smallint in (0,1); migration_history_owner text
+  bounded to 1–63 octets. Foundation version 0 records the original Goose table
+  owner. Migrator enforcement installs the owner trigger and records version 1
+  plus runtime_owner atomically. This does not prove legacy write coverage.
 - Every transaction that can create, reschedule, lease, complete, expire, or
-  delete application/job state participates in the write barrier below. A
-  deferred owner trigger advances generation once per transaction and sets
-  last_write_at from clock_timestamp immediately before commit. Transactions
-  that accept an application mutation also advance last_accepted_writer_at;
-  maintenance and controller bookkeeping do not extend the idempotency tail.
-  Trigger DML on runtime_write_state does not recurse.
+  delete application/job state participates in the write barrier below.
+  runtime_finish_write runs as runtime_owner and advances generation once per
+  dirty transaction and sets last_write_at from clock_timestamp immediately
+  before commit. The deferred constraint trigger only asserts finish.
+  Transactions that accept an application mutation also advance
+  last_accepted_writer_at; maintenance and controller bookkeeping do not extend
+  the idempotency tail. Trigger DML on runtime_write_state does not recurse.
 
 ## runtime_job_schedule
 
@@ -172,19 +177,24 @@ Use one fixed 64-bit advisory key `aboutme.runtime-write-barrier.v1`.
 1. Every application, mail, maintenance, migration, lifecycle-command, and proof
    transaction that mutates database state enters through the central WriteTx
    API, which first takes the shared transaction advisory lock and checks the
-   gate before returning a transaction. This happens before public_state, user,
-   resume, slug, job, transition, admission, or category locks. BEFORE STATEMENT
-   triggers only assert that entry already occurred and immediately reject an
-   uninstrumented writer; they never acquire or wait for the barrier. This new
-   outer lock changes none of the existing inner order: ADR 0022 keeps
-   public_state, discovery, then ascending resume UUID; ADR 0016 keeps user,
-   idempotency record, then usage. Normal writers never lock runtime_write_state
-   before their existing rows; their deferred update is last.
-2. The final deferred trigger advances runtime_write_state immediately before
-   commit. A transaction rollback advances nothing. TRUNCATE is revoked from app
-   and maintenance roles. Migration/bootstrap records a generation before its
-   commit and cannot overlap receipt issue. Owner tables have explicit
-   nonrecursive handling.
+   gate before calling application code with transaction-bound Queries. This
+   happens before public_state, user, resume, slug, job, transition, admission,
+   or category locks. BEFORE STATEMENT triggers only assert that entry already
+   occurred and immediately reject an uninstrumented writer; they never acquire
+   or wait for the barrier. This new outer lock changes none of the existing
+   inner order: ADR 0022 keeps public_state, discovery, then ascending resume
+   UUID; ADR 0016 keeps user, idempotency record, then usage. Normal writers
+   never lock runtime_write_state before their existing rows; the private
+   runner's finish update is last.
+2. The runner calls runtime_finish_write and immediately commits. The deferred
+   constraint trigger asserts completion without changing state. Forced early
+   constraint checks fail before finish, including when recovered through a
+   savepoint. A transaction rollback advances nothing. TRUNCATE is revoked from
+   app and maintenance roles. Migration/bootstrap records a generation before
+   its commit and cannot overlap receipt issue. Owner tables have explicit
+   nonrecursive handling. The protected Goose version INSERT is the sole
+   post-finish bookkeeping statement, as specified in
+   [transaction entry](transaction-entry.md#migration-policy).
 3. create_quiescence_snapshot takes the exclusive transaction advisory lock,
    then runtime_capacity FOR UPDATE, runtime_write_state FOR UPDATE, replica
    rows, public transitions, claims/leases, runtime_job_schedule rows in

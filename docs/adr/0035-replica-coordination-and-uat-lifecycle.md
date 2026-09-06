@@ -112,3 +112,11 @@ record supersedes these earlier mechanisms:
 
 Implementation follows the bounded Task 10.18 plan and its local checks. Hosted
 scaling and shutdown proofs remain Phase 10 gates.
+
+The transaction mechanism was corrected during local implementation on
+2026-09-06. PostgreSQL can force deferred constraint triggers before commit. The
+private write runner therefore calls an explicit finish function before commit;
+the deferred trigger only asserts completion. Owner-only temporary markers,
+contaminated-backend removal and framed migrator bookkeeping preserve the write
+barrier. See [transaction entry](../design/scaling/transaction-entry.md). This
+correction changes neither deployment scope nor the approved budget.
