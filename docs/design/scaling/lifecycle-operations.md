@@ -101,11 +101,13 @@ requires an exact fenced, previously unused replaced_replica_id and changes
 neither logical flag. This permits one replacement after one-node loss and two
 separately bound replacements after both nodes are fenced, while active serving
 count must remain below unchanged desired. Initial and scale-out activation
-require replaced_replica_id null. For maintenance kind, require zero other
-maintenance replica, do not count it against desired and do not change rate
-partitions. Change joining->active. Only a serving result may later contribute
-to Caddy readiness; commit observation, not this return alone, permits that
-readiness.
+require replaced_replica_id null. For maintenance kind, require no other
+maintenance replica in joining, active, draining or terminating state. Retained
+left/fenced maintenance rows do not block a later campaign. Require
+replaced_replica_id null; do not count maintenance against desired serving
+capacity or change rate partitions. Change joining->active. Only a serving
+result may later contribute to Caddy readiness; commit observation, not this
+return alone, permits that readiness.
 
 ## Private maintenance wake
 
