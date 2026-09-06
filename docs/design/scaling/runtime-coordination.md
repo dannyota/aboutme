@@ -113,9 +113,12 @@ Definite rollback changes closing to rolled_back in its transaction. Ambiguous
 commit reads transition state and existing mutation/idempotency evidence through
 an independent pool connection. committed proves success. Recovery selects the
 transition FOR UPDATE; if it obtains the lock and still sees closing, no open
-business transaction holds the execution fence, so it may atomically roll back;
-rolled_back proves no business SQL passed the state predicate. Missing or
-contradictory evidence marks unresolved and keeps every affected fence closed.
+business transaction holds the execution fence, so it may atomically roll back
+when the durable evidence is consistent. rolled_back proves no business change
+from that transition committed. Missing or contradictory evidence keeps every
+affected fence closed and follows the fixed
+[unresolved evidence contract](transition-storage.md#unresolved-evidence-boundary).
+No caller-provided reason can mark unresolved.
 
 If the initiator has been fenced by exact EC2 termination proof,
 lifecycle-command may roll back its closing transition through the separate

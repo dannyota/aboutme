@@ -143,8 +143,8 @@ exercise the current head.
 `make server-build server-vet server-test` passed. Scoped migration and store
 lint reported zero issues. Root documentation formatting and lint also passed.
 
-The test database is at version 15, write generation 4 and enforcement version
-
-1. The native database remains at version 14. Generated types are refreshed; the
-   clean-tree `make sqlc-check` follows the local commit. This evidence does not
-   complete R1 or hosted acceptance.
+Committed locally at `05e49ce`. The clean-tree `make sqlc-check` passed after
+the commit. Both test and native databases are at version 15, write generation 4
+and enforcement version 1. Native `make migrate migrate-check` passed, with user
+and resume counts unchanged. This evidence does not complete R1 or hosted
+acceptance.

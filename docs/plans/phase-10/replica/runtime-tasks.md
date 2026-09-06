@@ -81,9 +81,10 @@ Live entry, clean reuse and physical discard proof now pass against B1.
 
 After B3, [R1.3 membership schema](membership-schema.md) installs the durable
 membership and lifecycle ledger tables without exposing unimplemented
-operations. Later serialized R1 slices install admission/transition schema and
-the fixed definers; R1 exits only after their complete store and real-role
-proof.
+operations. [R1.4 transition schema](transition-schema.md) follows with exact
+targets, acknowledgements and terminal outcomes. Later R1 slices install
+admission schema and the fixed definers; R1 exits only after their complete
+store and real-role proof.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
@@ -108,6 +109,12 @@ results. [Public transitions](../../../design/scaling/public-transitions.md) and
 original deadline, parent-first execution fence and separate lifecycle recovery
 of a proved fenced initiator. R1 installs their real named-role grants. R8 owns
 composition and readiness; it introduces no additional SQL privilege gate.
+
+Before assigning callable unresolved recovery, R3's design must name the exact
+durable mutation/idempotency evidence and fixed resolver in
+[transition storage](../../../design/scaling/transition-storage.md). R1 then
+implements that SQL contract; R3 composes it after R1. The schema slice grants
+no reason-taking unresolved operation.
 
 [Exclusive lifecycle entry](../../../design/scaling/lifecycle-write-entry.md)
 defines the only two wake methods, owner marker, fixed assertion catalog and
@@ -311,8 +318,9 @@ manifests, tool/lock/generated roots, command fixtures, migrator entry wiring,
 the generated mutator inventory gate, and any shared test harness.
 
 Fail first: exact replica/deployment identity required; partial trio rejected;
-joining cannot become ready; duplicate release/instance rejected; normal query,
-revision LISTEN, transition listener, admission probe, paired Caddy/Nuxt probe;
+joining cannot become ready; duplicate task/instance and changed identity
+rejected; two replicas may share a build digest; normal query, revision LISTEN,
+transition listener, admission probe, paired Caddy/Nuxt probe;
 quarantine/replay; ordered SIGTERM; coordinator loss cancels and joins without
 liveness restart; termination intent prevents reopen; pool max 12; two app
 pools + five independent four-connection auxiliary tasks + admin reserve = 60;

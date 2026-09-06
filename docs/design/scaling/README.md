@@ -14,6 +14,7 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | [Lifecycle replay](lifecycle-replay.md)             | Immutable operation results and permitted action order                |
 | [Lifecycle write entry](lifecycle-write-entry.md)   | Fixed exclusive wake methods, markers and completion                  |
 | [Public transitions](public-transitions.md)         | Target digest, replica acknowledgements and durable recovery          |
+| [Transition storage](transition-storage.md)         | Four-table constraints, complete results and immutable evidence       |
 | [Transition commit](transition-commit.md)           | Business execution fence and fenced-initiator rollback                |
 | [Admission](admission.md)                           | Fleet rate policies, heavy work, render affinity and realtime         |
 | [Policy catalog](policy-catalog.md)                 | Exact limiter identities, scopes and existing caller behavior         |
