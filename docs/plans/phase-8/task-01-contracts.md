@@ -5,8 +5,9 @@ AC-MEDIA-003/006/007. Read the phase index and its named authorities.
 
 **Owned paths:** phase plan, design clarifications, traceability, OpenAPI and
 generated client, `apps/server/migrations/00011_privacy_lifecycle.sql`,
-migration tests, `apps/server/sqlc.yaml`, generated store files, and shared
-queries needed by the task authors.
+migration `00012_media_reference_index.sql`, migration tests,
+`apps/server/sqlc.yaml`, generated store files, and shared queries needed by the
+task authors.
 
 ## Contract
 

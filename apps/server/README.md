@@ -31,10 +31,18 @@ slice.
 - Encrypted transactional authentication mail delivered through SES or a
   loopback capture server.
 
-Server-Sent Events, print and image rendering, and the privacy lifecycle
-workers are not implemented. The
-[current-state architecture](../../docs/architecture.md) records the exact
-boundary.
+Server-Sent Events, private print redemption, and direct public rendering are
+implemented across the Go and web components; Chromium is initialized only by
+the normal server path. Four privacy and media lifecycle jobs are available as
+one-shot commands:
+`idempotency-expiry-sweep`, `media-deletion-sweep`,
+`media-orphan-sweep` (with optional `--dry-run`), and
+`privacy-retention-sweep`. They run before HTTP and Chromium initialization,
+load only the database configuration they need (media commands also load the
+media backend), and emit a fixed identifier-free JSON result. Each run is
+bounded to 30 minutes, uses an advisory overlap lock, and joins work after
+cancellation. The [privacy runbook](../../docs/runbooks/privacy.md) describes
+the budgets, failure handling, and Phase 10 scheduler handoff.
 
 ## Data sources
 
@@ -70,3 +78,15 @@ go test ./...
 
 Run these commands from this directory. Database-backed gates use the one
 shared container started by `make test-db-up` from the repository root.
+
+Run a one-shot job from this directory with the same environment as the
+server. The command exits nonzero on an invalid command, invalid configuration,
+or failed job; its stdout still contains the fixed result when the worker
+returns one. Media commands require the configured private media backend.
+
+```sh
+go run ./cmd/server idempotency-expiry-sweep
+go run ./cmd/server media-deletion-sweep
+go run ./cmd/server media-orphan-sweep --dry-run
+go run ./cmd/server privacy-retention-sweep
+```

@@ -28,6 +28,8 @@ intended model, not replacement DDL.
 | `idempotency_records`       | User, concrete operation identity, mutation key, semantic request fingerprint, stored response, expiry                    |
 | `idempotency_usage`         | One per-user retained-record and stored-response-byte counter maintained transactionally                                  |
 | `media_deletion_jobs`       | Exact immutable object key, due time, bounded retry state, terminal outcome, audit timestamps                             |
+| `lifecycle_audit_events`    | Fixed account-deletion and media-overdue/completion events, independent of deleted accounts and retained for 180 days     |
+| `privacy_sweep_state`       | Durable cursor for bounded weekly media reconciliation                                                                    |
 | `public_state`              | Singleton durable discovery generation advanced with public-membership mutations                                          |
 
 Server-owned relational rows use PostgreSQL UUIDv7 defaults. Client-generated
