@@ -65,11 +65,22 @@ failure or backend change destroys the physical connection. Go never reads
 owner-only temporary marker rows. Schema CREATE remains available through
 owner-role function DDL and is revoked after RESET ROLE, before finish.
 
+Goose cleanup cannot observe the primary migration result. Every migration
+backend therefore retires through the pinned pgx driver before Goose returns,
+including successful migrations. Bootstrap may use UpTo(13); protected versions
+use separate ApplyVersion lifecycles. Status uses fixed SQL transaction commands
+on its pinned Conn so rollback receives a detached five-second context.
+
 ## Failing-first acceptance matrix
 
 - TestRuntimeLockerSameBackendOrder; TestRuntimeLockerCleanExit;
   TestRuntimeLockerContentionCleanup; TestRuntimeLockerAmbiguityPoisonsBackend;
   TestRuntimeLockerErrBadConnNeverReconnects; TestRuntimeLockerExitTimeoutFails.
+- TestMigrationSuccessPhysicallyRetiresBackendAndKeepsDBOpen;
+  TestMigrationCommitResponseLostRetiresExactPIDBeforeReturn;
+  TestMigrationCommitErrorPreservesPrimaryAndCleanupErrors;
+  TestMigrationUnsupportedDriverFailsBeforeMigration;
+  TestProtectedApplyVersionUsesFreshPIDAndRechecksEachVersion.
 - TestApplyFreshStopsAt13ThenReentersFor14;
   TestApplyFreshMigratorOwnerNeedsNoAdoption;
   TestApplyExistingAboutmePre13StaysAdminOnlyThrough13;
@@ -90,7 +101,9 @@ owner-role function DDL and is revoked after RESET ROLE, before finish.
   TestStatusRepeatableReadCatalogRace; TestStatusCorruptionNeverRepairs.
 - TestStatusDirectRejectsAdmin; TestStatusLocalUsesSameBackendAndResets;
   TestStatusCancellationRollsBackAndResets;
-  TestStatusResetFailureDiscardsPhysicalConnection.
+  TestStatusResetFailureDiscardsPhysicalConnection;
+  TestStatusRollbackFailureRetiresBackendWithoutGoroutine;
+  TestStatusReadOnlyCommitErrorRetiresBackend.
 - TestDirectIdentityRejectsAdmin; TestLocalIdentityRejectsNonAboutme;
   TestLocalIdentityResetsSession; TestHostedManifestForbidsLocalAdminIdentity;
   TestMigratorMetadataAccessorIsBoundedAndStateTableDenied;

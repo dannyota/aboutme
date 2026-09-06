@@ -80,15 +80,15 @@ safe reuse. Session end releases any possibly acquired lock.
 Protected SessionUnlock reverses ownership: wrapped Goose unlock first, then
 runtime_exit_migrator, then RESET SESSION AUTHORIZATION in local mode. Each step
 uses a five-second context derived from context.WithoutCancel. Any ambiguity,
-AM001, backend mismatch, or reset failure returns an error and marks the
-connection for physical destruction. A clean exit returns nil. Goose then calls
-`sql.Conn.Close`; the wrapper does not pre-close a clean connection. Tests pin
-that clean Close does not produce ErrConnDone or turn a committed migration into
-failure. Clean reuse requires a confirmed exit-function outcome, both advisory
-locks confirmed released and local session authorization reset. The definer
-functions enforce session-marker deletion and an empty transaction marker; Go
-never directly SELECTs their owner-only temporary tables. Administrative test
-connections verify those rows independently.
+AM001, backend mismatch, or reset failure returns an error. Every migration
+backend is physically retired after these cleanup attempts, including successful
+migrations. Goose calls SessionUnlock before returning the migration or Commit
+error and does not pass that error to the locker. Retiring every backend closes
+the gap where a lost Commit response could otherwise return a reusable
+connection before Apply learns of the error. The caller's sql.DB stays open. The
+definer functions enforce session-marker deletion and an empty transaction
+marker; Go never SELECTs their owner-only temporary tables. Administrative tests
+verify those rows independently.
 
 Responsibility is split deliberately. SQL runtime_exit_migrator does not infer
 autocommit from transaction timestamps or xid allocation. It rejects an active
@@ -96,17 +96,33 @@ write marker or missing runtime session lock, clears its session marker, and
 unlocks exactly once. Go calls it as one standalone statement only after Goose
 migration transactions and wrapped Goose SessionUnlock complete, then verifies
 PID, lock absence, identity and exposed catalog state on the same backend before
-identity reset or reuse. Successful definer execution supplies the private-row
-proof. Unknown execution outcomes destroy the backend, without expanding marker
-grants or the metadata accessor.
+identity reset and retirement. Successful definer execution supplies the
+private-row proof. Unknown execution outcomes destroy the backend, without
+expanding marker grants or the metadata accessor.
 
-Physical destruction uses `sql.Conn.Raw` with a callback returning
-`driver.ErrBadConn`, then closes the sql.Conn. It preserves the original error.
-There is no retry. A pinned `*sql.Conn` may not resume on a replacement backend;
-every stage compares pg_backend_pid with the recorded marker. ErrBadConn or
-ErrConnDone during an active run fails that run. Go database/sql Conn.grabConn
-uses its bound driverConn and returns ErrConnDone after close; it does not
-reacquire through DB. Tests pin this Go-version behavior and backend PID.
+Apply and Status support the pinned pgx stdlib driver. Verify exact
+`*stdlib.Conn` through Raw before any identity, lock or Goose work in bootstrap
+and protected Apply, and before Status session authorization or BEGIN.
+Retirement uses sql.Conn.Raw to require that type, calls its exported
+Conn().Close with a separate five-second cleanup context, and confirms IsClosed.
+Never retain the driver handle outside Raw. Return nil from Raw after successful
+physical close so Goose's following sql.Conn.Close does not turn a successful
+migration into ErrConnDone. The dead wrapper cannot execute SQL or pass pgx
+ResetSession. A close error is reported even when IsClosed confirms the socket
+cannot be reused. If the Raw callback runs but IsClosed is false, return
+driver.ErrBadConn so database/sql synchronously closes and discards the wrapper.
+SessionUnlock still returns a cleanup failure and preserves the primary
+migration error. If Raw cannot invoke the callback, report an invariant failure
+and do not retry or claim confirmed backend death without proof. Unsupported
+drivers fail before execution.
+
+There is no reconnect or retry during a failed operation. Each protected version
+uses ApplyVersion and rechecks identity, runtime state and history under both
+locks on its own backend. The backend is retired before that call returns.
+Bootstrap alone may use UpTo(13) across its transactional versions; its first
+failure stops and retires the backend. Every stage checks its recorded backend
+PID. Tests prove physical closure precedes Apply's return, successful migration
+returns no artificial cleanup error, and the caller-owned DB remains usable.
 
 ## Fresh and staged Apply
 
@@ -205,8 +221,9 @@ version SQL, and cleanup behavior.
 
 ## Read-only status and check
 
-Status never constructs a Goose Provider. It runs catalog/history reads in a
-read-only transaction (`SET TRANSACTION READ ONLY`) and takes no advisory lock:
+Status never constructs a Goose Provider. It uses one pinned sql.Conn and fixed
+`BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`, COMMIT and ROLLBACK
+statements. It takes no advisory lock:
 
 - no runtime state and no history: return typed ErrMigrationHistoryMissing;
   migrate -check prints fixed uninitialized/pending output and exits nonzero;
@@ -240,6 +257,10 @@ the read transaction. It records backend PID, begins REPEATABLE READ READ ONLY,
 reads one snapshot, and commits. It verifies the same PID; impersonated local
 mode then RESET SESSION AUTHORIZATION before release, while direct mode
 re-verifies session_user remains migrator. Query/cancellation failure gets a
-five-second independent rollback. Reset, rollback, PID, or cleanup ambiguity
-poisons the physical connection. Clean release requires confirmed commit or
-rollback and identity reset. Status never retries or changes backend.
+five-second independent ROLLBACK through the same Conn. Do not use sql.Tx here:
+its Rollback has no context and pgx stdlib retains the canceled BeginTx context.
+Cleanup is synchronous; never return the lease while rollback is pending. A
+read-only COMMIT error, reset failure, rollback failure, PID mismatch or cleanup
+ambiguity retires the physical backend. Confirmed commit or rollback plus
+identity reset allows clean Status reuse. Status never retries or changes
+backend.
