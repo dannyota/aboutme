@@ -471,6 +471,8 @@ async function proveConflictAndTemplate(
     'Keep partial',
   ]);
   await partial.getByRole('button', { name: 'Keep partial' }).press('Enter');
+  editorDiagnosticStage = 'template-keep-partial-saved';
+  await expectSavedOrDiagnose(page, 'template-keep-partial');
   diagnostics.assertTemplateFailureSecondChild();
   await expectURLUnchanged(page, baseline);
   await expectNoPersistenceWrites(probes);
@@ -782,7 +784,7 @@ async function provePhotoSessionPersistence(
   editorDiagnosticStage = 'photo-upload-accepted';
   expect((await acceptedPhoto).status()).toBe(200);
   editorDiagnosticStage = 'photo-upload-saved';
-  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await expectSavedOrDiagnose(page, 'photo-upload');
   expect((await ownerPhotoRead).headers()['content-type']).toMatch(/^image\/(?:jpeg|png)/);
   await expect(page.locator('[data-photo-preview] img')).toBeVisible();
   await expect.poll(async () => (await sourceReads.read()).dataURL).toBeGreaterThan(0);
@@ -800,7 +802,7 @@ async function provePhotoSessionPersistence(
   editorDiagnosticStage = 'photo-crop-response';
   expect((await acceptedCrop).status()).toBe(200);
   editorDiagnosticStage = 'photo-crop-saved';
-  await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await expectSavedOrDiagnose(page, 'photo-crop');
   editorDiagnosticStage = 'photo-crop-url';
   await expectURLUnchanged(page, baseline);
   editorDiagnosticStage = 'photo-crop-persistence';
@@ -1508,6 +1510,67 @@ async function expectNoPersistenceWrites(
     sendBeacon: 0,
     sessionStorage: 0,
   });
+}
+
+async function expectSavedOrDiagnose(
+  page: Page,
+  boundary: 'template-keep-partial' | 'photo-upload' | 'photo-crop',
+): Promise<void> {
+  try {
+    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  } catch (error) {
+    const state = await page.getByTestId('save-status').getAttribute('data-state');
+    const safeState = [
+      'conflict',
+      'dirty',
+      'error',
+      'offline',
+      'saved',
+      'saving',
+      'session-lost',
+    ].includes(state ?? '') ? state : 'other';
+    const conflict = page.locator('[data-conflict]').first();
+    const category = await conflict.count() > 0
+      ? classifyConflict(await conflict.getAttribute('data-conflict'))
+      : await page.getByRole('alert').count() > 0
+        ? 'alert'
+        : 'none';
+    editorDiagnosticStage = `${boundary}-saved-${safeState}-${category}`;
+    throw error;
+  }
+}
+
+function classifyConflict(value: string | null): string {
+  if (value === 'template') return 'template';
+  const separator = value?.indexOf(':') ?? -1;
+  const kind = separator > 0 ? value?.slice(0, separator) : undefined;
+  const command = separator > 0 ? value?.slice(separator + 1) : undefined;
+  const safeKinds = [
+    'context-changed',
+    'destructive-reconfirmation',
+    'identity-missing',
+    'identity-retyped',
+    'membership-changed',
+    'photo-changed',
+    'superseded-after-success',
+    'target-changed',
+  ];
+  const safeCommand = command === 'customization'
+    ? 'customization'
+    : command === 'photoCrop'
+      ? 'photo-crop'
+      : command === 'photoDelete'
+        ? 'photo-delete'
+        : command === 'photoUpload'
+          ? 'photo-upload'
+          : command === 'structure'
+            ? 'structure'
+            : undefined;
+  return kind !== undefined
+    && safeKinds.includes(kind)
+    && safeCommand !== undefined
+    ? `${kind}-${safeCommand}`
+    : 'conflict-other';
 }
 
 async function ensureAuthenticated(page: Page): Promise<void> {
