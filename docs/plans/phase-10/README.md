@@ -51,7 +51,9 @@ time to stay within laptop RAM limits.
 
 Before implementation, reconcile every infrastructure task against the Phase 9
 decision and current code. Resolve `PUBLIC_RENDER_ORIGIN`, password/MCP flags,
-disabled-provider startup validation, and the current mail runtime settings.
+disabled-provider startup validation, and the current mail runtime settings. The
+[runtime handoff](runtime-refresh.md) records the inspected Phase 8 inputs,
+private print wiring gap, ARM64 browser path, and remaining resource checks.
 Read the [email runbook](../../runbooks/email.md) and inventory the existing
 `aboutme-email` CloudFormation stack before OpenTofu adopts overlapping
 resources. It records the Singapore sandbox, `danny@aboutme.vn`, `aboutme-auth`,

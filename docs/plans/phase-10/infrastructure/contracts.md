@@ -2,6 +2,10 @@
 
 ## Required pre-dispatch refresh
 
+The [runtime handoff](../runtime-refresh.md) records the final Phase 8 inputs
+and concrete gaps in this baseline. Apply its private print, provider startup,
+ARM64, and build-plan checks together with the Phase 9 cost recommendation.
+
 This baseline is proposed until Phase 9 cost research and the final Phase 6.1,
 6.2, 7.1, 7.2, and 8 contracts are available. Before any task dispatch, record
 the refresh outputs in the phase plan:

@@ -1,6 +1,7 @@
 # Phase 9 — AWS Singapore cost research
 
-Status: **Planned** (2026-09-05). Research has not run.
+Status: **In progress** (2026-09-06). Phase 8 is merged. Research and the priced
+recommendation are ready for phase review; no budget amount has been approved.
 
 **Goal:** choose a costed UAT deployment at `uat.aboutme.vn` in AWS Singapore
 (`ap-southeast-1`) and estimate later production costs separately.

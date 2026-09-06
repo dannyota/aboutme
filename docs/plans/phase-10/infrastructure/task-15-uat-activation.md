@@ -6,7 +6,10 @@ Cloudflare only after the Phase 9 cost decision and the local checkpoint below.
 ## Preconditions
 
 - [ ] Phase 9 records quantified cost, the budget decision, and selected UAT
-      sizing at the exact candidate commit.
+      sizing at the exact candidate commit. Apply its
+      [spending and cleanup controls](../../../research/aws-cost/recommendation.md#alerts-and-controls),
+      including the active expiry, campaign and retained-resource budgets, daily
+      inventory checks, and operator cleanup path independent of Actions.
 - [ ] The infrastructure local checkpoint is `PASS`: affected local checks, fake
       AMI and OpenTofu-mock checks, one author per task, one fresh Phase 10
       review, and the owner's single `make ci` plus `make scan` run.
@@ -113,7 +116,7 @@ are live.
       role can list `resumes/` and act on `resumes/*`; neighbouring prefixes and
       every other role are denied. The server invalidation action is scoped to
       this one distribution.
-- [ ] All six Task 10.10 schedules are enabled, their image commands and roles
+- [ ] All seven Task 10.10 schedules are enabled, their image commands and roles
       resolve, and every heartbeat/failure alarm has a source. Run the safe TLS
       and CIDR checks once. Restore timing and notification receipt remain Phase
       10 operational rehearsal criteria.
@@ -123,12 +126,15 @@ are live.
 Stop writers and record the approved data-loss scope. Empty only the named UAT
 media bucket, then destroy the disposable environment; bootstrap state,
 persistent secrets KMS key, SSM parameters, and ECR remain. Verify RDS followed
-the UAT no-final-snapshot policy and no production resource was addressable.
-Re-run all eight activation stages from empty environment state, including the
-decrypting secret check, certificate validation, DB bootstrap, and full smoke.
-Leave the recreated UAT environment healthy for tasks 10.16–10.17 and run the
-task 10.14 harness's live preflight. Cost-control shutdown or final teardown
-occurs only after task 10.17 records hosted acceptance and the retention plan.
+the UAT no-final-snapshot policy with `delete_automated_backups = true`, and no
+production resource was addressable. Inventory and remove only owned UAT manual
+snapshots; any retention exception needs a priced lifetime. Re-run all eight
+activation stages from empty environment state, including the decrypting secret
+check, certificate validation, DB bootstrap, and full smoke. Leave the recreated
+UAT environment healthy for tasks 10.16–10.17 and run the task 10.14 harness's
+live preflight. Planned final teardown follows task 10.17's hosted acceptance
+and retention record. Budget or expiry limits can require earlier cleanup; in
+that case, record the incomplete acceptance work before destroying UAT.
 Production keeps deletion protection, a final snapshot, and a non-force-destroy
 bucket.
 

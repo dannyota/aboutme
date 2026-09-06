@@ -11,6 +11,12 @@ Basic-header gate is not compatible with MCP Bearer authorization and cannot be
 implemented unchanged; the resolved UAT access policy must update this row and
 its owning task together. No row is newly proven by this plan revision.
 
+Phase 9's [cost recommendation](../../research/aws-cost/recommendation.md)
+supplies sizing and spending assumptions. The
+[runtime handoff](../phase-10/runtime-refresh.md) records deployment gaps found
+after Phase 8. These inputs do not prove any infrastructure or hosted acceptance
+row; the existing Phase 10 owners and checks remain responsible.
+
 The selected
 [native ARM64 build contract](../phase-10/infrastructure/contracts.md#build-and-runner-contract)
 is owned by tasks 10.8/10.12/10.13 and the infrastructure exit checklist. It
