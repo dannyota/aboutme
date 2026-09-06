@@ -108,6 +108,7 @@ services:
       db-role-bootstrap:
         condition: service_completed_successfully
     environment:
+      MIGRATION_IDENTITY: local-aboutme
       # DATABASE_URL deliberately carries NO password: POSTGRES_PASSWORD is
       # spliced in unencoded below only as a separate PGPASSWORD variable,
       # not into the URI. Splicing it into the URI directly used to corrupt

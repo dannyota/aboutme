@@ -21,6 +21,11 @@ esac
 SH
 cat >"$WORK/bin/go" <<'SH'
 #!/usr/bin/env bash
+if [[ "$*" == 'run ./cmd/migrate' || "$*" == 'run ./cmd/migrate -check' ]]; then
+  [[ ${MIGRATION_IDENTITY:-} == local-aboutme ]] || exit 93
+  printf 'migrate:%s\n' "$*" >>"$ROLE_TEST_CALLS"
+  exit 0
+fi
 [[ "$*" == 'run ./cmd/db-role-bootstrap' ]] || exit 91
 [[ ${CLUSTER_BOOTSTRAP_DATABASE_URL:-} == *'/postgres?sslmode=disable' ]] || exit 92
 printf 'bootstrap\n' >>"$ROLE_TEST_CALLS"
@@ -46,5 +51,16 @@ for result in 23 0; do
     [ "$status" -eq 0 ] || { echo 'role-wiring: valid bootstrap failed' >&2; exit 1; }
     awk '/^bootstrap$/ { ready=1 } /psql/ { if (!ready) exit 1; seen=1 } END { if (!seen) exit 1 }' "$calls"
   fi
+done
+for target in migrate migrate-check; do
+  calls="$WORK/calls-$target"
+  : >"$calls"
+  (cd "$WORK/repo" && env -u SHELLOPTS -u MIGRATION_IDENTITY \
+    PATH="$WORK/bin:/usr/bin:/bin" ROLE_TEST_CALLS="$calls" \
+    /usr/bin/make --no-print-directory "$target") >"$WORK/output-$target" 2>&1 || {
+    echo "role-wiring: $target did not select the fixed local migration identity" >&2
+    exit 1
+  }
+  grep -q '^migrate:' "$calls" || { echo 'role-wiring: migrate was omitted' >&2; exit 1; }
 done
 echo 'Database role bootstrap ordering and failure propagation passed'
