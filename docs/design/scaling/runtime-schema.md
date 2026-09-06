@@ -11,9 +11,21 @@ Root owns the migration, SQL sources, generated sqlc code, grants, and schema
 tests. Names below are contract names; authors do not edit migration files until
 root assigns the schema slice.
 
+[Replica membership](replica-membership.md),
+[lifecycle operations](lifecycle-operations.md) and
+[lifecycle replay](lifecycle-replay.md) define the exact identity, function and
+replay contracts. [Public transitions](public-transitions.md) and
+[transition commit](transition-commit.md) define the ordered target digest,
+typed functions, transaction capability and recovery actors.
+[Exclusive lifecycle entry](lifecycle-write-entry.md) fixes the two wake
+methods, marker, table/action catalog and historical write-generation results.
+
 ## runtime_replicas
 
 - replica_id uuid primary key, generated randomly by composition at each boot.
+- replica_kind text fixed to serving or maintenance; immutable. Only serving
+  replicas count toward desired capacity and public readiness. Maintenance
+  replicas may acquire only C03 mail.send from the shared-claim catalog.
 - instance_id text not null; container_instance_arn text not null.
 - caddy_task_arn, go_task_arn, nuxt_task_arn text not null.
 - release_digest text not null; state text not null check in
@@ -27,6 +39,14 @@ root assigns the schema slice.
   left_at; terminating requires termination_requested_at; fenced requires
   fenced_at. Left and fenced are terminal. No delete path exists.
 
+## runtime_replica_tasks
+
+- task_arn text primary key; replica_id references runtime_replicas; task_role
+  fixed to caddy, go or nuxt; unique(replica_id, task_role).
+- Rows are immutable. A deferred assertion requires exactly three children and
+  an exact match with the parent's three role-specific ARNs. The global primary
+  key prevents concurrent cross-role task reuse.
+
 ## runtime_capacity
 
 - singleton boolean primary key fixed true; desired_replicas smallint check
@@ -34,11 +54,53 @@ root assigns the schema slice.
   controller_operation_id text not null; admission_enabled boolean;
   lifecycle_phase check in ('offline','starting','online','stopping');
   updated_at; updated_by evidence ID.
-- readable by app role, writable only through lifecycle-role functions.
+- Readable by app; writable only through fixed owner-controlled definers.
+- Membership definers also advance generation for fresh register, ready, leave
+  and proof changes. They preserve controller_generation and never grant app
+  direct capacity DML. Lifecycle actions advance both generations once. Replay,
+  rejected calls, rollback and transition recovery advance neither.
 - shared_rate_partitions allocation-enabled flags change in the same lifecycle
   transaction. Offline/stopping disables new allocation in both partitions but
   retains all debt. desired_replicas remains bounded 1..2 as the next/online
   target; it is not changed to zero to mirror the external UAT ASG.
+- Rate partitions are logical fleet capacity, with no node-to-partition
+  assignment. Either exact serving replica may be replaced or selected for
+  scale-in; retained rate debt does not move with a physical node. First and
+  second serving activation enable partitions 1 and 2. Failure and fencing
+  preserve their flags, including with zero survivors; replacement inherits that
+  capacity. Proved scale-in disables partition 2 and final shutdown disables
+  both. Maintenance activation changes neither.
+- The installation seed is desired one, capacity/controller generations one,
+  online, admission enabled and `bootstrap-uncomposed-v1` for both controller
+  operation and updated_by. Both logical partitions start disabled. It creates
+  no replica, ledger or termination evidence. See the exact
+  [installation seed](lifecycle-operations.md#installation-seed). The existing
+  write foundation stays open; only finalization creates closed UAT.
+
+## Lifecycle operation ledger
+
+`runtime_lifecycle_operations` has an immutable operation_id primary key and
+closed workflow_kind. `runtime_lifecycle_operation_steps` has primary key
+(operation_id, action), a foreign key to its parent, expected/result controller
+generations, fixed 32-byte argument/result digests, typed immutable historical
+result columns and database recorded_at. Replay reads those stored columns,
+never current membership or capacity rows. Workflow/action checks enforce the
+exact predecessor map in [lifecycle replay](lifecycle-replay.md). No deletion
+path exists.
+
+Every lifecycle operation locks public_state then runtime_capacity before
+reading or inserting its operation parent and action. The singleton serializes
+fresh IDs. Each fresh action increments controller generation once; exact replay
+returns stored durable fields with replayed=true. The derived replayed flag is
+excluded from the result digest.
+
+The exact
+[nullable result matrix](lifecycle-replay.md#operation-schema-and-digest)
+requires capacity counts and flags for capacity actions and finish-scale-in.
+Replica actions store exact replica fields; wake actions alone store gate and
+write generation. The typed `argument_replaced_replica_id` is non-null only for
+replacement activation and has a unique partial index preventing reuse. No
+argument or historical result uses JSON.
 
 ## runtime_termination_intents
 
@@ -89,13 +151,18 @@ root assigns the schema slice.
   tables. Exact app definer functions mediate register/mark-join-ready/drain,
   transition and admission. App cannot activate a replica or enable a capacity
   partition.
-- Two non-app roles get no table DML. `aboutme_lifecycle_command` may execute
-  only prepare_scale_out, activate_replica_capacity, prepare_scale_in,
-  finish_scale_in, begin_uat_shutdown, finish_uat_shutdown, begin_wake,
-  finalize_stop_receipt, and begin_replica_termination. `aboutme_fencing_proof`
-  may execute only record_ec2_termination. The app role alone may execute
-  finish_graceful_leave for its authenticated replica after local join proof.
-  Each function checks an expected controller generation and operation ID.
+- Lifecycle-command and fencing-proof get no table DML. Lifecycle-command
+  executes only the named capacity, maintenance-drain and wake operations in
+  [lifecycle operations](lifecycle-operations.md), plus the separately gated UAT
+  shutdown/final-stop functions. Capacity actions use expected controller
+  generation and operation ID. Lifecycle-command also receives the narrow
+  [fenced-initiator rollback](transition-commit.md) function; it takes no
+  capacity or controller-ledger locks and cannot acknowledge or commit work.
+  Fencing-proof executes only runtime_record_ec2_termination, which never reads
+  or mutates transition rows. App and maintenance receive distinct fixed-kind
+  graceful-leave wrappers after their local join proof. Shared app credentials
+  do not authenticate a per-process incarnation; the private adapter binds the
+  exact immutable tuple and SQL checks it.
 - Bootstrap uses explicit grants and default-privilege revocation. Existing
   broad app grants must not grant new-table DML. Tests inspect
   information_schema and attempt forbidden statements through every real role,
@@ -130,23 +197,37 @@ uses 55000. A committed marker lookalike is never adopted or repaired. The
 transaction finish guard in the transaction contract survives DISCARD TEMP;
 temporary ownership alone does not prevent marker removal after forced checks.
 
-Grant enter/finish to app, maintenance, lifecycle-command and fencing-proof.
-Migrator receives only its session entry, per-migration begin, finish and exit
-primitives and the bounded read-only metadata accessor. Restore receives none.
-All assertion helpers remain owner-only. The state update is explicit and once
-per dirty transaction. A checked table/operation catalog marks accepted
-application writes automatically; maintenance and bookkeeping do not extend the
-application writer tail.
+Grant ordinary enter/finish to app, maintenance, lifecycle-command and
+fencing-proof for their shared write methods. Only lifecycle-command receives
+the two fixed wake entry and action functions. Wake methods use their exclusive
+marker and finish assertion, never ordinary entry or finish. The wake branch
+accepts only its fixed table/action catalog and no business writes. Its
+statement trigger checks entry identity and table/operation only. Owner BEFORE
+ROW triggers bind operation-parent workflow and step action/workflow to the
+marker's exact operation ID and mode. The fixed entry signatures are
+`runtime_enter_begin_wake(operation_id text, wake_mode text)` and
+`runtime_enter_complete_wake(operation_id text)`. Migrator receives only its
+session entry, per-migration begin, finish and exit primitives and the bounded
+read-only metadata accessor. Restore receives none. All assertion helpers remain
+owner-only. The state update is explicit and once per dirty transaction. A
+checked table/operation catalog marks accepted application writes automatically;
+maintenance and bookkeeping do not extend the application writer tail.
 
 ## public_transitions
 
 - transition_id uuid primary key; initiator_replica_id references replicas.
 - operation text constrained to the existing mutation inventory; state check in
   ('closing','committed','rolled_back','unresolved').
-- created_at, deadline_at, terminal_at timestamptz; deadline_at is exactly the
-  caller's existing five-second deadline and cannot be extended.
+- created_at, deadline_at, terminal_at timestamptz; deadline_at equals
+  created_at plus five seconds. Begin projects the original remaining monotonic
+  budget onto database statement time and derives created_at from that deadline.
+  The original caller deadline still bounds all work; it never restarts on SQL,
+  lock wait or recovery. See [public transitions](public-transitions.md).
 - target_digest bytea length 32; terminal_error_code nullable and bounded; no
   request body or secret. Per-target rows are the only committed-result source.
+- recovery_fencing_evidence_id nullable text references the unique fencing proof
+  evidence_id. It is non-null exactly for rolled_back with reason
+  initiator_fenced, and immutable. Other outcomes keep it null.
 - closing rows may become committed or rolled_back once. unresolved is only for
   invalid/corrupt recovery evidence and fails readiness; no normal retry writes
   through it.

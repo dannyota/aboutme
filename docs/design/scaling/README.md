@@ -9,6 +9,12 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | --------------------------------------------------- | --------------------------------------------------------------------- |
 | [Runtime schema](runtime-schema.md)                 | Durable state, immutable outcomes and database privileges             |
 | [Replica coordination](runtime-coordination.md)     | Joining, transitions, recovery, draining and connection limits        |
+| [Replica membership](replica-membership.md)         | Exact node identity, task trios, leave and EC2 proof                  |
+| [Lifecycle operations](lifecycle-operations.md)     | Serving capacity, replacement and private maintenance wake            |
+| [Lifecycle replay](lifecycle-replay.md)             | Immutable operation results and permitted action order                |
+| [Lifecycle write entry](lifecycle-write-entry.md)   | Fixed exclusive wake methods, markers and completion                  |
+| [Public transitions](public-transitions.md)         | Target digest, replica acknowledgements and durable recovery          |
+| [Transition commit](transition-commit.md)           | Business execution fence and fenced-initiator rollback                |
 | [Admission](admission.md)                           | Fleet rate policies, heavy work, render affinity and realtime         |
 | [Policy catalog](policy-catalog.md)                 | Exact limiter identities, scopes and existing caller behavior         |
 | [UAT lifecycle](uat-lifecycle.md)                   | Maintenance deadlines, write barriers and final stop receipts         |

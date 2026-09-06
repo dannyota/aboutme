@@ -23,6 +23,10 @@ the next planned wake. Missing proof starts maintenance or keeps RDS running.
   ambiguous leave retains claims until exact EC2 termination proof fences that
   incarnation. ECS STOPPED, task health, lease expiry, and advisory-lock loss do
   not prove the process or external work stopped.
+- Store immutable replica_kind=maintenance. Its fixed register, mark-ready and
+  graceful-leave wrappers are separate from serving wrappers. It remains outside
+  desired serving capacity and public readiness. Only C03 mail.send uses shared
+  concurrency claims; existing mail/media job leases remain separate protocols.
 - Lifecycle command and fence proof have no replica claims and may run as
   independent bounded Fargate tasks. Infrastructure apply has no database login.
 
@@ -51,9 +55,10 @@ functions.
   identity, credential, public-state, transition, capacity, rate, or fence DML.
 - Existing session advisory-lock calls remain available. Grant EXECUTE only on
   new SECURITY DEFINER functions for maintenance incarnation registration,
-  admission claims, finish_graceful_leave, begin_quiescence,
-  record_job_run_result, and create_quiescence_snapshot. Final stop receipt and
-  write-gate functions belong only to `aboutme_lifecycle_command`.
+  maintenance mark-ready, C03 mail.send admission, maintenance graceful leave,
+  begin_quiescence, record_job_run_result, and create_quiescence_snapshot. Final
+  stop receipt and write-gate functions belong only to
+  `aboutme_lifecycle_command`.
 - Default privileges and PUBLIC remain revoked. Tests run every existing command
   under this real role and separately prove forbidden DML and lifecycle/proof
   execution fail.
@@ -228,10 +233,19 @@ Use one fixed 64-bit advisory key `aboutme.runtime-write-barrier.v1`.
    without changing controller generation, and emit external metrics. It rereads
    gate plus generation immediately before StopDBInstance.
 9. On the next RDS start, lifecycle-command first calls begin_wake under the
-   exclusive barrier. It advances generation, invalidates the old receipt, and
-   changes closed-to-closing. It opens the gate only after migrations,
-   reconciliation, due-work planning, and replica admission prerequisites are
-   ready. No app or maintenance writer can bypass closing.
+   exclusive barrier with immutable serving or maintenance mode. It advances
+   generation, invalidates the old receipt, and changes closed-to-closing. The
+   separate lifecycle-only runtime_complete_wake opens the gate after
+   migrations, reconciliation, due-work planning and deployment prerequisites
+   pass. Replica registration, local join-ready probes and exact activation
+   follow gate opening; they cannot bypass closing. A maintenance-only wake
+   keeps ALB absent and serving capacity zero throughout. The complete private
+   maintenance node uses normal write entry after wake completion. See
+   [lifecycle operations](lifecycle-operations.md) and the fixed
+   [exclusive wake runner](lifecycle-write-entry.md). Both wake actions advance
+   capacity, controller and write generations once without changing the
+   accepted-writer timestamp. Exact replay returns the stored gate and
+   generations even after later state changes.
 
 ## Write paths that invalidate a receipt
 

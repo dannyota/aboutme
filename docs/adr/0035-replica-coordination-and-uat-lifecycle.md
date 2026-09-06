@@ -34,6 +34,13 @@ proof task verifies that its exact EC2 instance is `terminated`. That proof
 permits reclamation for a fresh attempt. It cannot acknowledge an earlier
 transition or revive a timed-out mutation.
 
+After that proof commits, lifecycle-command may separately roll back a closing
+transition whose initiator was fenced. It must obtain the transition's execution
+lock and validate the exact stored proof. It cannot change committed results,
+repair unresolved evidence or perform business work. This closes the recovery
+gap when no serving replica survives; the proof role itself cannot mutate
+transitions. See [transition recovery](../design/scaling/transition-commit.md).
+
 Render snapshots, capabilities, controllers, and completion authority stay in
 the initiating Go process. Shared claims enforce one running job and eight
 waiting jobs across the fleet. Paired node-local routing preserves one-use print
