@@ -13,6 +13,13 @@ enters the runtime write barrier. A table trigger is too late to acquire the
 barrier after SELECT FOR UPDATE. Triggers assert prior entry and reject missing
 entry immediately; they never acquire or wait for the barrier.
 
+Ordinary writes use the shared runner below. Only `begin_wake` and
+`complete_wake` use the fixed
+[exclusive lifecycle runner](lifecycle-write-entry.md). Their owner marker and
+finish assertion permit the closed wake table/action catalog while the ordinary
+gate is closed or closing. They never call ordinary entry or finish. The
+separately defined receipt finalizer remains exclusive.
+
 ## Exported Go seam
 
 Add `WriteTxRunner` under `apps/server/internal/store` with two methods:
@@ -60,10 +67,10 @@ existing idempotency rules.
 The supported write API exposes no raw transaction. A structural production
 write-path inventory also rejects direct Conn, Begin, Commit, Rollback and
 runtime_finish_write use outside this wrapper and the separately controlled
-migrator. Proved read-only exports, LISTEN and recovery connections remain
-outside the write API. This prevents accidental escape through driver
-interfaces; it does not claim language-level containment of malicious compiled
-Go.
+migrator, fixed wake runner and receipt finalizer. Proved read-only exports,
+LISTEN and recovery connections remain outside the write API. This prevents
+accidental escape through driver interfaces; it does not claim language-level
+containment of malicious compiled Go.
 
 ## Transaction marker
 
@@ -101,6 +108,10 @@ Rollback of dirty work or finish restores the marker and generation together.
 Successful commit clears marker rows; a pooled backend retains only an empty,
 owner-validated table. No login receives direct marker privileges.
 
+Ordinary entry and migrator entry reject the exclusive wake marker or finish
+guard. Wake entry rejects ordinary and migrator markers and guards. One
+transaction cannot mix modes.
+
 ## Assertion trigger
 
 `runtime_assert_write_entry()` is a definer-owned BEFORE INSERT/UPDATE/DELETE
@@ -119,6 +130,14 @@ classification. Bookkeeping and maintenance do not extend the application writer
 tail. No callable manual acceptance marker exists. The receipt finalizer uses
 the exclusive sibling lock and its named definer function; it does not use the
 ordinary runner.
+
+The bounded wake branch validates its exclusive marker and fixed table/action
+catalog as defined in [exclusive lifecycle entry](lifecycle-write-entry.md).
+Business assertions reject that branch. Wake actions update write state last and
+never extend the accepted-writer tail. Statement assertions inspect only the
+marker, lock and table/operation. Owner row triggers validate the parent
+workflow and step action against the operation ID and mode bound by the fixed
+wake entry.
 
 ## Inner lock order
 

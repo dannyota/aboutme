@@ -93,6 +93,25 @@ SSE, queue ordinals, replica binding, receipt retention and bounded ambiguity
 resolution. R1 adds their store/schema; R5 and the named caller tasks compose
 it.
 
+The [membership](../../../design/scaling/replica-membership.md),
+[lifecycle](../../../design/scaling/lifecycle-operations.md) and
+[replay](../../../design/scaling/lifecycle-replay.md) contracts fix exact task
+trios, serving/maintenance kinds, logical partitions and immutable controller
+results. [Public transitions](../../../design/scaling/public-transitions.md) and
+[commit](../../../design/scaling/transition-commit.md) fix the target digest,
+original deadline, parent-first execution fence and separate lifecycle recovery
+of a proved fenced initiator. R1 installs their real named-role grants. R8 owns
+composition and readiness; it introduces no additional SQL privilege gate.
+
+[Exclusive lifecycle entry](../../../design/scaling/lifecycle-write-entry.md)
+defines the only two wake methods, owner marker, fixed assertion catalog and
+historical write-state result. R1 installs the functions and bounded changes to
+ordinary/migrator entry checks in a new migration; it never edits 00013. R1a
+proves the private wake runner beside the shared runner. Wake functions never
+use ordinary entry or finish. The wake statement assertion checks
+table/operation; owner row triggers check the operation ID, workflow and action
+against the entry-bound marker.
+
 Owner paths: root-assigned migration number, apps/server/sql runtime query
 source or approved new SQL files, generated store output, store/migration tests.
 These are normally root-owned; root must explicitly assign and serialize them.
@@ -112,6 +131,15 @@ Fail first:
 - role tests prove PUBLIC/app/lifecycle direct DML is revoked, app cannot forge
   proof/fenced/terminating/capacity state, lifecycle executes only its named
   definer functions, search_path is pg_catalog, and proof is immutable.
+- race a locked business parent against fenced-initiator recovery; recover with
+  zero surviving serving replicas; reject wrong-host/ECS-only/missing proof and
+  cross-role execution; preserve committed/unresolved terminal evidence;
+- prove omitted transition completion and finish-before-terminal fail; pending
+  deferred assertions block DISCARD TEMP, forced checks cannot remove an
+  unfinished capability, and completed/discarded guards reject re-entry.
+- prove closed-to-closing and closing-to-open wake, historical replay after
+  later writes, mixed-entry rejection, wrong-role/table/action rejection,
+  unchanged accepted-writer tail, and physical backend retirement on ambiguity.
 
 Implement: sqlc boundaries for all schema operations; no handler SQL. Preserve
 existing public_state and resume transaction lock order.

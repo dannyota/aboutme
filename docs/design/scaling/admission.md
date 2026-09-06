@@ -35,10 +35,13 @@ replicas make one ordered decision after restart.
 - primary key (policy_id, partition); partition in (1,2); enabled boolean;
   capacity_generation bigint > 0 and operation_id text not null; active_keys
   integer check 0..10000; updated_at.
-- Partition 1 is enabled at desired replica count one. Partition 2 changes in
-  the same expected-generation transaction that activates the second replica or
-  finishes its scale-in. Scale-in disables new ownership on partition 2 but does
-  not delete its active rows. Stale controller generations cannot toggle it.
+- First serving activation enables partition 1; second serving activation
+  enables partition 2. Failure and fencing preserve both flags, even with zero
+  survivors; replacement inherits that logical capacity. Proved scale-in
+  disables partition 2 and final shutdown disables both, retaining active rows
+  and debt. Maintenance activation changes neither. These changes use the same
+  expected-generation transaction as the lifecycle action. Stale controller
+  generations cannot toggle a flag.
 
 ## shared_rate_buckets
 

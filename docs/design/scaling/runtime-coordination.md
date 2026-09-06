@@ -9,9 +9,10 @@ gates.
 
 1. Composition obtains replica ID and exact EC2/container/task/release identity
    from trusted deployment inputs. Partial or mismatched trio fails startup.
-2. In one transaction lock public_state singleton, insert joining replica, and
-   read all closing/unresolved transitions and runtime capacity. Any such row or
-   unapproved capacity keeps it unready.
+2. In one transaction lock public_state then runtime capacity, insert joining
+   replica and its exact three task rows, and read closing/unresolved
+   transitions without locking them. Any such row or unapproved capacity keeps
+   it unready.
 3. Start the transition listener and revision LISTEN connection. Read durable
    discovery generation and current affected resume revisions on demand.
 4. Exercise one normal query connection, both listener/coordinator connections,
@@ -21,8 +22,9 @@ gates.
    controller calls activate_replica_capacity. That one transaction locks the
    singleton, validates desired capacity 1..2, exact instance/release/trio,
    current active count below desired, no transition/unresolved state, changes
-   joining to active, and enables the corresponding rate capacity partition.
-   Only after observing commit may Caddy readiness open.
+   joining to active, and enables logical partition one or two for first or
+   second serving activation. Replacement preserves the existing flags. Only
+   after observing commit may Caddy readiness open.
 
 ## Capacity/topology handshake
 
@@ -36,7 +38,7 @@ gates.
 - Graceful scale in: lifecycle prepare_scale_in checks the expected controller
   generation, names the exact active target, and makes only it draining. The
   process closes admission, joins all work, then calls finish_graceful_leave as
-  its final database action. That function authenticates the calling replica,
+  its final database action. That function matches the stored replica identity,
   requires the same generation and proves no owned transition or claim. The
   caller's local invariant requires every callback/process joined before this
   call. It changes the row to terminal left and returns an immutable receipt.
@@ -115,8 +117,17 @@ business transaction holds the execution fence, so it may atomically roll back;
 rolled_back proves no business SQL passed the state predicate. Missing or
 contradictory evidence marks unresolved and keeps every affected fence closed.
 
-Account deletion preserves canonical-email, public_state, slug, account, and
-resume lock order, the at-most-three plan attempts, reference revocation and
+If the initiator has been fenced by exact EC2 termination proof,
+lifecycle-command may roll back its closing transition through the separate
+[fenced recovery function](transition-commit.md). It locks the transition parent
+and validates the stored proof. It cannot acknowledge, run business SQL, change
+committed results or repair unresolved evidence. This permits replacement when
+no serving replica survives. Proof recording and recovery use separate
+transactions; membership never waits on a transition parent.
+
+Account deletion locks the transition parent, ordered slug advisory keys,
+public_state, canonical email, registration, user, ordered resumes and current
+session. It preserves the at-most-three plan attempts, reference revocation and
 deletion-job atomicity. A failed fleet close consumes one attempt only as
 current caller semantics specify; it never commits deletion. Private media
 remains unreachable immediately after the successful reference-removal
@@ -193,8 +204,10 @@ itself.
   one termination intent, it terminates that exact node once. Health changes
   cannot create another intent or reopen it.
 - Replacement starts only after termination is verified and fencing proof is
-  recorded, then capacity is reconciled once. No readiness alarm directly
-  increments desired capacity. This preserves maximum two and prevents churn.
+  recorded. Any fenced initiator's closing transitions are then recovered in
+  separate transactions before replacement activation and capacity
+  reconciliation. No readiness alarm directly increments desired capacity. This
+  preserves maximum two and prevents churn.
 
 ## Controller generation and credentials
 
