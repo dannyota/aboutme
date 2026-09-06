@@ -27,6 +27,7 @@ import type { ResumeApi, ResumeConditionalReadResult } from './resumeApi';
 import {
   advanceTemplateGroup,
   nextTemplateChild,
+  reconcileTemplateChild,
   type EditorQueueItem,
   type TemplateGroupCommand,
 } from './templateGroup';
@@ -356,6 +357,20 @@ export function createMutationCoordinator(deps: {
     if (record === undefined || record.templateState === null) return;
     const adoption = deps.store.adoptComplete(resumeId, accepted);
     if (adoption.kind === 'older') {
+      if (compareRevision(accepted.revision, adoption.winner.revision) === 0) {
+        const next = advanceTemplateGroup(
+          group,
+          record.templateState,
+          adoption.winner,
+        );
+        deps.store.setTemplateState(resumeId, next);
+        if (next.kind === 'complete') {
+          deps.store.dropHead(resumeId, group.id);
+          return;
+        }
+        deps.store.continueTemplateGroup(resumeId, group.id);
+        return;
+      }
       const decision = reconcileTemplateGroup(group, adoption.winner);
       if (decision.kind === 'satisfied') {
         deps.store.setTemplateState(resumeId, null);
@@ -563,8 +578,15 @@ export function createMutationCoordinator(deps: {
         deps.store.adoptStaleWinner(resumeId, snapshot);
       }
     }
-    const decision = reconcileCommand(command, snapshot);
+    const decision = queueItem.kind === 'templateGroup'
+      && (command.kind === 'structure' || command.kind === 'customization')
+      ? reconcileTemplateChild(command, snapshot)
+      : reconcileCommand(command, snapshot);
     if (decision.kind === 'satisfied') {
+      if (queueItem.kind === 'templateGroup') {
+        settleTemplateComplete(resumeId, queueItem, snapshot);
+        return;
+      }
       deps.store.dropHead(resumeId, queueItem.id);
       return;
     }
@@ -622,6 +644,40 @@ export function createMutationCoordinator(deps: {
       = adoption.kind === 'adopted' ? adoption.accepted : adoption.winner;
     const active = deps.store.recordFor(resumeId)?.attempt;
     if (active === null || active === undefined) return latest;
+    if (active.queueItem.kind === 'templateGroup') {
+      if (
+        active.command.kind !== 'structure'
+        && active.command.kind !== 'customization'
+      ) {
+        return latest;
+      }
+      const decision = reconcileTemplateChild(toRaw(active.command), latest);
+      if (
+        decision.kind === 'satisfied'
+        && active.kind === 'unknown'
+        && active.reason === 'cutoff'
+      ) {
+        settleTemplateComplete(resumeId, active.queueItem, latest);
+      } else if (
+        decision.kind === 'safe-base'
+        && active.kind === 'unknown'
+        && active.reason === 'cutoff'
+        && record.templateState !== null
+        && record.templateState.kind !== 'complete'
+        && record.templateState.kind !== 'partial'
+      ) {
+        deps.store.setTemplateState(resumeId, {
+          kind: 'partial',
+          accepted: latest,
+          nextChild: record.templateState.nextChild,
+          reason: 'unknown-outcome',
+        });
+        deps.store.continueTemplateGroup(resumeId, active.queueItem.id);
+      } else if (decision.kind === 'conflict') {
+        deps.store.markConflict(resumeId, decision.conflict);
+      }
+      return latest;
+    }
     const decision = reconcileCommand(toRaw(active.command), latest);
     if (decision.kind === 'satisfied') {
       deps.store.dropHead(resumeId, active.queueItem.id);
