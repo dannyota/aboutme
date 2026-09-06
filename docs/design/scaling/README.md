@@ -18,6 +18,8 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | [Lifecycle replay](lifecycle-replay.md)                   | Immutable operation results and permitted action order                   |
 | [Lifecycle digest vectors](lifecycle-vectors.md)          | Exact typed field order and literal SQL/Go replay hashes                 |
 | [Lifecycle write entry](lifecycle-write-entry.md)         | Fixed exclusive wake methods, markers and completion                     |
+| [Wake operations](wake-operations.md)                     | Fresh wake state, historical results and scalar transport                |
+| [Wake migrations](wake-migrations.md)                     | Protected migration bound to the recorded closing-gate wake              |
 | [Public transitions](public-transitions.md)               | Target digest, replica acknowledgements and durable recovery             |
 | [Transition recovery](transition-recovery.md)             | Atomic outcome evidence and parent-locked rollback                       |
 | [Transition reconciliation](transition-reconciliation.md) | One snapshot, local apply order and durable retirement                   |

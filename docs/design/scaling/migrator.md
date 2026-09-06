@@ -6,11 +6,13 @@ Implementation follows the
 [B3 task](../../plans/phase-10/replica/migrator-composition.md). The
 [write-entry contract](transaction-entry.md) owns the barrier and markers;
 [database provisioning](migration-provisioning.md) owns fixed grants and
-adoption.
+adoption. [Wake migrations](wake-migrations.md) adds a separate ApplyWake entry
+for the exact recorded closing-gate window. Normal Apply and read-only Status
+retain the behavior below; wake implementation remains a later R1 slice.
 
 ## Fixed identities and API
 
-Use the same explicit identity for both public entry points:
+Normal Apply and Status use the same explicit identity:
 
 ```go
 Apply(ctx context.Context, db *sql.DB, identity MigrationIdentity,

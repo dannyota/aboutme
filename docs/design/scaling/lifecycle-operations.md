@@ -7,7 +7,9 @@ implementation and hosted proof remain Phase 10 gates.
 This contract defines desired serving capacity, logical rate partitions, exact
 activation and scale changes, and the private maintenance wake path.
 [Lifecycle replay](lifecycle-replay.md) defines operation identity, action
-order, and retry results.
+order, and retry results. [Wake operations](wake-operations.md) fixes fresh wake
+predicates and historical results; [wake migrations](wake-migrations.md) fixes
+the protected closing-gate migration path.
 
 ## Capacity model
 
@@ -122,8 +124,8 @@ replay.
 
 1. Lifecycle-command begin_wake supplies fixed mode `maintenance`, holds the
    exclusive barrier, invalidates the stop receipt and moves closed->closing.
-   Migration, reconciliation and due-work planning use their accepted privileged
-   paths.
+   Protected migrations use ApplyWake. Reconciliation and due-work planning
+   before complete are read-only; due-work writes wait for the open gate.
 2. The lifecycle-command wake-completion step opens the write gate and sets
    lifecycle online/admission enabled only after those prerequisites pass. No
    ALB exists and no serving replica is active, so public traffic remains

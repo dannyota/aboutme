@@ -115,7 +115,10 @@ separate later slices. [R1.11 membership evidence](membership-evidence.md)
 follows migration 22 with three fixed leave/proof functions and retained proof
 request/count fields. Cleanup stays atomic under a bounded caller context, with
 no fixed claim-row bound. Exclusive wake and transition functions still follow
-separately.
+separately. [Wake operations](../../../design/scaling/wake-operations.md) and
+[protected wake migration](../../../design/scaling/wake-migrations.md) define
+the exclusive runner, fixed ApplyWake path and source admission. Their later
+implementation remains unassigned.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption

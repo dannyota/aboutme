@@ -9,6 +9,9 @@ This contract defines the exclusive transaction path for only `begin_wake` and
 `complete_wake`. [Transaction entry](transaction-entry.md) remains the ordinary
 shared path. [Lifecycle operations](lifecycle-operations.md) defines wake state,
 and [lifecycle replay](lifecycle-replay.md) defines immutable action identity.
+[Wake operations](wake-operations.md) fixes fresh predicates, time and
+transport. [Wake migrations](wake-migrations.md) fixes protected migration while
+closing.
 
 ## Fixed Go API
 
@@ -69,10 +72,11 @@ takes the exclusive transaction advisory lock on the existing fixed 64-bit
 gate: fresh begin starts from `closed`, fresh complete starts from `closing`,
 and an exact historical replay may run after later gate changes.
 
-Entry rejects any ordinary `runtime_write_entry_v1` row, ordinary finish guard,
-wake marker row, or wake finish guard already held by this backend. It creates
-or validates owner-owned `pg_temp.runtime_lifecycle_write_entry_v1` with fixed
-static DDL. Validation checks:
+Entry rejects any normal or wake migrator session row, ordinary
+`runtime_write_entry_v1` row, ordinary finish guard, wake marker row, or wake
+finish guard already held by this backend. It creates or validates owner-owned
+`pg_temp.runtime_lifecycle_write_entry_v1` with fixed static DDL. Validation
+checks:
 
 - temporary namespace and persistence;
 - owner `aboutme_runtime_owner`;
@@ -224,13 +228,14 @@ moves to `open`. Both increment capacity generation, controller generation, and
 write generation exactly once. They update controller operation evidence and
 write-state timestamps.
 
-The function locks `runtime_write_state`, then takes one `clock_timestamp()`
-sample. It writes timestamps as the greatest of the prior high-water values and
-that sample. It leaves `last_accepted_writer_at` unchanged. The write-state row
-is the last durable state mutation. The function inserts its immutable typed
-action result, then updates write state last; the action insert contains the
-already computed post-action values and commits atomically with that update. It
-then takes the wake finish guard and marks only the temporary marker finished.
+The function locks `runtime_write_state`, then samples the fixed lifecycle clock
+once. It clamps against prior capacity, parent/predecessor, write-state updated
+time and last-write time, as specified in [wake operations](wake-operations.md).
+It leaves `last_accepted_writer_at` unchanged. The write-state row is the last
+durable state mutation. The function inserts its immutable typed action result,
+then updates write state last; the action insert contains the already computed
+post-action values and commits atomically with that update. It then takes the
+wake finish guard and marks only the temporary marker finished.
 
 An existing exact action is replay. The function locks and validates the parent
 and action, marker-bound operation ID and mode, argument digest, fixed command,
@@ -271,11 +276,13 @@ and matching wake functions. App, maintenance, fencing-proof, migrator, and
 restore receive none. Lifecycle-command has no marker, table DML, helper,
 ordinary entry, ordinary finish, or final-stop grant through this contract.
 
-The controller calls begin wake, performs the accepted migration and
-reconciliation sequence, then calls complete wake. Serving or maintenance
-registration and activation happen later through their existing fixed methods. A
-clean closed wake needs no bypass. Corrupt shutdown or wake remains unavailable.
-Final stop requires all transitions terminal before gate closure.
+The controller calls begin wake, performs
+[protected wake migration](wake-migrations.md) and read-only
+reconciliation/planning, then calls complete wake. R8 proves the external
+prerequisites before that fixed call. Serving or maintenance registration and
+activation happen later through their existing fixed methods. A clean closed
+wake needs no bypass. Corrupt shutdown or wake remains unavailable. Final stop
+requires all transitions terminal before gate closure.
 
 ## Acceptance
 

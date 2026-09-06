@@ -236,11 +236,14 @@ Use one fixed 64-bit advisory key `aboutme.runtime-write-barrier.v1`.
    exclusive barrier with immutable serving or maintenance mode. It advances
    generation, invalidates the old receipt, and changes closed-to-closing. The
    separate lifecycle-only runtime_complete_wake opens the gate after
-   migrations, reconciliation, due-work planning and deployment prerequisites
-   pass. Replica registration, local join-ready probes and exact activation
-   follow gate opening; they cannot bypass closing. A maintenance-only wake
-   keeps ALB absent and serving capacity zero throughout. The complete private
-   maintenance node uses normal write entry after wake completion. See
+   [protected wake migrations](wake-migrations.md), read-only reconciliation,
+   due-work planning and deployment prerequisites pass under the serialized
+   controller. SQL checks represented state; it accepts no prerequisite flag.
+   Due-work writes wait for the open gate. Replica registration, local
+   join-ready probes and exact activation follow gate opening; they cannot
+   bypass closing. A maintenance-only wake keeps ALB absent and serving capacity
+   zero throughout. The complete private maintenance node uses normal write
+   entry after wake completion. See
    [lifecycle operations](lifecycle-operations.md) and the fixed
    [exclusive wake runner](lifecycle-write-entry.md). Both wake actions advance
    capacity, controller and write generations once without changing the

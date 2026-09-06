@@ -23,6 +23,9 @@ terminal matrix, digest assertion and immutable child sets.
 separates response receipts from commit authority.
 [Reconciliation](transition-reconciliation.md) fixes the one-snapshot read and
 local ordering that preserve later generations and proved retirements.
+[Wake migrations](wake-migrations.md) adds migrator-only fixed session entry and
+exact source admission during a recorded closing-gate wake. Normal migration and
+read-only Status retain their existing contracts.
 [Exclusive lifecycle entry](lifecycle-write-entry.md) fixes the two wake
 methods, marker, table/action catalog and historical write-generation results.
 
