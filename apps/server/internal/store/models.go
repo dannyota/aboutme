@@ -378,6 +378,22 @@ type Session struct {
 	RotatedFrom        *uuid.UUID
 }
 
+type SharedAdmissionAttempt struct {
+	AttemptID       uuid.UUID
+	PolicyID        string
+	ClientID        uuid.UUID
+	BucketKind      string
+	Partition       pgtype.Int2
+	KeyDigest       []byte
+	WindowStartedAt time.Time
+	ReservedAt      time.Time
+	EffectiveUntil  time.Time
+	State           string
+	Outcome         *string
+	TerminalReason  *string
+	TerminalAt      *time.Time
+}
+
 type SharedClaimPolicy struct {
 	PolicyID     string
 	ScopeKind    string
@@ -419,6 +435,63 @@ type SharedClaimScopeSummary struct {
 	WaitingCount int32
 	NextOrdinal  int64
 	UpdatedAt    time.Time
+}
+
+type SharedPolicyClock struct {
+	PolicyID     string
+	HighWaterAt  time.Time
+	LastRawAt    time.Time
+	AnomalyCount int64
+}
+
+type SharedRateBucket struct {
+	PolicyID        string
+	KeyDigest       []byte
+	Partition       int16
+	Algorithm       string
+	LastSeen        time.Time
+	TokenNumerator  *int64
+	RefillAt        *time.Time
+	WindowStartedAt *time.Time
+	Count           *int32
+	RollingEvents   []time.Time
+}
+
+type SharedRateOverflow struct {
+	PolicyID        string
+	Algorithm       string
+	LastSeen        time.Time
+	TokenNumerator  *int64
+	RefillAt        *time.Time
+	WindowStartedAt *time.Time
+	Count           *int32
+	RollingEvents   []time.Time
+}
+
+type SharedRatePartition struct {
+	PolicyID           string
+	Partition          int16
+	Enabled            bool
+	CapacityGeneration int64
+	OperationID        string
+	ActiveKeys         int32
+	UpdatedAt          time.Time
+}
+
+type SharedRatePolicy struct {
+	PolicyID                 string
+	Algorithm                string
+	Capacity                 int32
+	WindowMicroseconds       int64
+	AllowSuccessClear        bool
+	DeniedAttemptAddsDebt    bool
+	OrdinaryIdleMicroseconds int64
+	MaxKeysPerPartition      int32
+}
+
+type SharedRatePolicyKeyShape struct {
+	PolicyID string
+	KeyShape string
 }
 
 type SlugTombstone struct {
