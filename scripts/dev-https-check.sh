@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # One entry point for the trusted-browser proofs (auth, transport, editor,
-# public, password-auth, MCP, entry, publish, and exports). Stages an immutable
+# public, password-auth, MCP, entry, publish, exports, and privacy). Stages an immutable
 # per-run copy of the spec sources and mounts it into the pinned browser image,
 # so editing a spec
 # never requires an image rebuild; the image manifest gates only the
@@ -39,6 +39,7 @@ readonly -a SPEC_SOURCES=(
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
+  privacy.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -67,9 +68,10 @@ mcp) evidence_prefix=mcp ;;
 entry) evidence_prefix=entry ;;
 publish) evidence_prefix=publish ;;
 exports) evidence_prefix=exports ;;
+privacy) evidence_prefix=privacy ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy'
   ;;
 esac
 
@@ -195,7 +197,7 @@ if [ "$MODE" = password-auth ]; then
   "$REPO/.dev/bin/password-auth-fixture" seed --database-url "$NATIVE_DSN"
   curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
     "http://127.0.0.1:20444/api/messages" >/dev/null
-elif [ "$MODE" = mcp ]; then
+elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
   mcp_run_id=$(</proc/sys/kernel/random/uuid)
   [[ $mcp_run_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
     fail 'cannot create an MCP run identifier'
@@ -215,8 +217,10 @@ elif [ "$MODE" = mcp ]; then
   "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
     --client-name "$mcp_client_name"
   mcp_seeded=1
-  "$mcp_fixture" seed --database-url "$NATIVE_DSN" \
-    --client-name "$mcp_client_name"
+  if [ "$MODE" = mcp ]; then
+    "$mcp_fixture" seed --database-url "$NATIVE_DSN" \
+      --client-name "$mcp_client_name"
+  fi
 elif [ "$MODE" = entry ]; then
   install -d -m 0700 "$REPO/.dev/bin"
   (cd "$REPO/apps/server" &&
@@ -242,7 +246,7 @@ status=0
 
 if [ "$MODE" = password-auth ]; then
   "$REPO/.dev/bin/password-auth-fixture" cleanup --database-url "$NATIVE_DSN"
-elif [ "$MODE" = mcp ]; then
+elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
   if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
     --client-name "$mcp_client_name"; then
     mcp_seeded=0

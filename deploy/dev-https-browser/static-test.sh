@@ -24,6 +24,7 @@ readonly -a SPEC_FILES=(
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
+  privacy.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -158,7 +159,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public | password-auth | mcp | entry | publish | exports)
+  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -364,7 +365,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, or exports' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, or privacy' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -600,6 +601,15 @@ for unrelated in \
   fi
 done
 
+readonly PRIVACY_LIST_OUTPUT=$(ABOUTME_BROWSER_MODE=privacy \
+  "$SOURCE/node_modules/.bin/playwright" test --list --config "$CONTEXT/playwright.config.ts")
+grep -Fq 'proves account export, reauthentication, and deletion' \
+  <<<"$PRIVACY_LIST_OUTPUT" || fail 'Playwright could not compile and list the privacy proof'
+if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
+  <<<"$PRIVACY_LIST_OUTPUT"; then
+  fail 'privacy mode listed the auth proof'
+fi
+
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
 readonly INSIDE_SPEC=$INSIDE_ROOT/uat-spec
@@ -723,6 +733,7 @@ malformed)
   *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
   *' entry.spec.ts '*) evidence=entry-proof.json ;;
   *' publish.spec.ts '*) evidence=publish-proof.json ;;
+  *' privacy.spec.ts '*) evidence=privacy-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -735,6 +746,7 @@ oversized)
   *' mcp.spec.ts '*) evidence=mcp-proof.json ;;
   *' entry.spec.ts '*) evidence=entry-proof.json ;;
   *' publish.spec.ts '*) evidence=publish-proof.json ;;
+  *' privacy.spec.ts '*) evidence=privacy-proof.json ;;
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -793,6 +805,17 @@ JSON
   "scenario": "entry-flow",
   "schemaVersion": 1,
   "steps": {"landing": true, "providerLinks": true, "resumeList": true, "signIn": true, "signOut": true, "signedInShell": true}
+}
+JSON
+    ;;
+  *' privacy.spec.ts '*)
+    cat >"$FAKE_INSIDE_EVIDENCE/privacy-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "account-privacy",
+  "schemaVersion": 1,
+  "steps": {"auth": true, "export": true, "cancel": true, "reauth": true, "explicitConfirmation": true, "deletion": true, "sessionRevoked": true, "grantRevoked": true, "publicRevoked": true, "tombstone": true, "cleanup": true}
 }
 JSON
     ;;
@@ -897,7 +920,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, or exports' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, or privacy' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -1221,5 +1244,33 @@ if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized publish evidence returned the wrong diagnostic'
+
+reset_inside
+printf '%s\n' 'aboutme MCP UAT 53000000-0000-4000-8000-000000000042' \
+  >"$INSIDE_INPUT/mcp-client-name"
+chmod 0600 "$INSIDE_INPUT/mcp-client-name"
+readonly PRIVACY_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside privacy)
+grep -Fq 'dev-https-browser account privacy proof: PASS' \
+  <<<"$PRIVACY_INSIDE_OUTPUT" || fail 'inside-container privacy success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts privacy.spec.ts' "$BROWSER_LOG" ||
+  fail 'focused privacy invocation drifted'
+grep -Fxq 'MODE=privacy' "$BROWSER_LOG" || fail 'privacy mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/privacy-proof.json" ] || fail 'privacy evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/privacy-proof.json")" = 600 ] || fail 'privacy evidence mode drifted'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside privacy 2>&1); then
+  fail 'malformed privacy evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" || fail 'malformed privacy evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside privacy 2>&1); then
+  fail 'oversized privacy evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" || fail 'oversized privacy evidence returned the wrong diagnostic'
+rm -- "$INSIDE_INPUT/mcp-client-name"
 
 printf '%s\n' 'dev-https-browser static tests: PASS'
