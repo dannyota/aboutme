@@ -21,6 +21,17 @@ const services = compose.services;
 const networkNames = (service) =>
   Array.isArray(service.networks) ? service.networks : Object.keys(service.networks ?? {});
 
+assert.ok(services['db-role-bootstrap'], 'role bootstrap must precede migration');
+assert.deepEqual(networkNames(services['db-role-bootstrap']), ['db']);
+assert.equal(services['db-role-bootstrap'].restart, 'no');
+assert.equal(services['db-role-bootstrap'].healthcheck.disable, true);
+assert.deepEqual(services['db-role-bootstrap'].entrypoint, ['/usr/local/bin/db-role-bootstrap']);
+assert.equal(services['db-role-bootstrap'].depends_on.postgres.condition, 'service_healthy');
+assert.equal(services.migrate.depends_on['db-role-bootstrap'].condition, 'service_completed_successfully');
+assert.match(services['db-role-bootstrap'].environment.CLUSTER_BOOTSTRAP_DATABASE_URL, /@postgres:5432\/postgres\?/);
+assert.deepEqual(Object.keys(services['db-role-bootstrap'].environment).sort(), ['CLUSTER_BOOTSTRAP_DATABASE_URL', 'PGPASSWORD']);
+assert.equal('ports' in services['db-role-bootstrap'], false);
+
 assert.deepEqual(compose.networks.render, {
   internal: true,
   ipam: { config: [{ subnet: '10.91.0.0/28' }] },
@@ -53,7 +64,7 @@ assert.equal(
 );
 assert.deepEqual(networkNames(services.web).sort(), ['frontend', 'render']);
 assert.equal(networkNames(services.web).includes('edge'), false);
-for (const name of ['postgres', 'migrate', 'media', 'media-init', 'caddy']) {
+for (const name of ['postgres', 'db-role-bootstrap', 'migrate', 'media', 'media-init', 'caddy']) {
   assert.equal(networkNames(services[name]).includes('render'), false, `${name} joined render`);
 }
 for (const name of ['server', 'web']) {

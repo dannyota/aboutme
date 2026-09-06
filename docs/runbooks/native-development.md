@@ -51,10 +51,16 @@ Isolated capture harnesses that seed their own fixture database set
 `make dev-seed` remains an explicit request to seed `aboutme_dev`.
 
 The command is idempotent. It starts or reuses `aboutme-test-db`, creates the
-`aboutme_dev` database if needed, applies goose migrations, builds the Go
-binary, then starts the authentication-mail-capture server, Go, Nuxt, and Caddy.
-The mail-capture bearer, rate-HMAC, and mail-encryption secrets are created once
-under `.dev/secrets/` and reused across restarts; they are never printed.
+fixed database roles, verifies their privileges on reuse, creates `aboutme_dev`
+if needed, applies goose migrations, builds the Go binary, then starts the
+authentication-mail-capture server, Go, Nuxt, and Caddy. The mail-capture
+bearer, rate-HMAC, and mail-encryption secrets are created once under
+`.dev/secrets/` and reused across restarts; they are never printed.
+
+If `ABOUTME_DEV_DATABASE_URL` selects another cluster, first export its
+`CLUSTER_BOOTSTRAP_DATABASE_URL` for the `postgres` database and run
+`make db-role-bootstrap`. Use an admin connection; bootstrap preserves existing
+passwords and fails on privilege drift.
 
 Open only `http://localhost:20080` in a browser. Direct upstream ports are for
 diagnostics.

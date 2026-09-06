@@ -12,6 +12,8 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 // requireMigrateTestDatabaseURL returns TEST_DATABASE_URL, skipping the
@@ -39,6 +41,7 @@ var migrateTestDatabaseCounter atomic.Uint64
 // in t.Cleanup.
 func newMigrateTestDatabase(t *testing.T, base string) string {
 	t.Helper()
+	testutil.BootstrapTestDatabaseRoles(t, base)
 
 	admin, err := sql.Open("pgx", base)
 	if err != nil {
