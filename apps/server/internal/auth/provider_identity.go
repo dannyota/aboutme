@@ -76,6 +76,14 @@ func (s *Service) resolveReturningProviderTx(ctx context.Context, qtx *store.Que
 // rolls back the complete attempted user transaction and re-reads the subject
 // first. A failed identity insert therefore cannot orphan a user.
 func (s *Service) createProviderAccountTx(ctx context.Context, qtx *store.Queries, account NewProviderAccount) (store.User, error) {
+	if err := qtx.LockCanonicalAccountEmail(ctx, account.VerifiedEmail); err != nil {
+		return store.User{}, fmt.Errorf("auth: create provider account: lock canonical email: %w", err)
+	}
+	// Registration rows precede users. Verification takes the same advisory
+	// lock, so this row cannot be consumed while account ownership is decided.
+	if _, err := qtx.GetPasswordRegistrationByEmailForUpdate(ctx, account.VerifiedEmail); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return store.User{}, fmt.Errorf("auth: create provider account: lock registration: %w", err)
+	}
 	if _, err := qtx.GetUserByCanonicalEmail(ctx, account.VerifiedEmail); err == nil {
 		return store.User{}, errEmailAlreadyRegistered
 	} else if !errors.Is(err, pgx.ErrNoRows) {

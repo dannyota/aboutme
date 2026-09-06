@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,53 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
+
+func TestCreateProviderAccountTx_UsesCanonicalEmailLock(t *testing.T) {
+	pool := newTestPool(t)
+	q := store.New(pool)
+	svc, err := auth.NewServiceForTest(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, pool, "", "", "")
+	if err != nil {
+		t.Fatalf("NewServiceForTest() error = %v", err)
+	}
+	email := uniqueEmail(t)
+	subject := uniqueSubject(t)
+
+	holder, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin holder: %v", err)
+	}
+	defer func() {
+		if rollbackErr := holder.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback holder: %v", rollbackErr)
+		}
+	}()
+	if err := q.WithTx(holder).LockCanonicalAccountEmail(context.Background(), email); err != nil {
+		t.Fatalf("lock canonical email: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- pgx.BeginFunc(context.Background(), pool, func(tx pgx.Tx) error {
+			_, createErr := auth.CreateProviderAccountTxForTest(context.Background(), svc, q.WithTx(tx), auth.NewProviderAccount{
+				Subject:       auth.ProviderSubject{Provider: auth.ProviderGoogle, Subject: subject},
+				VerifiedEmail: email,
+				Name:          "Blocked",
+			})
+			return createErr
+		})
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("provider create bypassed canonical-email lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := holder.Commit(context.Background()); err != nil {
+		t.Fatalf("commit holder: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("provider create after lock release: %v", err)
+	}
+}
 
 // TestCreateProviderAccountTx_EmailCollisionReturnsClosedError proves a new
 // subject cannot create an account against an email another user already owns.
