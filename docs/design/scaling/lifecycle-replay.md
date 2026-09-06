@@ -8,10 +8,13 @@ This contract serializes lifecycle workflows and makes every controller retry
 resolve to one immutable action result.
 
 The [fixed operation error contract](claim-operations.md#roles-and-errors) uses
-AM002 for supplied identity/replay conflict and AM001 for corrupted stored
-argument/result digests or impossible ledger rows. Missing/out-of-order
-predecessors and stale generations use 55000. Existing transition mismatch codes
-remain unchanged.
+AM002 for supplied identity/replay conflict, including any supplied canonical
+argument-digest mismatch. The ledger omits some original arguments, so this
+comparison cannot distinguish changed input from a well-shaped stored argument
+digest change. AM001 covers independently provable retained-field corruption, a
+recomputed result-digest mismatch or an impossible ledger row. Missing or
+out-of-order predecessors and stale generations use 55000. Existing transition
+mismatch codes remain unchanged.
 
 ## Operation schema and digest
 
@@ -125,7 +128,9 @@ requires the exact current controller generation and every state prerequisite.
 The workflow/action map is closed:
 
 - initial_serving: activate_replica_capacity is the sole and first action; it
-  requires no active serving replica, desired one, and a null replaced replica.
+  requires no active serving replica, desired one, a null replaced replica and
+  both logical partitions disabled. Retained enabled partition 1 after node loss
+  requires replacement_serving with an exact fenced predecessor.
 - scale_out: prepare_scale_out first, then activate_replica_capacity for
   serving; activation requires that exact predecessor and a null replaced
   replica.
@@ -143,7 +148,8 @@ The workflow/action map is closed:
   and a null leave_operation_id. Either result stores zero or one active
   survivor after every other incarnation is terminal.
 - uat_serving_wake: begin_wake with mode `serving`, complete_wake, then
-  activate_replica_capacity for the one booked serving replica.
+  activate_replica_capacity for the one booked serving replica. First activation
+  requires both logical partitions disabled.
 - maintenance_wake: begin_wake with mode `maintenance`, then complete_wake. When
   recomputed due work requires a node, activate_replica_capacity for maintenance
   and then prepare_maintenance_drain. When recomputation proves no node work,

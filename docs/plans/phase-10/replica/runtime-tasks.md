@@ -134,7 +134,9 @@ The [membership](../../../design/scaling/replica-membership.md),
 [replay](../../../design/scaling/lifecycle-replay.md) contracts and
 [literal digest vectors](../../../design/scaling/lifecycle-vectors.md) fix exact
 task trios, serving/maintenance kinds, logical partitions and immutable
-controller results.
+controller results. The
+[ordinary controller contract](../../../design/scaling/lifecycle-controller.md)
+fixes their grants, scalar transport, partition checks and replay-error limits.
 [Public transitions](../../../design/scaling/public-transitions.md) and
 [commit](../../../design/scaling/transition-commit.md) fix the target digest,
 original deadline, parent-first execution fence and separate lifecycle recovery

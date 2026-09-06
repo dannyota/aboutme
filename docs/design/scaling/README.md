@@ -11,6 +11,7 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | [Replica coordination](runtime-coordination.md)           | Joining, transitions, recovery, draining and connection limits           |
 | [Replica membership](replica-membership.md)               | Exact node identity, task trios, leave and EC2 proof                     |
 | [Lifecycle operations](lifecycle-operations.md)           | Serving capacity, replacement and private maintenance wake               |
+| [Ordinary lifecycle contract](lifecycle-controller.md)    | Fixed controller functions, partition changes and historical results     |
 | [Lifecycle replay](lifecycle-replay.md)                   | Immutable operation results and permitted action order                   |
 | [Lifecycle digest vectors](lifecycle-vectors.md)          | Exact typed field order and literal SQL/Go replay hashes                 |
 | [Lifecycle write entry](lifecycle-write-entry.md)         | Fixed exclusive wake methods, markers and completion                     |
