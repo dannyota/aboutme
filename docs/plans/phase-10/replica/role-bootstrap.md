@@ -19,15 +19,17 @@ boundary. This slice creates no database schema or stop authority.
   the app ownership. It gets no lifecycle/proof runtime execution.
 - `aboutme_app`: existing hosted LOGIN role. Do not replace or broaden its
   existing application-table grants in this slice. Add EXECUTE only on
-  runtime_enter_write; no DML on foundation tables. Accepted-write marking is
-  owner-triggered and exposes no callable app function.
+  runtime_enter_write and runtime_finish_write; no DML on foundation tables.
+  Accepted-write marking is owner-triggered and exposes no callable app
+  function.
 - `aboutme_restore_verify`: existing hosted LOGIN role. Retain read-only restore
   verification scope. It gets no write-entry or runtime table privilege.
 - `aboutme_lifecycle_command`, `aboutme_fencing_proof`, and
   `aboutme_maintenance`: distinct LOGIN, NOSUPERUSER, NOCREATEDB, NOCREATEROLE,
   NOREPLICATION, NOBYPASSRLS, NOINHERIT roles. Foundation grants
-  runtime_enter_write to each, but no table DML and no other role membership.
-  Later migrations grant only their accepted named functions/table columns.
+  runtime_enter_write/runtime_finish_write to each, but no table DML and no
+  other role membership. Later migrations grant only their accepted named
+  functions/table columns.
 
 All six LOGIN roles are explicitly NOSUPERUSER, NOCREATEDB, NOCREATEROLE,
 NOREPLICATION, NOBYPASSRLS. aboutme_app and aboutme_restore_verify have no role

@@ -15,50 +15,98 @@ entry immediately; they never acquire or wait for the barrier.
 
 ## Exported Go seam
 
-Add under `apps/server/internal/store`:
+Add `WriteTxRunner` under `apps/server/internal/store` with two methods:
 
-- `type WriteTxStarter interface { BeginWrite(context.Context, pgx.TxOptions) (pgx.Tx, error) }`
-- `NewWriteTxStarter(*pgxpool.Pool) WriteTxStarter`
-- `WithWriteTx(ctx, starter, options, func(*store.Queries) error) error`
-- `ExecWrite(ctx, starter, func(*store.Queries) error) error` for a mutation
-  that was formerly one autocommit statement.
+```go
+WithWriteTx(context.Context, pgx.TxOptions, func(*Queries) error) error
+ExecWrite(context.Context, func(*Queries) error) error
+```
 
-BeginWrite calls pool.BeginTx, then immediately calls the SECURITY DEFINER
-`runtime_enter_write()` on that transaction before returning it. No callback,
-query, hook, metric query, or SELECT FOR UPDATE may run between BeginTx and
-runtime_enter_write. Entry:
+`NewWriteTxRunner(*pgxpool.Pool) WriteTxRunner` constructs the runner. ExecWrite
+uses default transaction options for a former autocommit mutation. The concrete
+runner, raw begin and transaction are private. Callbacks receive only
+transaction-bound Queries, with no Commit, Rollback, Begin, Conn or finish
+method. A savepoint helper, if needed, must keep its nested transaction private.
+
+The runner acquires a pool connection, begins a transaction, and immediately
+calls SECURITY DEFINER `runtime_enter_write()` before its callback. No query,
+hook, metric or SELECT FOR UPDATE may intervene. Entry:
 
 1. takes `pg_advisory_xact_lock_shared(runtime-write-barrier-key)`;
 2. reads runtime_write_state only after the shared advisory lock, without a row
    lock that would serialize ordinary writers;
 3. rejects write_gate closing/closed with the existing unavailable mapping; and
-4. sets a transaction-local marker bound to the current backend transaction ID.
+4. creates or validates an owner-only temporary marker bound to backend PID,
+   transaction ID and session-role OID, then records entry.
 
-If entry fails, BeginWrite rolls back with the existing bounded independent
-cleanup and returns no transaction. WithWriteTx commits once on nil callback
-error and otherwise rolls back. It does not retry an ambiguous commit. Existing
-operation-specific ambiguous-resolution and idempotency code remains the owner.
+On a nil callback error the private commit method calls runtime_finish_write,
+then Commit without an intervening query or hook. Finish advances generation
+once for dirty writes and marks the transaction finished. Triggers reject later
+tracked DML. A deferred constraint trigger only asserts finish; it never changes
+generation. PostgreSQL permits callers to force
+[deferred constraint triggers early](https://www.postgresql.org/docs/18/sql-set-constraints.html),
+so a deferred generation update cannot enforce this ordering.
+
+Callback error or panic uses a five-second cancellation-independent rollback;
+panic is then rethrown. Ordinary unavailable SQLSTATE 55000 permits connection
+reuse only after confirmed rollback. Project SQLSTATE AM001 means marker or
+backend contamination: rollback, remove the connection from the pool with
+Hijack, and close the physical connection. Ambiguous entry/finish, unknown
+cleanup and every commit error also destroy the backend. Cleanup is bounded. No
+path retries internally. Wrapped errors preserve driver causes so the operation
+owner can resolve an ambiguous commit through a fresh read connection under its
+existing idempotency rules.
+
+The supported write API exposes no raw transaction. A structural production
+write-path inventory also rejects direct Conn, Begin, Commit, Rollback and
+runtime_finish_write use outside this wrapper and the separately controlled
+migrator. Proved read-only exports, LISTEN and recovery connections remain
+outside the write API. This prevents accidental escape through driver
+interfaces; it does not claim language-level containment of malicious compiled
+Go.
+
+## Transaction marker
+
+`pg_temp.runtime_write_entry_v1` is created by runtime_owner using fixed static
+PL/pgSQL DDL, with ON COMMIT DELETE ROWS and a deferred AFTER INSERT constraint
+trigger. Before reuse, entry verifies its owner, temporary namespace and
+persistence, exact columns, constraints and trigger. A lookalike, unexpected row
+or mismatched marker raises AM001 and destroys the backend; it is never adopted,
+repaired or dropped by the definer function.
+
+The row carries xid8 transaction ID, backend PID, session-role OID, writer kind,
+entry generation, dirty and accepted-write flags, bounded operation ID, and
+finished state. Exact entry before finish is idempotent; entry after finish is
+contamination. Exact repeated finish cannot advance generation again.
+
+Forced constraint checking before finish fails. Savepoint recovery may catch
+that error, but cannot remove the outer transaction's finish requirement.
+Rollback of dirty work or finish restores the marker and generation together.
+Successful commit clears marker rows; a pooled backend retains only an empty,
+owner-validated table. No login receives direct marker privileges.
 
 ## Assertion trigger
 
 `runtime_assert_write_entry()` is a definer-owned BEFORE INSERT/UPDATE/DELETE
-statement trigger on every tracked mutable table. It checks both the local
-marker matching the backend transaction ID and a granted ShareLock for this
-backend/key in pg_catalog.pg_locks. It does not call either advisory-lock
+statement trigger on every tracked mutable table. It checks both the unfinished
+marker matching backend/transaction/session identity and a granted ShareLock for
+this backend/key in pg_catalog.pg_locks. It does not call either advisory-lock
 function and does not wait. Missing/mismatched marker, missing lock, or closed
-gate raises one fixed SQLSTATE mapped to unavailable. A concurrent writer may
-advance generation after entry; that does not invalidate the marker because the
-held shared lock already prevents gate closure. Direct autocommit DML fails
-before changing a row.
+gate raises the fixed SQLSTATE described above. A concurrent writer may advance
+generation after entry; that does not invalidate the marker because the held
+shared lock already prevents gate closure. Direct autocommit DML fails before
+changing a row.
 
-The deferred write-state trigger remains the last database action. It advances
-generation once per transaction near commit. It never establishes entry. The
-receipt finalizer uses the exclusive sibling lock and its named definer
-function; it is not routed through BeginWrite.
+The assertion marks the transaction dirty. Business-table assertions also mark
+accepted application writes using owner-controlled table/operation
+classification. Bookkeeping and maintenance do not extend the application writer
+tail. No callable manual acceptance marker exists. The receipt finalizer uses
+the exclusive sibling lock and its named definer function; it does not use the
+ordinary runner.
 
 ## Inner lock order
 
-The shared advisory lock is the common outer lock. Once BeginWrite returns,
+The shared advisory lock is the common outer lock. Once the callback starts,
 existing relative orders remain unchanged:
 
 - ADR 0022: public_state, discovery, then affected resume UUID byte order.
@@ -71,11 +119,11 @@ existing relative orders remain unchanged:
   order. The command takes runtime shared entry before the command advisory
   lock.
 
-No ordinary writer explicitly locks runtime_write_state later. Its deferred
-generation update is last. Finalize-stop takes the exclusive advisory lock, then
-runtime_write_state and the documented source rows. A writer either enters first
-and finishes before the finalizer gets exclusive, or waits before holding any
-application row. This removes the review's deadlock cycle.
+No callback explicitly locks runtime_write_state. The runner's finish update is
+last. Finalize-stop takes the exclusive advisory lock, then runtime_write_state
+and the documented source rows. A writer either enters first and finishes before
+the finalizer gets exclusive, or waits before holding any application row. This
+removes the review's deadlock cycle.
 
 ## Legacy direct transaction entry points to migrate
 
@@ -150,24 +198,55 @@ receiver is not transaction-bound.
 
 ## Migration policy
 
-Goose cannot issue ordinary DML through an unentered pooled connection. The
-migrator calls a separate runtime_enter_migrator on the same dedicated
-database/sql connection before goose checks/applies migrations. It acquires a
-session shared barrier, checks the gate, and sets a session marker accepted only
-for the configured migrator role/backend. Goose then takes its existing session
-advisory migration lock and runs its internal transactions. The dedicated
-connection is always unlocked and closed, so no pool borrower inherits the
-marker. `begin_wake` opens only the migration phase, with app/maintenance
-admission still closed. Migration bootstrap that creates runtime_write_state is
-a versioned one-time schema-installer exception; later migrations have no
-bypass. Cluster CREATE ROLE/DROP ROLE stays outside goose as specified in
-runtime-coordination.md.
+The migrator uses one dedicated backend for runtime_enter_migrator, Goose's
+session lock, all migrations and runtime_exit_migrator. Entry takes the session
+shared barrier before Goose or table reads, checks the gate and creates an
+owner-validated temporary session marker with ON COMMIT PRESERVE ROWS. Exit
+clears it and releases exactly one lock. Entry exceptions unlock; ambiguity or
+marker mismatch closes the physical backend. No reconnect may continue a run.
+
+Each transactional Up after migration 00013 starts with
+runtime_begin_migration_write and ends with runtime_finish_write. Begin marks
+dirty unconditionally so pure DDL advances generation once. The operation ID
+binds the migration version. NO TRANSACTION is forbidden. The pinned Goose
+v3.27.3 Provider executes the Up body, inserts its version, then commits that
+same transaction. The version table is the sole post-finish bookkeeping case:
+runtime_owner owns the table and an assertion trigger permits only migrator
+INSERT with matching backend/xid, finished marker, exact version and
+is_applied=true. App and runtime roles get no DML. In its direct login state,
+the migrator gets required reads and exact INSERT, with no UPDATE, DELETE,
+TRUNCATE or TRIGGER grant. The initial dirty mark covers this write. Tests pin
+ordering, statement shape and transaction identity across upgrades.
+
+Reviewed migration code may SET ROLE runtime_owner to alter its objects. These
+direct-role restrictions do not sandbox malicious migration SQL. Source review,
+framing, the dedicated backend and session barrier govern that trusted DDL path.
+
+Goose may initialize its version table even through a lock-free provider.
+Status/PendingCount/check must first validate history through read-only catalog
+queries, including the expected owner and enabled assertion trigger for the
+installed enforcement version. Foundation state records
+migrator_enforcement_version=0 and the original migration_history_owner; it
+requires that owner and shape without the later trigger. The proved migrator
+enforcement migration records version 1 and runtime_owner atomically with its
+ownership, grants and trigger. Version 1 alone does not authorize final stop.
+Missing history and absent runtime state report an uninitialized database
+without creating a provider or version-zero row. Runtime state with missing or
+malformed history is corruption; apply/check/status fail before any repair.
+Apply alone may initialize a fresh database before migration 00013.
+
+Migration 00013 installs the barrier and migrator primitives as the sole
+schema-installer exception. No migration 00014 lands until dedicated-backend
+entry, transaction framing and version bookkeeping are proved. `begin_wake`
+opens only migration admission while app/maintenance stay closed. Cluster role
+creation stays outside Goose. Final-stop authority remains absent until all
+caller and table coverage is complete.
 
 ## Exact caller migration strategy
 
-1. Add runtime_enter_write, assertion/deferred triggers, WriteTxStarter, and
-   database/sql migrator equivalent with failing tests.
-2. Inject WriteTxStarter beside read pools. Migrate direct Begin/BeginFunc sites
+1. Add runtime_enter_write/runtime_finish_write, assertion triggers,
+   WriteTxRunner, and database/sql migrator equivalent with failing tests.
+2. Inject WriteTxRunner beside read pools. Migrate direct Begin/BeginFunc sites
    package by package without changing their inner query order or error mapping.
 3. Convert listed autocommit DML to ExecWrite. Remove service access to
    pool-backed mutating Queries.
@@ -181,13 +260,16 @@ runtime-coordination.md.
 - OAuth/account/auth-mail transaction holds its first SELECT FOR UPDATE row,
   then finalizer requests exclusive: writer completes without deadlock and
   finalizer waits outside all rows.
-- Finalizer holds exclusive before writer entry: BeginWrite waits or returns its
+- Finalizer holds exclusive before writer entry: the runner waits or returns its
   bounded unavailable result before writer locks any application row.
 - Direct pool sqlc mutator, raw autocommit Exec, marker without advisory lock,
   advisory lock without marker, marker from another transaction, and closed gate
   all fail before row change.
 - Commit/rollback clears marker and xact lock; reused pooled connection cannot
   inherit authority. Existing ambiguous commit resolution remains unchanged.
+- Forced constraints, savepoint rollback, finish failure, lookalike marker,
+  poisoned-backend discard, pure DDL and exact Goose bookkeeping are proved
+  independently. The temporary-marker feasibility probe is not this proof.
 
 Read-only rg transaction-entry/caller searches produced the inventories above.
 Commands NOT RUN: targeted `go test -race -count=1` for store, OAuth,

@@ -58,7 +58,7 @@ R1 installs new runtime tables, protected functions and their own assertion
 triggers. It does not attach the write-entry trigger to legacy application and
 job tables while their callers still use old transaction entry. R1a proves the
 store entry API; R2–R7 migrate callers in their exclusive packages. R8 installs
-the final legacy-table assertion/deferred triggers and verifies complete mutator
+the final legacy-table assertion triggers and verifies complete mutator
 coverage.
 
 No production configuration flag bypasses enforcement. Finalize-stop is absent
@@ -74,9 +74,9 @@ provides the real function and live-DB entry/lock checks pass.
 
 ## R1 - Runtime coordination and admission schema/store
 
-Start with [R1.1 cluster role bootstrap](role-bootstrap.md), then the serialized
-write-foundation migration. The unused Go helper is locally checked and
-committed as `986fe44`; live entry proof remains pending.
+Start with [R1.1 cluster role bootstrap](role-bootstrap.md), then
+[R1.2 write foundation](write-foundation.md). The unused Go helper is locally
+checked and committed as `986fe44`; live entry proof remains pending.
 
 Owner paths: root-assigned migration number, apps/server/sql runtime query
 source or approved new SQL files, generated store output, store/migration tests.
@@ -112,18 +112,21 @@ Owner: one store/runtime author. Exclusive paths are store write-entry helpers
 and their unit/live-DB tests only. R1 owns database function source; root owns
 generated output. R1a never edits a caller package.
 
-Fail first: BeginWrite enters before any callback/query; failed entry exposes no
-transaction; cancellation still permits bounded rollback; commit is attempted
-once without retry; marker-only, lock-only, stale marker and closed gate fail
-before row change in real database tests. Independent pools prove the shared
-entry waits before any row lock when the finalizer holds exclusive.
+Fail first: the private runner enters before any callback/query and finishes
+immediately before commit; failed entry exposes no callback. Cancellation
+permits bounded cleanup. AM001, ambiguous entry/finish, failed cleanup and
+commit error destroy the physical backend without retry. Marker-only, lock-only,
+stale marker and closed gate fail before row change. Forced constraints cannot
+bypass finish. Independent pools prove entry waits before any row lock when the
+finalizer holds exclusive and a poisoned backend is replaced.
 
-Implement BeginWrite/WithWriteTx/ExecWrite and the database/sql entry
-equivalent. R2–R7 migrate each caller within their assigned package. R3 proves
-the account and resume lock cases; R7a/R7b prove auth/OAuth; R7d proves
-auth-mail/maintenance. R8 owns command/fixture/migrator wiring, the generated
-mutator inventory gate, and complete legacy trigger coverage. No-op suppression
-remains unavailable.
+Replace the unused helper with the exact WriteTxRunner interface from
+[transaction entry](../../../design/scaling/transaction-entry.md). Its callback
+receives only Queries; raw transactions stay private. R2–R7 migrate each caller
+within their assigned package. R3 proves the account and resume lock cases;
+R7a/R7b prove auth/OAuth; R7d proves auth-mail/maintenance. R8 owns
+command/fixture/migrator wiring, the generated mutator inventory gate, and
+complete legacy trigger coverage. No-op suppression remains unavailable.
 
 Narrow checks: under apps/server, `go test -race -count=1 ./internal/store`.
 Real entry checks require TEST_DATABASE_URL; a fake-only pass does not complete
