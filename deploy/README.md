@@ -4,13 +4,13 @@
 environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
-| Path                 | Purpose                                               |
-| -------------------- | ----------------------------------------------------- |
-| `compose.yml`        | Podman Compose services and isolated networks         |
-| `server.Dockerfile`  | Go server and embedded goose migration binaries       |
-| `web.Dockerfile`     | Nuxt production image                                 |
-| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary |
-| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof  |
+| Path                 | Purpose                                                 |
+| -------------------- | ------------------------------------------------------- |
+| `compose.yml`        | Podman Compose services and isolated networks           |
+| `server.Dockerfile`  | Go server, role bootstrap, and goose migration binaries |
+| `web.Dockerfile`     | Nuxt production image                                   |
+| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary   |
+| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof    |
 
 AWS infrastructure has not landed. The planned private `aboutme-infra`
 repository will build deployment images on GitHub Actions `ubuntu-24.04-arm`,
@@ -90,10 +90,11 @@ and only when later work needs it.
 
 ## Runtime boundaries
 
-Compose runs PostgreSQL, MinIO, Go, Nuxt, and Caddy as long-lived services. Two
-one-shot services run first: `migrate` applies embedded goose migrations, and
-the media initializer creates the private bucket. A failed migration or bucket
-initialization prevents the server from starting.
+Compose runs PostgreSQL, MinIO, Go, Nuxt, and Caddy as long-lived services.
+`db-role-bootstrap` first creates or verifies the fixed roles in the common
+`postgres` database. It sets no role passwords and fails on existing privilege
+drift. Then `migrate` applies goose migrations. The media initializer creates
+the private bucket. Any prerequisite failure prevents the server from starting.
 
 PostgreSQL and the MinIO API are not published to the host. Only Caddy publishes
 a port. MinIO, its initializer, and Go are the only members of the isolated

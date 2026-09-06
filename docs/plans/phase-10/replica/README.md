@@ -6,6 +6,7 @@ design. Implementation and proof remain pending.
 
 | Plan                                            | Scope                                            |
 | ----------------------------------------------- | ------------------------------------------------ |
+| [Role bootstrap](role-bootstrap.md)             | First bounded database foundation slice          |
 | [Runtime tasks](runtime-tasks.md)               | Dependency order, owned paths and narrow checks  |
 | [Infrastructure tasks](infrastructure-tasks.md) | Public/private ownership, local and hosted proof |
 

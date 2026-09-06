@@ -38,6 +38,8 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
 	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
 	bash scripts/test/render-topology-test.sh
+	bash -n scripts/test/db-role-bootstrap-wiring-test.sh
+	bash scripts/test/db-role-bootstrap-wiring-test.sh
 	bash scripts/dev-https-test.sh --static
 	bash deploy/dev-https-browser/static-test.sh
 	scripts/test/ci-failure-propagation-test.sh
@@ -90,9 +92,9 @@ server-test: ## Test the Go API server
 	cd apps/server && go test ./...
 
 server-test-db: ## Run the DB-backed suites against live Postgres; missing TEST_DATABASE_URL fails when REQUIRE_TEST_DB=1
-	@printf '%s\n' 'server-test-db: go test live dev-seed/auth/store/user/resume/realtime/account/privacy packages'
+	@printf '%s\n' 'server-test-db: go test live roles/dev-seed/auth/store/user/resume/realtime/account/privacy packages'
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
-	  go test ./cmd/dev-seed ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... -race -count=1 -v
+	  go test ./cmd/db-role-bootstrap ./internal/dbroles ./cmd/dev-seed ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... -race -count=1 -v
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... -p=1 -race -count=1 -v
 
@@ -385,10 +387,16 @@ test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the 
 	  fi; \
 	  sleep 1; \
 	done; \
+	CLUSTER_BOOTSTRAP_DATABASE_URL=postgres://aboutme:aboutme_dev@127.0.0.1:20432/postgres?sslmode=disable \
+	  $(MAKE) --no-print-directory db-role-bootstrap || exit $$?; \
 	podman exec aboutme-test-db psql -U aboutme -d aboutme -tc \
 	  "SELECT 1 FROM pg_database WHERE datname='aboutme_dev'" | grep -q 1 || \
 	  podman exec aboutme-test-db psql -U aboutme -d aboutme -c "CREATE DATABASE aboutme_dev"; \
 	echo "aboutme-test-db is ready (databases: aboutme, aboutme_dev)."
+
+.PHONY: db-role-bootstrap
+db-role-bootstrap: ## Create or verify the fixed database roles using an explicit postgres admin connection
+	@cd apps/server && go run ./cmd/db-role-bootstrap
 
 test-db-down: ## Stop the aboutme Postgres container (check no worker is mid-suite first)
 	podman rm -f aboutme-test-db

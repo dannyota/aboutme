@@ -56,6 +56,7 @@ func RequireTestDatabaseURL(t *testing.T) string {
 // that ordering didn't hold (e.g. `go test ./internal/user/...` run alone).
 func MigrateTestDatabase(t *testing.T, dsn string) {
 	t.Helper()
+	BootstrapTestDatabaseRoles(t, dsn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

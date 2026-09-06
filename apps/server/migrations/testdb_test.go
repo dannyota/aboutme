@@ -12,6 +12,8 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 // testDatabaseCounter disambiguates database names created within the same
@@ -36,6 +38,7 @@ func newTestDatabase(t *testing.T) string {
 	if base == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping live-database integration test")
 	}
+	testutil.BootstrapTestDatabaseRoles(t, base)
 
 	admin, err := sql.Open("pgx", base)
 	if err != nil {

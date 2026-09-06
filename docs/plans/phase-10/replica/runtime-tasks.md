@@ -74,6 +74,10 @@ provides the real function and live-DB entry/lock checks pass.
 
 ## R1 - Runtime coordination and admission schema/store
 
+Start with [R1.1 cluster role bootstrap](role-bootstrap.md), then the serialized
+write-foundation migration. The unused Go helper is locally checked and
+committed as `986fe44`; live entry proof remains pending.
+
 Owner paths: root-assigned migration number, apps/server/sql runtime query
 source or approved new SQL files, generated store output, store/migration tests.
 These are normally root-owned; root must explicitly assign and serialize them.

@@ -177,6 +177,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+      - name: Initialize database roles
+        run: make db-role-bootstrap
+        env:
+          CLUSTER_BOOTSTRAP_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/postgres?sslmode=disable
       - run: make server-test-integration
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
