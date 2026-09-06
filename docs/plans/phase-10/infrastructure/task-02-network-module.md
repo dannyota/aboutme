@@ -1,65 +1,46 @@
-# Task 10.2: Network module — VPC, prefix-list ingress, private DB subnets, EIP auto-reassociation
+# Task 10.2: Network module — ALB ingress, public application nodes, private RDS
 
-**Task gate:** One author writes the failing checks first and runs the affected
-checks. The fresh Phase 10 review covers the instance profile, metadata
-boundary, host firewall, EIP recovery, and network isolation.
+**Dependency:** Task 10.18's approved trust, placement, readiness, and scheduled
+UAT contracts. One author writes failing checks first. The fresh Phase 10 review
+covers metadata, security groups, forwarding trust, and stopped-state safety.
 
-**Files:** `deploy/aws/modules/network/**` (+ `tests/*.tftest.hcl`), env-root
-wiring, `docs/runbooks/eip-recovery.md` seed.
+**Files:** `deploy/aws/modules/network/**` and tests, environment-root wiring,
+and the recovery runbook named by Task 10.18.
 
 **Steps:**
 
-- [ ] Failing tests first (`tofu test` with `mock_provider "aws"` and **explicit
-      `override_data` values** for the prefix-list and AMI data sources, so
-      wiring assertions check real derived values, not mock-generated
-      placeholders): assert (a) the SG has **exactly one** inbound rule — TCP
-      443 whose source is the managed prefix list
-      `com.amazonaws.global.cloudfront.origin-facing` (via
-      `aws_ec2_managed_prefix_list` data source); (b) no rule admits port 80 or
-      22 (also the SG-quota-safe shape — D14); (c) the EIP is tagged for the
-      user-data association script; (d) the ASG has min=max=desired=1 and the
-      launch template sets `instance_type = var.instance_type`; (e) **private
-      subnets exist (2 AZs) with no route to an IGW and no NAT** — they exist
-      solely for the DB subnet group (Task 10.3); (f) the launch ENI has
-      `associate_public_ip_address = true`, which supplies bounded bootstrap
-      egress before the EIP is associated; (g) metadata options require IMDSv2,
-      disable v1, and use hop limit 1; (h) the 30 GiB gp3 root volume is
-      encrypted with `alias/aws/ebs`, delete-on-termination, and not magnetic.
-- [ ] Implement: VPC (public subnets across 2 AZs — the single node lives in
-      one; **plus 2 private subnets for RDS**), IGW, SG per the tests, EIP,
-      ASG(1) + launch template. During local-only work, use fake AMI data and
-      explicit OpenTofu mocks. Resolve the latest stable ECS-optimized Amazon
-      Linux 2023 arm64 AMI and record its exact image ID only during authorized
-      Task 10.15 activation; do not float an SSM alias at apply. The instance
-      role has only ECS registration, SSM Session Manager, the one EIP
-      association, and the one CloudWatch metric namespace; no application SSM
-      or media access. User data first verifies the pinned `aws` CLI is present
-      and records its version, then associates the EIP by allocation ID with at
-      most 30 attempts ten seconds apart. It emits one failure metric without
-      secrets and exits nonzero after five minutes. Initial public IPv4 egress
-      is removed from the interface only by the successful EIP replacement path.
-- [ ] Before ECS starts tasks, a persistent systemd unit installs and verifies
-      two metadata rules: `DOCKER-USER` rejects bridge-container traffic to
-      `169.254.169.254/32`, while leaving ECS task credentials at
-      `169.254.170.2` reachable; host `OUTPUT` rejects IMDS for the dedicated
-      Caddy, server, migrate, web, and ops UIDs fixed by Task 10.5. Root-owned
-      ECS and SSM agents retain the minimum instance-profile path. A
-      rendered-user- data test asserts rule order, persistence across service
-      restart, fail- closed startup, IMDSv2 settings, CLI probe, and bounded
-      retry. Task 10.15 probes denial from bridge and host-mode application
-      containers while a server task still obtains its task-role identity.
-- [ ] The same pre-ECS unit creates `/var/lib/caddy` and `/var/log/caddy` owned
-      by UID/GID 10001 with mode 0700, then verifies both before starting ECS.
-      No other task UID can read the persisted origin TLS material or access
-      logs.
-- [ ] Seed `docs/runbooks/eip-recovery.md`: what auto-reassociation does, manual
-      recovery commands, and the Phase 10 operational rehearsal drill hook
-      ("terminate the instance; verify the replacement re-associates within five
-      minutes after EC2 reports the replacement running").
-      `make docs-fmt && make docs-lint`.
+- [ ] Write mocked `tofu test` cases for two public application subnets and two
+      private RDS subnets across two Availability Zones. Private subnets have no
+      internet gateway or NAT route. Nodes associate public IPv4 for outbound
+      access without NAT.
+- [ ] Assert an internet-facing application load balancer (ALB) spans both
+      public subnets when the environment is active. Its listener accepts only
+      the CloudFront origin path chosen by Task 10.18. Node ingress accepts only
+      the ALB security group on the selected target port; it admits neither
+      direct Internet traffic nor ports 22 or 80. The origin-secret check
+      remains mandatory at Caddy.
+- [ ] Assert the ALB, target groups, listeners, and related hourly resources are
+      absent when scheduled UAT is off. Production always retains them. The UAT
+      state transition cannot leave a public target or listener behind.
+- [ ] Implement the Auto Scaling group (ASG) and capacity-provider inputs from
+      Task 10.18. Production uses minimum one and initial maximum two nodes. UAT
+      uses explicit active and stopped settings. Tests reconcile ECS desired
+      count with ASG minimum, desired, and maximum so host replacement cannot
+      start a stopped environment.
+- [ ] Pin the selected ECS-optimized Amazon Linux 2023 arm64 image during
+      authorized activation. Require IMDSv2, hop limit one, encrypted gp3 root
+      volumes, task-role credentials, and host/container metadata firewall
+      rules. Dedicated application UIDs cannot reach instance metadata.
+      Root-owned ECS and SSM agents keep only their required instance-profile
+      paths.
+- [ ] Test ALB target registration, deregistration, readiness, replacement, and
+      one-complete-replica-per-node placement using the exact output interface
+      consumed by Task 10.5. No stable elastic IP or EIP reassociation script is
+      part of the target topology.
+- [ ] Seed the recovery runbook with node replacement, ALB target health,
+      stopped-UAT reconciliation, and direct-node bypass checks. Production
+      recovery never scales below one.
 
-**Verification:** `tofu test` (mocked, in CI — no credentials); `validate`;
-parity check still green. Real-AWS behavior (does the user-data script actually
-associate?) is **deliberately deferred to Task 10.15's hosted-UAT activation** —
-the cheapest safe check before that is a shellcheck + `bash -n` pass on the
-rendered user-data script plus the mocked assertions.
+**Verification:** mocked `tofu test`, `tofu validate`, environment parity,
+shellcheck for rendered user data, and deterministic lifecycle tests. Task 10.15
+owns real AWS checks.

@@ -9,7 +9,9 @@ with the v1 entry-experience authority on 2026-09-02, 0029 with the application
 UI authority on 2026-09-02, and 0030 with the visual identity authority on
 2026-09-04. ADR 0031 records the owner's 2026-09-05 direction: numeric phases,
 AWS Singapore cost research, OpenTofu, managed-service preference, and hosted
-UAT.
+UAT. ADR 0033 records the owner's 2026-09-06 approval of public image builds
+with private AWS publication and deployment. ADR 0034 records the approved
+monthly operating range, scheduled UAT, and production scale-out and scale-in.
 
 | ADR                                                                 | Status   | Integrated outcome                                                                                       |
 | ------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
@@ -44,21 +46,29 @@ UAT.
 | [0029](../adr/0029-application-ui-toolkit.md)                       | Accepted | Tailwind v4 and shadcn-vue chrome without Preflight; renderer stays isolated                             |
 | [0030](../adr/0030-stamped-document-visual-identity.md)             | Accepted | Stamped-document identity: seal red only for public state, signature ink actions, Be Vietnam Pro chrome  |
 | [0031](../adr/0031-aws-cost-research-and-hosted-uat.md)             | Accepted | Phase 9 AWS cost research, OpenTofu, managed AWS services, Phase 10 hosted UAT, separate Phase 11 launch |
+| [0032](../adr/0032-public-share-image.md)                           | Accepted | One live-gated public PNG share image from the continuous resume renderer                                |
+| [0033](../adr/0033-public-image-builds-private-deployment.md)       | Accepted | Public ARM64 build/smoke; private verified ECR publication and AWS deployment                            |
+| [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)     | Accepted | Scheduled UAT; ECS production autoscaling with a one-server minimum; fixed RDS compute                   |
 
 ## Remaining gates
 
-| Gate                                                   | Owner                                     | Due                                                 |
-| ------------------------------------------------------ | ----------------------------------------- | --------------------------------------------------- |
-| Per-asset font license, notice, and Reserved Font Name | Integration owner                         | As each P3 Task 5 asset is admitted, and before T5B |
-| Product name and trademark review                      | Human owner                               | Before Phase 11 production promotion                |
-| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before Phase 11 production promotion                |
-| UAT sizes, spending limit, lifetime                    | Phase 9 and human owner                   | Before Phase 10 activation                          |
-| Production authorization                               | Human owner                               | After Phase 10 UAT and operational rehearsal        |
+| Gate                                                   | Owner                                     | Due                                                             |
+| ------------------------------------------------------ | ----------------------------------------- | --------------------------------------------------------------- |
+| Per-asset font license, notice, and Reserved Font Name | Integration owner                         | As each P3 Task 5 asset is admitted, and before T5B             |
+| Product name and trademark review                      | Human owner                               | Before Phase 11 production promotion                            |
+| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before Phase 11 production promotion                            |
+| UAT operating controls and booked test windows         | Phase 10                                  | Prove the approved $30/month ceiling controls before activation |
+| Production authorization                               | Human owner                               | After Phase 10 UAT and operational rehearsal                    |
 
 The font gate stays per asset because it is a legal check on exact bytes. Name
 and privacy reviews gate production. The owner has authorized AWS UAT in
 Singapore and Cloudflare DNS for `uat.aboutme.vn`; that scope does not require
-another general permission request. Phase 9 settles the cost decision first.
+another general permission request. The owner approved
+$20–30/month UAT,
+$140–170/month production, and $160–200/month combined on
+2026-09-06. These estimates do not waive production launch approval. Phase 10
+implements and proves the operating controls and replica safety required by
+ADR 0034.
 
 ADRs 0022 and 0023 carry the highest implementation complexity in the design and
 belong to the completed public-surface phase and task 7.1. They are accepted as

@@ -44,6 +44,14 @@ deployment smoke checks. Complete hosted UAT is planned for Phase 10 at
 [ADR 0031](adr/0031-aws-cost-research-and-hosted-uat.md). No AWS application
 deployment is claimed by these local checks.
 
+The owner has approved the costed Singapore ECS/EC2 and RDS target in
+[ADR 0034](adr/0034-scheduled-uat-and-production-autoscaling.md). UAT will stop
+between test windows; production will scale application capacity out and in with
+at least one server. Those controls are not implemented yet. Revocation leases,
+print jobs, event subscribers, and limiters still hold process-local state.
+Phase 10 must implement and prove coordination across replicas before enabling
+autoscaling. RDS compute remains separately sized.
+
 ## Implemented HTTP surface
 
 The [OpenAPI document](api/openapi.yaml) is the exact JSON API authority. OAuth

@@ -1,0 +1,64 @@
+{
+  "schema_version": 2,
+  "currency": "USD",
+  "month_hours": 730,
+  "production": {
+    "low": { "source_scenario": "production_low", "extra_node_hours": 100 },
+    "expected": {
+      "source_scenario": "production_expected",
+      "extra_node_hours": 200
+    }
+  },
+  "uat": {
+    "schedules": {
+      "baseline": { "active_hours": 40, "test_days": 10 },
+      "high": { "active_hours": 160, "test_days": 20 }
+    },
+    "requests": 1000000,
+    "cloudfront_gb": 10,
+    "cloudfront_invalidation_paths": 100,
+    "media_gb_month": 5,
+    "s3_get_requests": 10000,
+    "s3_put_requests": 1000,
+    "log_ingest_gb": 2,
+    "log_archive_gb_month": 12,
+    "logs_insights_scan_gb": 10,
+    "cloudwatch_api_requests": 1000,
+    "hourly_custom_metrics": 50,
+    "application_standard_alarms": 18,
+    "persistent_dashboards": 1,
+    "scheduler_invocations_per_active_hour": 7,
+    "shared_mail_custom_metrics": 7,
+    "shared_mail_standard_alarms": 7,
+    "emails": 500,
+    "email_feedback_events": 25,
+    "alarm_notifications": 25,
+    "kms_keys": 2,
+    "kms_requests_per_active_hour": 10,
+    "ecr_gb_month": 6,
+    "state_gb_month": "0.1",
+    "rds_backup_extra_gb_month": 5,
+    "cross_az_db_gb": 1,
+    "non_cloudfront_egress_gb": 1,
+    "restore_hours_per_test_day": 2,
+    "production_shape_drill_hours": 4,
+    "production_topology_proof_hours": 4
+  },
+  "topology": {
+    "alb_count": 1,
+    "alb_lcu": 1,
+    "alb_public_ipv4": 2,
+    "root_gb": 30
+  },
+  "monthly_allowances": {
+    "CloudFront Asia viewer data": 1000,
+    "CloudFront HTTPS requests": 10000000,
+    "CloudFront viewer function": 2000000,
+    "CloudFront invalidation paths": 1000,
+    "CloudWatch log ingestion": 5,
+    "CloudWatch 180-day log storage": 5,
+    "CloudWatch Logs Insights scans": 5,
+    "CloudWatch custom metrics": 10,
+    "CloudWatch standard alarms": 10
+  }
+}

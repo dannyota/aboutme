@@ -1,5 +1,9 @@
 # Task 10.10: Scheduled jobs, restore verification, TLS, and drift
 
+**Dependency:** Task 10.18 defines fleet-wide job admission and the scheduled
+UAT lifecycle. Schedules must meet privacy and deletion deadlines while UAT is
+normally stopped.
+
 AC-INF-006; drift-detector half of D6.
 
 **Task gate:** One author writes the failing checks first and runs the affected
@@ -9,6 +13,11 @@ restore isolation, and overlap handling.
 **Files:** `deploy/aws/modules/jobs/**` (+ tests),
 `deploy/aws/scripts/{restore-verify,cidr-drift-check,tls-expiry-check}.sh`,
 script tests, and `docs/runbooks/restore-drill.md` seed.
+
+The module and environment runbook belong in private `aboutme-infra`. The three
+generic ops scripts and their synthetic tests belong in public `aboutme`, per
+ADR 0033. Complete those scripts before Task 10.8's four-image build; the ops
+image never copies private environment settings or credentials.
 
 ## Schedule contract
 
@@ -69,10 +78,10 @@ candidate images.
       `com.amazonaws.global.cloudfront.origin-facing` entries and the injected
       OpenTofu baseline, emit heartbeat on equality, drift plus nonzero exit on
       mismatch. It never calls SSM.
-- [ ] `tls-expiry-check.sh`: connect to `127.0.0.1:443` with SNI and hostname
-      equal to the configured origin FQDN, five-second connect/read limits,
-      validate the chain/hostname, calculate whole days remaining, and publish
-      the expiry metric. It never opens origin ingress or probes the EIP.
+- [ ] `tls-expiry-check.sh`: probe the TLS endpoint and authentication path
+      selected by Task 10.18 with five-second connect/read limits, validate the
+      chain/hostname, calculate whole days remaining, and publish the expiry
+      metric. It never opens origin ingress or a direct node path.
 - [ ] Every script supports `--plan`, is shellcheck-clean, and has deterministic
       fake-command tests for arguments, timeouts, exit paths, metrics, overlap,
       cleanup ownership, and secret-free stdout/stderr. Seed

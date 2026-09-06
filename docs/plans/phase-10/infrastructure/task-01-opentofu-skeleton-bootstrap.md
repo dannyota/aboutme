@@ -45,19 +45,28 @@ pin providers/backends at this point), `.gitignore` additions for `.terraform/`,
       bucket lifecycle rule, distinct state/secrets keys, key rotation, and
       deletion protection; then `tofu fmt -check`, `tofu init -backend=false`,
       `tofu validate` all green.
-- [ ] Define three staging GitHub roles: `ci-build-staging` may authenticate to
-      and push only the four staging ECR repositories; `ci-plan-staging` may
-      read only the staging backend/KMS data and describe or read staging-tagged
-      resources needed for refresh/plan; `ci-deploy-staging` may use the staging
-      backend, apply only staging-tagged resources, and pass only the exact
-      staging ECS task/execution roles. Every trust policy requires
-      `aud=sts.amazonaws.com` and
-      `sub=repo:dannyota/aboutme-infra:environment:staging` for the planned
-      private repository. Assert the public `aboutme` subject is rejected. If
-      the resolved private repository owner/name changes, update the exact
-      subject and tests together before activation. The protected GitHub
-      `staging` environment admits only the approved branch and requires the
-      recorded human reviewer for deploy/build jobs. Attach one explicit CI
+- [ ] Define three staging GitHub roles: `ci-publish-staging` may authenticate
+      to, push, and verify image content only in the four staging ECR
+      repositories; `ci-plan-staging` may read only the staging backend/KMS data
+      and describe or read staging-tagged resources needed for refresh/plan;
+      `ci-deploy-staging` may use the staging backend, apply only staging-tagged
+      resources, and pass only the exact staging ECS task/execution roles. Every
+      trust policy requires `aud=sts.amazonaws.com` and an exact `StringEquals`
+      match for the private repository's actual staging-environment `sub`. After
+      creating the private repository, resolve its subject format,
+      owner/repository names and immutable IDs from GitHub metadata/settings.
+      Record them privately and pin the resulting environment subject in trust
+      and tests before bootstrap activation. Do not assume the older name-only
+      subject: GitHub documents
+      [immutable subjects for new repositories](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims)
+      created after 2026-07-15. Verify the configured format without printing or
+      retaining a bearer token. Tests reject public `aboutme` subjects in both
+      formats, wrong owner/repository IDs, forks, branch-only subjects, wrong
+      environments and audiences. A rename, transfer, or subject-setting change
+      requires matched trust/test updates before use. Never widen to a wildcard
+      or accept both formats as a fallback. The protected GitHub `staging`
+      environment admits only the approved branch and requires the recorded
+      human reviewer for deploy/publication jobs. Attach one explicit CI
       permissions boundary. Deny production and bootstrap mutation, IAM
       policy/role creation outside the declared module resources, unbounded
       `iam:PassRole`, and state-policy/KMS-policy mutation. Failing mocked tests

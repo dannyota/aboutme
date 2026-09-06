@@ -1,23 +1,32 @@
 # Task 10.12: Deploy pipeline — pre-migration snapshot, drain→readiness, rollback
 
+**Dependency:** Task 10.18 defines fleet-wide admission, drain, render/SSE
+handoff, readiness, placement, and autoscaling restoration. This task applies
+that contract across every replica.
+
 **Files:** `.github/workflows/deploy-staging.yml` authored as a diff for the
 integration owner in private `aboutme-infra`; `docs/runbooks/deploy-rollback.md`
-seed. Consumes task 10.8's versioned digest manifest and successful build run.
+seed. Consumes task 10.8's private ECR release manifest, successful publication,
+and bound canonical public build evidence.
 
 **Steps:**
 
 - [ ] Author the workflow (manual `workflow_dispatch` with an input naming the
-      image-digest manifest and run from task 10.8's build, or its reviewed
-      private release record after artifact expiry). Before AWS access, verify
-      the checksum and manifest schema, successful build run/attempt in the
-      expected private repository/workflow, and app/infrastructure source
-      provenance under task 10.8's protected candidate-branch and check-identity
-      rules. An archive must come from a reviewed protected private-repository
-      commit and preserve the original manifest and successful-run evidence;
-      reject a missing or tampered archive. Check the approved commits,
-      `linux/arm64`, and all four expected ECR repository/digest pairs. Reject
-      missing, substituted, or mismatched metadata; never resolve a mutable tag
-      or rebuild an image during deploy or promotion. The previous-image
+      image-digest manifest and run from task 10.8's private publication, or its
+      reviewed private release record after artifact expiry). Before AWS access,
+      verify the checksum and manifest schema, successful publication
+      run/attempt for private `aboutme-infra` workflow
+      `.github/workflows/publish-images.yml`, and its bound public
+      `dannyota/aboutme` workflow `.github/workflows/images-arm64.yml` build
+      run/attempt/artifact identity. Verify both workflow identities, approved
+      app/infrastructure commits, and task 10.8's protected candidate-branch and
+      check-identity rules. Public checksums alone cannot authorize deployment.
+      An archive must come from a reviewed protected private-repository commit
+      and preserve the original manifest and successful-run evidence; reject a
+      missing or tampered archive. Check the approved commits, `linux/arm64`,
+      and all four expected ECR repository/digest pairs. Reject missing,
+      substituted, or mismatched metadata; never resolve a mutable tag or
+      rebuild an image during deploy or promotion. The previous-image
       compatibility step uses `ubuntu-24.04-arm` to execute the ARM64 image
       natively after authorized registry access. Then OIDC →
       `ci-deploy-staging`; acquire a per-environment concurrency lock with
@@ -31,8 +40,11 @@ seed. Consumes task 10.8's versioned digest manifest and successful build run.
       and nonzero allocated size. This exact drain → verified backup order
       implements the
       [database release sequence](../../../design/deployment.md#database-and-releases).
-      A failure before the candidate apply restores the previous service to
-      desired count one, waits for readiness, and reports failure.
+      A failure before the candidate apply restores the previously healthy
+      capacity, waits for fleet readiness, and reports failure. The serialized
+      workflow may hold production application capacity at zero only for its
+      snapshot and migration drain; every completion or recovery path restores
+      at least one healthy replica.
 - [ ] After the snapshot, create a **fresh** saved OpenTofu plan from the
       drained state. It must restore `services_enabled=true`, carry the approved
       digest manifest, and differ from the approved speculative plan only by the
@@ -71,10 +83,9 @@ seed. Consumes task 10.8's versioned digest manifest and successful build run.
       the previous digest fails the migrated-schema test, stop the deployment;
       do not claim that the circuit breaker can restore service. Document
       exactly this in `docs/runbooks/deploy-rollback.md`, plus the automatic
-      circuit-breaker rollback from D16 and the **documented maintenance
-      window** from the
-      [production topology](../../../design/deployment.md#production-topology)
-      (single node, min-healthy 0 %).
+      circuit-breaker rollback from D16, Task 10.18's fleet drain and rollback
+      contract, and the
+      [production topology](../../../design/deployment.md#production-topology).
 - [ ] `actionlint` the workflow; hand the diff to the integration owner. Note in
       the workflow header: **Phase 11 promotes by running the same workflow
       shape against `envs/production` with the staging-proven digest manifest**

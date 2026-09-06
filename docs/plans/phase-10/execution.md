@@ -1,21 +1,23 @@
 # Task 10.16 — Complete product UAT
 
 **Owner:** integration owner, using the scripted hosted harness. **Inputs:**
-task 10.15 deployment, task 10.14 harness, the owner's SES handoff, the
-candidate commit and image digests, and stable acceptance IDs.
+task 10.15 deployment, task 10.14 harness, the owner's SES handoff, the Task
+10.18 replica-safety and scaling contract, the candidate commit and image
+digests, and stable acceptance IDs.
 
 ## Workflows
 
-| Area              | Required acceptance                                                                                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Password and mail | Register, verify, sign in/out, reset, recent reauthentication, sessions/revocation, real SES delivery and expected failure handling                            |
-| v1 flags          | Provider login absent when disabled; server starts without unused provider credentials; MCP enabled                                                            |
-| MCP               | Discovery, registration, consent, token exchange/rotation/revoke, authenticated resume changes, denied expired/revoked grants; edge preserves Bearer semantics |
-| Editing           | Create/rename/delete, structure and content, autosave/CAS races, reload/refetch, photos, templates, mobile layout, and accessibility                           |
-| Publication       | Publish, rename, discoverability, download flag, public HTML/JSON/photo/Markdown/PDF/images; unpublish and deletion revoke later reads                         |
-| Realtime          | Owner/public SSE, reconnect refetch, slow-client bounds, polling fallback, and stream closure on unpublish                                                     |
-| Rendering         | Owner and public exports, deterministic fonts/photos, sanitizer conformance, timeout/cancellation, queue limits, and no renderer outbound network              |
-| Privacy           | Account export/deletion, session and grant revocation, exact-key media cleanup, retention, orphan reconciliation, and idempotency expiry                       |
+| Area              | Required acceptance                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Password and mail | Register, verify, sign in/out, reset, recent reauthentication, sessions/revocation, real SES delivery and expected failure handling                                |
+| v1 flags          | Provider login absent when disabled; server starts without unused provider credentials; MCP enabled                                                                |
+| MCP               | Discovery, registration, consent, token exchange/rotation/revoke, authenticated resume changes, denied expired/revoked grants; edge preserves Bearer semantics     |
+| Editing           | Create/rename/delete, structure and content, autosave/CAS races, reload/refetch, photos, templates, mobile layout, and accessibility                               |
+| Publication       | Publish, rename, discoverability, download flag, public HTML/JSON/photo/Markdown/PDF/images; unpublish and deletion revoke later reads                             |
+| Realtime          | Owner/public SSE, reconnect refetch, slow-client bounds, polling fallback, and stream closure on unpublish                                                         |
+| Rendering         | Owner and public exports, deterministic fonts/photos, sanitizer conformance, timeout/cancellation, queue limits, and no renderer outbound network                  |
+| Scaling           | Actual 1 → 2 → 1 transition during writes, revocation, render, private deletion, and SSE; abrupt failure plus graceful drain; declared limit scopes and pgx budget |
+| Privacy           | Account export/deletion, session and grant revocation, exact-key media cleanup, retention, orphan reconciliation, and idempotency expiry                           |
 
 Use the six established visual presets: `classic-serif`, `engineer-compact`,
 `modern-sidebar`, `executive-band`, `consulting-formal`, and `academic-dense`.

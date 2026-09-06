@@ -4,30 +4,41 @@
 
 OpenTofu, environment configuration, and AWS deployment workflows will live in
 the planned private `aboutme-infra` repository. It has not been created. The
-public app retains source, local tools, and a versioned deployment contract;
-normal app checks must not require private infrastructure tooling or access. The
-private deployment consumes an explicit app commit and immutable image digests.
-It does not silently deploy the latest branch.
+public app retains all four image inputs, build/smoke workflows, local tools,
+and a versioned deployment contract; normal app checks must not require private
+infrastructure tooling or access. The private publisher consumes a validated
+canonical public OCI bundle; deployment consumes its private release record and
+immutable ECR digests. It does not silently deploy the latest branch.
 
 The owner selected GitHub Actions `ubuntu-24.04-arm` for native deployment image
-builds. The [build contract](contracts.md#build-and-runner-contract) records the
-runner split, ARM64 smoke evidence, digest handoff, and private Actions billing.
+builds in public `dannyota/aboutme`, per
+[ADR 0033](../../../adr/0033-public-image-builds-private-deployment.md). The
+[build contract](contracts.md#build-and-runner-contract) records the free public
+builds, private publication, provenance, and remaining private Actions usage.
 Development remains on the laptop, and AMD64 browser baselines keep their pinned
 architecture.
 
 The detailed file paths below predate this split and are not dispatchable.
-Before implementation, move deployment-only paths/workflows into the private
-repo, keep shared application changes in the public repo, and define each repo's
-independent checks and handoff. Complete Phases 6–8 first; this document records
-future work, not a reason to begin deployment now.
+Before dispatch, assign each path to its owning repo and independent checks.
+Public build inputs include `deploy/{server,web,caddy,ops}.Dockerfile`,
+`deploy/caddy/**`, and generic
+`deploy/aws/scripts/{db-bootstrap,restore-verify,tls-expiry-check,cidr-drift-check}.sh`
+with their tests. These scripts receive settings at runtime; no environment
+values are baked into images. The private repo consumes them from the exact app
+commit and must not maintain copies. OpenTofu roots/modules, environment tfvars,
+state configuration, credential/DNS bootstrap, and release approvals stay
+private. The public `images-arm64.yml` and private `publish-images.yml` have
+distinct permissions and artifact contracts. Phases 6–8 are complete; Phase 9
+spending and Phase 10 local checks still precede activation.
 
-> **Proposed baseline:** This material moved from the former infrastructure
-> plan. It remains a proposed technical baseline pending Phase 9 AWS cost
-> research and the final Phase 6/7/8 runtime contracts. It is not an approval of
-> this topology, sizing, production resources, or secret runtime contract. Phase
-> 9 must compare managed AWS services, including ECS/Fargate, RDS, S3, and SES,
-> for cost and suitability. The existing ECS-on-EC2 shape is a baseline
-> candidate only; rewrite any superseded task before dispatch.
+> **Accepted target and superseded baseline:** ADR 0034 accepts ECS on EC2
+> Graviton with RDS PostgreSQL, an internet-facing ALB, production application
+> autoscaling from one to an initial maximum of two replicas, and scheduled UAT.
+> Earlier single-host-only placement, stable-EIP origin, fixed-capacity, and
+> no-ALB text in this plan is historical baseline context and cannot be
+> dispatched. Task 10.18 must first design and implement replica safety,
+> routing, draining, fleet limits, and lifecycle contracts. Production still
+> requires separate Phase 11 approval.
 >
 > **Private-media correction (2026-08-12):** ADR 0019 and Draft v4 accept this
 > security invariant. They supersede the earlier direct-media edge design. The
@@ -77,25 +88,20 @@ future work, not a reason to begin deployment now.
 > phase reviewer reads the integrated diff. The integration owner runs `make ci`
 > and `make scan` once at the unchanged candidate commit.
 
-**Goal:** An OpenTofu baseline for a proposed AWS hosted UAT environment at
+**Goal:** An OpenTofu baseline for an AWS hosted UAT environment at
 `uat.aboutme.vn` in `ap-southeast-1` (Singapore), with Cloudflare DNS and SES
 configuration handed off by the user. The modules are intended to apply cleanly
 to a **UAT** environment mirroring the production topology (VPC, ECS on EC2
-Graviton with host networking for the edge/API tier and fixed ports, RDS
-Postgres gp3, private S3 media reached only by Go, CloudFront + ACM us-east-1
-with the
+Graviton with one complete application replica per node, RDS Postgres gp3,
+private S3 media reached only by Go, CloudFront + ACM us-east-1 with the
 [CloudFront behavior contract](../../../design/deployment.md#cloudfront-behavior),
-Caddy origin with EIP + auto-reassociation, origin-secret + prefix-list ingress,
+Caddy behind an internet-facing ALB, origin-secret and source-specific ingress,
 SSM secrets with IAM scoping and rotation, CloudWatch alarms/dashboards/SNS,
 scheduled retention + restore-verification jobs, arm64 image build + ECS deploy
 pipeline with drain→readiness and the migration advisory-lock sequence), with
 `tofu validate`/`plan` wired into CI and UAT/production differing **only by
-variables**. Plus the **BLOCKING** Phase 0 security-review item: a production
-Caddy configuration that derives the viewer address from CloudFront's validated
-inbound chain after verifying `X-Origin-Secret`, emits exactly one canonical
-client-IP header, **refuses service on empty/unset boundary configuration**, and
-is proven by an end-to-end CI test with two viewers through one simulated edge
-plus forged and duplicated forwarding headers.
+variables**. Task 10.18 blocks this work until the shared application and
+network contracts are implemented locally.
 
 **Base:** the then-current integrated `main` descendant after Phase 7.2 and
 Phase 9. Commit `9382c86` is a historical minimum ancestry point, not an
@@ -121,7 +127,7 @@ real AWS AMI only during authorized activation.
 | Delivery order and review gates       | [Master plan](../../implementation-plan.md), [ADR 0024](../../../adr/0024-single-pass-delivery-gates.md), and [engineering standard](../../../standards/engineering.md)                                                           |
 | Numeric limits and acceptance owners  | [Budgets](../../../design/budgets.md) and [traceability](../../traceability/README.md)                                                                                                                                            |
 
-AC-INF-001…008 are Phase 10 infrastructure-owned. AC-OPS-015…019 are Phase 10
+AC-INF-001…010 are Phase 10 infrastructure-owned. AC-OPS-015…019 are Phase 10
 operational rehearsal-owned. Phase 10 sequencing and status live in the
 [master plan](../../implementation-plan.md). These authority documents, not
 companion patches or compatibility stubs, are the dispatch inputs.
@@ -136,7 +142,7 @@ and choose sizing first. That result does not authorize production. The plan
 performs **no production apply, no production DNS cutover, no ops drills**
 (those are Phase 10 operational rehearsal/Phase 11). Deep Vietnam data-residency
 work and Flutter are out of scope. The
-[production topology](../../../design/deployment.md#production-topology) has no
+[production topology](../../../design/deployment.md#production-topology) uses an
 application load balancer. The rootless-podman dev stack (`deploy/compose.yml`,
 dev `CADDY_HTTP_PORT` gotcha) is untouched except the explicitly flagged shared
 route-snippet extraction in Task 10.7 (which uses env-placeholder defaults so
@@ -157,24 +163,25 @@ Phase 7.2.
 
 This plan is split by contract and task so each worker has a bounded file set.
 
-| File                                                                               | Contents                                                                                                               |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [`constraints.md`](constraints.md)                                                 | Environment facts (verified 2026-08-02 at `9382c86`); global constraints                                               |
-| [`decisions.md`](decisions.md)                                                     | Infrastructure decisions D1–D25 that refine the design                                                                 |
-| [`contracts.md`](contracts.md)                                                     | Traceability position; budget wiring; module/file structure; master-plan exit bullet → task map                        |
-| [`task-01-opentofu-skeleton-bootstrap.md`](task-01-opentofu-skeleton-bootstrap.md) | Task 10.1: OpenTofu skeleton, exact pinning, bootstrap stack (incl. shared ECR)                                        |
-| [`task-02-network-module.md`](task-02-network-module.md)                           | Task 10.2: Network module — VPC, prefix-list ingress, private DB subnets, EIP auto-reassociation                       |
-| [`task-03-database-storage-modules.md`](task-03-database-storage-modules.md)       | Task 10.3: Database + storage modules — RDS gp3 and private S3 media                                                   |
-| [`task-04-secrets-iam-module.md`](task-04-secrets-iam-module.md)                   | Task 10.4: Secrets & IAM module — SSM contract, server-only media access, scoped roles                                 |
-| [`task-05-compute-module.md`](task-05-compute-module.md)                           | Task 10.5: Compute module — ECS cluster, arm64 capacity, task definitions (D24 topology)                               |
-| [`task-06-edge-module.md`](task-06-edge-module.md)                                 | Task 10.6: Edge module — Caddy-only CloudFront behaviors, ORPs, HSTS, UAT gate, ACM                                    |
-| [`task-07-caddy-client-ip-boundary.md`](task-07-caddy-client-ip-boundary.md)       | Task 10.7: **BLOCKING** — production Caddy client-IP boundary, fail-closed config, prod image, simulated-edge e2e test |
-| [`task-08-ops-image-arm64-build.md`](task-08-ops-image-arm64-build.md)             | Task 10.8: Ops image + arm64 build workflow (registry consumed from bootstrap)                                         |
-| [`task-09-observability-module.md`](task-09-observability-module.md)               | Task 10.9: Observability module — alarms (with default thresholds), dashboards, SNS                                    |
-| [`task-10-jobs-module.md`](task-10-jobs-module.md)                                 | Task 10.10: Jobs module — retention interface, restore-verification, drift check                                       |
-| [`task-11-dns-certificate-glue.md`](task-11-dns-certificate-glue.md)               | Task 10.11: DNS + certificate glue — `cf` apply script from OpenTofu outputs                                           |
-| [`task-12-deploy-pipeline.md`](task-12-deploy-pipeline.md)                         | Task 10.12: Deploy pipeline — pre-migration snapshot, drain→readiness, rollback                                        |
-| [`task-13-ci-integration.md`](task-13-ci-integration.md)                           | Task 10.13: CI integration — `tofu validate`/`plan`/test, parity, boundary job                                         |
-| [`task-15-uat-activation.md`](task-15-uat-activation.md)                           | Task 10.15: Authorized hosted UAT activation (real AWS), runbooks complete, evidence                                   |
-| [`exit-criteria.md`](exit-criteria.md)                                             | Distinct local code checkpoint, activation handoff, and hosted-UAT handoff criteria                                    |
-| [`gates.md`](gates.md)                                                             | Escalations, interfaces, and links to the local checkpoint and hosted UAT exit criteria                                |
+| File                                                                                                     | Contents                                                                                        |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`../task-18-replica-safety-and-scaling-contract.md`](../task-18-replica-safety-and-scaling-contract.md) | Task 10.18: prerequisite distributed runtime, autoscaling, and scheduled UAT contract           |
+| [`constraints.md`](constraints.md)                                                                       | Environment facts (verified 2026-08-02 at `9382c86`); global constraints                        |
+| [`decisions.md`](decisions.md)                                                                           | Infrastructure decisions D1–D25 that refine the design                                          |
+| [`contracts.md`](contracts.md)                                                                           | Traceability position; budget wiring; module/file structure; master-plan exit bullet → task map |
+| [`task-01-opentofu-skeleton-bootstrap.md`](task-01-opentofu-skeleton-bootstrap.md)                       | Task 10.1: OpenTofu skeleton, exact pinning, bootstrap stack (incl. shared ECR)                 |
+| [`task-02-network-module.md`](task-02-network-module.md)                                                 | Task 10.2: Network module — ALB ingress, public application nodes, private RDS                  |
+| [`task-03-database-storage-modules.md`](task-03-database-storage-modules.md)                             | Task 10.3: Database + storage modules — RDS gp3 and private S3 media                            |
+| [`task-04-secrets-iam-module.md`](task-04-secrets-iam-module.md)                                         | Task 10.4: Secrets & IAM module — SSM contract, server-only media access, scoped roles          |
+| [`task-05-compute-module.md`](task-05-compute-module.md)                                                 | Task 10.5: Compute module — replica placement, services, and autoscaling                        |
+| [`task-06-edge-module.md`](task-06-edge-module.md)                                                       | Task 10.6: Edge module — CloudFront, ALB origin, ORPs, HSTS, and UAT gate                       |
+| [`task-07-caddy-client-ip-boundary.md`](task-07-caddy-client-ip-boundary.md)                             | Task 10.7: Caddy client-IP and origin boundary behind ALB                                       |
+| [`task-08-ops-image-arm64-build.md`](task-08-ops-image-arm64-build.md)                                   | Task 10.8: Ops image + arm64 build workflow (registry consumed from bootstrap)                  |
+| [`task-09-observability-module.md`](task-09-observability-module.md)                                     | Task 10.9: Observability module — alarms (with default thresholds), dashboards, SNS             |
+| [`task-10-jobs-module.md`](task-10-jobs-module.md)                                                       | Task 10.10: Jobs module — retention interface, restore-verification, drift check                |
+| [`task-11-dns-certificate-glue.md`](task-11-dns-certificate-glue.md)                                     | Task 10.11: DNS + certificate glue — `cf` apply script from OpenTofu outputs                    |
+| [`task-12-deploy-pipeline.md`](task-12-deploy-pipeline.md)                                               | Task 10.12: Deploy pipeline — pre-migration snapshot, drain→readiness, rollback                 |
+| [`task-13-ci-integration.md`](task-13-ci-integration.md)                                                 | Task 10.13: CI integration — `tofu validate`/`plan`/test, parity, boundary job                  |
+| [`task-15-uat-activation.md`](task-15-uat-activation.md)                                                 | Task 10.15: Authorized hosted UAT activation (real AWS), runbooks complete, evidence            |
+| [`exit-criteria.md`](exit-criteria.md)                                                                   | Distinct local code checkpoint, activation handoff, and hosted-UAT handoff criteria             |
+| [`gates.md`](gates.md)                                                                                   | Escalations, interfaces, and links to the local checkpoint and hosted UAT exit criteria         |

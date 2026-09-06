@@ -20,9 +20,14 @@ describes what is implemented now.
 
 AWS OpenTofu, environment configuration, and publication/deployment workflows
 belong in the planned private `aboutme-infra` repository under
-[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). It consumes an
-explicit app commit and builds deployment images on GitHub's native ARM64
-runner. The public app's checks require neither that repository nor AWS access.
+[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). Under
+[ADR 0033](../adr/0033-public-image-builds-private-deployment.md), the public
+app owns all four image build inputs and native ARM64 build/smoke workflows.
+This includes generic Caddy templates and ops scripts with runtime-supplied
+settings. Private publication validates the public build evidence and publishes
+the tested OCI images without rebuilding. Environment values and release
+approvals stay private. Public checks require neither that repository nor AWS
+access.
 
 Generated files are committed but never hand-edited. Document types derive from
 JSON Schema. Store types derive from migrations and sqlc queries. Web API types

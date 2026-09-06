@@ -8,20 +8,20 @@ only — D13) for the integration owner (owner-serialized).
 
 - [ ] Failing-first: script test harness (pure-bash, no network) feeding a
       fixture `tofu output -json` document and asserting the rendered `cf`
-      commands for: `origin-uat` A → EIP (grey-cloud/DNS-only), ACM validation
-      CNAMEs, `uat` CNAME/alias → CloudFront domain. Production names render
-      from the same code path with production outputs (parity).
+      commands for ACM validation CNAMEs and `uat` CNAME/alias → CloudFront
+      domain. The CloudFront origin is the ALB DNS name from OpenTofu and needs
+      no Cloudflare origin record. Production names render from the same code
+      path with production outputs (parity).
 - [ ] Implement with `--check` (diff live DNS vs outputs, exit nonzero on drift
       — this becomes a Phase 10 operational rehearsal/Phase 11 pre-flight) and
       two apply stages; `cf` CLI v0.5+ per D19; never a Cloudflare provider.
-      `--apply-foundation` writes only the DNS-only origin A record and ACM
-      validation CNAMEs. `--apply-aliases` writes UAT and canonical redirect
-      aliases only after OpenTofu outputs a deployed distribution domain.
-      Grey-cloud is enforced on every record.
+      `--apply-foundation` writes only ACM validation CNAMEs. `--apply-aliases`
+      writes UAT and canonical redirect aliases only after OpenTofu outputs a
+      deployed distribution domain. Grey-cloud is enforced on every record.
 - [ ] Document and test the two OpenTofu stages in the script header. The
       foundation saved plan has `services_enabled=false` and
-      `distribution_enabled=false`, but creates the EIP, persistent data plane,
-      and ACM certificate and outputs validation records. Apply it, run
+      `distribution_enabled=false`, but creates the persistent data plane and
+      ACM certificate and outputs validation records. Apply it, run
       `--apply-foundation`, and wait until ACM is `ISSUED`. Only then create and
       approve a **new** full saved plan with `distribution_enabled=true`; after
       apply, run `--apply-aliases`. CloudFront is never planned against a
