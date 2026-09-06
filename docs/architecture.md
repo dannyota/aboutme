@@ -1,7 +1,7 @@
 # Current-state architecture
 
 This document describes the current integration candidate, verified on
-2026-09-05. The [design](design/README.md) owns intended behavior.
+2026-09-06. The [design](design/README.md) owns intended behavior.
 
 ## Running system
 
@@ -52,8 +52,17 @@ print jobs, event subscribers, and limiters still hold process-local state.
 Phase 10 must implement and prove coordination across replicas before enabling
 autoscaling. [ADR 0035](adr/0035-replica-coordination-and-uat-lifecycle.md) and
 the [scaling contract](design/scaling/README.md) settle the target, including
-proof-based UAT shutdown and a 60-connection RDS envelope. These mechanisms
-remain unimplemented. RDS compute remains separately sized.
+proof-based UAT shutdown and a 60-connection RDS envelope. Replica coordination
+and shutdown remain unimplemented. RDS compute remains separately sized.
+
+The local candidate includes seven fixed database roles and migration 00013's
+runtime write-entry, finish and migrator-session primitives. Live tests prove
+real-role permissions, transaction completion, lock order, cancellation and
+contamination rejection. The private Go write runner is unit-tested; its live
+pool proof and caller adoption remain pending. Goose history still uses the
+legacy runner. The [dedicated migrator design](design/scaling/migrator.md)
+protects that history next and converges exact legacy object ownership on
+aboutme_runtime_owner while preserving data. Final-stop authority is absent.
 
 ## Implemented HTTP surface
 

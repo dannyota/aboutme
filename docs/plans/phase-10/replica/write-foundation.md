@@ -1,22 +1,23 @@
 # R1.2 - Write barrier foundation
 
-Status: Accepted for bounded implementation after the PostgreSQL 18.4
-temporary-marker probe and the same fresh phase review. Runtime and hosted proof
-remain pending.
+Status: B1 is implemented and locally accepted at `a5c47fa`. Root's live race,
+migration, database, integration and sqlc checks passed. B2 live pool proof and
+B3 migrator composition remain pending; no hosted proof is claimed.
 [Transaction entry](../../../design/scaling/transaction-entry.md),
 [runtime privileges](../../../design/scaling/runtime-schema.md), and
 [UAT lifecycle](../../../design/scaling/uat-lifecycle.md) own the contract.
 
 ## Scope and order
 
-R1.1 role bootstrap is committed as `132447e`. The old unused Go helper at
-`986fe44` must be replaced before any caller adopts it.
+R1.1 role bootstrap is committed as `132447e`. The private runner at `f45cf93`
+replaces the old unused helper at `986fe44`; caller adoption waits for B2.
 
 1. B1 installs inert SQL primitives and proves them through real roles.
 2. B2 implements the private Go runner and proves its lifecycle against B1.
 3. B3 composes the dedicated migrator and protected Goose bookkeeping before
-   another runtime migration lands. Root settles its fixture identities and
-   enforcement version before dispatch.
+   another runtime migration lands. Its
+   [composition task](migrator-composition.md) fixes identities, provisioning,
+   adoption and enforcement before dispatch.
 
 No slice exposes a gate-closing or final-stop function, enables multiple serving
 replicas, or attaches a write assertion to a legacy application table. Local
