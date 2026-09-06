@@ -60,13 +60,25 @@ type Identity struct {
 	CreatedAt      time.Time
 }
 
+type LifecycleAuditEvent struct {
+	ID         uuid.UUID
+	Kind       string
+	OccurredAt time.Time
+	MediaJobID *uuid.UUID
+}
+
 type MediaDeletionJob struct {
-	ID            uuid.UUID
-	ResumeID      uuid.UUID
-	ObjectKey     string
-	EnqueuedAt    time.Time
-	NextAttemptAt time.Time
-	AttemptCount  int32
+	ID             uuid.UUID
+	ResumeID       uuid.UUID
+	ObjectKey      string
+	EnqueuedAt     time.Time
+	NextAttemptAt  time.Time
+	AttemptCount   int32
+	LeaseID        *uuid.UUID
+	LeaseExpiresAt *time.Time
+	CompletedAt    *time.Time
+	OverdueAt      *time.Time
+	Outcome        *string
 }
 
 type OAuthAuthorizationCode struct {
@@ -156,6 +168,12 @@ type PasswordResetToken struct {
 	TokenDigest []byte
 	CreatedAt   time.Time
 	ExpiresAt   time.Time
+}
+
+type PrivacySweepState struct {
+	Name      string
+	Cursor    string
+	UpdatedAt time.Time
 }
 
 type PublicState struct {
