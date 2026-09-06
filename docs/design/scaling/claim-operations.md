@@ -107,7 +107,12 @@ order. Exact replay returns current durable claim state after identity checks.
 Promote/release preserve their applicable lock order. Release remains available
 during drain, updates all scopes and counts atomically, and requires exact
 terminal-reason replay. The proof definer alone invokes owner-only fenced
-cleanup; that helper takes no reason argument and hardcodes fenced.
+cleanup through runtime_release_fenced_replica_claims(replica_id uuid,
+effective_at timestamptz). It takes no reason argument and hardcodes fenced. The
+[evidence contract](membership-evidence.md) requires one atomic cleanup of all
+live claims owned by that replica, with canonical locks and a scalar count.
+There is no fixed row/work bound. The caller bounds execution; timeout/error
+grants no authority. No paging, partial commits or age-based release is added.
 
 ## Roles and errors
 

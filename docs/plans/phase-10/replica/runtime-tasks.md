@@ -105,6 +105,9 @@ retain key encoding, operation state and caller responses.
 21 with six controller actions, immutable replay and atomic logical partition
 changes. Leave, exact EC2 proof, exclusive wake and transition functions remain
 separate later slices.
+[Membership evidence](../../../design/scaling/membership-evidence.md) requires
+retained proof request/count fields in a later migration and atomic cleanup
+under a bounded caller context, with no fixed claim-row bound.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption

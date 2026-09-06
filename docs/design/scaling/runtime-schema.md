@@ -134,9 +134,10 @@ argument or historical result uses JSON.
 ## runtime_leave_receipts
 
 - replica_id primary key references runtime_replicas; controller_generation and
-  operation_id bind the prepared scale-in; instance_id/release_digest must
-  match; joined_transition_count and joined_claim_count fixed zero; recorded_at
-  uses database time.
+  operation_id bind the historical prepare step result, even after later
+  controller actions; instance_id/release_digest must match;
+  joined_transition_count and joined_claim_count fixed zero; recorded_at uses
+  database time.
 - finish_graceful_leave inserts once and changes draining to left atomically.
   Exact replay is idempotent; any mismatch fails. Owner trigger and revoked DML
   make the receipt immutable. It cannot be created for terminating or fenced.
@@ -146,14 +147,23 @@ argument or historical result uses JSON.
 - replica_id uuid primary key references runtime_replicas.
 - instance_id, release_digest text not null and must match the replica row.
 - adapter text check adapter='ec2_terminated_v1'.
-- evidence_id text unique not null; requested_at, observed_terminated_at,
-  recorded_at timestamptz not null; observed state fixed to 'terminated'.
-- inserted only by the lifecycle fencing role. Immutable by trigger and grants.
+- evidence_id text unique not null; request_id text unique not null, 1..128
+  printable ASCII bytes; reclaimed_claim_count integer not null and >=0.
+  requested_at, observed_terminated_at and recorded_at timestamptz not null;
+  observed state fixed to 'terminated'.
+- A later membership-evidence migration adds request_id and
+  reclaimed_claim_count only when the legacy proof table is empty. It rejects
+  nonempty legacy evidence without deleting rows or inventing history. Migration
+  00015 remains unchanged. [Evidence operations](membership-evidence.md) fix the
+  upgrade and historical replay contract.
+- inserted only through the aboutme_fencing_proof wrapper. Immutable by trigger
+  and grants, including both added fields.
 - one definer-owned function validates the referenced row and atomically inserts
   proof. It changes joining/active/draining/terminating to fenced. A terminal
-  left row stays left and gains audit proof only. App role has SELECT only. App
-  has no direct runtime_replicas update. Named app functions permit join-ready
-  and drain changes; lifecycle functions alone activate, terminate, and fence.
+  left row stays left and gains audit proof only. App has no direct
+  runtime_replicas update. Named app functions register, mark ready and finish
+  serving leave. Lifecycle functions activate and prepare drain/termination; the
+  fencing-proof wrapper alone records EC2 proof.
 
 ## Database privilege boundary
 

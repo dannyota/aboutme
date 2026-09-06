@@ -10,6 +10,9 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | [Runtime schema](runtime-schema.md)                       | Durable state, immutable outcomes and database privileges                |
 | [Replica coordination](runtime-coordination.md)           | Joining, transitions, recovery, draining and connection limits           |
 | [Replica membership](replica-membership.md)               | Exact node identity, task trios, leave and EC2 proof                     |
+| [Membership evidence](membership-evidence.md)             | Historical leave and proof records, atomic claim reclamation             |
+| [Evidence transport](membership-evidence-transport.md)    | Fixed SQL and Go leave/proof interfaces                                  |
+| [Membership cases](membership-cases.md)                   | Required identity, lifecycle, proof and concurrency cases                |
 | [Lifecycle operations](lifecycle-operations.md)           | Serving capacity, replacement and private maintenance wake               |
 | [Ordinary lifecycle contract](lifecycle-controller.md)    | Fixed controller functions, partition changes and historical results     |
 | [Lifecycle replay](lifecycle-replay.md)                   | Immutable operation results and permitted action order                   |
