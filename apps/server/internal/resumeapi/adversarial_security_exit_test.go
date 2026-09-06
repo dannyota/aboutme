@@ -368,10 +368,27 @@ func TestGetSafeMethodsBypassCSRFButNotAuth(t *testing.T) {
 			if withAuth.status != wantStatus {
 				t.Fatalf("authenticated GET without CSRF = %d, want %d (body=%s)", withAuth.status, wantStatus, withAuth.body)
 			}
+			if operation.OperationID == "downloadResumePDF" {
+				if !bytes.Equal(withAuth.body, []byte(resumeAPITestPDF)) {
+					t.Fatalf("authenticated PDF body = %q, want fixed test PDF", withAuth.body)
+				}
+				if withAuth.header.Get("Content-Type") != "application/pdf" ||
+					withAuth.header.Get("Content-Disposition") != `attachment; filename="resume.pdf"` {
+					t.Fatalf("authenticated PDF headers = %v", withAuth.header)
+				}
+			}
 
 			head := securityExitRequest(t, h, http.MethodHead, path, nil, "", h.cookie, false)
 			if head.status != wantStatus {
 				t.Fatalf("authenticated HEAD without CSRF = %d, want %d", head.status, wantStatus)
+			}
+			if len(head.body) != 0 {
+				t.Fatalf("authenticated HEAD body = %q, want empty", head.body)
+			}
+			if operation.OperationID == "downloadResumePDF" &&
+				(head.header.Get("Content-Type") != "application/pdf" ||
+					head.header.Get("Content-Disposition") != `attachment; filename="resume.pdf"`) {
+				t.Fatalf("authenticated PDF HEAD headers = %v", head.header)
 			}
 		})
 	}

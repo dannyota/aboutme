@@ -31,7 +31,7 @@ rows are never split by number range.
 | `AC-PUB`    | 10   | [ac-pub.md](./ac-pub.md)       |
 | `AC-SEC`    | 6    | [ac-sec.md](./ac-sec.md)       |
 | `AC-RT`     | 2    | [ac-rt.md](./ac-rt.md)         |
-| `AC-PDF`    | 1    | [ac-pdf.md](./ac-pdf.md)       |
+| `AC-PDF`    | 6    | [ac-pdf.md](./ac-pdf.md)       |
 | `AC-PRIV`   | 1    | [ac-priv.md](./ac-priv.md)     |
 | `AC-OPS`    | 23   | [ac-ops.md](./ac-ops.md)       |
 | `AC-INF`    | 8    | [ac-inf.md](./ac-inf.md)       |
@@ -42,4 +42,4 @@ rows are never split by number range.
 | `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
 | `AC-UI`     | 13   | [ac-ui.md](./ac-ui.md)         |
 
-Total: 147 rows across 17 prefixes.
+Total: 152 rows across 17 prefixes.

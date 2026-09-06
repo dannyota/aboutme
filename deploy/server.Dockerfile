@@ -22,23 +22,24 @@ COPY apps/server/migrations/ ./apps/server/migrations/
 COPY packages/schema/gen/go/ ./packages/schema/gen/go/
 
 # The API server and one-shot migration runner share one image.
-RUN go -C apps/server build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
-RUN go -C apps/server build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 
 # ---- runtime ----
-FROM docker.io/library/alpine:3.24 AS runtime
+FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac AS runtime
 
-# Chromium and its pinned fonts arrive with the render phase. Until then this
-# remains a minimal runtime. See docs/design/system.md and docs/design/fonts.md.
-RUN apk add --no-cache ca-certificates wget \
-    && addgroup -S aboutme \
-    && adduser -S aboutme -G aboutme
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /ms-playwright/chromium-1234/chrome-linux64 /opt/chromium
+ENV CHROMIUM_PATH=/opt/chromium/chrome TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 COPY --from=build /out/server /usr/local/bin/server
 COPY --from=build /out/migrate /usr/local/bin/migrate
 
-USER aboutme
-EXPOSE 8080
+USER pwuser
+EXPOSE 8080 8081
 
 # Probe the same GET response operators use. HEAD is also supported by the
 # route contract, but wget's explicit output target keeps this probe portable.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -56,6 +57,27 @@ type trackingReadCloser struct {
 	closeErr error
 }
 
+type blockingReaderBody struct {
+	started chan struct{}
+	closed  chan struct{}
+	once    sync.Once
+}
+
+func (b *blockingReaderBody) Read([]byte) (int, error) {
+	b.once.Do(func() { close(b.started) })
+	<-b.closed
+	return 0, errors.New("private blocked read")
+}
+
+func (b *blockingReaderBody) Close() error {
+	select {
+	case <-b.closed:
+	default:
+		close(b.closed)
+	}
+	return nil
+}
+
 func (r *trackingReadCloser) Close() error { r.closed = true; return r.closeErr }
 
 func (s *readerStore) GetPublicState(context.Context) (store.PublicState, error) {
@@ -102,6 +124,39 @@ func TestReaderReadResumeClassifiesAbsentRowsAsNotFound(t *testing.T) {
 			}
 			if !errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnavailable) {
 				t.Fatalf("ReadResume() error = %v, want only ErrNotFound", err)
+			}
+		})
+	}
+}
+
+func TestReaderReadResumeAppliesArtifactEligibilityIndependently(t *testing.T) {
+	slug := "ada"
+	base := validReaderRow(t, slug)
+	for _, test := range []struct {
+		name           string
+		representation publicstate.Representation
+		download       bool
+		discovery      bool
+		wantFound      bool
+	}{
+		{name: "PDF download enabled without discovery", representation: publicstate.RepresentationPDF, download: true, discovery: false, wantFound: true},
+		{name: "PDF download disabled", representation: publicstate.RepresentationPDF, download: false, discovery: true},
+		{name: "PNG download disabled without discovery", representation: publicstate.RepresentationPNG, download: false, discovery: false, wantFound: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			row := base
+			row.DownloadEnabled = test.download
+			row.SEOGeoEnabled = test.discovery
+			reader := newTestReader(t, &readerStore{row: row})
+			_, lease, err := reader.ReadResume(context.Background(), slug, test.representation)
+			if lease != nil {
+				defer lease.Release()
+			}
+			if test.wantFound && err != nil {
+				t.Fatalf("ReadResume() error = %v, want admitted", err)
+			}
+			if !test.wantFound && !errors.Is(err, ErrNotFound) {
+				t.Fatalf("ReadResume() error = %v, want ErrNotFound", err)
 			}
 		})
 	}
@@ -322,6 +377,32 @@ func TestReaderReadPhotoRejectsUnavailableMedia(t *testing.T) {
 	closeFail := &trackingReadCloser{Reader: strings.NewReader("x"), closeErr: errors.New("close failure")}
 	if _, _, err := (&Reader{media: &photoBackend{body: closeFail, contentType: "image/png"}}).ReadPhoto(context.Background(), Snapshot{photoKey: "private/key"}); !errors.Is(err, ErrUnavailable) || !closeFail.closed {
 		t.Fatalf("close failure = %v, closed=%v", err, closeFail.closed)
+	}
+}
+
+func TestReaderReadPhotoCancellationClosesAndJoinsBlockedBody(t *testing.T) {
+	body := &blockingReaderBody{started: make(chan struct{}), closed: make(chan struct{})}
+	reader := &Reader{media: &photoBackend{body: body, contentType: "image/png"}}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := reader.ReadPhoto(ctx, Snapshot{photoKey: "private/key"})
+		done <- err
+	}()
+	<-body.started
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("ReadPhoto() error = %v, want context cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ReadPhoto did not close and join the blocked body after cancellation")
+	}
+	select {
+	case <-body.closed:
+	default:
+		t.Fatal("ReadPhoto returned before the blocked body was closed")
 	}
 }
 

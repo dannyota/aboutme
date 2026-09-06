@@ -6,12 +6,22 @@ import { build as viteBuild } from 'vite';
 
 import { HTML_CSP } from './app/utils/csp';
 import {
+  buildPrintDocumentValidator,
   buildPublicResumeValidator,
 } from './server/utils/public-render/worker-build';
+import { buildPrintWorker } from './server/utils/print/worker-build';
+import { buildPrintAssets } from './server/utils/print/assets';
 
 const harnessEnabled = process.env.NUXT_HARNESS === '1';
 const isolatedBuildTest = process.env.NUXT_BUILD_TEST === '1';
 const publicRenderBuildDir = resolve('.nuxt/public-render-worker');
+const printBuildDir = resolve('.nuxt/print-worker');
+const printAssetsDir = resolve('.nuxt/print-assets');
+const printWorker = resolve(printBuildDir, 'print.mjs');
+const printDocumentValidator = resolve(
+  printBuildDir,
+  'print-document-validator.mjs',
+);
 const publicRenderAssetsDir = resolve('.nuxt/public-render-assets');
 const publicRenderWorker = resolve(publicRenderBuildDir, 'public-render.mjs');
 const publicResumeHydration = resolve(
@@ -134,6 +144,8 @@ const publicRenderWorkerPlugin = (emitAssets = true) => ({
   resolveId(id: string) {
     if (id === '#public-render-worker-url') return '\0public-render-worker-url';
     if (id === '#public-render-validator') return '\0public-render-validator';
+    if (id === '#print-worker-url') return '\0print-worker-url';
+    if (id === '#print-document-validator') return '\0print-document-validator';
     return undefined;
   },
   load(
@@ -146,6 +158,24 @@ const publicRenderWorkerPlugin = (emitAssets = true) => ({
     },
     id: string,
   ) {
+    if (id === '\0print-document-validator') {
+      if (!existsSync(printDocumentValidator)) {
+        throw new Error('Print document validator was not built.');
+      }
+      return readFileSync(printDocumentValidator, 'utf8');
+    }
+    if (id === '\0print-worker-url') {
+      if (!existsSync(printWorker)) {
+        throw new Error('Print worker was not built.');
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'workers/print.mjs',
+        source: readFileSync(printWorker, 'utf8'),
+      });
+      return `export default new URL('./workers/print.mjs', `
+        + 'import.meta.url).href;';
+    }
     if (id === '\0public-render-validator') {
       if (!existsSync(publicResumeValidator)) {
         throw new Error('PublicResume validator was not built.');
@@ -190,6 +220,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/tailwind.css'],
 
   runtimeConfig: {
+    printOrigin: 'http://127.0.0.1:20082',
     public: {
       // Go API base path. Same-origin in dev/prod (Caddy routes /api/v1/*
       // to the server); override only for local experimentation.
@@ -205,6 +236,7 @@ export default defineNuxtConfig({
 
   alias: {
     '#public-render-validator': publicResumeValidator,
+    '#print-document-validator': printDocumentValidator,
   },
 
   routeRules: {
@@ -235,10 +267,10 @@ export default defineNuxtConfig({
           ? '.output/normal-test'
           : '.output',
     },
-    publicAssets: [{
-      dir: publicRenderAssetsDir,
-      baseURL: '/_nuxt/assets',
-    }],
+    publicAssets: [
+      { dir: publicRenderAssetsDir, baseURL: '/_nuxt/assets' },
+      { dir: resolve(printAssetsDir, 'fonts'), baseURL: '/_nuxt/fonts' },
+    ],
     rollupConfig: {
       plugins: [publicRenderWorkerPlugin()],
       output: {
@@ -256,11 +288,19 @@ export default defineNuxtConfig({
   hooks: {
     'build:before': () => {
       buildPublicResumeValidator(publicRenderBuildDir);
+      buildPrintDocumentValidator(printBuildDir);
     },
     'nitro:build:before': async () => {
       buildPublicResumeValidator(publicRenderBuildDir);
+      buildPrintDocumentValidator(printBuildDir);
       await buildPublicRenderWorker();
       await buildPublicResumeHydration();
+      await buildPrintWorker(printBuildDir, printDocumentValidator);
+      buildPrintAssets(
+        publicRenderAssetsDir,
+        resolve(printAssetsDir, 'fonts'),
+        resolve(printBuildDir, 'print.css'),
+      );
     },
     'pages:extend': (pages) => {
       const retained = pages.filter((page) => {

@@ -57,6 +57,7 @@ const rootStyle = computed<CSSProperties>(() => ({
   font-family: var(--font-family);
   font-size: var(--fs-body);
   line-height: var(--lh-body);
+  overflow-wrap: anywhere;
 }
 
 .resume-document * {

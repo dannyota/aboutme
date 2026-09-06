@@ -16,6 +16,7 @@ readonly MAIL_CAPTURE_URL="http://${MAIL_CAPTURE_ADDR}"
 readonly ACTIVE_KEY_ID=dev-active
 readonly PUBLIC_ORIGIN="https://localhost:${CADDY_PORT}"
 readonly PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20440
+readonly PRINT_LISTEN_ADDR=127.0.0.1:20445
 readonly GOOGLE_CLIENT_ID=aboutme-local-google
 readonly GOOGLE_CLIENT_SECRET=not-a-secret-local-google
 readonly GOOGLE_ISSUER_URL="http://127.0.0.1:${MOCK_PORT}/google"
@@ -694,6 +695,8 @@ reject_http_stack() {
 preflight_new_stack() {
   local name port
   [ -d "$ROOT/apps/web/node_modules" ] || die "apps/web/node_modules is missing; run 'npm ci' in apps/web first"
+  node "$ROOT/scripts/chromium-path.mjs" >/dev/null || die "pinned Chromium is unavailable"
+  require_port_absent 20445 "private print port is already in use"
   generate_caddyfile >/dev/null || die "the deployed Caddy route table no longer matches the exact HTTPS substitutions"
   for name in "${SERVICES[@]}"; do
     port=$(port_of "$name")
@@ -801,9 +804,12 @@ write_service_env() {
       "$SERVER_PORT" 127.0.0.1 "$DATABASE_URL" dev "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" 127.0.0.1/32 "$LOG_LEVEL" fs "$MEDIA_DIR" \
       "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_ISSUER_URL" \
       "$PASSWORD_RATE_HMAC_KEY_B64" "$ACTIVE_KEY_ID" "$AUTH_EMAIL_ACTIVE_KEY_B64" capture "$MAIL_CAPTURE_URL" "$AUTH_EMAIL_CAPTURE_BEARER_B64" true true >"$file"
+    local chromium_path
+    chromium_path=$(node "$ROOT/scripts/chromium-path.mjs") || return 1
+    printf 'PRINT_LISTEN_ADDR=%q\nCHROMIUM_PATH=%q\n' "$PRINT_LISTEN_ADDR" "$chromium_path" >>"$file"
     ;;
   mail-capture) : >"$file" ;;
-  web) : >"$file" ;;
+  web) printf 'NUXT_PRINT_ORIGIN=%q\n' "http://$PRINT_LISTEN_ADDR" >"$file" ;;
   caddy)
     printf 'XDG_CONFIG_HOME=%q\nXDG_DATA_HOME=%q\n' "$CADDY_DIR/config" "$CADDY_DIR/data" >"$file"
     ;;

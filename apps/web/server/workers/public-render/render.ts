@@ -34,6 +34,9 @@ const escapeText = (value: string): string => value
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;');
 
+const escapeAttribute = (value: string): string => escapeText(value)
+  .replaceAll('\'', '&#39;');
+
 const isHTTPSURL = (value: string): boolean => {
   try {
     const parsed = new URL(value);
@@ -82,12 +85,23 @@ export async function renderPublicResume(
     );
     const person = request.publicResume.document.personalDetails;
     const discoveryScript = jsonLd(request);
+    const imageURL = [
+      request.canonicalOrigin,
+      '/api/v1/public/resumes/',
+      request.publicResume.slug,
+      '/og.png',
+    ].join('');
     const head = [
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
       `<title>${escapeText(`${person.fullName} — Resume`)}</title>`,
       `<link rel="canonical" href="${request.canonicalOrigin}/`,
       `${request.publicResume.slug}">`,
+      `<meta property="og:image" content="${escapeAttribute(imageURL)}">`,
+      '<meta property="og:image:width" content="1200">',
+      '<meta property="og:image:height" content="630">',
+      '<meta name="twitter:card" content="summary_large_image">',
+      `<meta name="twitter:image" content="${escapeAttribute(imageURL)}">`,
       discoveryScript,
     ].join('');
     const html = [

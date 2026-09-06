@@ -119,6 +119,36 @@ async function verifyRaster(
 
 test.describe.configure({ mode: 'serial' });
 
+test('wraps an unbroken entry token within its column', async ({ page }) => {
+  test.setTimeout(20_000);
+  const external = await denyExternalRequests(page);
+  const response = await page.goto(
+    '/_harness/render?fixture=print-main-overflow'
+    + '&template=modern-sidebar&mode=continuous',
+  );
+  expect(response?.ok()).toBe(true);
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+
+  const entryBody = page.locator('.entry-body p').first();
+  await entryBody.evaluate((element) => {
+    element.textContent = 'x'.repeat(16 * 1024);
+  });
+
+  for (const media of ['screen', 'print'] as const) {
+    await page.emulateMedia({ media });
+    const lines = await entryBody.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getClientRects().length;
+    });
+    expect(lines).toBeGreaterThan(1);
+    await expect.poll(async () => entryBody.evaluate((element) =>
+      element.clientWidth > 0 && element.scrollWidth <= element.clientWidth,
+    )).toBe(true);
+  }
+  expect(external).toEqual([]);
+});
+
 for (const printCase of CASES) {
   test(printCase.fixture, async ({ page }, testInfo) => {
     test.setTimeout(20_000);

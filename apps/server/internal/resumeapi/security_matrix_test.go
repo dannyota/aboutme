@@ -242,6 +242,9 @@ func TestCrossUser_EveryRoute_IndistinguishableFromMissing(t *testing.T) {
 		t.Run(route.Operation, func(t *testing.T) {
 			real := crossUserRouteRequest(t, h, route, created.ID, foreignCookie, foreignToken)
 			missing := crossUserRouteRequest(t, h, route, unknown, foreignCookie, foreignToken)
+			if route.Operation == "headResumePDF" && (len(real.body) != 0 || len(missing.body) != 0) {
+				t.Fatalf("PDF HEAD bodies real=%q missing=%q, want empty", real.body, missing.body)
+			}
 			if real.status != missing.status || !bytes.Equal(real.body, missing.body) {
 				t.Fatalf("real = %d %s; missing = %d %s", real.status, real.body, missing.status, missing.body)
 			}

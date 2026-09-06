@@ -53,17 +53,21 @@ test('proves a published resume hydrates in a real browser', async ({
       .getByRole('navigation', { name: 'Resume outline' })
       .getByRole('button', { name: 'Personal details', exact: true })
       .press('Enter');
-    await page.getByLabel('Full name').fill('Public proof resume');
-    await page.getByLabel('Full name').press('Tab');
+    await page.getByLabel('Full name', { exact: true }).fill('Public proof resume');
+    await page.getByLabel('Full name', { exact: true }).press('Tab');
     await expect(page.locator('[data-state="saved"]')).toBeVisible();
 
     // Add one work section and entry, so the resume meets the publish
     // completeness minimum (a full name plus at least one visible entry).
-    await page.getByRole('button', { name: 'Structure' }).press('Enter');
+    await page
+      .getByRole('button', { name: '+ Add section', exact: true })
+      .press('Enter');
     await page.getByLabel('Section type').selectOption('work');
-    await page.locator('[data-action="create"]').press('Enter');
+    await page
+      .getByTestId('section-create-form')
+      .getByRole('button', { name: 'Add section', exact: true })
+      .press('Enter');
     await expect(page.locator('[data-state="saved"]')).toBeVisible();
-    await page.getByRole('button', { name: 'Document' }).press('Enter');
     await page
       .getByRole('navigation', { name: 'Resume outline' })
       .getByRole('button', { name: 'Experience' })

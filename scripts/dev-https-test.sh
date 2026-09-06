@@ -139,6 +139,10 @@ EOF
   cat >"$fakebin/node" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+if [ "$#" -eq 1 ] && [[ $1 == */scripts/chromium-path.mjs ]]; then
+  printf '%s/fake-service\n' "${0%/*}"
+  exit 0
+fi
 [ "$#" -eq 2 ]
 [[ $1 == */scripts/generate-public-roots.mjs ]]
 [ "$2" = --check ]
@@ -309,6 +313,7 @@ new_fixture() {
     "$fixture/repo/apps/server" "$fixture/repo/apps/web/node_modules"
   cp "$SOURCE_SCRIPT" "$fixture/repo/scripts/dev-https.sh"
   cp "$SOURCE_ROOT/scripts/generate-public-roots.mjs" "$fixture/repo/scripts/generate-public-roots.mjs"
+  cp "$SOURCE_ROOT/scripts/chromium-path.mjs" "$fixture/repo/scripts/chromium-path.mjs"
   cp "$SOURCE_ROOT/deploy/caddy/Caddyfile" "$fixture/repo/deploy/caddy/Caddyfile"
   cp "$SOURCE_ROOT/deploy/caddy/public-roots.generated.caddy" "$fixture/repo/deploy/caddy/public-roots.generated.caddy"
   cp "$SOURCE_ROOT/packages/publicroots/public-roots.v6.json" "$fixture/repo/packages/publicroots/public-roots.v6.json"
@@ -382,6 +387,9 @@ run_happy_path_and_lifecycle_checks() (
     [ "$(stat -c '%s' "$secret_file")" = 32 ] || fail "$secret_file size is $(stat -c '%s' "$secret_file"), want 32"
   done
   server_env=$(<.dev/native-https/run/server.env)
+  assert_contains "$server_env" 'PRINT_LISTEN_ADDR=127.0.0.1:20445'
+  assert_contains "$server_env" "CHROMIUM_PATH=$fixture/fakebin/fake-service"
+  assert_contains "$(<.dev/native-https/run/web.env)" 'NUXT_PRINT_ORIGIN=http://127.0.0.1:20445'
   assert_contains "$server_env" 'PASSWORD_RATE_HMAC_KEY='
   assert_contains "$server_env" 'AUTH_EMAIL_ACTIVE_KEY_ID=dev-active'
   assert_contains "$server_env" 'AUTH_EMAIL_ACTIVE_KEY='

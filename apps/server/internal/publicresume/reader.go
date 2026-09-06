@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -92,6 +93,10 @@ func (r *Reader) ReadResume(ctx context.Context, slug string, representation pub
 			lease.Release()
 			return Snapshot{}, nil, ErrNotFound
 		}
+		if representation == publicstate.RepresentationPDF && !snapshot.Public.DownloadEnabled {
+			lease.Release()
+			return Snapshot{}, nil, ErrNotFound
+		}
 		return snapshot, lease, nil
 	}
 	return Snapshot{}, nil, ErrUnavailable
@@ -128,10 +133,38 @@ func (r *Reader) ReadPhoto(ctx context.Context, snapshot Snapshot) ([]byte, stri
 	}
 	body, contentType, err := r.media.Get(ctx, snapshot.photoKey)
 	if err != nil {
+		if body != nil {
+			// Both storage and close failures map to the same opaque response.
+			_ = body.Close() //nolint:errcheck // The storage read already failed; cleanup cannot change its result.
+		}
 		return nil, "", ErrUnavailable
 	}
+	if body == nil {
+		return nil, "", ErrUnavailable
+	}
+	var closeOnce sync.Once
+	var closeErr error
+	closeBody := func() { closeOnce.Do(func() { closeErr = body.Close() }) }
+	stopClose := make(chan struct{})
+	closeJoined := make(chan struct{})
+	go func() {
+		defer close(closeJoined)
+		select {
+		case <-ctx.Done():
+			closeBody()
+		case <-stopClose:
+		}
+	}()
+	defer func() {
+		close(stopClose)
+		<-closeJoined
+		closeBody()
+	}()
 	bytes, err := io.ReadAll(io.LimitReader(body, media.MaxObjectBytes+1))
-	closeErr := body.Close()
+	closeBody()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, "", ctxErr
+	}
 	if err != nil || closeErr != nil || int64(len(bytes)) > media.MaxObjectBytes || (contentType != "image/jpeg" && contentType != "image/png") {
 		return nil, "", ErrUnavailable
 	}

@@ -20,6 +20,7 @@ readonly -a SPEC_SOURCES=(
   mcp.spec.ts
   entry.spec.ts
   publish.spec.ts
+  exports.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -71,8 +72,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, or exports' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -213,6 +214,12 @@ inside_container() {
     proof_name='native HTTPS publish, discovery, and revocation'
     spec=publish.spec.ts
     ;;
+  exports)
+    evidence_name=exports-proof.json
+    evidence_limit=8192
+    proof_name=exports
+    spec=exports.spec.ts
+    ;;
   esac
   # Stage the mounted specs beside a node_modules symlink so module
   # resolution finds the image's pinned dependencies. The image package.json
@@ -236,7 +243,7 @@ inside_container() {
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
     if [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
-      [ "$mode" = entry ]; then
+      [ "$mode" = entry ] || [ "$mode" = exports ]; then
       local -a bounded_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
@@ -322,6 +329,23 @@ const expected = mode === 'auth' ? {
     editorVisible: true,
     grantRevoked: true,
     revokedRejected: true,
+  },
+} : mode === 'exports' ? {
+  ...common,
+  scenario: 'resume-exports',
+  schemaVersion: 1,
+  steps: {
+    auth: true,
+    ownerSaveFirst: true,
+    ownerDownload: true,
+    ownerPrivacy: true,
+    publicPDF: true,
+    shareImage: true,
+    conditional: true,
+    downloadGate: true,
+    discoveryIndependent: true,
+    revocation: true,
+    cleanup: true,
   },
 } : mode === 'publish' ? {
   ...common,
@@ -411,11 +435,11 @@ VERIFY_EVIDENCE
 
 host_run() {
   [ "$#" -ge 4 ] && [ "$#" -le 5 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish]'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish|exports]'
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, or exports' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra

@@ -58,6 +58,7 @@ behavior that future contract changes must implement.
 | `GET /events`, `GET /live/{slug}`                                  | Authenticated and public SSE invalidation streams                         |
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`   | Live-gated public document and photo                                      |
 | `GET /public/resumes/{slug}/pdf`                                   | Live and download-gated public PDF                                        |
+| `GET /public/resumes/{slug}/og.png`                                | Live-gated 1200 by 630 PNG share image; ADR 0032                          |
 | `GET /oauth/consent`, `POST /oauth/consent`                        | Agent consent read and the approve/deny decision                          |
 | `GET /me/agents`, `DELETE /me/agents/{grantId}`                    | Connected-agent list and grant revocation                                 |
 | `GET /me/export`, `DELETE /me`                                     | Data export and recent-reauthenticated account deletion                   |

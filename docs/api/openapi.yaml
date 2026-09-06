@@ -2326,6 +2326,67 @@ paths:
           $ref: "#/components/responses/ResumeRateLimited"
         "500":
           $ref: "#/components/responses/ResumeInternalError"
+  /resumes/{id}/pdf:
+    get:
+      operationId: downloadResumePDF
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+      summary: Download the owner's saved resume as PDF
+      description: >-
+        Exports the current saved owner document, including private drafts,
+        through the shared renderer. The immutable snapshot is selected after
+        admission to the bounded render queue. The response is at most
+        16,777,216 bytes. There is one active job, eight queued jobs, and a
+        20-second deadline from admission. Limits are 10 requests per minute
+        per account and per trusted client IP. HEAD performs the same export
+        and returns its headers without body bytes. Query parameters, request
+        bodies, conditional headers, and schema-version negotiation are rejected.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+      responses: &ownerPDFResponses
+        "200":
+          description: The PDF of the saved resume.
+          headers:
+            Cache-Control:
+              description: Owner exports are never cached.
+              schema:
+                type: string
+                const: no-store, no-transform
+            Content-Disposition:
+              $ref: "#/components/headers/ResumePDFAttachment"
+            Content-Length:
+              $ref: "#/components/headers/RepresentationContentLength"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/PDFReadBadRequest"
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowedPDF"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "503":
+          $ref: "#/components/responses/OwnerPDFUnavailable"
+    head:
+      operationId: headResumePDF
+      tags: [resumes]
+      security:
+        - sessionCookie: []
+      summary: Read headers for the owner's saved resume PDF
+      description: >-
+        Performs the same owner authorization, admission, snapshot selection,
+        and rendering as GET. Returns the selected status and headers,
+        including Content-Length for a 200 response, without body bytes.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+      responses: *ownerPDFResponses
   /resumes/{id}/photo:
     post:
       operationId: uploadResumePhoto
@@ -2653,6 +2714,92 @@ paths:
         - $ref: "#/components/parameters/PublicSlug"
         - $ref: "#/components/parameters/IfNoneMatch"
       responses: *publicPhotoResponses
+  /public/resumes/{slug}/pdf:
+    get:
+      operationId: getPublicResumePDF
+      tags: [public]
+      security: []
+      summary: Read a published resume's PDF
+      description: >-
+        Requires the current slug, live state, and download_enabled=true. The full saved document is exported as PDF.
+        The current generation gate runs before cache reuse or conditional
+        evaluation. Query parameters and request bodies are rejected.
+        PDF and PNG misses share a 20-render-per-minute client IP limit;
+        every artifact request also passes a 300-per-minute IP limit.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: &publicPDFResponses
+        "200":
+          $ref: "#/components/responses/PublicPDFRead"
+        "304":
+          $ref: "#/components/responses/PublicPDFNotModified"
+        "400":
+          $ref: "#/components/responses/PublicBadRequest"
+        "404":
+          $ref: "#/components/responses/PublicNotFound"
+        "405":
+          $ref: "#/components/responses/PublicMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/PublicArtifactRateLimited"
+        "503":
+          $ref: "#/components/responses/PublicUnavailable"
+    head:
+      operationId: headPublicResumePDF
+      tags: [public]
+      security: []
+      summary: Read published PDF headers
+      description: >-
+        Performs the same admission, rendering, and conditional comparison as
+        GET. Sends the selected status and headers, including Content-Length
+        for a 200 response, without body bytes.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: *publicPDFResponses
+  /public/resumes/{slug}/og.png:
+    get:
+      operationId: getPublicResumeShareImage
+      tags: [public]
+      security: []
+      summary: Read a published resume's share image
+      description: >-
+        Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background.
+        The current generation gate runs before cache reuse or conditional
+        evaluation. Query parameters and request bodies are rejected.
+        PDF and PNG misses share a 20-render-per-minute client IP limit;
+        every artifact request also passes a 300-per-minute IP limit.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: &publicPNGResponses
+        "200":
+          $ref: "#/components/responses/PublicPNGRead"
+        "304":
+          $ref: "#/components/responses/PublicPNGNotModified"
+        "400":
+          $ref: "#/components/responses/PublicBadRequest"
+        "404":
+          $ref: "#/components/responses/PublicNotFound"
+        "405":
+          $ref: "#/components/responses/PublicMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/PublicArtifactRateLimited"
+        "503":
+          $ref: "#/components/responses/PublicUnavailable"
+    head:
+      operationId: headPublicResumeShareImage
+      tags: [public]
+      security: []
+      summary: Read published share image headers
+      description: >-
+        Performs the same admission, rendering, and conditional comparison as
+        GET. Sends the selected status and headers, including Content-Length
+        for a 200 response, without body bytes.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: *publicPNGResponses
   /auth/password/register:
     post:
       operationId: postAuthPasswordRegister
@@ -3075,6 +3222,15 @@ components:
             error:
               code: precondition_not_supported
               message: resume creation has no prior revision to match
+    PDFReadBadRequest:
+      description: >-
+        `invalid_client_ip`, or `request_invalid` for a malformed resume id,
+        query, body, schema header, or conditional request. Owner PDF export
+        accepts only a saved snapshot request with no variants.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     PhotoReadBadRequest:
       description: >-
         `invalid_client_ip`, or `request_invalid` for a malformed resume id
@@ -3400,6 +3556,116 @@ components:
             error:
               code: public_state_busy
               message: public state is busy; retry shortly
+    PublicPDFRead:
+      description: The exact generated PDF bytes, bounded at 16777216 bytes.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+        Content-Disposition:
+          $ref: "#/components/headers/ResumePDFAttachment"
+      content:
+        application/pdf:
+          schema:
+            type: string
+            format: binary
+    PublicPDFNotModified:
+      description: The strong tag matches the selected PDF bytes. No body or Content-Length.
+      headers:
+        Content-Disposition:
+          $ref: "#/components/headers/ResumePDFAttachment"
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Type:
+          description: Media type of the selected GET representation.
+          schema:
+            type: string
+            const: application/pdf
+          example: application/pdf
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+    PublicPNGRead:
+      description: The exact generated PNG bytes, bounded at 4194304 bytes.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+      content:
+        image/png:
+          schema:
+            type: string
+            format: binary
+    PublicPNGNotModified:
+      description: The strong tag matches the selected PNG bytes. No body or Content-Length.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Type:
+          description: Media type of the selected GET representation.
+          schema:
+            type: string
+            const: image/png
+          example: image/png
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+    PublicArtifactRateLimited:
+      description: The public artifact IP request or render-miss budget is exhausted.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: rate_limited
+              message: too many requests; retry later
+    OwnerPDFUnavailable:
+      description: The bounded queue or rendering dependency is unavailable.
+      headers:
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            const: 1
+          example: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: internal_error
+              message: PDF export is temporarily unavailable
+    MethodNotAllowedPDF:
+      description: Only GET and HEAD are accepted for owner PDF.
+      headers:
+        Allow:
+          description: Registered methods this path serves.
+          schema:
+            type: string
+            const: GET, HEAD
+          example: GET, HEAD
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: method_not_allowed
+              message: method not allowed
     PublicResumeRead:
       description: The exact unencoded public JSON representation.
       headers:
@@ -3504,7 +3770,7 @@ components:
               message: public resume not found
     PublicMethodNotAllowed:
       description: >-
-        `method_not_allowed`: the recognized public JSON or photo path accepts
+        `method_not_allowed`: the recognized public representation path accepts
         only GET and HEAD. Dispatch happens before resource lookup or body read.
       headers:
         Allow:
@@ -3849,6 +4115,12 @@ components:
               code: authentication_unavailable
               message: authentication is temporarily unavailable
   headers:
+    ResumePDFAttachment:
+      description: Fixed resume PDF download filename.
+      schema:
+        type: string
+        const: attachment; filename="resume.pdf"
+      example: attachment; filename="resume.pdf"
     ParentETag:
       description: The owning resume's revision as a strong entity tag,
         `"r<revision>"`. Send it back as `If-Match` on the next mutation.
@@ -4557,8 +4829,11 @@ components:
     PublicLink:
       type: string
       maxLength: 2048
-      format: uri
-      pattern: "^(https://|mailto:|tel:)"
+      anyOf:
+        - const: ""
+        - type: string
+          format: uri
+          pattern: "^(https://|mailto:|tel:)"
     PublicProfileEntry:
       type: object
       additionalProperties: false
@@ -5698,8 +5973,8 @@ components:
         The resume document version this request speaks. Absent means the
         server's current version. It appears on every JSON resume read and
         every mutation, including bodyless deletes, because a mutation
-        resolves it into its idempotency fingerprint. The binary photo read
-        is outside this contract.
+        resolves it into its idempotency fingerprint. The binary photo and PDF reads
+        are outside this contract.
 
 
         A value outside the accepted set is `400

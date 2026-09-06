@@ -23,6 +23,7 @@ readonly -a SPEC_FILES=(
   mcp.spec.ts
   entry.spec.ts
   publish.spec.ts
+  exports.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -157,7 +158,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public | password-auth | mcp | entry | publish)
+  transport | editor | public | password-auth | mcp | entry | publish | exports)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -363,7 +364,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, or exports' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -896,7 +897,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, or publish' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, or exports' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 

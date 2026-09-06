@@ -23,7 +23,11 @@ type SelectedResponse struct {
 
 // NewSelectedResponse validates and constructs a cacheable public response.
 func NewSelectedResponse(status int, contentType, cacheControl string, body []byte, extra http.Header) (SelectedResponse, error) {
-	if status != http.StatusOK || contentType == "" || cacheControl != "no-cache, must-revalidate" || len(body) == 0 || len(body) > maxSelectedBodyBytes || containsCookie(extra) {
+	return newSelectedResponseWithLimit(status, contentType, cacheControl, body, extra, maxSelectedBodyBytes)
+}
+
+func newSelectedResponseWithLimit(status int, contentType, cacheControl string, body []byte, extra http.Header, maxBodyBytes int) (SelectedResponse, error) {
+	if status != http.StatusOK || contentType == "" || cacheControl != "no-cache, must-revalidate" || maxBodyBytes <= 0 || len(body) == 0 || len(body) > maxBodyBytes || containsCookie(extra) {
 		return SelectedResponse{}, ErrInvalidSelectedResponse
 	}
 	for i := range contentType {
