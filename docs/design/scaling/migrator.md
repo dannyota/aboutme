@@ -116,13 +116,25 @@ migration error. If Raw cannot invoke the callback, report an invariant failure
 and do not retry or claim confirmed backend death without proof. Unsupported
 drivers fail before execution.
 
-There is no reconnect or retry during a failed operation. Each protected version
-uses ApplyVersion and rechecks identity, runtime state and history under both
-locks on its own backend. The backend is retired before that call returns.
-Bootstrap alone may use UpTo(13) across its transactional versions; its first
-failure stops and retires the backend. Every stage checks its recorded backend
-PID. Tests prove physical closure precedes Apply's return, successful migration
-returns no artificial cleanup error, and the caller-owned DB remains usable.
+There is no reconnect or retry during a failed operation. Bootstrap and
+protected stages use ApplyVersion once per exact embedded version, each on a new
+locked backend that retires before the call returns. Protected versions recheck
+runtime state and history under both locks. Every stage checks its recorded
+backend PID. Return completed results with the first migration, Commit,
+identity, lock or cleanup error. Tests prove physical closure precedes Apply's
+return, success returns no artificial cleanup error, and the caller's DB remains
+usable.
+
+Only the separate
+[adoption reconciliation](migration-provisioning.md#adoption-result-and-ambiguous-outcomes)
+may open one read-only connection after confirmed retirement to prove
+convergence.
+
+Production Apply never calls Goose Up, UpByOne, UpTo, HasPending, GetDBVersion
+or Status. Pinned UpTo calls HasPending, which initializes history without the
+SessionLocker before UpTo enters its locked migration path. ApplyVersion enters
+locked initialization directly. Never call Provider.Close on the caller's DB;
+discard the provider after its connection cleanup instead.
 
 ## Fresh and staged Apply
 
@@ -137,10 +149,12 @@ It then chooses exactly one state:
 1. Fresh: runtime_write_state and goose_db_version both absent. Use a bootstrap
    session locker that establishes direct migrator or fixed local impersonation,
    acquires only Goose's session lock, rechecks both absences, and runs
-   `UpTo(ctx,13)`. Goose may create history/version zero here. Migration 00013
-   is the sole unprotected installer exception. If the recorded history owner is
-   migrator, close this provider and continue through a new protected provider;
-   no manual adoption stop is required.
+   ApplyVersion for the exact embedded sequence 1..13. Each version establishes
+   identity and locks before history creation or reads. Goose may create
+   history/version zero inside version 1's locked lifecycle. Migration 00013 is
+   the sole unprotected installer exception. If the recorded history owner is
+   migrator, discard this provider and continue through a new protected
+   provider; no manual adoption stop is required.
 2. Pre-foundation: history exists with maximum version 0..12 and runtime state
    absent. Owner aboutme requires LocalAdmin identity and remains session_user
    aboutme while Goose-locked Apply advances only through 13. Owner migrator
@@ -161,11 +175,29 @@ It then chooses exactly one state:
    enabled trigger/privileges exist. Use the protected provider for all pending
    migrations.
 
-After UpTo 13, Apply never continues to 14 in the bootstrap provider. It closes
-that connection and starts a new protected provider directly when owner is
+After version 13, Apply never continues to 14 in the bootstrap provider. It
+retires that connection and starts a new protected provider when owner is
 migrator. Only an existing aboutme-owned database requires the fixed adoption
-command and another Apply invocation. Every path rechecks under runtime then
-Goose locks. A bootstrap race rechecks after Goose lock before choosing.
+command and another Apply invocation. A bootstrap race rechecks after Goose lock
+before choosing; protected entry takes runtime then Goose locks.
+
+Bootstrap walks from source version 1 without an unlocked history read. An
+already-applied candidate is consumed only after its locked lifecycle proves the
+exact identity, owner and valid contiguous history prefix, with that version
+applied once. Cleanup must also succeed. It produces no local MigrationResult.
+Any joined cleanup error stops even if it also contains ErrAlreadyApplied.
+Missing sources, gaps, duplicate or down history rows, unknown versions and
+state mismatches fail before mutation. An empty bootstrap source set fails; an
+already-valid version 13 routes directly to adoption or protected entry.
+
+If a peer installs foundation during bootstrap, the Goose-locked catalog probe
+may observe its existence without reading runtime metadata. The locker cleans
+up, retires its backend, and returns a fresh private token bound to that locker
+and PID. Only `errors.Unwrap(err)==token` with proved clean retirement permits
+new protected classification. For peer-applied versions, require
+`errors.Unwrap(err)==goose.ErrAlreadyApplied` plus the locked proof above.
+Pinned Goose wraps each clean outcome once; joined cleanup errors change that
+shape. Neither arbitrary errors nor an errors.Is match permit continuation.
 
 Any other combination is ErrMigrationHistoryCorrupt: runtime without history,
 history >=13 without matching runtime state, enforcement 0 at a version other

@@ -67,9 +67,16 @@ owner-role function DDL and is revoked after RESET ROLE, before finish.
 
 Goose cleanup cannot observe the primary migration result. Every migration
 backend therefore retires through the pinned pgx driver before Goose returns,
-including successful migrations. Bootstrap may use UpTo(13); protected versions
-use separate ApplyVersion lifecycles. Status uses fixed SQL transaction commands
-on its pinned Conn so rollback receives a detached five-second context.
+including successful migrations. Bootstrap and protected versions use separate
+ApplyVersion lifecycles; no production path uses unlocked Goose discovery.
+Status uses fixed SQL transaction commands on its pinned Conn so rollback
+receives a detached five-second context. Provision and adoption use the same
+bounded server rollback mechanism. Adoption alone may reconcile through one new
+read-only connection after confirmed retirement, using the exact evidence in
+migration-provisioning.md. Its AdoptionResult distinguishes Applied,
+AlreadyConverged and ReconciledConverged; AmbiguousCause retains the original
+cause. Convergence never claims which adopter committed. Joined cleanup errors
+cannot count as peer convergence.
 
 ## Failing-first acceptance matrix
 
@@ -81,6 +88,24 @@ on its pinned Conn so rollback receives a detached five-second context.
   TestMigrationCommitErrorPreservesPrimaryAndCleanupErrors;
   TestMigrationUnsupportedDriverFailsBeforeMigration;
   TestProtectedApplyVersionUsesFreshPIDAndRechecksEachVersion.
+- TestBootstrapFreshApplyVersionLocksAndSetsIdentityBeforeHistoryCreate;
+  TestBootstrapNeverCallsUnlockedProviderDiscovery;
+  TestBootstrapEachVersionUsesFreshRetiredBackend;
+  TestBootstrapConcurrentPeerAlreadyAppliedConverges;
+  TestBootstrapAlreadyAppliedWithGapOrMismatchFails;
+  TestBootstrapAt13DoesNotConstructBootstrapProvider;
+  TestBootstrapFailureReturnsPartialAndRetiresBeforeReturn;
+  TestBootstrapCommitAmbiguityStopsWithoutRetry.
+- TestBootstrapPeerFoundationHandoffRequiresExactCleanErrorTree;
+  TestBootstrapAlreadyAppliedCleanupErrorStops;
+  TestAdoptAmbiguousCommitRetiresBeforeReadOnlyReconciliation;
+  TestAdoptReconciledConvergedPreservesOriginalCause;
+  TestAdoptConcurrentLoserAlreadyConvergedDoesNotAdvanceGeneration;
+  TestAdoptReconcileCatalogACLHistorySnapshotIsAtomic;
+  TestAdoptReconcileFailureRetiresSecondBackend;
+  TestAdoptCommitErrorNeverRollsBackOrRetries;
+  TestProvisionCanceledUsesDetachedBoundedRollback;
+  TestProvisionAmbiguousCommitReturnsCauseWithoutReconnect.
 - TestApplyFreshStopsAt13ThenReentersFor14;
   TestApplyFreshMigratorOwnerNeedsNoAdoption;
   TestApplyExistingAboutmePre13StaysAdminOnlyThrough13;
