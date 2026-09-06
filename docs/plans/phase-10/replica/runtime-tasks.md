@@ -97,6 +97,10 @@ with fixed acquire/resolve/promote/release, receipt cleanup and typed transport.
 R5 keeps operation identity and retry state; exact fenced cleanup remains with
 the later lifecycle proof slice.
 
+[R1.9 rate operations](rate-operations.md) follows claim operations migration 20
+with nine fixed functions, bounded cleanup and scalar store transport. R5/R7
+retain key encoding, operation state and caller responses.
+
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
 preserve existing database rows while converging ownership on runtime_owner.
