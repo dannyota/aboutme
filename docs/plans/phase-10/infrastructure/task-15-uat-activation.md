@@ -10,13 +10,18 @@ Cloudflare only after the Phase 9 cost decision and the local checkpoint below.
       [spending and cleanup controls](../../../research/aws-cost/recommendation.md#alerts-and-controls),
       including the active expiry, campaign and retained-resource budgets, daily
       inventory checks, and operator cleanup path independent of Actions.
+- [ ] Public builds use standard runners and capped caches. Private workflow
+      minutes and metadata storage fit the verified remaining account allowance;
+      paid Actions usage remains disabled. Resolve any quota shortfall and the
+      private approval-feature eligibility before enabling AWS workflow access.
 - [ ] The infrastructure local checkpoint is `PASS`: affected local checks, fake
       AMI and OpenTofu-mock checks, one author per task, one fresh Phase 10
       review, and the owner's single `make ci` plus `make scan` run.
 - [ ] The existing authorization record names `uat.aboutme.vn`,
       `ap-southeast-1`, UAT resources, and Cloudflare DNS. It does not authorize
       production. No bootstrap apply, image push, DNS change, UAT apply, or
-      workflow dispatch occurs before the cost result and local checkpoint.
+      credentialed workflow dispatch occurs before the cost result and local
+      checkpoint. Public credential-free build/smoke supplies evidence first.
 - [ ] The refresh has resolved the UAT access mechanism, secret runtime
       contract, final Phase 6/7/8 settings, mail runtime and SES handoff, and
       the exact protected operator environment. Plaintext credentials remain
@@ -42,8 +47,9 @@ bootstrap or email adoption.
    non-secret outputs and a zero-drift second plan. Resolve and record the real
    AWS AMI here; local tasks use fake AMI data only.
 2. Run `secrets-bootstrap.sh`, then its decrypting `--check`, against the
-   persistent UAT key. Build all four images through Task 10.8's protected
-   workflow and record immutable digests.
+   persistent UAT key. Publish Task 10.8's already-tested public OCI bundle
+   through its separate protected private workflow and record the release
+   manifest and four immutable ECR digests.
 3. Create and approve a foundation saved plan with `services_enabled=false` and
    `distribution_enabled=false`. Apply it to create network/host, private RDS
    and S3, ECS definitions, ACM certificate, and application alarms without a

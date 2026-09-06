@@ -1,7 +1,9 @@
 # Phase 9 — AWS Singapore cost research
 
 Status: **In progress** (2026-09-06). Phase 8 is merged. Research and the priced
-recommendation are recorded; no budget amount has been approved.
+recommendation are recorded. The owner accepted public image builds under
+[ADR 0033](../../adr/0033-public-image-builds-private-deployment.md); the AWS
+budget amount remains unresolved.
 
 **Goal:** choose a costed UAT deployment at `uat.aboutme.vn` in AWS Singapore
 (`ap-southeast-1`) and estimate later production costs separately.

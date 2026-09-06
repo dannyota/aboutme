@@ -83,55 +83,86 @@ backup-retention enforcement remain Phase 10 evidence.
 
 ## Build and runner contract
 
-The owner selected GitHub-hosted `ubuntu-24.04-arm` on 2026-09-05 for native
-`linux/arm64` deployment images. This runner choice is settled; AWS topology,
-instance sizes, and the spending limit still come from Phase 9.
+The owner selected native `ubuntu-24.04-arm` runners and then public image
+builds under
+[ADR 0033](../../../adr/0033-public-image-builds-private-deployment.md). AWS
+sizing and spending still come from Phase 9.
 
 | Work                                         | Execution location                                      | Owner                                     |
 | -------------------------------------------- | ------------------------------------------------------- | ----------------------------------------- |
 | Development and affected feature checks      | Laptop, native stack and one shared database container  | Public app repository                     |
 | Existing app CI and pinned browser baselines | Existing GitHub runners; AMD64 for baseline comparison  | Public app repository                     |
-| Deployment image build and runtime smoke     | Native `ubuntu-24.04-arm`, Podman, `linux/arm64`        | Private `aboutme-infra`, task 10.8        |
+| Deployment image build and runtime smoke     | Native `ubuntu-24.04-arm`, Podman, `linux/arm64`        | Public `dannyota/aboutme`, task 10.8      |
 | Image publication and AWS UAT deployment     | Protected manual workflows after the activation handoff | Private `aboutme-infra`, tasks 10.8/10.12 |
 
-Task 10.8 records the tested app commit, infrastructure commit, runner image
-version, target platform, and the four immutable image digests. Native smoke
-tests cover server/migrate, Nuxt, Caddy, and ops, including the Phase 7
-Chromium, font, and export path. The browser baseline remains AMD64. Neither
-QEMU nor a multi-architecture release build is required; laptop image checks use
-the laptop architecture. ARM64 runtime smoke must pass on the native runner
-before publication and deployment, beyond the existing local checkpoint.
+Task 10.8's public `images-arm64.yml` takes an exact reviewed app commit and
+requires the canonical protected candidate branch and expected check identities.
+One job builds all four images sequentially, then runs native smoke for
+server/migrate, Nuxt, Caddy, ops, and the Phase 7 Chromium/font PDF and image
+path against those local Podman images. There is no intermediate artifact or
+cross-job image transfer. All inputs are public; fixtures are synthetic. It has
+no private checkout, AWS identity, registry write, or `id-token: write`. QEMU is
+not used. Local image checks use the laptop architecture; AMD64 browser
+baselines remain separate.
 
-Task 10.8 checks reviewed canonical candidates against protected branch and
-workflow/check identities before publication. Task 10.12 verifies that
-provenance and the manifest against the selected successful build run, then
-deploys those digests. The integration owner archives the manifest, checksum,
-source approval and successful-run/smoke evidence in a reviewed private release
-record before Actions artifacts expire. Retain that record and referenced ECR
-images through UAT, Phase 11 promotion, and the rollback window. Task 10.12 can
-validate the protected archive after artifact expiry; it cannot recreate the
-manifest from tags. Phase 11 promotes the UAT-proven images without rebuilding.
-Task 10.13 checks the runner labels, event/permission boundaries, and manifest
-rejection paths. These are task obligations, not new acceptance IDs or evidence
-of completion.
+After smoke succeeds, upload a versioned public OCI bundle and evidence with a
+14-day retention limit (7 days for the low-cost scenario). Its manifest records
+the app and workflow commits, workflow path/ref, run ID/attempt, runner image,
+`linux/arm64`, and exactly four image names with archive checksums and OCI
+manifest/config digests. Capture GitHub's artifact ID and digest after upload in
+the private handoff; do not embed a not-yet-assigned artifact ID in the bundle.
+Failed, canceled, or incomplete runs cannot authorize publication.
+
+Private `publish-images.yml` is a separate manual workflow. Its credential-free
+validation job fetches only the selected canonical public run/attempt/artifact
+through GitHub's API, using only read access where authentication is required.
+Validate successful run status, workflow/source provenance, artifact identity
+and service-reported digest, bounded schema/archive contents, smoke evidence,
+and all image digests. A checksum supplied inside the same bundle alone is not
+proof of provenance. Reject fork/PR-only commits, wrong workflow/ref/attempt,
+arbitrary URLs, substituted archives, path traversal, and missing/extra images.
+
+Only the subsequent protected publication job receives `id-token: write` for
+private `ci-publish-staging`. It rechecks the approved artifact identity and
+pushes the exact validated images without rebuilding. Treat archives as data; do
+not execute their scripts or images in the credentialed publisher. Record both
+the OCI and resulting ECR digests, verifying the same manifest/config and layers
+after upload rather than assuming a tag or digest conversion is safe.
+
+The private release manifest binds public build provenance to the reviewed
+infrastructure commit, successful publication run/attempt, and four ECR digests.
+The integration owner archives the exact manifests, checksums, API identity,
+approval, and successful-run/smoke evidence in a reviewed private release record
+before artifacts expire. Private Actions retains only small metadata artifacts;
+OCI archives are downloaded to the job workspace, not uploaded again privately.
+If an unpublished public bundle expires, run a new public build and repeat its
+approval. After publication, task 10.12 can deploy from the protected private
+release record after artifact expiry. Retain referenced ECR images through UAT,
+Phase 11, and rollback; never reconstruct evidence from tags or rebuild during
+promotion. Task 10.13 tests these rejection and retention paths as task
+obligations; they do not add acceptance IDs or change AC-INF-003's
+environment-parity scope.
 
 Use caches keyed by OS, architecture, exact tool versions, and dependency
 lockfile hashes. Keep ARM64 native outputs separate from AMD64 outputs and
 release caches separate from untrusted pull-request caches. Cancel superseded
 read-only PR checks; serialize image publication and deploys with
 `cancel-in-progress: false`, so cancellation cannot interrupt a migration. Set
-explicit job timeouts and artifact retention. Measure build duration and
-disk/memory use before adding larger runners or parallel image builds.
+explicit job timeouts and artifact retention. Cap public caches at the included
+10 GiB; private jobs start without caches. Measure build duration and
+disk/memory use before changing the standard runner or sequential-build design.
 
 GitHub's
 [runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 and
 [billing rules](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
-(checked 2026-09-05) distinguish free standard public-repository jobs from
-included/paid private-repository minutes. Task 9.1 prices the private workflows
-and storage. Runner labels select architecture/OS, not an immutable machine
-image or AWS region; pin tools and container digests and record the actual
-runner image. Follow GitHub's
+(checked 2026-09-06) distinguish free standard public-repository builds from
+private publication/deployment usage. Task 9.1 records private usage before
+account allowances; activation verifies enough remaining quota with no paid
+Actions usage selected. Private approval-feature eligibility is a separate
+check. Runner labels select architecture/OS, not an immutable machine image or
+AWS region; pin tools and container digests and record the actual runner image.
+Follow GitHub's
 [concurrency rules](https://docs.github.com/en/actions/concepts/workflows-and-actions/concurrency)
 when implementing cancellation.
 
@@ -175,7 +206,7 @@ patch file is required or present.
 
 | Path                                                                            | Responsibility                                                                                                                                                   |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deploy/aws/bootstrap/`                                                         | One-time retained state/secrets KMS roots, state bucket, exact GitHub OIDC build/plan/deploy roles + boundary, and shared ECR repos (local state)                |
+| `deploy/aws/bootstrap/`                                                         | One-time retained state/secrets KMS roots, state bucket, exact GitHub OIDC publication/plan/deploy roles + boundary, and shared ECR repos (local state)          |
 | `deploy/aws/modules/network/`                                                   | VPC, public + **private (DB)** subnets, SG (443 from CloudFront origin-facing prefix list), EIP + ASG(1) auto-reassociation                                      |
 | `deploy/aws/modules/database/`                                                  | RDS Postgres (gp3, PITR, write-only master password + version), parameter group, **private** subnet group                                                        |
 | `deploy/aws/modules/storage/`                                                   | Private unversioned S3 media bucket, public-access block, encryption, bucket and prefix outputs                                                                  |
@@ -199,7 +230,8 @@ patch file is required or present.
 | `deploy/caddy.Dockerfile` + `deploy/caddy/caddy-entrypoint.sh`                  | **Task 10.7:** xcaddy build (Caddy 2.11.4 + caddy-dns/cloudflare, pinned, arm64) + fail-closed env entrypoint guard                                              |
 | `deploy/ops.Dockerfile`                                                         | Minimal arm64 image: aws-cli + postgresql-client + the ops scripts                                                                                               |
 | `apps/server/internal/routetable/prod_boundary_test.go`                         | The BLOCKING e2e test (simulated edge, two viewers, forged + duplicated headers, fail-closed rows)                                                               |
-| `.github/workflows/{iac.yml,images.yml,deploy-staging.yml}`                     | Authored by Tasks 10.8/10.12/10.13 as exact diffs, **applied by the integration owner**                                                                          |
+| Private `.github/workflows/{iac.yml,publish-images.yml,deploy-staging.yml}`     | Authored by Tasks 10.8/10.12/10.13 as exact diffs, **applied by the integration owner**                                                                          |
+| Public `.github/workflows/images-arm64.yml`                                     | Credential-free native builds/smoke and public OCI bundle; Task 10.8 diff applied by the integration owner                                                       |
 | Root `Makefile` (diff for owner)                                                | `iac-fmt`, `iac-validate`, `iac-test`, `route-table-test-prod`, `staging-plan` targets                                                                           |
 | `.env.example` (diff for owner — owner-serialized)                              | `CLOUDFLARE_API_TOKEN=` (Zone:DNS:Edit, `aboutme.vn` only), `AWS_PROFILE=` names-only additions                                                                  |
 | `docs/runbooks/{deploy-rollback,eip-recovery,secret-rotation,restore-drill}.md` | Seeded runbooks (drilled in Phase 10 operational rehearsal)                                                                                                      |

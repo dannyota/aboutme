@@ -4,22 +4,32 @@
 
 OpenTofu, environment configuration, and AWS deployment workflows will live in
 the planned private `aboutme-infra` repository. It has not been created. The
-public app retains source, local tools, and a versioned deployment contract;
-normal app checks must not require private infrastructure tooling or access. The
-private deployment consumes an explicit app commit and immutable image digests.
-It does not silently deploy the latest branch.
+public app retains all four image inputs, build/smoke workflows, local tools,
+and a versioned deployment contract; normal app checks must not require private
+infrastructure tooling or access. The private publisher consumes a validated
+canonical public OCI bundle; deployment consumes its private release record and
+immutable ECR digests. It does not silently deploy the latest branch.
 
 The owner selected GitHub Actions `ubuntu-24.04-arm` for native deployment image
-builds. The [build contract](contracts.md#build-and-runner-contract) records the
-runner split, ARM64 smoke evidence, digest handoff, and private Actions billing.
+builds in public `dannyota/aboutme`, per
+[ADR 0033](../../../adr/0033-public-image-builds-private-deployment.md). The
+[build contract](contracts.md#build-and-runner-contract) records the free public
+builds, private publication, provenance, and remaining private Actions usage.
 Development remains on the laptop, and AMD64 browser baselines keep their pinned
 architecture.
 
 The detailed file paths below predate this split and are not dispatchable.
-Before implementation, move deployment-only paths/workflows into the private
-repo, keep shared application changes in the public repo, and define each repo's
-independent checks and handoff. Complete Phases 6–8 first; this document records
-future work, not a reason to begin deployment now.
+Before dispatch, assign each path to its owning repo and independent checks.
+Public build inputs include `deploy/{server,web,caddy,ops}.Dockerfile`,
+`deploy/caddy/**`, and generic
+`deploy/aws/scripts/{db-bootstrap,restore-verify,tls-expiry-check,cidr-drift-check}.sh`
+with their tests. These scripts receive settings at runtime; no environment
+values are baked into images. The private repo consumes them from the exact app
+commit and must not maintain copies. OpenTofu roots/modules, environment tfvars,
+state configuration, credential/DNS bootstrap, and release approvals stay
+private. The public `images-arm64.yml` and private `publish-images.yml` have
+distinct permissions and artifact contracts. Phases 6–8 are complete; Phase 9
+spending and Phase 10 local checks still precede activation.
 
 > **Proposed baseline:** This material moved from the former infrastructure
 > plan. It remains a proposed technical baseline pending Phase 9 AWS cost

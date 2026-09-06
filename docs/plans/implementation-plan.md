@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 36, active** (2026-09-06).
+Status: **Revision 37, active** (2026-09-06).
 
 The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -14,8 +14,10 @@ runs in AWS at `https://uat.aboutme.vn`, under
 
 Use OpenTofu for infrastructure and prefer managed AWS services. Phase 9
 compares their cost, workload fit, and operating effort before selecting sizes.
-Deployment code will live in a separate private `aboutme-infra` repository. This
-is future planning; the next work is Phase 9 cost research.
+OpenTofu and AWS publication/deployment will live in private `aboutme-infra`.
+All four image builds and native smoke stay in public `aboutme` under
+[ADR 0033](../adr/0033-public-image-builds-private-deployment.md). Phase 9 cost
+research is recorded; its AWS budget decision remains open.
 
 A phase's plan lives in `phase-<number>/` while the phase is active. When the
 phase exits, its plan directory is deleted; git history keeps it. What the phase
@@ -81,7 +83,7 @@ that feeds public SSR and the read that feeds internal print SSR.
 | Production launch authorization                           | Human owner                               | After Phase 10 passes                                                                                      |
 
 No other approval blocks development. Design v4, the template contract v2, and
-ADRs 0001–0032 are accepted, subject to recorded supersessions.
+ADRs 0001–0033 are accepted, subject to recorded supersessions.
 
 ## Dependency graph
 
@@ -123,8 +125,9 @@ restrictions, and the laptop's resource limits. Run heavy gates serially.
 GitHub Actions builds deployment images natively on `ubuntu-24.04-arm` for
 `linux/arm64`. The existing AMD64 browser baseline gate stays on AMD64. Tasks
 10.8 and 10.13 cover native image smoke checks and workflow checks; task 10.12
-deploys the tested digests without a rebuild. The private `aboutme-infra` build
-minutes and storage are part of task 9.1's cost model. See the
+deploys the tested digests without a rebuild. Public standard image-build
+runners are free; task 9.1 separately models private validation, publication,
+and deployment usage before account allowances. See the
 [build contract](phase-10/infrastructure/contracts.md#build-and-runner-contract).
 
 Phase 10 uses `https://uat.aboutme.vn`, Cloudflare DNS, and AWS Singapore. It

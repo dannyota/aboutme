@@ -9,7 +9,8 @@ with the v1 entry-experience authority on 2026-09-02, 0029 with the application
 UI authority on 2026-09-02, and 0030 with the visual identity authority on
 2026-09-04. ADR 0031 records the owner's 2026-09-05 direction: numeric phases,
 AWS Singapore cost research, OpenTofu, managed-service preference, and hosted
-UAT.
+UAT. ADR 0033 records the owner's 2026-09-06 approval of public image builds
+with private AWS publication and deployment.
 
 | ADR                                                                 | Status   | Integrated outcome                                                                                       |
 | ------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
@@ -44,6 +45,7 @@ UAT.
 | [0029](../adr/0029-application-ui-toolkit.md)                       | Accepted | Tailwind v4 and shadcn-vue chrome without Preflight; renderer stays isolated                             |
 | [0030](../adr/0030-stamped-document-visual-identity.md)             | Accepted | Stamped-document identity: seal red only for public state, signature ink actions, Be Vietnam Pro chrome  |
 | [0031](../adr/0031-aws-cost-research-and-hosted-uat.md)             | Accepted | Phase 9 AWS cost research, OpenTofu, managed AWS services, Phase 10 hosted UAT, separate Phase 11 launch |
+| [0033](../adr/0033-public-image-builds-private-deployment.md)       | Accepted | Public ARM64 build/smoke; private verified ECR publication and AWS deployment                            |
 
 ## Remaining gates
 

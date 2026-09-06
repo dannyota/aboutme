@@ -12,6 +12,10 @@ cross-tenant DoS (master plan, Phase 0 security review). The prod Caddy image
 `routes.caddy`), `apps/server/internal/routetable/prod_boundary_test.go`,
 Makefile diff (`route-table-test-prod`) for the integration owner.
 
+All these inputs and synthetic boundary tests stay in public `aboutme` under
+ADR 0033. The image receives environment settings at runtime. Account values,
+credentials, and the resolved AWS/DNS inventory stay in private `aboutme-infra`.
+
 **Boundary contract (what `boundary.caddy` + global options + the entrypoint
 guard must implement):**
 

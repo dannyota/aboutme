@@ -44,10 +44,11 @@ activation.
 
 ## Hosted UAT handoff
 
-- [ ] Task 10.8's native `ubuntu-24.04-arm` build/smoke evidence and versioned
-      manifest identify the app/infrastructure commits and all four Linux/arm64
-      ECR digests. Task 10.12 validates that successful build and deploys the
-      same images; AMD64 browser baselines remain on their pinned architecture.
+- [ ] Task 10.8 records a successful public native ARM64 build/smoke and
+      separate protected private publication. Its release manifest binds both
+      runs, artifact provenance, app/infrastructure commits, and four ECR
+      digests. AWS roles reject public identities. Task 10.12 validates the
+      record and deploys those images; AMD64 browser baselines stay pinned.
 - [ ] Task 10.15 has a zero-drift post-activation plan, passing health and
       readiness checks through `uat.aboutme.vn`, and the UAT evidence ledger.
 - [ ] Phase 10 operational rehearsal receives the live interfaces for its

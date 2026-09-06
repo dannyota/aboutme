@@ -1,10 +1,11 @@
 # AWS UAT cost recommendation
 
 Recommend a 14-day Singapore UAT on the existing ECS-on-EC2, RDS PostgreSQL, and
-private S3 design. The expected modeled cost is
-**$46.43**, including gross
-GitHub Actions usage. The same 14-day high-usage case is **$97.53**.
-Prices were retrieved on 2026-09-06; amounts are USD before tax.
+private S3 design. Expected AWS cost is
+**$43.57**; the same 14-day high-usage
+case is **$88.68**. Public image builds
+use free standard GitHub runners. Prices were retrieved on 2026-09-06; amounts
+are USD before tax.
 
 Status: **proposed; spending amount awaits the owner**. Region, UAT hostname,
 and supporting Cloudflare DNS scope are already authorized by
@@ -13,17 +14,17 @@ has not provisioned resources or purchased a plan.
 
 ## Selected configuration
 
-| Resource         | UAT starting point                                                    | Production planning assumption                     |
-| ---------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
-| Application host | One `t4g.small`, 2 vCPU, 2 GiB                                        | One `t4g.medium`, 2 vCPU, 4 GiB                    |
-| Root disk        | 30 GiB gp3                                                            | 30 GiB gp3                                         |
-| Database         | Private Single-AZ `db.t4g.micro`, 20 GiB gp3                          | Private Single-AZ `db.t4g.small`, 50 GiB gp3       |
-| Backups          | 30-day automated retention, nightly isolated restore                  | Same retention and restore schedule                |
-| Media            | Private, unversioned S3; Go authorizes every read                     | Same                                               |
-| Edge             | CloudFront to one Elastic IP origin over HTTPS; Cloudflare DNS-only   | Same topology, separate production resources       |
-| Server limit     | 512 MiB task cgroup for Go and Chromium; 512 CPU units                | Same hard memory bound; repeat hosted measurements |
-| Monitoring       | Standard Container Insights, app/job metrics and alarms, 180-day logs | Same inventory, measured cardinality               |
-| Build            | Native `ubuntu-24.04-arm` in private `aboutme-infra`                  | Promote the UAT-proven image digests               |
+| Resource         | UAT starting point                                                              | Production planning assumption                     |
+| ---------------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Application host | One `t4g.small`, 2 vCPU, 2 GiB                                                  | One `t4g.medium`, 2 vCPU, 4 GiB                    |
+| Root disk        | 30 GiB gp3                                                                      | 30 GiB gp3                                         |
+| Database         | Private Single-AZ `db.t4g.micro`, 20 GiB gp3                                    | Private Single-AZ `db.t4g.small`, 50 GiB gp3       |
+| Backups          | 30-day automated retention, nightly isolated restore                            | Same retention and restore schedule                |
+| Media            | Private, unversioned S3; Go authorizes every read                               | Same                                               |
+| Edge             | CloudFront to one Elastic IP origin over HTTPS; Cloudflare DNS-only             | Same topology, separate production resources       |
+| Server limit     | 512 MiB task cgroup for Go and Chromium; 512 CPU units                          | Same hard memory bound; repeat hosted measurements |
+| Monitoring       | Standard Container Insights, app/job metrics and alarms, 180-day logs           | Same inventory, measured cardinality               |
+| Build            | Native `ubuntu-24.04-arm` in public `dannyota/aboutme`; private AWS publication | Promote the UAT-proven image digests               |
 
 These are starting sizes, not proven hosted capacity. The
 [workload record](workload.md) distinguishes the local render and SSE
@@ -46,18 +47,26 @@ topology change is selected here.
 
 ## Spending proposal
 
-| Scenario                  |     AWS | Gross Actions usage | Combined |
-| ------------------------- | ------: | ------------------: | -------: |
-| Expected 14-day UAT       |  $43.57 |               $2.86 |   $46.43 |
-| High-usage 14-day UAT     |  $88.68 |               $8.85 |   $97.53 |
-| Expected production month | $157.68 |               $5.30 |  $162.98 |
-| Stress production month   | $564.07 |              $17.00 |  $581.07 |
+| Scenario                  |     AWS | Private Actions before allowances | Gross comparison |
+| ------------------------- | ------: | --------------------------------: | ---------------: |
+| Expected 14-day UAT       |  $43.57 |                             $0.60 |           $44.18 |
+| High-usage 14-day UAT     |  $88.68 |                             $2.41 |           $91.09 |
+| Expected production month | $157.68 |                             $1.20 |          $158.89 |
+| Stress production month   | $564.07 |                             $4.81 |          $568.88 |
 
-The proposed campaign ceilings are **$100 for AWS** and **$10 for Actions
-usage**, with a **14-day active lifetime**. These are spending decisions for the
-owner, not existing controls. They cover the modeled campaign and stated
-retention charges. They exclude tax and a new GitHub subscription. Production
-figures are planning scenarios and do not authorize launch or production spend.
+The proposed AWS ceiling is **$100**, with a **14-day active lifetime**. This
+spending decision remains with the owner. It covers the modeled AWS campaign and
+stated retention charges, excluding tax. Production figures do not authorize
+launch or production spend.
+
+The owner accepted public image builds under
+[ADR 0033](../../adr/0033-public-image-builds-private-deployment.md). No paid
+Actions usage is selected. The private columns above are overage sensitivities
+before account allowances, not expected bills or spending authorization. Public
+builds and smoke cost $0 on standard runners. Expected UAT uses 120 private
+minutes; high use needs 480. Check remaining shared minutes and metadata storage
+before activation. If those allowances cannot cover the planned runs, resolve
+that shortfall before enabling paid use. Totals use unrounded line items.
 
 The totals include the full six-month log-storage liability, keys and
 registry/state storage through active UAT and one month after teardown, shared
@@ -106,9 +115,11 @@ budget reports or budget actions are selected.
   execute the scoped cleanup unless the owner approves an extension.
 - End active UAT at day 14 unless an extension is recorded. Cleanup is an
   operator action through the reviewed infrastructure workflow.
-- Set the Actions usage budget to stop paid usage at $10 where the account
-  supports it. Reserve an operator-run cleanup path so a blocked Actions run
-  cannot leave UAT resources running.
+- Verify remaining private Actions quota and keep paid usage disabled through
+  the account's supported spending controls. Keep public caches within 10 GiB
+  and private artifacts limited to release metadata. A quota shortfall needs a
+  priced decision; it cannot silently enable overage. Reserve an operator-run
+  cleanup path so a blocked Actions run cannot leave UAT resources running.
 - For retained resources, alert at
   $6 actual monthly cost and a forecast above
   $8. Remove eligible expired
@@ -189,11 +200,14 @@ headroom, the nightly restore, rollback, alarms, and origin-secret rotation on
 the selected hardware. A failed capacity check needs a priced correction within
 the approved ceiling or a new spending decision.
 
-Owner budget decision: **pending** for the $100 AWS campaign ceiling, $10
-Actions ceiling, 14-day lifetime, and up to $8/month retained footprint. GitHub
-plan eligibility and any replacement approval mechanism remain separate Phase 10
-inputs. No cloud activation is permitted until the required inputs, local gates,
-and recorded spending decision are complete.
+Owner budget decision: **pending** for the
+$100 AWS campaign ceiling,
+14-day lifetime, and up to $8/month retained
+footprint. Public image builds are accepted; no paid Actions usage or
+subscription is approved. GitHub plan eligibility and any replacement approval
+mechanism remain separate Phase 10 inputs. No cloud activation is permitted
+until the required inputs, local gates, and recorded spending decision are
+complete.
 
 Reproduce the totals with `python3 -B docs/research/aws-cost/calculate.py`. The
 phase's independent review and final local checks are recorded by the

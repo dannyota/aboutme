@@ -4,9 +4,10 @@
       reproducible units, and explicit workload assumptions.
 - [ ] Singapore UAT, idle/retained-resource, and production costs are separate;
       restore drills and recurring operational jobs are included.
-- [ ] Private `aboutme-infra` Actions minutes, cache/artifact retention, and
-      required GitHub plan features are costed separately from public app CI and
-      AWS runtime. ARM64 compatibility assumptions are recorded.
+- [ ] Free public image builds/native smoke and private `aboutme-infra`
+      validation/publication/deployment usage are separate from AWS runtime.
+      Private quota, metadata retention, and approval-feature eligibility are
+      explicit. ARM64 compatibility assumptions are recorded (ADR 0033).
 - [ ] Alternatives use the same requirements and workload. Any topology change
       has an accepted ADR and matching design and plan updates.
 - [ ] OpenTofu provider support and managed-service suitability are verified. A

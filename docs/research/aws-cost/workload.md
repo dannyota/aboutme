@@ -204,34 +204,53 @@ See
 
 ## Build and plan eligibility
 
-The private infrastructure repository uses the standard `ubuntu-24.04-arm`
-runner. GitHub charges `$0.005/minute` and rounds each job up to a whole minute.
-Artifact storage is `$0.25/GB-month`; cache storage is `$0.07/GB-month`. One
-workflow cycle models six billed jobs: four native ARM64 image build/publication
-jobs, one native image smoke, and one infrastructure plan/deploy job. This
-includes workflow work beyond image compilation. See
+The public `dannyota/aboutme` repository uses one standard `ubuntu-24.04-arm`
+build-and-smoke job for one sequential build of all four images and one native
+ARM64 smoke pass. It uploads the final OCI bundle and evidence only after the
+smoke succeeds. Standard GitHub-hosted runners for public repositories are free.
+The private `aboutme-infra` repository retains credential-free public artifact
+validation, credentialed publication, speculative plan, and apply/compatibility
+jobs. It uses four standard ARM64 job budgets per cycle at `$0.005/minute` after
+any shared private-account allowance. Private artifact storage costs
+`$0.25/GB-month` after its shared allowance. Public artifacts keep the prior
+count, size, and retention inputs at a zero gross charge. Public caches are
+capped at the separate 10 GB per-repository allowance, so no paid cache
+extension is configured. See
+[Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions),
 [runner pricing](https://docs.github.com/en/billing/reference/actions-runner-pricing),
-[runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
 and
-[Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+[runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 
-| Scenario                 | Cycles | Jobs/cycle | Minutes/job | Artifacts/cycle | GB/artifact | Retention | Cache peak |
-| ------------------------ | -----: | ---------: | ----------: | --------------: | ----------: | --------: | ---------: |
-| UAT low                  |      1 |          6 |          10 |               2 |           2 |    7 days |       5 GB |
-| UAT expected             |      2 |          6 |          15 |               2 |           3 |   14 days |       8 GB |
-| UAT 14-day high / stress |      6 |          6 |          20 |               2 |           3 |   14 days |      15 GB |
-| Production low           |      2 |          6 |          15 |               2 |           3 |   14 days |       8 GB |
-| Production expected      |      4 |          6 |          15 |               2 |           3 |   14 days |      10 GB |
-| Production stress        |     12 |          6 |          20 |               2 |           3 |   14 days |      20 GB |
+| Scenario                 | Cycles | Minutes/image | Public combined job budgets | Private jobs | Public artifacts/cycle | GB/artifact | Retention | Public cache peak |
+| ------------------------ | -----: | ------------: | --------------------------: | -----------: | ---------------------: | ----------: | --------: | ----------------: |
+| UAT low                  |      1 |            10 |    1 job: 4 images, 1 smoke |            4 |                      2 |           2 |    7 days |              5 GB |
+| UAT expected             |      2 |            15 |    1 job: 4 images, 1 smoke |            4 |                      2 |           3 |   14 days |              8 GB |
+| UAT 14-day high / stress |      6 |            20 |    1 job: 4 images, 1 smoke |            4 |                      2 |           3 |   14 days |             10 GB |
+| Production low           |      2 |            15 |    1 job: 4 images, 1 smoke |            4 |                      2 |           3 |   14 days |              8 GB |
+| Production expected      |      4 |            15 |    1 job: 4 images, 1 smoke |            4 |                      2 |           3 |   14 days |             10 GB |
+| Production stress        |     12 |            20 |    1 job: 4 images, 1 smoke |            4 |                      2 |           3 |   14 days |             10 GB |
 
-Runner minutes are `cycles × jobs × rounded minutes`. Artifact GB-month is
-`cycles × artifacts × GB × retention_days / 30`. Cache cost uses the assumed
-peak GB held through the billing horizon; seven-day inactivity eviction is not
-treated as guaranteed savings.
+The combined public job has separate duration budgets: sequential-build minutes
+are `cycles × 4 images × minutes/image`, and smoke-pass minutes are
+`cycles × 1 × minutes`. Private minutes are `cycles × 4 × minutes`. Public
+artifact GB-month remains `cycles × artifacts × GB × retention_days / 30` at a
+zero rate. Private storage contains only one 0.01 GiB metadata artifact per
+cycle with the same retention. There are no private OCI artifact copies and no
+private cache baseline.
 
-The gross estimate charges all build minutes and storage. Included allowances
-must be applied only after the owner proves the plan and checks use by every
-private repository on the account:
+The residual-private gross sensitivity is shown before shared private-account
+allowances. The plan selects zero paid Actions initially, conditional on quota.
+The owner must verify the private repository's plan, remaining shared minutes,
+and remaining artifact storage before activation; any overage needs a priced
+decision. For an illustration only, if a Free account has its full unused
+allowance, the largest modeled campaign uses 960 private minutes against 2,000
+included minutes and 12 × 0.01 GiB = 0.12 GiB peak metadata storage (0.056
+GB-month modeled accrual) against 500 MB shared artifact storage. Other private
+repositories and GitHub Packages can consume those shared allowances, so this
+does not predict the bill.
+
+Included allowances apply only after the owner proves the plan and checks use by
+every private repository on the account:
 
 | Plan             | Included minutes/month | Artifact storage | Cache storage |
 | ---------------- | ---------------------: | ---------------: | ------------: |
@@ -240,9 +259,9 @@ private repository on the account:
 | Team             |                  3,000 |             2 GB |         10 GB |
 | Enterprise Cloud |                 50,000 |            50 GB |         10 GB |
 
-Public application-repository Actions being free does not prove private builds
-are free. The read-only account projection is `User` with no plan name, so the
-plan remains unknown.
+Public application-repository Actions are free, while private use draws from the
+owner's shared allowance. The read-only account projection is `User` with no
+plan name, so private eligibility and remaining quota remain unknown.
 
 GitHub's current environment documentation says required reviewers and wait
 timers are unavailable for private repositories on Free, Pro, and Team. Phase 10
@@ -259,10 +278,11 @@ not an approved purchase. See
 
 ## Lifecycle and retained resources
 
-Setup includes private ARM64 builds, artifacts, and caches. Active cost includes
-compute, database, edge, requests, logs, metrics, mail, schedules, and KMS use.
-Restore cost is shown separately. Retained cost includes ECR, the state bucket,
-KMS keys, 180-day logs, and any backup bytes above the regional allowance.
+Setup includes public zero-rate build usage and residual-private Actions
+sensitivity. Active cost includes compute, database, edge, requests, logs,
+metrics, mail, schedules, and KMS use. Restore cost is shown separately.
+Retained cost includes ECR, the state bucket, KMS keys, 180-day logs, and any
+backup bytes above the regional allowance.
 
 Synthetic UAT teardown empties only UAT media and destroys the environment with
 no final or manual RDS snapshot. The model assumes teardown deletes retained

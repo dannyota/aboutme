@@ -417,22 +417,87 @@ def add_shared(
         note="Zero baseline: native smoke uses its locally built image. Any later external pull must replace this input.",
     )
 
-    github_minutes = (
+    github_public_image_build_minutes = (
         decimal(scenario["github_workflow_cycles"])
-        * decimal(scenario["github_billed_jobs_per_cycle"])
+        * decimal(scenario["github_public_images_per_build"])
         * decimal(scenario["github_avg_minutes_per_job"])
     )
-    github_artifact_gb_month = (
+    github_public_smoke_minutes = (
         decimal(scenario["github_workflow_cycles"])
-        * decimal(scenario["github_artifacts_per_cycle"])
-        * decimal(scenario["github_artifact_gb_each"])
-        * decimal(scenario["github_artifact_retention_days"])
+        * decimal(scenario["github_public_smoke_passes_per_build"])
+        * decimal(scenario["github_avg_minutes_per_job"])
+    )
+    github_private_minutes = (
+        decimal(scenario["github_workflow_cycles"])
+        * decimal(scenario["github_private_jobs_per_cycle"])
+        * decimal(scenario["github_avg_minutes_per_job"])
+    )
+    github_public_artifact_gb_month = (
+        decimal(scenario["github_workflow_cycles"])
+        * decimal(scenario["github_public_artifacts_per_cycle"])
+        * decimal(scenario["github_public_artifact_gb_each"])
+        * decimal(scenario["github_public_artifact_retention_days"])
         / Decimal("30")
     )
+    github_private_metadata_artifact_gb_month = (
+        decimal(scenario["github_workflow_cycles"])
+        * decimal(scenario["github_private_metadata_artifacts_per_cycle"])
+        * decimal(scenario["github_private_metadata_artifact_gb_each"])
+        * decimal(scenario["github_private_metadata_artifact_retention_days"])
+        / Decimal("30")
+    )
+    for item, quantity, unit, note in (
+        (
+            "Public image build time budget",
+            github_public_image_build_minutes,
+            "minute",
+            "One combined public-repository build-and-smoke job budgeted at four images times the scenario minutes; standard GitHub-hosted runners are free.",
+        ),
+        (
+            "Public smoke time budget",
+            github_public_smoke_minutes,
+            "minute",
+            "One native smoke pass within the combined public-repository build-and-smoke job; standard GitHub-hosted runners are free.",
+        ),
+        (
+            "Public Actions artifacts",
+            github_public_artifact_gb_month,
+            "GB-month",
+            "Prior artifact count, size, and retention assumptions retained in the public repository at a zero gross charge.",
+        ),
+        (
+            "Public Actions cache",
+            decimal(scenario["github_public_cache_peak_gb"]),
+            "GB-month",
+            "Public cache peak is at or below the separate 10 GB per-repository allowance; no paid cache extension is configured.",
+        ),
+    ):
+        add(
+            rows,
+            scenario=scenario,
+            option=option,
+            provider="GitHub",
+            lifecycle="setup",
+            category="build",
+            item=item,
+            quantity=quantity,
+            unit=unit,
+            rate=Decimal("0"),
+            note=note,
+        )
     for item, quantity, price_id, unit in (
-        ("Private ARM64 runner", github_minutes, "github_arm64_minute", "minute"),
-        ("Actions artifacts", github_artifact_gb_month, "github_artifact_storage", "GB-month"),
-        ("Actions cache", decimal(scenario["github_cache_peak_gb"]), "github_cache_storage", "GB-month"),
+        (
+            "Private standard ARM64 runners",
+            github_private_minutes,
+            "github_arm64_minute",
+            "minute",
+        ),
+        (
+            "Private Actions metadata artifact",
+            github_private_metadata_artifact_gb_month,
+            "github_artifact_storage",
+            "GB-month",
+        ),
     ):
         add(
             rows,
@@ -445,7 +510,7 @@ def add_shared(
             quantity=quantity,
             unit=unit,
             rate=prices[price_id],
-            note="Gross private-repository charge before plan allowances; shared usage is unknown.",
+            note="Residual private-repository gross sensitivity before shared account minute and artifact allowances; no private OCI artifact copies or cache baseline.",
         )
     add(
         rows,

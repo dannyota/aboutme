@@ -10,6 +10,11 @@ restore isolation, and overlap handling.
 `deploy/aws/scripts/{restore-verify,cidr-drift-check,tls-expiry-check}.sh`,
 script tests, and `docs/runbooks/restore-drill.md` seed.
 
+The module and environment runbook belong in private `aboutme-infra`. The three
+generic ops scripts and their synthetic tests belong in public `aboutme`, per
+ADR 0033. Complete those scripts before Task 10.8's four-image build; the ops
+image never copies private environment settings or credentials.
+
 ## Schedule contract
 
 Task 10.10 dispatches only after Phase 8 privacy has shipped and its exact

@@ -15,16 +15,19 @@
       DNS, email, logs/metrics/alarms, secrets, registry, and jobs. Include
       applicable items in each option and account for idle charges.
 - [x] Price native GitHub Actions `ubuntu-24.04-arm` builds separately from AWS
-      runtime. Public app CI uses standard public-repository runners; the
-      planned private `aboutme-infra` workflows consume the owner's included
-      minutes and then paid usage. Model build frequency/duration, cache and
+      runtime. Public app CI and all four image builds/native smoke use free
+      standard public-repository runners under ADR 0033. Private validation,
+      publication and deployment use remaining included account allowances.
+      Model their gross overage sensitivity separately from public builds, with
+      no paid Actions usage selected. Record build frequency/duration, cache and
       artifact storage/retention, and ECR storage/transfer. Verify the account
       plan supports the required private-repository environment protections.
       Record account-plan assumptions without private billing data. Use dated
       [runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
       and
       [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
-      sources; do not assume deployment builds are free.
+      sources; keep public build costs distinct from private workflow
+      eligibility.
 - [x] Save each price's source URL, retrieval date, region, unit, currency, and
       calculation basis. Show steady cost without promotional credits; itemize
       allowances and discounts separately with their eligibility.

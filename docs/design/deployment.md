@@ -42,13 +42,15 @@ baseline job stays on AMD64. ARM64 container smoke tests cover runtime
 compatibility, including Chromium and fonts; they do not replace the browser
 baseline gate.
 
-The planned private `aboutme-infra` repository owns image publication and
-deployment workflows, per
-[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). Builds consume an
-explicit tested app commit and record both app and infrastructure commits with
-the image digests. UAT deploys those digests; production promotion reuses the
-UAT-proven images without rebuilding them. Public app checks stay independent of
-AWS and the private repository.
+The public app builds and smoke-tests all four images from an explicit reviewed
+app commit, per
+[ADR 0033](../adr/0033-public-image-builds-private-deployment.md). Its workflow
+emits OCI archives and canonical source/run evidence without AWS access. The
+planned private `aboutme-infra` repository validates that evidence and owns
+protected image publication and deployment. Its release record binds the public
+build to the infrastructure commit and four ECR digests. UAT deploys those
+digests; production reuses the UAT-proven images without rebuilding them. Public
+app checks stay independent of AWS and the private repository.
 
 Native ARM64 builds avoid emulation overhead. Graviton runtime cost and
 performance still depend on instance size and workload: Phase 9 prices the

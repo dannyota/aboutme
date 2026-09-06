@@ -19,30 +19,35 @@ needs an ADR and new UAT evidence before it can replace the baseline.
 
 ## Comparable gross totals
 
-Totals include AWS and gross private GitHub Actions usage. They exclude the
-conditional GitHub Enterprise Cloud license, all free allowances, discounts,
-credits, commitments, and tax. Each option uses the same traffic, storage,
-email, monitoring, restore, and build inputs from `scenarios.json`.
+The selected monetary totals are AWS plus residual private Actions gross
+sensitivity. Public build, smoke, artifact, and cache usage has zero gross
+charge and is recorded separately in `results.csv`. The totals are not an actual
+GitHub bill: private plan eligibility and remaining shared minute and artifact
+allowance must be verified before activation. Paid Actions is selected at zero
+initially; any overage needs a priced decision. Totals exclude the conditional
+GitHub Enterprise Cloud license, free allowances, discounts, credits,
+commitments, and tax. Each option uses the same traffic, storage, email,
+monitoring, restore, and build inputs from `scenarios.json`.
 
 | Scenario                     | EC2 + RDS | EC2 + Aurora | Fargate + RDS |
 | ---------------------------- | --------: | -----------: | ------------: |
-| UAT low, 72 hours            |    $13.68 |       $19.27 |        $18.29 |
-| UAT expected, 14 days        |    $46.43 |       $90.22 |        $66.25 |
-| UAT high, same 14 days       |    $97.53 |      $225.77 |       $116.48 |
-| UAT stress, 730 hours        |   $141.49 |      $418.98 |       $182.16 |
-| Production low, monthly      |   $117.72 |      $153.72 |       $144.35 |
-| Production expected, monthly |   $162.98 |      $237.08 |       $190.14 |
-| Production stress, monthly   |   $581.07 |      $853.01 |       $606.34 |
+| UAT low, 72 hours            |    $13.00 |       $18.59 |        $17.60 |
+| UAT expected, 14 days        |    $44.18 |       $87.96 |        $63.99 |
+| UAT high, same 14 days       |    $91.09 |      $219.33 |       $110.04 |
+| UAT stress, 730 hours        |   $135.05 |      $412.53 |       $175.72 |
+| Production low, monthly      |   $115.46 |      $151.46 |       $142.10 |
+| Production expected, monthly |   $158.89 |      $232.98 |       $186.05 |
+| Production stress, monthly   |   $568.88 |      $840.83 |       $594.16 |
 
 The UAT high row is the useful budget case. It keeps the proposed 14-day
 lifetime while applying stress traffic, logs, backups, credits, restore
 duration, build frequency, and a four-hour production-shape drill. Its accepted
-option is `$88.68` AWS plus `$8.85` gross GitHub usage. A proposed `$100` AWS
-authorization ceiling therefore leaves `$11.32` above the modeled high case. The
-alert and teardown controls needed to enforce a ceiling do not exist yet. AWS
-budget data can be delayed, and stopping resources leaves storage, address, log,
-key, and registry charges. Task 9.3 must state any control as proposed and
-define a direct teardown path.
+option is `$88.68` AWS plus `$2.41` residual private Actions gross sensitivity,
+for `$91.09`. That sensitivity is not a purchase estimate: private plan
+eligibility and shared quota must be checked before activation. AWS budget data
+can be delayed, and stopping resources leaves storage, address, log, key, and
+registry charges. Task 9.3 must state any control as proposed and define a
+direct teardown path.
 
 ## Lifecycle detail
 
@@ -52,15 +57,15 @@ Fargate restore includes the scheduled task while it waits for RDS.
 
 | Expected 14-day UAT | Setup | Active | Seven-day idle | Retained | Restore/jobs | Gross total |
 | ------------------- | ----: | -----: | -------------: | -------: | -----------: | ----------: |
-| EC2 + RDS           | $3.19 | $33.72 |          $2.14 |    $8.72 |        $0.81 |      $46.43 |
-| EC2 + Aurora        | $3.29 | $75.68 |         $18.81 |    $8.36 |        $2.88 |      $90.22 |
-| Fargate + RDS       | $3.10 | $52.03 |          $6.72 |    $8.72 |        $2.39 |      $66.25 |
+| EC2 + RDS           | $0.93 | $33.72 |          $2.14 |    $8.72 |        $0.81 |      $44.18 |
+| EC2 + Aurora        | $1.03 | $75.68 |         $18.81 |    $8.36 |        $2.88 |      $87.96 |
+| Fargate + RDS       | $0.84 | $52.03 |          $6.72 |    $8.72 |        $2.39 |      $63.99 |
 
-The setup column includes GitHub workflows and the production-shape drill. The
-drill does not resize the 20 GB UAT database in place. It prices a separate 50
-GB `db.t4g.small` for four hours and the EC2 host-class rate difference, then
-requires exact-owner deletion. RDS allocated storage cannot be shrunk back to 20
-GB.
+The setup column includes public zero-rate workflow usage, residual private
+Actions sensitivity, and the production-shape drill. The drill does not resize
+the 20 GB UAT database in place. It prices a separate 50 GB `db.t4g.small` for
+four hours and the EC2 host-class rate difference, then requires exact-owner
+deletion. RDS allocated storage cannot be shrunk back to 20 GB.
 
 Retained UAT cost charges peak ECR and state storage for the active fraction of
 a month plus one post-destroy month. The assumed existing shared SES metrics and
@@ -86,9 +91,9 @@ Expected production lifecycle cost is:
 
 | Expected production month | Setup |  Active | Retained |  Restore/jobs | Gross total |
 | ------------------------- | ----: | ------: | -------: | ------------: | ----------: |
-| EC2 + RDS                 | $5.30 | $142.88 |   $11.18 |         $3.63 |     $162.98 |
-| EC2 + Aurora              | $5.30 | $215.95 |    $9.38 |         $6.45 |     $237.08 |
-| Fargate + RDS             | $5.30 | $166.61 |   $11.18 | $3.43 + $3.63 |     $190.14 |
+| EC2 + RDS                 | $1.20 | $142.88 |   $11.18 |         $3.63 |     $158.89 |
+| EC2 + Aurora              | $1.20 | $215.95 |    $9.38 |         $6.45 |     $232.98 |
+| Fargate + RDS             | $1.20 | $166.61 |   $11.18 | $3.43 + $3.63 |     $186.05 |
 
 ## Option 1: ECS on EC2 with RDS
 
@@ -286,15 +291,20 @@ target.
 
 ## External plan and unresolved inputs
 
-GitHub allowances are not deducted because the private account plan and shared
-usage are unknown. Required environment reviewers and wait timers are not
-available for private repositories on Free, Pro, or Team. GitHub advertises
-Enterprise Cloud as starting at `$21/user-month` for the first 12 months. That
-is neither a verified renewal rate nor a verified single-month or seat
-commitment. A private repository in the current personal namespace would also
-need an organization and enterprise governance decision. The conditional line is
-excluded from every gross total, and no purchase or workflow weakening is
-authorized.
+Public standard-runner Actions are free. Private allowance eligibility, quota,
+and shared artifact use remain unknown, so the residual private gross rows are
+conservative sensitivity rather than an actual bill. If a Free account has a
+full unused allowance, the largest modeled campaign's 960 private minutes and 12
+× 0.01 GiB = 0.12 GiB peak metadata storage (0.056 GB-month modeled accrual) fit
+within 2,000 minutes and 500 MB. Other private repositories and GitHub Packages
+can consume the shared allowance. Required environment reviewers and wait timers
+are unavailable for private repositories on Free, Pro, or Team. GitHub
+advertises Enterprise Cloud as starting at `$21/user-month` for the first 12
+months. That is neither a verified renewal rate nor a verified single-month or
+seat commitment. A private repository in the current personal namespace would
+also need an organization and enterprise governance decision. The conditional
+line is excluded from every gross total, and no purchase or workflow weakening
+is authorized.
 
 The existing SES account is in sandbox. Production access, recipient volume,
 mail feedback consumption, and the adopted stack's exact alarms remain Phase 10

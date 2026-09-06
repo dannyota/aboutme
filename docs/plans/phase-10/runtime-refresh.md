@@ -91,12 +91,19 @@ the existing mail resources during UAT cleanup.
 
 - Tasks 10.5, 10.7, and 10.8 consume the exact runtime inputs above and replace
   conflicting baseline text before implementation.
+- Task 10.1 resolves the new private repository's actual OIDC subject format and
+  immutable owner/repository IDs before bootstrap activation. GitHub's
+  [AWS OIDC guide](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws),
+  checked 2026-09-06, warns that new repositories use ID-bearing subjects. Pin
+  the exact private environment subject; public identities remain rejected.
 - Task 10.6 resolves the UAT access mechanism across discovery, `/oauth/*`,
   `/authorize`, and `/mcp`. A blanket Basic Authorization gate cannot consume or
   remove the MCP Bearer header. Noindex does not provide access control.
 - Task 10.13 checks workflow protection against the actual private repository
-  plan. Included Actions minutes and public CI do not prove private deployment
-  protection features or free deployment builds.
+  plan. Public builds and smoke are free on standard runners under ADR 0033.
+  Private validation/publication/deployment need sufficient remaining included
+  minutes and metadata storage; no paid Actions usage is selected. Account
+  allowances do not prove private deployment protection features.
 - GitHub's
   [environment rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments),
   checked 2026-09-06, restrict required reviewers to public repositories on

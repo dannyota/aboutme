@@ -8,8 +8,11 @@ user workflows, and rehearse the operational requirements before production.
 
 Infrastructure uses OpenTofu and the managed AWS services selected in Phase 9.
 Deployment images build natively on GitHub Actions `ubuntu-24.04-arm` in the
-planned private `aboutme-infra` repository. Development stays on the laptop; the
-existing AMD64 browser baseline gate keeps its pinned architecture. The
+public app repository under
+[ADR 0033](../../adr/0033-public-image-builds-private-deployment.md). Private
+`aboutme-infra` validates those artifacts and owns AWS publication/deployment.
+Development stays on the laptop; the existing AMD64 browser baseline gate keeps
+its pinned architecture. The
 [build contract](infrastructure/contracts.md#build-and-runner-contract) defines
 the ARM64 smoke tests and immutable image handoff.
 
