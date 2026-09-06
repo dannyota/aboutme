@@ -87,6 +87,12 @@ four operations; common and replica fields are present. Use a private validated
 constructor/decoder in runtime_membership.go, with no callback or driver handle
 in the interface. The schema's generated RuntimeReplica model is unchanged.
 
+Use `*int16` for the three nullable count fields and `*bool` for the two
+nullable partition flags. Validation errors require fixed private-value-free
+messages, a nonnil error and a zero result; no exported sentinel or exact
+message contract is added. Preserve wrapped driver causes for existing error
+handling.
+
 ## Task 1: Prove missing operations
 
 - [ ] Add a bounded live test that checks to_regprocedure for each exact
@@ -125,16 +131,23 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
       drain, leave, termination or fence. Increment neither generation and never
       reconstruct a historical registration result.
 - [ ] Mark-ready locks public_state, capacity and replica. Require joining,
-      exact tuple, no termination intent, online/starting lifecycle and the
-      accepted admission prerequisites, including no visible unresolved/closing
-      transition. Set join_ready_at once, keep joining and change no partition.
-      Exact replay is idempotent only while joining. SQL does not claim local
-      probe or key-version evidence.
+      exact tuple, no termination intent, and exactly (online,true) or
+      (starting,false) for lifecycle/admission, with no visible
+      unresolved/closing transition. Set join_ready_at once, keep joining and
+      change no partition. Exact replay is idempotent only while joining. SQL
+      does not claim local probe or key-version evidence.
+- [ ] Preserve ordinary write entry: a closed/closing gate rejects before the
+      fixed function. A starting lifecycle creates no bypass. Both rate
+      partitions may be disabled when marking ready; activation owns their later
+      enablement.
 - [ ] Sample database time once after needed row locks and clamp it to capacity
       updated_at and relevant prior timestamps. Every fresh register/mark-ready
       increments capacity generation once; controller generation is unchanged.
       Replay, rejection and rollback increment neither. Detect bigint exhaustion
       without wrapping or partial mutation.
+- [ ] Set capacity.updated_by to the exact public function name for the fresh
+      wrapper call. These four fixed literals are internal evidence; no caller
+      operation ID is added. Exact replay preserves updated_by and updated_at.
 - [ ] Never lock or wait on a transition parent. Use only the accepted
       nonlocking predicates while holding membership locks. Return exact
       runtime_replica_result fields with null count/partition outputs and
@@ -151,8 +164,10 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
       Hostile search paths cannot redirect helper reads or writes.
 - [ ] Cover offline, starting, online and stopping registration; closing and
       unresolved transition visibility; no implicit activation; ready rejection
-      outside joining and exact ready replay. Test current registration replay
-      after every later state with no generation change.
+      outside joining and exact ready replay under each accepted pair. Test
+      closed/closing gate rejection and both-disabled partition success without
+      a partition mutation. Test current registration replay after every later
+      state with no generation change.
 - [ ] Populate future capacity/replica timestamps to prove the clock clamp, and
       exercise capacity generation at its positive bigint boundary. A failed
       write leaves parent, children, timestamps and generations intact.

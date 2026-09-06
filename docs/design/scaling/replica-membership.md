@@ -157,14 +157,25 @@ runtime_mark_maintenance_replica_join_ready( replica_id uuid, instance_id text,
 container_instance_arn text, caddy_task_arn text, go_task_arn text,
 nuxt_task_arn text, release_digest text) -> runtime_replica_result
 
-Lock public_state, capacity and replica. Require joining, exact identity, no
-termination intent, online/starting lifecycle, and admission prerequisites. It
-sets join_ready_at once but leaves state joining. Exact replay is idempotent.
-Mark-ready replay retains the joining prerequisite; it does not inherit
-registration's later-state replay permission. The private adapter calls this
-only after normal query, transition listener, revision LISTEN, paired
-Nuxt/Caddy, shared admission rollback and unresolved-transition probes pass. SQL
-cannot infer those local probes.
+Lock public_state, capacity and replica. Require joining, exact identity/trio,
+no termination intent, and no visible closing or unresolved transition. The
+accepted capacity pairs are exactly (online,true) or (starting,false) for
+(lifecycle_phase,admission_enabled). Set join_ready_at once and keep joining.
+Exact replay is idempotent. Mark-ready replay retains the joining prerequisite;
+it does not inherit registration's later-state replay permission. The private
+adapter calls this only after normal query, transition listener, revision
+LISTEN, paired Nuxt/Caddy, shared admission rollback and unresolved-transition
+probes pass. SQL cannot infer those local probes.
+
+Ordinary write entry must still find an open write gate. A starting lifecycle
+does not bypass a closing/closed gate; the normal UAT sequence remains
+complete-wake, register, mark-ready, then activate. Mark-ready neither requires
+enabled rate partitions nor changes them: first readiness precedes the
+activation that enables partition 1. Joining grants no serving or claim work.
+
+Fresh registration and mark-ready set capacity.updated_by to their exact public
+function name. These are fixed internal evidence literals. Replay preserves
+updated_by and updated_at; callers supply no additional operation ID.
 
 Use the two register functions as wrappers over an owner-only helper. They store
 their fixed replica_kind. Grant runtime_mark_maintenance_replica_join_ready only
