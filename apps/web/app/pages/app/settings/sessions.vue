@@ -2,6 +2,7 @@
 import type { AuthProvider } from '../../../composables/useAuth';
 import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
 import ConnectedAgents from '../../../components/settings/ConnectedAgents.vue';
+import PrivacySettings from '../../../components/settings/PrivacySettings.vue';
 import StatusBanner from '../../../components/app/StatusBanner.vue';
 import { Button } from '../../../components/ui/button';
 import {
@@ -11,6 +12,12 @@ import {
   mapReauthStartError,
   mapSetPasswordError,
 } from '../../../composables/passwordSettings';
+import {
+  createAccountExportController,
+  mapAccountDeletionError,
+  PrivacySettingsActionsKey,
+  type PrivacySettingsActions,
+} from '../../../composables/privacySettings';
 import { useCapabilities } from '../../../composables/useCapabilities';
 import { useNow } from '../../../composables/useNow';
 import {
@@ -195,6 +202,31 @@ async function startOAuth(
   }
 }
 
+async function reauthenticatePassword(password: string): Promise<void> {
+  try {
+    await mutate('/api/v1/auth/password/reauth', {
+      method: 'POST',
+      body: { password },
+    });
+  } catch (error) {
+    throw mapReauthError(error);
+  }
+}
+
+async function startProviderReauth(provider: AuthProvider): Promise<void> {
+  try {
+    const response = await mutate<AuthStartEnvelope>(
+      `/api/v1/auth/${provider}/start`,
+      { method: 'POST', query: { purpose: 'reauth' } },
+    );
+    const url = validateAuthorizeUrl(provider, response?.data?.authorizeUrl);
+    if (!url) throw new Error('invalid OAuth authorize URL');
+    await navigateTo(url, { external: true });
+  } catch (error) {
+    throw mapReauthStartError(error);
+  }
+}
+
 // The password-settings actions stay closed: each performs one operation and
 // rejects with a PasswordSettingsFailure rather than a raw server body. The
 // provider round trip reuses the same authorizeURL validation as linking.
@@ -205,16 +237,7 @@ const passwordProviders = computed(() =>
 );
 
 const passwordActions: PasswordSettingsActions = {
-  async reauthenticate(password) {
-    try {
-      await mutate('/api/v1/auth/password/reauth', {
-        method: 'POST',
-        body: { password },
-      });
-    } catch (error) {
-      throw mapReauthError(error);
-    }
-  },
+  reauthenticate: reauthenticatePassword,
   async setPassword(password) {
     try {
       await mutate('/api/v1/me/password', {
@@ -225,22 +248,34 @@ const passwordActions: PasswordSettingsActions = {
       throw mapSetPasswordError(error);
     }
   },
-  async startProviderReauth(provider) {
-    try {
-      const response = await mutate<AuthStartEnvelope>(
-        `/api/v1/auth/${provider}/start`,
-        { method: 'POST', query: { purpose: 'reauth' } },
-      );
-      const url = validateAuthorizeUrl(provider, response?.data?.authorizeUrl);
-      if (!url) throw new Error('invalid OAuth authorize URL');
-      await navigateTo(url, { external: true });
-    } catch (error) {
-      throw mapReauthStartError(error);
-    }
-  },
+  startProviderReauth,
 };
 
 provide(PasswordSettingsActionsKey, passwordActions);
+
+const exportController = createAccountExportController();
+onBeforeUnmount(() => exportController.dispose());
+
+const privacyActions: PrivacySettingsActions = {
+  exportAccount: exportController.download,
+  async deleteAccount() {
+    try {
+      await mutate('/api/v1/me', { method: 'DELETE' });
+    } catch (error) {
+      throw mapAccountDeletionError(error);
+    }
+  },
+  reauthenticate: reauthenticatePassword,
+  startProviderReauth,
+};
+
+provide(PrivacySettingsActionsKey, privacyActions);
+
+function onAccountDeleted(): void {
+  // A top-level navigation discards every in-memory account projection before
+  // the now-anonymous login page starts.
+  if (import.meta.client) window.location.assign('/login');
+}
 
 async function onPasswordUpdated(): Promise<void> {
   // A successful add/change replaces the current session: refetch /me (to
@@ -362,6 +397,13 @@ const linkErrorMessage = computed(() => {
         @updated="onPasswordUpdated"
       />
     </section>
+
+    <PrivacySettings
+      class="border-t py-8"
+      :has-password="user?.hasPassword ?? false"
+      :providers="passwordProviders"
+      @deleted="onAccountDeleted"
+    />
 
     <section
       v-if="agentAccess"

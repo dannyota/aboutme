@@ -1286,6 +1286,12 @@ func TestIdempotencyStore_Execute_BoundedOldestFirstCleanup(t *testing.T) {
 	if _, bitmapErr := tx.Exec(ctx, `SET LOCAL enable_bitmapscan = off`); bitmapErr != nil {
 		t.Fatalf("disable bitmap scan for ordered-index plan evidence: %v", bitmapErr)
 	}
+	if _, sortErr := tx.Exec(ctx, `SET LOCAL enable_sort = off`); sortErr != nil {
+		t.Fatalf("disable sort for ordered-index plan evidence: %v", sortErr)
+	}
+	if _, incrementalSortErr := tx.Exec(ctx, `SET LOCAL enable_incremental_sort = off`); incrementalSortErr != nil {
+		t.Fatalf("disable incremental sort for ordered-index plan evidence: %v", incrementalSortErr)
+	}
 	rows, err := tx.Query(ctx, `
 		EXPLAIN (COSTS OFF)
 		SELECT id FROM idempotency_records

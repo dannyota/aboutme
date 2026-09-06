@@ -1532,7 +1532,7 @@ func (q *Queries) GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantPa
 }
 
 const getMediaDeletionJobByObjectKey = `-- name: GetMediaDeletionJobByObjectKey :one
-SELECT id, resume_id, object_key, enqueued_at, next_attempt_at, attempt_count
+SELECT id, resume_id, object_key, enqueued_at, next_attempt_at, attempt_count, lease_id, lease_expires_at, completed_at, overdue_at, outcome
 FROM media_deletion_jobs
 WHERE resume_id = $1::uuid
   AND object_key = $2::text
@@ -1555,6 +1555,11 @@ func (q *Queries) GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMed
 		&i.EnqueuedAt,
 		&i.NextAttemptAt,
 		&i.AttemptCount,
+		&i.LeaseID,
+		&i.LeaseExpiresAt,
+		&i.CompletedAt,
+		&i.OverdueAt,
+		&i.Outcome,
 	)
 	return i, err
 }

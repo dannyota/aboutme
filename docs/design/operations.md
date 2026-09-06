@@ -29,6 +29,64 @@ legal wording and any jurisdiction-specific data-residency obligations require
 qualified counsel before production approval. Design documents do not claim that
 a named law has been satisfied merely because infrastructure is in one region.
 
+### Account export and deletion
+
+The export is a versioned JSON attachment named `aboutme-export.json` with a
+`data` envelope. Version 1 contains `exportedAt`, the account's ID, email, name,
+creation/update times and linked provider names, and all of its resumes in
+creation-time/ID order. Each resume carries its current-version document and
+owner metadata, including hidden/private content and incomplete drafts. A
+separate nullable `photo` contains normalized JPEG/PNG media type, standard
+base64 bytes and nullable crop; the document's server-owned photo reference is
+removed. A missing referenced photo fails the export before any success bytes.
+Password, session, CSRF, provider-subject, OAuth, idempotency, storage-key and
+cleanup state are excluded. Account avatar storage has no v1 portable-media
+contract and is not resolved through the resume-photo backend.
+
+Export and deletion are cookie-only account operations. They accept no body,
+query, resume-schema, conditional, or idempotency input. Export emits the
+current schema response header and exact `no-store, no-transform`. Deletion
+rechecks a live recently reauthenticated session under the account lock, drains
+all affected public generations under ADR 0022, and removes account state in one
+transaction. A concurrent resume creation invalidates the planned set; three
+fresh attempts are allowed before a closed `account_changed` conflict.
+
+A canonical-email advisory lock serializes registration, verification, provider
+account creation and deletion. Registration rows precede user rows in the SQL
+lock order. Deletion removes same-email pending registration and its mail jobs,
+so an old verification token cannot recreate the deleted account. Mail already
+accepted before deletion may still arrive, but its token no longer grants
+access. No new mail send can pass a deleted scope after success.
+
+Successful deletion returns 204, clears session/OAuth transaction cookies, and
+sends `Clear-Site-Data` for cookies and storage. The settings dialog requires
+explicit confirmation, including after reauthentication; a callback never
+automatically submits deletion.
+
+### Scheduled cleanup and audit
+
+The server exposes one-shot `idempotency-expiry-sweep` and
+`media-deletion-sweep` commands hourly, `media-orphan-sweep` weekly, and
+`privacy-retention-sweep` daily. These commands use PostgreSQL advisory overlap
+locks, bounded runs and fixed numeric result fields. They never start the HTTP
+listeners or Chromium. Local tests execute them directly; Phase 10 activates
+their schedules and proves heartbeat, failure and overdue alarm delivery.
+
+Session metadata is redacted 90 days after the session's creation. Lifecycle
+events contain only a generated event ID, fixed kind, occurrence time and an
+optional media-job ID. Account deletion and media overdue/completion events are
+durable; audit insertion and the state they describe commit together. Completed
+media jobs remain for 180 days from completion to preserve outcome and
+ambiguous-commit proof. Audit events expire after 180 days from occurrence.
+Pending and overdue jobs never expire. Security diagnostic logs use the same
+180-day hosted retention, configured and proved in Phase 10; cleared mail
+delivery bookkeeping remains on its existing seven-day cleanup schedule.
+
+Orphan dry runs do not mutate objects, jobs, audit or the stored cursor. Failed
+orphan removal creates exact durable retry work before advancing the cursor.
+Cleanup always rechecks live references and never derives deletion authority
+from object existence or a stored cursor alone.
+
 ## Resource and performance budgets
 
 [`budgets.md`](budgets.md) owns numeric limits and benchmark protocol. Hard

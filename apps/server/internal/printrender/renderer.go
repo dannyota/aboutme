@@ -157,9 +157,8 @@ func defaultHooks() *runtimeHooks {
 		euid:             os.Geteuid,
 		sandboxSupported: linuxSandboxSupported,
 		version: func(ctx context.Context, executable string) (string, error) {
-			arguments := controlledBrowserArguments(executable, "--version")
-			cmd := exec.CommandContext(ctx, browserEnvironmentExecutable, arguments...)
-			cmd.Env = make([]string, 0)
+			cmd := exec.CommandContext(ctx, executable, "--version")
+			configureBrowserCommand(executable)(cmd)
 			output, err := cmd.Output()
 			return strings.TrimSpace(string(output)), err
 		},
