@@ -68,6 +68,24 @@ relations' owner, temporary namespace, persistence, exact columns, constraints
 and trigger state before reuse. A name/type/index collision or lookalike is
 AM001; never adopt or repair it.
 
+PostgreSQL keeps ON COMMIT actions in backend memory, outside the relation
+catalog. Prove DELETE/PRESERVE behavior through commit, rollback and reuse
+tests; do not claim catalog validation of that action. Static owner-only
+creation and validated ownership reject application-owned replacements. Validate
+the exposed column defaults, constraints, grants and trigger function exactly.
+See PostgreSQL's
+[ON COMMIT implementation](https://github.com/postgres/postgres/blob/REL_18_STABLE/src/backend/commands/tablecmds.c#L18068).
+
+Reserve two-int advisory namespace `295306100`, derived from the first four
+big-endian SHA-256 bytes of `aboutme.runtime-write-finish.v1`. Its second key is
+pg_backend_pid(). It differs from media cleanup's `0x61626d65`. Entry and
+migration begin reject this backend's held guard. Finish rejects an early guard,
+uses pg_try_advisory_xact_lock before the final state-row lock, and fails AM001
+if another backend holds the key. Exact repeated finish requires the finished
+marker and guard. The guard survives DISCARD TEMP and prevents re-entry after
+forced checks remove pending trigger events. Commit, rollback and savepoint
+rollback release the guard with the corresponding marker/state changes.
+
 ## B1 function contract
 
 Every function is owned by aboutme_runtime_owner, SECURITY DEFINER, with
@@ -88,9 +106,11 @@ they receive no login EXECUTE grant.
 - runtime_assert_business_write has the same assertion. For an app session it
   also marks accepted_write and derives operation_id from fixed owner-supplied
   trigger arguments plus TG_OP. It exposes no manual acceptance function.
-- runtime_finish_write validates entry, updates state once when dirty using one
-  clock_timestamp value, and sets finished. Clean finish changes no generation;
-  exact repeated finish is idempotent. Rollback changes no durable generation.
+- runtime_finish_write validates entry and takes the finish guard. For dirty
+  work it locks the state row last, samples clock_timestamp once, and advances
+  generation and timestamp high-water values in one update. It then sets
+  finished. Clean finish changes no generation; exact repeated finish is
+  idempotent. Rollback changes no durable generation.
 - runtime_assert_write_finished is the DEFERRABLE INITIALLY DEFERRED AFTER
   INSERT constraint trigger on the marker. It only checks the current marker's
   finished state. Forced constraints before finish fail; after finish they
@@ -102,9 +122,14 @@ they receive no login EXECUTE grant.
 - runtime_begin_migration_write(operation_id text) requires that session marker
   and lock, creates the current transaction marker and marks dirty
   unconditionally. Its operation ID binds the migration version.
-- runtime_exit_migrator requires the exact session marker in autocommit, clears
-  it and releases exactly one session lock. Missing lock or ambiguous marker is
+- runtime_exit_migrator validates the exact session marker, rejects an active
+  write marker, clears the session marker and releases exactly one session lock.
+  The pinned-connection runner calls it in autocommit; SQL does not guess this
+  from timestamps or transaction IDs. Missing lock or ambiguous marker is
   contamination; the caller closes the dedicated backend.
+- runtime_read_migrator_metadata returns only gate, generation, enforcement
+  version and history owner. It is read-only, takes no input or advisory lock,
+  and grants EXECUTE only to migrator. It conveys no write authority.
 
 Ordinary unavailable uses SQLSTATE 55000. Marker/identity/shape mismatch,
 missing lock or re-entry after finish uses project SQLSTATE AM001. Do not use
@@ -112,15 +137,19 @@ PostgreSQL's P0004, which means assert_failure. Trigger errors change no rows.
 
 ## B1 grants and intermediate behavior
 
-Runtime owner owns state and functions. If owner transfer needs CREATE on
-public, grant it only within the migration transaction and revoke before commit.
-Give runtime_owner the database TEMPORARY privilege needed to create markers;
-leave existing database privileges and owners unchanged.
+Runtime owner owns state and functions. Before installation, database-local
+provisioning grants migrator CONNECT, TEMPORARY and CREATE on that database,
+schema USAGE and CREATE WITH GRANT OPTION, and runtime_owner database TEMPORARY.
+B1 validates required privileges, grants runtime_owner schema CREATE within its
+object-transfer transaction, and revokes it before commit. It never changes
+cluster roles, database owners or legacy table grants. Root owns shared
+provisioning; B1 tests install these fixed grants in their disposable database
+and prove the transfer under the real non-superuser migrator identity.
 
 Revoke PUBLIC table/function privileges. No login gets state DML. Grant
 enter/finish to app, maintenance, lifecycle-command and fencing-proof. Grant
-migrator entry/begin/finish/exit only to migrator. Restore gets no write
-function. Assertion helpers get no login EXECUTE.
+migrator entry/begin/finish/exit and metadata reads only to migrator. Restore
+gets no write function. Assertion helpers get no login EXECUTE.
 
 B1 attaches only the temporary-marker constraint trigger, not a legacy or
 Goose-table trigger. It leaves Goose ownership and grants unchanged. B3 installs
@@ -147,6 +176,9 @@ table ships in migration SQL.
 - Forced constraints before/after finish, constraints already immediate,
   repeated finish, savepoint rollback of dirty work/finish and pooled-backend
   reuse preserve the transaction boundary.
+- DISCARD TEMP before finish fails; after finish and forced checks it cannot
+  enable re-entry. Guard namespace inventory, separate backends, commit/rollback
+  reuse, early self-lock and a foreign holder prove fail-closed behavior.
 - Separate connections prove an exclusive holder blocks entry before any probe
   row lock; an entered writer finishes before exclusive acquisition. A trigger
   never acquires the barrier after a row lock.

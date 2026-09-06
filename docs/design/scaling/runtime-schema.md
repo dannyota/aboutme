@@ -122,14 +122,17 @@ COMMIT DELETE ROWS. Fixed static PL/pgSQL DDL creates its table and constraint
 trigger. Entry validates ownership, shape, constraints and trigger before reuse.
 No login has marker-table privileges. Marker mismatch is project SQLSTATE AM001
 and requires destruction of the physical connection. Ordinary unavailable state
-uses 55000. A committed marker lookalike is never adopted or repaired.
+uses 55000. A committed marker lookalike is never adopted or repaired. The
+transaction finish guard in the transaction contract survives DISCARD TEMP;
+temporary ownership alone does not prevent marker removal after forced checks.
 
 Grant enter/finish to app, maintenance, lifecycle-command and fencing-proof.
 Migrator receives only its session entry, per-migration begin, finish and exit
-primitives. Restore receives none. All assertion helpers remain owner-only. The
-state update is explicit and once per dirty transaction. A checked
-table/operation catalog marks accepted application writes automatically;
-maintenance and bookkeeping do not extend the application writer tail.
+primitives and the bounded read-only metadata accessor. Restore receives none.
+All assertion helpers remain owner-only. The state update is explicit and once
+per dirty transaction. A checked table/operation catalog marks accepted
+application writes automatically; maintenance and bookkeeping do not extend the
+application writer tail.
 
 ## public_transitions
 

@@ -76,7 +76,8 @@ provides the real function and live-DB entry/lock checks pass.
 
 Start with [R1.1 cluster role bootstrap](role-bootstrap.md), then
 [R1.2 write foundation](write-foundation.md). The unused Go helper is locally
-checked and committed as `986fe44`; live entry proof remains pending.
+checked and committed as `f45cf93`; it replaces the raw starter at `986fe44`.
+Live entry proof remains pending.
 
 Owner paths: root-assigned migration number, apps/server/sql runtime query
 source or approved new SQL files, generated store output, store/migration tests.

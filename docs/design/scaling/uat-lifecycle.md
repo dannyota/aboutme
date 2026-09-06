@@ -73,11 +73,14 @@ functions.
 - Every transaction that can create, reschedule, lease, complete, expire, or
   delete application/job state participates in the write barrier below.
   runtime_finish_write runs as runtime_owner and advances generation once per
-  dirty transaction and sets last_write_at from clock_timestamp immediately
-  before commit. The deferred constraint trigger only asserts finish.
-  Transactions that accept an application mutation also advance
-  last_accepted_writer_at; maintenance and controller bookkeeping do not extend
-  the idempotency tail. Trigger DML on runtime_write_state does not recurse.
+  dirty transaction. It takes the transaction finish guard, locks the state row
+  last, then samples clock_timestamp once immediately before its final update.
+  Each updated timestamp is GREATEST of its previous value and that sample, so
+  lock waits or backward clock steps cannot shorten the writer tail. The
+  deferred constraint trigger only asserts finish. Transactions that accept an
+  application mutation also advance last_accepted_writer_at; maintenance and
+  controller bookkeeping do not extend the idempotency tail. Trigger DML on
+  runtime_write_state does not recurse.
 
 ## runtime_job_schedule
 

@@ -120,3 +120,9 @@ the deferred trigger only asserts completion. Owner-only temporary markers,
 contaminated-backend removal and framed migrator bookkeeping preserve the write
 barrier. See [transaction entry](../design/scaling/transaction-entry.md). This
 correction changes neither deployment scope nor the approved budget.
+
+Local hostile-SQL probes also showed that DISCARD TEMP can remove a finished
+marker after forced constraint checks. A reserved per-backend transaction
+advisory guard prevents that removal from permitting another finish. Completion
+locks the state row before sampling database time and preserves timestamp
+high-water values. These corrections retain the same write and privacy contract.
