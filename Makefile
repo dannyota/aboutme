@@ -430,10 +430,10 @@ sqlc-check: ## Fail if the generated data layer drifts from migrations/ (uses --
 	      git status --porcelain -- internal/store; exit 1; }; }
 
 migrate: ## Apply pending migrations
-	cd apps/server && go run ./cmd/migrate
+	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate
 
 migrate-check: ## Report pending migrations without applying them
-	cd apps/server && go run ./cmd/migrate -check
+	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate -check
 
 server-migration-test: ## Run the migration harness + migrate CLI (needs test-db-up or TEST_DATABASE_URL)
 	@printf '%s\n' 'server-migration-test: go test migration harness and CLI packages'
