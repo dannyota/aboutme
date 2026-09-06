@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 38, active** (2026-09-06).
+Status: **Revision 39, active** (2026-09-06).
 
 The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -46,15 +46,15 @@ password authentication, the native HTTPS development harness, and the v1 entry
 experience, including MCP agent access and the owner publish UX, the application
 UI toolkit, and the application visual identity.
 
-| Phase | Work                                                                   | State                                                  |
-| ----- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
-| 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                       |
-| 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete and merged                                    |
-| 8     | [Privacy lifecycle](../runbooks/privacy.md)                            | Complete and merged                                    |
-| 9     | [AWS Singapore cost research](../research/aws-cost/recommendation.md)  | Research and decision complete                         |
-| 10    | [Infrastructure and AWS UAT](phase-10/README.md)                       | Planned; UAT scope authorized; no deployment performed |
-| 11    | Production promotion                                                   | After Phase 10 and separate launch approval            |
-| 12    | Flutter app                                                            | Deferred beyond web v1                                 |
+| Phase | Work                                                                   | State                                                |
+| ----- | ---------------------------------------------------------------------- | ---------------------------------------------------- |
+| 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                     |
+| 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete and merged                                  |
+| 8     | [Privacy lifecycle](../runbooks/privacy.md)                            | Complete and merged                                  |
+| 9     | [AWS Singapore cost research](../research/aws-cost/recommendation.md)  | Complete and merged                                  |
+| 10    | [Infrastructure and AWS UAT](phase-10/README.md)                       | In progress: replica design; no deployment performed |
+| 11    | Production promotion                                                   | After Phase 10 and separate launch approval          |
+| 12    | Flutter app                                                            | Deferred beyond web v1                               |
 
 Active phases and tasks use numbers, such as Phase 7 and task 7.1. Completed
 lettered identifiers remain historical evidence and are not reassigned.
