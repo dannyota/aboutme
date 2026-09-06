@@ -18,17 +18,18 @@ and write framing.
 
 The schema adds `public_transitions`, `public_transition_targets`,
 `public_transition_replicas`, and `public_transition_acks` as specified in
-[runtime schema](runtime-schema.md#public_transitions). These constraints are
-required:
+[runtime schema](runtime-schema.md#public_transitions) and the exact
+[storage contract](transition-storage.md). These constraints are required:
 
 - Transition, replica, and resume UUIDs are non-nil.
 - `deadline_at = created_at + interval '5 seconds'`.
 - `terminal_at` is null exactly while state is `closing`.
 - Every carried target digest is 32 octets.
-- Target ordinals are contiguous and nonnegative. Discovery is ordinal zero;
-  resume targets follow it, or start at zero when discovery is absent.
+- Each parent has 1..4 targets. Ordinals are contiguous and nonnegative.
+  Discovery is ordinal zero; resume targets follow it, or start at zero when
+  discovery is absent.
 - Expected generations are positive.
-- Closing and rolled-back targets have no result.
+- Closing, rolled-back and unresolved targets have no result.
 - Every committed target has exactly one immutable `generation` or `retired`
   result. Discovery is Revoking and permits only `generation`.
 - Required replica identity matches its immutable membership tuple. An ack's
@@ -43,6 +44,12 @@ change after terminal state, and any ack update or delete. The one permitted
 result write occurs atomically while its closing parent is locked. All four
 tables have a `runtime_assert_write_entry` BEFORE statement trigger. Transition
 bookkeeping does not extend `last_accepted_writer_at`.
+
+The deferred whole-parent assertion also checks initial closing creation,
+recomputes the ordered digest and requires a nonempty required set. Committed
+requires every required ack. Other states may retain any observed ack subset,
+including full coverage. Child insertion locks the parent and requires closing.
+Separate owner triggers always reject TRUNCATE, including under valid entry.
 
 ## Target digest
 

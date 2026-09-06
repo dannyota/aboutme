@@ -17,6 +17,8 @@ root assigns the schema slice.
 replay contracts. [Public transitions](public-transitions.md) and
 [transition commit](transition-commit.md) define the ordered target digest,
 typed functions, transaction capability and recovery actors.
+[Transition storage](transition-storage.md) fixes the four-table columns,
+terminal matrix, digest assertion and immutable child sets.
 [Exclusive lifecycle entry](lifecycle-write-entry.md) fixes the two wake
 methods, marker, table/action catalog and historical write-generation results.
 
@@ -219,7 +221,9 @@ maintenance and bookkeeping do not extend the application writer tail.
 
 ## public_transitions
 
-- transition_id uuid primary key; initiator_replica_id references replicas.
+- transition_id uuid primary key; required initiator_replica_id,
+  initiator_instance_id and initiator_release_digest use a composite foreign key
+  to immutable membership.
 - operation text constrained to the existing mutation inventory; state check in
   ('closing','committed','rolled_back','unresolved').
 - created_at, deadline_at, terminal_at timestamptz; deadline_at equals
@@ -227,14 +231,17 @@ maintenance and bookkeeping do not extend the application writer tail.
   budget onto database statement time and derives created_at from that deadline.
   The original caller deadline still bounds all work; it never restarts on SQL,
   lock wait or recovery. See [public transitions](public-transitions.md).
-- target_digest bytea length 32; terminal_error_code nullable and bounded; no
-  request body or secret. Per-target rows are the only committed-result source.
+- target_digest bytea length 32; terminal_error_code uses the exact closed
+  [state matrix](transition-storage.md#parent-identity-and-state). No request
+  body or secret is stored. Per-target rows are the only committed-result
+  source.
 - recovery_fencing_evidence_id nullable text references the unique fencing proof
   evidence_id. It is non-null exactly for rolled_back with reason
   initiator_fenced, and immutable. Other outcomes keep it null.
-- closing rows may become committed or rolled_back once. unresolved is only for
-  invalid/corrupt recovery evidence and fails readiness; no normal retry writes
-  through it.
+- closing rows may become committed, rolled_back or unresolved once. Terminal
+  rows are immutable. Unresolved requires proved durable recovery evidence and
+  fails readiness; its callable resolver remains gated by the
+  [evidence contract](transition-storage.md#unresolved-evidence-boundary).
 
 ## public_transition_targets
 
@@ -243,13 +250,14 @@ maintenance and bookkeeping do not extend the application writer tail.
 - kind check in ('discovery','resume'); discovery uses resume_id null; resume
   uses uuid. expected_generation bigint > 0.
 - class check in ('non_draining','revoking'); discovery must be revoking.
-- ordinal 0 is discovery when present; resume targets follow in ascending UUID
-  byte order. A digest covers every ordered field.
+- Each parent has 1..4 targets with contiguous ordinals from zero. Discovery is
+  first when present; resumes follow in ascending UUID byte order. An owner
+  helper recomputes the exact ordered target digest for a deferred assertion.
 - result_kind nullable check in ('generation','retired'); result_generation
   bigint nullable; result_recorded_at nullable. While closing, all are null. At
   committed terminal state each target has exactly one result: generation
   requires result_generation > 0; retired requires null. Discovery permits
-  generation only. Rollback leaves all result fields null.
+  generation only. Rollback and unresolved leave all result fields null.
 - A terminal function/constraint trigger refuses committed until every result is
   valid and prevents all result changes after terminal state.
 
@@ -257,6 +265,8 @@ maintenance and bookkeeping do not extend the application writer tail.
 
 - primary key (transition_id, replica_id); snapshot_state fixed 'required'.
 - replica release/instance identity copied for audit; target_digest bytea.
+- Composite foreign keys bind immutable membership and parent digest. Every
+  parent has a nonempty required set. Rows cannot change or be deleted.
 - row exists for every active, draining or terminating unfenced incarnation
   snapshotted at creation. A terminating incarnation cannot ack, so begin may
   reject immediately rather than wait; it cannot omit that incarnation.
@@ -264,10 +274,16 @@ maintenance and bookkeeping do not extend the application writer tail.
 ## public_transition_acks
 
 - primary key (transition_id, replica_id), foreign key to required snapshot.
+- The foreign key also binds target_digest. Instance/release identity comes from
+  that immutable required row and is not duplicated in the ack.
 - target_digest, acked_at, local_result text fixed 'closed'.
 - revoking_count, non_draining_count nonnegative for metrics only.
 - insert is idempotent only when all values match; mismatch is corruption and
   marks runtime unready. An ack cannot be updated or reused.
+- Committed parents require every required ack. Closing, rolled_back and
+  unresolved permit any observed subset, including the full set. Owner
+  assertions reject terminal child inserts and all four tables reject TRUNCATE,
+  including under valid write entry.
 
 ## Notification channels
 

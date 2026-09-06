@@ -150,27 +150,23 @@ parent lock proves no open business transaction holds the execution fence. The
 function rechecks tuple and digest, then atomically rolls back. Committed and
 rolled_back return the durable state.
 
-```sql
-runtime_mark_public_transition_unresolved(
-  transition_id uuid,
-  initiator_replica_id uuid,
-  initiator_instance_id text,
-  initiator_release_digest text,
-  target_digest bytea,
-  reason text
-)
-```
-
-This definer function accepts only fixed bounded reasons and first proves the
-durable contradiction. The caller cannot supply evidence or an error string.
-Unresolved never reopens a fence or permits business SQL.
+No reason-taking unresolved function is installed. The
+[storage contract](transition-storage.md#unresolved-evidence-boundary) reserves
+only closing-to-unresolved with `recovery_evidence_conflict`. Before adding a
+callable resolver, R3 must name the exact durable mutation/idempotency evidence
+and a fixed parent-locked query that proves its conflict. Callers cannot assert
+the contradiction, supply an error string or alter terminal results. Until that
+contract lands, contradictory recovery retains closing and keeps readiness
+unavailable. Unresolved never reopens a fence or permits business SQL.
 
 An ambiguous business commit reads the durable transition and existing
 idempotency evidence through a fresh pool connection. Complete committed state
 is publication authority; R3 still validates the stored response evidence before
-returning it. Rolled_back proves business SQL did not pass the execution fence.
-Closing uses recovery rollback. Missing, partial, or contradictory evidence
-becomes unresolved and leaves admission closed.
+returning it. Rolled_back proves no business change from that transition
+committed. Closing uses recovery rollback only when its evidence permits that
+proof. Missing, partial or contradictory evidence leaves admission closed and
+follows the gated unresolved resolver contract; a caller mismatch alone changes
+no durable state.
 
 ## Fenced-initiator recovery
 
