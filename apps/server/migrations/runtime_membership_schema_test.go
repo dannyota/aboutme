@@ -114,7 +114,7 @@ func TestRuntimeMembershipSchemaEvidenceImmutableAndTupleBound(t *testing.T) {
 	}
 	requireMembershipFailure(t, membershipWrite(t, db, `UPDATE public.runtime_fencing_proofs SET evidence_id='changed' WHERE evidence_id='evidence-1'`))
 	requireMembershipFailure(t, membershipWrite(t, db, `DELETE FROM public.runtime_fencing_proofs`))
-	requireMembershipFailure(t, membershipWrite(t, db, `TRUNCATE public.runtime_fencing_proofs`))
+	requireMembershipPGError(t, membershipWrite(t, db, `TRUNCATE public.runtime_fencing_proofs CASCADE`), "55000", "", "")
 }
 
 func TestRuntimeMembershipSchemaLifecycleShapeAndPredecessor(t *testing.T) {
