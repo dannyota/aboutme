@@ -148,6 +148,8 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
 - [ ] Set capacity.updated_by to the exact public function name for the fresh
       wrapper call. These four fixed literals are internal evidence; no caller
       operation ID is added. Exact replay preserves updated_by and updated_at.
+- [ ] Assert runtime_require_write_entry before the first row lock, including
+      exact replay. The fixed operation never acquires the barrier itself.
 - [ ] Never lock or wait on a transition parent. Use only the accepted
       nonlocking predicates while holding membership locks. Return exact
       runtime_replica_result fields with null count/partition outputs and
@@ -161,7 +163,9 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
 - [ ] Prove serving/maintenance role separation with real sessions. Wrong
       wrapper/helper/table access fails 42501. Verify owners, PUBLIC revocation,
       helper secrecy, search_path and no sensitive values in fixed errors.
-      Hostile search paths cannot redirect helper reads or writes.
+      Direct calls without write entry reject before any row lock, including
+      replay while another session holds public_state. Hostile search paths
+      cannot redirect helper reads or writes.
 - [ ] Cover offline, starting, online and stopping registration; closing and
       unresolved transition visibility; no implicit activation; ready rejection
       outside joining and exact ready replay under each accepted pair. Test
