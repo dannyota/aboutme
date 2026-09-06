@@ -12,6 +12,7 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | [Replica membership](replica-membership.md)               | Exact node identity, task trios, leave and EC2 proof                     |
 | [Lifecycle operations](lifecycle-operations.md)           | Serving capacity, replacement and private maintenance wake               |
 | [Lifecycle replay](lifecycle-replay.md)                   | Immutable operation results and permitted action order                   |
+| [Lifecycle digest vectors](lifecycle-vectors.md)          | Exact typed field order and literal SQL/Go replay hashes                 |
 | [Lifecycle write entry](lifecycle-write-entry.md)         | Fixed exclusive wake methods, markers and completion                     |
 | [Public transitions](public-transitions.md)               | Target digest, replica acknowledgements and durable recovery             |
 | [Transition recovery](transition-recovery.md)             | Atomic outcome evidence and parent-locked rollback                       |

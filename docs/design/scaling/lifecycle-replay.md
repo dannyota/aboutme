@@ -91,11 +91,12 @@ explicit null presence. `replayed` is deliberately excluded: a fresh step stores
 and returns replayed=false, while an exact retry returns the same stored result
 columns and digest with replayed=true. Replay never reads current replica,
 capacity, or partition rows to reconstruct an old result. The migration fixes
-one literal expected SHA-256 vector per action; Go repeats the same bytes and
-vectors. SQL is authoritative. Fresh mutation records result_generation exactly
-one above expected_generation. Replay returns the stored result without mutation
-or generation increment. admission_enabled is true only for
-lifecycle_phase=online. updated_at and updated_by are database evidence.
+the [literal SHA-256 vectors](lifecycle-vectors.md), including each action and
+its nullable variants; Go repeats the same bytes and vectors. SQL is
+authoritative. Fresh mutation records result_generation exactly one above
+expected_generation. Replay returns the stored result without mutation or
+generation increment. admission_enabled is true only for lifecycle_phase=online.
+updated_at and updated_by are database evidence.
 
 ## Serialization and action graph
 
