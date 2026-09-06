@@ -16,7 +16,7 @@ fi
 printf '%s %s %s %s\n' "$(/bin/ps -o pgid= -p $$)" "$TZ" "$LANG" "$LC_ALL"
 `)
 
-	output, err := defaultHooks().version(context.Background(), executable)
+	output, err := defaultHooksWithSupervisor(testSupervisorCommand(t)).version(context.Background(), executable)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -90,6 +90,16 @@ node scripts/generate-public-roots.mjs --check >/dev/null ||
 native=$(<scripts/dev-native.sh)
 https=$(<scripts/dev-https.sh)
 dockerfile=$(<deploy/web.Dockerfile)
+server_dockerfile=$(<deploy/server.Dockerfile)
+
+[[ $server_dockerfile == *'-o /out/render-browser-supervisor ./cmd/render-browser-supervisor'* ]] ||
+  fail 'server image does not build the browser supervisor'
+[[ $server_dockerfile == *'COPY --from=build /out/render-browser-supervisor /usr/local/bin/render-browser-supervisor'* ]] ||
+  fail 'server image does not install the browser supervisor beside the server'
+for source in "$native" "$https"; do
+  [[ $source == *'go build -o "$BIN_DIR/render-browser-supervisor" ./cmd/render-browser-supervisor'* ]] ||
+    fail 'native startup does not build the browser supervisor beside the server'
+done
 
 [[ $native == *'PUBLIC_RENDER_ORIGIN=http://127.0.0.1:20030'* ]] ||
   fail 'native direct render origin is missing'

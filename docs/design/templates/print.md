@@ -220,3 +220,7 @@ budget, with a configured 20-second cancellation deadline from admission and
 process-group kill. Every result waits for joined teardown. The
 [numeric budgets](../budgets.md) own those values. A template that exceeds them
 is defective; every golden fixture must print within the limits.
+
+[Process teardown](process-teardown.md) defines the private supervisor,
+descriptor-bound cancellation and completion proof required before capacity is
+released.

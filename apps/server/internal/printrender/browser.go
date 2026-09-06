@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
+	"golang.org/x/sys/unix"
 
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 )
@@ -76,7 +78,7 @@ func browserFlags(proxyURL string) map[string]any {
 	}
 }
 
-func allocatorOptions(executable, proxyURL string) []chromedp.ExecAllocatorOption {
+func allocatorOptions(executable, proxyURL string, configure func(*exec.Cmd)) []chromedp.ExecAllocatorOption {
 	flags := browserFlags(proxyURL)
 	names := make([]string, 0, len(flags))
 	for name := range flags {
@@ -85,7 +87,7 @@ func allocatorOptions(executable, proxyURL string) []chromedp.ExecAllocatorOptio
 	sort.Strings(names)
 	options := []chromedp.ExecAllocatorOption{
 		chromedp.ExecPath(browserEnvironmentExecutable),
-		chromedp.ModifyCmdFunc(configureBrowserCommand(executable)),
+		chromedp.ModifyCmdFunc(configure),
 		chromedp.WSURLReadTimeout(5 * time.Second),
 	}
 	for _, name := range names {
@@ -103,25 +105,125 @@ func controlledBrowserArguments(executable string, arguments ...string) []string
 	return append(result, arguments...)
 }
 
-func configureBrowserCommand(executable string) func(*exec.Cmd) {
+type supervisorCommand struct {
+	path   string
+	prefix []string
+}
+
+type browserJoinProof struct {
+	reader, writer *os.File
+	passedWriter   *os.File
+	done           chan struct{}
+	readerDone     chan struct{}
+	mu             sync.Mutex
+	closeOnce      sync.Once
+	doneOnce       sync.Once
+	cmd            *exec.Cmd
+}
+
+func newBrowserCommand(executable, supervisor string, prefix []string) (func(*exec.Cmd), *browserJoinProof) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		proof := &browserJoinProof{done: make(chan struct{}), readerDone: make(chan struct{})}
+		close(proof.readerDone)
+		return func(cmd *exec.Cmd) { cmd.Path = "" }, proof
+	}
+	proof := &browserJoinProof{reader: reader, writer: writer, done: make(chan struct{}), readerDone: make(chan struct{})}
+	go proof.read()
 	return func(cmd *exec.Cmd) {
+		proof.mu.Lock()
+		proof.cmd = cmd
+		proof.mu.Unlock()
 		arguments := controlledBrowserArguments(executable, cmd.Args[1:]...)
-		cmd.Path = browserEnvironmentExecutable
-		cmd.Args = append([]string{browserEnvironmentExecutable}, arguments...)
+		cmd.Path = supervisor
+		cmd.Args = append([]string{supervisor}, prefix...)
+		passedFD, duplicateErr := unix.Dup(int(proof.writer.Fd()))
+		if duplicateErr != nil {
+			cmd.Path = ""
+			proof.noChildStarted()
+			return
+		}
+		proof.mu.Lock()
+		proof.passedWriter = os.NewFile(uintptr(passedFD), "join-proof-pass")
+		passedWriter := proof.passedWriter
+		proof.mu.Unlock()
+		proofFD := 3 + len(cmd.ExtraFiles)
+		cmd.Args = append(cmd.Args, "--extra-files", strconv.Itoa(len(cmd.ExtraFiles)), "--proof-fd", strconv.Itoa(proofFD), "--", browserEnvironmentExecutable)
+		cmd.Args = append(cmd.Args, arguments...)
+		cmd.ExtraFiles = append(cmd.ExtraFiles, passedWriter)
 		cmd.Env = make([]string, 0)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 		cmd.Cancel = func() error {
 			if cmd.Process == nil {
 				return os.ErrProcessDone
 			}
-			err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			err := cmd.Process.Signal(syscall.SIGTERM)
 			if errors.Is(err, syscall.ESRCH) {
 				return os.ErrProcessDone
 			}
 			return err
 		}
+	}, proof
+}
+
+func (p *browserJoinProof) read() {
+	defer close(p.readerDone)
+	defer p.reader.Close() //nolint:errcheck
+	buffer := make([]byte, 1)
+	state := byte(0)
+	for {
+		if _, err := p.reader.Read(buffer); err != nil {
+			return
+		}
+		p.closeWriters()
+		if buffer[0] == 'D' && state == 0 || buffer[0] == 'D' && state == 'S' {
+			p.doneOnce.Do(func() { close(p.done) })
+			return
+		}
+		if buffer[0] != 'S' || state != 0 {
+			return
+		}
+		state = 'S'
 	}
 }
+
+func (p *browserJoinProof) wait() {
+	<-p.done
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.passedWriter != nil {
+		ignoreProcessError(p.passedWriter.Close())
+	}
+}
+
+func (p *browserJoinProof) noChildStarted() {
+	p.closeWriters()
+	p.mu.Lock()
+	if p.passedWriter != nil {
+		ignoreProcessError(p.passedWriter.Close())
+	}
+	p.mu.Unlock()
+	p.doneOnce.Do(func() { close(p.done) })
+}
+
+func (p *browserJoinProof) completeIfNotStarted() {
+	p.mu.Lock()
+	cmd := p.cmd
+	p.mu.Unlock()
+	if cmd == nil || cmd.Process == nil {
+		p.noChildStarted()
+	}
+}
+
+func (p *browserJoinProof) closeWriters() {
+	p.closeOnce.Do(func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		ignoreProcessError(p.writer.Close())
+	})
+}
+
+func ignoreProcessError(error) {}
 
 func readyBrowser(ctx context.Context, renderer *Renderer) (resultErr error) {
 	proxy, err := startAttemptProxy(ctx, proxyConfig{
@@ -137,7 +239,7 @@ func readyBrowser(ctx context.Context, renderer *Renderer) (resultErr error) {
 			resultErr = ErrUnavailable
 		}
 	}()
-	if err := withBrowser(ctx, renderer.executable, proxy.url(), func(browserCtx context.Context) error {
+	if err := withBrowser(ctx, renderer.executable, proxy.url(), renderer.supervisor, func(browserCtx context.Context) error {
 		return chromedp.Run(browserCtx)
 	}); err != nil {
 		return ErrUnavailable
@@ -145,12 +247,15 @@ func readyBrowser(ctx context.Context, renderer *Renderer) (resultErr error) {
 	return nil
 }
 
-func withBrowser(ctx context.Context, executable, proxyURL string, run func(context.Context) error) error {
-	allocatorCtx, allocatorCancel := chromedp.NewExecAllocator(ctx, allocatorOptions(executable, proxyURL)...)
+func withBrowser(ctx context.Context, executable, proxyURL string, supervisor supervisorCommand, run func(context.Context) error) error {
+	configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
+	allocatorCtx, allocatorCancel := chromedp.NewExecAllocator(ctx, allocatorOptions(executable, proxyURL, configure)...)
 	browserCtx, browserCancel := chromedp.NewContext(allocatorCtx)
 	defer func() {
 		browserCancel()
 		allocatorCancel()
+		proof.completeIfNotStarted()
+		proof.wait()
 	}()
 	return run(browserCtx)
 }
@@ -179,7 +284,7 @@ func (r *Renderer) renderAttempt(parent context.Context, navigation renderjob.Na
 		cancel()
 		callbacks.wait()
 	}()
-	err = withBrowser(ctx, r.executable, proxy.url(), func(browserCtx context.Context) error {
+	err = withBrowser(ctx, r.executable, proxy.url(), r.supervisor, func(browserCtx context.Context) error {
 		return runNavigation(browserCtx, cancel, &callbacks, &failure, initialURL, navigation)
 	})
 	if parentErr := parent.Err(); parentErr != nil {

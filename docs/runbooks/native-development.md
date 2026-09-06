@@ -53,10 +53,10 @@ Isolated capture harnesses that seed their own fixture database set
 The command is idempotent. It starts or reuses `aboutme-test-db`, creates the
 fixed database roles, verifies their privileges on reuse, creates `aboutme_dev`
 if needed, provisions its fixed migration grants, applies goose migrations,
-builds the Go binary, then starts the authentication-mail-capture server, Go,
-Nuxt, and Caddy. The mail-capture bearer, rate-HMAC, and mail-encryption secrets
-are created once under `.dev/secrets/` and reused across restarts; they are
-never printed.
+builds Go and its browser supervisor, then starts the
+authentication-mail-capture server, Go, Nuxt, and Caddy. The mail-capture
+bearer, rate-HMAC, and mail-encryption secrets are created once under
+`.dev/secrets/` and reused across restarts; they are never printed.
 
 If `ABOUTME_DEV_DATABASE_URL` selects another cluster, first export its
 `CLUSTER_BOOTSTRAP_DATABASE_URL` for the `postgres` database and run

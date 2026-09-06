@@ -23,6 +23,7 @@ COPY packages/schema/gen/go/ ./packages/schema/gen/go/
 
 # The API server, role bootstrap, and migration runner share one image.
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/render-browser-supervisor ./cmd/render-browser-supervisor
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/db-role-bootstrap ./cmd/db-role-bootstrap
 
@@ -37,6 +38,7 @@ RUN apt-get update \
 ENV CHROMIUM_PATH=/opt/chromium/chrome TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 COPY --from=build /out/server /usr/local/bin/server
+COPY --from=build /out/render-browser-supervisor /usr/local/bin/render-browser-supervisor
 COPY --from=build /out/migrate /usr/local/bin/migrate
 COPY --from=build /out/db-role-bootstrap /usr/local/bin/db-role-bootstrap
 
