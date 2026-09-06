@@ -173,8 +173,11 @@ idempotent only while that prerequisite holds.
 [Lifecycle replay](lifecycle-replay.md) returns immutable historical step
 columns and digest. It never reconstructs that result from current capacity,
 replica, partition or write-state rows. Supplied operation/workflow/action or
-argument conflicts and reuse of a consumed replacement predecessor are AM002. A
-recomputed stored argument/result digest mismatch or impossible ledger row is
+argument conflicts and reuse of a consumed replacement predecessor are AM002.
+Every supplied canonical argument-digest mismatch is AM002; the ledger cannot
+reconstruct every original argument to distinguish changed input from a
+well-shaped stored digest change. A recomputed stored result-digest mismatch,
+independently provable retained-field corruption or impossible ledger row is
 AM001. Missing/out-of-order predecessor and stale generation are 55000.
 
 ## Query transport and Go ownership

@@ -21,7 +21,11 @@ values in its immutable step result. This includes prepare-scale-out,
 activation, prepare-scale-in, finish-scale-in, prepare-maintenance-drain,
 begin-replica-termination, begin-wake, and complete-wake. Exact replay, rejected
 calls, and rollback increment neither. Lifecycle-command changes capacity state
-only through these definer functions and has no direct table DML.
+only through these definer functions and has no direct table DML. Each fresh
+action writes operation_id to both updated_by and controller_operation_id;
+replay preserves them. The owner-only runtime_sample_lifecycle_time() samples
+clock_timestamp once after locks, with the clamp and isolated test seam fixed by
+the [ordinary operation contract](lifecycle-controller.md).
 
 Fresh begin-wake and complete-wake also each increment
 runtime_write_state.generation exactly once. Each requires the exact expected
@@ -89,16 +93,19 @@ Lock public_state, capacity, target replica, then shared_rate_partitions in
 numeric order. Require exact joining+join_ready tuple, lifecycle online, no
 closing/ unresolved transition or unfenced terminating replica. For serving
 kind, require active serving count below desired; activation of the first
-serving replica atomically enables logical partition 1 and activation of the
-second enables partition 2. A replacement requires an exact fenced, previously
-unused replaced_replica_id and changes neither logical flag. This permits one
-replacement after one-node loss and two separately bound replacements after both
-nodes are fenced, while active serving count must remain below unchanged
-desired. Initial and scale-out activation require replaced_replica_id null. For
-maintenance kind, require zero other maintenance replica, do not count it
-against desired and do not change rate partitions. Change joining->active. Only
-a serving result may later contribute to Caddy readiness; commit observation,
-not this return alone, permits that readiness.
+serving replica under initial_serving or uat_serving_wake requires both
+partitions disabled, then atomically enables partition 1. Retained enabled
+partition 1 after node loss requires exact fenced-predecessor replacement.
+Activation of the second serving replica enables partition 2. A replacement
+requires an exact fenced, previously unused replaced_replica_id and changes
+neither logical flag. This permits one replacement after one-node loss and two
+separately bound replacements after both nodes are fenced, while active serving
+count must remain below unchanged desired. Initial and scale-out activation
+require replaced_replica_id null. For maintenance kind, require zero other
+maintenance replica, do not count it against desired and do not change rate
+partitions. Change joining->active. Only a serving result may later contribute
+to Caddy readiness; commit observation, not this return alone, permits that
+readiness.
 
 ## Private maintenance wake
 
