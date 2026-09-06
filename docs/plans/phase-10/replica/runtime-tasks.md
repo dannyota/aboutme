@@ -131,9 +131,11 @@ a later operation migration, with claim schema 17 unchanged.
 
 The [membership](../../../design/scaling/replica-membership.md),
 [lifecycle](../../../design/scaling/lifecycle-operations.md) and
-[replay](../../../design/scaling/lifecycle-replay.md) contracts fix exact task
-trios, serving/maintenance kinds, logical partitions and immutable controller
-results. [Public transitions](../../../design/scaling/public-transitions.md) and
+[replay](../../../design/scaling/lifecycle-replay.md) contracts and
+[literal digest vectors](../../../design/scaling/lifecycle-vectors.md) fix exact
+task trios, serving/maintenance kinds, logical partitions and immutable
+controller results.
+[Public transitions](../../../design/scaling/public-transitions.md) and
 [commit](../../../design/scaling/transition-commit.md) fix the target digest,
 original deadline, parent-first execution fence and separate lifecycle recovery
 of a proved fenced initiator. R1 installs their real named-role grants. R8 owns
