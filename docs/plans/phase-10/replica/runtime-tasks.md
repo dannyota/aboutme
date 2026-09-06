@@ -243,6 +243,13 @@ Split into disjoint author subtasks only after R5 interfaces freeze:
   owns one-shot command wiring. Enforce global password two/16 and mail two-send
   claims where their owners compose them; keep explicit per-task rows local.
 
+R7d follows
+[maintenance sessions](../../../design/scaling/maintenance-entry.md). Root first
+assigns its store primitive and database functions as a serialized slice. The
+fixed lock catalog and eight allowed pool reads feed R8's existing operation
+inventory. Callers preserve scope-before-job auth-mail ordering and must prove
+quarantine never cleans up pgx concurrently with an active callback.
+
 Each subtask writes current-response parity tests plus two-store concurrency,
 overflow, DB loss, cancellation and ambiguity tests. Preserve every inventory
 number and key shape. Photo admission remains per task. Outer and route-specific

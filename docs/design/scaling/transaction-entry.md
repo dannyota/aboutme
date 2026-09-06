@@ -130,10 +130,15 @@ existing relative orders remain unchanged:
 - Account deletion: slug, public_state, canonical email, registration, user,
   ordered resumes, current session.
 - OAuth: client/user/grant/code/token order already encoded by each flow.
-- Auth mail: leased job, exact registration/reset/user scope, then outcome.
+- Auth mail: exact registration/reset/user scope, leased job, then outcome.
 - Maintenance: command advisory session lock, then its documented page/row
   order. The command takes runtime shared entry before the command advisory
   lock.
+
+[Maintenance sessions](maintenance-entry.md) bind that outer barrier, fixed
+command lock and every write transaction to one leased backend, including idle
+gaps. Auth mail uses the ordinary runner and preserves its scope-before-job
+order.
 
 No callback explicitly locks runtime_write_state. The runner's finish update is
 last. Finalize-stop takes the exclusive advisory lock, then runtime_write_state

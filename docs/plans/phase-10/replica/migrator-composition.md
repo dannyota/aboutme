@@ -156,7 +156,7 @@ databases are removed by their creator; workers never stop the container.
 
 ## Later boundary
 
-R7d's maintenance commands must hold their runtime barrier and command session
-lock on one owned connection. They cannot lock on one connection and execute a
-pool-backed write callback on another. Settle that separate connection-bound
-contract before R7d implementation; B3 does not add a general session-lock API.
+R7d follows the separate
+[maintenance session contract](../../../design/scaling/maintenance-entry.md).
+Its barrier, fixed command lock and writes share one leased backend. B3 does not
+add a general session-lock API.
