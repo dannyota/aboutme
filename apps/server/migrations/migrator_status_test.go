@@ -12,34 +12,35 @@ func TestStatusPre13Inert13AndClosedProtectedAreReadOnly(t *testing.T) {
 	db := newCompositionTestDatabase(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	provider, err := NewProvider(db, FS)
+	foundationFS := enforcementFixtureFS(t)
+	provider, err := NewProvider(db, foundationFS)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := provider.UpTo(ctx, 12); err != nil {
 		t.Fatal(err)
 	}
-	statuses, err := Status(ctx, db, LocalAdminMigratorIdentity())
+	statuses, err := statusFS(ctx, db, foundationFS, LocalAdminMigratorIdentity())
 	if err != nil || PendingCount(statuses) != 2 {
 		t.Fatalf("pre-13 Status pending=%d error=%v", PendingCount(statuses), err)
 	}
 	if _, err := provider.UpTo(ctx, 13); err != nil {
 		t.Fatal(err)
 	}
-	statuses, err = Status(ctx, db, LocalAdminMigratorIdentity())
+	statuses, err = statusFS(ctx, db, foundationFS, LocalAdminMigratorIdentity())
 	if err != nil || PendingCount(statuses) != 1 {
 		t.Fatalf("inert-13 Status pending=%d error=%v", PendingCount(statuses), err)
 	}
 	if _, err := AdoptHistoryOwner(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Apply(ctx, db, LocalAdminMigratorIdentity()); err != nil {
+	if _, err := applyFS(ctx, db, foundationFS, LocalAdminMigratorIdentity()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.ExecContext(ctx, `UPDATE public.runtime_write_state SET write_gate='closed' WHERE singleton`); err != nil {
 		t.Fatal(err)
 	}
-	statuses, err = Status(ctx, db, LocalAdminMigratorIdentity())
+	statuses, err = statusFS(ctx, db, foundationFS, LocalAdminMigratorIdentity())
 	if err != nil || PendingCount(statuses) != 0 {
 		t.Fatalf("closed protected Status pending=%d error=%v", PendingCount(statuses), err)
 	}

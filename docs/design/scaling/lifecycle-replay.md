@@ -109,6 +109,12 @@ generation, increments controller_generation once, and records its result. A
 stale workflow cannot skip or reorder actions because each action checks its
 required predecessor row and current capacity/replica state.
 
+Intervening controller actions may advance generation between workflow steps.
+The predecessor's result generation must be at most the next action's expected
+generation; it need not equal it. For example, abrupt scale-in records a
+separate termination action between prepare and finish. The next action still
+requires the exact current controller generation and every state prerequisite.
+
 The workflow/action map is closed:
 
 - initial_serving: activate_replica_capacity is the sole and first action; it
@@ -140,8 +146,9 @@ The workflow/action map is closed:
 
 No other first action, repeated action position, cross-kind action, skipped
 predecessor or action after a terminal step is valid. Each predecessor is the
-immutable step for the same operation parent, and current controller generation
-must equal that predecessor's result generation.
+immutable step for the same operation parent. Its result generation cannot
+exceed the next action's expected generation, which must match current
+controller generation.
 
 ## Required replay cases
 

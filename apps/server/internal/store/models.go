@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type AuthEmailJob struct {
@@ -197,6 +198,109 @@ type Resume struct {
 	Customization   json.RawMessage
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type RuntimeCapacity struct {
+	Singleton             bool
+	DesiredReplicas       int16
+	Generation            int64
+	ControllerGeneration  int64
+	ControllerOperationID string
+	AdmissionEnabled      bool
+	LifecyclePhase        string
+	UpdatedAt             time.Time
+	UpdatedBy             string
+}
+
+type RuntimeFencingProof struct {
+	ReplicaID            uuid.UUID
+	InstanceID           string
+	ReleaseDigest        string
+	Adapter              string
+	EvidenceID           string
+	RequestedAt          time.Time
+	ObservedTerminatedAt time.Time
+	RecordedAt           time.Time
+	ObservedState        string
+}
+
+type RuntimeLeaveReceipt struct {
+	ReplicaID             uuid.UUID
+	InstanceID            string
+	ReleaseDigest         string
+	ControllerGeneration  int64
+	OperationID           string
+	JoinedTransitionCount int32
+	JoinedClaimCount      int32
+	RecordedAt            time.Time
+}
+
+type RuntimeLifecycleOperation struct {
+	OperationID  string
+	WorkflowKind string
+	CreatedAt    time.Time
+}
+
+type RuntimeLifecycleOperationStep struct {
+	OperationID               string
+	Action                    string
+	WorkflowKind              string
+	ExpectedGeneration        int64
+	ResultGeneration          int64
+	ArgumentDigest            []byte
+	ResultDigest              []byte
+	ArgumentReplacedReplicaID *uuid.UUID
+	ResultKind                string
+	ReplicaID                 *uuid.UUID
+	ReplicaKind               *string
+	ReplicaState              *string
+	DesiredReplicas           pgtype.Int2
+	ActiveServingReplicas     pgtype.Int2
+	ActiveMaintenanceReplicas pgtype.Int2
+	Partition1Enabled         pgtype.Bool
+	Partition2Enabled         pgtype.Bool
+	CapacityGeneration        int64
+	ControllerGeneration      int64
+	ControllerOperationID     string
+	AdmissionEnabled          bool
+	LifecyclePhase            string
+	WriteGate                 *string
+	WriteGeneration           *int64
+	RecordedAt                time.Time
+}
+
+type RuntimeReplica struct {
+	ReplicaID              uuid.UUID
+	ReplicaKind            string
+	InstanceID             string
+	ContainerInstanceArn   string
+	CaddyTaskArn           string
+	GoTaskArn              string
+	NuxtTaskArn            string
+	ReleaseDigest          string
+	State                  string
+	JoinedAt               time.Time
+	JoinReadyAt            *time.Time
+	ActivatedAt            *time.Time
+	DrainingAt             *time.Time
+	LeftAt                 *time.Time
+	TerminationRequestedAt *time.Time
+	FencedAt               *time.Time
+}
+
+type RuntimeReplicaTask struct {
+	TaskArn   string
+	ReplicaID uuid.UUID
+	TaskRole  string
+}
+
+type RuntimeTerminationIntent struct {
+	ReplicaID     uuid.UUID
+	InstanceID    string
+	ReleaseDigest string
+	RequestID     string
+	Reason        string
+	RequestedAt   time.Time
 }
 
 type RuntimeWriteState struct {

@@ -19,7 +19,7 @@ func TestApplyFreshStopsAt13ThenReentersFor14(t *testing.T) {
 	if err := ProvisionDatabase(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	results, err := Apply(ctx, db, LocalAdminMigratorIdentity())
+	results, err := applyFS(ctx, db, enforcementFixtureFS(t), LocalAdminMigratorIdentity())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestApplyFreshStopsAt13ThenReentersFor14(t *testing.T) {
 	if head != 14 || generation != 2 || historyOwner != "aboutme_runtime_owner" || recordedOwner != historyOwner || enforcement != 1 {
 		t.Fatalf("head=%d generation=%d owner=%q recorded=%q enforcement=%d", head, generation, historyOwner, recordedOwner, enforcement)
 	}
-	second, err := Apply(ctx, db, LocalAdminMigratorIdentity())
+	second, err := applyFS(ctx, db, enforcementFixtureFS(t), LocalAdminMigratorIdentity())
 	if err != nil || len(second) != 0 {
 		t.Fatalf("repeat Apply results=%d error=%v", len(second), err)
 	}
@@ -127,6 +127,7 @@ func TestApplyConcurrentBootstrapRechecksAfterGooseLock(t *testing.T) {
 	if err := ProvisionDatabase(ctx, db); err != nil {
 		t.Fatal(err)
 	}
+	foundationFS := enforcementFixtureFS(t)
 	type outcome struct {
 		count int
 		err   error
@@ -136,7 +137,7 @@ func TestApplyConcurrentBootstrapRechecksAfterGooseLock(t *testing.T) {
 	for range 2 {
 		go func() {
 			<-start
-			results, err := Apply(ctx, db, LocalAdminMigratorIdentity())
+			results, err := applyFS(ctx, db, foundationFS, LocalAdminMigratorIdentity())
 			outcomes <- outcome{count: len(results), err: err}
 		}()
 	}

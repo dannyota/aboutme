@@ -182,8 +182,24 @@ runtime_replica_result
 Lock public_state, capacity, target replica and intent. Accept joining, active
 or draining; exact replay only. Insert immutable intent and change to
 terminating. It never cancels, reopens, releases claims, changes desired,
-enables a partition, or creates leave evidence. Reasons are a closed design
-enum, not caller text.
+enables a partition, or creates leave evidence. `reason` is exactly one of:
+
+- `startup_failed`: the joining incarnation failed bootstrap, trio validation,
+  join probes, or bounded readiness before activation. It is valid only from
+  joining.
+- `readiness_failed`: an active incarnation failed the accepted bounded
+  node-specific readiness path. It is valid only from active and only after the
+  controller's fleet-wide RDS-unavailable suppression has ruled out shared
+  database outage.
+- `drain_failed`: the exact prepared draining incarnation could not produce or
+  resolve its graceful leave receipt. It is valid only from draining and
+  requires the matching prepare-scale-in or prepare-maintenance-drain step.
+
+The reason is immutable audit classification and is covered by the operation
+argument digest. It grants no termination or fencing authority. ASG hook
+timeout, controller outage, or already-terminated discovery may produce exact
+EC2 proof without an intent; they do not invent another reason. No caller text
+is stored.
 
 runtime_finish_scale_in( expected_controller_generation, operation_id,
 replica_id, instance_id, release_digest, leave_operation_id,
@@ -223,3 +239,6 @@ zero-survivor result permits one later replacement activation under desired one.
 - Scale-in converges for a left target or a fenced target, with zero or one
   survivor. Target-dead, survivor-dead, and both-dead races terminalize the
   exact prepared operation without fabricating work evidence.
+- Termination intent rejects a reason/state mismatch, shared-RDS failure labeled
+  as node readiness failure, drain failure without the exact prepare step, and
+  changed-reason replay.

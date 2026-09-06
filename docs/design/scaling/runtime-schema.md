@@ -105,9 +105,13 @@ argument or historical result uses JSON.
 ## runtime_termination_intents
 
 - replica_id primary key references runtime_replicas; instance_id and release
-  digest must match; request_id unique; reason enum; requested_at.
-- lifecycle-command role inserts once and atomically changes active/draining to
-  terminating. No cancel/reopen edge exists. App role has SELECT only.
+  digest must match; request_id unique; reason fixed to startup_failed,
+  readiness_failed or drain_failed; requested_at. The exact source-state and
+  controller prerequisites are in
+  [lifecycle operations](lifecycle-operations.md).
+- lifecycle-command role inserts once and atomically changes
+  joining/active/draining to terminating. No cancel/reopen edge exists. App role
+  has SELECT only.
 
 ## runtime_leave_receipts
 
