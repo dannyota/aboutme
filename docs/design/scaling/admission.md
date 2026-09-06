@@ -24,9 +24,12 @@ replicas make one ordered decision after restart.
   capacity. No bucket can hold more than its current burst/limit. The durable
   high-water never moves backward later. Count and metric any absolute raw jump
   above an implementation constant selected only for observability.
-- Tests inject database time through a store clock seam; production callers
-  cannot provide time. This differs from current local injected-clock behavior
-  under ADR 0035, which supersedes ADR 0018 for fleet time authority.
+- Tests replace the owner-only no-argument sampling helper in disposable
+  databases through the
+  [fixed clock seam](rate-operations.md#database-time-test-seam). Production
+  callers cannot provide or change time. This differs from current local
+  injected-clock behavior under ADR 0035, which supersedes ADR 0018 for fleet
+  time authority.
 
 ## Rate schema contract
 
