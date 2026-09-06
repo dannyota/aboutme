@@ -378,6 +378,49 @@ type Session struct {
 	RotatedFrom        *uuid.UUID
 }
 
+type SharedClaimPolicy struct {
+	PolicyID     string
+	ScopeKind    string
+	RunningLimit int32
+	WaitingLimit int32
+	QueueEnabled bool
+	DeadlineMode string
+}
+
+type SharedClaimRequest struct {
+	ClaimID       uuid.UUID
+	PolicyID      string
+	ReplicaID     uuid.UUID
+	WorkID        *uuid.UUID
+	State         string
+	AdmittedAt    time.Time
+	DeadlineAt    *time.Time
+	ReleasedAt    *time.Time
+	ReleaseReason *string
+	ScopeCount    int16
+	RequestDigest []byte
+}
+
+type SharedClaimScope struct {
+	ClaimID           uuid.UUID
+	RequestOrdinal    int16
+	PolicyID          string
+	ScopeKind         string
+	ScopeDigest       []byte
+	AllocationOrdinal int64
+	State             string
+}
+
+type SharedClaimScopeSummary struct {
+	PolicyID     string
+	ScopeKind    string
+	ScopeDigest  []byte
+	RunningCount int32
+	WaitingCount int32
+	NextOrdinal  int64
+	UpdatedAt    time.Time
+}
+
 type SlugTombstone struct {
 	ID               uuid.UUID
 	Slug             string
