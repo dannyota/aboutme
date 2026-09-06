@@ -125,3 +125,10 @@ not the revocation authority.
   bounded, and it has no ambient cookie, ID lookup, database, or Go API path.
 - Scaling beyond the v1 single-node application tier requires a distributed
   revocation fence or a replacement ADR.
+
+## Later decision: replica scaling (2026-09-06)
+
+[ADR 0035](0035-replica-coordination-and-uat-lifecycle.md) supersedes this
+record's process-local publication coordination with durable fleet transitions
+and proof-gated replica recovery. NonDraining and Revoking retain their distinct
+admission and draining behavior.

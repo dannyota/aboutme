@@ -70,7 +70,13 @@ The server exposes one-shot `idempotency-expiry-sweep` and
 `privacy-retention-sweep` daily. These commands use PostgreSQL advisory overlap
 locks, bounded runs and fixed numeric result fields. They never start the HTTP
 listeners or Chromium. Local tests execute them directly; Phase 10 activates
-their schedules and proves heartbeat, failure and overdue alarm delivery.
+their schedules and proves heartbeat, failure and overdue alarm delivery. For
+stopped UAT, [ADR 0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)
+permits a controller evaluation to report `proved_empty` without starting a
+database job only when the final stop receipt proves nothing can become due
+before the next wake. This does not advance a job-success timestamp or waive any
+deadline. The [lifecycle contract](scaling/uat-lifecycle.md) defines each
+category, the shared write barrier, final receipt and measured wake lead.
 
 Session metadata is redacted 90 days after the session's creation. Lifecycle
 events contain only a generated event ID, fixed kind, occurrence time and an

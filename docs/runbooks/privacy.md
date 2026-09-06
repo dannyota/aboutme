@@ -116,3 +116,12 @@ adoption.
 
 Hosted schedule activation, alarm delivery, 180-day log retention and backup
 expiry have not run. Phase 10 owns that evidence.
+
+## Planned stopped-UAT scheduling
+
+The [accepted lifecycle contract](../design/scaling/uat-lifecycle.md) defines
+hourly controller evaluation, due-category checks and the final database stop
+receipt. A `proved_empty` evaluation cannot count as a successful job run or
+waive a privacy deadline. This scheduling and its write barrier are pending
+Phase 10 implementation and hosted proof; the commands above retain their
+current behavior.

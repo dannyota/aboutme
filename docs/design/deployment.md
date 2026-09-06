@@ -61,9 +61,10 @@ build machines are separate from the Singapore application and data region.
 
 [ADR 0034](../adr/0034-scheduled-uat-and-production-autoscaling.md) replaces the
 earlier single-host comparison baseline for AWS. OpenTofu remains the
-infrastructure tool. Phase 10 must first design and implement the distributed
-runtime contracts named below; this target is not evidence that the current
-process-local implementation is replica-safe.
+infrastructure tool.
+[ADR 0035](../adr/0035-replica-coordination-and-uat-lifecycle.md) and the
+[scaling contract](scaling/README.md) define the distributed runtime. Phase 10
+implements and proves it locally before infrastructure wiring.
 
 ```mermaid
 graph LR
@@ -90,18 +91,19 @@ render jobs and capabilities, SSE state, and limiters across the fleet.
 Application nodes use public IPv4 for outbound access without a NAT gateway.
 Their inbound security group accepts only the ALB security group, and Caddy
 still requires the rotating origin secret. RDS remains private and single-AZ at
-launch. Service discovery, placement, readiness, scale-in draining, and the
-source-specific forwarded-address chain are explicit Phase 10 design outputs.
+launch. Three DAEMON services form one complete node-local replica; mixed or
+partial releases cannot become ready. Exact-node scale-in closes admission,
+drains work, and terminates that node. Unresolved claims require independent
+proof of its EC2 termination. [Topology](scaling/topology.md) owns the details.
 
 Cloudflare is DNS-only. CloudFront owns viewer TLS and uses an ACM certificate
 in `us-east-1`. The internet-facing ALB spans two public subnets and is the
 stable origin in `ap-southeast-1`; the former elastic-IP origin is superseded
 for production. CloudFront reaches the ALB over HTTPS and overwrites the origin
-secret. Phase 10 must choose and prove the ALB-to-Caddy target TLS and
-authentication model, health routing, and security-group rules before compute
-wiring. The model must account for ALB target TLS behavior rather than assume
-native target-certificate validation. No listener or node path may bypass the
-CloudFront and origin-secret boundary.
+secret. ALB reaches Caddy over HTTPS without validating its target certificate.
+Security groups, target registration and exact-one origin-secret validation
+authenticate this hop. Only the narrow nonsensitive ALB health route bypasses
+the secret. The complete route and bypass proof precedes activation.
 
 Viewer policy redirects HTTP to HTTPS, requires TLS 1.2 or newer, and sends HTTP
 Strict Transport Security. Caddy accepts current and next origin secrets during
@@ -109,13 +111,14 @@ rotation.
 
 ## Client-IP boundary
 
-Caddy validates the CloudFront-to-ALB path before trusting forwarding data. It
-strips untrusted forwarding headers and derives one canonical client address
-from the source-specific, validated chain. Go accepts that canonical header only
-from the colocated trusted Caddy boundary, normalizes it with `netip`, and fails
-closed in production when its trusted-proxy set is empty. Go never parses
-`X-Forwarded-For` itself. Phase 10 tests forged viewer headers, direct ALB and
-node bypass, and the exact ALB header behavior before activation.
+CloudFront overwrites `X-Aboutme-Client-IP` with the viewer address. Caddy
+requires the ALB peer and exact-one origin secret, rejects duplicate or invalid
+client-IP values, strips forwarding headers, and emits one `X-Real-IP`. Go
+accepts that canonical header only from the colocated trusted Caddy boundary,
+normalizes it with `netip`, and fails closed in production when its
+trusted-proxy set is empty. Go never parses `X-Forwarded-For` itself. Phase 10
+tests forged viewer headers, direct ALB and node bypass, and the exact ALB
+header behavior before activation.
 
 ## CloudFront behavior
 
@@ -271,21 +274,20 @@ images, source, command lines, logs, or OpenTofu state where the platform
 permits a reference instead. Secret names and rotation procedures are tracked;
 values are never evidence artifacts.
 
-Phase 9 settles Singapore cost, sizes, and UAT lifetime before activation. UAT
-terminates application nodes and removes its temporary ALB between scheduled
-test windows, then stops RDS. RDS storage, keys, state, ECR images, and required
-logs remain. The cost model conservatively reserves a full month of one 30 GB
-application root disk and one public IPv4 address; these are cost headroom, not
-claims that terminated-node resources remain. Any orphaned volume or address is
-inventoried and removed. RDS stop automation must restart it before AWS's
-seven-day limit, run overdue privacy and retention work before its deadlines,
-and return it to the scheduled stopped state. A failed or high-cost forecast
-shortens optional testing rather than weakening retention or revocation.
-Production autoscaling never selects zero. A serialized, operator-approved
-snapshot and migration deployment may drain application capacity to zero, then
-must restore at least one healthy replica. The owner has authorized Phase 10 AWS
-UAT and Cloudflare DNS at `uat.aboutme.vn`. Local candidate checks and
-infrastructure simulation precede deployment; complete UAT and operational
-drills follow it. Production launch in Phase 11 requires separate approval. The
-local port-443 UAT gate is superseded by
-[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md).
+The accepted [UAT lifecycle](scaling/uat-lifecycle.md) keeps RDS on during a
+booked campaign and its final 24-hour application writer tail. Application nodes
+and the temporary ALB are removed outside test windows. RDS may stop only after
+due cleanup, drained and terminated replicas, and an immutable final stop
+receipt that closes database writes. Hourly controller checks wake it before any
+category deadline or the seven-day service limit. Missing proof keeps RDS
+available. RDS storage, keys, state, images and required logs remain.
+
+The [lifecycle forecast](../research/aws-cost/uat-lifecycle.md) includes
+retained costs and recovery reserves within USD 30. Orphaned volumes and
+addresses are removed. A failed forecast shortens optional testing; privacy
+deadlines remain. Production autoscaling never selects zero. A serialized,
+operator-approved snapshot and migration deployment may drain to zero, then must
+restore at least one healthy replica. The owner authorized Phase 10 AWS UAT and
+Cloudflare DNS at `uat.aboutme.vn`. Local candidate checks and infrastructure
+simulation precede deployment. Hosted UAT and drills follow; Phase 11 production
+launch requires separate approval under ADR 0031.

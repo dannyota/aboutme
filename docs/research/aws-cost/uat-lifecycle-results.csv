@@ -1,0 +1,60 @@
+scope,item,price_id,quantity,usd_per_unit,cost_usd
+base,CloudFront Asia viewer data,cloudfront_asia_data,10.000000,0.120000,1.200000
+base,CloudFront HTTPS requests,cloudfront_asia_https,1000000.000000,0.000001,1.200000
+base,CloudFront invalidation paths,cloudfront_invalidation,100.000000,0.005000,0.500000
+base,CloudFront viewer function,cloudfront_function,1000000.000000,0.000000,0.100000
+base,CloudWatch 180-day log storage,cloudwatch_log_storage,12.000000,0.030000,0.360000
+base,CloudWatch API requests,cloudwatch_api_request,1000.000000,0.000010,0.010000
+base,CloudWatch Logs Insights scans,cloudwatch_logs_insights,10.000000,0.007000,0.070000
+base,CloudWatch custom metrics,cloudwatch_custom_metric,2.488584,0.300000,0.746575
+base,CloudWatch dashboard,cloudwatch_dashboard,1.000000,3.000000,3.000000
+base,CloudWatch log ingestion,cloudwatch_log_ingest,2.000000,0.700000,1.400000
+base,CloudWatch standard alarms,cloudwatch_alarm,18.000000,0.100000,1.800000
+base,Customer-managed KMS keys during active period,kms_key,2.000000,1.000000,2.000000
+base,EC2-to-RDS cross-AZ transfer,regional_cross_az,1.000000,0.010000,0.010000
+base,KMS requests,kms_request,400.000000,0.000003,0.001200
+base,Non-CloudFront internet transfer out,ec2_internet_data_out,1.000000,0.120000,0.120000
+base,OpenTofu state bucket storage,s3_standard_storage,0.100000,0.025000,0.002500
+base,Private media S3 storage,s3_standard_storage,5.000000,0.025000,0.125000
+base,Production-shape RDS instance,rds_pg_t4g_small,4.000000,0.051000,0.204000
+base,Production-shape RDS storage,rds_pg_gp3_storage,0.273973,0.138000,0.037808
+base,Production-shape medium host,ec2_t4g_medium,4.000000,0.042400,0.169600
+base,Production-shape replaced small host,ec2_t4g_small,-4.000000,0.021200,-0.084800
+base,S3 read requests,s3_get,10000.000000,0.000000,0.004000
+base,S3 write and list requests,s3_put,1000.000000,0.000005,0.005000
+base,SES recipients,ses_recipient,500.000000,0.000100,0.050000
+base,SNS alarm and feedback requests,sns_request,50.000000,0.000000,0.000025
+base,SNS alarm email deliveries,sns_email_delivery,25.000000,0.000020,0.000500
+base,SNS feedback delivery to SQS,sns_sqs_delivery,25.000000,0.000000,0.000000
+base,SQS feedback queue requests,sqs_standard_request,75.000000,0.000000,0.000030
+base,Seven EventBridge Scheduler schedules,eventbridge_scheduler,800.000000,0.000001,0.001000
+base,Shared ECR image storage,ecr_storage,6.000000,0.100000,0.600000
+base,Shared SES custom metrics,cloudwatch_custom_metric,7.000000,0.300000,2.100000
+base,Shared SES standard alarms,cloudwatch_alarm,7.000000,0.100000,0.700000
+base,Temporary ALB,alb_hour,16.000000,0.025200,0.403200
+base,Temporary ALB LCU,alb_lcu_hour,16.000000,0.008000,0.128000
+base,Temporary ALB public IPv4,public_ipv4,32.000000,0.005000,0.160000
+base,Temporary second production node,ec2_t4g_medium,4.000000,0.042400,0.169600
+base,Temporary second-node gp3,ebs_gp3_storage,0.164384,0.096000,0.015781
+base,Temporary second-node public IPv4,public_ipv4,4.000000,0.005000,0.020000
+base,UAT EC2 root gp3 cost reserve,ebs_gp3_storage,1.493151,0.096000,0.143342
+base,UAT ECS EC2 Graviton host,ec2_t4g_small,36.333333,0.021200,0.770267
+base,UAT RDS excess backup storage,rds_backup_extra,5.000000,0.095000,0.475000
+base,UAT RDS gp3 storage,rds_pg_gp3_storage,20.000000,0.138000,2.760000
+base,UAT RDS primary instance,rds_pg_t4g_micro,132.000000,0.025000,3.300000
+base,UAT public IPv4 cost reserve,public_ipv4,36.333333,0.005000,0.181667
+base,UAT restore instance,rds_pg_t4g_micro,20.000000,0.025000,0.500000
+base,UAT restore storage,rds_pg_gp3_storage,0.547945,0.138000,0.075616
+controller,infrastructure_apply CPU,fargate_arm_vcpu,0.833333,0.040450,0.033708
+controller,infrastructure_apply memory,fargate_arm_memory,1.666667,0.004420,0.007367
+controller,infrastructure_apply public IPv4,public_ipv4,1.666667,0.005000,0.008333
+controller,lifecycle_and_proof CPU,fargate_arm_vcpu,10.416667,0.040450,0.421354
+controller,lifecycle_and_proof memory,fargate_arm_memory,20.833333,0.004420,0.092083
+controller,lifecycle_and_proof public IPv4,public_ipv4,41.666667,0.005000,0.208333
+controller,Standard state transitions,step_functions_standard,50000.000000,0.000025,1.250000
+controller,S3 conditional-write request reserve,s3_put,10000.000000,0.000005,0.050000
+controller,Additional KMS requests,kms_request,10000.000000,0.000003,0.030000
+summary,base,,,,25.534912
+summary,controller,,,,2.101179
+summary,gross_total,,,,27.636091
+summary,ceiling_margin,,,,2.363909

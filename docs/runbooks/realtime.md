@@ -76,3 +76,11 @@ cross-tab owner refresh, in-place public refresh, scroll preservation, and
 automatic 404 navigation after unpublish. See [local checks](local-uat.md) for
 setup and bounded evidence handling. The traceability rows record the latest
 accepted proof state.
+
+## Planned replica support
+
+The [accepted fleet contract](../design/scaling/admission.md) retains PostgreSQL
+revision notifications, local queues and reconnect/refetch. Fleet claims enforce
+100 connections per IP and 20 per account; 2,000 connections remains a per-task
+cap. Cross-replica revocation, drain and admission are pending Task 10.18 local
+and hosted proof.

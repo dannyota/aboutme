@@ -27,6 +27,11 @@ application protocol.
 
 ## Design output
 
+The [detailed contract](../../design/scaling/README.md) and
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md) are
+accepted. The [implementation tasks](replica/README.md) remain pending;
+acceptance of the design does not prove runtime safety.
+
 Write a focused design and its implementation-task split before changing runtime
 code. The design must choose exact state ownership, transaction boundaries,
 identifiers, expiry rules, retry behavior, and observability for:

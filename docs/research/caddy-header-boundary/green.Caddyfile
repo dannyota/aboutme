@@ -1,0 +1,15 @@
+{
+	admin off
+	persist_config off
+	auto_https off
+	servers {
+		trusted_proxies static 127.0.0.1/32
+		client_ip_headers X-Aboutme-Client-IP
+	}
+}
+http://127.0.0.1:20961 {
+	bind 127.0.0.1
+	@allowed expression `{http.request.header.X-Origin-Secret} in ['fixture-current', 'fixture-next'] && {http.request.header.X-Aboutme-Client-IP} != '' && !{http.request.header.X-Aboutme-Client-IP}.contains(',') && {http.request.header.X-Aboutme-Client-IP} == {client_ip} && remote_ip('127.0.0.1/32')`
+	respond @allowed "{client_ip}" 200
+	respond "denied" 403
+}
