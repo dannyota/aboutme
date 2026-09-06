@@ -182,6 +182,52 @@ type PublicState struct {
 	DiscoveryGeneration int64
 }
 
+type PublicTransition struct {
+	TransitionID              uuid.UUID
+	InitiatorReplicaID        uuid.UUID
+	InitiatorInstanceID       string
+	InitiatorReleaseDigest    string
+	Operation                 string
+	State                     string
+	CreatedAt                 time.Time
+	DeadlineAt                time.Time
+	TerminalAt                *time.Time
+	TargetDigest              []byte
+	TerminalErrorCode         *string
+	RecoveryFencingEvidenceID *string
+}
+
+type PublicTransitionAck struct {
+	TransitionID     uuid.UUID
+	ReplicaID        uuid.UUID
+	TargetDigest     []byte
+	AckedAt          time.Time
+	LocalResult      string
+	RevokingCount    int32
+	NonDrainingCount int32
+}
+
+type PublicTransitionReplica struct {
+	TransitionID  uuid.UUID
+	ReplicaID     uuid.UUID
+	SnapshotState string
+	InstanceID    string
+	ReleaseDigest string
+	TargetDigest  []byte
+}
+
+type PublicTransitionTarget struct {
+	TransitionID       uuid.UUID
+	Ordinal            int32
+	Kind               string
+	ResumeID           *uuid.UUID
+	ExpectedGeneration int64
+	Class              string
+	ResultKind         *string
+	ResultGeneration   *int64
+	ResultRecordedAt   *time.Time
+}
+
 type Resume struct {
 	ID              uuid.UUID
 	UserID          uuid.UUID

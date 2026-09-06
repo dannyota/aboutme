@@ -179,7 +179,7 @@ func waitForDeletionMailLock(ctx context.Context, pool *store.Pool, pid int) err
 		var blocked bool
 		var query string
 		err := pool.QueryRow(ctx, `
-			SELECT deletion.wait_event_type = 'Lock' AND EXISTS (
+			SELECT COALESCE(deletion.wait_event_type = 'Lock', false) AND EXISTS (
 				SELECT 1
 				FROM pg_stat_activity AS blocker
 				WHERE blocker.pid = ANY(pg_blocking_pids(deletion.pid))
