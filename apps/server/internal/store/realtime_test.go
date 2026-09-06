@@ -77,6 +77,18 @@ func TestResumeNotificationsAreCommittedMetadataOnly(t *testing.T) {
 	if _, err := listener.Exec(ctx, "LISTEN aboutme_resume_revision"); err != nil {
 		t.Fatal(err)
 	}
+	foreignPayload, err := json.Marshal(map[string]any{
+		"account_id": uuid.New(),
+		"resume_id":  uuid.New(),
+		"revision":   7,
+		"deleted":    false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Exec(ctx, "SELECT pg_notify('aboutme_resume_revision', $1)", string(foreignPayload)); err != nil {
+		t.Fatal(err)
+	}
 	tx, beginErr := writer.Begin(ctx)
 	if beginErr != nil {
 		t.Fatal(beginErr)
@@ -116,13 +128,11 @@ func TestResumeNotificationsAreCommittedMetadataOnly(t *testing.T) {
 	}
 	// A later committed marker proves the rolled-back transaction emitted no
 	// notification without relying on a quiet timeout to establish absence.
-	if _, err := writer.Exec(ctx, "SELECT pg_notify('aboutme_resume_revision', 'barrier')"); err != nil {
+	barrier := "barrier-" + uuid.NewString()
+	if _, err := writer.Exec(ctx, "SELECT pg_notify('aboutme_resume_revision', $1)", barrier); err != nil {
 		t.Fatal(err)
 	}
-	notification, err := listener.WaitForNotification(ctx)
-	if err != nil || notification.Payload != "barrier" {
-		t.Fatalf("rollback emitted a notification before barrier: %v, %v", notification, err)
-	}
+	assertNoTargetNotificationBeforeBarrier(ctx, t, listener, resumeID, barrier)
 	if _, err := writer.Exec(ctx, "DELETE FROM resumes WHERE id = $1", resumeID); err != nil {
 		t.Fatal(err)
 	}
@@ -153,25 +163,70 @@ func assertRevisionNotification(ctx context.Context, t *testing.T, conn *pgx.Con
 	t.Helper()
 	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	notification, err := conn.WaitForNotification(readCtx)
-	if err != nil {
-		t.Fatalf("missing committed resume notification: %v", err)
-	}
-	var payload map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(notification.Payload), &payload); err != nil {
-		t.Fatal(err)
-	}
-	if len(payload) != 4 {
-		t.Fatalf("notification has non-metadata fields: %s", notification.Payload)
-	}
-	want := map[string]any{"account_id": owner, "resume_id": resumeID, "revision": revision, "deleted": deleted}
-	for field, value := range want {
-		encoded, err := json.Marshal(value)
+	for {
+		notification, err := conn.WaitForNotification(readCtx)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("missing committed resume notification: %v", err)
 		}
-		if string(payload[field]) != string(encoded) {
-			t.Errorf("%s = %s, want %s", field, payload[field], encoded)
+		payload := parseRevisionNotification(t, notification.Payload)
+		var notifiedResumeID uuid.UUID
+		if err := json.Unmarshal(payload["resume_id"], &notifiedResumeID); err != nil {
+			t.Fatalf("notification has invalid resume_id: %s", notification.Payload)
+		}
+		if notifiedResumeID != resumeID {
+			continue
+		}
+		if len(payload) != 4 {
+			t.Fatalf("notification has non-metadata fields: %s", notification.Payload)
+		}
+		want := map[string]any{"account_id": owner, "resume_id": resumeID, "revision": revision, "deleted": deleted}
+		for field, value := range want {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(payload[field]) != string(encoded) {
+				t.Fatalf("%s = %s, want %s", field, payload[field], encoded)
+			}
+		}
+		return
+	}
+}
+
+func assertNoTargetNotificationBeforeBarrier(
+	ctx context.Context,
+	t *testing.T,
+	conn *pgx.Conn,
+	resumeID uuid.UUID,
+	barrier string,
+) {
+	t.Helper()
+	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	for {
+		notification, err := conn.WaitForNotification(readCtx)
+		if err != nil {
+			t.Fatalf("missing rollback notification barrier: %v", err)
+		}
+		if notification.Payload == barrier {
+			return
+		}
+		payload := parseRevisionNotification(t, notification.Payload)
+		var notifiedResumeID uuid.UUID
+		if err := json.Unmarshal(payload["resume_id"], &notifiedResumeID); err != nil {
+			t.Fatalf("notification has invalid resume_id before barrier: %s", notification.Payload)
+		}
+		if notifiedResumeID == resumeID {
+			t.Fatalf("rollback emitted target notification before barrier: %s", notification.Payload)
 		}
 	}
+}
+
+func parseRevisionNotification(t *testing.T, raw string) map[string]json.RawMessage {
+	t.Helper()
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		t.Fatalf("invalid resume notification: %v", err)
+	}
+	return payload
 }
