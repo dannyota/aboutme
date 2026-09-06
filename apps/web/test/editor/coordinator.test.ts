@@ -516,6 +516,175 @@ describe('mutation coordinator', () => {
     await flushing;
   });
 
+  // eslint-disable-next-line max-len -- exact concurrency regression name.
+  it('clears its opaque upload conflict when SSE adopts the same successful revision first', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const uploaded = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        personalDetails: {
+          ...accepted.document.personalDetails,
+          photo: { key: 'photo-uploaded' },
+        },
+      },
+      revision: parseRevision('2'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    let resolveDispatch!: (value: never) => void;
+    const dispatch = new Promise<never>((resolve) => {
+      resolveDispatch = resolve;
+    });
+    const api = {
+      dispatch: vi.fn(() => dispatch),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: uploaded }),
+    } as never;
+    const auth = {
+      user: computed(() => ({ id: 'owner-1' })),
+      csrfToken: computed(() => 'csrf-1'),
+      authState: computed(() => 'authenticated'),
+    } as never;
+    const runtime = {
+      nowEpochMs: () => 0,
+      uuid: vi.fn()
+        .mockReturnValueOnce('upload-command')
+        .mockReturnValueOnce('upload-attempt'),
+      delay: async () => {},
+    };
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+    const actions = createResumeEditorActions({
+      resumeId: accepted.metadata.id,
+      store,
+      coordinator,
+      auth,
+      runtime,
+    });
+
+    actions.edit({
+      kind: 'photoUpload',
+      file: new File(['image'], 'photo.png', { type: 'image/png' }),
+    });
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toHaveLength(1);
+
+    resolveDispatch!({
+      kind: 'complete',
+      status: 200,
+      accepted: uploaded,
+    } as never);
+    await flushing;
+
+    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+      .toHaveBeenCalledOnce();
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      accepted: {
+        document: { personalDetails: { photo: { key: 'photo-uploaded' } } },
+        revision: parseRevision('2'),
+      },
+      attempt: null,
+      pending: [],
+      conflicts: [],
+    });
+  });
+
+  // eslint-disable-next-line max-len -- exact concurrency regression name.
+  it('keeps an opaque upload conflict when SSE adopts a newer foreign revision first', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const uploaded = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        personalDetails: {
+          ...accepted.document.personalDetails,
+          photo: { key: 'photo-uploaded' },
+        },
+      },
+      revision: parseRevision('2'),
+    };
+    const foreign = {
+      ...uploaded,
+      document: {
+        ...uploaded.document,
+        personalDetails: {
+          ...uploaded.document.personalDetails,
+          photo: { key: 'photo-foreign' },
+        },
+      },
+      revision: parseRevision('3'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    let resolveDispatch!: (value: never) => void;
+    const dispatch = new Promise<never>((resolve) => {
+      resolveDispatch = resolve;
+    });
+    const api = {
+      dispatch: vi.fn(() => dispatch),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: foreign }),
+    } as never;
+    const auth = {
+      user: computed(() => ({ id: 'owner-1' })),
+      csrfToken: computed(() => 'csrf-1'),
+      authState: computed(() => 'authenticated'),
+    } as never;
+    const runtime = {
+      nowEpochMs: () => 0,
+      uuid: vi.fn()
+        .mockReturnValueOnce('upload-command')
+        .mockReturnValueOnce('upload-attempt'),
+      delay: async () => {},
+    };
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+    const actions = createResumeEditorActions({
+      resumeId: accepted.metadata.id,
+      store,
+      coordinator,
+      auth,
+      runtime,
+    });
+
+    actions.edit({
+      kind: 'photoUpload',
+      file: new File(['image'], 'photo.png', { type: 'image/png' }),
+    });
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    resolveDispatch!({
+      kind: 'complete',
+      status: 200,
+      accepted: uploaded,
+    } as never);
+    await flushing;
+
+    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+      .toHaveBeenCalledOnce();
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      accepted: {
+        document: { personalDetails: { photo: { key: 'photo-foreign' } } },
+        revision: parseRevision('3'),
+      },
+      attempt: null,
+      pending: [],
+      conflicts: [{ id: 'upload-command' }],
+    });
+  });
+
   // eslint-disable-next-line max-len -- exact regression name.
   it('conflicts a second crop when the accepted photo is replaced', async () => {
     setActivePinia(createPinia());
