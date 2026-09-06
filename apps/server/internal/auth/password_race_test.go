@@ -43,6 +43,73 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+func TestPasswordRegisterAndVerifyUseCanonicalEmailLock(t *testing.T) {
+	t.Run("register", func(t *testing.T) {
+		e := newPasswordEnv(t)
+		email := newEmail()
+		holder, err := e.pool.Begin(context.Background())
+		if err != nil {
+			t.Fatalf("begin holder: %v", err)
+		}
+		defer rollbackPasswordHolder(t, holder)()
+		if err := e.q.WithTx(holder).LockCanonicalAccountEmail(context.Background(), email); err != nil {
+			t.Fatalf("lock canonical email: %v", err)
+		}
+		done := make(chan error, 1)
+		go func() {
+			done <- e.svc.RegisterForTest(context.Background(), "Ada", email, testPassword, raceIP)
+		}()
+		assertPasswordStillBlocked(t, done, "register bypassed canonical-email lock")
+		if err := holder.Commit(context.Background()); err != nil {
+			t.Fatalf("commit holder: %v", err)
+		}
+		if err := <-done; err != nil {
+			t.Fatalf("register after lock release: %v", err)
+		}
+	})
+
+	t.Run("verify", func(t *testing.T) {
+		e := newPasswordEnv(t)
+		email := newEmail()
+		token, _ := e.createRegistration(t, email, "Ada", testPassword)
+		holder, err := e.pool.Begin(context.Background())
+		if err != nil {
+			t.Fatalf("begin holder: %v", err)
+		}
+		defer rollbackPasswordHolder(t, holder)()
+		if err := e.q.WithTx(holder).LockCanonicalAccountEmail(context.Background(), email); err != nil {
+			t.Fatalf("lock canonical email: %v", err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- e.svc.VerifyForTest(context.Background(), token.Raw, raceIP) }()
+		assertPasswordStillBlocked(t, done, "verify bypassed canonical-email lock")
+		if err := holder.Commit(context.Background()); err != nil {
+			t.Fatalf("commit holder: %v", err)
+		}
+		if err := <-done; err != nil {
+			t.Fatalf("verify after lock release: %v", err)
+		}
+	})
+}
+
+func assertPasswordStillBlocked(t *testing.T, done <-chan error, failure string) {
+	t.Helper()
+	select {
+	case err := <-done:
+		t.Fatalf("%s: %v", failure, err)
+	case <-time.After(500 * time.Millisecond):
+	}
+}
+
+func rollbackPasswordHolder(t *testing.T, tx pgx.Tx) func() {
+	t.Helper()
+	return func() {
+		if err := tx.Rollback(context.Background()); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			t.Errorf("rollback holder: %v", err)
+		}
+	}
+}
+
 // TestPasswordLogin_ResetFence proves login session issuance serializes on the
 // user lock with password reset's RevokeAllSessions.
 func TestPasswordLogin_ResetFence(t *testing.T) {

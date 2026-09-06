@@ -115,6 +115,8 @@ type Service struct {
 	github   githubProviderConfig
 	linkedin linkedinProviderConfig
 
+	accountDeleteHandler http.Handler
+
 	// Provider overrides are empty in production and route test traffic to
 	// in-process providers through the production verification paths.
 	googleIssuerOverride string
@@ -192,7 +194,7 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	}
 
 	// Session routes authenticate before CSRF enforcement.
-	mux.Handle(MePath, route(http.MethodGet, s.sessionChain(s.handleMe)))
+	mux.Handle(MePath, http.HandlerFunc(s.handleAccount))
 	mux.Handle(LogoutPath, route(http.MethodPost, s.sessionChain(s.handleLogout)))
 	// Collection method dispatch runs before authentication, matching route.
 	mux.Handle(SessionsPath, http.HandlerFunc(s.handleSessionsCollection))
