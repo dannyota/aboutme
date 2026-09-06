@@ -157,8 +157,8 @@ func TestOAuthAgentAccessMigrationDownUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider() error: %v", err)
 	}
-	if _, err := provider.Up(ctx); err != nil {
-		t.Fatalf("Up() error: %v", err)
+	if _, err := provider.UpTo(ctx, 9); err != nil {
+		t.Fatalf("UpTo(9) error: %v", err)
 	}
 	if _, err := provider.DownTo(ctx, 8); err != nil {
 		t.Fatalf("DownTo(8) error: %v", err)
@@ -630,8 +630,8 @@ func TestOAuthGrantSingleLiveRowUnderConcurrentInserts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider() error: %v", err)
 	}
-	if _, upErr := provider.Up(ctx); upErr != nil {
-		t.Fatalf("Up() error: %v", upErr)
+	if _, upErr := provider.UpTo(ctx, 9); upErr != nil {
+		t.Fatalf("UpTo(9) error: %v", upErr)
 	}
 
 	pool, err := pgxpool.New(ctx, dsn)
