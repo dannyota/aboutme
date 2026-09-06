@@ -92,6 +92,11 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
       clear/debt flags, idle microseconds and partition limit. P05 adds
       account_ip beside ip. The ten accepted failed-key middleware policies add
       peer_ip. Reject any unknown combination or catalog update/delete.
+- [ ] Pin allow_success_clear true only for P07/P22 and denied_attempt_adds_debt
+      true only for P12; all other values are false. The first flag describes
+      private-only success clear, never overflow clear. No denied P22
+      reservation adds debt. Callable behavior remains a later slice; this
+      migration proves the exact catalog literals.
 - [ ] Create clocks and two partitions per policy with catalog keys. Enforce
       nonnegative anomaly/count fields, positive capacity generation, partition
       1/2 and active_keys 0..10000. Preserve clock high-water monotonicity and

@@ -33,6 +33,13 @@ has its single catalog shape. The tables have no runtime UPDATE/DELETE path. P22
 remains fixed_window with its separate attempts. No caller supplies capacity,
 window, algorithm, key shape, cleanup horizon, or partition limit.
 
+The boolean literals are closed: allow_success_clear is true only for P07 and
+P22; denied_attempt_adds_debt is true only for P12. Every other value is false.
+Success clear applies only to an exact private bucket. P07 never clears
+overflow; P22 overflow success resolves only its own reservation and preserves
+shared debt. A denied P22 reservation inserts no attempt or debt; a later
+failure finish is a separate mutation. These flags grant no generic operation.
+
 ## Shared time
 
 shared_policy_clocks has policy_id primary key/FK, high_water_at and last_raw_at
