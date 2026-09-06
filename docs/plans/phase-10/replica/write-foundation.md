@@ -1,8 +1,8 @@
 # R1.2 - Write barrier foundation
 
 Status: B1 is implemented and locally accepted at `a5c47fa`. Root's live race,
-migration, database, integration and sqlc checks passed. B2 live pool proof and
-B3 migrator composition remain pending; no hosted proof is claimed.
+migration, database, integration and sqlc checks passed. B2 live pool proof also
+passes; B3 migrator composition remains pending. No hosted proof is claimed.
 [Transaction entry](../../../design/scaling/transaction-entry.md),
 [runtime privileges](../../../design/scaling/runtime-schema.md), and
 [UAT lifecycle](../../../design/scaling/uat-lifecycle.md) own the contract.
