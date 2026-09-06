@@ -30,6 +30,12 @@ replicas make one ordered decision after restart.
 
 ## Rate schema contract
 
+[Rate storage](rate-storage.md) fixes the policy catalog, exact integer state,
+seeds, pending-window assertions, bounded cleanup and SQL results.
+[Rate identities](rate-identities.md) fixes typed canonical keys, distinct
+raw-peer fallback and pinned deployment key versions. These details preserve the
+policy numbers and caller behavior below.
+
 ## shared_rate_partitions
 
 - primary key (policy_id, partition); partition in (1,2); enabled boolean;
@@ -47,7 +53,9 @@ replicas make one ordered decision after restart.
 
 - primary key (policy_id, key_digest); partition 1 or 2; algorithm enum
   ('token_bucket','fixed_window','rolling_slug'); algorithm fields constrained
-  to its policy: tokens numeric, refill_at, window_started_at, count, last_seen.
+  to its policy: token_numerator bigint, refill_at, window_started_at, count,
+  rolling_events and last_seen. Integer numerator units retain the exact
+  accepted rational refill rate at PostgreSQL microsecond precision.
 - unique policy/partition/key; key_digest is HMAC/UUID/IP composite output from
   the existing canonical caller and contains no bearer/email plaintext.
 - Rows expire only when fully refilled or their algorithm carries no debt, or
@@ -94,7 +102,10 @@ anonymous and authenticated key shapes. No new provider-start split is added.
 
 - Password failures preserve first-failure 15-minute window, threshold 10,
   denial without extension, State without mutation except last_seen, failure
-  record, and private-only ClearSuccess. Overflow clear is a no-op.
+  record, and private-only ClearSuccess. State never allocates or sweeps; it
+  uses committed capacity and refreshes only the selected existing private or
+  overflow bucket. ClearSuccess deletes only an existing private bucket with its
+  active_keys decrement. Overflow clear is a no-op.
 - OAuth failed grants count committed failures plus pending reservations against
   10/15 minutes. Admit creates a globally unique attempt UUID in
   shared_admission_attempts. Finish invalid converts pending to failure; neutral

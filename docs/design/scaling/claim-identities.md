@@ -22,11 +22,19 @@ Kinds are global, user, ip and account. Global has an empty value. User/account
 use 16 UUID network-order bytes. IP uses four IPv4 or sixteen IPv6 bytes after
 Unmap. Domain, policy and kind separation prevent limits from sharing rows.
 
-Every replica must use the same key generation before readiness. Rotation closes
-admission, joins or fences all active claims, proves zero running and waiting
-counts, replaces the key across the deployment, then reopens admission. Mixed
-generations remain unready. R8 owns the parameter name, generation check and
-rotation runbook; this document does not claim that wiring exists.
+Every replica verifies the same private pinned key-version tuple before
+readiness. The [rate identity contract](rate-identities.md) binds both admission
+and password-email key versions through trusted R8 composition and controller
+evidence, without changing membership or lifecycle SQL. Mixed or unverifiable
+versions remain unready.
+
+Rotation closes application admission and activation, joins or exactly fences
+all admitted work, and proves zero claim counts plus zero rate/pending debt
+through the accepted bounded cleanup. Only then may the deployment replace a key
+and recompose every replica. Claim counts alone cannot justify a switch because
+the admission key also identifies rate buckets. No old-key fallback or
+clock-based live-claim reclamation exists. R8 owns loading, readiness and the
+executable runbook after infrastructure exists.
 
 ## Request digest
 

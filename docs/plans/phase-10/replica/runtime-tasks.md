@@ -93,7 +93,10 @@ preserve existing database rows while converging ownership on runtime_owner.
 
 The [OAuth reservation contract](../../../design/scaling/admission-attempts.md)
 fixes P22 attempt schema, common rate lock order and bounded terminal receipt
-cleanup. R1 implements its store/schema only; R5 and R7b own callers.
+cleanup. [Rate storage](../../../design/scaling/rate-storage.md) fixes all 24
+policies, integer/rolling state, seeds, stored-pending assertions and bounded
+ordinary/overflow cleanup with an atomic policy_idle result. R1 implements
+store/schema only; R5 and R7b own callers.
 
 The [shared claim schema](../../../design/scaling/shared-claims.md) and
 [identity contract](../../../design/scaling/claim-identities.md) fix multi-scope
@@ -258,6 +261,11 @@ Owner paths: new apps/server/internal/admission/** plus
 apps/server/internal/api/ratelimit.go and its tests. Store implementation
 remains R1. Root resolves package name before dispatch.
 
+[Rate identities](../../../design/scaling/rate-identities.md) fixes the single
+typed encoder, distinct canonical/peer IP domains, P05 shapes and deployment key
+versions. R5 preserves caller canonicalization and receives no raw-key SQL or
+generation override. P22 retains its fixed unkeyed UUID hash.
+
 Fail first for every algorithm: replica one/two exact budget; burst/refill;
 denial debt; 24-hour idle and fully-refilled expiry; rejected request last_seen;
 one/two 10,000 partitions; scale-in retains partition-two debt; overflow admits;
@@ -328,6 +336,15 @@ quarantine/replay; ordered SIGTERM; coordinator loss cancels and joins without
 liveness restart; termination intent prevents reopen; pool max 12; two app
 pools + five independent four-connection auxiliary tasks + admin reserve = 60;
 2,000 SSE adds zero DB connections; ASG max two grants no third pool.
+
+R8 verifies the pinned admission/password-email key-version tuple before adapter
+construction. Exact target evidence gates the existing activation call; no
+membership/lifecycle SQL expands for key versions. Prove rejection of missing,
+mixed or unverifiable versions and the closed rotation predicate: joined/fenced
+work, zero claims, and policy_idle from every policy while new admission remains
+closed. No old-key fallback or artificial clock advance. Write the executable
+rotation runbook only after the runtime and infrastructure exist; keep its
+private controller evidence out of this public repository.
 
 Narrow commands not run: make server-build server-vet server-test; relevant
 composition tests under apps/server/cmd/server and internal/config/store.

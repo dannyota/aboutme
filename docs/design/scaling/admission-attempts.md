@@ -140,6 +140,14 @@ Pending count is derived from effective attempt rows, not a mutable counter.
 Constrain committed failures to 0..10. The window is absent exactly when both
 committed failures and effective pending debt are zero.
 
+That is the evaluated state after the selected bucket resolves expiry. At rest,
+the owner deferred assertion instead binds stored pending rows to the exact
+bucket/window and requires committed failures plus stored pending count at most
+ten. A stored pending row may have passed effective_until until its bucket is
+selected. A zero-failure bucket keeps its window while such a row remains.
+Advancing the policy clock for another key never forces an unrelated bucket
+sweep. See [rate storage](rate-storage.md) for exact nullable state.
+
 Finish revalidates the exact attempt, bucket and original window:
 
 - Neutral resolves only its reservation.
@@ -169,6 +177,12 @@ grants no work and changes no debt. Callers never reuse attempt UUIDs for new
 requests. Conflict detection is retained for the 24-hour receipt horizon; this
 does not promise an unbounded outcome archive or an absolute row-count cap. No
 cleanup function or partial index alone proves production storage bounds.
+
+The maintenance-only [rate cleanup](rate-storage.md) also normalizes the one
+selected overflow bucket through accepted refill/expiry rules. It resolves only
+expired pending attempts, preserves effective debt and never deletes overflow.
+Its atomic policy_idle result requires no ordinary bucket, neutral overflow and
+no pending P22 row; retained terminal receipts do not affect it.
 
 ## Required local proof
 
