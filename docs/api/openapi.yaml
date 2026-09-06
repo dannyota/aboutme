@@ -1027,6 +1027,205 @@ paths:
                 error:
                   code: session_required
                   message: a valid session is required
+    delete:
+      operationId: deleteAccount
+      tags:
+        - auth
+      summary: Delete the caller’s account and revoke access
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      description: Requires a live cookie session, exact Origin/CSRF and
+        reauthentication within 15 minutes, rechecked under the account lock.
+        Takes the global discovery fence then every owned resume fence in UUID
+        order, drains active public delivery within one five-second deadline, and
+        atomically deletes account state, retains slug tombstones, queues exact
+        private-media removal and records lifecycle audit. A concurrent new resume
+        retries the complete plan at most three times, then returns
+        account_changed. Media removal targets 24 hours; backups expire on the
+        30-day schedule. No body, query, schema, conditional or idempotency input
+        is accepted. Separate 5/minute account-and-client-IP limit. A successful
+        response clears the session and OAuth transaction cookies. An ambiguous
+        database commit is independently resolved before success; unresolved
+        public admission stays closed.
+      responses:
+        "204":
+          description: Account deleted. Zero body bytes.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store, no-transform
+            Clear-Site-Data:
+              schema:
+                type: string
+                const: '"cookies", "storage"'
+        "400":
+          description: Bodiless account operation rejects query, body, schema,
+            conditional and idempotency inputs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: request_invalid
+                  message: invalid account request
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "403":
+          description:
+            CSRF validation failed or recent reauthentication is required. No
+            account deletion occurred.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: reauth_required
+                  message: recent reauthentication is required
+        "405":
+          description: Unsupported method.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: method_not_allowed
+                  message: method not allowed
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET, DELETE
+        "409":
+          description:
+            The complete owned-resume set kept changing during deletion.
+            Confirm and retry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: account_changed
+                  message: account changed; try again
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+        "503":
+          description:
+            The account operation could not complete safely. No partial
+            export or unproved deletion is returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: account_unavailable
+                  message: account operation unavailable; try again
+  /me/export:
+    get:
+      operationId: getAccountExport
+      tags:
+        - auth
+      summary: Download the caller’s portable account data
+      security:
+        - sessionCookie: []
+      description: "Downloads one complete version-1 JSON bundle of the account
+        profile and up to three current-version resume documents, including
+        hidden/private content and incomplete drafts. Each normalized photo is
+        separate standard-base64 data with its crop;
+        document.personalDetails.photo is removed. No backend object keys,
+        provider subjects, password/session/CSRF/OAuth credentials or cleanup
+        data appear. Reads account and documents in one database snapshot and
+        buffers the complete attachment before success. A referenced photo that
+        is missing, invalid or over 2 MiB fails the export. Complete response
+        cap: 12,582,912 bytes. No body, query, schema, conditional or
+        idempotency input is accepted. Separate 5/minute account-and-client-IP
+        limit."
+      responses:
+        "200":
+          description: Complete portable JSON attachment, at most 12 MiB.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store, no-transform
+            Content-Disposition:
+              schema:
+                type: string
+                const: attachment; filename="aboutme-export.json"
+            X-Resume-Schema-Version:
+              schema:
+                type: string
+                pattern: ^[0-9]+$
+              description: Current emitted resume schema version.
+              example: "2"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountExport"
+              example:
+                data:
+                  exportVersion: 1
+                  exportedAt: 2026-09-06T00:00:00Z
+                  account:
+                    id: 018f5b6a-9a3e-7c21-8b1e-000000000001
+                    email: example@example.test
+                    name: Example
+                    createdAt: 2026-08-01T00:00:00Z
+                    updatedAt: 2026-08-01T00:00:00Z
+                    linkedProviders: []
+                  resumes: []
+        "400":
+          description: Bodiless account operation rejects query, body, schema,
+            conditional and idempotency inputs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: request_invalid
+                  message: invalid account request
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "405":
+          description: Unsupported method.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: method_not_allowed
+                  message: method not allowed
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+        "503":
+          description:
+            The account operation could not complete safely. No partial
+            export or unproved deletion is returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: account_unavailable
+                  message: account operation unavailable; try again
   /capabilities:
     get:
       operationId: getCapabilities
@@ -5341,6 +5540,120 @@ components:
         dateFormat:
           type: string
           enum: [MM/YYYY, Mon YYYY, YYYY]
+    AccountExport:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - exportVersion
+            - exportedAt
+            - account
+            - resumes
+          properties:
+            exportVersion:
+              type: integer
+              const: 1
+            exportedAt:
+              type: string
+              format: date-time
+            account:
+              $ref: "#/components/schemas/AccountExportProfile"
+            resumes:
+              type: array
+              maxItems: 3
+              items:
+                $ref: "#/components/schemas/AccountExportResume"
+    AccountExportProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - name
+        - createdAt
+        - updatedAt
+        - linkedProviders
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        linkedProviders:
+          type: array
+          maxItems: 3
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - google
+              - github
+              - linkedin
+    AccountExportResume:
+      allOf:
+        - $ref: "#/components/schemas/ResumeSummary"
+        - type: object
+          required:
+            - document
+            - photo
+          properties:
+            document:
+              $ref: "#/components/schemas/AccountExportDocument"
+            photo:
+              $ref: "#/components/schemas/AccountExportPhoto"
+      unevaluatedProperties: false
+    AccountExportDocument:
+      description:
+        Full current-version owner document with personalDetails.photo
+        removed; the portable photo is beside the document. All other fields,
+        including hidden/private content, remain.
+      allOf:
+        - $ref: "#/components/schemas/ResumeDocument"
+        - type: object
+          properties:
+            personalDetails:
+              type: object
+              properties:
+                photo: false
+    AccountExportPhoto:
+      description: Portable normalized photo and crop, with no object key.
+      anyOf:
+        - type: "null"
+        - type: object
+          additionalProperties: false
+          required:
+            - mediaType
+            - data
+            - crop
+          properties:
+            mediaType:
+              type: string
+              enum:
+                - image/jpeg
+                - image/png
+            data:
+              type: string
+              contentEncoding: base64
+              maxLength: 2796204
+            crop:
+              anyOf:
+                - type: "null"
+                - $ref: "#/components/schemas/PublicPhotoCrop"
     ResumeSummary:
       type: object
       description: >-

@@ -26,6 +26,19 @@ Failed reads retry independently of heartbeats. Session loss stops owner updates
 while retaining in-memory edits. Public 404 reloads the authoritative page; an
 unknown document or wire version reloads the client.
 
+A successful mutation response can arrive after its realtime-triggered owner
+read. When both have the same immutable revision, the coordinator settles that
+command and clears its provisional conflict. This includes photo uploads whose
+object key is assigned by the server. A strictly newer accepted revision stays
+authoritative; a conflicting change still requires resolution.
+
+Template children reconcile against their captured placement and customization
+projections. A live read can adopt a child's result while its response is in
+flight; the response advances that child without dropping the remaining group.
+After the retry window expires, a read that proves the child result advances the
+group. An unchanged target opens partial recovery. A stale winner still requires
+a complete owner read before the next child can dispatch.
+
 ## Local connection measurement
 
 On 2026-09-05 the integration owner ran `make server-test-realtime-stress` on

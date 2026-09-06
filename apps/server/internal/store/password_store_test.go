@@ -7,6 +7,8 @@ package store_test
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -377,6 +379,9 @@ func TestPasswordAuthCleanupIsBounded(t *testing.T) {
 
 func TestPasswordAuthListLiveKeyIDs(t *testing.T) {
 	ctx, _, _, q := newPasswordStoreTx(t)
+	keyPrefix := "list-live-" + uuid.NewString() + "-"
+	sharedKey := keyPrefix + "shared"
+	otherKey := keyPrefix + "other"
 
 	reg1 := newPasswordRegistration(ctx, t, q)
 	reg2 := newPasswordRegistration(ctx, t, q)
@@ -399,16 +404,23 @@ func TestPasswordAuthListLiveKeyIDs(t *testing.T) {
 			t.Fatalf("CreateAuthEmailJob: %v", err)
 		}
 	}
-	mk(reg1, "k-shared")
-	mk(reg2, "k-shared")
-	mk(reg2, "k-other")
+	mk(reg1, sharedKey)
+	mk(reg2, sharedKey)
+	mk(reg2, otherKey)
 
 	keys, err := q.ListLiveAuthEmailJobKeyIDs(ctx, time.Now().UTC().Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("ListLiveAuthEmailJobKeyIDs: %v", err)
 	}
-	if len(keys) != 2 {
-		t.Fatalf("live key IDs = %v, want exactly 2 distinct keys", keys)
+	var scopedKeys []string
+	for _, key := range keys {
+		if strings.HasPrefix(key, keyPrefix) {
+			scopedKeys = append(scopedKeys, key)
+		}
+	}
+	want := []string{otherKey, sharedKey}
+	if !slices.Equal(scopedKeys, want) {
+		t.Fatalf("scoped live key IDs = %v, want exactly %v", scopedKeys, want)
 	}
 }
 

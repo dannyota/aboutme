@@ -33,6 +33,8 @@ make dev-https-entry-check
 make dev-https-public-check
 make dev-https-publish-check
 make dev-https-password-check
+make dev-https-exports-check
+make dev-https-privacy-check
 make dev-https-down
 make dev-native
 ```
@@ -103,6 +105,16 @@ bytes. It contains only fixed step booleans, response statuses, the bounded
 revocation time, mutation-header presence flags, and error counters. It never
 stores header values, cookies, passwords, request or response bodies, resume
 content, or personal data.
+
+The privacy check exports a portable account attachment, cancels deletion, then
+proves provider reauthentication and a fresh explicit confirmation before real
+account deletion. One exact DELETE response is forced to `reauth_required` to
+exercise the settings branch; live database API tests prove stale-session
+refusal. The check verifies old session, grant, public representation and
+discovery access is revoked, and that the old slug remains tombstoned. It
+removes its synthetic accounts through the API and its reserved OAuth client
+through the fixture cleanup. `privacy-proof.json` is mode 0600, at most 8,192
+bytes, and contains only fixed step booleans and error counters.
 
 For renderer specs, `make web-e2e-fast` iterates in the pinned browser against
 the working tree without the hermetic tar (`ARGS="print.spec.ts"` selects specs,

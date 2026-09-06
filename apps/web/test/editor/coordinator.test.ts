@@ -20,6 +20,58 @@ const preset = TEMPLATES.find(
   ({ customization }) => customization.layout.placement === 'byType',
 )!;
 
+function templateAcceptedFixture() {
+  const fixture = acceptedFixture();
+  return {
+    ...fixture,
+    document: {
+      ...fixture.document,
+      content: { skill: { sectionType: 'skill' as const, entries: [] } },
+      customization: {
+        ...fixture.document.customization,
+        layout: {
+          ...fixture.document.customization.layout,
+          sections: { main: ['skill'], sidebar: [] },
+        },
+      },
+    },
+  };
+}
+
+function templateRaceFixture() {
+  setActivePinia(createPinia());
+  const accepted = templateAcceptedFixture();
+  const ids = ['group-1', 'structure-1', 'customization-1'];
+  const runtime = {
+    nowEpochMs: () => 0,
+    uuid: () => ids.shift()!,
+    delay: async () => {},
+  };
+  const group = captureTemplateGroup({
+    resumeId: accepted.metadata.id,
+    ownerId: 'owner-1',
+    sequence: 1,
+    current: accepted,
+    preset,
+    dependencyIds: [],
+    runtime,
+  })!;
+  const intermediate = {
+    ...applyIntent(accepted, group.children[0]!),
+    revision: parseRevision('2'),
+    metadataFreshness: 'complete' as const,
+  };
+  const store = useResumeStore();
+  store.initialize(accepted);
+  store.enqueue(accepted.metadata.id, group);
+  const auth = {
+    user: computed(() => ({ id: 'owner-1' })),
+    csrfToken: computed(() => 'csrf-1'),
+    authState: computed(() => 'authenticated'),
+  } as never;
+  return { accepted, auth, group, intermediate, runtime, store };
+}
+
 describe('resume editor actions', () => {
   it('captures atomic and template IDs from the injected runtime', () => {
     setActivePinia(createPinia());
@@ -516,6 +568,175 @@ describe('mutation coordinator', () => {
     await flushing;
   });
 
+  // eslint-disable-next-line max-len -- exact concurrency regression name.
+  it('clears its opaque upload conflict when SSE adopts the same successful revision first', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const uploaded = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        personalDetails: {
+          ...accepted.document.personalDetails,
+          photo: { key: 'photo-uploaded' },
+        },
+      },
+      revision: parseRevision('2'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    let resolveDispatch!: (value: never) => void;
+    const dispatch = new Promise<never>((resolve) => {
+      resolveDispatch = resolve;
+    });
+    const api = {
+      dispatch: vi.fn(() => dispatch),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: uploaded }),
+    } as never;
+    const auth = {
+      user: computed(() => ({ id: 'owner-1' })),
+      csrfToken: computed(() => 'csrf-1'),
+      authState: computed(() => 'authenticated'),
+    } as never;
+    const runtime = {
+      nowEpochMs: () => 0,
+      uuid: vi.fn()
+        .mockReturnValueOnce('upload-command')
+        .mockReturnValueOnce('upload-attempt'),
+      delay: async () => {},
+    };
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+    const actions = createResumeEditorActions({
+      resumeId: accepted.metadata.id,
+      store,
+      coordinator,
+      auth,
+      runtime,
+    });
+
+    actions.edit({
+      kind: 'photoUpload',
+      file: new File(['image'], 'photo.png', { type: 'image/png' }),
+    });
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toHaveLength(1);
+
+    resolveDispatch!({
+      kind: 'complete',
+      status: 200,
+      accepted: uploaded,
+    } as never);
+    await flushing;
+
+    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+      .toHaveBeenCalledOnce();
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      accepted: {
+        document: { personalDetails: { photo: { key: 'photo-uploaded' } } },
+        revision: parseRevision('2'),
+      },
+      attempt: null,
+      pending: [],
+      conflicts: [],
+    });
+  });
+
+  // eslint-disable-next-line max-len -- exact concurrency regression name.
+  it('keeps an opaque upload conflict when SSE adopts a newer foreign revision first', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const uploaded = {
+      ...accepted,
+      document: {
+        ...accepted.document,
+        personalDetails: {
+          ...accepted.document.personalDetails,
+          photo: { key: 'photo-uploaded' },
+        },
+      },
+      revision: parseRevision('2'),
+    };
+    const foreign = {
+      ...uploaded,
+      document: {
+        ...uploaded.document,
+        personalDetails: {
+          ...uploaded.document.personalDetails,
+          photo: { key: 'photo-foreign' },
+        },
+      },
+      revision: parseRevision('3'),
+    };
+    const store = useResumeStore();
+    store.initialize(accepted);
+    let resolveDispatch!: (value: never) => void;
+    const dispatch = new Promise<never>((resolve) => {
+      resolveDispatch = resolve;
+    });
+    const api = {
+      dispatch: vi.fn(() => dispatch),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: foreign }),
+    } as never;
+    const auth = {
+      user: computed(() => ({ id: 'owner-1' })),
+      csrfToken: computed(() => 'csrf-1'),
+      authState: computed(() => 'authenticated'),
+    } as never;
+    const runtime = {
+      nowEpochMs: () => 0,
+      uuid: vi.fn()
+        .mockReturnValueOnce('upload-command')
+        .mockReturnValueOnce('upload-attempt'),
+      delay: async () => {},
+    };
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+    const actions = createResumeEditorActions({
+      resumeId: accepted.metadata.id,
+      store,
+      coordinator,
+      auth,
+      runtime,
+    });
+
+    actions.edit({
+      kind: 'photoUpload',
+      file: new File(['image'], 'photo.png', { type: 'image/png' }),
+    });
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await Promise.resolve();
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    resolveDispatch!({
+      kind: 'complete',
+      status: 200,
+      accepted: uploaded,
+    } as never);
+    await flushing;
+
+    expect((api as { dispatch: ReturnType<typeof vi.fn> }).dispatch)
+      .toHaveBeenCalledOnce();
+    expect(store.recordFor(accepted.metadata.id)).toMatchObject({
+      accepted: {
+        document: { personalDetails: { photo: { key: 'photo-foreign' } } },
+        revision: parseRevision('3'),
+      },
+      attempt: null,
+      pending: [],
+      conflicts: [{ id: 'upload-command' }],
+    });
+  });
+
   // eslint-disable-next-line max-len -- exact regression name.
   it('conflicts a second crop when the accepted photo is replaced', async () => {
     setActivePinia(createPinia());
@@ -627,21 +848,7 @@ describe('mutation coordinator', () => {
   // eslint-disable-next-line max-len -- exact regression name.
   it('marks a template partial when a later child is definitively rejected', async () => {
     setActivePinia(createPinia());
-    const fixture = acceptedFixture();
-    const accepted = {
-      ...fixture,
-      document: {
-        ...fixture.document,
-        content: { skill: { sectionType: 'skill' as const, entries: [] } },
-        customization: {
-          ...fixture.document.customization,
-          layout: {
-            ...fixture.document.customization.layout,
-            sections: { main: ['skill'], sidebar: [] },
-          },
-        },
-      },
-    };
+    const accepted = templateAcceptedFixture();
     const ids = ['group-1', 'structure-1', 'customization-1'];
     const runtime = {
       nowEpochMs: () => 0,
@@ -673,6 +880,10 @@ describe('mutation coordinator', () => {
     const store = useResumeStore();
     store.initialize(accepted);
     store.enqueue(accepted.metadata.id, group);
+    let rejectSecondChild!: (value: never) => void;
+    const secondChild = new Promise<never>((resolve) => {
+      rejectSecondChild = resolve;
+    });
     const api = {
       dispatch: vi
         .fn()
@@ -681,10 +892,11 @@ describe('mutation coordinator', () => {
           status: 200,
           accepted: intermediate,
         })
-        .mockResolvedValueOnce({
-          kind: 'validation-rejected',
-          issues: [{ path: 'customization', code: 'invalid' }],
-        }),
+        .mockImplementationOnce(() => secondChild),
+      read: vi.fn().mockResolvedValue({
+        kind: 'complete',
+        accepted: intermediate,
+      }),
     } as never;
     const coordinator = createMutationCoordinator({
       api,
@@ -697,7 +909,18 @@ describe('mutation coordinator', () => {
       runtime,
     });
 
-    await coordinator.flush(accepted.metadata.id);
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await vi.waitFor(() => {
+      expect(
+        (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
+      ).toHaveBeenCalledTimes(2);
+    });
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    rejectSecondChild!({
+      kind: 'validation-rejected',
+      issues: [{ path: 'customization', code: 'invalid' }],
+    } as never);
+    await flushing;
 
     expect(
       (api as { dispatch: ReturnType<typeof vi.fn> }).dispatch,
@@ -728,6 +951,297 @@ describe('mutation coordinator', () => {
       kind: 'keep-partial',
     });
     expect(store.recordFor(accepted.metadata.id)!.issues).toEqual({});
+    expect(store.recordFor(accepted.metadata.id)!.conflicts).toEqual([]);
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('advances a template child once when its owner read precedes HTTP success', async () => {
+    const { accepted, auth, group, intermediate, runtime, store }
+      = templateRaceFixture();
+    let acceptFirstChild!: (value: never) => void;
+    const firstChild = new Promise<never>((resolve) => {
+      acceptFirstChild = resolve;
+    });
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockImplementationOnce(() => firstChild)
+        .mockResolvedValueOnce({
+          kind: 'validation-rejected',
+          issues: [{ path: 'customization', code: 'invalid' }],
+        }),
+      read: vi.fn().mockResolvedValue({
+        kind: 'complete',
+        accepted: intermediate,
+      }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await vi.waitFor(() => {
+      expect(store.recordFor(accepted.metadata.id)?.attempt).toMatchObject({
+        kind: 'dispatching',
+        command: { kind: 'structure' },
+      });
+    });
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'queued',
+      nextChild: 0,
+    });
+    acceptFirstChild!({ kind: 'complete', accepted: intermediate } as never);
+    await flushing;
+
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'partial',
+      accepted: intermediate,
+      nextChild: 1,
+      reason: 'child-failed',
+    });
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toEqual([]);
+    expect(store.recordFor(accepted.metadata.id)?.pending[0]?.id).toBe(
+      group.id,
+    );
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('retains a conflict when a newer owner read changes the template child', async () => {
+    const { accepted, auth, intermediate, runtime, store }
+      = templateRaceFixture();
+    let rejectSecondChild!: (value: never) => void;
+    const secondChild = new Promise<never>((resolve) => {
+      rejectSecondChild = resolve;
+    });
+    const foreign = {
+      ...intermediate,
+      document: {
+        ...intermediate.document,
+        customization: {
+          ...intermediate.document.customization,
+          colors: {
+            ...intermediate.document.customization.colors,
+            primary: '#123456',
+          },
+        },
+      },
+      revision: parseRevision('3'),
+    };
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({ kind: 'complete', accepted: intermediate })
+        .mockImplementationOnce(() => secondChild),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted: foreign }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await vi.waitFor(() => expect(api.dispatch).toHaveBeenCalledTimes(2));
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toMatchObject([
+      { kind: 'target-changed', command: { kind: 'customization' } },
+    ]);
+    rejectSecondChild!({
+      kind: 'validation-rejected',
+      issues: [{ path: 'customization', code: 'invalid' }],
+    } as never);
+    await flushing;
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('advances a template after cutoff when the owner read proves success', async () => {
+    const { accepted, auth, intermediate, store } = templateRaceFixture();
+    let now = 0;
+    const runtime = {
+      nowEpochMs: () => now,
+      uuid: () => 'attempt',
+      delay: async () => {},
+    };
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({ kind: 'unknown', reason: 'server' })
+        .mockImplementationOnce(async () => {
+          now = 24 * 60 * 60 * 1_000;
+          return { kind: 'unknown', reason: 'server' };
+        })
+        .mockResolvedValueOnce({
+          kind: 'validation-rejected',
+          issues: [{ path: 'customization', code: 'invalid' }],
+        }),
+      read: vi.fn().mockResolvedValue({
+        kind: 'complete',
+        accepted: intermediate,
+      }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+
+    await coordinator.flush(accepted.metadata.id);
+    expect(api.dispatch).toHaveBeenCalledTimes(3);
+    expect(api.read).toHaveBeenCalledOnce();
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'partial',
+      accepted: intermediate,
+      nextChild: 1,
+      reason: 'child-failed',
+    });
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toEqual([]);
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('offers template recovery when a cutoff read proves no child change', async () => {
+    const { accepted, auth, group, store } = templateRaceFixture();
+    let now = 0;
+    const api = {
+      dispatch: vi.fn().mockImplementation(async () => {
+        now = 24 * 60 * 60 * 1_000;
+        return { kind: 'unknown', reason: 'server' };
+      }),
+      read: vi.fn().mockResolvedValue({ kind: 'complete', accepted }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime: {
+        nowEpochMs: () => now,
+        uuid: () => 'attempt',
+        delay: async () => {},
+      },
+    });
+
+    await coordinator.flush(accepted.metadata.id);
+
+    expect(api.dispatch).toHaveBeenCalledOnce();
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'partial',
+      accepted,
+      nextChild: 0,
+      reason: 'unknown-outcome',
+    });
+    expect(store.recordFor(accepted.metadata.id)?.attempt).toBeNull();
+    expect(store.recordFor(accepted.metadata.id)?.pending[0]?.id).toBe(
+      group.id,
+    );
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('does not advance a template read during the unknown replay delay', async () => {
+    const { accepted, auth, intermediate, runtime, store }
+      = templateRaceFixture();
+    let resumeReplay!: () => void;
+    const replayDelay = new Promise<void>((resolve) => {
+      resumeReplay = resolve;
+    });
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({ kind: 'unknown', reason: 'server' })
+        .mockResolvedValueOnce({ kind: 'complete', accepted: intermediate })
+        .mockResolvedValueOnce({
+          kind: 'validation-rejected',
+          issues: [{ path: 'customization', code: 'invalid' }],
+        }),
+      read: vi.fn().mockResolvedValue({
+        kind: 'complete',
+        accepted: intermediate,
+      }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime: { ...runtime, delay: async () => replayDelay },
+    });
+
+    const flushing = coordinator.flush(accepted.metadata.id);
+    await vi.waitFor(() => {
+      expect(store.recordFor(accepted.metadata.id)?.attempt).toMatchObject({
+        kind: 'unknown',
+        reason: 'server',
+      });
+    });
+    await coordinator.refreshAndReconcile(accepted.metadata.id);
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'queued',
+      nextChild: 0,
+    });
+    resumeReplay!();
+    await flushing;
+
+    expect(api.dispatch).toHaveBeenCalledTimes(3);
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'partial',
+      accepted: intermediate,
+      nextChild: 1,
+      reason: 'child-failed',
+    });
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toEqual([]);
+  });
+
+  // eslint-disable-next-line max-len -- exact regression name.
+  it('advances a satisfied stale template child without dropping its group', async () => {
+    const { accepted, auth, intermediate, runtime, store }
+      = templateRaceFixture();
+    const api = {
+      dispatch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          kind: 'stale',
+          winner: {
+            document: intermediate.document,
+            revision: intermediate.revision,
+          },
+        })
+        .mockResolvedValueOnce({
+          kind: 'validation-rejected',
+          issues: [{ path: 'customization', code: 'invalid' }],
+        }),
+      read: vi.fn().mockResolvedValue({
+        kind: 'complete',
+        accepted: intermediate,
+      }),
+    } as never;
+    const coordinator = createMutationCoordinator({
+      api,
+      store,
+      auth,
+      runtime,
+    });
+
+    await coordinator.flush(accepted.metadata.id);
+
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'running',
+      nextChild: 1,
+      lastRevision: parseRevision('2'),
+    });
+    await coordinator.completeRead(accepted.metadata.id);
+    await coordinator.flush(accepted.metadata.id);
+
+    expect(api.dispatch).toHaveBeenCalledTimes(2);
+    expect(store.recordFor(accepted.metadata.id)?.templateState).toEqual({
+      kind: 'partial',
+      accepted: intermediate,
+      nextChild: 1,
+      reason: 'child-failed',
+    });
+    expect(store.recordFor(accepted.metadata.id)?.conflicts).toEqual([]);
   });
 
   it('dispatches once one second after the last local edit', async () => {

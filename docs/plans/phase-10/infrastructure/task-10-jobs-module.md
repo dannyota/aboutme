@@ -18,17 +18,18 @@ server CLI is available. The module pins these enabled schedules at activation:
 | Job                   | Command                    | Cadence   | Lock and heartbeat                                                      |
 | --------------------- | -------------------------- | --------- | ----------------------------------------------------------------------- |
 | Idempotency expiry    | `idempotency-expiry-sweep` | hourly    | PostgreSQL advisory lock; hourly success/backlog/oldest-age metrics     |
+| Media deletion        | `media-deletion-sweep`     | hourly    | PostgreSQL advisory lock; hourly success/backlog/overdue metrics        |
 | Media orphan cleanup  | `media-orphan-sweep`       | weekly    | PostgreSQL advisory lock; weekly success/backlog/delete-failure metrics |
 | Session/audit privacy | `privacy-retention-sweep`  | daily     | PostgreSQL advisory lock; daily success/backlog metrics                 |
 | Restore verification  | `restore-verify.sh`        | nightly   | tagged deterministic target; daily heartbeat                            |
 | Origin TLS expiry     | `tls-expiry-check.sh`      | daily     | scheduler exclusion; expiry/failure metric                              |
 | CloudFront CIDR drift | `cidr-drift-check.sh`      | every 6 h | scheduler exclusion; six-hour heartbeat                                 |
 
-The first three use the server image and its task role. The other three use the
+The first four use the server image and its task role. The other three use the
 ops image and the job task role. Flexible windows are off and Scheduler retry
 attempts are zero: a missed or failed run must alarm, not hide behind retries.
 Local OpenTofu authoring may use services disabled, but Task 10.15 cannot close
-until all six schedules are enabled and their task commands resolve in the
+until all seven schedules are enabled and their task commands resolve in the
 candidate images.
 
 ## Steps

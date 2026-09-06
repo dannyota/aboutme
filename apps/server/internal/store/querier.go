@@ -35,11 +35,16 @@ type Querier interface {
 	// leased rows. Two concurrent claimers are disjoint because each claims a
 	// distinct row under FOR UPDATE SKIP LOCKED.
 	ClaimAuthEmailJobs(ctx context.Context, arg ClaimAuthEmailJobsParams) ([]AuthEmailJob, error)
+	// Media deletion and orphan-reconciliation queries. The document photo key is
+	// the ownership authority; media_deletion_jobs is only durable cleanup work.
+	ClaimMediaDeletionJobs(ctx context.Context, arg ClaimMediaDeletionJobsParams) ([]MediaDeletionJob, error)
+	ClassifyMediaObject(ctx context.Context, objectKey string) (ClassifyMediaObjectRow, error)
 	CleanupExpiredPasswordRegistrations(ctx context.Context, arg CleanupExpiredPasswordRegistrationsParams) (int64, error)
 	CleanupExpiredPasswordResetTokens(ctx context.Context, arg CleanupExpiredPasswordResetTokensParams) (int64, error)
 	// Sent/terminal jobs are retained for seven days of audit, then removed in a
 	// bounded page, oldest outcome first.
 	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
+	CompleteClaimedMediaDeletion(ctx context.Context, arg CompleteClaimedMediaDeletionParams) (bool, error)
 	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
 	// Single-use consumption (M2). One conditional UPDATE both takes the row lock
 	// and decides the winner: under two concurrent exchanges of the same code the
@@ -65,6 +70,7 @@ type Querier interface {
 	// pre-cap count.
 	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CreateAndClaimOrphanMediaDeletion(ctx context.Context, arg CreateAndClaimOrphanMediaDeletionParams) (MediaDeletionJob, error)
 	// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
 	// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
 	// id; the caller has already encrypted the payload and computed the exact expiry
@@ -122,6 +128,8 @@ type Querier interface {
 	// Relational schema changes belong in apps/server/migrations; see
 	// docs/design/data.md.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteAccountUser(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteCompletedMediaJobsPage(ctx context.Context, arg DeleteCompletedMediaJobsPageParams) (int64, error)
 	// Deletes exactly this key's record if (and only if) it has expired, and
 	// reports the counters to release — zero rows deleted still returns one
 	// aggregate row of zeros.
@@ -157,6 +165,7 @@ type Querier interface {
 	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
+	DeleteLifecycleAuditPage(ctx context.Context, arg DeleteLifecycleAuditPageParams) (int64, error)
 	// Removing a client cascades its codes, grants, and tokens: deregistering an
 	// agent ends every authorization it holds.
 	DeleteOAuthClient(ctx context.Context, id uuid.UUID) (int64, error)
@@ -184,11 +193,21 @@ type Querier interface {
 	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
 	// table's own check constraint rejects a malformed or cross-resume key.
 	EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error)
+	// Lock users before replay rows and usage counters, matching every resume
+	// writer. SKIP LOCKED lets inactive users progress past a busy account.
+	ExpireIdempotencyPage(ctx context.Context, arg ExpireIdempotencyPageParams) (ExpireIdempotencyPageRow, error)
 	// Finds the exact unrevoked successor through rotated_from. The partial unique
 	// index in migration 00003 permits at most one successor per predecessor;
 	// timestamps must never be used to reconstruct this lineage. The reverse
 	// direction is already present in a session row's rotated_from value.
 	FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uuid.UUID) (Session, error)
+	GetAccountDeletedAuditEvent(ctx context.Context, id uuid.UUID) (LifecycleAuditEvent, error)
+	GetAccountDeletionSessionForUpdate(ctx context.Context, arg GetAccountDeletionSessionForUpdateParams) (Session, error)
+	// Account export deliberately reads only portable profile fields, provider
+	// names, and owner resume rows. Credentials, provider subjects, object keys,
+	// and lifecycle records do not cross the HTTP export boundary.
+	GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error)
+	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
 	// Inputs for the capacity Retry-After decision: while an expired retained
 	// row remains the caller retries in one second (the next mutation's
 	// bounded cleanup frees space); otherwise the earliest retained expiry
@@ -198,17 +217,21 @@ type Querier interface {
 	// normally happen); the caller maps any earliest_expiry <= now to the
 	// one-second branch.
 	GetIdempotencyCapacityRetryAfter(ctx context.Context, arg GetIdempotencyCapacityRetryAfterParams) (GetIdempotencyCapacityRetryAfterRow, error)
+	GetIdempotencyExpiryBacklog(ctx context.Context, cutoff time.Time) (GetIdempotencyExpiryBacklogRow, error)
 	GetIdempotencyRecord(ctx context.Context, arg GetIdempotencyRecordParams) (IdempotencyRecord, error)
 	GetIdentityByProviderSubject(ctx context.Context, arg GetIdentityByProviderSubjectParams) (Identity, error)
 	// Re-locks the exact leased job by its owner before the bounded send handoff,
 	// so a token replacement that already committed cannot race this delivery.
 	GetLeasedAuthEmailJobForUpdate(ctx context.Context, arg GetLeasedAuthEmailJobForUpdateParams) (AuthEmailJob, error)
+	GetLifecycleAuditBacklog(ctx context.Context, arg GetLifecycleAuditBacklogParams) (GetLifecycleAuditBacklogRow, error)
 	// The grant-skip read: a live grant with equal-or-wider scopes lets authorize
 	// issue a code without a second consent.
 	GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantParams) (OAuthGrant, error)
 	// Ambiguous-delete recovery proves the exact immutable cleanup job without
 	// scanning or exposing unrelated object keys.
 	GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error)
+	GetMediaDeletionQueueState(ctx context.Context, arg GetMediaDeletionQueueStateParams) (GetMediaDeletionQueueStateRow, error)
+	GetMediaOrphanSweepCursor(ctx context.Context) (string, error)
 	// Replay lookup: returns the row whether or not it was consumed, so the caller
 	// can see the family a consumed code issued and revoke exactly those tokens.
 	GetOAuthAuthorizationCodeByDigest(ctx context.Context, codeDigest []byte) (OAuthAuthorizationCode, error)
@@ -264,6 +287,7 @@ type Querier interface {
 	// and every sibling atomically.
 	GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Session, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	GetSessionMetadataBacklog(ctx context.Context, arg GetSessionMetadataBacklogParams) (GetSessionMetadataBacklogRow, error)
 	GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error)
 	GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error)
 	// Ownership read before a new-account insert. The caller passes the canonical
@@ -279,6 +303,7 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// The user-row lock every session issuer and password mutation serializes on.
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
+	InsertAccountDeletedAuditEvent(ctx context.Context, arg InsertAccountDeletedAuditEventParams) (LifecycleAuditEvent, error)
 	// Refresh rotation (M3). Every identity field -- family, client, user, grant,
 	// and family expiry -- is read from the predecessor row rather than trusted
 	// from the caller, so a rotated token structurally cannot join a different
@@ -288,6 +313,9 @@ type Querier interface {
 	// mint at most one successor even under concurrent rotations.
 	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
+	ListAccountDeletionResumeSetForUpdate(ctx context.Context, userID uuid.UUID) ([]ListAccountDeletionResumeSetForUpdateRow, error)
+	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
+	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]Resume, error)
 	// Discovery bytes contain only eligible slugs in raw byte order. The
 	// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
 	// string instead of a pointer.
@@ -337,6 +365,10 @@ type Querier interface {
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
+	// Account deletion owns the global lock order documented in
+	// docs/design/operations.md. The caller takes slug advisory locks and
+	// public_state before these account-scoped locks.
+	LockCanonicalAccountEmail(ctx context.Context, email string) error
 	LockPublicState(ctx context.Context) (PublicState, error)
 	LockSlugClaim(ctx context.Context, slug string) error
 	LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -346,12 +378,16 @@ type Querier interface {
 	// lease field and records terminal_at. A stale pending job may terminate
 	// without ever being leased (attempts stays 0).
 	MarkAuthEmailJobTerminal(ctx context.Context, arg MarkAuthEmailJobTerminalParams) (int64, error)
+	MarkClaimedMediaDeletionOverdue(ctx context.Context, arg MarkClaimedMediaDeletionOverdueParams) (bool, error)
+	MarkMediaDeletionOverduePage(ctx context.Context, arg MarkMediaDeletionOverduePageParams) (int64, error)
+	MediaObjectHasLiveReference(ctx context.Context, objectKey string) (bool, error)
 	// Normalizes a candidate response through the same jsonb representation an
 	// insert would store and reports the exact byte count the usage
 	// reservation must account for — the one canonical byte expression shared
 	// with backfill, insert, and cleanup.
 	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
 	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
+	RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error)
 	// Releases exactly the counters of physically deleted records, in the same
 	// transaction as their deletion. The migration's purge-then-backfill order
 	// plus transactional maintenance guarantee this can never underflow the
@@ -361,6 +397,7 @@ type Querier interface {
 	// time, retaining ciphertext and the already-incremented attempt count. The
 	// caller never requeues at attempts = 8 (that path marks terminal instead).
 	RequeueAuthEmailJob(ctx context.Context, arg RequeueAuthEmailJobParams) (int64, error)
+	RequeueClaimedMediaDeletion(ctx context.Context, arg RequeueClaimedMediaDeletionParams) (int64, error)
 	// Bounded stale-lease recovery: a lease that expired without a completed send
 	// returns to pending, rolling back the claim's attempt increment (the send
 	// never happened) and re-dueing immediately. Ordered so repeated calls make
@@ -392,6 +429,7 @@ type Querier interface {
 	// revoked. The affected-row count lets the caller return the same absence
 	// result for missing, expired, and differently owned sessions.
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
+	SaveMediaOrphanSweepCursor(ctx context.Context, arg SaveMediaOrphanSweepCursorParams) (int64, error)
 	// Starts a predecessor's short grace period after its successor is first
 	// used. BeginSessionRotation parks rotation_grace_until at
 	// min(now + rotationAge, its own absolute_expires_at) -- non-NULL, so the
@@ -432,11 +470,18 @@ type Querier interface {
 	// Records that this session's lineage just completed a full OAuth login
 	// after a real reauthentication round trip, never by rotation.
 	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
+	// Phase 8 privacy retention queries. Every mutation is bounded and ordered;
+	// command-level advisory locks are session locks held on a dedicated pooled
+	// connection for the whole run.
+	TryLockIdempotencyExpirySweep(ctx context.Context) (bool, error)
+	TryLockPrivacyRetentionSweep(ctx context.Context) (bool, error)
 	// Conditionally admits one new retained record of record_bytes stored
 	// bytes within the caps. Zero rows (pgx.ErrNoRows) means the insert would
 	// exceed a cap and the caller must reject with the typed capacity error
 	// without committing the mutation.
 	TryReserveIdempotencyUsage(ctx context.Context, arg TryReserveIdempotencyUsageParams) (TryReserveIdempotencyUsageRow, error)
+	UnlockIdempotencyExpirySweep(ctx context.Context) (bool, error)
+	UnlockPrivacyRetentionSweep(ctx context.Context) (bool, error)
 	// The returned revision is the NEW revision (revision + 1), never the
 	// caller's expected one. A stale or non-matching $3 updates zero rows and
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into

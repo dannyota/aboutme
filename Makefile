@@ -89,10 +89,19 @@ server-vet: ## Vet the Go API server
 server-test: ## Test the Go API server
 	cd apps/server && go test ./...
 
-server-test-db: ## Run the dev-seed/auth/store/user/resume/realtime DB-backed test suite against a live Postgres (needs test-db-up or TEST_DATABASE_URL); REQUIRE_TEST_DB=1 turns a missing TEST_DATABASE_URL into a failure instead of a silent skip, so a gate run can never pass vacuously
-	@printf '%s\n' 'server-test-db: go test live dev-seed/auth/store/user/resume/realtime packages'
+server-test-db: ## Run the DB-backed suites against live Postgres; missing TEST_DATABASE_URL fails when REQUIRE_TEST_DB=1
+	@printf '%s\n' 'server-test-db: go test live dev-seed/auth/store/user/resume/realtime/account/privacy packages'
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./cmd/dev-seed ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... -race -count=1 -v
+	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
+	  go test ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... -p=1 -race -count=1 -v
+
+.PHONY: idempotency-expiry-sweep media-deletion-sweep media-orphan-sweep media-orphan-sweep-dry-run privacy-retention-sweep
+idempotency-expiry-sweep media-deletion-sweep media-orphan-sweep privacy-retention-sweep: ## Run one bounded privacy job using runtime DATABASE_URL and media configuration
+	cd apps/server && go run ./cmd/server $@
+
+media-orphan-sweep-dry-run: ## Report orphan candidates without changing media or sweep state
+	cd apps/server && go run ./cmd/server media-orphan-sweep --dry-run
 
 .PHONY: server-test-realtime-stress
 server-test-realtime-stress: ## Measure 2,000 real SSE connections and churn locally; run alone
@@ -342,6 +351,10 @@ dev-https-publish-check: dev-https-status ## Prove publish UX, discovery, and re
 dev-https-exports-check: dev-https-status ## Prove owner PDF and public export gates over trusted HTTPS
 	@bash scripts/dev-https-check.sh exports
 
+.PHONY: dev-https-privacy-check
+dev-https-privacy-check: dev-https-status ## Prove account export, reauthentication, and deletion over trusted HTTPS
+	@bash scripts/dev-https-check.sh privacy
+
 p5a-native-http-check: ## Run the deterministic native public HTTP capture and retain only bounded local evidence
 	bash scripts/p5a-native-http-capture.sh
 
@@ -399,7 +412,7 @@ semgrep: ## Offline SAST scan with registry packs + project rules (no account ne
 semgrep-ci: ## Connected Semgrep — Code (Pro rules) + Supply Chain (SCA) + Secrets; free for public repos. Needs SEMGREP_APP_TOKEN in the environment. This is what CI runs.
 	semgrep ci --code --supply-chain --secrets --no-suppress-errors
 
-sqlc-gen: ## Regenerate the typed data layer (sqlc reads migrations/ for the schema and sql/queries.sql for the queries)
+sqlc-gen: ## Regenerate the typed data layer from migrations/ and sql/ query sources
 	cd apps/server && sqlc generate
 
 sqlc-check: ## Fail if the generated data layer drifts from migrations/ (uses --porcelain so a NEW untracked generated file is caught too; plain `git diff` misses those)

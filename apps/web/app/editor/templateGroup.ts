@@ -8,6 +8,7 @@ import {
   replayCommand,
 } from './commands';
 import { compareRevision } from './revision';
+import { makeAtomicConflict } from './conflicts';
 import { diffCustomization, diffPlacement } from './templateDiff';
 import type { AtomicCommandIntent, AtomicEditorCommand } from './commands';
 import type {
@@ -50,6 +51,31 @@ export interface TemplateGroupInput {
   readonly preset: Readonly<TemplatePreset>;
   readonly dependencyIds: readonly string[];
   readonly runtime: EditorRuntime;
+}
+
+export type TemplateChildReconcileDecision
+  = | { readonly kind: 'satisfied' }
+    | { readonly kind: 'safe-base' }
+    | {
+      readonly kind: 'conflict';
+      readonly conflict: ReturnType<typeof makeAtomicConflict>;
+    };
+
+export function reconcileTemplateChild(
+  child: TemplateChildCommand,
+  winner: ResumeSnapshot,
+): TemplateChildReconcileDecision {
+  const projection = projectChild(winner, child);
+  if (equalProjection(projection, child.intended!)) {
+    return { kind: 'satisfied' };
+  }
+  if (equalProjection(projection, child.base)) {
+    return { kind: 'safe-base' };
+  }
+  return {
+    kind: 'conflict',
+    conflict: makeAtomicConflict(child, winner, projection),
+  };
 }
 
 export interface TemplateUndo {

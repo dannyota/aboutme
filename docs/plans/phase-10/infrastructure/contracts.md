@@ -69,6 +69,14 @@ and heartbeat, image, deploy-pipeline, parity, and operational handoff checks.
 The exit criteria gate their affected checks; it does not replace those task
 contracts with an abbreviated checklist.
 
+The Phase 8 job handoff has four exact server commands:
+`idempotency-expiry-sweep` and `media-deletion-sweep` hourly,
+`media-orphan-sweep` weekly, and `privacy-retention-sweep` daily. Together with
+the existing `restore-verify.sh`, `tls-expiry-check.sh`, and
+`cidr-drift-check.sh` ops jobs, Task 10.10 owns seven schedules. Hosted schedule
+activation, heartbeat and failure alarms, 180-day log retention, and
+backup-retention enforcement remain Phase 10 evidence.
+
 ## Build and runner contract
 
 The owner selected GitHub-hosted `ubuntu-24.04-arm` on 2026-09-05 for native
