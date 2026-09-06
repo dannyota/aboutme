@@ -1,214 +1,202 @@
-# AWS UAT cost recommendation
+# AWS hosting cost recommendation
 
-Recommend a 14-day Singapore UAT on the existing ECS-on-EC2, RDS PostgreSQL, and
-private S3 design. Expected AWS cost is
-**$43.57**; the same 14-day high-usage
-case is **$88.68**. Public image builds
-use free standard GitHub runners. Prices were retrieved on 2026-09-06; amounts
-are USD before tax.
+The owner approved part-time UAT and production autoscaling on 2026-09-06:
+**$20–30/month for UAT**, **$140–170/month for production**, and
+**$160–200/month combined**, in AWS Singapore (`ap-southeast-1`). Amounts are
+USD before tax. These are workload estimates, not a measured bill or a promise
+that arbitrary traffic fits the range.
 
-Status: **proposed; spending amount awaits the owner**. Region, UAT hostname,
-and supporting Cloudflare DNS scope are already authorized by
+[ADR 0034](../../adr/0034-scheduled-uat-and-production-autoscaling.md) records
+the decision. The operating plan replaces the proposed
+$100, 14-day UAT
+campaign and separate $8/month retained-resource allowance. Use
+**$30/month** as the UAT operating ceiling, including retained and allocated
+shared costs. Production launch still requires Phase 11 approval under
 [ADR 0031](../../adr/0031-aws-cost-research-and-hosted-uat.md). This research
 has not provisioned resources or purchased a plan.
 
 ## Selected configuration
 
-| Resource         | UAT starting point                                                              | Production planning assumption                     |
-| ---------------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
-| Application host | One `t4g.small`, 2 vCPU, 2 GiB                                                  | One `t4g.medium`, 2 vCPU, 4 GiB                    |
-| Root disk        | 30 GiB gp3                                                                      | 30 GiB gp3                                         |
-| Database         | Private Single-AZ `db.t4g.micro`, 20 GiB gp3                                    | Private Single-AZ `db.t4g.small`, 50 GiB gp3       |
-| Backups          | 30-day automated retention, nightly isolated restore                            | Same retention and restore schedule                |
-| Media            | Private, unversioned S3; Go authorizes every read                               | Same                                               |
-| Edge             | CloudFront to one Elastic IP origin over HTTPS; Cloudflare DNS-only             | Same topology, separate production resources       |
-| Server limit     | 512 MiB task cgroup for Go and Chromium; 512 CPU units                          | Same hard memory bound; repeat hosted measurements |
-| Monitoring       | Standard Container Insights, app/job metrics and alarms, 180-day logs           | Same inventory, measured cardinality               |
-| Build            | Native `ubuntu-24.04-arm` in public `dannyota/aboutme`; private AWS publication | Promote the UAT-proven image digests               |
+| Resource           | UAT                                                                                       | Production target                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Region and runtime | Singapore ECS on EC2 Graviton                                                             | Same                                                                                                         |
+| Application host   | One `t4g.small` during test windows; temporary larger replicas for production-shape proof | `t4g.medium`, minimum one, initial maximum two; automatic scale-out and scale-in                             |
+| Root disk          | 30 GiB gp3 per active node; deleted with the node                                         | 30 GiB gp3 per node                                                                                          |
+| Database           | Private Single-AZ `db.t4g.micro`, 20 GiB gp3; stop between tests                          | Private Single-AZ `db.t4g.small`, 50 GiB gp3; fixed compute size                                             |
+| Edge               | Same load-balancer path during test windows; remove the load balancer when idle           | CloudFront through an Application Load Balancer to the application fleet                                     |
+| Network            | Auto-assigned node addresses are released on termination                                  | Two load-balancer public addresses and one outbound public address per node; no NAT gateway in this estimate |
+| Media              | Private S3; Go authorizes every read                                                      | Same                                                                                                         |
+| Monitoring         | App/job metrics and alarms, 180-day logs; stop-aware heartbeat checks                     | Same inventory plus scaling and load-balancer health                                                         |
+| Build              | Free standard public ARM64 image build and smoke                                          | Promote UAT-proven image digests                                                                             |
 
 These are starting sizes, not proven hosted capacity. The
-[workload record](workload.md) distinguishes the local render and SSE
-measurements from unmeasured whole-application load. Scheduled jobs need their
-own task reservations and host headroom. They do not share the request process's
-heavy-work permit.
+[workload record](workload.md) distinguishes local render and server-sent event
+(SSE) measurements from unmeasured whole-application load. Each server task
+retains its 512 MiB Go-plus-Chromium cgroup. Jobs need their own reservations
+and host headroom. Database connections and fleet-wide limits must fit the
+[numeric budgets](../../design/budgets.md).
 
-Reserve a four-hour production-shape drill inside the 14 days. Temporarily use
-the larger host class and a separate private 50 GiB `db.t4g.small` database.
-Keep the ordinary UAT database intact, then delete only the owned drill target.
-Do not model a reversible in-place reduction from 50 GiB back to 20 GiB.
+The current code has process-local revocation leases, render jobs, SSE
+subscriptions, and limiters. Adding a second ECS replica is not yet safe. Task
+10.18 defines the shared coordination, routing, placement, and draining
+contracts before dependent implementation. Phase 10 must prove scale-out and
+scale-in under writes, revocations, printing, and SSE before enabling the
+production target. RDS compute does not change with ECS capacity.
 
-EC2 remains self-managed because it preserves the current network and trust
-boundaries at the lowest modeled cost. Its owner must patch the host image, test
-replacement and Elastic IP reassociation, watch CPU credits and disk pressure,
-and maintain job placement headroom. RDS, S3, SES, CloudFront, and Scheduler
-keep their managed-service roles. The [comparison](comparison.md) prices Aurora
-and Fargate and identifies the ADR and runtime changes each would need. No
-topology change is selected here.
+EC2 remains the selected application compute because it preserves the existing
+runtime boundaries at the modeled cost. Its owner must patch the host image,
+verify replacement and draining, watch CPU credits and disk pressure, and keep
+job headroom. RDS, S3, SES, CloudFront, and Scheduler retain managed-service
+roles. Multi-AZ RDS, NAT gateways, paid support, and commitments are not
+selected or included in the launch estimate.
 
-## Spending proposal
+## Reproducible monthly estimate
 
-| Scenario                  |     AWS | Private Actions before allowances | Gross comparison |
-| ------------------------- | ------: | --------------------------------: | ---------------: |
-| Expected 14-day UAT       |  $43.57 |                             $0.60 |           $44.18 |
-| High-usage 14-day UAT     |  $88.68 |                             $2.41 |           $91.09 |
-| Expected production month | $157.68 |                             $1.20 |          $158.89 |
-| Stress production month   | $564.07 |                             $4.81 |          $568.88 |
+Use [monthly-inputs.json](monthly-inputs.json), [monthly.py](monthly.py), and
+[monthly-results.csv](monthly-results.csv) for the approved operating model. It
+separates production, standalone UAT, and UAT's incremental cost beside
+production. Shared mail monitoring, keys, registry, and state are allocated
+once. Recurring account allowances are applied once to combined usage; they are
+not independent allowances for each environment.
 
-The proposed AWS ceiling is **$100**, with a **14-day active lifetime**. This
-spending decision remains with the owner. It covers the modeled AWS campaign and
-stated retention charges, excluding tax. Production figures do not authorize
-launch or production spend.
+The production estimate assumes 730 baseline server-hours and 100–200 extra
+server-hours monthly, 10–100 GB of edge traffic, and the saved low to expected
+operational workload. Each extra node includes compute, disk, and its outbound
+public address. The load balancer includes two Availability Zones, two public
+addresses, and one modeled capacity unit. More traffic, scaling hours, CPU
+surplus, log cardinality, or cross-zone traffic changes the result. No page-view
+count is evidence of server capacity.
 
-The owner accepted public image builds under
-[ADR 0033](../../adr/0033-public-image-builds-private-deployment.md). No paid
-Actions usage is selected. The private columns above are overage sensitivities
-before account allowances, not expected bills or spending authorization. Public
-builds and smoke cost $0 on standard runners. Expected UAT uses 120 private
-minutes; high use needs 480. Check remaining shared minutes and metadata storage
-before activation. If those allowances cannot cover the planned runs, resolve
-that shortfall before enabling paid use. Totals use unrounded line items.
+UAT starts with 40 billable hours over ten test days. The 160-hour case is a
+sensitivity, not an unconditional runtime entitlement. The load balancer runs
+throughout each booked UAT window. Production-shape tests, including a second
+node, consume the same monthly allowance. Book those windows and required
+retention first; shorten optional tests if the forecast would exceed $30. A 50
+GiB production-shape database is a separate disposable target. Do not shrink the
+20 GiB UAT database back after an in-place expansion.
 
-The totals include the full six-month log-storage liability, keys and
-registry/state storage through active UAT and one month after teardown, shared
-email monitoring over that same period, backup growth, nightly restore
-resources, and the production-shape drill. They are not a quote or an upper
-bound on arbitrary traffic or resource drift. Read
-[scenarios.json](scenarios.json), [pricing.csv](pricing.csv), and the line items
-in [results.csv](results.csv) before changing a workload assumption.
+The calculation uses dated [prices](pricing.csv), including ongoing
+[CloudFront allowances](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/)
+and [CloudWatch allowances](https://aws.amazon.com/cloudwatch/pricing/). It does
+not assume promotional EC2/RDS credits, reserved capacity, or Savings Plans.
+Phase 10 checks actual shared allowance use before activation. If those
+allowances are consumed by other workloads, use the gross result and reduce
+optional work to fit the ceiling.
 
-After the modeled retention month, allow **up to
-$8/month** for the retained
-footprint and review it after 30 days. At the expected retained quantities the
-run rate is about $5.46/month;
-at the high quantities it is about $7.10/month. These rates include two KMS
-keys, state storage, ECR, remaining logs, and the assumed shared mail metrics
-and alarms. Shared mail is an existing cost, and its actual inventory must
-replace the assumption. Log storage expires on its 180-day schedule; retained
-release images and keys have separate lifetimes.
+The selected 40-hour UAT case is about
+$22/month. Expected production is about
+$163/month, and their combined account
+estimate is about $187/month. The
+160-hour UAT sensitivity exceeds both the $30
+UAT ceiling and, with expected production, the $200 combined range. Dashboard
+charges are gross because their free-allowance eligibility is unproven. The
+model also reserves a full month of root-disk and node-address cost for UAT;
+those are conservative cost reserves, not resources retained by the normal
+shutdown path.
 
-### Alerts and controls
+The original [comparison](comparison.md), [scenarios](scenarios.json), and
+[results](results.csv) retain the gross 14-day, production, and alternative
+service calculations. They explain the service choice; their campaign totals are
+not the selected monthly operating budget.
 
-Before activation, Task 10.15 records the owner, start time, expiry time, exact
-resource inventory, and budget scope. Separate AWS UAT charges from other
-account workloads. Record shared-resource allocation explicitly.
+## Alerts and operating controls
 
-Verify that each
+Before activation, Task 10.15 records the owner, monthly cost allocation, booked
+test windows, shutdown times, resource inventory, and cleanup path. Use a
+monthly AWS budget covering active, stopped, retained, and allocated shared
+resources. Include global edge charges and untagged shared costs.
+
+Verify that the
 [budget filter](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-create-filters.html)
-captures its intended charges. A tag filter requires an activated
-cost-allocation tag. If the tag is not active, start with a broader account
-budget and reconcile it against the UAT inventory; do not create a filter that
-silently misses new charges. Include global edge charges and untagged shared
-costs in the ledger.
+actually captures the intended charges. A tag filter requires an activated
+cost-allocation tag. Until then, use a broader account budget and reconcile it
+against the owned inventory. Budget monitoring and notifications are
+[free](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/); no paid
+budget reports or actions are selected.
 
-Use a custom-period AWS cost budget from activation through the modeled first
-retention month, plus a monthly retained-resource budget after that. The 14-day
-active expiry remains a separate scheduled operator check. Track the remaining
-six-month log-storage liability even after the campaign budget ends. AWS
-[supports custom project periods](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html);
-budget monitoring and notifications are
-[free](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). No paid
-budget reports or budget actions are selected.
+- Alert at $20 and $25 actual monthly UAT cost, and a forecast of $30.
+- At $25 actual cost or a forecast of $30, stop optional tests and reserve the
+  remaining amount for required cleanup, storage, logs, and shutdown work.
+- Start each test window only when actual cost plus the remaining conservative
+  forecast fits $30. End compute at the booked shutdown time. A larger monthly
+  spend requires a priced extension.
+- Reconcile the inventory and forecast daily. AWS billing data is delayed; an
+  alert does not stop services and is not a technical hard cap.
+- Preserve an operator-run shutdown and cleanup path if private Actions quota is
+  exhausted. No paid Actions usage or subscription is approved.
 
-- Alert at $50 and $75 actual AWS campaign cost, and at $90 forecast cost. The
-  owner checks resource counts and the revised forecast at each alert.
-- At $90 actual AWS cost, or a forecast above $100, stop optional test work and
-  execute the scoped cleanup unless the owner approves an extension.
-- End active UAT at day 14 unless an extension is recorded. Cleanup is an
-  operator action through the reviewed infrastructure workflow.
-- Verify remaining private Actions quota and keep paid usage disabled through
-  the account's supported spending controls. Keep public caches within 10 GiB
-  and private artifacts limited to release metadata. A quota shortfall needs a
-  priced decision; it cannot silently enable overage. Reserve an operator-run
-  cleanup path so a blocked Actions run cannot leave UAT resources running.
-- For retained resources, alert at
-  $6 actual monthly cost and a forecast above
-  $8. Remove eligible expired
-  resources and seek a priced extension before the next month if required
-  retention would exceed the limit. Preserve keys and images still needed for
-  decryption, promotion, or rollback.
+Production's range is a planning input for Phase 11. It does not authorize
+production activation, scale-to-zero, or an automatic database resize.
 
-Check the inventory and forecast daily; use the saved model if AWS cannot yet
-produce a forecast. AWS budget data typically refreshes every 8–12 hours, so
-[costs can exceed a threshold before its alert arrives](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html).
-An alert does not stop a service, and stopping EC2 or RDS still leaves charges.
-The mechanism that removes active AWS charges is the verified destruction of the
-disposable UAT resources. No automatic budget-triggered stop or teardown exists
-yet. Phase 10 must prove the selected controls and the direct cleanup path
-before calling them operational.
+## UAT stop, resume, and final cleanup
 
-## Cleanup and remaining resources
+Stopping between tests preserves UAT data. Final teardown removes the disposable
+environment. These operations have different costs and data-loss effects.
 
-1. Record the synthetic data-loss scope, stop new writes, and complete pending
-   media deletion work. Save only the required redacted evidence.
-2. Stop the environment's schedules and tasks. Verify that no restore or
-   production-shape drill target remains. Delete only targets with the expected
-   environment and ownership tags; adjudicate stale ownership explicitly.
-3. Empty only the UAT media bucket. Destroy the disposable environment under its
-   no-final-snapshot contract with `delete_automated_backups = true`, including
-   its primary RDS instance, EC2 capacity, root volumes, Elastic IP, edge
-   resources, and UAT-only DNS. Confirm that no owned manual or retained
-   automated backup remains. Retaining one changes this cost model and needs a
-   priced retention decision.
-4. Verify the remaining AWS and DNS inventory against the planned retained list.
-   Preserve the state bucket and keys, retained UAT secret key, protected
-   release images, required logs, and the shared email stack and Google DNS.
-5. Record the residual monthly cost and review it after 30 days. Remove
-   unreferenced images when their release window closes; preserve every UAT,
-   promotion, and rollback digest while its release record requires it.
+1. Before stopping, close test access and new writes, drain active work, and
+   complete any pending privacy work that must meet its deadline. Do not leave
+   media-deletion jobs past the 24-hour target while their worker is disabled.
+2. Disable application capacity reconciliation and scheduled jobs in the
+   reviewed order, then scale the owned EC2 group to zero and stop RDS. ECS and
+   its Auto Scaling Group must not replace deliberately removed capacity. Remove
+   the temporary load balancer at the end of every test window.
+3. Node termination deletes its root disk and releases its auto-assigned public
+   address. Clean up any orphaned volumes or addresses. Retain the primary
+   database, state, keys, required logs, images, and authorized UAT media.
+   Charge their storage and other retained costs to the monthly ceiling. RDS
+   [automatically restarts after seven days](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_StopInstance.html);
+   prove a restart safeguard outside the stopped application before calling
+   scheduled shutdown operational.
+4. On resume, start the database and recreate capacity and the load balancer,
+   verify readiness, run due bounded maintenance, restore the job schedules, and
+   reopen test access. Record the actual billable hours, including operational
+   overhead.
+5. At final teardown, retain only redacted evidence and the explicitly required
+   persistent resources. Empty only the owned synthetic UAT media bucket. Delete
+   disposable EC2, volumes, addresses, load balancers, edge resources, UAT DNS,
+   and RDS targets under the no-final-snapshot contract with
+   `delete_automated_backups = true`. Verify no owned restore target or manual
+   backup remains. Preserve the shared email stack and Google DNS.
+6. Reconcile the remaining state, keys, release images, and 180-day logs against
+   their retention requirements. Their cost remains inside the same
+   $30/month
+   ceiling; the previous separate $8 allowance does not apply.
+   Review retained resources after 30 days and remove eligible expired
+   resources.
 
-A seven-day stopped EC2/RDS UAT still has about $2.14 of infrastructure charges
-before keys, registry, logs, email monitoring, and backup growth. RDS restarts
-after seven days. This is a sensitivity for short maintenance, not the chosen
-post-UAT lifecycle. Do not pause cleanup schedules while pending deletion work
-still needs to meet its 24-hour target.
+## GitHub and mail handoff
 
-## GitHub and mail inputs
+[ADR 0033](../../adr/0033-public-image-builds-private-deployment.md) keeps all
+four image builds and native smoke in public `aboutme`. Private `aboutme-infra`
+validates artifacts, publishes to ECR, and deploys using its available quota.
+Public workflows receive no AWS credentials. Keep public caches within 10 GiB
+and private artifacts limited to release metadata. The old private Actions
+columns are overage sensitivities, not approved spend.
 
-The current read-only account projection did not provide a plan name. GitHub's
-[environment rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
-do not offer private-repository required reviewers on Free, Pro, or Team. Tasks
-10.1 and 10.12 currently require that approval mechanism.
-
-Verify existing Enterprise Cloud eligibility and the private repository's
-organization/namespace before those tasks activate. If it is unavailable, review
-a replacement approval contract that preserves artifact provenance, scoped AWS
-roles, and recorded owner approval. Do not silently omit the gate. GitHub
-advertises Enterprise as starting at $21/user-month for the first 12 months;
-renewal price, seat terms, and checkout commitment are unverified. That
-conditional subscription is excluded from the ceilings above. This
-recommendation does not request a subscription purchase.
+GitHub private-repository required-reviewer eligibility remains a Phase 10
+input. Verify an existing eligible plan or design a replacement approval
+contract that preserves provenance, scoped AWS roles, and recorded owner
+approval. No subscription purchase is selected. A missing paid feature must not
+silently remove the approval gate.
 
 The [email runbook](../../runbooks/email.md) records Singapore SES in sandbox,
 the `aboutme-auth` configuration set, and the existing `aboutme-email` stack.
-Adopt shared email as a persistent stack unit so CloudFormation remains the sole
-owner of its children. Do not duplicate or destroy its SES, SNS, SQS,
-CloudWatch, or DNS resources in disposable UAT state.
+Adopt that stack as a persistent unit; CloudFormation remains the sole owner of
+its children. Do not duplicate its SES, SNS, SQS, CloudWatch, or DNS resources
+in disposable UAT state.
 
-Phase 10 needs the current sandbox limits, approved verified recipients, the
-runtime SES IAM policy, and a decision and implementation for feedback
-consumption. Simulator delivery is separate from real verification/reset
-workflows. The queue has no consumer today; any new consumer adds its runtime
-and polling cost before activation. Preserve Google Workspace records and the
-existing MAIL FROM subdomain.
+Phase 10 checks sandbox limits, verified recipients, runtime SES IAM, and the
+feedback consumer. Price a new consumer and polling before activation. Simulator
+delivery is separate from real verification/reset workflows. Preserve Google
+Workspace records and the existing MAIL FROM subdomain.
 
-## Phase 10 handoff and decision record
+The [runtime handoff](../../plans/phase-10/runtime-refresh.md) carries the
+remaining startup, private print, ARM64, access, and workflow contracts. Local
+checks precede AWS activation. Hosted UAT proves load, scaling, mail, restore,
+rollback, alarms, origin-secret rotation, and concurrent migrations. A failed
+capacity check needs a priced correction within the approved ceiling.
 
-The [runtime handoff](../../plans/phase-10/runtime-refresh.md) and task
-contracts carry the startup, private print, ARM64, access-control, and workflow
-gaps. Before activation, prove mixed render/media/SSE load, API/SSR latency, job
-headroom, the nightly restore, rollback, alarms, and origin-secret rotation on
-the selected hardware. A failed capacity check needs a priced correction within
-the approved ceiling or a new spending decision.
-
-Owner budget decision: **pending** for the
-$100 AWS campaign ceiling,
-14-day lifetime, and up to $8/month retained
-footprint. Public image builds are accepted; no paid Actions usage or
-subscription is approved. GitHub plan eligibility and any replacement approval
-mechanism remain separate Phase 10 inputs. No cloud activation is permitted
-until the required inputs, local gates, and recorded spending decision are
-complete.
-
-Reproduce the totals with `python3 -B docs/research/aws-cost/calculate.py`. The
-phase's independent review and final local checks are recorded by the
-integration owner before closure.
+Reproduce the gross comparison with
+`python3 -B docs/research/aws-cost/calculate.py` and the operating model with
+`python3 -B docs/research/aws-cost/monthly.py --check`. After changing
+quantities or rates, regenerate its CSV with `--write`.

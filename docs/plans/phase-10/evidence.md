@@ -20,6 +20,10 @@ Use the runbooks and exact commands delivered by the infrastructure tasks:
 - Re-run the existing media-normalization corpus and new render benchmarks under
   the selected production architecture and task limits. If UAT is smaller,
   include the production-shape rehearsal and temporary cost in Phase 9's model.
+- Prove the Task 10.18 fleet contracts during an actual 1 → 2 → 1 transition:
+  shared publication drains, account/private-media revocation, render and
+  one-use redemption, SSE repair, aggregate limits, pgx budget, abrupt failure,
+  and graceful scale-in.
 
 Changing topology requires the corresponding design/acceptance update first; it
 does not silently waive a recovery or security invariant.
@@ -46,6 +50,13 @@ Compare observed UAT usage/cost with Phase 9's estimate. Record stopped/deleted
 resources, retained data/backups, remaining daily cost, and expiry/cleanup
 owner. Do not delete the owner's shared SES resources, unrelated DNS, or
 production resources. Follow the recorded UAT retention policy for test data.
+Record each booked window's ALB lifetime, the off-state absence of application
+nodes and the ALB, RDS stop/start guard execution, required retention-job
+completion, persistent RDS storage, keys, state, ECR images, and required logs.
+Treat the modeled full-month 30 GB root disk and public IPv4 as conservative
+cost reserves until live inventory proves they can decrease. Clean up any
+orphaned volume or address. Forecast at USD 30 shortens optional work; it cannot
+defer privacy or deletion obligations.
 
 Successful Phase 10 is the evidence input to Phase 11. It does not authorize
 production promotion by itself.

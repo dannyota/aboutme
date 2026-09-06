@@ -86,15 +86,56 @@ GB-month for production. Any RDS excess costs `$0.095/GB-month`. AWS documents
 
 ## Scenario inputs
 
-UAT low, expected, and stress lifetimes are 72 hours, 336 hours, and 730 hours.
-The expected case is a proposed 14-day rehearsal. A separate 14-day high case
-uses stress traffic and retention assumptions without extending the lifetime. It
-also includes a four-hour `t4g.medium` host-rate increment and a separate
-temporary `db.t4g.small` database with 50 GB storage for a production-shape
-drill. The temporary database is deleted by exact ownership after the drill. The
-model does not assume RDS storage can shrink from 50 GB back to 20 GB.
-Production cases are steady-state 730-hour months. All compared hosting options
-consume the same workload row.
+The current UAT operating inputs are 40 billable hours over 10 days, with a high
+case of 160 billable hours over 20 days. Normal stop tears down the application
+nodes, their root disks, and their auto-assigned public IPv4 addresses, then
+stops RDS. The model conservatively reserves a full month of one 30 GiB root
+disk and one public IPv4 in case teardown is delayed; these are cost reserves,
+not retained-resource requirements. The 20 GiB RDS storage continues to bill. A
+stopped RDS instance automatically restarts after seven days, so Phase 10 needs
+a mandatory stop safeguard. Do not stop privacy jobs while deletion or other
+deadline-bound work is pending.
+
+The selected UAT topology uses an ALB throughout all booked running hours: 40
+hours in the baseline and 160 hours in the sensitivity. Tear it down outside
+those windows. A four-hour production-topology proof also adds a second
+`t4g.medium` node, its prorated 30 GiB root volume, and its public IPv4 address.
+The separate production-shape database drill upgrades the first node for four
+hours and creates a temporary 50 GiB `db.t4g.small`; it does not count that
+first-node upgrade as a second node.
+
+The model retains 18 application alarms, seven shared mail alarms, and the
+dashboard for the full month because they remain operating controls while
+compute is stopped. Dashboard charges stay gross because eligibility for the
+three-dashboard allowance requires at most 50 referenced metrics per dashboard,
+which is unproven. Custom-metric allowance treatment by emitted metric-hours is
+also uncertain; use the gross result until live billing confirms it.
+Scaling-alarm cardinality is unproven and is not invented as seven extra alarms.
+The model prorates only the 50 application custom metrics by emitted
+metric-hours. The seven Scheduler invocations per active hour are a conservative
+explicit upper bound, not a derived cadence. Generic CloudWatch API calls remain
+gross because their allowance eligibility depends on the operation mix measured
+in Phase 10.
+
+The selected 40-hour baseline costs
+$22.122210 after the modeled account
+allowances and $30.629128 if they are
+already consumed. Verify allowance use before activation. The 160-hour
+sensitivity costs $35.818148 after allowances
+and $44.403148 without them. It is
+not selected or an entitlement. Shorten optional test runtime and retain
+required evidence and retention resources. The forecast is a planning range
+rather than a technical spending cap; AWS budget data can lag.
+
+UAT low, expected, and stress campaign lifetimes are 72 hours, 336 hours, and
+730 hours. The former expected case is a 14-day rehearsal. A separate 14-day
+high case uses stress traffic and retention assumptions without extending the
+lifetime. It also includes a four-hour `t4g.medium` host-rate increment and a
+separate temporary `db.t4g.small` database with 50 GB storage for a
+production-shape drill. The temporary database is deleted by exact ownership
+after the drill. The model does not assume RDS storage can shrink from 50 GB
+back to 20 GB. Production cases are steady-state 730-hour months. All compared
+hosting options consume the same workload row.
 
 | Input                      | UAT low | UAT expected | UAT 14-day high | UAT stress |  Prod low | Prod expected | Prod stress |
 | -------------------------- | ------: | -----------: | --------------: | ---------: | --------: | ------------: | ----------: |

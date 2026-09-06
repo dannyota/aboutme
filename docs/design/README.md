@@ -9,8 +9,9 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. Every ADR
-through 0029 is accepted and integrated here. If a page disagrees with an
-accepted ADR, the ADR controls that decision until this text is corrected.
+through 0034 is accepted, subject to recorded supersessions. If a page disagrees
+with an accepted ADR, the ADR controls that decision until this text is
+corrected.
 
 ## Sections
 
@@ -56,8 +57,8 @@ The design has five cross-cutting rules:
    the editor or a connected agent.
 4. Caddy is the sole client-IP trust boundary. Go accepts the canonical client
    address only from configured trusted proxies.
-5. Local verification precedes cloud work. No AWS or DNS mutation occurs before
-   local user acceptance testing and explicit human authorization.
+5. Local verification precedes cloud work. Phase 10 local checks precede the
+   authorized AWS UAT deployment; production needs separate launch approval.
 
 ## Approval rule
 

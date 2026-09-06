@@ -186,6 +186,8 @@ patch file is required or present.
 | AC-INF-004         | Phase 10 infrastructure Task 10.4                               | Secrets absent from repo/state; SSM paths disjoint; only the server role gets prefix-scoped media operations                                                             |
 | AC-INF-005         | Phase 10 infrastructure Task 10.9                               | Alarm inventory + dashboards + SNS provisioned, incl. drift + heartbeat alarms                                                                                           |
 | AC-INF-006         | Phase 10 infrastructure Task 10.10                              | Enabled privacy, media, restore, TLS, and drift schedules with exact roles, overlap locks, heartbeats, and failure alarms                                                |
+| AC-INF-009         | Phase 10 Tasks 10.18, 10.5, and 10.15                           | Replica coordination and production-shaped 1 → 2 → 1 safety across publication, render, SSE, limits, drains, and database connections                                    |
+| AC-INF-010         | Phase 10 Tasks 10.18 and 10.15                                  | Scheduled UAT stop/start, RDS seven-day guard, privacy deadlines, temporary ALB removal, and retained-cost evidence                                                      |
 | AC-OPS-001         | P0B (done)                                                      | Reused, not re-implemented (D16); live two-runner staging drill is AC-OPS-017                                                                                            |
 | AC-OPS-002         | Phase 10 operational rehearsal                                  | Phase 10 infrastructure builds the mechanism (D8/D9, Tasks 10.6–10.7) and proves it in CI simulation; live bypass rejection stays Phase 10 operational rehearsal         |
 | AC-OPS-015…019     | Phase 10 operational rehearsal                                  | Phase 10 infrastructure leaves the interfaces (alarm-trigger table, rotation runbook, restore job, deploy workflow); the drills are out of Phase 10 infrastructure scope |
@@ -196,7 +198,7 @@ patch file is required or present.
 | Budget (budgets.md)                                        | Infrastructure parameter (task)                                                                                                                                                                         |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Server task ≤ 512 MiB (Go + Chromium)                      | ECS **task-definition-level** `memory = 512` (the task cgroup — budgets.md's whole-task semantics); container-level limits left unset or equal so a container can never out-budget the task (Task 10.5) |
-| pgx pool ≤ 20 < `max_connections`                          | RDS parameter group asserts `max_connections` ≥ 100 on the chosen class (Task 10.3, `tofu test` assertion)                                                                                              |
+| pgx pool and RDS connection reserve                        | Task 10.18 derives the per-task pool and fleet aggregate for two replicas, jobs, migration, restore, and administration; Tasks 10.3/10.5 assert it                                                      |
 | SSE ≤ 2000 conns, ≥ 25 % fd headroom                       | `ulimits { nofile soft/hard = 65536 }` on caddy + server containers (Task 10.5)                                                                                                                         |
 | SSE heartbeat 25 s < CF idle timeout                       | `caddy-sse` origin read timeout 60 s; default origin 30 s (Task 10.6, D22)                                                                                                                              |
 | API/SSR p95 SLOs (Phase 10 operational rehearsal-measured) | Instance classes are tfvars (D21) so Phase 10 operational rehearsal benchmark evidence can change them without module edits                                                                             |
@@ -204,38 +206,38 @@ patch file is required or present.
 
 ## Module/file structure produced by this phase
 
-| Path                                                                            | Responsibility                                                                                                                                                   |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `deploy/aws/bootstrap/`                                                         | One-time retained state/secrets KMS roots, state bucket, exact GitHub OIDC publication/plan/deploy roles + boundary, and shared ECR repos (local state)          |
-| `deploy/aws/modules/network/`                                                   | VPC, public + **private (DB)** subnets, SG (443 from CloudFront origin-facing prefix list), EIP + ASG(1) auto-reassociation                                      |
-| `deploy/aws/modules/database/`                                                  | RDS Postgres (gp3, PITR, write-only master password + version), parameter group, **private** subnet group                                                        |
-| `deploy/aws/modules/storage/`                                                   | Private unversioned S3 media bucket, public-access block, encryption, bucket and prefix outputs                                                                  |
-| `deploy/aws/modules/secrets/`                                                   | SSM name contract, retained-key input, scoped task/execution roles, server-only media and one-distribution invalidation permissions                              |
-| `deploy/aws/modules/compute/`                                                   | ECS cluster, capacity provider (ASG, ECS-optimized arm64 AMI), task definitions (host-mode caddy/server, **bridge-mode web — D24**), log groups                  |
-| `deploy/aws/modules/edge/`                                                      | CloudFront distribution with dual Caddy origins only, origin-request and response-header policies, **proposed UAT viewer gate — D25**, ACM us-east-1 certificate |
-| `deploy/aws/modules/observability/`                                             | CloudWatch alarms (inventory below, with default thresholds), dashboards, SNS topic + subscription, EventBridge failure rules                                    |
-| `deploy/aws/modules/jobs/`                                                      | Enabled bounded privacy/media jobs plus restore, TLS-expiry, and prefix-list drift; exact RunTask/PassRole/task-role boundaries                                  |
-| `deploy/aws/envs/staging/`, `deploy/aws/envs/production/`                       | Thin, byte-identical roots (D4): `main.tf`, `variables.tf`, `outputs.tf`, `backend.hcl`, `<env>.auto.tfvars`                                                     |
-| `deploy/aws/scripts/secrets-bootstrap.sh`                                       | After bootstrap, writes and decrypt-checks SSM SecureStrings under the retained environment key before the environment foundation apply                          |
-| `deploy/aws/scripts/dns-apply.sh`                                               | Applies/diffs Cloudflare records from OpenTofu outputs via `cf` CLI (D19)                                                                                        |
-| `deploy/aws/scripts/restore-verify.sh`                                          | RDS snapshot → isolated instance → verification query → teardown; overlap-guarded (D20)                                                                          |
-| `deploy/aws/scripts/cidr-drift-check.sh`                                        | Compares deployed CloudFront origin-facing CIDR set vs the live managed prefix list; nonzero exit on drift (D6)                                                  |
-| `deploy/aws/scripts/db-bootstrap.sh`                                            | Creates the database and exact migrator/app/restore roles and grants; idempotent and app-DDL-negative tested                                                     |
-| `deploy/aws/scripts/tls-expiry-check.sh`                                        | Checks the local Caddy listener with origin SNI/hostname and emits bounded expiry/failure metrics                                                                |
-| `deploy/caddy/routes.caddy`                                                     | Shared route table imported by dev + prod Caddyfiles; env-placeholder upstreams with dev defaults (D7)                                                           |
-| `deploy/caddy/boundary.caddy`                                                   | Edge boundary: fail-closed origin-secret gate, trusted-chain client-IP, header strip/emit (D5/D8)                                                                |
-| `deploy/caddy/Caddyfile.prod`                                                   | Production Caddyfile: `admin off`, DNS-01 TLS, internal SSR listener (D24), loopback health vhost, imports of the two snippets                                   |
-| `deploy/caddy/Caddyfile.boundary-test`                                          | TLS-free wrapper importing the same snippets, driven by the CI e2e test (env-substituted listen port)                                                            |
-| `deploy/caddy/Caddyfile` (modify)                                               | Dev file now imports `routes.caddy` (behavior unchanged; existing route-table test must stay green)                                                              |
-| `deploy/caddy.Dockerfile` + `deploy/caddy/caddy-entrypoint.sh`                  | **Task 10.7:** xcaddy build (Caddy 2.11.4 + caddy-dns/cloudflare, pinned, arm64) + fail-closed env entrypoint guard                                              |
-| `deploy/ops.Dockerfile`                                                         | Minimal arm64 image: aws-cli + postgresql-client + the ops scripts                                                                                               |
-| `apps/server/internal/routetable/prod_boundary_test.go`                         | The BLOCKING e2e test (simulated edge, two viewers, forged + duplicated headers, fail-closed rows)                                                               |
-| Private `.github/workflows/{iac.yml,publish-images.yml,deploy-staging.yml}`     | Authored by Tasks 10.8/10.12/10.13 as exact diffs, **applied by the integration owner**                                                                          |
-| Public `.github/workflows/images-arm64.yml`                                     | Credential-free native builds/smoke and public OCI bundle; Task 10.8 diff applied by the integration owner                                                       |
-| Root `Makefile` (diff for owner)                                                | `iac-fmt`, `iac-validate`, `iac-test`, `route-table-test-prod`, `staging-plan` targets                                                                           |
-| `.env.example` (diff for owner — owner-serialized)                              | `CLOUDFLARE_API_TOKEN=` (Zone:DNS:Edit, `aboutme.vn` only), `AWS_PROFILE=` names-only additions                                                                  |
-| `docs/runbooks/{deploy-rollback,eip-recovery,secret-rotation,restore-drill}.md` | Seeded runbooks (drilled in Phase 10 operational rehearsal)                                                                                                      |
-| `docs/architecture.md` (update — **owner-serialized diff**)                     | Gains the deployed-UAT current-state section (Task 10.15, diff handed to owner)                                                                                  |
+| Path                                                                             | Responsibility                                                                                                                                          |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deploy/aws/bootstrap/`                                                          | One-time retained state/secrets KMS roots, state bucket, exact GitHub OIDC publication/plan/deploy roles + boundary, and shared ECR repos (local state) |
+| `deploy/aws/modules/network/`                                                    | VPC, public application and private DB subnets, internet-facing ALB, node SG limited to the ALB SG, and scheduled-UAT network state                     |
+| `deploy/aws/modules/database/`                                                   | RDS Postgres (gp3, PITR, write-only master password + version), parameter group, **private** subnet group                                               |
+| `deploy/aws/modules/storage/`                                                    | Private unversioned S3 media bucket, public-access block, encryption, bucket and prefix outputs                                                         |
+| `deploy/aws/modules/secrets/`                                                    | SSM name contract, retained-key input, scoped task/execution roles, server-only media and one-distribution invalidation permissions                     |
+| `deploy/aws/modules/compute/`                                                    | ECS cluster, capacity provider, one colocated Caddy/Go/Nuxt replica per node, production autoscaling one to two, UAT stopped state                      |
+| `deploy/aws/modules/edge/`                                                       | CloudFront distribution using the ALB origin, origin-request and response-header policies, UAT viewer gate, ACM us-east-1 certificate                   |
+| `deploy/aws/modules/observability/`                                              | CloudWatch alarms (inventory below, with default thresholds), dashboards, SNS topic + subscription, EventBridge failure rules                           |
+| `deploy/aws/modules/jobs/`                                                       | Enabled bounded privacy/media jobs plus restore, TLS-expiry, and prefix-list drift; exact RunTask/PassRole/task-role boundaries                         |
+| `deploy/aws/envs/staging/`, `deploy/aws/envs/production/`                        | Thin, byte-identical roots (D4): `main.tf`, `variables.tf`, `outputs.tf`, `backend.hcl`, `<env>.auto.tfvars`                                            |
+| `deploy/aws/scripts/secrets-bootstrap.sh`                                        | After bootstrap, writes and decrypt-checks SSM SecureStrings under the retained environment key before the environment foundation apply                 |
+| `deploy/aws/scripts/dns-apply.sh`                                                | Applies/diffs Cloudflare records from OpenTofu outputs via `cf` CLI (D19)                                                                               |
+| `deploy/aws/scripts/restore-verify.sh`                                           | RDS snapshot → isolated instance → verification query → teardown; overlap-guarded (D20)                                                                 |
+| `deploy/aws/scripts/cidr-drift-check.sh`                                         | Checks the source-specific CloudFront/ALB trust inputs selected by Task 10.18 and exits nonzero on drift                                                |
+| `deploy/aws/scripts/db-bootstrap.sh`                                             | Creates the database and exact migrator/app/restore roles and grants; idempotent and app-DDL-negative tested                                            |
+| `deploy/aws/scripts/tls-expiry-check.sh`                                         | Checks the local Caddy listener with origin SNI/hostname and emits bounded expiry/failure metrics                                                       |
+| `deploy/caddy/routes.caddy`                                                      | Shared route table imported by dev + prod Caddyfiles; env-placeholder upstreams with dev defaults (D7)                                                  |
+| `deploy/caddy/boundary.caddy`                                                    | Edge boundary: fail-closed origin-secret gate, trusted-chain client-IP, header strip/emit (D5/D8)                                                       |
+| `deploy/caddy/Caddyfile.prod`                                                    | Production Caddyfile: `admin off`, DNS-01 TLS, internal SSR listener (D24), loopback health vhost, imports of the two snippets                          |
+| `deploy/caddy/Caddyfile.boundary-test`                                           | TLS-free wrapper importing the same snippets, driven by the CI e2e test (env-substituted listen port)                                                   |
+| `deploy/caddy/Caddyfile` (modify)                                                | Dev file now imports `routes.caddy` (behavior unchanged; existing route-table test must stay green)                                                     |
+| `deploy/caddy.Dockerfile` + `deploy/caddy/caddy-entrypoint.sh`                   | **Task 10.7:** xcaddy build (Caddy 2.11.4 + caddy-dns/cloudflare, pinned, arm64) + fail-closed env entrypoint guard                                     |
+| `deploy/ops.Dockerfile`                                                          | Minimal arm64 image: aws-cli + postgresql-client + the ops scripts                                                                                      |
+| `apps/server/internal/routetable/prod_boundary_test.go`                          | The BLOCKING e2e test (simulated edge, two viewers, forged + duplicated headers, fail-closed rows)                                                      |
+| Private `.github/workflows/{iac.yml,publish-images.yml,deploy-staging.yml}`      | Authored by Tasks 10.8/10.12/10.13 as exact diffs, **applied by the integration owner**                                                                 |
+| Public `.github/workflows/images-arm64.yml`                                      | Credential-free native builds/smoke and public OCI bundle; Task 10.8 diff applied by the integration owner                                              |
+| Root `Makefile` (diff for owner)                                                 | `iac-fmt`, `iac-validate`, `iac-test`, `route-table-test-prod`, `staging-plan` targets                                                                  |
+| `.env.example` (diff for owner — owner-serialized)                               | `CLOUDFLARE_API_TOKEN=` (Zone:DNS:Edit, `aboutme.vn` only), `AWS_PROFILE=` names-only additions                                                         |
+| `docs/runbooks/{deploy-rollback,node-recovery,secret-rotation,restore-drill}.md` | Seeded runbooks, including ALB target and stopped-UAT recovery, drilled in Phase 10                                                                     |
+| `docs/architecture.md` (update — **owner-serialized diff**)                      | Gains the deployed-UAT current-state section (Task 10.15, diff handed to owner)                                                                         |
 
 Module dependency graph:
 
@@ -262,24 +264,23 @@ graph TD
 
 ## Master-plan exit bullet → task map
 
-| Master-plan Phase 10 infrastructure exit bullet                                                                         | Task(s)           |
-| ----------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| VPC                                                                                                                     | 10.2              |
-| ECS on EC2 Graviton — host networking for the edge/API tier (web tier bridge-mode per D24), fixed ports per P0 contract | 10.5 (D24)        |
-| RDS Postgres (gp3)                                                                                                      | 10.3              |
-| Private S3 media, with access limited to the Go server role                                                             | 10.3, 10.4        |
-| CloudFront + ACM (us-east-1) with the [CloudFront behavior contract](../../../design/deployment.md#cloudfront-behavior) | 10.6, 10.11       |
-| Caddy origin `origin.aboutme.vn` (DNS-01 via Cloudflare)                                                                | 10.7, 10.11       |
-| EIP + auto-reassociation                                                                                                | 10.2              |
-| Origin-secret + prefix-list ingress                                                                                     | 10.2, 10.6, 10.7  |
-| SSM secrets (IAM scoping + rotation)                                                                                    | 10.4              |
-| CloudWatch alarms + dashboards + SNS/on-call                                                                            | 10.9              |
-| Scheduled retention + RDS restore-verification (overlap, alarmed)                                                       | 10.10             |
-| arm64 (Graviton) image build + ECS deploy pipeline drain→readiness                                                      | 10.7, 10.8, 10.12 |
-| [Database release sequence](../../../design/deployment.md#database-and-releases), including backup and migration lock   | 10.5, 10.12       |
-| `tofu validate`/`plan` in CI                                                                                            | 10.13             |
-| Env-parameterized modules (staging/prod differ only by variables)                                                       | 10.1, 10.13       |
-| **BLOCKING**: production Caddy client-IP boundary + e2e test                                                            | 10.7              |
-| Modules apply cleanly to a UAT environment                                                                              | 10.15             |
+| Master-plan Phase 10 infrastructure exit bullet                                                                         | Task(s)                   |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| VPC                                                                                                                     | 10.2                      |
+| ECS on EC2 Graviton — one complete application replica per node, production application autoscaling one to two          | 10.18, 10.5               |
+| RDS Postgres (gp3)                                                                                                      | 10.3                      |
+| Private S3 media, with access limited to the Go server role                                                             | 10.3, 10.4                |
+| CloudFront + ACM (us-east-1) with the [CloudFront behavior contract](../../../design/deployment.md#cloudfront-behavior) | 10.6, 10.11               |
+| Internet-facing ALB origin and CloudFront-to-ALB-to-Caddy trust                                                         | 10.18, 10.2, 10.6, 10.7   |
+| Scheduled UAT start/stop with temporary ALB removal and RDS seven-day guard                                             | 10.18, 10.5, 10.10, 10.15 |
+| SSM secrets (IAM scoping + rotation)                                                                                    | 10.4                      |
+| CloudWatch alarms + dashboards + SNS/on-call                                                                            | 10.9                      |
+| Scheduled retention + RDS restore-verification (overlap, alarmed)                                                       | 10.10                     |
+| arm64 (Graviton) image build + ECS deploy pipeline drain→readiness                                                      | 10.7, 10.8, 10.12         |
+| [Database release sequence](../../../design/deployment.md#database-and-releases), including backup and migration lock   | 10.5, 10.12               |
+| `tofu validate`/`plan` in CI                                                                                            | 10.13                     |
+| Env-parameterized modules (staging/prod differ only by variables)                                                       | 10.1, 10.13               |
+| **BLOCKING**: production Caddy client-IP boundary + e2e test                                                            | 10.7                      |
+| Modules apply cleanly to a UAT environment                                                                              | 10.15                     |
 
 ---

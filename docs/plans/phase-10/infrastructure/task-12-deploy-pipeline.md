@@ -1,5 +1,9 @@
 # Task 10.12: Deploy pipeline — pre-migration snapshot, drain→readiness, rollback
 
+**Dependency:** Task 10.18 defines fleet-wide admission, drain, render/SSE
+handoff, readiness, placement, and autoscaling restoration. This task applies
+that contract across every replica.
+
 **Files:** `.github/workflows/deploy-staging.yml` authored as a diff for the
 integration owner in private `aboutme-infra`; `docs/runbooks/deploy-rollback.md`
 seed. Consumes task 10.8's private ECR release manifest, successful publication,
@@ -36,8 +40,11 @@ and bound canonical public build evidence.
       and nonzero allocated size. This exact drain → verified backup order
       implements the
       [database release sequence](../../../design/deployment.md#database-and-releases).
-      A failure before the candidate apply restores the previous service to
-      desired count one, waits for readiness, and reports failure.
+      A failure before the candidate apply restores the previously healthy
+      capacity, waits for fleet readiness, and reports failure. The serialized
+      workflow may hold production application capacity at zero only for its
+      snapshot and migration drain; every completion or recovery path restores
+      at least one healthy replica.
 - [ ] After the snapshot, create a **fresh** saved OpenTofu plan from the
       drained state. It must restore `services_enabled=true`, carry the approved
       digest manifest, and differ from the approved speculative plan only by the
@@ -76,10 +83,9 @@ and bound canonical public build evidence.
       the previous digest fails the migrated-schema test, stop the deployment;
       do not claim that the circuit breaker can restore service. Document
       exactly this in `docs/runbooks/deploy-rollback.md`, plus the automatic
-      circuit-breaker rollback from D16 and the **documented maintenance
-      window** from the
-      [production topology](../../../design/deployment.md#production-topology)
-      (single node, min-healthy 0 %).
+      circuit-breaker rollback from D16, Task 10.18's fleet drain and rollback
+      contract, and the
+      [production topology](../../../design/deployment.md#production-topology).
 - [ ] `actionlint` the workflow; hand the diff to the integration owner. Note in
       the workflow header: **Phase 11 promotes by running the same workflow
       shape against `envs/production` with the staging-proven digest manifest**

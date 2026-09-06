@@ -5,6 +5,10 @@ specs and operational commands used by tasks 10.16–10.17 in the locally review
 candidate. After deployment, run the same harness's live TLS/route preflight; do
 not introduce new code into the candidate during acceptance.
 
+Task 10.18's implemented replica-safety and lifecycle contracts are required
+inputs. Harness authoring may start earlier, but its scaling scenarios cannot be
+accepted against uncoordinated process-local state.
+
 **Owner:** assigned harness author; root Makefile/workflows remain
 integration-owned. **Planned paths:** `deploy/uat-browser/`,
 `scripts/uat-check.sh`, and a `docs/runbooks/aws-uat.md` guide. Create exact
@@ -32,6 +36,18 @@ implementation; these paths do not yet exist.
   callback. Do not broadly disable the existing local network protections.
 - Add negative checks proving that production origins, unexpected redirects,
   wrong environment identity, and unsafe cleanup are rejected before mutation.
+- Drive a real production-shaped 1 → 2 → 1 transition while writes, publication
+  and artifact revocation, account/private-media deletion, render, one-use print
+  redemption, and owner/public SSE are active. Inject one abrupt replica loss
+  and one graceful scale-in. Prove stale artifacts and private media stay
+  unreachable, capabilities stay one-use, SSE repairs by reconnect and refetch,
+  fleet limits do not multiply, and pgx connections stay within the Task 10.18
+  budget.
+- Exercise one scheduled UAT stop/start cycle. Confirm ECS and ASG capacity stay
+  off, application nodes terminate, the temporary ALB is removed, RDS restarts
+  before the seven-day guard, due privacy and deletion jobs run before restop,
+  actual persistent resources match the inventory, and orphaned volumes or
+  addresses are absent.
 
 ## Verification and handoff
 

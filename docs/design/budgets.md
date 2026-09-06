@@ -4,6 +4,34 @@ Each owning component enforces its rows. Staging rehearsal repeats
 production-shaped latency and resource measurements. A hard-budget breach fails
 the gate; changing a number requires a reviewed change with evidence.
 
+## AWS operating budget
+
+The owner approved the Singapore operating plan on 2026-09-06 in
+[ADR 0034](../adr/0034-scheduled-uat-and-production-autoscaling.md):
+$20–30/month part-time UAT, $140–170/month production, and $160–200/month
+combined, before tax. Production activation remains a separate Phase 11 gate.
+
+Use
+$30/month as the UAT operating ceiling, including retained and allocated
+shared resources. Alert at $20
+and $25 actual cost and a $30 forecast. At $25
+actual cost or a $30 forecast,
+stop optional tests and reserve the remaining amount for required cleanup and
+retention. Book test windows only when their conservative forecast fits the
+ceiling. AWS budget alerts are delayed and do not enforce a technical hard cap.
+The [cost recommendation](../research/aws-cost/recommendation.md) owns the
+priced workload, allocation, shutdown, and cleanup details.
+
+Production starts with a minimum of one and an initial maximum of two
+application replicas. Scale-out and scale-in must preserve per-account and
+per-IP limits, revocation deadlines, and the render/media admission bounds.
+Per-task memory and connection bounds remain in force; aggregate database
+connections must fit RDS with room for jobs and operations. Task 10.18 resolves
+the exact fleet coordination before dependent implementation. These are target
+requirements; the current process-local implementation is not a scaling proof.
+
+## Runtime bounds
+
 | Budget                                          | Target                                              | Where enforced                                        |
 | ----------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- |
 | API p95 latency (read, warm)                    | ≤ 150 ms                                            | Staging synthetic benchmark                           |

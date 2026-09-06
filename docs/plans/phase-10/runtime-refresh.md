@@ -9,24 +9,30 @@ selected sizes, UAT lifetime, and spending assumptions. Existing infrastructure
 defaults cannot override it. The remaining runtime checks below still apply to
 the selected topology.
 
+Task 10.18 is the first runtime dependency despite its numeric identifier. It
+must replace or coordinate process-local publication fences, render jobs and
+capabilities, SSE fanout, and limiters before dependent infrastructure tasks
+wire a second replica or autoscaling.
+
 ## Application and private print
 
-| Input or boundary     | Current source and required handoff                                                                                                                                                                                     |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public render origin  | `apps/server/internal/config/config.go` reads `PUBLIC_RENDER_ORIGIN`, not `NUXT_RENDER_ORIGIN`. Wire the direct Nuxt origin for bounded `POST /internal-render/public`.                                                 |
-| Build identity        | Go also reads `APP_BUILD_DIGEST` and `PUBLIC_RENDERER_BUILD_DIGEST`. Derive these from the tested release and renderer inputs.                                                                                          |
-| Private redemption    | `apps/server/internal/config/print.go` permits `PRINT_LISTEN_ADDR=127.0.0.1:8081` in staging and production. This listener serves `POST /internal-render/print/redeem`; the public API listener does not.               |
-| Nuxt print caller     | `apps/web/nuxt.config.ts` declares `printOrigin`, set through `NUXT_PRINT_ORIGIN`. `server/utils/print/redemption.ts` has an exact origin allowlist. Its local default is not an AWS address.                           |
-| Web network isolation | D24 places Nuxt outside Go's host namespace. Its proposed Caddy bridge listener routes only `/api/v1/*` to Go's public listener. That does not provide a private redemption path.                                       |
-| Provider login        | `PROVIDER_LOGIN_ENABLED=false` is the v1 default, but config currently validates provider credentials before reading that flag. Phase 10 must fix and test disabled-provider startup without adding unused credentials. |
-| MCP access            | Enable the shipped MCP surface for v1. The edge must preserve Bearer authorization and protocol discovery while enforcing the resolved UAT access policy.                                                               |
+| Input or boundary     | Current source and required handoff                                                                                                                                                                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public render origin  | `apps/server/internal/config/config.go` reads `PUBLIC_RENDER_ORIGIN`, not `NUXT_RENDER_ORIGIN`. Wire the direct Nuxt origin for bounded `POST /internal-render/public`.                                                                                          |
+| Build identity        | Go also reads `APP_BUILD_DIGEST` and `PUBLIC_RENDERER_BUILD_DIGEST`. Derive these from the tested release and renderer inputs.                                                                                                                                   |
+| Private redemption    | `apps/server/internal/config/print.go` permits `PRINT_LISTEN_ADDR=127.0.0.1:8081` in staging and production. This listener serves `POST /internal-render/print/redeem`; the public API listener does not. Task 10.18 preserves this trust boundary across tasks. |
+| Nuxt print caller     | `apps/web/nuxt.config.ts` declares `printOrigin`, set through `NUXT_PRINT_ORIGIN`. `server/utils/print/redemption.ts` has an exact origin allowlist. Its local default is not an AWS address.                                                                    |
+| Web network isolation | D24 places Nuxt outside Go's host namespace. Its proposed Caddy bridge listener routes only `/api/v1/*` to Go's public listener. That does not provide a private redemption path.                                                                                |
+| Provider login        | `PROVIDER_LOGIN_ENABLED=false` is the v1 default, but config currently validates provider credentials before reading that flag. Phase 10 must fix and test disabled-provider startup without adding unused credentials.                                          |
+| MCP access            | Enable the shipped MCP surface for v1. The edge must preserve Bearer authorization and protocol discovery while enforcing the resolved UAT access policy.                                                                                                        |
 
-Tasks 10.5 and 10.7 must define the private redemption path together, then
-update its exact origin allowlist and topology tests. Keep Nuxt outside the
-trusted Go loopback namespace. Permit only the private redemption operation on
-the selected internal route. External `/print/**` and `/internal-render/**`
-remain denied, and the one-use capability remains mandatory. Do not expose the
-private listener or make the origin allowlist accept arbitrary URLs.
+Task 10.18 chooses the replica-safe render and redemption contract. Tasks 10.5
+and 10.7 then wire the private redemption path together and update its exact
+origin allowlist and topology tests. Keep Nuxt outside the trusted Go loopback
+namespace. Permit only the private redemption operation on the selected internal
+route. External `/print/**` and `/internal-render/**` remain denied, and the
+one-use capability remains mandatory. Do not expose the private listener or make
+the origin allowlist accept arbitrary URLs.
 
 `NUXT_INTERNAL_API_BASE` is an older proposed deployment input; the current Nuxt
 runtime config does not declare it. Inspect the actual server-side callers
@@ -46,8 +52,9 @@ measured Go's render queue and Chromium at 309.5 MiB peak under a 512 MiB,
 half-CPU cgroup. Nuxt was outside that measurement. The
 [SSE baseline](../../runbooks/realtime.md#local-connection-measurement) measured
 2,000 streams with clients and server in one test process. Neither result proves
-the combined application at hosted load. Phase 10 must measure the whole server
-task, web task, host headroom, and selected database together.
+the combined application at hosted load. Phase 10 must measure each server, web,
+and Caddy task, host headroom, fleet limits, pgx connection budgets, and the
+selected database together.
 
 Task 10.8 first proves ARM64 image and render compatibility without AWS
 credentials. Hosted Phase 10 then proves latency, mixed render/media/SSE load,
@@ -89,6 +96,10 @@ the existing mail resources during UAT cleanup.
 
 ## Dispatch and activation checks
 
+- Task 10.18 completes its design, bounded implementation-task split, runtime
+  implementation, and local proof before tasks 10.2, 10.5–10.7, 10.9–10.12,
+  10.14, or 10.15 dispatch. It does not treat two uncoordinated processes as
+  scaling evidence.
 - Tasks 10.5, 10.7, and 10.8 consume the exact runtime inputs above and replace
   conflicting baseline text before implementation.
 - Task 10.1 resolves the new private repository's actual OIDC subject format and

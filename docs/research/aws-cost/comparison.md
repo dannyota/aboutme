@@ -5,17 +5,78 @@ Amounts are US dollars before tax.
 
 ## Result
 
-The accepted ECS-on-EC2 and RDS design is the only option ready to carry into
-Phase 10 without an architecture decision record (ADR). It is also the lowest
-gross-cost option in every expected and stress case. The choice still depends on
-UAT proving ARM64 Chromium, concurrent job headroom, render latency, 2,000
-server-sent event (SSE) connections, and the private print path.
+The historical fixed-host ECS-on-EC2 and RDS baseline was the lowest gross-cost
+option in every expected and stress campaign case. The owner then selected the
+scheduled UAT and autoscaled production target in
+[ADR 0034](../../adr/0034-scheduled-uat-and-production-autoscaling.md). The
+target still depends on UAT proving ARM64 Chromium, concurrent job headroom,
+render latency, replica safety, server-sent event (SSE) behavior, and the
+private print path.
+
+The owner approved a revised operating estimate of
+**$20–30 per month** for
+part-time UAT, **$140–170 per month** for future
+autoscaled production, and **$160–200 per month** when both run in one account.
+Production activation remains a separate Phase 11 decision. The deterministic
+[monthly model](monthly-inputs.json) gives these unrounded reference points:
+
+| Operating case                            |  Standalone | Increment beside production |
+| ----------------------------------------- | ----------: | --------------------------: |
+| UAT, 40 hours over 10 days                |  $22.122210 |                  $20.826628 |
+| UAT high, 160 hours over 20 days          |  $35.818148 |                  $37.800648 |
+| Production low, 100 extra node-hours      | $142.942180 |                           — |
+| Production expected, 200 extra node-hours | $162.603564 |                           — |
+| Combined low                              |           — |                 $163.768808 |
+| Combined expected                         |           — |                 $186.630193 |
+| Combined high                             |           — |                 $200.404213 |
+
+Combined expected pairs expected production with the selected 40-hour UAT
+schedule. Combined high pairs expected production with the unselected 160-hour
+UAT sensitivity.
+
+With every allowance set to zero, the same UAT schedules cost
+$30.629128 and
+$44.403148. The selected 40-hour baseline is within the approved
+range when the modeled allowances are available. Verify account use before
+activation. The 160-hour forecast exceeds the UAT range, and its combined high
+case exceeds $200. Neither is selected or a spending entitlement; reduce
+optional test hours or obtain a revised cost decision.
+
+Production uses one `t4g.medium` node normally and allows a second node for
+100–200 hours per month. A persistent public Application Load Balancer (ALB),
+one ALB capacity unit, and its two public IPv4 addresses cost
+$31.536000 per
+month. Each extra node includes its public IPv4 address and prorated 30 GiB gp3
+root volume; 100 hours cost $5.134521.
+The database stays fixed-size Single-AZ RDS PostgreSQL. Multi-AZ RDS, NAT
+gateways, and paid VPC endpoints are excluded. All capacity remains unproven
+until hosted load and recovery checks run.
+
+The account-wide CloudFront and CloudWatch monthly allowances are applied to
+merged quantities once. For example, expected production's 10 million HTTPS
+requests use the request allowance, so the combined high case bills UAT's
+additional 1 million requests. The result does not add two separately netted
+environment totals. The saved quantities come from the official
+[CloudFront pay-as-you-go pricing](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/)
+and [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/) pages,
+retrieved on 2026-09-06. The combined rows also count shared SES monitoring, KMS
+keys, OpenTofu state, and ECR storage once. Public standard-runner GitHub
+Actions cost zero and no Actions overage or subscription is included in AWS
+totals. Generic CloudWatch API requests are priced gross because the operation
+mix is unknown. The one-million-request allowance is operation-sensitive;
+`GetMetricData`, `GetInsightRuleReport`, and `GetMetricWidgetImage` are outside
+it. Replace the gross input only after Phase 10 records eligible operations.
+Dashboards are also priced gross because the three-dashboard allowance requires
+each dashboard to reference at most 50 metrics, which this model has not proved.
+Custom-metric allowance billing by emitted metric-hours remains an estimate; the
+gross column is the fallback until the first live invoice confirms it.
 
 Aurora Serverless v2 is a viable managed database alternative in Singapore, but
 it costs more at the modeled capacity and changes database, backup, and restore
 contracts. Fargate is available and priced, but it is not a drop-in replacement
-for the accepted separate-service, host-network topology. Either alternative
-needs an ADR and new UAT evidence before it can replace the baseline.
+for the historical separate-service, fixed-host comparison topology. Either
+alternative needs an ADR and new UAT evidence before it can replace the
+baseline.
 
 ## Comparable gross totals
 
@@ -29,24 +90,26 @@ GitHub Enterprise Cloud license, free allowances, discounts, credits,
 commitments, and tax. Each option uses the same traffic, storage, email,
 monitoring, restore, and build inputs from `scenarios.json`.
 
-| Scenario                     | EC2 + RDS | EC2 + Aurora | Fargate + RDS |
-| ---------------------------- | --------: | -----------: | ------------: |
-| UAT low, 72 hours            |    $13.00 |       $18.59 |        $17.60 |
-| UAT expected, 14 days        |    $44.18 |       $87.96 |        $63.99 |
-| UAT high, same 14 days       |    $91.09 |      $219.33 |       $110.04 |
-| UAT stress, 730 hours        |   $135.05 |      $412.53 |       $175.72 |
-| Production low, monthly      |   $115.46 |      $151.46 |       $142.10 |
-| Production expected, monthly |   $158.89 |      $232.98 |       $186.05 |
-| Production stress, monthly   |   $568.88 |      $840.83 |       $594.16 |
+| Scenario                                            | EC2 + RDS | EC2 + Aurora | Fargate + RDS |
+| --------------------------------------------------- | --------: | -----------: | ------------: |
+| UAT low, 72 hours                                   |    $13.00 |       $18.59 |        $17.60 |
+| UAT expected, 14 days (superseded operating choice) |    $44.18 |       $87.96 |        $63.99 |
+| UAT high, same 14 days                              |    $91.09 |      $219.33 |       $110.04 |
+| UAT stress, 730 hours                               |   $135.05 |      $412.53 |       $175.72 |
+| Production low, monthly                             |   $115.46 |      $151.46 |       $142.10 |
+| Production expected, monthly                        |   $158.89 |      $232.98 |       $186.05 |
+| Production stress, monthly                          |   $568.88 |      $840.83 |       $594.16 |
 
-The UAT high row is the useful budget case. It keeps the proposed 14-day
+These gross campaign rows remain useful option and traffic comparisons. The
+part-time monthly schedule above supersedes the 14-day campaign as the operating
+choice. The UAT high row was the prior budget case. It keeps the proposed 14-day
 lifetime while applying stress traffic, logs, backups, credits, restore
-duration, build frequency, and a four-hour production-shape drill. Its accepted
-option is `$88.68` AWS plus `$2.41` residual private Actions gross sensitivity,
-for `$91.09`. That sensitivity is not a purchase estimate: private plan
-eligibility and shared quota must be checked before activation. AWS budget data
-can be delayed, and stopping resources leaves storage, address, log, key, and
-registry charges. Task 9.3 must state any control as proposed and define a
+duration, build frequency, and a four-hour production-shape drill. Its selected
+historical option is `$88.68` AWS plus `$2.41` residual private Actions gross
+sensitivity, for `$91.09`. That sensitivity is not a purchase estimate: private
+plan eligibility and shared quota must be checked before activation. AWS budget
+data can be delayed, and stopping resources leaves storage, address, log, key,
+and registry charges. Task 9.3 must state any control as proposed and define a
 direct teardown path.
 
 ## Lifecycle detail
@@ -95,9 +158,10 @@ Expected production lifecycle cost is:
 | EC2 + Aurora              | $1.20 | $215.95 |    $9.38 |         $6.45 |     $232.98 |
 | Fargate + RDS             | $1.20 | $166.61 |   $11.18 | $3.43 + $3.63 |     $186.05 |
 
-## Option 1: ECS on EC2 with RDS
+## Historical option 1: fixed-host ECS on EC2 with RDS
 
-This option preserves the approved one-host topology:
+This gross comparison option preserves the former one-host topology. ADR 0034
+supersedes its single-host routing and placement as the production target:
 
 - Caddy and Go remain separate host-network tasks with loopback origin trust.
 - Nuxt remains bridge-isolated and cannot reach Go loopback.
@@ -133,12 +197,12 @@ instead of treating them as absent.
 
 ## Option 2: ECS on EC2 with Aurora Serverless v2
 
-This option keeps the accepted EC2 application topology and replaces RDS
-PostgreSQL with Aurora PostgreSQL Serverless v2 standard storage. Singapore
-supports RDS clusters. The estimate uses explicit average capacity of 0.5, 0.75,
-and 2 Aurora capacity units (ACUs) and does not assume auto-pause. Each ACU
-combines about 2 GiB of memory with CPU and networking. Actual scaling is a
-hosted unknown. AWS documents
+This option keeps the historical fixed-host EC2 application topology and
+replaces RDS PostgreSQL with Aurora PostgreSQL Serverless v2 standard storage.
+Singapore supports RDS clusters. The estimate uses explicit average capacity of
+0.5, 0.75, and 2 Aurora capacity units (ACUs) and does not assume auto-pause.
+Each ACU combines about 2 GiB of memory with CPU and networking. Actual scaling
+is a hosted unknown. AWS documents
 [capacity behavior](https://aws.amazon.com/blogs/database/understanding-how-acu-minimum-and-maximum-range-impacts-scaling-in-amazon-aurora-serverless-v2/).
 
 Aurora increases expected UAT by `$43.78` and expected production by `$74.10`
@@ -161,11 +225,11 @@ workload.
 
 ## Option 3: ECS on Fargate with RDS
 
-Fargate requires `awsvpc` network mode. The accepted design requires separate
-Caddy and Go tasks sharing host loopback, plus a bridge-isolated Nuxt task on a
-fixed host port. Separate Fargate tasks do not share loopback. Containers in one
-Fargate task can communicate over localhost, but co-location changes task
-ownership and resource bounds. See the
+Fargate requires `awsvpc` network mode. The historical comparison design
+requires separate Caddy and Go tasks sharing host loopback, plus a
+bridge-isolated Nuxt task on a fixed host port. Separate Fargate tasks do not
+share loopback. Containers in one Fargate task can communicate over localhost,
+but co-location changes task ownership and resource bounds. See the
 [Fargate task rules](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html)
 and
 [network namespace guidance](https://docs.aws.amazon.com/AmazonECS/latest/bestpracticesguide/fargate-security-considerations.html).
@@ -278,7 +342,7 @@ calculator inputs:
 | Extra Route 53 private hosted-zone billing month               |           $0.50 |
 | First KMS rotation for three retained keys                     |     $3.00/month |
 
-Render count has no independent per-render charge on the accepted fixed EC2
+Render count has no independent per-render charge on the historical fixed EC2
 host. It becomes a cost only when measured concurrency forces a larger host or
 creates CPU-credit charges. The calculator therefore does not invent a linear
 render price.

@@ -6,6 +6,9 @@ activation.
 
 ## Local code checkpoint
 
+- [ ] Task 10.18's detailed distributed-runtime and scheduled-lifecycle design,
+      bounded implementation tasks, implementation, and local proofs pass before
+      dependent infrastructure is treated as dispatchable.
 - [ ] The [email ownership strategy](contracts.md#existing-email-ownership)
       names exactly one manager per resource and provides retention, import,
       rollback, and no-change-plan checks before any overlapping resource apply.

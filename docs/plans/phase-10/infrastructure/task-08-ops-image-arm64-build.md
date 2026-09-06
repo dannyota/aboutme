@@ -30,10 +30,11 @@ compatibility; it does not duplicate every app CI job on ARM64.
       script connects to `127.0.0.1:443` with SNI/hostname `var.origin_fqdn`,
       bounded connect/read timeouts, verifies the chain and hostname, parses
       remaining lifetime, and emits only the expiry metric or a nonzero failure.
-      It never probes the public EIP, whose security group rejects the host.
-      Failing-first tests use local fake AWS/Postgres/TLS endpoints, assert
-      command arguments and secret-free output, run shellcheck, and verify every
-      script is present and executable before the Dockerfile test can pass.
+      It never probes a public node address, whose security group rejects the
+      host. Failing-first tests use local fake AWS/Postgres/TLS endpoints,
+      assert command arguments and secret-free output, run shellcheck, and
+      verify every script is present and executable before the Dockerfile test
+      can pass.
 - [ ] Author public `images-arm64.yml`: manual `workflow_dispatch` only, with a
       full app commit SHA and no publication input. Define allowed candidate
       branches and required workflow/check identities in protected

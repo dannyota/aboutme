@@ -11,7 +11,7 @@ in [`../architecture.md`](../architecture.md) and operator guides.
 | Tests               | One capped PostgreSQL container; native test processes; optional isolated service harnesses | Kernel-assigned or `20090+` ports |
 | Native development  | Shared test DB container plus native Go, Nuxt, and Caddy processes                          | `http://localhost:20080`          |
 | Native HTTPS checks | Shared DB, native processes, and disposable browser                                         | `https://localhost:20443`         |
-| AWS UAT             | Phase 9 costed topology, provisioned in Singapore in Phase 10                               | `https://uat.aboutme.vn`          |
+| AWS UAT             | Scheduled ECS/EC2 Graviton and RDS PostgreSQL in Singapore; stopped between test windows    | `https://uat.aboutme.vn`          |
 | Self-hosted         | Podman Compose with operator-supplied credentials and TLS configuration                     | Operator-defined HTTPS origin     |
 | Production          | CloudFront, Caddy on ECS/EC2 Graviton, Go, Nuxt, RDS PostgreSQL, and private S3             | `https://aboutme.vn`              |
 
@@ -59,50 +59,63 @@ build machines are separate from the Singapore application and data region.
 
 ## Production topology
 
-The topology below is the accepted comparison baseline for Phase 9. OpenTofu is
-the infrastructure tool. Prefer managed AWS services when they meet resource,
-security, and cost requirements. Phase 9 compares options and records any
-architecture change in a follow-up ADR before Phase 10 implementation; the
-existing EC2 shape is not a cost-research conclusion.
+[ADR 0034](../adr/0034-scheduled-uat-and-production-autoscaling.md) replaces the
+earlier single-host comparison baseline for AWS. OpenTofu remains the
+infrastructure tool. Phase 10 must first design and implement the distributed
+runtime contracts named below; this target is not evidence that the current
+process-local implementation is replica-safe.
 
 ```mermaid
 graph LR
     DNS[Cloudflare DNS only] --> CF[CloudFront]
-    CF -->|HTTPS and origin secret| CA[Caddy on one Graviton host]
-    CA --> GO[Go task]
-    CA --> NX[Nuxt task]
-    GO --> PG[(RDS PostgreSQL)]
-    GO --> S3[(Private S3)]
-    GO -->|leased public render and one-use print snapshot| NX
+    CF -->|HTTPS and origin secret| ALB[Internet-facing ALB across two AZs]
+    ALB --> A1[Application node 1]
+    ALB --> A2[Application node 2 when scaled]
+    A1 --> PG[(Private single-AZ RDS PostgreSQL)]
+    A2 --> PG
+    A1 --> S3[(Private S3)]
+    A2 --> S3
 ```
 
-V1 is an honest single-node application tier: one EC2 Graviton host runs Caddy,
-Go, and Nuxt under ECS. Caddy and Go use fixed host-network ports; Nuxt may use
-the bridge-mode boundary defined by the infrastructure plan. There is no
-application load balancer or horizontal scaling in v1. Deploys have a brief,
-documented maintenance window. Scaling beyond one task per service requires a
-new discovery and load-balancing decision.
+Each application node runs distinct Caddy, Go, and Nuxt ECS tasks with separate
+cgroups: Caddy uses 128 MiB and 128 CPU units, Go plus Chromium uses 512 MiB and
+512 CPU units, and Nuxt uses 256 MiB and 256 CPU units. Scheduled ops tasks use
+256 MiB and 256 CPU units. One application replica is placed per node. The
+initial production capacity range is one to two replicas and scales in both
+directions; this launch bound is not a permanent product limit. RDS compute is
+fixed and sized separately. Increasing the application replica count alone is
+unsafe until Phase 10 replaces or coordinates process-local publication fences,
+render jobs and capabilities, SSE state, and limiters across the fleet.
+
+Application nodes use public IPv4 for outbound access without a NAT gateway.
+Their inbound security group accepts only the ALB security group, and Caddy
+still requires the rotating origin secret. RDS remains private and single-AZ at
+launch. Service discovery, placement, readiness, scale-in draining, and the
+source-specific forwarded-address chain are explicit Phase 10 design outputs.
 
 Cloudflare is DNS-only. CloudFront owns viewer TLS and uses an ACM certificate
-in `us-east-1`. The origin is in `ap-southeast-1`, uses HTTPS, and accepts
-traffic only from CloudFront's origin-facing path. Caddy accepts current and
-next origin secrets during rotation.
+in `us-east-1`. The internet-facing ALB spans two public subnets and is the
+stable origin in `ap-southeast-1`; the former elastic-IP origin is superseded
+for production. CloudFront reaches the ALB over HTTPS and overwrites the origin
+secret. Phase 10 must choose and prove the ALB-to-Caddy target TLS and
+authentication model, health routing, and security-group rules before compute
+wiring. The model must account for ALB target TLS behavior rather than assume
+native target-certificate validation. No listener or node path may bypass the
+CloudFront and origin-secret boundary.
 
-`origin.aboutme.vn` is a DNS-only record to the origin's elastic IP. Caddy gets
-its origin certificate through Cloudflare DNS-01, so port 80 and an
-unauthenticated HTTP challenge path are unnecessary. The security group admits
-origin 443 only from CloudFront's origin-facing managed prefix list. Caddy then
-verifies the rotating origin-secret header before routing. Viewer policy
-redirects HTTP to HTTPS, requires TLS 1.2 or newer, and sends HTTP Strict
-Transport Security.
+Viewer policy redirects HTTP to HTTPS, requires TLS 1.2 or newer, and sends HTTP
+Strict Transport Security. Caddy accepts current and next origin secrets during
+rotation.
 
 ## Client-IP boundary
 
-Caddy validates the production path before trusting forwarding data. It strips
-viewer-supplied forwarding headers, derives one canonical client address, and
-sends it to Go. Go accepts that header only from configured trusted-proxy CIDRs,
-normalizes it with `netip`, and fails closed in production when the proxy set is
-empty. Go never parses `X-Forwarded-For` itself.
+Caddy validates the CloudFront-to-ALB path before trusting forwarding data. It
+strips untrusted forwarding headers and derives one canonical client address
+from the source-specific, validated chain. Go accepts that canonical header only
+from the colocated trusted Caddy boundary, normalizes it with `netip`, and fails
+closed in production when its trusted-proxy set is empty. Go never parses
+`X-Forwarded-For` itself. Phase 10 tests forged viewer headers, direct ALB and
+node bypass, and the exact ALB header behavior before activation.
 
 ## CloudFront behavior
 
@@ -137,28 +150,31 @@ see the new state. Sitemap and `llms.txt` responses use a global discovery
 generation lease; any mutation that changes their membership advances and drains
 that generation before success.
 
-Go reaches public SSR at the direct Nuxt origin URL
-`http://127.0.0.1:3000/internal-render/public` in production and the equivalent
-direct native Nuxt address in development. Caddy denies `/internal-render` and
-`/internal-render/*` before its default web proxy. The Nuxt route is POST-only,
-accepts only the bounded frozen snapshot, and has no ambient session, ID lookup,
-API fetch, or database path. Route-parity tests pin the Caddy denial and direct-
-origin caller so topology drift cannot expose it.
+Within one application replica, Go reaches its colocated Nuxt task through the
+deployment-private route selected in Phase 10 and the equivalent direct native
+Nuxt address in development. Routing must preserve replica affinity for the
+frozen public snapshot and one-use print capability. Caddy denies
+`/internal-render` and `/internal-render/*` before its default web proxy. The
+Nuxt route is POST-only, accepts only the bounded frozen snapshot, and has no
+ambient session, ID lookup, API fetch, or database path. Route-parity tests pin
+the Caddy denial and direct-origin caller so topology drift cannot expose it.
 
 ## Internal print
 
-The render browser reaches Nuxt only on the internal application network. Go
-authorizes and freezes the render snapshot, then issues a 256-bit one-use
-capability with a maximum 60-second lifetime. Nuxt redeems it through a loopback
-or deployment-private Go interface and receives the document and inline photo
-context. The browser has no account cookie or general outbound network access.
-Caddy's external `/print/**` denial and network placement are defense in depth;
-Nuxt still rejects a missing, expired, mismatched, or consumed capability. Go
-retains the consumed job binding and is the only component that can accept
-completed bytes after the terminal digest and public-generation check. Nuxt and
-Chromium have no artifact-publish credential. Completion is an in-process Go
-operation requiring a separate controller handle that never leaves the render
-queue; the job ID alone grants no completion authority.
+The render browser reaches its selected Nuxt replica only on the internal
+application network. Go authorizes and freezes the render snapshot, then issues
+a 256-bit one-use capability with a maximum 60-second lifetime. Nuxt redeems it
+through a loopback or deployment-private Go interface and receives the document
+and inline photo context. The browser has no account cookie or general outbound
+network access. Caddy's external `/print/**` denial and network placement are
+defense in depth; Nuxt still rejects a missing, expired, mismatched, or consumed
+capability. Go retains the consumed job binding and is the only component that
+can accept completed bytes after the terminal digest and public-generation
+check. Nuxt and Chromium have no artifact-publish credential. Completion
+requires a controller authority separate from the job ID. Phase 10 must replace
+the current process-local queue, redeemed-capability state, and controller
+handle with a fleet-safe contract before a second replica can serve traffic; the
+job ID alone grants no completion authority.
 [ADR 0023](../adr/0023-private-print-capability.md) owns the protocol.
 
 ## Media
@@ -225,10 +241,13 @@ availability decision. Backup retention is 30 days. Restore evidence matters
 more than backup configuration: staging performs a real isolated restore and
 data verification before launch.
 
-Production migration order is: stop writes, verify backup, take the migration
-advisory lock, run embedded goose migrations exactly once, start the new tasks,
-wait for readiness, then reopen traffic. Rollback uses a forward corrective
-migration; migrations fixed by the first UAT baseline never change
+Production migration order is: stop admission and drain admitted requests on
+every replica, verify backup, take the migration advisory lock, run embedded
+goose migrations exactly once, start the new tasks, wait for fleet readiness,
+then reopen traffic. Scaling and deployment drains must preserve publication,
+account-deletion, private-media, artifact-revocation, render, and SSE
+invariants. Rollback uses a forward corrective migration; migrations fixed by
+the first UAT baseline never change
 ([ADR 0020](../adr/0020-uat-migration-baseline.md)).
 
 The embedded runner uses goose's Provider with a PostgreSQL session advisory
@@ -252,9 +271,21 @@ images, source, command lines, logs, or OpenTofu state where the platform
 permits a reference instead. Secret names and rotation procedures are tracked;
 values are never evidence artifacts.
 
-Phase 9 settles Singapore cost, sizes, and UAT lifetime before activation. The
-owner has authorized Phase 10 AWS UAT and Cloudflare DNS at `uat.aboutme.vn`.
-Local candidate checks and infrastructure simulation precede deployment;
-complete UAT and operational drills follow it. Production launch in Phase 11
-requires separate approval. The local port-443 UAT gate is superseded by
+Phase 9 settles Singapore cost, sizes, and UAT lifetime before activation. UAT
+terminates application nodes and removes its temporary ALB between scheduled
+test windows, then stops RDS. RDS storage, keys, state, ECR images, and required
+logs remain. The cost model conservatively reserves a full month of one 30 GB
+application root disk and one public IPv4 address; these are cost headroom, not
+claims that terminated-node resources remain. Any orphaned volume or address is
+inventoried and removed. RDS stop automation must restart it before AWS's
+seven-day limit, run overdue privacy and retention work before its deadlines,
+and return it to the scheduled stopped state. A failed or high-cost forecast
+shortens optional testing rather than weakening retention or revocation.
+Production autoscaling never selects zero. A serialized, operator-approved
+snapshot and migration deployment may drain application capacity to zero, then
+must restore at least one healthy replica. The owner has authorized Phase 10 AWS
+UAT and Cloudflare DNS at `uat.aboutme.vn`. Local candidate checks and
+infrastructure simulation precede deployment; complete UAT and operational
+drills follow it. Production launch in Phase 11 requires separate approval. The
+local port-443 UAT gate is superseded by
 [ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md).
