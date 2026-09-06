@@ -145,28 +145,19 @@ runtime_recover_rollback_public_transition(
 ) RETURNS TABLE(state text, terminal_at timestamptz)
 ```
 
-Recovery uses an independent `WriteTxRunner` transaction. Obtaining the closing
-parent lock proves no open business transaction holds the execution fence. The
-function rechecks tuple and digest, then atomically rolls back. Committed and
-rolled_back return the durable state.
+Recovery uses an independent `WriteTxRunner` transaction. The
+[recovery evidence contract](transition-recovery.md) fixes parent-first locking,
+identity validation in every state and a nonlocking expected-generation check
+only for closing. It records `business_not_started` only when that check passes.
+The code means no business change from the transition committed; it does not
+claim no SQL ran. Committed and rolled-back results remain immutable.
 
-No reason-taking unresolved function is installed. The
-[storage contract](transition-storage.md#unresolved-evidence-boundary) reserves
-only closing-to-unresolved with `recovery_evidence_conflict`. Before adding a
-callable resolver, R3 must name the exact durable mutation/idempotency evidence
-and a fixed parent-locked query that proves its conflict. Callers cannot assert
-the contradiction, supply an error string or alter terminal results. Until that
-contract lands, contradictory recovery retains closing and keeps readiness
-unavailable. Unresolved never reopens a fence or permits business SQL.
-
-An ambiguous business commit reads the durable transition and existing
-idempotency evidence through a fresh pool connection. Complete committed state
-is publication authority; R3 still validates the stored response evidence before
-returning it. Rolled_back proves no business change from that transition
-committed. Closing uses recovery rollback only when its evidence permits that
-proof. Missing, partial or contradictory evidence leaves admission closed and
-follows the gated unresolved resolver contract; a caller mismatch alone changes
-no durable state.
+R1/R3 install no unresolved writer. The atomic parent, target results and
+business commit are the outcome authority. Response receipts affect exact HTTP
+replay only. Unsafe closing recovery leaves closing unchanged and readiness
+unavailable. R2 uses the separate
+[reconciliation snapshot](transition-reconciliation.md) before changing a local
+fence, preserving later generations, proved retirement and current blockers.
 
 ## Fenced-initiator recovery
 
@@ -308,8 +299,9 @@ sets identity, timestamps, terminal results, or notification payloads.
 - Committed parent rejects missing, extra, mismatched, or mutable results.
 - Publish, unpublish, private/live delete, and multi-resume account deletion
   produce complete results atomically with business and idempotency evidence.
-- Ambiguous commit resolves committed, rolled_back, closing-to-rollback, and
-  contradictory-to-unresolved through independent connections.
+- Ambiguous commit resolves committed, rolled_back and safe closing-to-rollback
+  through independent connections. Unsafe closing remains unchanged; no
+  unresolved writer or retained-response heuristic can replace outcome evidence.
 - Fenced recovery waits behind a parent-locked business transaction and returns
   its committed result or rolls back only a still-closing parent.
 - Fenced recovery succeeds with zero surviving serving replicas after exact EC2

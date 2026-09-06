@@ -181,12 +181,13 @@ function can prove it. Under valid constraints, parent and target shapes are
 consistent. A caller digest mismatch, missing caller data, timeout or
 unavailable database must return an error without changing durable state.
 
-This schema grants no unresolved mutator. A later fixed resolver must identify
-the exact durable mutation/idempotency evidence and prove its conflict in the
-same parent-locked transaction. It may only change closing to unresolved with
-the literal code; it accepts no reason string or caller assertion. Until that
-resolver is defined, contradictory recovery retains closing and keeps readiness
-unavailable. Committed and rolled-back results remain immutable.
+R1/R3 install no unresolved mutator. The
+[recovery evidence contract](transition-recovery.md) uses the atomic transition
+record as the outcome authority. Mutable current rows and retained response
+receipts cannot prove a transition-attributed contradiction. Unsafe closing
+recovery leaves closing unchanged and readiness unavailable. Committed and
+rolled-back results remain immutable. A future unresolved writer requires a
+separate reviewed evidence contract; none is needed for this phase.
 
 ## Ownership, grants and indexes
 

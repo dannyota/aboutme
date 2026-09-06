@@ -239,9 +239,12 @@ resume generation. Publication changes also record discovery generation. Resume
 deletion records retirement and discovery only when planned. Account deletion
 records every planned resume retired plus discovery. Rollback records no result.
 
-Delayed, duplicate, or reordered notifications only wake this read. R2 applies
-generation results, retires recorded resumes, or reopens expected generations
-after rollback. It never infers retirement from current row absence.
+Delayed, duplicate, or reordered notifications only wake reconciliation. This
+read supplies historical transition details. R2 applies the separate fixed
+[reconciliation snapshot](transition-reconciliation.md) under its local apply
+mutex before opening or retiring a fence. It preserves later generations,
+retained retirement evidence and every current closing/unresolved blocker.
+Current row absence alone never proves retirement.
 
 Same-incarnation recovery runs with admission closed. It may replay and ack a
 closing transition only after quarantine joined every local callback and rebuilt

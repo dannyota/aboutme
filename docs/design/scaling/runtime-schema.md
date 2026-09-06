@@ -19,6 +19,10 @@ replay contracts. [Public transitions](public-transitions.md) and
 typed functions, transaction capability and recovery actors.
 [Transition storage](transition-storage.md) fixes the four-table columns,
 terminal matrix, digest assertion and immutable child sets.
+[Recovery evidence](transition-recovery.md) fixes parent-locked rollback and
+separates response receipts from commit authority.
+[Reconciliation](transition-reconciliation.md) fixes the one-snapshot read and
+local ordering that preserve later generations and proved retirements.
 [Exclusive lifecycle entry](lifecycle-write-entry.md) fixes the two wake
 methods, marker, table/action catalog and historical write-generation results.
 
