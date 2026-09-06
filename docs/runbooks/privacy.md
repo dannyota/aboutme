@@ -83,3 +83,35 @@ Rollback restores the application and scheduler configuration to a reviewed
 previous version; it does not restore revoked references, sessions, or deleted
 media. Phase 10 supplies the hosted schedule, alarm, log-retention, and backup
 enforcement evidence.
+
+## Local verification
+
+Phase 8 passed live database race tests for account deletion/export, auth, media
+cleanup, and privacy retention, plus the command/configuration tests. Native
+smokes passed for all four commands and the orphan dry run. The real orphan
+sweep removed 140 old unreferenced test objects with zero failures. The
+production server image also ran idempotency expiry through its normal entry
+point as a non-root, read-only container with no added capabilities.
+
+`make p5a-native-http-check` passed with bounded evidence at
+`.dev/p5a-evidence/run.7oVUTr`. It removed its isolated fixture database and
+left the shared development database running.
+
+`make dev-https-privacy-check` passed all 11 steps with zero certificate,
+console, page, or external-request errors. The 355-byte verdict is retained
+locally at `.dev/native-https/evidence/privacy.cUOMot/privacy-proof.json` with
+mode 0600. Its staged-source aggregate SHA-256 is
+`a50fd2ad860c416cbb76897cb1b5f7a0fc823eacf6fc3eab9c18678524a2d761`. The
+individual `privacy.spec.ts` SHA-256 is
+`dabc77b3cd837edcb1f4e03e97677764f2b81bbc0f52ecaca7f0b510eaa477e8`. The check
+uses one forced `reauth_required` response before real provider reauthentication
+and a fresh confirmed deletion. The live database API suite proves refusal of an
+actually stale session.
+
+The same build passed all ten native HTTPS modes: auth, transport, editor, MCP,
+entry, public, publish, password, exports, and privacy. The editor proof
+includes template partial recovery and the photo lifecycle after realtime
+adoption.
+
+Hosted schedule activation, alarm delivery, 180-day log retention and backup
+expiry have not run. Phase 10 owns that evidence.
