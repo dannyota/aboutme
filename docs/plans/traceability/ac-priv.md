@@ -1,9 +1,12 @@
 # AC-PRIV traceability rows
 
-1 acceptance-criterion rows with the `AC-PRIV-` prefix, in their original matrix
-order. See [README.md](./README.md) for the matrix purpose, maintenance rules,
-and the full prefix index.
+Five acceptance rows own account privacy and local lifecycle jobs. Hosted
+activation and retention evidence remain Phase 10. See [README.md](README.md).
 
-| ID          | Spec clause | Statement                                                               | Phase/task | Test / UAT reference |
-| ----------- | ----------- | ----------------------------------------------------------------------- | ---------- | -------------------- |
-| AC-PRIV-001 | §9          | DELETE /me purges account, resumes, media, sessions; creates tombstones | Phase 8    | (pending)            |
+| ID          | Spec clause                                  | Statement                                                                                                                                                                       | Phase/task  | State   | Test / UAT reference                                       |
+| ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------- | ---------------------------------------------------------- |
+| AC-PRIV-001 | Operations: account deletion; ADRs 0019/0022 | DELETE /me requires recent reauth, drains all public generations, atomically purges account state and creates tombstones/exact media jobs                                       | 8.2/8.6/8.7 | PLANNED | Phase 8 account and browser checks                         |
+| AC-PRIV-002 | Operations: account export                   | Cookie-only JSON export contains complete portable current-version resumes and normalized photos within its cap, without credential or backend-key state                        | 8.3/8.6/8.7 | PLANNED | Phase 8 export and browser checks                          |
+| AC-PRIV-003 | Operations: retention; ADR 0016              | Hourly bounded global idempotency expiry releases exact counters; daily session metadata redaction starts at 90 days and audit/completed-job expiry at 180 days                 | 8.5/8.7     | PLANNED | Phase 8 retention checks; hosted schedule in Phase 10      |
+| AC-PRIV-004 | Operations: audit; ADR 0019                  | Account deletion and delayed/completed media cleanup write durable fixed-field audit events that survive account deletion; pending work never expires                           | 8.2/8.4/8.5 | PLANNED | Phase 8 transaction and retention checks                   |
+| AC-PRIV-005 | Operations: scheduled cleanup                | Exact commands enforce overlap locks, run/page/concurrency/retry bounds, fixed signals and cancellation joins; orphan dry run is read-only and cursor progress survives restart | 8.4/8.5/8.7 | PLANNED | Phase 8 jobs and command checks; hosted alarms in Phase 10 |

@@ -55,7 +55,12 @@ the gate; changing a number requires a reviewed change with evidence.
 | Idempotency cleanup batch                       | ≤ 200 rows/mutation                                 | Idempotency store                                     |
 | Retained idempotency records/account            | ≤ 50,000 after new-key insert                       | Idempotency store                                     |
 | Retained idempotency stored bytes/account       | ≤ 1 GiB after new-key insert                        | Idempotency store                                     |
-| Global idempotency expiry sweep                 | hourly; 1,000/page; 10,000/run                      | Privacy sweep (planned)                               |
+| Global idempotency expiry sweep                 | hourly; 1,000/page; 10,000/run                      | Privacy sweep                                         |
+| Account JSON export                             | ≤ 12,582,912 bytes; 5/min per account and IP        | Account export route                                  |
+| Account deletion attempts                       | 5/min per account and IP; 3 plan attempts/request   | Account deletion route                                |
+| Privacy job run                                 | ≤ 30 min; cancel and join                           | One-shot job commands                                 |
+| Daily retention per category                    | 1,000/page; 10,000/run                              | Session/audit/completed-job sweeps                    |
+| Media job lease / object I/O                    | 30 s / 5 s                                          | Media cleanup                                         |
 | Resume reads per account and IP                 | ≤ 600/min                                           | Resume route limiters                                 |
 | Resume writes per account and IP                | ≤ 240/min                                           | Resume route limiters                                 |
 | Photo uploads per account and IP                | ≤ 20/h                                              | Resume route limiters                                 |
@@ -157,6 +162,22 @@ write, and upload policies are also separate instances. Each start reaps at most
 200 expired transactions. Structure and customization requests accept at most
 100 ordered operations each; the 256 KiB transport ceiling remains a separate
 byte bound.
+
+Account export allows three 512 KiB documents and three 2 MiB photos after
+base64 expansion within a 12 MiB attachment. Its five-per-minute limit is
+separate from account deletion's five-per-minute limit. Both use the existing
+bounded account-and-client-IP limiter. Deletion may rebuild a stale public
+transition plan at most three times; each drain retains the existing shared
+five-second deadline.
+
+Daily retention uses separate 10,000-row run ceilings for session metadata,
+lifecycle audits and completed media jobs. Expiry uses 90 days from session
+creation and 180 days from event/completion. Existing OAuth cleanup keeps its
+200-row sweep ceiling. All one-shot job commands have a 30-minute run deadline
+and join their work after cancellation. Media calls have five-second deadlines
+inside 30-second claims. Queue retries start at one minute and double up to six
+hours. Orphan retries wait one and two seconds before their second and third
+attempts; each attempt is separately bounded.
 
 **Public render and revocation rows.** `canonicalOrigin` is one normalized ASCII
 `http` or `https` origin with no userinfo, non-root path, query, or fragment.
