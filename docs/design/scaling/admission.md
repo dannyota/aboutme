@@ -76,7 +76,9 @@ anonymous and authenticated key shapes. No new provider-start split is added.
 
 ## Token-bucket transaction
 
-1. Lock policy clock and existing private bucket. If absent, lock partitions in
+1. Follow the
+   [common rate lock order](admission-attempts.md#lock-order-and-time). Lock
+   policy clock and existing private bucket. If absent, lock partitions in
    numeric order, remove only legitimately expired rows, then claim the first
    enabled partition with active_keys < 10000. Otherwise lock overflow.
 2. Refill by effective elapsed time, capped at existing Requests burst. A
@@ -93,9 +95,14 @@ anonymous and authenticated key shapes. No new provider-start split is added.
 - OAuth failed grants count committed failures plus pending reservations against
   10/15 minutes. Admit creates a globally unique attempt UUID in
   shared_admission_attempts. Finish invalid converts pending to failure; neutral
-  deletes reservation; success clears a private bucket and its pending rows but
-  never overflow debt. Finish is idempotent for the same outcome and rejects a
-  different terminal outcome.
+  resolves its pending debt; success clears a private bucket and its pending
+  debt but never overflow debt. First pending starts the window. Retain terminal
+  receipts for 24 hours after terminal_at, with maintenance pages of at
+  most 256. An exact caller-finish replay is idempotent; a different caller
+  outcome conflicts during that horizon. System-cleared/expired attempts and
+  absent-after-deletion finishes are harmless no-ops. The
+  [attempt contract](admission-attempts.md) fixes schema, lock order, replay and
+  cleanup details.
 - Slug attempts preserve rolling 30/account/hour, including denied attempt debt
   and its existing caller error without invented Retry-After.
 
