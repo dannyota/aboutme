@@ -83,6 +83,10 @@ Live entry, clean reuse and physical discard proof now pass against B1.
 runtime migration after 00013. Its fixed object manifest and local adoption
 preserve existing database rows while converging ownership on runtime_owner.
 
+The [OAuth reservation contract](../../../design/scaling/admission-attempts.md)
+fixes P22 attempt schema, common rate lock order and bounded terminal receipt
+cleanup. R1 implements its store/schema only; R5 and R7b own callers.
+
 Owner paths: root-assigned migration number, apps/server/sql runtime query
 source or approved new SQL files, generated store output, store/migration tests.
 These are normally root-owned; root must explicitly assign and serialize them.
