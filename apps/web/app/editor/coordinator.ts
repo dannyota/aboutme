@@ -330,6 +330,11 @@ export function createMutationCoordinator(deps: {
       deps.store.dropHead(resumeId, command.id);
       return;
     }
+    if (compareRevision(accepted.revision, adoption.winner.revision) === 0) {
+      deps.store.resolveConflict(resumeId, command.id);
+      deps.store.dropHead(resumeId, command.id);
+      return;
+    }
     const decision = reconcileCommand(command, adoption.winner);
     if (decision.kind === 'satisfied') {
       deps.store.dropHead(resumeId, command.id);

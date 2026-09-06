@@ -781,6 +781,8 @@ async function provePhotoSessionPersistence(
   uploadPause.release();
   editorDiagnosticStage = 'photo-upload-accepted';
   expect((await acceptedPhoto).status()).toBe(200);
+  editorDiagnosticStage = 'photo-upload-saved';
+  await expect(page.locator('[data-state="saved"]')).toBeVisible();
   expect((await ownerPhotoRead).headers()['content-type']).toMatch(/^image\/(?:jpeg|png)/);
   await expect(page.locator('[data-photo-preview] img')).toBeVisible();
   await expect.poll(async () => (await sourceReads.read()).dataURL).toBeGreaterThan(0);
@@ -795,9 +797,13 @@ async function provePhotoSessionPersistence(
   });
   await page.getByLabel('Width').fill('0.75');
   await page.getByRole('button', { name: 'Save crop' }).press('Enter');
+  editorDiagnosticStage = 'photo-crop-response';
   expect((await acceptedCrop).status()).toBe(200);
+  editorDiagnosticStage = 'photo-crop-saved';
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  editorDiagnosticStage = 'photo-crop-url';
   await expectURLUnchanged(page, baseline);
+  editorDiagnosticStage = 'photo-crop-persistence';
   await expectNoPersistenceWrites(probes);
 
   editorDiagnosticStage = 'photo-remote-conflict';
