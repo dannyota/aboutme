@@ -223,8 +223,9 @@ other incarnation, permit zero or one active serving survivor and require all
 others terminal. Both branches set desired one and disable partition 2
 atomically while retaining debt. This capacity reconciliation creates no leave,
 ack, business result, or claim release; abrupt proof already performed its
-bounded claim cleanup. Exact replay returns the stored historical result. A
-zero-survivor result permits one later replacement activation under desired one.
+atomic exact-replica claim cleanup under its bounded caller context. Exact
+replay returns the stored historical result. A zero-survivor result permits one
+later replacement activation under desired one.
 
 ## Required lifecycle cases
 

@@ -70,10 +70,13 @@ no direct capacity DML.
 
 runtime_termination_intents, runtime_leave_receipts and runtime_fencing_proofs
 use the exact fields in runtime-schema.md. Add composite foreign keys to
-immutable replica_id/instance_id/release_digest identity. request_id/evidence_id
-are 1..128 printable ASCII and globally unique. Intents and receipts have owner
-triggers that reject UPDATE/DELETE. Proof rows reject UPDATE/DELETE and
-duplicate mismatch.
+immutable replica_id/instance_id/release_digest identity. Request/evidence IDs
+are 1..128 printable ASCII. Each is unique within its record type; a proof may
+reuse only its exact replica's intent request ID. Intents and receipts have
+owner triggers that reject UPDATE/DELETE. Proof rows reject UPDATE/DELETE and
+duplicate mismatch. The [evidence operation contract](membership-evidence.md)
+adds durable proof request_id and reclaimed_claim_count in a later migration,
+with an empty legacy-proof prerequisite and exact historical replay.
 
 ## Database time
 
@@ -211,8 +214,10 @@ database mutation after all local callbacks/processes join; SQL proves durable
 ownership counts, while R8 proves the local join. It cannot release work or make
 readiness reopen. The wrappers fix and verify serving or maintenance kind.
 Serving leave requires the matching prepare-scale-in step. Maintenance leave
-requires the matching prepare-maintenance-drain step. Neither role can call the
-other wrapper.
+requires the matching prepare-maintenance-drain step. The expected controller
+generation and receipt bind that step's historical result generation. Unrelated
+later controller actions do not invalidate a prepared leave. Neither role can
+call the other wrapper.
 
 ## Exact EC2 fencing
 
@@ -229,17 +234,22 @@ weaken exact EC2 evidence and cannot block fencing. Require observed_state
 exactly `terminated`, complete identity match, unique evidence, and request
 match when an intent exists. The proof writer itself must have immediately
 described that exact EC2 ID as terminated; SQL records its authenticated input
-but does not call AWS. Exact proof replay is idempotent; mismatch conflicts.
+but does not call AWS. Exact proof replay compares the stored request ID even
+without an intent and returns the stored reclaimed-claim count after later claim
+receipt cleanup. Request IDs are unique among proofs and cannot name another
+replica's intent. Mismatch conflicts.
 
 For left, insert audit proof and retain left. For joining/active/draining/
 terminating without leave, insert proof, set fenced and atomically release only
 that replica's claims through the owner helper. It cannot ack a transition,
 commit business work, revive a mutation, alter another replica, or change a
 transition row. Any closing/unresolved transition remains unchanged for its
-separate recovery protocol. Proof never infers death from ECS, ALB, heartbeat,
-deadline, lock or database loss. If proof commit is ambiguous, resolve by
-evidence ID and full tuple; absence authorizes one same-evidence retry, mismatch
-remains closed.
+separate recovery protocol. Cleanup processes all owned live claims atomically
+under a bounded caller context; it has no fixed row/work bound. Timeout grants
+no success, and only confirmed rollback proves unchanged rows. Proof never
+infers death from ECS, ALB, heartbeat, deadline, lock or database loss. If proof
+commit is ambiguous, resolve by evidence ID and full tuple; absence authorizes
+one same-evidence retry, mismatch remains closed.
 
 After the fencing transaction commits, lifecycle-command may call
 `runtime_recover_fenced_public_transition(transition_id, target_digest, initiator_replica_id, fencing_evidence_id)`
@@ -319,35 +329,6 @@ identity and controls public enablement timing.
 
 ## Required membership cases
 
-- Reject malformed, partial, duplicate, or reused instance, container, and task
-  tuples, plus a changed release digest for one UUID. Two replicas may share one
-  release digest. Concurrent cross-role reuse of one task ARN admits exactly one
-  complete trio; deferred constraints reject a missing, extra, or mismatched
-  child.
-- Registration and ready replay require the exact immutable tuple. Registration
-  replay after later activation/leave/fence returns the current state with
-  replayed=true and performs no mutation; it does not reconstruct the original
-  registration result. Ready never activates capacity. Two pools racing the
-  final serving slot admit one replica.
-- Drain blocks new claims and transitions for the exact selected incarnation.
-  Graceful leave requires local work joined, zero live claims, and no visible
-  closing or unresolved transition. It cannot release work on the caller's word.
-- Loss of RDS, ECS, ALB, a heartbeat, an advisory lock, or a deadline never
-  fences. Exact EC2 terminated proof for the exact tuple fences an ungraceful
-  incarnation and releases only its claims. Proof for `left` adds audit evidence
-  without changing the terminal state.
-- Proof can commit while a transition parent is locked. It leaves that
-  transition unchanged. Only a later, separate lifecycle transaction may recover
-  a still closing transition through exact fencing evidence.
-- Every real role can execute only its named functions. PUBLIC, direct DML,
-  helper execution, forged evidence, and cross-role calls fail.
-- Register, ready, leave, and proof each increment capacity generation once and
-  leave controller generation unchanged. Exact replay, rejection, rollback, and
-  read-only resolution increment neither. Fenced-transition recovery changes
-  neither membership generation.
-- Two-pool tests cover registration versus transition, activation versus
-  transition, claim acquisition versus drain/fence, leave versus release, and
-  fencing versus ack without a reverse transition-parent lock edge.
-- Loss and proof preserve logical partition flags with one or zero survivors.
-  First serving activation enables partition 1; second enables partition 2;
-  maintenance activation changes neither; proved scale-in disables partition 2.
+[Required cases](membership-cases.md) cover identity, readiness, leave, fencing,
+generations, role grants and two-pool races. The evidence contract adds exact
+proof replay fields and migration checks.
