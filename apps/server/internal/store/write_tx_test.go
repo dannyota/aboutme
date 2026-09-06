@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ type fakeWriteLease struct {
 	gotOptions         pgx.TxOptions
 	releases, destroys int
 	destroyErrAtCall   error
+	destroyErr         error
 	destroyDeadline    time.Time
 	destroyHasDeadline bool
 }
@@ -36,12 +38,17 @@ func (l *fakeWriteLease) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, 
 	l.gotOptions = o
 	return l.tx, l.beginErr
 }
-func (l *fakeWriteLease) Release() { l.events = append(l.events, "release"); l.releases++ }
-func (l *fakeWriteLease) Destroy(ctx context.Context) {
+func (l *fakeWriteLease) Release(context.Context) error {
+	l.events = append(l.events, "release")
+	l.releases++
+	return nil
+}
+func (l *fakeWriteLease) Destroy(ctx context.Context) error {
 	l.events = append(l.events, "destroy")
 	l.destroys++
 	l.destroyErrAtCall = ctx.Err()
 	l.destroyDeadline, l.destroyHasDeadline = ctx.Deadline()
+	return l.destroyErr
 }
 
 type fakeRunnerTx struct {
@@ -182,6 +189,53 @@ func TestWriteTxRunnerFinishAndCommitFailuresDestroyWithoutReplay(t *testing.T) 
 		assertEvents(t, l.events, "acquire", "begin", "entry", "finish", "commit", "destroy")
 		assertCounts(t, l, 0, 1, 1, 0, 0, 1)
 	})
+}
+
+func TestWriteTxRunnerPreservesPrimaryBeforeRetirementFailure(t *testing.T) {
+	primary := errors.New("callback failed")
+	retirement := errors.New("physical retirement failed")
+	l := newFakeWriteLease()
+	l.tx.rollbackErr = errors.New("rollback response unknown")
+	l.destroyErr = retirement
+
+	err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { return primary })
+	if !errors.Is(err, primary) || !errors.Is(err, retirement) {
+		t.Fatalf("error=%v, want primary and retirement errors", err)
+	}
+	if !strings.HasPrefix(err.Error(), primary.Error()) {
+		t.Fatalf("error=%q, want primary error first", err)
+	}
+	assertEvents(t, l.events, "acquire", "begin", "entry", "rollback", "destroy")
+}
+
+func TestWriteTxRunnerPreservesEntryAndFinishCleanupFailures(t *testing.T) {
+	for _, stage := range []string{"entry", "finish"} {
+		t.Run(stage, func(t *testing.T) {
+			primary := errors.New(stage + " failed")
+			rollback := errors.New("rollback response unknown")
+			retirement := errors.New("physical retirement failed")
+			l := newFakeWriteLease()
+			l.tx.rollbackErr = rollback
+			l.destroyErr = retirement
+			if stage == "entry" {
+				l.tx.entryErr = primary
+			} else {
+				l.tx.finishErr = primary
+			}
+
+			err := fakeRunner(l).ExecWrite(context.Background(), func(*Queries) error { return nil })
+			for _, want := range []error{primary, rollback, retirement} {
+				if !errors.Is(err, want) {
+					t.Fatalf("error=%v, want cause %v", err, want)
+				}
+			}
+			primaryAt := strings.Index(err.Error(), primary.Error())
+			cleanupAt := strings.Index(err.Error(), rollback.Error())
+			if primaryAt < 0 || cleanupAt < 0 || primaryAt > cleanupAt {
+				t.Fatalf("error=%q, want primary error before cleanup", err)
+			}
+		})
+	}
 }
 
 func TestWriteTxRunnerCleanupIsIndependentBoundedAndShared(t *testing.T) {

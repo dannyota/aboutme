@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/dannyota/aboutme/apps/server/internal/pgtransport"
 	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
@@ -453,7 +454,12 @@ func liveWrappedRunner(pool *pgxpool.Pool, wrap func(pgx.Tx) pgx.Tx) WriteTxRunn
 		if err != nil {
 			return nil, err
 		}
-		return &liveWrappedLease{pooledWriteTxLease: &pooledWriteTxLease{conn: conn}, wrap: wrap}, nil
+		retirement, err := pgtransport.CapturePGX(conn.Conn())
+		if err != nil {
+			ignoreWriteCleanupError(conn.Hijack().Close(ctx))
+			return nil, err
+		}
+		return &liveWrappedLease{pooledWriteTxLease: &pooledWriteTxLease{conn: conn, retirement: retirement}, wrap: wrap}, nil
 	}}
 }
 
