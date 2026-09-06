@@ -75,6 +75,11 @@ construct a foreign operation or supply raw claim metadata.
 
 ## Operation lifetime
 
+[Claim results](claim-operations.md) distinguish stored state, definitive denial
+and confirmed absence. Denial consumes first acquisition; it grants no same-UUID
+retry. Only the ambiguous-acquire/confirmed-absence path below can use the
+private retry flag. A store error exposes no result authority.
+
 ClaimOperation retains the immutable request, original context, factory
 identity, createdAt and a reacquire-used flag privately. It exposes no SQL, pgx,
 caller clock, limit override, deadline override or fencing action. R5 provides

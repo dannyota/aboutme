@@ -33,6 +33,11 @@ receives only fixed admission calls; maintenance receives only bounded cleanup
 calls. Key-version evidence remains private R8 composition input, with no new
 replica column, registration argument or lifecycle ledger field.
 
+[Fixed claim operations](claim-operations.md) adds a result-only composite in a
+later operation migration, exact role/kind checks and value/presence transport.
+It preserves claim storage. Its AM002 conflict code also fixes the previously
+unnamed membership/lifecycle replay code; stored corruption remains AM001.
+
 ## runtime_replicas
 
 - replica_id uuid primary key, generated randomly by composition at each boot.

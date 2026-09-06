@@ -81,6 +81,10 @@ No parent can commit a partial IP/account reservation.
 
 ## Functions and privileges
 
+[Fixed claim operations](claim-operations.md) defines the exact result matrix,
+role/kind checks, replay error codes and query/Go transport. Its result-only
+outcomes and later composite type add no stored claim field.
+
 All tables, indexes, triggers and definer functions belong to
 aboutme_runtime_owner. Revoke PUBLIC and direct runtime-role DML. Definer
 functions set search_path=pg_catalog, qualify names and accept no dynamic SQL.
