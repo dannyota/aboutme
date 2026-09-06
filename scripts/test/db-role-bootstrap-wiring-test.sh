@@ -21,9 +21,12 @@ esac
 SH
 cat >"$WORK/bin/go" <<'SH'
 #!/usr/bin/env bash
-if [[ "$*" == 'run ./cmd/migrate' || "$*" == 'run ./cmd/migrate -check' ]]; then
+if [[ "$*" == 'run ./cmd/migrate' || "$*" == 'run ./cmd/migrate -check' || "$*" == 'run ./cmd/migrate provision' ]]; then
   [[ ${MIGRATION_IDENTITY:-} == local-aboutme ]] || exit 93
   printf 'migrate:%s\n' "$*" >>"$ROLE_TEST_CALLS"
+  if [[ "$*" == 'run ./cmd/migrate provision' ]]; then
+    exit "${ROLE_TEST_PROVISION_RESULT:-0}"
+  fi
   exit 0
 fi
 [[ "$*" == 'run ./cmd/db-role-bootstrap' ]] || exit 91
@@ -62,5 +65,26 @@ for target in migrate migrate-check; do
     exit 1
   }
   grep -q '^migrate:' "$calls" || { echo 'role-wiring: migrate was omitted' >&2; exit 1; }
+  if [[ "$target" == migrate ]]; then
+    awk '/^migrate:run .\/cmd\/migrate provision$/ { ready=1 } /^migrate:run .\/cmd\/migrate$/ { if (!ready) exit 1; seen=1 } END { if (!seen) exit 1 }' "$calls" || {
+      echo 'role-wiring: explicit database provisioning must precede apply' >&2
+      exit 1
+    }
+  elif grep -q 'provision' "$calls"; then
+    echo 'role-wiring: read-only migrate-check must not provision' >&2
+    exit 1
+  fi
 done
+calls="$WORK/calls-failed-provision"
+: >"$calls"
+if (cd "$WORK/repo" && env -u SHELLOPTS -u MIGRATION_IDENTITY \
+  PATH="$WORK/bin:/usr/bin:/bin" ROLE_TEST_CALLS="$calls" ROLE_TEST_PROVISION_RESULT=23 \
+  /usr/bin/make --no-print-directory migrate) >"$WORK/output-failed-provision" 2>&1; then
+  echo 'role-wiring: provisioning failure was ignored' >&2
+  exit 1
+fi
+if grep -qx 'migrate:run ./cmd/migrate' "$calls"; then
+  echo 'role-wiring: migration continued after provisioning failure' >&2
+  exit 1
+fi
 echo 'Database role bootstrap ordering and failure propagation passed'

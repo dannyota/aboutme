@@ -125,6 +125,7 @@ func TestBudgets_ValidateRejectsNegativeSlack(t *testing.T) {
 // itself rather than hiding behind a connection error.
 func TestRun_InvalidBudgets_FailsFastWithoutDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
+	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "")
 
 	orig := runBudgets
@@ -204,6 +205,7 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 	t.Cleanup(func() { runBudgets = origBudgets })
 
 	t.Setenv("DATABASE_URL", dsn)
+	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "dev")
 	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
@@ -211,6 +213,9 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 	defer cancel()
 
 	holderDB := openMigrateTestDB(t, dsn)
+	if err := migrations.ProvisionDatabase(ctx, holderDB); err != nil {
+		t.Fatalf("setup migration grants: %v", err)
+	}
 	holderConn, err := holderDB.Conn(ctx)
 	if err != nil {
 		t.Fatalf("open holder connection: %v", err)
@@ -288,6 +293,7 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	t.Cleanup(func() { runBudgets = origBudgets })
 
 	t.Setenv("DATABASE_URL", dsn)
+	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "dev")
 	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
@@ -299,7 +305,10 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	// pending migration — not simply "this fresh database was never
 	// migrated" masking the lock-contention behavior under test.
 	setupDB := openMigrateTestDB(t, dsn)
-	if _, err := migrations.Apply(ctx, setupDB); err != nil {
+	if err := migrations.ProvisionDatabase(ctx, setupDB); err != nil {
+		t.Fatalf("setup migration grants: %v", err)
+	}
+	if _, err := migrations.Apply(ctx, setupDB, migrations.LocalAdminMigratorIdentity()); err != nil {
 		t.Fatalf("setup Apply() error: %v", err)
 	}
 

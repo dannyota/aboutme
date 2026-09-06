@@ -61,82 +61,33 @@ func NewProvider(db *sql.DB, fsys fs.FS, lockOpts ...lock.SessionLockerOption) (
 	return p, nil
 }
 
-// newLockFreeProvider builds a goose Provider over fsys identically to
-// NewProvider, EXCEPT it never configures a SessionLocker at all. This is
-// deliberate and load-bearing, not an oversight, and it is the only
-// correct way to make [*goose.Provider.Status] lock-free:
-//
-//   - goose's exported Provider.Status always requests the configured
-//     lock internally when a SessionLocker is configured — its doc
-//     comment carries no lock-free guarantee, unlike HasPending and
-//     GetVersions ("this method will not use a SessionLocker or Locker if
-//     one is configured"). Internally, Status -> status(ctx) ->
-//     initialize(ctx, true), and initialize acquires the SessionLocker
-//     whenever one is configured, regardless of that boolean's caller
-//     (see pressly/goose/v3/provider_run.go). A fast lock-wait retry
-//     budget (lock.WithLockTimeout) still takes the *real* advisory lock
-//     through that path, just faster and with a shorter failure window —
-//     it does not skip it. This was verified directly: with LockID held
-//     by another session, Status through a NewProvider-built provider
-//     blocked for its full lock-wait budget and then returned "failed to
-//     acquire lock".
-//   - goose's own lockEnabled config bit is set exclusively by
-//     WithSessionLocker/WithLocker (pressly/goose/v3/provider_options.go)
-//     and checked as `useLocker && p.cfg.lockEnabled` before ever touching
-//     a locker. A provider that never calls WithSessionLocker has
-//     lockEnabled permanently false, so Status's internal
-//     initialize(ctx, true) is a no-op with respect to locking — this is
-//     what actually skips lock acquisition, not any option passed to
-//     WithSessionLocker itself.
-//   - HasPending/GetVersions are genuinely lock-free but return a
-//     bool/version pair, not the per-migration Source+State+AppliedAt
-//     list Status (and this package's PendingCount, and cmd/migrate's
-//     `-check` output) need — switching to them would mean rebuilding
-//     that shape by hand instead of using goose's own Status.
-func newLockFreeProvider(db *sql.DB, fsys fs.FS) (*goose.Provider, error) {
-	p, err := goose.NewProvider(goose.DialectPostgres, db, fsys)
-	if err != nil {
-		return nil, fmt.Errorf("migrations: create lock-free provider: %w", err)
-	}
-	return p, nil
-}
-
-// Apply applies every pending embedded migration to db, serialized by the
-// advisory lock, and returns the migrations that were actually applied
+// Apply applies every pending embedded migration through the fixed migration
+// identity state machine and returns the migrations that were actually applied
 // (nil, nil when db is already at head). lockOpts customizes the session
 // locker's lock-wait retry budget (see NewProvider); production callers
 // pass the caller's configured budget (see cmd/migrate/main.go's
 // budgets), tests can pass none for goose's own default.
 //
-// Only ever runs each migration's "-- +goose Up" section: this calls
-// [*goose.Provider.Up], never Down/DownTo, and neither this package nor
+// Only ever runs each migration's "-- +goose Up" section. It never runs
+// Down/DownTo, and neither this package nor
 // cmd/migrate exposes any rollback path at all. A migration's
 // "-- +goose Down" section is therefore inert cargo that ships in the file
 // but is never executed by this runner: per this repo's append-only
 // migration rule, rollback is always a new forward corrective migration,
 // not a Down run against a released one.
-func Apply(ctx context.Context, db *sql.DB, lockOpts ...lock.SessionLockerOption) ([]*goose.MigrationResult, error) {
-	p, err := NewProvider(db, FS, lockOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return p.Up(ctx)
+func Apply(ctx context.Context, db *sql.DB, identity MigrationIdentity, lockOpts ...lock.SessionLockerOption) ([]*goose.MigrationResult, error) {
+	return applyFS(ctx, db, FS, identity, lockOpts...)
 }
 
 // Status reports the state (applied or pending) of every embedded
 // migration without applying anything and without ever taking the
-// advisory lock — via newLockFreeProvider, whose doc comment explains why
-// that (not a fast lock-wait budget on Apply's provider) is what's
-// actually required. This makes Status always safe to call, including
+// advisory lock. It reads catalog and history state in one pinned, repeatable
+// read-only transaction. This makes Status safe to call, including
 // while another process holds the lock applying migrations: exactly the
 // "pre-deploy readiness gate" use cmd/migrate's `-check` flag documents
 // itself as.
-func Status(ctx context.Context, db *sql.DB) ([]*goose.MigrationStatus, error) {
-	p, err := newLockFreeProvider(db, FS)
-	if err != nil {
-		return nil, err
-	}
-	return p.Status(ctx)
+func Status(ctx context.Context, db *sql.DB, identity MigrationIdentity) ([]*goose.MigrationStatus, error) {
+	return statusFS(ctx, db, FS, identity)
 }
 
 // PendingCount returns how many of statuses (as returned by Status) are

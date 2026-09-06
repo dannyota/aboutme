@@ -3,15 +3,61 @@ package migrations
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/dannyota/aboutme/apps/server/internal/pgtransport"
 )
 
-const migrationBackendRetirementTimeout = 5 * time.Second
+type migrationBackend struct {
+	capability *pgtransport.Capability
+}
+
+func captureMigrationBackend(conn *sql.Conn) (*migrationBackend, error) {
+	capability, err := pgtransport.Capture(conn)
+	if err != nil {
+		return nil, fmt.Errorf("migrations: capture physical backend: %w", err)
+	}
+	return &migrationBackend{capability: capability}, nil
+}
+
+func (b *migrationBackend) retire(ctx context.Context, conn *sql.Conn) error {
+	if b == nil || b.capability == nil {
+		return errors.New("migrations: missing physical backend capability")
+	}
+	result := b.capability.Retire(ctx, conn)
+	return result.Err
+}
+
+func (b *migrationBackend) releaseClean(conn *sql.Conn) error {
+	if b == nil || b.capability == nil {
+		return errors.New("migrations: missing physical backend capability")
+	}
+	return b.capability.ReleaseClean(conn)
+}
+
+func finalizeMigrationBackend(ctx context.Context, backend *migrationBackend, conn *sql.Conn, releaseClean bool) error {
+	if releaseClean {
+		releaseErr := backend.releaseClean(conn)
+		if releaseErr == nil {
+			return nil
+		}
+		retireErr := backend.retire(ctx, conn)
+		logicalErr := conn.Close()
+		if retireErr == nil && errors.Is(logicalErr, sql.ErrConnDone) {
+			logicalErr = nil
+		}
+		return errors.Join(releaseErr, retireErr, logicalErr)
+	}
+	retireErr := backend.retire(ctx, conn)
+	logicalErr := conn.Close()
+	if retireErr == nil && errors.Is(logicalErr, sql.ErrConnDone) {
+		logicalErr = nil
+	}
+	return errors.Join(retireErr, logicalErr)
+}
 
 func verifyMigrationDriver(conn *sql.Conn) error {
 	if conn == nil {
@@ -27,48 +73,4 @@ func verifyMigrationDriver(conn *sql.Conn) error {
 		}
 		return nil
 	})
-}
-
-func retireMigrationBackend(ctx context.Context, conn *sql.Conn) error {
-	if conn == nil {
-		return errors.New("migrations: nil connection for backend retirement")
-	}
-	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), migrationBackendRetirementTimeout)
-	defer cancel()
-
-	var callbackRan bool
-	var closeErr error
-	var invariantErr error
-	rawErr := conn.Raw(func(driverConn any) error {
-		callbackRan = true
-		stdlibConn, ok := driverConn.(*stdlib.Conn)
-		if !ok || stdlibConn == nil {
-			invariantErr = fmt.Errorf("migrations: unsupported SQL driver connection %T during retirement", driverConn)
-			return driver.ErrBadConn
-		}
-		pgxConn := stdlibConn.Conn()
-		if pgxConn == nil {
-			invariantErr = errors.New("migrations: pgx driver connection is nil during retirement")
-			return driver.ErrBadConn
-		}
-		closeErr = pgxConn.Close(cleanupCtx)
-		if !pgxConn.IsClosed() {
-			invariantErr = errors.New("migrations: physical backend closure was not confirmed")
-			return driver.ErrBadConn
-		}
-		return nil
-	})
-	if !callbackRan {
-		return fmt.Errorf("migrations: retirement Raw callback unavailable: %w", rawErr)
-	}
-	if invariantErr != nil {
-		return errors.Join(invariantErr, closeErr, rawErr)
-	}
-	if closeErr != nil {
-		return fmt.Errorf("migrations: close physical backend: %w", closeErr)
-	}
-	if rawErr != nil {
-		return fmt.Errorf("migrations: retire physical backend: %w", rawErr)
-	}
-	return nil
 }

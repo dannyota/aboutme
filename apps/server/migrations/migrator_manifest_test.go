@@ -196,6 +196,7 @@ func TestManifestFoundationAndDependenciesReject(t *testing.T) {
 		"row-type-parent":      `ALTER TABLE public.users RENAME TO users_moved; CREATE TYPE public.users AS (id integer)`,
 		"trigger-function":     `DROP TRIGGER resumes_enforce_cap ON public.resumes; CREATE TRIGGER resumes_enforce_cap BEFORE INSERT OR UPDATE OF user_id ON public.resumes FOR EACH ROW EXECUTE FUNCTION public.notify_resume_revision()`,
 		"identity-sequence":    `ALTER TABLE public.goose_db_version ALTER COLUMN id DROP IDENTITY`,
+		"inert-b3-function":    `CREATE FUNCTION public.runtime_assert_migration_history_write() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'; ALTER FUNCTION public.runtime_assert_migration_history_write() OWNER TO aboutme_runtime_owner`,
 	}
 	for name, statement := range tests {
 		t.Run(name, func(t *testing.T) {

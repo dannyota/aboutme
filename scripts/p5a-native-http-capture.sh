@@ -100,7 +100,11 @@ if ! podman exec "$DB_CONTAINER" psql -U aboutme -d aboutme -tc \
   "SELECT 1 FROM pg_database WHERE datname='$FIXTURE_DB'" 2>/dev/null | grep -q 1; then
   podman exec "$DB_CONTAINER" psql -U aboutme -d aboutme -c "CREATE DATABASE $FIXTURE_DB" >/dev/null
 fi
-(cd "$ROOT/apps/server" && DATABASE_URL="$FIXTURE_DATABASE_URL" MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate >/dev/null)
+(
+  cd "$ROOT/apps/server"
+  DATABASE_URL="$FIXTURE_DATABASE_URL" MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate provision >/dev/null
+  DATABASE_URL="$FIXTURE_DATABASE_URL" MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate >/dev/null
+)
 
 mkdir -p "$ROOT/.dev/bin"
 export PATH="$ROOT/.dev/bin:$PATH"

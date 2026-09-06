@@ -429,7 +429,11 @@ sqlc-check: ## Fail if the generated data layer drifts from migrations/ (uses --
 	    { echo "generated data layer drifts from migrations/ — run 'make sqlc-gen' and commit:"; \
 	      git status --porcelain -- internal/store; exit 1; }; }
 
-migrate: ## Apply pending migrations
+.PHONY: migrate-provision
+migrate-provision: ## Provision fixed local database migration grants
+	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate provision
+
+migrate: migrate-provision ## Apply pending migrations
 	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate
 
 migrate-check: ## Report pending migrations without applying them

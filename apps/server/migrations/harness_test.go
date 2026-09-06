@@ -66,7 +66,11 @@ func TestHarness_EmptyDatabaseToHead(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), harnessTimeout)
 	defer cancel()
 
-	results, err := migrations.Apply(ctx, db)
+	if err := migrations.ProvisionDatabase(ctx, db); err != nil {
+		t.Fatalf("ProvisionDatabase() error: %v", err)
+	}
+	identity := migrations.LocalAdminMigratorIdentity()
+	results, err := migrations.Apply(ctx, db, identity)
 	if err != nil {
 		t.Fatalf("Apply() error: %v", err)
 	}
@@ -74,7 +78,7 @@ func TestHarness_EmptyDatabaseToHead(t *testing.T) {
 		t.Fatal("Apply() applied zero migrations against an empty database")
 	}
 
-	statuses, err := migrations.Status(ctx, db)
+	statuses, err := migrations.Status(ctx, db, identity)
 	if err != nil {
 		t.Fatalf("Status() error: %v", err)
 	}
@@ -93,7 +97,7 @@ func TestHarness_EmptyDatabaseToHead(t *testing.T) {
 	}
 
 	// Re-applying at head must be a safe no-op.
-	results, err = migrations.Apply(ctx, db)
+	results, err = migrations.Apply(ctx, db, identity)
 	if err != nil {
 		t.Fatalf("second Apply() at head error: %v", err)
 	}

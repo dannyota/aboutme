@@ -17,6 +17,7 @@ const unreachableDSN = "postgres://user:pass@127.0.0.1:1/aboutme?connect_timeout
 
 func TestRun_MissingDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
+	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "dev")
 
 	err := run(false, &bytes.Buffer{})
@@ -30,6 +31,7 @@ func TestRun_MissingDatabaseURL(t *testing.T) {
 
 func TestRun_UnreachableDatabase(t *testing.T) {
 	t.Setenv("DATABASE_URL", unreachableDSN)
+	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "dev")
 	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
@@ -44,6 +46,7 @@ func TestRun_UnreachableDatabase(t *testing.T) {
 
 func TestRun_UnreachableDatabase_CheckMode(t *testing.T) {
 	t.Setenv("DATABASE_URL", unreachableDSN)
+	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "dev")
 	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
