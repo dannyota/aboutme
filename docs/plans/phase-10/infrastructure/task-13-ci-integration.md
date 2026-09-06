@@ -5,9 +5,10 @@ integration owner applies and observes credentialed workflow steps.
 
 **Files:** private `aboutme-infra` `.github/workflows/iac.yml` and Makefile diff
 (`iac-fmt`, `iac-validate`, `iac-test`, `staging-plan`), plus public app
-`ci.yml`/Makefile diffs only for shared application checks. Resolve exact paths
-under the [repository boundary](README.md#repository-boundary) before dispatch.
-Per ADR 0024, the private repository's local `make ci` composes `iac-fmt`,
+`ci.yml`/Makefile diffs for shared checks and task 10.8's public
+`images-arm64.yml` contract tests. Resolve exact paths under the
+[repository boundary](README.md#repository-boundary) before dispatch. Per ADR
+0024, the private repository's local `make ci` composes `iac-fmt`,
 `iac-validate`, and `iac-test`, all credential-free. The public app's `make ci`
 does not depend on private files/tools or AWS. `staging-plan` is credentialed
 and stays out of either local gate; it runs only via manual dispatch below.
@@ -23,23 +24,34 @@ and stays out of either local gate; it runs only via manual dispatch below.
       job).
 - [ ] Keep existing public app jobs and the pinned AMD64 `web-e2e` comparison on
       their existing architectures. Use `ubuntu-24.04-arm` for task 10.8's
-      private image build/smoke and task 10.12's previous-image compatibility
-      job. Fail workflow tests if either ARM64 execution job uses an x86 runner
-      or QEMU, or if the baseline comparison is moved to ARM64. Test that build
-      smoke defaults to no publication, AWS access exists only in protected
-      manual jobs, OIDC names private `aboutme-infra`, and deploy rejects a
-      failed build, wrong commit/run, missing image, or wrong platform.
+      public image build/smoke and task 10.12's private previous-image
+      compatibility job. Fail workflow tests if either ARM64 execution job uses
+      an x86 runner or QEMU, or if the baseline comparison is moved to ARM64.
+      Test that public build/smoke runs in one job over the same local Podman
+      images and uploads final evidence only after successful smoke. It has no
+      private checkout, AWS role, `id-token: write`, or publication input.
+      Credential-free artifact validation precedes the separate private
+      protected manual publisher. OIDC names only private `aboutme-infra`; AWS
+      trust rejects the public repo. Test the resolved immutable IDs and reject
+      public subjects in both formats without a wildcard fallback. Deploy
+      rejects a failed build, wrong commit/run, missing image, or wrong
+      platform.
 - [ ] Exercise source and retention rejection cases: green checks on a
       PR/fork-only SHA, wrong workflow/check identity, or an unapproved
-      candidate branch cannot authorize publication/deployment. An expired
-      Actions artifact with task 10.8's valid protected release record works;
-      missing or tampered archival evidence fails. Registry lifecycle tests keep
-      all referenced UAT/promotion/rollback images through their window.
+      candidate branch cannot authorize publication/deployment. Wrong public
+      workflow, artifact ID/digest, run attempt, substituted OCI content, unsafe
+      archive paths, or excessive archive size must fail before AWS credentials.
+      Never execute public artifact code in the publisher. An expired Actions
+      artifact with task 10.8's valid protected release record works; missing or
+      tampered archival evidence fails. An unpublished expired bundle requires a
+      new public build and approval. Registry lifecycle tests keep all
+      referenced UAT/promotion/rollback images through their window.
 - [ ] Cancel superseded credential-free PR checks using a workflow-and-PR
       concurrency group. Keep publication and deployment in separate groups with
       `cancel-in-progress: false`. Verify architecture-specific cache keys,
       isolation from untrusted PR writes, explicit timeouts, and artifact
-      retention against the
+      retention, public cache cap of 10 GiB, no private cache/OCI artifact
+      copies, and residual private quota checks against the
       [build contract](contracts.md#build-and-runner-contract). Pin actions to
       reviewed commit SHAs and tools to exact versions; validate their native
       ARM64 support when authoring the affected jobs.
@@ -61,8 +73,8 @@ and stays out of either local gate; it runs only via manual dispatch below.
 **Integration-owner steps (not the worker's):** apply the diffs; observe the PR
 gate green on a no-op PR and red on a seeded violation; confirm no AWS
 credentials are reachable from any `pull_request` trigger by reading the applied
-workflow triggers. Observe a private native ARM64 build/smoke run with
-publication disabled and record it before task 10.8's first ECR publication.
+workflow triggers. Observe a public native ARM64 build/smoke run and record its
+artifact provenance before task 10.8's separate private ECR publication.
 
 **Verification:** worker: local command runs + `actionlint` output recorded.
 Owner: the applied workflows' red-then-green observation.

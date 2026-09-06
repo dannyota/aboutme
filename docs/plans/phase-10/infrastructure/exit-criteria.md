@@ -6,6 +6,9 @@ activation.
 
 ## Local code checkpoint
 
+- [ ] Task 10.18's detailed distributed-runtime and scheduled-lifecycle design,
+      bounded implementation tasks, implementation, and local proofs pass before
+      dependent infrastructure is treated as dispatchable.
 - [ ] The [email ownership strategy](contracts.md#existing-email-ownership)
       names exactly one manager per resource and provides retention, import,
       rollback, and no-change-plan checks before any overlapping resource apply.
@@ -44,10 +47,11 @@ activation.
 
 ## Hosted UAT handoff
 
-- [ ] Task 10.8's native `ubuntu-24.04-arm` build/smoke evidence and versioned
-      manifest identify the app/infrastructure commits and all four Linux/arm64
-      ECR digests. Task 10.12 validates that successful build and deploys the
-      same images; AMD64 browser baselines remain on their pinned architecture.
+- [ ] Task 10.8 records a successful public native ARM64 build/smoke and
+      separate protected private publication. Its release manifest binds both
+      runs, artifact provenance, app/infrastructure commits, and four ECR
+      digests. AWS roles reject public identities. Task 10.12 validates the
+      record and deploys those images; AMD64 browser baselines stay pinned.
 - [ ] Task 10.15 has a zero-drift post-activation plan, passing health and
       readiness checks through `uat.aboutme.vn`, and the UAT evidence ledger.
 - [ ] Phase 10 operational rehearsal receives the live interfaces for its

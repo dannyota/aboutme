@@ -1,5 +1,10 @@
 # Task 10.9: Observability module — alarms (with default thresholds), dashboards, SNS
 
+**Dependency:** Task 10.18 defines autoscaling metrics, fleet-wide limits, drain
+signals, and scheduled UAT state. This task alarms on those contracts and must
+distinguish an expected stopped UAT window from an unhealthy production or
+active-UAT service.
+
 AC-INF-005.
 
 **Alarm inventory** (from the
@@ -19,7 +24,7 @@ default and must be set by the owner before production use:
 | **Prefix-list drift (D6)**                         | Custom metric from Task 10.10's drift job (missing-data ⇒ ALARM)                                                      | any drift, or no heartbeat in 13 h                 |
 | Server task readiness flapping / restart loop      | Container Insights `RunningTaskCount`; EventBridge STOPPED events → dedicated log metric `ECSServiceTaskStoppedCount` | < 1 for 5 min, or Sum > 3 in 30 min                |
 | Render queue depth / OOM kills                     | Custom app metric (interface reserved — emitted from Phase 7.1)                                                       | _(owner-set with Phase 7.1 baselining)_            |
-| EIP association failure                            | Custom metric from Task 10.2's user-data script                                                                       | any failure event                                  |
+| ALB target or stopped-state reconciliation failure | ALB/ECS health plus the Task 10.18 lifecycle metric                                                                   | any failure event                                  |
 | TLS certificate expiry (origin cert)               | Custom metric from a scheduled ops check (Task 10.10)                                                                 | < 21 days remaining                                |
 | CloudFront 5xx rate                                | `CloudFront/5xxErrorRate` (us-east-1 metrics)                                                                         | > 1 %, 2 × 5 min                                   |
 | ECS deployment circuit-breaker rollback            | ECS deployment state EventBridge rule                                                                                 | any rollback                                       |

@@ -1,0 +1,8 @@
+scenario,gross_usd,allowance_savings_usd,after_allowance_usd,incremental_uat_usd
+production_low,151.527180,8.585000,142.942180,
+production_expected,199.488564,36.885000,162.603564,
+uat_baseline,30.629128,8.506918,22.122210,
+uat_high,44.403148,8.585000,35.818148,
+combined_low,176.753808,12.985000,163.768808,20.826628
+combined_expected,224.715193,38.085000,186.630193,24.026628
+combined_high,238.489213,38.085000,200.404213,37.800648

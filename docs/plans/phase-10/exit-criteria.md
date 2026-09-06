@@ -2,6 +2,9 @@
 
 ## Before activation
 
+- [ ] Task 10.18's detailed design, bounded implementation tasks, runtime
+      implementation, and local multi-process/lifecycle proofs are complete.
+      Dependent infrastructure and hosted work consume those outputs.
 - [ ] Task 10.14's harness, workflow specs, operational scripts, and runbooks
       are authored, tested locally, and included in the reviewed candidate.
       After task 10.15 deploys it, only live preflight and acceptance execution
@@ -27,14 +30,18 @@
 - [ ] Task 10.15 deploys the candidate digests and passes the activation
       handoff.
 - [ ] Tasks 10.14–10.16 pass all required workflows through real HTTPS and SES.
+- [ ] Production-shaped UAT proves actual 1 → 2 → 1 capacity during writes,
+      revocation, render, and SSE, including abrupt failure and graceful drain,
+      without multiplying limits or exceeding the pgx connection budget.
 - [ ] Task 10.17 passes security, performance, restore, rotation, migration,
       rollback, edge, alarm, and cost checks with private supporting evidence.
 - [ ] Affected traceability rows have accurate evidence; no required row is
       blocked or claimed proven by configuration alone.
 - [ ] The same fresh reviewer confirms fixes and the final evidence. Any
       candidate change reruns required gates and invalidated UAT results.
-- [ ] Cleanup/retention and residual cost are recorded; unrelated resources and
-      the owner's shared mail setup are preserved.
+- [ ] Scheduled UAT stop/start, RDS seven-day guard, required-job deadlines,
+      temporary ALB removal, cleanup/retention, and residual cost are recorded;
+      unrelated resources and the owner's shared mail setup are preserved.
 - [ ] The integration owner completes this checklist and records local gates and
       hosted evidence against one unchanged final candidate before closure.
 

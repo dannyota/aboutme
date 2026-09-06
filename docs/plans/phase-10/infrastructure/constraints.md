@@ -32,12 +32,10 @@
   this exactly: Go binds `127.0.0.1:8080`, Caddy proxies via loopback,
   `TRUSTED_PROXY_CIDRS=127.0.0.1/32`. **The web tier does NOT share that
   namespace** — see D24.
-- Phase 10 infrastructure port map: Caddy `80/443` (the production SG exposes
-  only 443; see D14), Go `127.0.0.1:8080`, and Nuxt `127.0.0.1:3000` (satisfied
-  through D24's bridge port publication). The
-  [production topology](../../../design/deployment.md#production-topology) fixes
-  one task per service and no application load balancer; Phase 10 infrastructure
-  adds no service discovery.
+- The former one-host port map and no-load-balancer clause are superseded by
+  ADR 0034. Task 10.18 must choose the colocated Caddy, Go, and Nuxt network and
+  service-discovery contract before Tasks 10.2, 10.5, or 10.7 dispatch. The
+  target uses one complete application replica per node behind an ALB.
 - CI jobs at base:
   `docs, schema, api, server, web, server-integration, migrations-append-only, released-schema-append-only, gitleaks, semgrep, route-table, sqlc-drift`
   (`.github/workflows/ci.yml`). Makefile targets relevant here: `docs-fmt`,
@@ -58,17 +56,21 @@
   container-level limit; pgx pool ≤ 20 < Postgres `max_connections`; SSE ≤ 2000
   conns/task with ≥ 25 % fd headroom; SSE heartbeat 25 s < CloudFront idle
   timeout; API/SSR p95 SLOs measured in Phase 10 operational rehearsal on the
-  production instance class.
-- GitHub runner decision (2026-09-05): native `ubuntu-24.04-arm` builds target
-  `linux/arm64` in the planned private `aboutme-infra` repository. Public app CI
-  uses free standard runners; private deployment builds consume included/paid
-  Actions minutes and storage. Task 9.1 includes those costs. The current public
-  AMD64 browser baseline job retains its architecture. Recheck runner tool
-  availability at implementation; the label does not pin installed tools. See
-  the [build contract](contracts.md#build-and-runner-contract).
-- Fork PR checks have no AWS role or publication access. Build/plan/deploy OIDC
-  trust names the private infrastructure repository and its protected
-  environment; public app workflow identities cannot assume those roles.
+  production instance class. Task 10.18 preserves each row's declared per-task,
+  per-instance, per-account, client-IP, or global scope and derives the
+  aggregate RDS connection budget separately.
+- GitHub build decision (ADR 0033, 2026-09-06): native `ubuntu-24.04-arm` builds
+  and smoke target `linux/arm64` in public `dannyota/aboutme`. Standard public
+  runners are free; private validation, publication and deployment use available
+  account allowances. Task 9.1 records residual private usage and any overage
+  needs a priced decision. The public AMD64 browser baseline retains its
+  architecture. Recheck runner tool availability at implementation; the label
+  does not pin installed tools. See the
+  [build contract](contracts.md#build-and-runner-contract).
+- Public builds and fork PR checks have no AWS role or publication access.
+  Publication/plan/deploy OIDC trust names the private infrastructure repository
+  and its protected environment; public app workflow identities cannot assume
+  those roles.
 
 ## Global constraints (inherited, plus phase-specific)
 

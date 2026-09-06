@@ -13,8 +13,8 @@ origin. Task 10.4 grants the Go server task the only application access.
 - [ ] Failing `tofu test` (mocked) first: RDS engine `postgres`, engine version
       = pinned latest stable major (resolve at scaffold; record),
       `storage_type = "gp3"`, `instance_class = var.db_instance_class`,
-      `backup_retention_period = var.db_backup_retention_days` (staging 7,
-      production 30 per the
+      `backup_retention_period = var.db_backup_retention_days` (30 in both
+      staging and production per the
       [privacy lifecycle](../../../design/operations.md#privacy-lifecycle)),
       PITR on, storage encrypted, `publicly_accessible = false`, deletion
       protection on in production vars, **subnet group composed of the network
@@ -28,12 +28,13 @@ origin. Task 10.4 grants the Go server task the only application access.
       CloudFront principal, or OAC exists.
 - [ ] Pin destroy behavior by environment. Staging is disposable only after an
       operator records the data-loss scope: RDS uses
-      `skip_final_snapshot = true` and a deletion-protection variable set false,
-      and a scoped pre-destroy command empties only the named staging media
-      bucket before OpenTofu destroys it. Production has deletion protection,
-      `skip_final_snapshot = false`, a unique timestamped final-snapshot
-      identifier, and no force-destroy bucket path. Mock tests prove both tfvar
-      modes and fail if production can delete stateful data without a snapshot.
+      `skip_final_snapshot = true`, `delete_automated_backups = true`, and a
+      deletion-protection variable set false, and a scoped pre-destroy command
+      empties only the named staging media bucket before OpenTofu destroys it.
+      Production has deletion protection, `skip_final_snapshot = false`, a
+      unique timestamped final-snapshot identifier, and no force-destroy bucket
+      path. Mock tests prove both tfvar modes and fail if production can delete
+      stateful data without a snapshot.
 - [ ] Implement both modules; DB security group admits 5432 **only from the
       compute node SG** (module input), nothing else.
 - [ ] Output the pieces `DATABASE_URL` assembly needs (host, port, dbname) —
@@ -47,3 +48,7 @@ website or ACL, enabled or suspended versioning, an OAC, and any media output
 other than bucket identity and the fixed prefix. RDS actually accepting
 connections is Task 10.15 + Phase 10 operational rehearsal territory (real AWS,
 stated).
+
+Phase 9 corrected the earlier seven-day staging default to the design's 30-day
+retention. UAT teardown still follows its explicit disposable-data contract;
+stopping an instance is not backup deletion.

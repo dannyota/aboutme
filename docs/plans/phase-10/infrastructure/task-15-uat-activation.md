@@ -3,17 +3,36 @@
 This task closes “modules apply cleanly to hosted UAT.” It mutates AWS and
 Cloudflare only after the Phase 9 cost decision and the local checkpoint below.
 
+Task 10.18's distributed-runtime implementation and local proof are mandatory
+preconditions. UAT follows booked running windows: every window creates the
+temporary ALB, starts RDS and ECS, and ends by draining ECS, removing the ALB,
+and stopping RDS. Retained resources remain in the cost inventory.
+
 ## Preconditions
 
 - [ ] Phase 9 records quantified cost, the budget decision, and selected UAT
-      sizing at the exact candidate commit.
+      sizing at the exact candidate commit. Apply its
+      [spending and cleanup controls](../../../research/aws-cost/recommendation.md#alerts-and-operating-controls):
+      the single USD 30 monthly UAT ceiling, booked running windows, daily
+      inventory checks, and operator shutdown and cleanup path independent of
+      Actions. Alerts fire at USD 20 and USD 25, and a USD 30 forecast stops
+      optional work. A failed or high forecast shortens optional booked hours.
+      It never delays privacy or deletion deadlines.
+- [ ] Task 10.18 is complete. Its multi-process publication, render, SSE,
+      limiter, pgx-budget, topology, and lifecycle checks pass. Tasks 10.2,
+      10.5–10.7, 10.9–10.12, and 10.14 consume the approved outputs.
+- [ ] Public builds use standard runners and capped caches. Private workflow
+      minutes and metadata storage fit the verified remaining account allowance;
+      paid Actions usage remains disabled. Resolve any quota shortfall and the
+      private approval-feature eligibility before enabling AWS workflow access.
 - [ ] The infrastructure local checkpoint is `PASS`: affected local checks, fake
       AMI and OpenTofu-mock checks, one author per task, one fresh Phase 10
       review, and the owner's single `make ci` plus `make scan` run.
 - [ ] The existing authorization record names `uat.aboutme.vn`,
       `ap-southeast-1`, UAT resources, and Cloudflare DNS. It does not authorize
       production. No bootstrap apply, image push, DNS change, UAT apply, or
-      workflow dispatch occurs before the cost result and local checkpoint.
+      credentialed workflow dispatch occurs before the cost result and local
+      checkpoint. Public credential-free build/smoke supplies evidence first.
 - [ ] The refresh has resolved the UAT access mechanism, secret runtime
       contract, final Phase 6/7/8 settings, mail runtime and SES handoff, and
       the exact protected operator environment. Plaintext credentials remain
@@ -39,16 +58,17 @@ bootstrap or email adoption.
    non-secret outputs and a zero-drift second plan. Resolve and record the real
    AWS AMI here; local tasks use fake AMI data only.
 2. Run `secrets-bootstrap.sh`, then its decrypting `--check`, against the
-   persistent UAT key. Build all four images through Task 10.8's protected
-   workflow and record immutable digests.
+   persistent UAT key. Publish Task 10.8's already-tested public OCI bundle
+   through its separate protected private workflow and record the release
+   manifest and four immutable ECR digests.
 3. Create and approve a foundation saved plan with `services_enabled=false` and
    `distribution_enabled=false`. Apply it to create network/host, private RDS
    and S3, ECS definitions, ACM certificate, and application alarms without a
-   long-running writer or CloudFront distribution. Exclude existing mail-owned
-   resources until the step 6 ownership handoff.
-4. Run `dns-apply.sh --apply-foundation` for the DNS-only origin A record and
-   ACM validation CNAMEs. Wait with a bounded command until the certificate is
-   `ISSUED`; a timeout leaves services and distribution disabled.
+   long-running writer, ALB, or CloudFront distribution. Exclude existing
+   mail-owned resources until the step 6 ownership handoff.
+4. Run `dns-apply.sh --apply-foundation` for ACM validation CNAMEs. Wait with a
+   bounded command until the certificate is `ISSUED`; a timeout leaves services
+   and distribution disabled.
 5. Run the named one-shot DB-bootstrap task. It creates the `aboutme` database
    and the migrator, app, and restore roles idempotently. Verify grants, default
    privileges, app DDL denial, and that only the bootstrap/migrate containers
@@ -59,11 +79,12 @@ bootstrap or email adoption.
    for each resource, and require a no-change post-import plan before updates.
    Do not duplicate the stack. Keep the Google root MX/SPF and separate
    `bounce.aboutme.vn` MAIL FROM records.
-7. Dispatch Task 10.12 in first-activation mode. It proves zero writers, takes
-   and verifies the initial snapshot, creates a fresh full saved plan with the
-   issued certificate, distribution, exact invalidation policy/environment,
-   enabled retention schedules, and services at one, then applies. Migrate must
-   finish before Go starts. Wait for ECS stability and `/healthz` plus `/readyz`
+7. Dispatch Task 10.12 in first-activation mode for the first booked UAT window.
+   It creates the temporary ALB, proves zero writers, takes and verifies the
+   initial snapshot, creates a fresh full saved plan with the issued
+   certificate, distribution, exact invalidation policy/environment, enabled
+   retention schedules, and services at one, then applies. Migrate must finish
+   before Go starts. Wait for ECS stability and `/healthz` plus `/readyz`
    through CloudFront.
 8. Run `dns-apply.sh --apply-aliases`, then verify the `uat.aboutme.vn` service
    and configured canonical redirect. Finish with a zero-drift full plan. No
@@ -78,25 +99,27 @@ are live.
 
 ## Live boundary checks
 
-- [ ] Record EIP replacement within five minutes of the instance entering
-      running, bootstrap AWS CLI version, bridge-gateway existence, encrypted
+- [ ] Record ALB target registration and one-complete-replica-per-node
+      placement, bootstrap AWS CLI version, private-route existence, encrypted
       gp3 root-volume settings, Caddy UID 10001, its sole
       `CAP_NET_BIND_SERVICE`, writable-directory owner/mode, and a live listener
       on 443.
-- [ ] From web and every host-mode application container, IMDS at
-      `169.254.169.254` is unreachable. A one-shot task under the server role
-      can still obtain its ECS task credentials at `169.254.170.2` and call
-      `sts:GetCallerIdentity`. Record no credentials or tokens.
+- [ ] From every application task, IMDS at `169.254.169.254` is unreachable. A
+      one-shot task under the server role can still obtain its ECS task
+      credentials at `169.254.170.2` and call `sts:GetCallerIdentity`. Record no
+      credentials or tokens.
 - [ ] Exercise Nuxt SSR through the internal Caddy listener. Credential-free
       structured logs show the internal marker, path-only URI, request ID, and
-      canonical bridge address. Sentinel OAuth query values, cookies, CSRF,
-      Basic Authorization, origin secrets, and arbitrary query values are absent
-      from captured Caddy and Go logs.
-- [ ] Direct EIP traffic without the origin secret is refused or gets 403. A
-      forged XFF through CloudFront cannot change the canonical rate-limit key.
-      A viewer `X-Origin-Secret` is overwritten once. Origin logs show the
-      origin FQDN, and CloudFront accepted the custom `allExcept` policy. Both
-      origins use HTTPS/443/TLS 1.2 with hostname validation.
+      canonical colocated-route address. Sentinel OAuth query values, cookies,
+      CSRF, Basic Authorization, origin secrets, and arbitrary query values are
+      absent from captured Caddy and Go logs.
+- [ ] Direct ALB and direct-node traffic cannot bypass CloudFront and the origin
+      secret. A forged XFF through CloudFront cannot change the canonical
+      rate-limit key. A viewer `X-Origin-Secret` is overwritten once. Origin
+      logs show the selected origin identity, and CloudFront accepted the custom
+      `allExcept` policy. Both hops use the Task 10.18 TLS and authentication
+      contract; the evidence does not claim native ALB target-certificate
+      validation.
 - [ ] The resolved UAT access policy rejects missing/invalid access and passes
       browser workflows without caching authentication responses. MCP receives
       exactly the intended Bearer header; no blanket Basic gate strips or
@@ -113,7 +136,7 @@ are live.
       role can list `resumes/` and act on `resumes/*`; neighbouring prefixes and
       every other role are denied. The server invalidation action is scoped to
       this one distribution.
-- [ ] All six Task 10.10 schedules are enabled, their image commands and roles
+- [ ] All seven Task 10.10 schedules are enabled, their image commands and roles
       resolve, and every heartbeat/failure alarm has a source. Run the safe TLS
       and CIDR checks once. Restore timing and notification receipt remain Phase
       10 operational rehearsal criteria.
@@ -123,14 +146,30 @@ are live.
 Stop writers and record the approved data-loss scope. Empty only the named UAT
 media bucket, then destroy the disposable environment; bootstrap state,
 persistent secrets KMS key, SSM parameters, and ECR remain. Verify RDS followed
-the UAT no-final-snapshot policy and no production resource was addressable.
-Re-run all eight activation stages from empty environment state, including the
-decrypting secret check, certificate validation, DB bootstrap, and full smoke.
-Leave the recreated UAT environment healthy for tasks 10.16–10.17 and run the
-task 10.14 harness's live preflight. Cost-control shutdown or final teardown
-occurs only after task 10.17 records hosted acceptance and the retention plan.
-Production keeps deletion protection, a final snapshot, and a non-force-destroy
-bucket.
+the UAT no-final-snapshot policy with `delete_automated_backups = true`, and no
+production resource was addressable. Inventory and remove only owned UAT manual
+snapshots; any retention exception needs a priced lifetime. Re-run all eight
+activation stages from empty environment state, including the decrypting secret
+check, certificate validation, DB bootstrap, and full smoke. Leave the recreated
+UAT environment healthy only for the booked test window and run the task 10.14
+harness's live preflight. During that window prove a real 1 → 2 → 1 transition
+under writes, revocation, account/private-media deletion, render, one-use print
+redemption, and SSE. Include abrupt replica loss and a graceful drain, and prove
+fleet limits and the pgx budget do not expand.
+
+At the end of every booked window, stop admission, drain admitted work, set ECS
+desired capacity and ASG minimum/desired/maximum to the stopped contract,
+terminate application nodes, remove the temporary ALB, and stop RDS. Verify no
+application node or ALB remains. Persist and price RDS storage, keys, state, ECR
+images, and required logs. Treat a full month of one 30 GB root disk and one
+public IPv4 address as conservative cost reserves until live inventory proves a
+safe reduction; do not claim they remain after normal node termination. Remove
+any orphaned volume or address. Restart RDS before AWS's seven-day guard, run
+due privacy, deletion, retention, and heartbeat work, then stop it again.
+Overdue required work blocks restop until it completes or fails closed. Budget
+or expiry limits shorten optional acceptance work; record incomplete evidence
+before cleanup. Production is never stopped by this lifecycle and keeps deletion
+protection, a final snapshot, and a non-force-destroy bucket.
 
 ## Handoff and verification
 
