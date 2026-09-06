@@ -158,18 +158,23 @@ available to deterministic tests.
 
 ## Shared concurrency schema and algorithm
 
-## shared_claims
+Use the [shared claim schema](shared-claims.md): immutable policy catalog,
+locked scope summaries, one claim parent and one or two scope children. SSE IP
+and optional account charges are atomic. Request order and queue allocation
+order use separate ordinals. Release removes charged capacity while retaining
+terminal receipts for 24 hours; maintenance deletes at most 256 receipts per
+transaction. Live claims are never removed by receipt age.
 
-- claim_id uuid primary key; policy_id, scope_digest, replica_id, state check
-  ('waiting','running'); admitted_at, deadline_at nullable; ordinal bigint.
-- unique policy/scope/ordinal; foreign key replica. Deadline is diagnostic and
-  cancellation input, never crash-reclamation authority.
-- Claim transaction locks policy/scope summary, enforces exact running/waiting
-  counts, inserts once, and returns allowed or existing denial. Release deletes
-  the exact claim idempotently. Conflicting reuse fails closed.
-- Graceful cancellation releases after work joins. Abrupt claims remain until
-  verified EC2 termination proof for their replica, then one reconciler deletes
-  them transactionally. TTL, deadline, lock loss, and replacement do not.
+The [identity and ambiguity contract](claim-identities.md) fixes scope/request
+encoding, replica consistency and operation-local retry permission. After an
+ambiguous acquire, exact positive resolution is required. Confirmed absence
+allows one same-UUID acquisition only at operation age below five minutes with
+the original context and all caller deadlines still live. Restart or lost
+operation state cannot reconstruct that permission.
+
+Graceful cancellation releases after local work joins. Abrupt claims remain
+until verified EC2 termination proof for their replica. TTL, deadline, lock loss
+and replacement never establish that proof.
 
 Policies: render global one running/eight waiting; password hash global two
 running/16 waiting; mail send global two running; MCP four running per user and
@@ -189,9 +194,10 @@ Render denial remains 503 Retry-After 1 through current owner/public callers.
 
 ## Strict local render affinity
 
-- Shared render claim is acquired before `renderjob.Queue` creates job ID,
-  capability, controller, snapshot state, or callbacks. Its admitted_at is the
-  start of the unchanged 20-second attempt deadline.
+- Queue may generate an inert job UUID before acquiring its shared render claim.
+  It installs no local job, capability, controller, snapshot or callback until
+  exact positive acquisition. The claim binds that UUID; the UUID alone grants
+  nothing. Its admitted_at starts the unchanged 20-second attempt deadline.
 - All authority remains in that queue. Database stores only claim ID, job ID,
   replica ID, state, and deadline. It never stores snapshot bytes, capability or
   controller hashes, artifact bytes, or terminal authority.
