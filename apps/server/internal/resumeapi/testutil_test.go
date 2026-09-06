@@ -20,13 +20,31 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/media/mediatest"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
+	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-const resumeAPITestOrigin = "https://resume-api.example.test"
+const (
+	resumeAPITestOrigin = "https://resume-api.example.test"
+	resumeAPITestPDF    = "%PDF-1.7\nresume-api-test"
+)
+
+type resumeAPITestPrintRenderer struct {
+	queue *renderjob.Queue
+}
+
+func (r *resumeAPITestPrintRenderer) Render(ctx context.Context, navigation renderjob.Navigation) ([]byte, error) {
+	if _, err := r.queue.Redeem(ctx, renderjob.Redemption{
+		ResumeID: navigation.ResumeID, JobID: navigation.JobID,
+		Audience: "nuxt-print", Capability: navigation.Capability,
+	}); err != nil {
+		return nil, err
+	}
+	return []byte(resumeAPITestPDF), nil
+}
 
 type resumeAPITestHarness struct {
 	ctx       context.Context
@@ -89,6 +107,18 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 		pool.Close(context.Background())
 		t.Fatalf("create public coordinator: %v", err)
 	}
+	renderer := &resumeAPITestPrintRenderer{}
+	printQueue, err := renderjob.New(renderjob.Config{Renderer: renderer})
+	if err != nil {
+		pool.Close(context.Background())
+		t.Fatalf("create print queue: %v", err)
+	}
+	renderer.queue = printQueue
+	t.Cleanup(func() {
+		if closeErr := printQueue.Close(); closeErr != nil {
+			t.Errorf("close print queue: %v", closeErr)
+		}
+	})
 
 	var suffix [12]byte
 	if _, randErr := rand.Read(suffix[:]); randErr != nil {
@@ -115,6 +145,7 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 		PublicOrigin:   resumeAPITestOrigin,
 		Coordinator:    coordinator,
 		RecoveryPool:   pool,
+		PrintQueue:     printQueue,
 	})
 	handler := api.New(slog.New(slog.NewTextHandler(io.Discard, nil)), pool, api.Options{}, nil, service.RegisterRoutes)
 	server := httptest.NewServer(handler)

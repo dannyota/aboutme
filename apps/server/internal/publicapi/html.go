@@ -142,6 +142,8 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 	}
 	var title, canonical, main *html.Node
 	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, charsetMeta, viewportMeta int
+	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
+	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
 	valid := true
 	var walk func(*html.Node)
 	walk = func(node *html.Node) {
@@ -161,6 +163,52 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 				}
 				if len(node.Attr) == 2 && attributeCount(node, "name") == 1 && attribute(node, "name") == "viewport" && attributeCount(node, "content") == 1 && attribute(node, "content") == "width=device-width, initial-scale=1" {
 					viewportMeta++
+					break
+				}
+				if len(node.Attr) == 2 && attributeCount(node, "property") == 1 && attributeCount(node, "content") == 1 {
+					switch attribute(node, "property") {
+					case "og:image":
+						if attribute(node, "content") != imageURL {
+							valid = false
+							return
+						}
+						ogImageMeta++
+					case "og:image:width":
+						if attribute(node, "content") != "1200" {
+							valid = false
+							return
+						}
+						ogImageWidthMeta++
+					case "og:image:height":
+						if attribute(node, "content") != "630" {
+							valid = false
+							return
+						}
+						ogImageHeightMeta++
+					default:
+						valid = false
+						return
+					}
+					break
+				}
+				if len(node.Attr) == 2 && attributeCount(node, "name") == 1 && attributeCount(node, "content") == 1 {
+					switch attribute(node, "name") {
+					case "twitter:card":
+						if attribute(node, "content") != "summary_large_image" {
+							valid = false
+							return
+						}
+						twitterCardMeta++
+					case "twitter:image":
+						if attribute(node, "content") != imageURL {
+							valid = false
+							return
+						}
+						twitterImageMeta++
+					default:
+						valid = false
+						return
+					}
 					break
 				}
 				valid = false
@@ -234,7 +282,7 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 		}
 	}
 	walk(document)
-	if !valid || title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || charsetMeta != 1 || viewportMeta != 1 || externalScripts != 1 {
+	if !valid || title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || charsetMeta != 1 || viewportMeta != 1 || externalScripts != 1 || ogImageMeta != 1 || ogImageWidthMeta != 1 || ogImageHeightMeta != 1 || twitterCardMeta != 1 || twitterImageMeta != 1 {
 		return false
 	}
 	if resume.Document.PersonalDetails.Photo == nil && images != 0 {

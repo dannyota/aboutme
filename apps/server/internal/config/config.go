@@ -15,6 +15,10 @@ import (
 
 // Config holds the server's validated runtime configuration.
 type Config struct {
+	// PrintListenAddr is the separate capability redemption listener.
+	PrintListenAddr string
+	// ChromiumPath identifies the pinned sandboxed browser executable.
+	ChromiumPath string
 	// Port is the TCP port the HTTP server listens on.
 	Port int
 	// ListenHost is the network interface address the HTTP server binds,
@@ -227,6 +231,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	printListenAddr, chromiumPath, err := loadPrintConfig(getenv, env)
+	if err != nil {
+		return Config{}, err
+	}
 	publicRenderOrigin := getenv("PUBLIC_RENDER_ORIGIN")
 	appBuildDigest := getenv("APP_BUILD_DIGEST")
 	publicRendererBuildDigest := getenv("PUBLIC_RENDERER_BUILD_DIGEST")
@@ -280,6 +288,8 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	cfg := Config{
+		PrintListenAddr:           printListenAddr,
+		ChromiumPath:              chromiumPath,
 		Port:                      port,
 		ListenHost:                listenHost,
 		DatabaseURL:               databaseURL,

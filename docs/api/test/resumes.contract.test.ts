@@ -17,6 +17,7 @@ const SURFACE: Record<string, Record<string, string>> = {
     delete: "deleteResume",
   },
   "/resumes/{id}/publish": { post: "publishResume" },
+  "/resumes/{id}/pdf": { get: "downloadResumePDF", head: "headResumePDF" },
   "/resumes/{id}/entries/{sectionKey}": { patch: "upsertResumeEntry" },
   "/resumes/{id}/entries/{sectionKey}/{entryId}": {
     delete: "deleteResumeEntry",
@@ -44,6 +45,14 @@ interface Success {
 // The exact success contract. A parent ETag is `"r<revision>"`; the photo GET's
 // object ETag is derived from the immutable normalized object key.
 const SUCCESS: Record<string, Success[]> = {
+  downloadResumePDF: [{
+    status: "200", mediaTypes: ["application/pdf"],
+    headers: ["Cache-Control", "Content-Disposition", "Content-Length"],
+  }],
+  headResumePDF: [{
+    status: "200", mediaTypes: ["application/pdf"],
+    headers: ["Cache-Control", "Content-Disposition", "Content-Length"],
+  }],
   listResumes: [
     {
       status: "200",
@@ -195,6 +204,18 @@ const itemDelete = (extra: Record<string, string[]> = {}) => {
 };
 
 const ERRORS: Record<string, Record<string, string[]>> = {
+  downloadResumePDF: {
+    "400": [...COMMON_400, "request_invalid"],
+    "401": ["session_required"], "404": ["resume_not_found"],
+    "405": ["method_not_allowed"], "429": ["rate_limited"],
+    "503": ["internal_error"],
+  },
+  headResumePDF: {
+    "400": [...COMMON_400, "request_invalid"],
+    "401": ["session_required"], "404": ["resume_not_found"],
+    "405": ["method_not_allowed"], "429": ["rate_limited"],
+    "503": ["internal_error"],
+  },
   listResumes: {
     "400": [...COMMON_400, "unsupported_schema_version"],
     "401": ["session_required"],
@@ -329,7 +350,7 @@ const codesIn = (response: any): string[] => {
 };
 
 describe("resume surface", () => {
-  it("declares the P2B surface plus the Phase 5A publish operation", () => {
+  it("declares the owner resume, publish, and PDF surface", () => {
     const declared = Object.keys(doc.paths).filter((p) =>
       p.startsWith("/resumes"),
     );
@@ -513,7 +534,10 @@ describe("resume surface", () => {
     for (const [path, method, id, operation] of operations()) {
       const refs = paramRefs(operation);
       const wanted = "#/components/parameters/SchemaVersionHeader";
-      if (id === "getResumePhoto") {
+      if (id === "downloadResumePDF" || id === "headResumePDF") {
+        expect(refs).not.toContain(wanted);
+        expect(refs).not.toContain("#/components/parameters/IfNoneMatch");
+      } else if (id === "getResumePhoto") {
         expect(
           refs,
           "binary photo GET is outside the version contract",
@@ -862,7 +886,7 @@ describe("Phase 5A publish and public wire contract", () => {
     ).toBe(true);
   });
 
-  it("declares only JSON and photo public API operations", () => {
+  it("declares JSON, photo, PDF, and share-image public operations", () => {
     const publicSurface = {
       "/public/resumes/{slug}": {
         get: "getPublicResume",
@@ -871,6 +895,14 @@ describe("Phase 5A publish and public wire contract", () => {
       "/public/resumes/{slug}/photo": {
         get: "getPublicResumePhoto",
         head: "headPublicResumePhoto",
+      },
+      "/public/resumes/{slug}/pdf": {
+        get: "getPublicResumePDF",
+        head: "headPublicResumePDF",
+      },
+      "/public/resumes/{slug}/og.png": {
+        get: "getPublicResumeShareImage",
+        head: "headPublicResumeShareImage",
       },
     } as const;
     for (const [path, methods] of Object.entries(publicSurface)) {
@@ -889,15 +921,19 @@ describe("Phase 5A publish and public wire contract", () => {
           "400",
           "404",
           "405",
+          ...(path.endsWith("/pdf") || path.endsWith("/og.png") ? ["429"] : []),
           "503",
         ]);
         const success = resolve(operation.responses["200"]);
         const wantedMedia = path.endsWith("/photo")
           ? ["image/jpeg", "image/png"]
-          : ["application/json"];
+          : path.endsWith("/pdf")
+            ? ["application/pdf"]
+            : path.endsWith("/og.png") ? ["image/png"] : ["application/json"];
         expect(Object.keys(success.content ?? {}).sort()).toEqual(wantedMedia);
         expect(Object.keys(success.headers ?? {}).sort()).toEqual([
           "Cache-Control",
+          ...(path.endsWith("/pdf") ? ["Content-Disposition"] : []),
           "Content-Length",
           "ETag",
         ]);
@@ -905,6 +941,7 @@ describe("Phase 5A publish and public wire contract", () => {
         expect(notModified.content).toBeUndefined();
         expect(Object.keys(notModified.headers ?? {}).sort()).toEqual([
           "Cache-Control",
+          ...(path.endsWith("/pdf") ? ["Content-Disposition"] : []),
           "Content-Type",
           "ETag",
         ]);
@@ -946,6 +983,8 @@ describe("Phase 5A publish and public wire contract", () => {
       "/robots.txt",
       "/llms.txt",
       "/internal-render/public",
+      "/internal-render/print/redeem",
+      "/print/{id}",
     ]) {
       expect(doc.paths[proseOnly]).toBeUndefined();
     }

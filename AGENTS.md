@@ -116,6 +116,7 @@ Ruled development ports are localhost `20000`–`21000`:
 | 20432       | Shared PostgreSQL container                       |
 | 20080       | Native Caddy origin                               |
 | 20081       | Native Go server                                  |
+| 20082       | Private print redemption                          |
 | 20030       | Nuxt development server                           |
 | 20090–21000 | Test harnesses and explicitly pinned stub servers |
 

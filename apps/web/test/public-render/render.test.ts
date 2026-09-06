@@ -86,6 +86,17 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '<link rel="canonical" href="https://resume.example/ada1">',
     );
+    expect(html).toContain(
+      '<meta property="og:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+    );
+    expect(html).toContain('<meta property="og:image:width" content="1200">');
+    expect(html).toContain('<meta property="og:image:height" content="630">');
+    expect(html).toContain(
+      '<meta name="twitter:card" content="summary_large_image">',
+    );
+    expect(html).toContain(
+      '<meta name="twitter:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+    );
     expect(html).toContain('<main id="public-resume" data-revision="1">');
     const skipLinks = html.match(
       /<a href="#public-resume">Skip to content<\/a>/gu,
@@ -112,8 +123,15 @@ describe('public Vue worker document', () => {
   it('omits the JSON-LD script when discovery is disabled', async () => {
     const value = request();
     value.discoveryEnabled = false;
-    await expect(renderPublicResume(value)).resolves.not.toContain(
+    const html = await renderPublicResume(value);
+    expect(html).not.toContain(
       'application/ld+json',
+    );
+    expect(html).toContain(
+      '<meta property="og:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+    );
+    expect(html).toContain(
+      '<meta name="twitter:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
     );
   });
 });
