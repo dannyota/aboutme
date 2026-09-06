@@ -111,7 +111,8 @@ consume the same workload row.
 | Peak SSE connections       |      10 |          100 |           2,000 |      2,000 |        50 |           500 |       2,000 |
 | Nightly restore runs       |       3 |           14 |              14 |         30 |        30 |            30 |          30 |
 | Hours per restore          |       1 |            2 |               4 |          4 |         1 |             2 |           4 |
-| ECR GB-month               |       4 |            6 |              20 |         20 |         6 |            12 |          40 |
+| ECR peak GB                |       4 |            6 |              20 |         20 |         6 |            12 |          40 |
+| Route 53 zone bill months  |       1 |            1 |               1 |          1 |         1 |             1 |           1 |
 | RDS excess backup GB-month |       0 |            5 |              20 |         20 |         0 |            25 |          50 |
 | Cross-AZ database GB       |     0.1 |            1 |              10 |         10 |         1 |            10 |         100 |
 | Other internet egress GB   |     0.1 |            1 |              10 |         10 |         1 |            10 |         100 |
@@ -160,8 +161,11 @@ task reservations and placement headroom even though they add no EC2 charge
 while they fit. The in-process heavy-work permit covers only photo normalization
 and Chromium in the Go API; it does not serialize these CLI and ops tasks.
 Concurrent UAT measurements must prove host headroom, and missed schedules must
-alarm. The conditional Fargate estimate prices a 0.25-vCPU, 0.5-GB task for each
-assumed duration.
+alarm. The conditional Fargate estimate prices a 0.25-vCPU, 0.5-GB task and one
+ephemeral public IPv4 address for each assumed duration. Every modeled task runs
+longer than the 60-second IPv4 billing minimum. AWS bills standard public IPv4
+addresses per second after that minimum; it does not round these jobs to a full
+hour. See [Amazon VPC pricing](https://aws.amazon.com/vpc/pricing/).
 
 Nightly restore verification creates a real private RDS instance from the latest
 automated snapshot. It uses the source instance's class and storage, runs schema
@@ -265,12 +269,24 @@ no final or manual RDS snapshot. The model assumes teardown deletes retained
 automated backups; retaining either backup type would continue the explicit
 `$0.095/GB-month` excess sensitivity until deletion. Teardown does not destroy
 the state bucket/key, the UAT secrets key, ECR, or the adopted shared-email
-stack. The UAT totals include one post-destroy month of the two retained KMS
-keys and ECR. They include the full six-month storage liability for the UAT run
-logs and expose its one-month run rate separately. An ordinary stopped RDS
-instance is different: storage and backups remain charged, and RDS automatically
-restarts a stopped instance after seven days. Stopping is not the modeled
-disposal path.
+stack. The UAT totals charge peak ECR and state storage for the active fraction
+of a 730-hour month plus one post-destroy month. They use that same horizon to
+allocate the assumed existing shared-email metrics and alarms. This allocation
+is a gross share of an existing persistent cost, not a new UAT-only resource.
+The two retained KMS keys also include one post-destroy month. The totals
+include the full six-month storage liability for the UAT run logs and expose its
+one-month run rate separately. An ordinary stopped RDS instance is different:
+storage and backups remain charged, and RDS automatically restarts a stopped
+instance after seven days. Stopping is not the modeled disposal path.
+
+The conditional Fargate rows assume one Route 53 private hosted-zone billing
+month for every selected scenario. The UAT start and end dates are not fixed. A
+run can use one month only when the zone is created and deleted within one
+sufficiently long calendar billing month; crossing another month adds `$0.50`.
+The 730-hour UAT row is a monthly stress comparison, not a promise that every
+dated 730-hour interval incurs one zone fee. Production uses one steady billing
+month. Private hosted-zone DNS queries are free. See
+[Route 53 pricing](https://aws.amazon.com/route53/pricing/).
 
 The accepted DNS-only record stays in the existing Cloudflare `aboutme.vn` zone.
 Cloudflare offers free DNS on every plan and does not charge DNS queries on

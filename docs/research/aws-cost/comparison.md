@@ -26,19 +26,19 @@ email, monitoring, restore, and build inputs from `scenarios.json`.
 
 | Scenario                     | EC2 + RDS | EC2 + Aurora | Fargate + RDS |
 | ---------------------------- | --------: | -----------: | ------------: |
-| UAT low, 72 hours            |    $13.36 |       $18.95 |        $17.48 |
-| UAT expected, 14 days        |    $44.87 |       $88.65 |        $64.35 |
-| UAT high, same 14 days       |    $95.32 |      $223.56 |       $117.41 |
-| UAT stress, 730 hours        |   $136.69 |      $414.17 |       $180.07 |
-| Production low, monthly      |   $117.72 |      $153.72 |       $143.92 |
-| Production expected, monthly |   $162.98 |      $237.08 |       $193.15 |
-| Production stress, monthly   |   $581.07 |      $853.01 |       $645.05 |
+| UAT low, 72 hours            |    $13.68 |       $19.27 |        $18.29 |
+| UAT expected, 14 days        |    $46.43 |       $90.22 |        $66.25 |
+| UAT high, same 14 days       |    $97.53 |      $225.77 |       $116.48 |
+| UAT stress, 730 hours        |   $141.49 |      $418.98 |       $182.16 |
+| Production low, monthly      |   $117.72 |      $153.72 |       $144.35 |
+| Production expected, monthly |   $162.98 |      $237.08 |       $190.14 |
+| Production stress, monthly   |   $581.07 |      $853.01 |       $606.34 |
 
 The UAT high row is the useful budget case. It keeps the proposed 14-day
 lifetime while applying stress traffic, logs, backups, credits, restore
 duration, build frequency, and a four-hour production-shape drill. Its accepted
-option is `$86.47` AWS plus `$8.85` gross GitHub usage. A proposed `$100` AWS
-authorization ceiling therefore leaves `$13.53` above the modeled high case. The
+option is `$88.68` AWS plus `$8.85` gross GitHub usage. A proposed `$100` AWS
+authorization ceiling therefore leaves `$11.32` above the modeled high case. The
 alert and teardown controls needed to enforce a ceiling do not exist yet. AWS
 budget data can be delayed, and stopping resources leaves storage, address, log,
 key, and registry charges. Task 9.3 must state any control as proposed and
@@ -52,9 +52,9 @@ Fargate restore includes the scheduled task while it waits for RDS.
 
 | Expected 14-day UAT | Setup | Active | Seven-day idle | Retained | Restore/jobs | Gross total |
 | ------------------- | ----: | -----: | -------------: | -------: | -----------: | ----------: |
-| EC2 + RDS           | $3.19 | $33.72 |          $2.14 |    $7.16 |        $0.81 |      $44.87 |
-| EC2 + Aurora        | $3.29 | $75.68 |         $18.81 |    $6.80 |        $2.88 |      $88.65 |
-| Fargate + RDS       | $3.10 | $52.16 |          $6.72 |    $7.16 |        $1.94 |      $64.35 |
+| EC2 + RDS           | $3.19 | $33.72 |          $2.14 |    $8.72 |        $0.81 |      $46.43 |
+| EC2 + Aurora        | $3.29 | $75.68 |         $18.81 |    $8.36 |        $2.88 |      $90.22 |
+| Fargate + RDS       | $3.10 | $52.03 |          $6.72 |    $8.72 |        $2.39 |      $66.25 |
 
 The setup column includes GitHub workflows and the production-shape drill. The
 drill does not resize the 20 GB UAT database in place. It prices a separate 50
@@ -62,13 +62,15 @@ GB `db.t4g.small` for four hours and the EC2 host-class rate difference, then
 requires exact-owner deletion. RDS allocated storage cannot be shrunk back to 20
 GB.
 
-Retained UAT cost includes one post-destroy month of the two customer-managed
-KMS keys and ECR, the assumed shared SES metrics and alarms, backup-growth
-sensitivity, the state bucket, and the full six-month storage liability for the
-run's logs. In the expected case, one month of those UAT logs is `$0.06`; the
-included six-month liability is `$0.36`. The adopted email stack persists
-outside UAT state. Its actual metric and alarm inventory must replace the
-assumed seven of each.
+Retained UAT cost charges peak ECR and state storage for the active fraction of
+a month plus one post-destroy month. The assumed existing shared SES metrics and
+alarms use the same allocation horizon. This is a gross allocation of the
+persistent stack, not a new UAT-only charge. The two customer-managed KMS keys
+include one post-destroy month. Retained cost also includes backup-growth
+sensitivity and the full six-month storage liability for the run's logs. In the
+expected case, one month of those UAT logs is `$0.06`; the included six-month
+liability is `$0.36`. The adopted email stack persists outside UAT state. Its
+actual metric and alarm inventory must replace the assumed seven of each.
 
 An idle environment is not a safe indefinite savings mode. The EC2 + RDS
 seven-day figure retains the root disk, public IPv4 address, and database
@@ -86,7 +88,7 @@ Expected production lifecycle cost is:
 | ------------------------- | ----: | ------: | -------: | ------------: | ----------: |
 | EC2 + RDS                 | $5.30 | $142.88 |   $11.18 |         $3.63 |     $162.98 |
 | EC2 + Aurora              | $5.30 | $215.95 |    $9.38 |         $6.45 |     $237.08 |
-| Fargate + RDS             | $5.30 | $170.61 |   $11.18 | $2.44 + $3.63 |     $193.15 |
+| Fargate + RDS             | $5.30 | $166.61 |   $11.18 | $3.43 + $3.63 |     $190.14 |
 
 ## Option 1: ECS on EC2 with RDS
 
@@ -165,20 +167,29 @@ and
 
 The priced redesign is deliberately explicit: one combined Caddy + Go task at
 0.5 vCPU and 1 GB, one Nuxt task at 0.25 vCPU and 0.5 GB, one single-AZ Network
-Load Balancer with one capacity unit, three public IPv4 addresses, and a Route
-53 private discovery zone for Caddy to find Nuxt. The current 512 MiB Go plus
+Load Balancer with one capacity unit, three long-running public IPv4 addresses,
+one ephemeral public IPv4 for each scheduled task's duration, and a Route 53
+private discovery zone for Caddy to find Nuxt. The current 512 MiB Go plus
 Chromium task limit cannot be carried into that combined task unchanged without
 deciding whether Caddy shares the limit or the task memory increases. Fargate
 allows 512 MiB only with 0.25 vCPU; 0.5 vCPU starts at 1 GB. A 0.25-vCPU form is
 unmeasured, not proven to fail.
 
 The public-task-IP estimate changes the exposure model and still needs security
-group and discovery design. Private tasks behind one NAT gateway add `$20.59` to
-expected UAT or `$50.74` to the stress 730-hour case when the image-volume proxy
-and other egress pass through it. Interface endpoints are cataloged at
-`$0.013/endpoint-hour` plus processing, but the required ECR, Logs, SSM, and
-other endpoint set is not fixed. Either network form needs an ADR and a complete
-price update.
+group and discovery design. Standard public IPv4 addresses are billed per second
+with a 60-second minimum; every modeled scheduled task exceeds that minimum. See
+[Amazon VPC pricing](https://aws.amazon.com/vpc/pricing/). The gross NAT gateway
+and processing components are `$20.59` for expected UAT and `$50.74` for the
+stress 730-hour case when the image-volume proxy and other egress pass through
+it. Those figures are not net private-topology increments: private tasks remove
+service and job public IPs but require a NAT public IP and a complete network
+recalculation. Interface endpoints are cataloged at `$0.013/endpoint-hour` plus
+processing, but the required ECR, Logs, SSM, and other endpoint set is not
+fixed. Either network form needs an ADR and a complete price update. Route 53
+private hosted-zone queries are free, while the `$0.50` zone fee is not
+prorated. The model selects one billing month; each extra month crossed by the
+as-yet-undated UAT run adds `$0.50`. See
+[Route 53 pricing](https://aws.amazon.com/route53/pricing/).
 
 Fargate can add only `SYS_PTRACE` as a Linux capability. The application keeps
 Chromium sandboxing enabled. The current image, user namespace, seccomp, and
@@ -188,7 +199,7 @@ sandbox behavior have not been proven on Fargate ARM64. See the
 Fargate removes EC2 host patching and task placement against a fixed instance.
 It adds NLB health and capacity, service discovery, per-task address and
 security-group policy, and per-run job compute. It remains single-task capacity
-because horizontal scaling is not authorized. Expected production costs `$30.17`
+because horizontal scaling is not authorized. Expected production costs `$27.16`
 more than EC2 + RDS before a private-network redesign.
 
 ## Shared invariants and edge behavior
@@ -259,6 +270,7 @@ calculator inputs:
 | 1,000 CloudFront invalidation paths at the gross marginal rate |           $5.00 |
 | One continuously active custom metric                          |     $0.30/month |
 | One standard alarm                                             |     $0.10/month |
+| Extra Route 53 private hosted-zone billing month               |           $0.50 |
 | First KMS rotation for three retained keys                     |     $3.00/month |
 
 Render count has no independent per-render charge on the accepted fixed EC2

@@ -1,7 +1,7 @@
 # Phase 9 — AWS Singapore cost research
 
 Status: **In progress** (2026-09-06). Phase 8 is merged. Research and the priced
-recommendation are ready for phase review; no budget amount has been approved.
+recommendation are recorded; no budget amount has been approved.
 
 **Goal:** choose a costed UAT deployment at `uat.aboutme.vn` in AWS Singapore
 (`ap-southeast-1`) and estimate later production costs separately.
@@ -47,8 +47,8 @@ A fresh Sol reviewer checks the completed comparison and recommendation.
 ## Outputs and handoff
 
 Task outputs live in `docs/research/aws-cost/`: `workload.md`, `pricing.csv`,
-`comparison.md`, and `recommendation.md`. These are future deliverables, not
-existing evidence. Account identifiers, private invoices, credentials, and
+`comparison.md`, and `recommendation.md`, with saved scenario inputs and a
+reproducible calculator. Account identifiers, private invoices, credentials, and
 billing exports do not belong in this public repository.
 
 The recommendation states a spending ceiling and UAT lifetime, including cleanup

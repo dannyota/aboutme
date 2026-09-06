@@ -2,8 +2,8 @@
 
 Recommend a 14-day Singapore UAT on the existing ECS-on-EC2, RDS PostgreSQL, and
 private S3 design. The expected modeled cost is
-**$44.87**, including gross
-GitHub Actions usage. The same 14-day high-usage case is **$95.32**.
+**$46.43**, including gross
+GitHub Actions usage. The same 14-day high-usage case is **$97.53**.
 Prices were retrieved on 2026-09-06; amounts are USD before tax.
 
 Status: **proposed; spending amount awaits the owner**. Region, UAT hostname,
@@ -48,8 +48,8 @@ topology change is selected here.
 
 | Scenario                  |     AWS | Gross Actions usage | Combined |
 | ------------------------- | ------: | ------------------: | -------: |
-| Expected 14-day UAT       |  $42.01 |               $2.86 |   $44.87 |
-| High-usage 14-day UAT     |  $86.47 |               $8.85 |   $95.32 |
+| Expected 14-day UAT       |  $43.57 |               $2.86 |   $46.43 |
+| High-usage 14-day UAT     |  $88.68 |               $8.85 |   $97.53 |
 | Expected production month | $157.68 |               $5.30 |  $162.98 |
 | Stress production month   | $564.07 |              $17.00 |  $581.07 |
 
@@ -59,10 +59,11 @@ owner, not existing controls. They cover the modeled campaign and stated
 retention charges. They exclude tax and a new GitHub subscription. Production
 figures are planning scenarios and do not authorize launch or production spend.
 
-The totals include the full six-month log-storage liability, one modeled month
-of retained keys and registry/state storage, shared email monitoring, backup
-growth, nightly restore resources, and the production-shape drill. They are not
-a quote or an upper bound on arbitrary traffic or resource drift. Read
+The totals include the full six-month log-storage liability, keys and
+registry/state storage through active UAT and one month after teardown, shared
+email monitoring over that same period, backup growth, nightly restore
+resources, and the production-shape drill. They are not a quote or an upper
+bound on arbitrary traffic or resource drift. Read
 [scenarios.json](scenarios.json), [pricing.csv](pricing.csv), and the line items
 in [results.csv](results.csv) before changing a workload assumption.
 
@@ -82,6 +83,14 @@ Before activation, Task 10.15 records the owner, start time, expiry time, exact
 resource inventory, and budget scope. Separate AWS UAT charges from other
 account workloads. Record shared-resource allocation explicitly.
 
+Verify that each
+[budget filter](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-create-filters.html)
+captures its intended charges. A tag filter requires an activated
+cost-allocation tag. If the tag is not active, start with a broader account
+budget and reconcile it against the UAT inventory; do not create a filter that
+silently misses new charges. Include global edge charges and untagged shared
+costs in the ledger.
+
 Use a custom-period AWS cost budget from activation through the modeled first
 retention month, plus a monthly retained-resource budget after that. The 14-day
 active expiry remains a separate scheduled operator check. Track the remaining
@@ -100,6 +109,12 @@ budget reports or budget actions are selected.
 - Set the Actions usage budget to stop paid usage at $10 where the account
   supports it. Reserve an operator-run cleanup path so a blocked Actions run
   cannot leave UAT resources running.
+- For retained resources, alert at
+  $6 actual monthly cost and a forecast above
+  $8. Remove eligible expired
+  resources and seek a priced extension before the next month if required
+  retention would exceed the limit. Preserve keys and images still needed for
+  decryption, promotion, or rollback.
 
 Check the inventory and forecast daily; use the saved model if AWS cannot yet
 produce a forecast. AWS budget data typically refreshes every 8–12 hours, so

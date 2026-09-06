@@ -82,6 +82,9 @@ def add_shared(
             else "production_retained_months"
         ]
     )
+    persistent_charge_months = (
+        fraction + retained_months if environment == "uat" else retained_months
+    )
 
     add(
         rows,
@@ -183,8 +186,8 @@ def add_shared(
             note="Counts include the Phase 10 alarm inventory and standard ECS Container Insights estimate.",
         )
     for item, quantity, price_id, unit in (
-        ("Shared SES custom metrics", decimal(assumptions["shared_email_custom_metrics"]), "cloudwatch_custom_metric", "metric-month"),
-        ("Shared SES standard alarms", decimal(assumptions["shared_email_standard_alarms"]), "cloudwatch_alarm", "alarm-month"),
+        ("Shared SES custom metrics", decimal(assumptions["shared_email_custom_metrics"]) * persistent_charge_months, "cloudwatch_custom_metric", "metric-month"),
+        ("Shared SES standard alarms", decimal(assumptions["shared_email_standard_alarms"]) * persistent_charge_months, "cloudwatch_alarm", "alarm-month"),
     ):
         add(
             rows,
@@ -197,7 +200,7 @@ def add_shared(
             quantity=quantity,
             unit=unit,
             rate=prices[price_id],
-            note="Assumed persistent shared-email inventory; verify during stack adoption.",
+            note="Assumed existing shared-email inventory allocated across the UAT active-plus-retained horizon or one production month; verify during stack adoption.",
         )
     log_storage_months = Decimal("6")
     add(
@@ -371,8 +374,8 @@ def add_shared(
     )
 
     for item, quantity, price_id in (
-        ("Shared ECR image storage", decimal(scenario["ecr_gb_month"]), "ecr_storage"),
-        ("OpenTofu state bucket storage", decimal(assumptions["state_storage_gb"]), "s3_standard_storage"),
+        ("Shared ECR image storage", decimal(scenario["ecr_peak_gb"]) * persistent_charge_months, "ecr_storage"),
+        ("OpenTofu state bucket storage", decimal(assumptions["state_peak_gb"]) * persistent_charge_months, "s3_standard_storage"),
     ):
         add(
             rows,
@@ -385,7 +388,7 @@ def add_shared(
             quantity=quantity,
             unit="GB-month",
             rate=prices[price_id],
-            note="Bootstrap resource persists outside disposable UAT state.",
+            note="Peak storage is charged across the UAT active-plus-retained horizon or one production month; the bootstrap resource persists outside disposable UAT state.",
         )
     add(
         rows,
@@ -395,7 +398,7 @@ def add_shared(
         lifecycle="setup",
         category="registry-and-state",
         item="ECR in-Region image transfer",
-        quantity=decimal(scenario["ecr_gb_month"]) * decimal(scenario["github_workflow_cycles"]),
+        quantity=decimal(scenario["ecr_peak_gb"]) * decimal(scenario["github_workflow_cycles"]),
         unit="GB",
         rate=prices["ecr_in_region_transfer"],
         note="A conservative image-volume proxy; pushes into ECR and pulls to Singapore ECS or EC2 are free.",
@@ -539,7 +542,7 @@ def add_fargate_compute(
         ("Single-AZ NLB", hours, "nlb_hour", "nlb-hour"),
         ("One NLB capacity unit", decimal(assumptions["fargate_nlcu"]) * hours, "nlb_lcu", "NLCU-hour"),
         ("Public IPv4 addresses", decimal(assumptions["fargate_public_ipv4_count"]) * hours, "public_ipv4", "IP-hour"),
-        ("Route 53 private discovery zone", hours / decimal(assumptions["month_hours"]), "route53_private_zone", "hosted-zone-month"),
+        ("Route 53 private discovery zone", decimal(scenario["route53_private_zone_billing_months"]), "route53_private_zone", "hosted-zone-month"),
         ("Route 53 discovery queries", decimal(scenario["requests"]), "route53_private_query", "query"),
     ):
         add(
@@ -570,6 +573,7 @@ def add_fargate_compute(
     for item, quantity, price_id, unit in (
         ("Fargate scheduled-job vCPU", job_hours * decimal(assumptions["fargate_job_vcpu"]), "fargate_arm_vcpu", "vCPU-hour"),
         ("Fargate scheduled-job memory", job_hours * decimal(assumptions["fargate_job_memory_gb"]), "fargate_arm_memory", "GB-hour"),
+        ("Fargate scheduled-job public IPv4", job_hours, "public_ipv4", "IP-hour"),
     ):
         add(
             rows,
@@ -582,7 +586,7 @@ def add_fargate_compute(
             quantity=quantity,
             unit=unit,
             rate=prices[price_id],
-            note="Per-run duration assumption includes the task waiting through the nightly restore.",
+            note="Per-run duration includes the task waiting through the nightly restore; each public task uses one ephemeral public IPv4 for that duration.",
         )
 
 
@@ -670,11 +674,25 @@ def add_option_sensitivities(
         included=False,
     )
     if option == "fargate_rds":
+        add(
+            rows,
+            scenario=scenario,
+            option=option,
+            provider="AWS",
+            lifecycle="sensitivity",
+            category="network",
+            item="ROUTE53_ADDITIONAL_BILLING_MONTH_SENSITIVITY",
+            quantity=Decimal("1"),
+            unit="hosted-zone-month",
+            rate=prices["route53_private_zone"],
+            note="Excluded sensitivity for each additional Route 53 private hosted-zone billing month crossed by UAT.",
+            included=False,
+        )
         nat_cost = (
             decimal(scenario["active_hours"]) * prices["nat_gateway_hour"]
             + (
                 decimal(scenario["non_cloudfront_egress_gb"])
-                + decimal(scenario["ecr_gb_month"])
+                + decimal(scenario["ecr_peak_gb"])
                 * decimal(scenario["github_workflow_cycles"])
             )
             * prices["nat_gateway_data"]
@@ -690,7 +708,7 @@ def add_option_sensitivities(
             quantity=Decimal("1"),
             unit="total",
             rate=nat_cost,
-            note="Excluded alternative to public task IPs; one NAT gateway plus scenario data processing.",
+            note="Excluded gross NAT gateway and processing component, not a net private-topology increment; private tasks remove service and job IPs but require a NAT public IP.",
             included=False,
         )
 
