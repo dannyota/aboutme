@@ -110,15 +110,19 @@ statement/lock timeout returns unavailable and leaves admission closed. It does
 not guess or compensate.
 
 Definite rollback changes closing to rolled_back in its transaction. Ambiguous
-commit reads transition state and existing mutation/idempotency evidence through
-an independent pool connection. committed proves success. Recovery selects the
-transition FOR UPDATE; if it obtains the lock and still sees closing, no open
-business transaction holds the execution fence, so it may atomically roll back
-when the durable evidence is consistent. rolled_back proves no business change
-from that transition committed. Missing or contradictory evidence keeps every
-affected fence closed and follows the fixed
-[unresolved evidence contract](transition-storage.md#unresolved-evidence-boundary).
-No caller-provided reason can mark unresolved.
+commit uses the atomic transition record as its outcome authority. Independent
+[recovery](transition-recovery.md) locks the parent, validates exact identity
+and, only for closing, checks unchanged expected generations without business
+row locks. It then rolls back or remains unavailable. rolled_back proves no
+business change from that transition committed. Response receipts govern exact
+HTTP replay only. No unresolved writer is installed.
+
+Before changing a local fence, R2 loads the fixed
+[reconciliation snapshot](transition-reconciliation.md) while holding its local
+apply mutex. Later generations and immutable retirement evidence survive old
+notifications and restart; every current closing/unresolved blocker remains
+closed. No PostgreSQL business/transition lock is held while waiting for that
+mutex.
 
 If the initiator has been fenced by exact EC2 termination proof,
 lifecycle-command may roll back its closing transition through the separate

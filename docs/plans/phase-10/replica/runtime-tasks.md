@@ -82,9 +82,10 @@ Live entry, clean reuse and physical discard proof now pass against B1.
 After B3, [R1.3 membership schema](membership-schema.md) installs the durable
 membership and lifecycle ledger tables without exposing unimplemented
 operations. [R1.4 transition schema](transition-schema.md) follows with exact
-targets, acknowledgements and terminal outcomes. Later R1 slices install
-admission schema and the fixed definers; R1 exits only after their complete
-store and real-role proof.
+targets, acknowledgements and terminal outcomes. Then
+[R1.5 claim schema](claim-schema.md) installs atomic claim scopes and release
+receipts. Later R1 slices install rate schema and the fixed definers; R1 exits
+only after their complete store and real-role proof.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
@@ -110,11 +111,12 @@ original deadline, parent-first execution fence and separate lifecycle recovery
 of a proved fenced initiator. R1 installs their real named-role grants. R8 owns
 composition and readiness; it introduces no additional SQL privilege gate.
 
-Before assigning callable unresolved recovery, R3's design must name the exact
-durable mutation/idempotency evidence and fixed resolver in
-[transition storage](../../../design/scaling/transition-storage.md). R1 then
-implements that SQL contract; R3 composes it after R1. The schema slice grants
-no reason-taking unresolved operation.
+[Recovery evidence](../../../design/scaling/transition-recovery.md) fixes the
+ordinary parent-locked rollback and atomic outcome authority. No unresolved
+writer is installed. R1 adds the separate
+[reconciliation read](../../../design/scaling/transition-reconciliation.md) and
+private store value; R2 holds its local apply mutex across that one read, driver
+cleanup and fence application. R3 validates response receipts separately.
 
 [Exclusive lifecycle entry](../../../design/scaling/lifecycle-write-entry.md)
 defines the only two wake methods, owner marker, fixed assertion catalog and
@@ -221,12 +223,13 @@ separately to avoid overlap.
 
 Fail first: every mutation preserves idempotency recheck; expected generation
 mismatch; fleet close before business callback; timeout/cancel before SQL;
-state-CAS loser; definite rollback; commit response loss resolved from durable
-transition plus idempotency evidence; contradictory proof unready; account
-deletion global/UUID lock order, three plan attempts, session/email recheck,
-media-reference and job atomicity. Prove no object write or compensation
-repeats. Migrate resume/account rate callers to frozen R5 interfaces within
-these owned packages; no separate admission author touches them.
+state-CAS loser; definite rollback; commit response loss resolved from the
+atomic transition with separate response-receipt validation; unsafe closing
+recovery unready; account deletion global/UUID lock order, three plan attempts,
+session/email recheck, media-reference and job atomicity. Prove no object write
+or compensation repeats. Migrate resume/account rate callers to frozen R5
+interfaces within these owned packages; no separate admission author touches
+them.
 
 Narrow command, under apps/server:
 

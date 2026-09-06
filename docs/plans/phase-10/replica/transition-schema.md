@@ -128,8 +128,9 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
 The schema does not claim proof of historical membership selection, current
 revision checks, local close/join, original caller deadline, notification
 delivery, external fencing authority or commit capability. Their fixed
-operations and callers must prove them later. No unresolved mutator is callable;
-its durable evidence resolver needs a contract before R1 grants that operation.
+operations and callers must prove them later. R1/R3 install no unresolved
+mutator; [recovery evidence](../../../design/scaling/transition-recovery.md)
+defines parent-locked rollback and the outcome authority.
 
 ## Task 3: Verify and release to root
 
