@@ -19,6 +19,7 @@ import (
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
+	"github.com/dannyota/aboutme/apps/server/internal/accountapi"
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
@@ -52,7 +53,7 @@ type publicRuntime struct {
 }
 
 func main() {
-	if err := run(); err != nil {
+	if err := runCommand(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -139,6 +140,16 @@ func run() error {
 		return errors.New("initialize private print handler")
 	}
 	sessionManager := auth.NewSessionManagerWithPool(pool)
+	accountService, err := accountapi.New(accountapi.Dependencies{
+		Pool: pool, Sessions: sessionManager, Coordinator: coordinator,
+		Media: blobs, Projector: projector, Logger: logger,
+		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		PublicOrigin:   cfg.PublicOrigin, Now: time.Now,
+	})
+	if err != nil {
+		return fmt.Errorf("create account service: %w", err)
+	}
+	authService.SetAccountDeleteHandler(accountService.DeleteHandler())
 	hub, err := realtime.NewHub(realtime.Config{})
 	if err != nil {
 		return fmt.Errorf("create realtime hub: %w", err)
@@ -199,7 +210,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
+	}, publicService, authService.RegisterRoutes, accountService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
