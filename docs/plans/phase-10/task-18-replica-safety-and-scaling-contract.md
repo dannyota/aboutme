@@ -31,11 +31,13 @@ Write a focused design and its implementation-task split before changing runtime
 code. The design must choose exact state ownership, transaction boundaries,
 identifiers, expiry rules, retry behavior, and observability for:
 
-1. Shared publication-generation fences and admitted-request draining. A state
-   change must wait for every request admitted under the old generation across
-   all replicas. Account deletion, private-media reference removal, public
-   artifact revocation, and discovery-generation changes retain their existing
-   ordering and five-second bounds.
+1. Shared publication-generation fences and admitted-request draining.
+   `NonDraining` changes close new admission while old admitted work may finish.
+   Revoking and discovery changes cancel and drain the applicable old-generation
+   work across all replicas. Account deletion, private-media reference removal,
+   public artifact revocation, and discovery-generation changes retain their
+   existing ordering and five-second bounds under
+   [ADR 0022](../../adr/0022-public-artifact-revocation.md).
 2. Transient failure and ambiguous commit handling. A replica must fail closed
    when shared coordination is unavailable. Retries cannot turn a possibly
    committed mutation, capability redemption, artifact completion, or object
@@ -94,8 +96,9 @@ their contracts. A fresh phase reviewer checks the invariants above by name.
 ## Local proof before infrastructure wiring
 
 - [ ] Multi-process tests prove publication and discovery fences block new
-      admissions, drain old-generation work fleet-wide, and fail closed on
-      coordinator loss, timeout, replica crash, and ambiguous completion.
+      admissions, preserve `NonDraining`, drain revoking and discovery work
+      fleet-wide, and fail closed on coordinator loss, timeout, replica crash,
+      and ambiguous completion.
 - [ ] Render tests prove one claim, one successful capability redemption, one
       authorized terminal completion, and origin affinity across two replicas.
       Claimant death either fails the job or retries only within the original

@@ -1,7 +1,8 @@
 # Phase 10 — Infrastructure and AWS UAT
 
-Status: **Planned** (2026-09-05). The owner authorized UAT in AWS Singapore and
-Cloudflare DNS for `uat.aboutme.vn`. Nothing has been deployed by this phase.
+Status: **In progress: replica design** (2026-09-06). Phase 9 is merged. The
+owner authorized UAT in AWS Singapore and Cloudflare DNS for `uat.aboutme.vn`.
+Task 10.18 design is under review. Nothing has been deployed by this phase.
 
 **Goal:** deploy the completed web v1 to `https://uat.aboutme.vn`, prove its
 user workflows, and rehearse the operational requirements before production.
