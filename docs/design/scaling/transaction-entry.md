@@ -214,6 +214,10 @@ receiver is not transaction-bound.
 
 ## Migration policy
 
+The [dedicated migrator](migrator.md) fixes the runner API and staged history
+validation. [Provisioning and adoption](migration-provisioning.md) fixes the
+exact ownership transition for fresh and existing databases.
+
 The migrator uses one dedicated backend for runtime_enter_migrator, Goose's
 session lock, all migrations and runtime_exit_migrator. Entry takes the session
 shared barrier before Goose or table reads, checks the gate and creates an

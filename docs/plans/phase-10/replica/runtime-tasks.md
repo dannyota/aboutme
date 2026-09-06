@@ -79,6 +79,10 @@ Start with [R1.1 cluster role bootstrap](role-bootstrap.md), then
 checked and committed as `f45cf93`; it replaces the raw starter at `986fe44`.
 Live entry proof remains pending.
 
+[B3 migrator composition](migrator-composition.md) protects history before any
+runtime migration after 00013. Its fixed object manifest and local adoption
+preserve existing database rows while converging ownership on runtime_owner.
+
 Owner paths: root-assigned migration number, apps/server/sql runtime query
 source or approved new SQL files, generated store output, store/migration tests.
 These are normally root-owned; root must explicitly assign and serialize them.

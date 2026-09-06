@@ -77,6 +77,10 @@ root assigns the schema slice.
   SECURITY DEFINER functions. Revoke ALL on each new table, sequence and
   function from PUBLIC. Revoke CREATE on schema public from app,
   lifecycle-command, fencing-proof, and maintenance roles.
+- Before later runtime migrations, fresh migration 00014 and fixed local/test
+  adoption converge the enumerated legacy objects on runtime_owner. Follow
+  [migration provisioning](migration-provisioning.md); preserve application
+  rows, object identities, definitions and non-owner effective privileges.
 - Every definer function sets `search_path = pg_catalog`, schema-qualifies all
   `public.<table>` references, validates fixed enums and UUIDs, and uses no
   dynamic SQL. Grant EXECUTE only to its named role.
