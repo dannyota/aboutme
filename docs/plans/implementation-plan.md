@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 33, active** (2026-09-06).
+Status: **Revision 34, active** (2026-09-06).
 
 The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
 [design](../design/README.md) owns intended behavior and is approved at v4. This
@@ -46,8 +46,8 @@ UI toolkit, and the application visual identity.
 | Phase | Work                                                                   | State                                                  |
 | ----- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
 | 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                       |
-| 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete locally                                       |
-| 8     | Privacy lifecycle                                                      | Not started                                            |
+| 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete and merged                                    |
+| 8     | [Privacy lifecycle](phase-8/README.md)                                 | Active; contracts and implementation                   |
 | 9     | [AWS Singapore cost research](phase-9/README.md)                       | Planned; research not run                              |
 | 10    | [Infrastructure and AWS UAT](phase-10/README.md)                       | Planned; UAT scope authorized; no deployment performed |
 | 11    | Production promotion                                                   | After Phase 10 and separate launch approval            |
