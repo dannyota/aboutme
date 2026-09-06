@@ -13,15 +13,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
-
-	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 func TestRuntimeWriteFoundationCatalogAndState(t *testing.T) {
 	db := openTestDB(t, newTestDatabase(t))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if _, err := migrations.Apply(ctx, db); err != nil {
+	if _, err := applyRuntimeWriteFoundation(ctx, db); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	digest := sha256.Sum256([]byte("aboutme.runtime-write-barrier.v1"))
@@ -106,7 +104,7 @@ func TestRuntimeWriteFoundationInstallsAsNonSuperuserMigrator(t *testing.T) {
 	if err := conn.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := migrations.Apply(context.Background(), migratorDB); err != nil {
+	if _, err := applyRuntimeWriteFoundation(context.Background(), migratorDB); err != nil {
 		t.Fatalf("apply migrations as aboutme_migrator: %v", err)
 	}
 
@@ -130,7 +128,7 @@ func TestRuntimeWriteFoundationInstallsAsNonSuperuserMigrator(t *testing.T) {
 func TestRuntimeWriteApplicationBoundary(t *testing.T) {
 	db := openTestDB(t, newTestDatabase(t))
 	ctx := context.Background()
-	if _, err := migrations.Apply(ctx, db); err != nil {
+	if _, err := applyRuntimeWriteFoundation(ctx, db); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE public.runtime_write_probe(id integer PRIMARY KEY); ALTER TABLE public.runtime_write_probe OWNER TO aboutme_runtime_owner; CREATE TRIGGER runtime_write_probe_assert BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON public.runtime_write_probe FOR EACH STATEMENT EXECUTE FUNCTION public.runtime_assert_business_write('probe'); GRANT SELECT,INSERT,UPDATE,DELETE ON public.runtime_write_probe TO aboutme_app`); err != nil {
@@ -202,7 +200,7 @@ func TestRuntimeWriteApplicationBoundary(t *testing.T) {
 
 func TestRuntimeWriteMigratorSessionLifecycle(t *testing.T) {
 	db := openTestDB(t, newTestDatabase(t))
-	if _, err := migrations.Apply(context.Background(), db); err != nil {
+	if _, err := applyRuntimeWriteFoundation(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.ExecContext(context.Background(), `GRANT CREATE ON SCHEMA public TO aboutme_runtime_owner`); err != nil {
@@ -484,7 +482,7 @@ func TestRuntimeWriteSavepointsConstraintsAndReuse(t *testing.T) {
 func TestRuntimeWriteConcurrentFinishesDoNotLoseIncrements(t *testing.T) {
 	dsn := newTestDatabase(t)
 	db := openTestDB(t, dsn)
-	if _, err := migrations.Apply(context.Background(), db); err != nil {
+	if _, err := applyRuntimeWriteFoundation(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
 	runtimeWriteProbe(t, db)
