@@ -7,15 +7,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pressly/goose/v3"
+
 	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 const runtimeBarrierKey int64 = 3727108639518528074
 
+func applyRuntimeWriteFoundation(ctx context.Context, db *sql.DB) ([]*goose.MigrationResult, error) {
+	provider, err := migrations.NewProvider(db, migrations.FS)
+	if err != nil {
+		return nil, err
+	}
+	return provider.UpTo(ctx, 13)
+}
+
 func runtimeWriteDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db := openTestDB(t, newTestDatabase(t))
-	if _, err := migrations.Apply(context.Background(), db); err != nil {
+	if _, err := applyRuntimeWriteFoundation(context.Background(), db); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	return db

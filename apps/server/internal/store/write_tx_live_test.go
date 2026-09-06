@@ -508,7 +508,11 @@ func newWriteRunnerDatabase(t *testing.T) (string, *sql.DB) {
 	})
 	setupCtx, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer setupCancel()
-	if _, err := migrations.Apply(setupCtx, db); err != nil {
+	provider, err := migrations.NewProvider(db, migrations.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(setupCtx, 13); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	if _, err := db.ExecContext(setupCtx, `CREATE TABLE public.runtime_write_probe(id integer PRIMARY KEY); ALTER TABLE public.runtime_write_probe OWNER TO aboutme_runtime_owner; CREATE TRIGGER runtime_write_probe_assert BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON public.runtime_write_probe FOR EACH STATEMENT EXECUTE FUNCTION public.runtime_assert_business_write('probe'); GRANT SELECT,INSERT,UPDATE,DELETE ON public.runtime_write_probe TO aboutme_app`); err != nil {

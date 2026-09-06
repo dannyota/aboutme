@@ -112,8 +112,12 @@ func seedPriorHead(ctx context.Context, t *testing.T, dsn string) retentionSeed 
 
 func migrateToHead(ctx context.Context, t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := migrations.Apply(ctx, db); err != nil {
-		t.Fatalf("Apply() to head from prior head error: %v", err)
+	provider, err := migrations.NewProvider(db, migrations.FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, 6); err != nil {
+		t.Fatalf("apply retention migration 6 from prior head: %v", err)
 	}
 }
 
