@@ -77,7 +77,7 @@ provides the real function and live-DB entry/lock checks pass.
 Start with [R1.1 cluster role bootstrap](role-bootstrap.md), then
 [R1.2 write foundation](write-foundation.md). The unused Go helper is locally
 checked and committed as `f45cf93`; it replaces the raw starter at `986fe44`.
-Live entry proof remains pending.
+Live entry, clean reuse and physical discard proof now pass against B1.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption

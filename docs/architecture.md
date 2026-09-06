@@ -58,11 +58,12 @@ and shutdown remain unimplemented. RDS compute remains separately sized.
 The local candidate includes seven fixed database roles and migration 00013's
 runtime write-entry, finish and migrator-session primitives. Live tests prove
 real-role permissions, transaction completion, lock order, cancellation and
-contamination rejection. The private Go write runner is unit-tested; its live
-pool proof and caller adoption remain pending. Goose history still uses the
-legacy runner. The [dedicated migrator design](design/scaling/migrator.md)
-protects that history next and converges exact legacy object ownership on
-aboutme_runtime_owner while preserving data. Final-stop authority is absent.
+contamination rejection. The private Go write runner passes live pool reuse and
+physical discard checks; response-loss cases use test-only fault injection.
+Caller adoption remains pending. Goose history still uses the legacy runner. The
+[dedicated migrator design](design/scaling/migrator.md) protects that history
+next and converges exact legacy object ownership on aboutme_runtime_owner while
+preserving data. Final-stop authority is absent.
 
 ## Implemented HTTP surface
 
