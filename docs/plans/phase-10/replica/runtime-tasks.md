@@ -117,8 +117,10 @@ request/count fields. Cleanup stays atomic under a bounded caller context, with
 no fixed claim-row bound. Exclusive wake and transition functions still follow
 separately. [Wake operations](../../../design/scaling/wake-operations.md) and
 [protected wake migration](../../../design/scaling/wake-migrations.md) define
-the exclusive runner, fixed ApplyWake path and source admission. Their later
-implementation remains unassigned.
+the exclusive runner, fixed ApplyWake path and source admission.
+[R1.12 exclusive wake](exclusive-wake.md) reserves migration 24 after
+evidence 23. ApplyWake remains a separate later slice; neither path is composed
+until both pass.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
