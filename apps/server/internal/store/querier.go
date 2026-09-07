@@ -429,10 +429,16 @@ type Querier interface {
 	// revoked. The affected-row count lets the caller return the same absence
 	// result for missing, expired, and differently owned sessions.
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
+	RuntimeAcquireSSEClaim(ctx context.Context, arg RuntimeAcquireSSEClaimParams) (RuntimeAcquireSSEClaimRow, error)
+	RuntimeAcquireSingleClaim(ctx context.Context, arg RuntimeAcquireSingleClaimParams) (RuntimeAcquireSingleClaimRow, error)
+	RuntimeGCReleasedClaimReceipts(ctx context.Context) (RuntimeGCReleasedClaimReceiptsRow, error)
 	RuntimeMarkMaintenanceReplicaJoinReady(ctx context.Context, arg RuntimeMarkMaintenanceReplicaJoinReadyParams) (RuntimeMarkMaintenanceReplicaJoinReadyRow, error)
 	RuntimeMarkServingReplicaJoinReady(ctx context.Context, arg RuntimeMarkServingReplicaJoinReadyParams) (RuntimeMarkServingReplicaJoinReadyRow, error)
+	RuntimePromoteClaim(ctx context.Context, arg RuntimePromoteClaimParams) (RuntimePromoteClaimRow, error)
 	RuntimeRegisterMaintenanceReplica(ctx context.Context, arg RuntimeRegisterMaintenanceReplicaParams) (RuntimeRegisterMaintenanceReplicaRow, error)
 	RuntimeRegisterServingReplica(ctx context.Context, arg RuntimeRegisterServingReplicaParams) (RuntimeRegisterServingReplicaRow, error)
+	RuntimeReleaseClaim(ctx context.Context, arg RuntimeReleaseClaimParams) (RuntimeReleaseClaimRow, error)
+	RuntimeResolveClaim(ctx context.Context, arg RuntimeResolveClaimParams) (RuntimeResolveClaimRow, error)
 	SaveMediaOrphanSweepCursor(ctx context.Context, arg SaveMediaOrphanSweepCursorParams) (int64, error)
 	// Starts a predecessor's short grace period after its successor is first
 	// used. BeginSessionRotation parks rotation_grace_until at

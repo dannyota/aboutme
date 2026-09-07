@@ -214,6 +214,13 @@ every result field. Nullable inputs use sqlc.narg. Do not expand
 `(function_call).*`, which can repeat a volatile call, or rely on `r.*`
 generation. No view, domain, broad override or generated-file edit is needed.
 
+sqlc also cannot see the columns of a function declared `RETURNS TABLE`, so it
+rewrites `SELECT *` over such a function into one whole-row column and the
+projected names fail at runtime. GC selects the whole row under an alias inside
+the materialized CTE and projects `(result.gc).deleted_claim_count::integer`,
+the same field-access pattern as the composite result. A live store test proves
+each generated query against PostgreSQL; unit stubs cannot catch this class.
+
 R1's internal/store owns generated scalar rows and a narrow
 RuntimeClaimTransport API with scalar inputs and decoded RuntimeClaimRow values.
 It exposes no ClaimOperation, encoder, key/version, retry state, callback or raw
