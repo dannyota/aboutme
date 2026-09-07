@@ -40,6 +40,39 @@ var rateResultComposites = []struct{ name, attributes string }{
 	{"runtime_rate_cleanup_result", "deleted_count:integer,effective_at:timestamp with time zone,policy_idle:boolean"},
 }
 
+// rateFunctionVolatility pins each installed function's declared volatility.
+// A helper that performs timestamptz arithmetic is timezone dependent and must
+// be STABLE, never IMMUTABLE.
+var rateFunctionVolatility = map[string]string{
+	"runtime_sample_rate_time":      "v",
+	"runtime_rate_interval":         "i",
+	"runtime_rate_ceil_div":         "i",
+	"runtime_rate_token_refill":     "s",
+	"runtime_rate_token_retry":      "i",
+	"runtime_rate_window_retry":     "s",
+	"runtime_rate_catalog":          "s",
+	"runtime_rate_sample":           "v",
+	"runtime_rate_client_digest":    "i",
+	"runtime_rate_bucket_eligible":  "s",
+	"runtime_rate_overflow_neutral": "s",
+	"runtime_rate_normalize_window": "v",
+	"runtime_rate_expire_one":       "v",
+	"runtime_rate_route":            "v",
+	"runtime_rate_apply_token":      "v",
+	"runtime_rate_apply_rolling":    "v",
+	"runtime_rate_failure_view":     "v",
+
+	"runtime_admit_token_rate":                   "v",
+	"runtime_password_failure_state":             "v",
+	"runtime_record_password_failure":            "v",
+	"runtime_clear_password_failure":             "v",
+	"runtime_admit_slug_change":                  "v",
+	"runtime_reserve_oauth_failed_grant":         "v",
+	"runtime_finish_admission_attempt":           "v",
+	"runtime_cleanup_admission_attempt_receipts": "v",
+	"runtime_cleanup_rate_buckets":               "v",
+}
+
 // rateHelperNames lists the owner-only helpers that carry no login grant.
 var rateHelperNames = []string{
 	"runtime_sample_rate_time", "runtime_rate_interval", "runtime_rate_ceil_div",
@@ -641,4 +674,32 @@ func corruptRateRows(t *testing.T, db *sql.DB, statements ...string) {
 	if mutationErr != nil {
 		t.Fatal(mutationErr)
 	}
+}
+
+type rateCatalogPolicy struct{ policy, algorithm string }
+
+// readRateCatalogPolicies returns the closed catalog with its algorithms.
+func readRateCatalogPolicies(t *testing.T, db *sql.DB) []rateCatalogPolicy {
+	t.Helper()
+	rows, err := db.QueryContext(context.Background(), `SELECT policy_id,algorithm FROM public.shared_rate_policies ORDER BY policy_id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	policies := make([]rateCatalogPolicy, 0, 24)
+	for rows.Next() {
+		var policy rateCatalogPolicy
+		if scanErr := rows.Scan(&policy.policy, &policy.algorithm); scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		policies = append(policies, policy)
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
+	}
+	return policies
 }
