@@ -252,5 +252,9 @@ Report an unrun check with its exact command, reason, and remaining uncertainty.
 - `make docs-lint` scans ignored Markdown too. Keep `PROGRESS.md` formatted.
 - If host DB TCP fails while in-container `pg_isready` passes, recreate the
   container; rootless pasta can lose its forward while the container stays up.
+- Migration and store live tests clone cached template databases named
+  `aboutme_migrate_template_<version>_<hash>`. Editing any migration builds a
+  new one and drops the stale one. `make test-db-templates-clean` removes them
+  all; they cost about 20 MB each.
 - FlowCV credentials stay in `.env`; findings go in `docs/research/flowcv/`.
   External references are evidence, not authority.

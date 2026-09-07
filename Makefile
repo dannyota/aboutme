@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check p5a-native-http-check
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-p2b server-test-p2b-s3 web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test test-db-templates-clean public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check p5a-native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
@@ -442,7 +442,18 @@ migrate-check: ## Report pending migrations without applying them
 server-migration-test: ## Run the migration harness + migrate CLI (needs test-db-up or TEST_DATABASE_URL)
 	@printf '%s\n' 'server-migration-test: go test migration harness and CLI packages'
 	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
-	  go test ./migrations/... ./cmd/migrate/... -count=1 -v
+	  go test ./migrations/... ./cmd/migrate/... -count=1 -timeout 30m -v
+
+test-db-templates-clean: ## Drop the cached migration template databases from aboutme-test-db
+	@for d in $$(podman exec aboutme-test-db psql -U aboutme -d postgres -tAc \
+	  "SELECT datname FROM pg_database WHERE datname LIKE 'aboutme_migrate_template_%'"); do \
+	  podman exec aboutme-test-db psql -U aboutme -d postgres -c \
+	    "ALTER DATABASE \"$$d\" IS_TEMPLATE false" >/dev/null; \
+	  podman exec aboutme-test-db psql -U aboutme -d postgres -c \
+	    "DROP DATABASE IF EXISTS \"$$d\" WITH (FORCE)" >/dev/null; \
+	  echo "dropped $$d"; \
+	done; \
+	echo "migration template databases cleared."
 
 public-roots-check: ## Verify the closed public-root registry, go generated consumer, and source-manifest drift
 	node --test packages/publicroots/public-roots.test.mjs
