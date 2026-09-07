@@ -429,6 +429,10 @@ type Querier interface {
 	// revoked. The affected-row count lets the caller return the same absence
 	// result for missing, expired, and differently owned sessions.
 	RevokeSessionForUser(ctx context.Context, arg RevokeSessionForUserParams) (int64, error)
+	RuntimeMarkMaintenanceReplicaJoinReady(ctx context.Context, arg RuntimeMarkMaintenanceReplicaJoinReadyParams) (RuntimeMarkMaintenanceReplicaJoinReadyRow, error)
+	RuntimeMarkServingReplicaJoinReady(ctx context.Context, arg RuntimeMarkServingReplicaJoinReadyParams) (RuntimeMarkServingReplicaJoinReadyRow, error)
+	RuntimeRegisterMaintenanceReplica(ctx context.Context, arg RuntimeRegisterMaintenanceReplicaParams) (RuntimeRegisterMaintenanceReplicaRow, error)
+	RuntimeRegisterServingReplica(ctx context.Context, arg RuntimeRegisterServingReplicaParams) (RuntimeRegisterServingReplicaRow, error)
 	SaveMediaOrphanSweepCursor(ctx context.Context, arg SaveMediaOrphanSweepCursorParams) (int64, error)
 	// Starts a predecessor's short grace period after its successor is first
 	// used. BeginSessionRotation parks rotation_grace_until at
