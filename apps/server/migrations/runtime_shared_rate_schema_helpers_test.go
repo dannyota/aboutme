@@ -7,25 +7,13 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func runtimeSharedRateDB(t *testing.T) (*sql.DB, context.Context) {
 	t.Helper()
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Apply(ctx, db, LocalAdminMigratorIdentity()); err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) {
-			t.Fatalf("rate migration: %v position=%d internal=%d", err, pgErr.Position, pgErr.InternalPosition)
-		}
-		t.Fatal(err)
-	}
 	return db, ctx
 }
 
