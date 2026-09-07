@@ -12,7 +12,7 @@ import (
 	"github.com/pressly/goose/v3/lock"
 )
 
-var localMigrationDatabasePattern = regexp.MustCompile(`^(aboutme|aboutme_dev|aboutme_migrate_(cmd_)?test_[0-9]+_[0-9]+)$`)
+var localMigrationDatabasePattern = regexp.MustCompile(`^(aboutme|aboutme_dev|aboutme_migrate_(cmd_)?test_[0-9]+_[0-9]+|aboutme_migrate_template_[0-9]+_[0-9a-f]{16})$`)
 
 // ProvisionDatabase installs the fixed database-local grants for local and test databases.
 func ProvisionDatabase(ctx context.Context, db *sql.DB) (resultErr error) {

@@ -51,3 +51,26 @@ func TestProvisionDatabaseFoundationIsValidationOnly(t *testing.T) {
 		t.Fatalf("validation-only provision changed generation to %d", generation)
 	}
 }
+
+func TestLocalMigrationDatabasePatternClasses(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		match bool
+	}{
+		{"aboutme", true},
+		{"aboutme_dev", true},
+		{"aboutme_migrate_test_1788717868022123841_1", true},
+		{"aboutme_migrate_cmd_test_1788717868022123841_1", true},
+		{"aboutme_migrate_template_20_0123456789abcdef", true},
+		{"aboutme_migrate_template_20_0123456789ABCDEF", false},
+		{"aboutme_migrate_template_20_0123456789abcde", false},
+		{"aboutme_migrate_template__0123456789abcdef", false},
+		{"aboutme_prod", false},
+		{"postgres", false},
+		{"aboutme_migrate_template_20_0123456789abcdef; DROP DATABASE x", false},
+	} {
+		if got := localMigrationDatabasePattern.MatchString(test.name); got != test.match {
+			t.Errorf("%q match=%t want=%t", test.name, got, test.match)
+		}
+	}
+}
