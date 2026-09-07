@@ -17,6 +17,13 @@
       passes. One fresh review, local `make ci`, and connected `make scan` pass
       at the candidate before deployment; heavy checks run serially.
 - [ ] The migration baseline marker is committed before the first UAT migration.
+- [ ] `shared_rate_buckets` has an index supporting the ordered expiry candidate
+      scan, `(policy_id, partition, last_seen, key_digest)`, confirmed with
+      `EXPLAIN` at ten thousand keys. Without it a full partition makes every
+      new-key admission scan every row while holding the exclusive policy clock
+      lock, so key exhaustion throttles the rate limiter itself. It belongs in
+      schema 18 while migrations stay editable, because a new migration would
+      take a reserved number.
 - [ ] The resource/DNS inventory, spending ceiling, UAT lifetime, cleanup scope,
       and any global-service region exceptions are recorded for the authorized
       Singapore environment and `uat.aboutme.vn`.
