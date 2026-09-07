@@ -76,11 +76,17 @@ version, close every connection, then `ALTER DATABASE ... IS_TEMPLATE true` and
 binaries running at once, such as `make server-test-db` starting several
 packages.
 
-**Clone.** `CREATE DATABASE <disposable> TEMPLATE <template>` followed by
-`ProvisionDatabase` on the clone, because database-level ACLs are properties of
-the `pg_database` row and are not copied with the files. Disposable names keep
-the existing `aboutme_migrate_test_<nanos>_<counter>` class, so every existing
-cleanup path still applies.
+**Clone.** `CREATE DATABASE <disposable> TEMPLATE <template>`, then the two
+database-level grants from `installProvisioning`
+(`GRANT CONNECT,TEMPORARY,CREATE ... TO aboutme_migrator` and
+`GRANT TEMPORARY ... TO aboutme_runtime_owner`) issued from the admin session,
+then `ProvisionDatabase` on the clone to validate. The grants must be reissued
+because a database ACL lives in the `pg_database` row, which `CREATE DATABASE`
+does not copy, and `ProvisionDatabase` installs grants only when the runtime
+foundation is absent, so on a clone it is validation-only and would otherwise
+fail with provisioning drift. Schema grants arrive with the copied files.
+Disposable names keep the existing `aboutme_migrate_test_<nanos>_<counter>`
+class, so every existing cleanup path still applies.
 
 **Stale templates.** Once per process, before the first build, compute the
 expected name for every version in the embedded sources and drop any
