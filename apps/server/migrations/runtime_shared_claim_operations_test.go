@@ -886,3 +886,34 @@ func TestRuntimeSharedClaimOperationsFailedMigrationRollsBackTypeFunctionsAndGen
 }
 
 var _ = sql.ErrNoRows
+
+// TestRuntimeSharedClaimOperationsRoleIsCheckedBeforeTheWriteGate proves each
+// claim definer answers a forbidden direct login with 42501 before it reads
+// public.runtime_write_state, so no caller learns the write-gate state from a
+// role it may not use. The accepted pairing is unchanged: an accepted role
+// without write entry still gets AM001.
+func TestRuntimeSharedClaimOperationsRoleIsCheckedBeforeTheWriteGate(t *testing.T) {
+	db, _ := runtimeMembershipDB(t)
+	claim := claimUUID("babababa", 1)
+	replica := claimUUID("babababa", 2)
+	digest := claimHex(41)
+	single := claimSingleExpression(claim, "mail.send", replica, "NULL", "global", digest)
+	for _, test := range []struct{ name, statement string }{
+		{"acquire_single", `SELECT ` + single},
+		{"acquire_sse", `SELECT ` + claimSSEExpression(claim, replica, digest, nil)},
+		{"resolve", `SELECT ` + claimResolveExpression(claim, replica, digest)},
+		{"promote", `SELECT ` + claimPromoteExpression(claim, replica, digest)},
+		{"release", `SELECT ` + claimReleaseExpression(claim, replica, digest, "joined")},
+		{"gc_receipts", `SELECT * FROM public.runtime_gc_released_claim_receipts()`},
+	} {
+		t.Run("forbidden_role_without_entry_"+test.name, func(t *testing.T) {
+			requireRegistrationError(t, registrationRoleExec(t, db, "aboutme_runtime_owner", test.statement), "42501")
+		})
+	}
+	t.Run("accepted_role_without_entry_still_reports_the_gate", func(t *testing.T) {
+		requireRegistrationError(t, registrationRoleExec(t, db, "aboutme_app", `SELECT `+single), "AM001")
+	})
+	t.Run("forbidden_role_with_entry_stays_forbidden", func(t *testing.T) {
+		requireClaimError(t, db, "aboutme_maintenance", claimSingleExpression(claim, "password.hash", replica, "NULL", "global", digest), "42501")
+	})
+}

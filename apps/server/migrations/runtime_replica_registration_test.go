@@ -718,3 +718,26 @@ func TestRuntimeReplicaRegistrationIdentityAndReadyRacesSerialize(t *testing.T) 
 		})
 	}
 }
+
+// TestRuntimeReplicaRegistrationRoleIsCheckedBeforeTheWriteGate proves each
+// registration wrapper answers a forbidden direct login with 42501 before the
+// shared implementation reads public.runtime_write_state, so a role that may
+// not register never learns the write-gate state. The accepted pairing is
+// unchanged: an accepted role without write entry still gets AM001.
+func TestRuntimeReplicaRegistrationRoleIsCheckedBeforeTheWriteGate(t *testing.T) {
+	db, _ := runtimeMembershipDB(t)
+	args := registrationArgs(validRegistrationIdentity("6"))
+	for _, function := range []string{
+		"runtime_register_serving_replica", "runtime_register_maintenance_replica",
+		"runtime_mark_serving_replica_join_ready", "runtime_mark_maintenance_replica_join_ready",
+	} {
+		t.Run("forbidden_role_without_entry_"+function, func(t *testing.T) {
+			statement := `SELECT public.` + function + `(` + args + `)`
+			requireRegistrationError(t, registrationRoleExec(t, db, "aboutme_runtime_owner", statement), "42501")
+		})
+	}
+	t.Run("accepted_role_without_entry_still_reports_the_gate", func(t *testing.T) {
+		statement := `SELECT public.runtime_register_serving_replica(` + args + `)`
+		requireRegistrationError(t, registrationRoleExec(t, db, "aboutme_app", statement), "AM001")
+	})
+}

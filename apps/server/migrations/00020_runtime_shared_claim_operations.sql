@@ -105,8 +105,8 @@ DECLARE cap public.runtime_capacity; replica public.runtime_replicas; replica_fo
  c1 public.shared_claim_policies; c2 public.shared_claim_policies; s1 public.shared_claim_scope_summaries; s2 public.shared_claim_scope_summaries;
  scope record; shape_ok boolean; digest bytea; admitted timestamptz; chosen text;
 BEGIN
- PERFORM public.runtime_require_write_entry();
  IF session_user NOT IN ('aboutme_app','aboutme_maintenance') THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='claim role is forbidden'; END IF;
+ PERFORM public.runtime_require_write_entry();
  shape_ok:=p_claim_id IS NOT NULL AND p_claim_id<>'00000000-0000-0000-0000-000000000000'::uuid
   AND p_policy_id IS NOT NULL AND p_replica_id IS NOT NULL AND p_replica_id<>'00000000-0000-0000-0000-000000000000'::uuid
   AND p_scope_count IN (1,2) AND p_scope_1_kind IS NOT NULL AND p_scope_1_digest IS NOT NULL AND octet_length(p_scope_1_digest)=32
@@ -194,8 +194,8 @@ CREATE FUNCTION public.runtime_resolve_claim(uuid,uuid,bytea) RETURNS public.run
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE p public.shared_claim_requests;
 BEGIN
- PERFORM public.runtime_require_write_entry();
  IF session_user NOT IN ('aboutme_app','aboutme_maintenance') THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='claim role is forbidden'; END IF;
+ PERFORM public.runtime_require_write_entry();
  p:=public.runtime_claim_assert_request($1,$2,$3);
  IF p.claim_id IS NULL THEN RETURN public.runtime_claim_absent($1); END IF;
  RETURN public.runtime_claim_result_for(p);
@@ -205,8 +205,8 @@ CREATE FUNCTION public.runtime_promote_claim(uuid,uuid,bytea) RETURNS public.run
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE cap public.runtime_capacity; replica public.runtime_replicas; p public.shared_claim_requests; s public.shared_claim_scopes; c public.shared_claim_policies; summary public.shared_claim_scope_summaries; first_waiting uuid; now_at timestamptz;
 BEGIN
- PERFORM public.runtime_require_write_entry();
  IF session_user<>'aboutme_app' THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='claim role is forbidden'; END IF;
+ PERFORM public.runtime_require_write_entry();
  PERFORM public.runtime_claim_validate_input($1,$2,$3);
  SELECT * INTO cap FROM public.runtime_capacity WHERE singleton FOR UPDATE;
  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='AM001',MESSAGE='runtime capacity is missing'; END IF;
@@ -243,8 +243,8 @@ CREATE FUNCTION public.runtime_release_claim(uuid,uuid,bytea,text) RETURNS publi
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE cap public.runtime_capacity; p public.shared_claim_requests; s record; now_at timestamptz;
 BEGIN
- PERFORM public.runtime_require_write_entry();
  IF session_user NOT IN ('aboutme_app','aboutme_maintenance') THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='claim role is forbidden'; END IF;
+ PERFORM public.runtime_require_write_entry();
  IF $4 IS NOT DISTINCT FROM 'fenced' THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='fenced claim release is forbidden'; END IF;
  IF $4 IS NULL OR $4 NOT IN ('joined','canceled','expired') THEN RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='claim release input is invalid'; END IF;
  PERFORM public.runtime_claim_validate_input($1,$2,$3);
@@ -278,8 +278,8 @@ CREATE FUNCTION public.runtime_gc_released_claim_receipts() RETURNS TABLE(delete
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE ids uuid[]; affected public.shared_claim_scope_summaries[]; item record; claims integer:=0; summaries integer:=0; cutoff timestamptz;
 BEGIN
- PERFORM public.runtime_require_write_entry();
  IF session_user<>'aboutme_maintenance' THEN RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='claim receipt cleanup role is forbidden'; END IF;
+ PERFORM public.runtime_require_write_entry();
  cutoff:=clock_timestamp()-interval '24 hours';
  SELECT array_agg(q.claim_id ORDER BY q.claim_id) INTO ids FROM (SELECT claim_id FROM public.shared_claim_requests WHERE state='released' AND released_at<=cutoff ORDER BY claim_id LIMIT 256 FOR UPDATE) q;
  IF ids IS NULL THEN RETURN QUERY SELECT 0,0; RETURN; END IF;

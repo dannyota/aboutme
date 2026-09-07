@@ -36,10 +36,19 @@ LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT clock_timestamp()
 $$;
 
+-- PostgreSQL multiplies an interval only by double precision, and the one
+-- exact alternative, (text)::interval, routes through the STABLE interval_in
+-- and would make this per-row helper depend on the caller's DateStyle. The
+-- double stays and the magnitude is bounded instead: every value within 2^53
+-- converts exactly, so a larger one fails closed rather than rounding.
 CREATE FUNCTION public.runtime_rate_interval(p_microseconds bigint) RETURNS interval
-LANGUAGE sql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT interval '1 microsecond'*p_microseconds::double precision
-$$;
+LANGUAGE plpgsql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+ IF p_microseconds>9007199254740992 OR p_microseconds<(-9007199254740992) THEN
+  RAISE EXCEPTION USING ERRCODE='AM001',MESSAGE='shared rate interval is invalid';
+ END IF;
+ RETURN interval '1 microsecond'*p_microseconds::double precision;
+END $$;
 
 CREATE FUNCTION public.runtime_rate_ceil_div(p_value bigint,p_divisor bigint) RETURNS bigint
 LANGUAGE sql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
@@ -110,12 +119,12 @@ BEGIN
   IF p_caller_supplied THEN RAISE EXCEPTION USING ERRCODE='55000',MESSAGE='shared rate policy is unavailable'; END IF;
   RAISE EXCEPTION USING ERRCODE='AM001',MESSAGE='shared rate catalog is invalid';
  END IF;
+ -- shared_rate_policies_exact_catalog_check (00018) pins every per-policy
+ -- literal on the stored row and no trigger state can disable it, so this
+ -- function asserts only the cross-cutting constants its own arithmetic and
+ -- routing read instead of keeping a second, driftable copy of the catalog.
  IF catalog_row.capacity<=0 OR catalog_row.window_microseconds<=0
-  OR catalog_row.ordinary_idle_microseconds<>86400000000 OR catalog_row.max_keys_per_partition<>10000
-  OR catalog_row.allow_success_clear<>(p_policy_id IN ('password.login_failure_email','oauth.failed_grant'))
-  OR catalog_row.denied_attempt_adds_debt<>(p_policy_id='resume.slug_change')
-  OR (p_policy_id IN ('password.login_failure_email','oauth.failed_grant') AND (catalog_row.capacity<>10 OR catalog_row.window_microseconds<>900000000))
-  OR (p_policy_id='resume.slug_change' AND (catalog_row.capacity<>30 OR catalog_row.window_microseconds<>3600000000)) THEN
+  OR catalog_row.ordinary_idle_microseconds<>86400000000 OR catalog_row.max_keys_per_partition<>10000 THEN
   RAISE EXCEPTION USING ERRCODE='AM001',MESSAGE='shared rate catalog is invalid';
  END IF;
  RETURN catalog_row;

@@ -646,6 +646,10 @@ func TestRuntimeSharedRateSchemaPrivilegesEntryAndCatalog(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND tablename='shared_admission_attempts' AND ((indexname='shared_admission_attempts_pending_private_idx' AND indexdef LIKE '%(policy_id, key_digest, attempt_id)%state%pending%bucket_kind%private%') OR (indexname='shared_admission_attempts_pending_overflow_idx' AND indexdef LIKE '%(policy_id, attempt_id)%state%pending%bucket_kind%overflow%') OR (indexname='shared_admission_attempts_pending_expiry_idx' AND indexdef LIKE '%(effective_until, attempt_id)%state%pending%') OR (indexname='shared_admission_attempts_terminal_idx' AND indexdef LIKE '%(terminal_at, attempt_id)%state%terminal%'))`).Scan(&attemptIndexes); err != nil || attemptIndexes != 4 {
 		t.Fatalf("attempt partial indexes=%d error=%v", attemptIndexes, err)
 	}
+	var expiryIndex int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND tablename='shared_rate_buckets' AND indexname='shared_rate_buckets_expiry_idx' AND indexdef LIKE '%(policy_id, partition, last_seen, key_digest)%'`).Scan(&expiryIndex); err != nil || expiryIndex != 1 {
+		t.Fatalf("bucket expiry index=%d error=%v", expiryIndex, err)
+	}
 	var deferredAssertions int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE c.relnamespace='public'::regnamespace AND c.relname=ANY($1) AND t.tgdeferrable AND t.tginitdeferred AND t.tgfoid IN ('public.runtime_assert_rate_partition_count()'::regprocedure,'public.runtime_assert_rate_state()'::regprocedure)`, runtimeSharedRateTables).Scan(&deferredAssertions); err != nil || deferredAssertions != 5 {
 		t.Fatalf("deferred rate assertions=%d error=%v", deferredAssertions, err)
