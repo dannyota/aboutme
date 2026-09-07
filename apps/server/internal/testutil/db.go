@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -64,11 +65,46 @@ func RequireMigratedTestDatabaseURL(t *testing.T) string {
 }
 
 var (
-	migratedTemplateOnce sync.Once
-	migratedTemplateName string
-	migratedTemplateErr  error
-	migratedCloneCounter atomic.Uint64
+	migratedTemplateMu    sync.Mutex
+	migratedTemplateName  string
+	migratedTemplateReady bool
+	migratedTemplateErr   error
+	migratedCloneCounter  atomic.Uint64
 )
+
+// migratedTemplate returns the cached head template name for base,
+// bootstrapping cluster roles and building the template at most once per
+// process in the normal case. A build failure is cached too, so every
+// caller in this process sees the same error instead of retrying
+// concurrently. invalidateMigratedTemplate clears the cache so the next
+// call rebuilds.
+func migratedTemplate(ctx context.Context, base string) (string, error) {
+	migratedTemplateMu.Lock()
+	defer migratedTemplateMu.Unlock()
+	if migratedTemplateReady {
+		return migratedTemplateName, migratedTemplateErr
+	}
+	if rolesErr := bootstrapTestDatabaseRoles(ctx, base); rolesErr != nil {
+		migratedTemplateErr = rolesErr
+		migratedTemplateReady = true
+		return "", migratedTemplateErr
+	}
+	migratedTemplateName, migratedTemplateErr = migrations.EnsureTemplateDatabase(ctx, base, migrations.FS, 0)
+	migratedTemplateReady = true
+	return migratedTemplateName, migratedTemplateErr
+}
+
+// invalidateMigratedTemplate clears the cached template name so the next
+// migratedTemplate call rebuilds it. Called when CloneTemplateDatabase
+// reports migrations.ErrTemplateMissing, e.g. after another process swept
+// the template this process had cached.
+func invalidateMigratedTemplate() {
+	migratedTemplateMu.Lock()
+	defer migratedTemplateMu.Unlock()
+	migratedTemplateReady = false
+	migratedTemplateName = ""
+	migratedTemplateErr = nil
+}
 
 // NewMigratedTestDatabase returns the DSN and an open pool for a disposable
 // clone of every embedded migration. The clone is dropped in t.Cleanup.
@@ -77,19 +113,22 @@ func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
 	base := RequireTestDatabaseURL(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	migratedTemplateOnce.Do(func() {
-		if err := bootstrapTestDatabaseRoles(ctx, base); err != nil {
-			migratedTemplateErr = err
-			return
-		}
-		migratedTemplateName, migratedTemplateErr = migrations.EnsureTemplateDatabase(ctx, base, migrations.FS, 0)
-	})
-	if migratedTemplateErr != nil {
-		t.Fatalf("build migrated template: %v", migratedTemplateErr)
+	template, templateErr := migratedTemplate(ctx, base)
+	if templateErr != nil {
+		t.Fatalf("build migrated template: %v", templateErr)
 	}
 	name := fmt.Sprintf("aboutme_migrate_test_%d_%d", time.Now().UnixNano(), migratedCloneCounter.Add(1))
-	if err := migrations.CloneTemplateDatabase(ctx, base, migratedTemplateName, name); err != nil {
-		t.Fatalf("clone migrated template: %v", err)
+	cloneErr := migrations.CloneTemplateDatabase(ctx, base, template, name)
+	if errors.Is(cloneErr, migrations.ErrTemplateMissing) {
+		invalidateMigratedTemplate()
+		template, templateErr = migratedTemplate(ctx, base)
+		if templateErr != nil {
+			t.Fatalf("rebuild migrated template: %v", templateErr)
+		}
+		cloneErr = migrations.CloneTemplateDatabase(ctx, base, template, name)
+	}
+	if cloneErr != nil {
+		t.Fatalf("clone migrated template: %v", cloneErr)
 	}
 	admin, err := sql.Open("pgx", base)
 	if err != nil {

@@ -167,14 +167,21 @@ func newMigratedTestDatabase(t *testing.T, through int64) *sql.DB {
 	base := compositionBaseDSN(t)
 	admin := compositionAdmin(t, base)
 	name := compositionDatabaseNameFor(t)
+	// Build or fetch the template BEFORE starting the clone's clock: a
+	// fresh build can take up to templateBuildTimeout, and the clone
+	// budget below must cover only CloneTemplateDatabase itself.
+	template := ensureTestTemplate(t, base, through)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	template := ensureTestTemplate(t, base, through)
 	err := CloneTemplateDatabase(ctx, base, template, name)
 	if errors.Is(err, ErrTemplateMissing) {
 		templateNames.Delete(through)
 		template = ensureTestTemplate(t, base, through)
-		err = CloneTemplateDatabase(ctx, base, template, name)
+		// The retry gets its own fresh 60-second budget rather than the
+		// context above, which may already be exhausted by the rebuild.
+		retryCtx, retryCancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer retryCancel()
+		err = CloneTemplateDatabase(retryCtx, base, template, name)
 	}
 	if err != nil {
 		t.Fatalf("clone template %s: %v", template, err)

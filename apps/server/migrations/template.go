@@ -260,7 +260,10 @@ func provisionClone(ctx context.Context, admin *sql.Conn, adminDSN, name string)
 }
 
 // DropStaleTemplateDatabases drops every template database whose name is not
-// in keep and returns the dropped names.
+// in keep and returns the dropped names. A name whose per-name advisory
+// lock is held by another session is left alone: that session may be
+// building or cloning it right now, and a template someone else is
+// building is by definition not stale.
 func DropStaleTemplateDatabases(ctx context.Context, adminDSN string, keep []string) ([]string, error) {
 	kept := make(map[string]bool, len(keep))
 	for _, name := range keep {
@@ -276,17 +279,48 @@ func DropStaleTemplateDatabases(ctx context.Context, adminDSN string, keep []str
 			if kept[name] || !templateDatabasePattern.MatchString(name) {
 				continue
 			}
-			if _, err := conn.ExecContext(ctx, `ALTER DATABASE `+name+` IS_TEMPLATE false`); err != nil {
-				return fmt.Errorf("migrations: unmark stale template: %w", err)
+			ok, dropErr := dropStaleTemplate(ctx, conn, name)
+			if dropErr != nil {
+				return dropErr
 			}
-			if _, err := conn.ExecContext(ctx, `DROP DATABASE `+name+` WITH (FORCE)`); err != nil {
-				return fmt.Errorf("migrations: drop stale template: %w", err)
+			if ok {
+				dropped = append(dropped, name)
 			}
-			dropped = append(dropped, name)
 		}
 		return nil
 	})
 	return dropped, err
+}
+
+// dropStaleTemplate takes the same per-name advisory lock
+// EnsureTemplateDatabase uses before unmarking and dropping name, so a
+// build or clone running in another process always serializes with this
+// sweep. The lock is taken with pg_try_advisory_lock rather than the
+// blocking form: when another session already holds it, dropStaleTemplate
+// leaves name in place and reports (false, nil) instead of waiting, and the
+// caller moves on to the next candidate.
+func dropStaleTemplate(ctx context.Context, conn *sql.Conn, name string) (dropped bool, resultErr error) {
+	var locked bool
+	if lockErr := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(hashtext($1)::bigint)`, name).Scan(&locked); lockErr != nil {
+		return false, fmt.Errorf("migrations: try lock stale template: %w", lockErr)
+	}
+	if !locked {
+		return false, nil
+	}
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if _, unlockErr := conn.ExecContext(unlockCtx, `SELECT pg_advisory_unlock(hashtext($1)::bigint)`, name); unlockErr != nil {
+			resultErr = errors.Join(resultErr, unlockErr)
+		}
+	}()
+	if _, unmarkErr := conn.ExecContext(ctx, `ALTER DATABASE `+name+` IS_TEMPLATE false`); unmarkErr != nil {
+		return false, fmt.Errorf("migrations: unmark stale template: %w", unmarkErr)
+	}
+	if _, dropErr := conn.ExecContext(ctx, `DROP DATABASE `+name+` WITH (FORCE)`); dropErr != nil {
+		return false, fmt.Errorf("migrations: drop stale template: %w", dropErr)
+	}
+	return true, nil
 }
 
 // listTemplateDatabases reads every template-class name before the caller
