@@ -1,9 +1,13 @@
 package testutil
 
 import (
+	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
+
+	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 type testSetupError struct{}
@@ -125,5 +129,24 @@ func TestTestDatabaseSetupCacheDoesNotRepeatSuccessfulPreparation(t *testing.T) 
 	}
 	if calls != 1 {
 		t.Errorf("setup calls = %d, want 1", calls)
+	}
+}
+
+func TestNewMigratedTestDatabaseIsCloneAtHead(t *testing.T) {
+	RequireTestDatabaseURL(t)
+	dsn, db := NewMigratedTestDatabase(t)
+	if !strings.Contains(dsn, "/aboutme_migrate_test_") {
+		t.Fatalf("dsn %q", dsn)
+	}
+	statuses, err := migrations.Status(context.Background(), db, migrations.LocalAdminMigratorIdentity())
+	if err != nil || migrations.PendingCount(statuses) != 0 {
+		t.Fatalf("pending=%d error=%v", migrations.PendingCount(statuses), err)
+	}
+	other, otherDB := NewMigratedTestDatabase(t)
+	if other == dsn {
+		t.Fatal("clones share a database")
+	}
+	if err := otherDB.PingContext(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }

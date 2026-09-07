@@ -1,8 +1,15 @@
 package testutil
 
 import (
+	"context"
+	"database/sql"
+	"fmt"
+	"net/url"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	// Registers the pgx driver under database/sql's "pgx" name, so
 	// prepareMigratedTestDatabase's sql.Open("pgx", dsn) resolves. testutil is
@@ -10,6 +17,8 @@ import (
 	// package doc comment in clock.go), so this registration only ever runs
 	// inside a test binary.
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 // RequireTestDatabaseURL returns TEST_DATABASE_URL, skipping the calling
@@ -52,4 +61,63 @@ func RequireMigratedTestDatabaseURL(t *testing.T) string {
 	dsn := RequireTestDatabaseURL(t)
 	MigrateTestDatabase(t, dsn)
 	return dsn
+}
+
+var (
+	migratedTemplateOnce sync.Once
+	migratedTemplateName string
+	migratedTemplateErr  error
+	migratedCloneCounter atomic.Uint64
+)
+
+// NewMigratedTestDatabase returns the DSN and an open pool for a disposable
+// clone of every embedded migration. The clone is dropped in t.Cleanup.
+func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
+	t.Helper()
+	base := RequireTestDatabaseURL(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	migratedTemplateOnce.Do(func() {
+		if err := bootstrapTestDatabaseRoles(ctx, base); err != nil {
+			migratedTemplateErr = err
+			return
+		}
+		migratedTemplateName, migratedTemplateErr = migrations.EnsureTemplateDatabase(ctx, base, migrations.FS, 0)
+	})
+	if migratedTemplateErr != nil {
+		t.Fatalf("build migrated template: %v", migratedTemplateErr)
+	}
+	name := fmt.Sprintf("aboutme_migrate_test_%d_%d", time.Now().UnixNano(), migratedCloneCounter.Add(1))
+	if err := migrations.CloneTemplateDatabase(ctx, base, migratedTemplateName, name); err != nil {
+		t.Fatalf("clone migrated template: %v", err)
+	}
+	admin, err := sql.Open("pgx", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
+		defer stop()
+		if _, dropErr := admin.ExecContext(cleanup, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`); dropErr != nil {
+			t.Errorf("drop migrated clone: %v", dropErr)
+		}
+		if closeErr := admin.Close(); closeErr != nil {
+			t.Errorf("close admin: %v", closeErr)
+		}
+	})
+	u, err := url.Parse(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.Path = "/" + name
+	db, err := sql.Open("pgx", u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close migrated clone: %v", err)
+		}
+	})
+	return u.String(), db
 }
