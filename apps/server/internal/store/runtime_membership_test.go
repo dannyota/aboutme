@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"net/url"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/dannyota/aboutme/apps/server/migrations"
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 type registrationRunnerStub struct {
@@ -197,60 +194,7 @@ func TestRuntimeReplicaRegistrationStoreReturnsZeroOnTransportAndDecodeFailure(t
 
 func registrationLiveDatabase(t *testing.T) (string, *sql.DB) {
 	t.Helper()
-	base := os.Getenv("TEST_DATABASE_URL")
-	if base == "" {
-		if os.Getenv("REQUIRE_TEST_DB") == "1" {
-			t.Fatal("TEST_DATABASE_URL is required")
-		}
-		t.Skip("TEST_DATABASE_URL not set")
-	}
-	server, err := sql.Open("pgx", base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if closeErr := server.Close(); closeErr != nil {
-			t.Errorf("close registration server pool: %v", closeErr)
-		}
-	})
-	name := fmt.Sprintf("aboutme_migrate_test_%d_%d", time.Now().UnixNano(), writeRunnerDatabaseCounter.Add(1))
-	if !writeRunnerDatabaseName.MatchString(name) {
-		t.Fatalf("unsafe disposable database name %q", name)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if _, createErr := server.ExecContext(ctx, `CREATE DATABASE `+name); createErr != nil {
-		t.Fatal(createErr)
-	}
-	t.Cleanup(func() {
-		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
-		defer stop()
-		if _, dropErr := server.ExecContext(cleanup, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`); dropErr != nil {
-			t.Errorf("drop registration database: %v", dropErr)
-		}
-	})
-	u, err := url.Parse(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u.Path = "/" + name
-	dsn := u.String()
-	admin, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if closeErr := admin.Close(); closeErr != nil {
-			t.Errorf("close registration database pool: %v", closeErr)
-		}
-	})
-	if err := migrations.ProvisionDatabase(ctx, admin); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := migrations.Apply(ctx, admin, migrations.LocalAdminMigratorIdentity()); err != nil {
-		t.Fatalf("upgrade registration store database: %v", err)
-	}
-	return dsn, admin
+	return testutil.NewMigratedTestDatabase(t)
 }
 
 func TestRuntimeReplicaRegistrationStoreLiveCommitAmbiguityReturnsZero(t *testing.T) {
