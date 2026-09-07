@@ -164,15 +164,14 @@ func TestRuntimeRateMaintenanceStoreRejectsInputsWithoutQuery(t *testing.T) {
 }
 
 func TestRuntimeRateMaintenanceStoreEntryFunctionFinishCommitOrder(t *testing.T) {
-	// The shared fake transaction only names claim functions, so each cleanup
-	// query reaches it as "function:unknown". The exact SQL function name of
-	// both cleanups is asserted in the per-operation stub test above.
+	// The asserted sequence names the cleanup in the function position, so a
+	// method wired to the wrong query fails here as well as in its stub test.
 	runner, lease := claimOrderRunner([]any{int32(0)})
 	receipts, err := (&runtimeRateMaintenanceStore{runner: runner}).CleanupAdmissionAttemptReceipts(context.Background(), 8)
 	if err != nil || receipts != (RuntimeAdmissionReceiptCleanupResult{}) || lease.tx.functions != 1 {
 		t.Fatalf("receipts=%+v error=%v functions=%d", receipts, err, lease.tx.functions)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_cleanup_admission_attempt_receipts", "finish", "commit", "release")
 
 	runner, lease = claimOrderRunner(rateCleanupValues(1, rateStoreEffective, false))
 	lease.tx.commitErr = errors.New("commit ambiguous")
@@ -180,7 +179,7 @@ func TestRuntimeRateMaintenanceStoreEntryFunctionFinishCommitOrder(t *testing.T)
 	if !errors.Is(err, lease.tx.commitErr) || buckets != (RuntimeRateCleanupResult{}) {
 		t.Fatalf("commit failure buckets=%+v error=%v", buckets, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "destroy")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_cleanup_rate_buckets", "finish", "commit", "destroy")
 
 	runner, lease = claimOrderRunner(rateCleanupValues(9, rateStoreEffective, false))
 	lease.tx.finishErr = errors.New("must not reach finish")
@@ -188,7 +187,7 @@ func TestRuntimeRateMaintenanceStoreEntryFunctionFinishCommitOrder(t *testing.T)
 	if err == nil || buckets != (RuntimeRateCleanupResult{}) || errors.Is(err, lease.tx.finishErr) {
 		t.Fatalf("over-page buckets=%+v error=%v", buckets, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "rollback", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_cleanup_rate_buckets", "rollback", "release")
 }
 
 func TestRuntimeRateMaintenanceStoreLiveRoleBoundaryAndBoundedPages(t *testing.T) {

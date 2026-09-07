@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -429,6 +430,12 @@ func (l *claimOrderLease) Destroy(context.Context) error {
 	return nil
 }
 
+// orderedFunctionName reads the fixed operation a query calls, so an order
+// test names the function in the sequence it asserts rather than a placeholder.
+// Deriving it from the SQL keeps every slice's operations covered without a
+// list to maintain.
+var orderedFunctionName = regexp.MustCompile(`public\.(runtime_[a-z0-9_]+)\(`)
+
 type claimOrderTx struct {
 	pgx.Tx
 	lease                          *claimOrderLease
@@ -453,10 +460,8 @@ func (tx *claimOrderTx) Exec(_ context.Context, sql string, _ ...any) (pgconn.Co
 func (tx *claimOrderTx) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
 	tx.functions++
 	name := "unknown"
-	for _, candidate := range []string{"runtime_acquire_single_claim", "runtime_acquire_sse_claim", "runtime_promote_claim", "runtime_release_claim", "runtime_resolve_claim", "runtime_gc_released_claim_receipts"} {
-		if strings.Contains(sql, candidate) {
-			name = candidate
-		}
+	if match := orderedFunctionName.FindStringSubmatch(sql); match != nil {
+		name = match[1]
 	}
 	tx.lease.events = append(tx.lease.events, "function:"+name)
 	return registrationRowStub{values: tx.values, err: tx.queryErr}

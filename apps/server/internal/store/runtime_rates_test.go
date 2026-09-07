@@ -749,15 +749,14 @@ func rateRejected(nonZero bool, err error) error {
 }
 
 func TestRuntimeRateTransportEntryFunctionFinishCommitOrder(t *testing.T) {
-	// The shared fake transaction only names claim functions, so each rate
-	// query reaches it as "function:unknown". The exact SQL function name of
-	// every rate operation is asserted in the per-operation stub tests above.
+	// The asserted sequence names the operation in the function position, so a
+	// method wired to the wrong query fails here as well as in its stub test.
 	runner, lease := claimOrderRunner(rateDecisionValues(rateDecisionProjection(true, "overflow", 0)))
 	decision, err := (&runtimeRateTransport{runner: runner}).AdmitToken(context.Background(), "api.outer_request", rateStoreDigest(0x11))
 	if err != nil || !decision.Allowed || decision.BucketKind != "overflow" || lease.tx.functions != 1 {
 		t.Fatalf("decision=%+v error=%v functions=%d", decision, err, lease.tx.functions)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_admit_token_rate", "finish", "commit", "release")
 
 	invalid := rateDecisionProjection(true, "private", 3)
 	runner, lease = claimOrderRunner(rateDecisionValues(invalid))
@@ -765,7 +764,7 @@ func TestRuntimeRateTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if err == nil || decision != (RuntimeRateDecisionResult{}) {
 		t.Fatalf("invalid decision=%+v error=%v", decision, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "rollback", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_admit_slug_change", "rollback", "release")
 
 	runner, lease = claimOrderRunner(ratePasswordValues(ratePasswordProjection("overflow", 0, false)))
 	lease.tx.finishErr = errors.New("finish lost")
@@ -773,7 +772,7 @@ func TestRuntimeRateTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if !errors.Is(err, lease.tx.finishErr) || record != (RuntimePasswordFailureResult{}) {
 		t.Fatalf("finish failure record=%+v error=%v", record, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "rollback", "destroy")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_record_password_failure", "finish", "rollback", "destroy")
 
 	runner, lease = claimOrderRunner(rateReserveValues(rateReserveProjection(true, false, "overflow", 0)))
 	lease.tx.commitErr = errors.New("commit ambiguous")
@@ -781,7 +780,7 @@ func TestRuntimeRateTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if !errors.Is(err, lease.tx.commitErr) || reserved != (RuntimeFailedGrantReserveResult{}) {
 		t.Fatalf("commit failure reserved=%+v error=%v", reserved, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "destroy")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_reserve_oauth_failed_grant", "finish", "commit", "destroy")
 
 	runner, lease = claimOrderRunner(nil)
 	lease.tx.queryErr = &pgconn.PgError{Code: "AM001", Message: "shared rate clock is invalid"}
@@ -789,21 +788,21 @@ func TestRuntimeRateTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if !isSQLState(err, "AM001") || finished != (RuntimeAdmissionAttemptFinishResult{}) {
 		t.Fatalf("AM001 finished=%+v error=%v", finished, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "rollback", "destroy")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_finish_admission_attempt", "rollback", "destroy")
 
 	runner, lease = claimOrderRunner(rateClearValues(rateClearProjection(true, 1)))
 	cleared, err := (&runtimeRateTransport{runner: runner}).ClearFailureSuccess(context.Background(), rateStoreDigest(0x22))
 	if err != nil || !cleared.Cleared || lease.tx.functions != 1 {
 		t.Fatalf("cleared=%+v error=%v functions=%d", cleared, err, lease.tx.functions)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_clear_password_failure", "finish", "commit", "release")
 
 	runner, lease = claimOrderRunner(ratePasswordValues(rateAbsentStateProjection()))
 	state, err := (&runtimeRateTransport{runner: runner}).FailureState(context.Background(), rateStoreDigest(0x22))
 	if err != nil || state.Partition != nil || state.ActivityRefreshed || lease.tx.functions != 1 {
 		t.Fatalf("state=%+v error=%v functions=%d", state, err, lease.tx.functions)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_password_failure_state", "finish", "commit", "release")
 }
 
 // rateLiveDatabase returns one migrated clone at head plus its admin pool.
