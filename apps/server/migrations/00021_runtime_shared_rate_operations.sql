@@ -50,7 +50,7 @@ $$;
 -- comparison and assigns the full numerator without converting a huge
 -- elapsed interval to microseconds.
 CREATE FUNCTION public.runtime_rate_token_refill(p_capacity integer,p_window bigint,p_numerator bigint,p_refill_at timestamptz,p_now timestamptz) RETURNS bigint
-LANGUAGE plpgsql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE full_value bigint; missing bigint; threshold bigint; elapsed bigint;
 BEGIN
  IF p_capacity IS NULL OR p_capacity<=0 OR p_window IS NULL OR p_window<=0 OR p_numerator IS NULL OR p_numerator<0 OR p_refill_at IS NULL OR p_now IS NULL THEN
@@ -71,7 +71,7 @@ CREATE FUNCTION public.runtime_rate_token_retry(p_capacity integer,p_window bigi
 LANGUAGE plpgsql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE deficit bigint; micro bigint; seconds bigint;
 BEGIN
- IF p_capacity IS NULL OR p_capacity<=0 OR p_window IS NULL OR p_numerator IS NULL THEN
+ IF p_capacity IS NULL OR p_capacity<=0 OR p_window IS NULL OR p_window<=0 OR p_numerator IS NULL OR p_numerator<0 THEN
   RAISE EXCEPTION USING ERRCODE='AM001',MESSAGE='shared rate token state is invalid';
  END IF;
  deficit:=p_window-p_numerator;
@@ -84,7 +84,7 @@ BEGIN
 END $$;
 
 CREATE FUNCTION public.runtime_rate_window_retry(p_started timestamptz,p_window bigint,p_now timestamptz) RETURNS integer
-LANGUAGE plpgsql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE micro bigint; seconds bigint;
 BEGIN
  IF p_started IS NULL OR p_window IS NULL OR p_now IS NULL THEN
@@ -106,7 +106,7 @@ DECLARE catalog_row public.shared_rate_policies; located boolean;
 BEGIN
  SELECT * INTO catalog_row FROM public.shared_rate_policies WHERE policy_id=p_policy_id;
  located:=FOUND;
- IF NOT located OR catalog_row.algorithm<>p_algorithm THEN
+ IF NOT located OR (p_algorithm IS NOT NULL AND catalog_row.algorithm<>p_algorithm) THEN
   IF p_caller_supplied THEN RAISE EXCEPTION USING ERRCODE='55000',MESSAGE='shared rate policy is unavailable'; END IF;
   RAISE EXCEPTION USING ERRCODE='AM001',MESSAGE='shared rate catalog is invalid';
  END IF;
@@ -653,7 +653,7 @@ END $$;
 
 CREATE FUNCTION public.runtime_cleanup_rate_buckets(p_policy_id text,p_page_size integer) RETURNS public.runtime_rate_cleanup_result
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE catalog_row public.shared_rate_policies; algorithm text; effective timestamptz; candidates bytea[]; item record;
+DECLARE catalog_row public.shared_rate_policies; effective timestamptz; candidates bytea[]; item record;
  locked public.shared_rate_buckets; deleted integer:=0; removed_1 integer:=0; removed_2 integer:=0;
  numerator bigint; refill timestamptz; events timestamptz[]; retained timestamptz[]; idle boolean;
 BEGIN
@@ -662,9 +662,7 @@ BEGIN
  IF p_policy_id IS NULL OR p_page_size IS NULL OR p_page_size<1 OR p_page_size>256 THEN
   RAISE EXCEPTION USING ERRCODE='22023',MESSAGE='shared rate input is invalid';
  END IF;
- SELECT s.algorithm INTO algorithm FROM public.shared_rate_policies s WHERE s.policy_id=p_policy_id;
- IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='55000',MESSAGE='shared rate policy is unavailable'; END IF;
- catalog_row:=public.runtime_rate_catalog(p_policy_id,algorithm,false);
+ catalog_row:=public.runtime_rate_catalog(p_policy_id,NULL::text,true);
  effective:=public.runtime_rate_sample(catalog_row.policy_id);
  SELECT array_agg(q.key_digest ORDER BY q.last_seen,q.key_digest) INTO candidates FROM (
   SELECT b.key_digest,b.last_seen FROM public.shared_rate_buckets b

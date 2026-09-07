@@ -1031,6 +1031,15 @@ func TestRuntimeSharedRateOperationsCatalogOwnersAndGrants(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT count(*)=$2 AND bool_and(pg_get_userbyid(proowner)='aboutme_runtime_owner' AND prosecdef AND proconfig=ARRAY['search_path=pg_catalog']::text[] AND NOT has_function_privilege('public',oid,'EXECUTE') AND NOT proisstrict) FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname=ANY($1)`, names, len(names)).Scan(&valid); err != nil || !valid {
 		t.Fatalf("catalog valid=%t error=%v", valid, err)
 	}
+	for name, want := range rateFunctionVolatility {
+		var volatility string
+		if err := db.QueryRowContext(ctx, `SELECT COALESCE((SELECT provolatile::text FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname=$1),'')`, name).Scan(&volatility); err != nil {
+			t.Fatal(err)
+		}
+		if volatility != want {
+			t.Errorf("function %s volatility=%q want=%q", name, volatility, want)
+		}
+	}
 	appTypes := map[string]bool{
 		"runtime_rate_decision_result": true, "runtime_password_failure_result": true, "runtime_password_clear_result": true,
 		"runtime_failed_grant_reserve_result": true, "runtime_admission_attempt_finish_result": true,
@@ -1717,6 +1726,26 @@ func TestRuntimeSharedRateOperationsInstalledCorruptionFailsClosed(t *testing.T)
 			t.Fatalf("corrupt decision committed=%+v", state)
 		}
 	})
+	t.Run("token_helpers_share_one_numeric_contract", func(t *testing.T) {
+		for _, expression := range []string{
+			`public.runtime_rate_token_refill(0,1000,0,now(),now())`,
+			`public.runtime_rate_token_refill(5,-1,0,now(),now())`,
+			`public.runtime_rate_token_refill(5,0,0,now(),now())`,
+			`public.runtime_rate_token_refill(5,1000,-1,now(),now())`,
+			`public.runtime_rate_token_retry(0,1000,0)`,
+			`public.runtime_rate_token_retry(5,-1,0)`,
+			`public.runtime_rate_token_retry(5,0,0)`,
+			`public.runtime_rate_token_retry(5,1000,-1)`,
+		} {
+			var sink any
+			requireRateOperationError(t, db.QueryRowContext(context.Background(), `SELECT `+expression).Scan(&sink), "AM001")
+		}
+		var refill, retry int64
+		if err := db.QueryRowContext(context.Background(), `SELECT public.runtime_rate_token_refill(5,1000,0,now(),now()),public.runtime_rate_token_retry(5,1000,0)`).Scan(&refill, &retry); err != nil || refill != 0 || retry != 1 {
+			t.Fatalf("accepted shapes refill=%d retry=%d error=%v", refill, retry, err)
+		}
+	})
+
 	t.Run("attempt_debt_above_capacity", func(t *testing.T) {
 		enableRatePartitions(t, db, ratePolicyAttempt, 1)
 		client := rateUUID("cccccccc", 95)
@@ -1732,4 +1761,31 @@ func TestRuntimeSharedRateOperationsInstalledCorruptionFailsClosed(t *testing.T)
 			t.Fatal("corrupt reserve inserted an attempt")
 		}
 	})
+}
+
+// TestRuntimeSharedRateOperationsCleanupAcceptsEveryCatalogPolicy proves the
+// maintenance cleanup is policy-agnostic: it fixes no algorithm, so every one
+// of the 24 catalog policies is accepted while an unknown policy stays 55000.
+func TestRuntimeSharedRateOperationsCleanupAcceptsEveryCatalogPolicy(t *testing.T) {
+	db, _ := runtimeSharedRateDB(t)
+	policies := readRateCatalogPolicies(t, db)
+	if len(policies) != 24 {
+		t.Fatalf("catalog policies=%d want=24", len(policies))
+	}
+	seen := map[string]int{}
+	for _, policy := range policies {
+		result, cleanupErr := callRateCleanup(t, db, "aboutme_maintenance", rateCleanupExpression(policy.policy, 256))
+		if cleanupErr != nil {
+			t.Fatalf("cleanup %s (%s): %v", policy.policy, policy.algorithm, cleanupErr)
+		}
+		if result.deleted != 0 || !result.policyIdle {
+			t.Fatalf("seeded cleanup %s=%+v", policy.policy, result)
+		}
+		seen[policy.algorithm]++
+	}
+	if seen["token_bucket"] != 21 || seen["fixed_window"] != 2 || seen["rolling_slug"] != 1 {
+		t.Fatalf("algorithm coverage=%v", seen)
+	}
+	_, unknownErr := callRateCleanup(t, db, "aboutme_maintenance", rateCleanupExpression("no.such.policy", 1))
+	requireRateOperationError(t, unknownErr, "55000")
 }
