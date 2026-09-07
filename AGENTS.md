@@ -254,7 +254,8 @@ Report an unrun check with its exact command, reason, and remaining uncertainty.
   container; rootless pasta can lose its forward while the container stays up.
 - Migration and store live tests clone cached template databases named
   `aboutme_migrate_template_<version>_<hash>`. Editing any migration builds a
-  new one and drops the stale one. `make test-db-templates-clean` removes them
-  all; they cost about 20 MB each.
+  new one; only a `./migrations` test run sweeps the names it no longer needs,
+  so other live-DB targets accumulate templates at about 20 MB each. Run
+  `make test-db-templates-clean` to remove them all.
 - FlowCV credentials stay in `.env`; findings go in `docs/research/flowcv/`.
   External references are evidence, not authority.

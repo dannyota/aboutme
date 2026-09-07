@@ -92,9 +92,9 @@ server-test: ## Test the Go API server
 	cd apps/server && go test ./...
 
 server-test-db: ## Run the DB-backed suites against live Postgres; missing TEST_DATABASE_URL fails when REQUIRE_TEST_DB=1
-	@printf '%s\n' 'server-test-db: go test live roles/dev-seed/auth/store/user/resume/realtime/account/privacy packages'
+	@printf '%s\n' 'server-test-db: go test live roles/dev-seed/testutil/auth/store/user/resume/realtime/account/privacy packages'
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
-	  go test ./cmd/db-role-bootstrap ./internal/dbroles ./cmd/dev-seed ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... -race -count=1 -v
+	  go test ./cmd/db-role-bootstrap ./internal/dbroles ./cmd/dev-seed ./internal/testutil ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... -race -count=1 -v
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... -p=1 -race -count=1 -v
 

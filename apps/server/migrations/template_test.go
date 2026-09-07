@@ -251,6 +251,96 @@ func TestEnsureTemplateDatabaseSerializesConcurrentBuilders(t *testing.T) {
 	}
 }
 
+func TestDropStaleTemplateDatabasesSkipsANameLockedByAnotherSession(t *testing.T) {
+	base := templateAdminDSN(t)
+	admin, err := sql.Open("pgx", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := admin.Close(); closeErr != nil {
+			t.Errorf("close template admin: %v", closeErr)
+		}
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Two cheap fixture "templates" outside the real template set: their
+	// content does not matter to DropStaleTemplateDatabases, only that
+	// their names satisfy templateDatabasePattern.
+	stamp := time.Now().UnixNano()
+	locked := fmt.Sprintf("aboutme_migrate_template_1_%016x", stamp)
+	unlocked := fmt.Sprintf("aboutme_migrate_template_1_%016x", stamp+1)
+	for _, name := range []string{locked, unlocked} {
+		if _, createErr := admin.ExecContext(ctx, `CREATE DATABASE `+name); createErr != nil {
+			t.Fatal(createErr)
+		}
+	}
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
+		defer stop()
+		if _, dropErr := admin.ExecContext(cleanup, `DROP DATABASE IF EXISTS `+locked+` WITH (FORCE)`); dropErr != nil {
+			t.Errorf("drop locked fixture: %v", dropErr)
+		}
+	})
+
+	// A second session holds the exact advisory lock EnsureTemplateDatabase
+	// and DropStaleTemplateDatabases use for `locked`, simulating a build
+	// or clone in flight in another process.
+	holder, err := sql.Open("pgx", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := holder.Close(); closeErr != nil {
+			t.Errorf("close lock holder: %v", closeErr)
+		}
+	})
+	holderConn, err := holder.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := holderConn.Close(); closeErr != nil {
+			t.Errorf("close lock holder conn: %v", closeErr)
+		}
+	})
+	if _, lockErr := holderConn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext($1)::bigint)`, locked); lockErr != nil {
+		t.Fatal(lockErr)
+	}
+	t.Cleanup(func() {
+		if _, unlockErr := holderConn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtext($1)::bigint)`, locked); unlockErr != nil {
+			t.Errorf("unlock fixture: %v", unlockErr)
+		}
+	})
+
+	dropped, err := DropStaleTemplateDatabases(ctx, base, expectedTemplateNames(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawLocked, sawUnlocked bool
+	for _, name := range dropped {
+		if name == locked {
+			sawLocked = true
+		}
+		if name == unlocked {
+			sawUnlocked = true
+		}
+	}
+	if sawLocked {
+		t.Fatalf("locked template %s was dropped while its lock was held", locked)
+	}
+	if !sawUnlocked {
+		t.Fatalf("unlocked template %s was not dropped: dropped=%v", unlocked, dropped)
+	}
+	if exists, _, _ := templateRow(t, admin, locked); !exists {
+		t.Fatalf("locked template %s was removed despite the held lock", locked)
+	}
+	if exists, _, _ := templateRow(t, admin, unlocked); exists {
+		t.Fatalf("unlocked template %s still exists", unlocked)
+	}
+}
+
 func TestNewMigratedTestDatabaseClonesAndIsolates(t *testing.T) {
 	ctx := context.Background()
 	first := newMigratedTestDatabase(t, 0)

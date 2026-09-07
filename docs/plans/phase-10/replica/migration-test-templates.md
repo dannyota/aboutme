@@ -1243,6 +1243,100 @@ git add -- docs/plans/phase-10/replica/migration-test-templates.md
 git commit -m "docs: record migration template test evidence" -- docs/plans/phase-10/replica/migration-test-templates.md
 ```
 
+## Implementation evidence
+
+Delivered in six commits from `d7db2b6`: the plan, the name class, the template
+tooling, the runtime test conversion, the rate helper and store conversion, and
+the Makefile and instruction updates. Three authors wrote the slices; the
+integration owner reran every check before each commit.
+
+### Measurements
+
+All on the shared `aboutme-test-db` container, one job at a time. The "after"
+migrations figures start from a cleared template cache, so they include building
+all six templates.
+
+| Measurement                                  | Before          | After            |
+| -------------------------------------------- | --------------- | ---------------- |
+| `./migrations`, no race                      | 528s            | 140s             |
+| `./migrations`, `-race`                      | timed out, 600s | 169s             |
+| `^TestRuntime` group                         | 502s            | 187s             |
+| `^TestRuntimeSharedRate` subset              | 109s            | 30s              |
+| `^TestRuntimeSharedClaimOperations`, `-race` | 20.6s           | 6.5s             |
+| `make server-migration-test`                 | over 535s       | 139s             |
+| `make server-test-db`                        | 13 packages     | 13 packages, 35s |
+| `./internal/store` `-race`                   | 9.6s            | 8.4s             |
+
+The goal is met: one `-race` run of the whole package now finishes in 169
+seconds, inside go test's ten-minute default, with headroom for migrations 21
+through 25. `make server-migration-test` still carries an explicit
+`-timeout 30m` so growth fails loudly rather than at an implicit limit.
+
+### Defects found while implementing
+
+1. **A defect in this plan.** The Design section claimed `ProvisionDatabase` on
+   a clone restores its database grants. It does not: a database ACL lives in
+   the `pg_database` row, which `CREATE DATABASE ... TEMPLATE` does not copy,
+   and `ProvisionDatabase` installs grants only when the runtime foundation is
+   absent, so on a clone it is validation-only and fails with provisioning
+   drift. `CloneTemplateDatabase` now reissues the two database-level grants
+   from `installProvisioning` before validating. The Design section is
+   corrected.
+2. **A gap in the Task 3 brief.** `runtime_shared_rate_schema_helpers_test.go`
+   was not in the owned paths, so 29 rate tests kept applying every migration.
+   Converted separately; it was the single largest remaining cost.
+3. `throughFS` needed no `Glob` method: `fs.Glob` falls back to `fs.ReadDir` for
+   a filesystem that does not implement `fs.GlobFS`, and
+   `migrationSourcesFromFS` uses `fs.ReadDir` as well. Proven by a pure test.
+4. Lint required renaming shadowed inner `err` variables and using the two-value
+   type assertion, because `errcheck.check-type-assertions` is on.
+
+### Fresh review
+
+The reviewer confirmed all five named invariants with cited evidence and
+returned CLEAR WITH FINDINGS: no template is connected to after sealing, clone
+names stay in the disposable class, the advisory lock covers check, build and
+mark as one critical section, every clone is provisioned, and the tests that
+prove empty-database paths still start empty. It also compared every converted
+call site against its pre-change form and found each assertion intact.
+
+Five should-fix findings were fixed before this section was written:
+
+1. `newMigratedTestDatabase` started the clone's 60-second deadline before a
+   template build that may take three minutes, and its retry reused the
+   exhausted context. The plan carried the same ordering bug. The template is
+   now built first, and the retry gets a fresh budget.
+2. `DropStaleTemplateDatabases` unmarked and dropped without the per-name
+   advisory lock, so it could interrupt a build in another test binary. It now
+   takes `pg_try_advisory_lock` per name and skips a name it cannot lock, since
+   a template someone is building is not stale. Proved by a test that fails
+   against the unfixed code.
+3. `testutil.NewMigratedTestDatabase` cached the template name in a `sync.Once`
+   that could not re-fire and had no `ErrTemplateMissing` recovery, so a swept
+   template broke every later store test permanently. It now invalidates and
+   rebuilds once, like the migrations helper.
+4. `TestNewMigratedTestDatabaseIsCloneAtHead` never ran live, because
+   `server-test-db` omitted `./internal/testutil`. The package is now in that
+   target, which runs 14 packages rather than 13.
+5. The instruction note claimed a migration edit drops the stale template. Only
+   a `./migrations` run sweeps, so other live-DB targets accumulate templates.
+   The note now says so and points at the cleanup target.
+
+### Portability confirmed
+
+The risk this plan flagged did not materialize. A cloned database upgrades
+cleanly through the real migrator: the template test builds a clone at version
+19 and applies version 20 to it through `applyFS`, and the B3 identity, history
+and manifest checks accept it. Clones also pass `ProvisionDatabase` validation,
+which is what proves the reissued grants are exact.
+
+### State after the run
+
+The container holds `aboutme`, `aboutme_dev` and at most one
+`aboutme_migrate_template_<version>_<hash>` per version the run used. No
+disposable test database leaked in any measured run.
+`make test-db-templates-clean` drops every template.
+
 ## Risks and fallbacks
 
 - If `CREATE DATABASE ... TEMPLATE` fails with "source database is being
