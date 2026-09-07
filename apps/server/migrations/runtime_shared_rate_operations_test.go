@@ -1789,3 +1789,90 @@ func TestRuntimeSharedRateOperationsCleanupAcceptsEveryCatalogPolicy(t *testing.
 	_, unknownErr := callRateCleanup(t, db, "aboutme_maintenance", rateCleanupExpression("no.such.policy", 1))
 	requireRateOperationError(t, unknownErr, "55000")
 }
+
+// rateExplainPlan returns the EXPLAIN text for statement.
+func rateExplainPlan(t *testing.T, db *sql.DB, statement string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	rows, err := db.QueryContext(ctx, `EXPLAIN (COSTS OFF) `+statement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			t.Error(closeErr)
+		}
+	}()
+	var plan strings.Builder
+	for rows.Next() {
+		var line string
+		if scanErr := rows.Scan(&line); scanErr != nil {
+			t.Fatal(scanErr)
+		}
+		plan.WriteString(line)
+		plan.WriteByte('\n')
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
+	}
+	return plan.String()
+}
+
+// TestRuntimeSharedRateOperationsExpiryCandidateWalksTheExpiryIndex proves the
+// allocation-path expiry candidate query runs as an ordered index walk that
+// stops at the first eligible row, not a full partition scan plus sort. The
+// query runs while runtime_rate_sample holds the exclusive shared_policy_clocks
+// row, so a full scan there serializes every operation for the policy behind
+// max_keys_per_partition non-inlinable predicate calls.
+func TestRuntimeSharedRateOperationsExpiryCandidateWalksTheExpiryIndex(t *testing.T) {
+	db, _ := runtimeSharedRateDB(t)
+	const policy = ratePolicyToken
+	rateFillBuckets(t, db, policy, 1, 10000, true)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	var rows int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM public.shared_rate_buckets WHERE policy_id=$1 AND partition=1`, policy).Scan(&rows); err != nil || rows != 10000 {
+		t.Fatalf("fixture rows=%d error=%v", rows, err)
+	}
+	if _, err := db.ExecContext(ctx, `ANALYZE public.shared_rate_buckets`); err != nil {
+		t.Fatal(err)
+	}
+	// The exact candidate shape runtime_rate_expire_one runs, with the
+	// catalog row supplied as a single-evaluation subquery in place of the
+	// function's composite argument.
+	candidate := `SELECT b.key_digest FROM public.shared_rate_buckets b
+ WHERE b.policy_id='` + policy + `' AND b.partition=1::smallint
+  AND public.runtime_rate_bucket_eligible(b,(SELECT p FROM public.shared_rate_policies p WHERE p.policy_id='` + policy + `'),clock_timestamp())
+ ORDER BY b.last_seen,b.key_digest LIMIT 1`
+	plan := rateExplainPlan(t, db, candidate)
+	if !strings.Contains(plan, "Index Scan using shared_rate_buckets_expiry_idx on shared_rate_buckets") {
+		t.Fatalf("expiry candidate does not walk shared_rate_buckets_expiry_idx:\n%s", plan)
+	}
+	for _, forbidden := range []string{"Seq Scan on shared_rate_buckets", "Bitmap Heap Scan on shared_rate_buckets", "Sort"} {
+		if strings.Contains(plan, forbidden) {
+			t.Fatalf("expiry candidate still plans %q:\n%s", forbidden, plan)
+		}
+	}
+}
+
+// TestRuntimeSharedRateOperationsIntervalRejectsInexactMagnitude proves
+// runtime_rate_interval answers every value it can convert exactly and fails
+// closed on one it cannot, so the single floating-point step in an otherwise
+// exact bigint pipeline can never round a caller's microseconds silently.
+func TestRuntimeSharedRateOperationsIntervalRejectsInexactMagnitude(t *testing.T) {
+	db, ctx := runtimeSharedRateDB(t)
+	var idle, window, boundary, nullInput bool
+	if err := db.QueryRowContext(ctx, `SELECT public.runtime_rate_interval(86400000000)=interval '24 hours',
+ public.runtime_rate_interval(900000000)=interval '15 minutes',
+ public.runtime_rate_interval(9007199254740992)=('9007199254740992 microseconds')::interval,
+ public.runtime_rate_interval(NULL) IS NULL`).Scan(&idle, &window, &boundary, &nullInput); err != nil || !idle || !window || !boundary || !nullInput {
+		t.Fatalf("exact interval idle=%t window=%t boundary=%t null=%t error=%v", idle, window, boundary, nullInput, err)
+	}
+	for _, argument := range []string{"9007199254740993", "-9007199254740993", "9223372036854775807", "-9223372036854775808"} {
+		t.Run("rejects_"+argument, func(t *testing.T) {
+			var sink any
+			requireRateOperationError(t, db.QueryRowContext(context.Background(), `SELECT public.runtime_rate_interval(`+argument+`)`).Scan(&sink), "AM001")
+		})
+	}
+}
