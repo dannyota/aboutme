@@ -113,7 +113,7 @@ themselves. They are not changed.
 - Produces: `localMigrationDatabasePattern` accepting
   `aboutme_migrate_template_[0-9]+_[0-9a-f]{16}`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 func TestLocalMigrationDatabasePatternClasses(t *testing.T) {
@@ -140,25 +140,25 @@ func TestLocalMigrationDatabasePatternClasses(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it and observe the template cases fail**
+- [x] **Step 2: Run it and observe the template cases fail**
 
 Run from `apps/server`:
 `go test ./migrations -run '^TestLocalMigrationDatabasePatternClasses$' -count=1`
 Expected: FAIL on the lowercase template name (`match=false want=true`).
 
-- [ ] **Step 3: Extend the pattern**
+- [x] **Step 3: Extend the pattern**
 
 ```go
 var localMigrationDatabasePattern = regexp.MustCompile(`^(aboutme|aboutme_dev|aboutme_migrate_(cmd_)?test_[0-9]+_[0-9]+|aboutme_migrate_template_[0-9]+_[0-9a-f]{16})$`)
 ```
 
-- [ ] **Step 4: Run the test again and the provisioning tests**
+- [x] **Step 4: Run the test again and the provisioning tests**
 
 Run:
 `go test ./migrations -run '^TestLocalMigrationDatabasePatternClasses$|Provision' -count=1`
 with `TEST_DATABASE_URL` set. Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add -- apps/server/migrations/migrator_provision.go apps/server/migrations/migrator_provision_test.go
@@ -199,7 +199,7 @@ func CloneTemplateDatabase(ctx context.Context, adminDSN, template, name string)
 func DropStaleTemplateDatabases(ctx context.Context, adminDSN string, keep []string) ([]string, error)
 ```
 
-- [ ] **Step 1: Write the pure naming test**
+- [x] **Step 1: Write the pure naming test**
 
 ```go
 func TestTemplateDatabaseNameIsVersionedAndSourceBound(t *testing.T) {
@@ -234,12 +234,12 @@ func TestTemplateDatabaseNameIsVersionedAndSourceBound(t *testing.T) {
 Update the literal `20` when the head version moves; the test names the head on
 purpose so a new migration forces a deliberate edit.
 
-- [ ] **Step 2: Run it and observe the missing symbols**
+- [x] **Step 2: Run it and observe the missing symbols**
 
 Run: `go test ./migrations -run '^TestTemplateDatabaseName' -count=1` Expected:
 build failure, `undefined: TemplateDatabaseName`.
 
-- [ ] **Step 3: Write the live build, clone, rebuild, and stale tests**
+- [x] **Step 3: Write the live build, clone, rebuild, and stale tests**
 
 ```go
 func templateAdminDSN(t *testing.T) string {
@@ -403,14 +403,14 @@ drops only this test's templates when it passes `nil` as keep. Before Task 3
 lands no other test builds templates, so `nil` is safe here; Task 3 changes this
 test to pass the process's cached names.
 
-- [ ] **Step 4: Run and observe compile failures**
+- [x] **Step 4: Run and observe compile failures**
 
 Run:
 `REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test ./migrations -run '^TestEnsureTemplate' -count=1`
 Expected: build failure listing `EnsureTemplateDatabase`,
 `CloneTemplateDatabase`, `DropStaleTemplateDatabases`, `ErrTemplateMissing`.
 
-- [ ] **Step 5: Implement `template.go`**
+- [x] **Step 5: Implement `template.go`**
 
 ```go
 package migrations
@@ -691,7 +691,7 @@ is refused by PostgreSQL, which is why the stale path unmarks first. `3D000` is
 `invalid_catalog_name`, the code PostgreSQL raises when the template named in
 `CREATE DATABASE` does not exist.
 
-- [ ] **Step 6: Run the template tests**
+- [x] **Step 6: Run the template tests**
 
 Run:
 `REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test ./migrations -run '^TestTemplateDatabaseName|^TestEnsureTemplate' -count=1 -v`
@@ -700,7 +700,7 @@ Expected: PASS. If `Status` on the clone reports zero pending instead of one,
 `migrationSourcesFromFS` enumerates files and adapt `ReadDir` or add a `Glob`
 method accordingly.
 
-- [ ] **Step 7: Lint and commit**
+- [x] **Step 7: Lint and commit**
 
 Run: `GOGC=50 golangci-lint run ./migrations --tests`. Expected: 0 issues. Where
 the shadow check reports an inner `err`, rename it (`rowErr`, `dropErr`) rather
@@ -729,7 +729,7 @@ git commit -m "feat(migrations): add local template database tooling" -- apps/se
 - Produces: `newMigratedTestDatabase(t *testing.T, through int64) *sql.DB`;
   `runtimeMembershipDB` returns a clone at head.
 
-- [ ] **Step 1: Write the failing helper test**
+- [x] **Step 1: Write the failing helper test**
 
 Add to `template_test.go`:
 
@@ -767,13 +767,13 @@ func TestNewMigratedTestDatabaseClonesAndIsolates(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it and observe the missing helper**
+- [x] **Step 2: Run it and observe the missing helper**
 
 Run:
 `REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test ./migrations -run '^TestNewMigratedTestDatabase' -count=1`
 Expected: build failure, `undefined: newMigratedTestDatabase`.
 
-- [ ] **Step 3: Implement the helper and rewire `runtimeMembershipDB`**
+- [x] **Step 3: Implement the helper and rewire `runtimeMembershipDB`**
 
 In `migrator_apply_helpers_test.go` split `newCompositionTestDatabase` into
 reusable pieces and add the clone path:
@@ -944,7 +944,7 @@ In `template_test.go` change both cleanups that call
 templates other tests in the same process are using. The variant fixtures in
 those tests still produce names outside that list, so they are still dropped.
 
-- [ ] **Step 4: Switch the fixture-start tests to clones**
+- [x] **Step 4: Switch the fixture-start tests to clones**
 
 Run
 `grep -n "runtimeTransitionFixtureFS(t, 1[5-9])" apps/server/migrations/*_test.go`.
@@ -966,7 +966,7 @@ and partial paths on purpose.
 The failed-migration tests that inject `SELECT 1/0` into a fixture stay valid:
 the clone at N and the modified fixture through N+1 apply only N+1.
 
-- [ ] **Step 5: Run the helper test, the switched files, and the runtime group**
+- [x] **Step 5: Run the helper test, the switched files, and the runtime group**
 
 Run:
 
@@ -978,7 +978,7 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test ./migrations -run '^TestRuntime'
 Expected: PASS, and the `^TestRuntime` run finishes well under 120 seconds (it
 took 502 seconds across two groups before this change).
 
-- [ ] **Step 6: Lint and commit**
+- [x] **Step 6: Lint and commit**
 
 Run: `GOGC=50 golangci-lint run ./migrations --tests`. Expected: 0 issues.
 
@@ -1010,7 +1010,7 @@ git commit -m "test(migrations): clone template databases for runtime tests" -- 
 func NewMigratedTestDatabase(t *testing.T) (dsn string, db *sql.DB)
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 func TestNewMigratedTestDatabaseIsCloneAtHead(t *testing.T) {
@@ -1033,13 +1033,13 @@ func TestNewMigratedTestDatabaseIsCloneAtHead(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it and observe the missing function**
+- [x] **Step 2: Run it and observe the missing function**
 
 Run:
 `TEST_DATABASE_URL=... go test ./internal/testutil -run '^TestNewMigratedTestDatabase' -count=1`
 Expected: build failure, `undefined: NewMigratedTestDatabase`.
 
-- [ ] **Step 3: Implement the wrapper**
+- [x] **Step 3: Implement the wrapper**
 
 ```go
 var (
@@ -1105,7 +1105,7 @@ func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
 `RequireTestDatabaseURL` already skips or fails on a missing `TEST_DATABASE_URL`
 exactly like the migration helpers.
 
-- [ ] **Step 4: Replace `registrationLiveDatabase` in the store tests**
+- [x] **Step 4: Replace `registrationLiveDatabase` in the store tests**
 
 ```go
 func registrationLiveDatabase(t *testing.T) (string, *sql.DB) {
@@ -1118,14 +1118,14 @@ Remove the now-unused imports (`net/url`, `os`, `regexp` if no other use) and
 the `writeRunnerDatabaseName` check if it becomes unused; `go vet` reports the
 exact leftovers.
 
-- [ ] **Step 5: Run the store live tests**
+- [x] **Step 5: Run the store live tests**
 
 Run:
 `REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./internal/store -run 'Live|Runtime' -v 2>&1 | tail -20`
 Expected: PASS; `TestRuntimeClaim*` and `TestRuntimeReplicaRegistrationStore*`
 live tests each finish in well under a second of setup.
 
-- [ ] **Step 6: Lint and commit**
+- [x] **Step 6: Lint and commit**
 
 Run: `GOGC=50 golangci-lint run ./internal/testutil ./internal/store --tests`.
 
@@ -1143,7 +1143,7 @@ git commit -m "test(store): clone the migrated template database" -- apps/server
 - Modify: `Makefile:442-446` and the `.PHONY` list on line 6
 - Modify: `AGENTS.md` Gotchas
 
-- [ ] **Step 1: Add the timeout and the cleanup target**
+- [x] **Step 1: Add the timeout and the cleanup target**
 
 Recipe lines below start with a tab, as Make requires.
 
@@ -1166,7 +1166,7 @@ test-db-templates-clean: ## Drop cached migration template databases from the sh
 
 Add `test-db-templates-clean` to the `.PHONY` line.
 
-- [ ] **Step 2: Add one Gotchas line to AGENTS.md**
+- [x] **Step 2: Add one Gotchas line to AGENTS.md**
 
 ```markdown
 - Migration and store live tests clone hash-keyed template databases named
@@ -1174,7 +1174,7 @@ Add `test-db-templates-clean` to the `.PHONY` line.
   drops stale ones. `make test-db-templates-clean` removes them all.
 ```
 
-- [ ] **Step 3: Verify formatting and the target**
+- [x] **Step 3: Verify formatting and the target**
 
 Run:
 
@@ -1186,7 +1186,7 @@ psql "$TEST_DATABASE_URL" -Atc "SELECT count(*) FROM pg_database WHERE datname L
 
 Expected: lint clean; the count prints `0`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add -- Makefile AGENTS.md
@@ -1202,7 +1202,7 @@ git commit -m "build: bound migration test time and add template cleanup" -- Mak
 - Modify: `docs/plans/phase-10/replica/migration-test-templates.md` (this file,
   evidence section)
 
-- [ ] **Step 1: Time the package three ways, one job at a time**
+- [x] **Step 1: Time the package three ways, one job at a time**
 
 ```sh
 cd apps/server
@@ -1215,7 +1215,7 @@ cd ../.. && make server-migration-test 2>&1 | tail -1 && make server-test-db 2>&
 Expected: non-race under 180 seconds; race under 600 seconds; focused race still
 green; `server-migration-test` ok; `server-test-db` 13 packages ok.
 
-- [ ] **Step 2: Confirm nothing leaks**
+- [x] **Step 2: Confirm nothing leaks**
 
 ```sh
 psql "$TEST_DATABASE_URL" -Atc "SELECT datname FROM pg_database WHERE datname LIKE 'aboutme_migrate_%' ORDER BY 1"
@@ -1224,13 +1224,13 @@ psql "$TEST_DATABASE_URL" -Atc "SELECT datname FROM pg_database WHERE datname LI
 Expected: only `aboutme_migrate_template_<v>_<hash>` rows for the versions the
 run used (at most one per version), no `aboutme_migrate_test_` rows.
 
-- [ ] **Step 3: Record evidence in this plan**
+- [x] **Step 3: Record evidence in this plan**
 
 Append an `## Implementation evidence` section with the four timings, the
 `server-test-db` count, the template list, and any deviation from the steps
 above. Run `npx prettier --write --ignore-path /dev/null` on this file.
 
-- [ ] **Step 4: Fresh review and commit**
+- [x] **Step 4: Fresh review and commit**
 
 A reviewer who authored none of Tasks 1 through 5 reads the integrated diff and
 confirms by name: no template is ever connected to after sealing; every clone

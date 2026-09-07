@@ -78,7 +78,7 @@ rethrow. No transport retries or treats a decoded value as committed authority.
 
 ## Task 1: Prove missing fixed functions
 
-- [ ] Add TestRuntimeSharedRateOperationsFunctionsExist. Check all nine exact
+- [x] Add TestRuntimeSharedRateOperationsFunctionsExist. Check all nine exact
       signatures and seven composite field orders/types. Observe the expected
       missing objects before migration 21 exists:
 
@@ -86,31 +86,31 @@ rethrow. No transport retries or treats a decoded value as committed authority.
 REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run '^TestRuntimeSharedRateOperationsFunctionsExist$'
 ```
 
-- [ ] Add failing role, arithmetic, state and concurrency cases before their
+- [x] Add failing role, arithmetic, state and concurrency cases before their
       implementation. Complete valid fixtures must fail on the intended SQLSTATE
       or named assertion; arbitrary database errors are not evidence.
 
 ## Task 2: Install fixed operations and time
 
-- [ ] Use protected first-entry/last-finish migration framing with inert Down.
+- [x] Use protected first-entry/last-finish migration framing with inert Down.
       Preserve all existing rows and generations except one migration write
       generation advance. Add only the accepted result types, wrappers/helpers
       and exact execution grants; no runtime table or configuration field.
-- [ ] Make all objects runtime_owner-owned. Revoke PUBLIC type usage and
+- [x] Make all objects runtime_owner-owned. Revoke PUBLIC type usage and
       function execution. Fix SECURITY DEFINER/search_path=pg_catalog and
       qualified SQL. App executes the seven admission operations; maintenance
       executes only the two cleanup operations. Check direct session_user before
       mutable reads. No STRICT wrapper, role-membership fallback or direct DML.
-- [ ] Explicitly validate NULL, digest length, UUID, page and outcome inputs.
+- [x] Explicitly validate NULL, digest length, UUID, page and outcome inputs.
       Preserve 22023 invalid shape, 42501 wrong role, 55000 caller policy or
       algorithm mismatch/unavailability, AM002 retained attempt conflict and
       AM001 installed state corruption. Fixed errors disclose no private values.
-- [ ] Add owner-only runtime_sample_rate_time(), a no-argument volatile helper
+- [x] Add owner-only runtime_sample_rate_time(), a no-argument volatile helper
       with the exact clock_timestamp body and no login grants. Every operation
       locks its policy clock before sampling once and clamping to high_water_at.
       Persist raw/effective observations and bounded anomaly count; any chosen
       jump threshold affects observation only. No caller time or runtime setter.
-- [ ] Preserve clock, numeric partitions, bucket/overflow and ordered-attempt
+- [x] Preserve clock, numeric partitions, bucket/overflow and ordered-attempt
       lock order. Use nonlocking routing/candidate reads and revalidate after
       locking. Never take a partition after a bucket or lock membership,
       transitions, users, resumes, clients, tokens or emails from a rate
@@ -118,35 +118,35 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
 
 ## Task 3: Enforce all algorithms and allocation
 
-- [ ] Token operations accept only fixed token policies. Use integer numerator
+- [x] Token operations accept only fixed token policies. Use integer numerator
       units and the accepted saturation-before-multiplication arithmetic. Admit
       consumes one whole token; denial consumes none. Return retry zero on allow
       and positive exact ceiling on denial. Cap long forward jumps and clamp
       backward samples without debt or idle reset.
-- [ ] Existing keys remain charged in disabled partitions. New keys first run
+- [x] Existing keys remain charged in disabled partitions. New keys first run
       only bounded legitimate expiry, at most one eligible oldest row per full
       enabled partition, then choose the lowest enabled partition below 10000.
       Insert/decrement/increment counts atomically. If no partition owns the new
       key, evaluate shared overflow; capacity pressure never grants work.
-- [ ] P07 State allocates/sweeps nothing and changes only selected last_seen:
+- [x] P07 State allocates/sweeps nothing and changes only selected last_seen:
       existing private and saturated/no-enabled overflow refresh activity;
       absent routable private returns unexhausted with null partition and no
       activity. Record preserves first-window/nonextension and exact count ten.
       Clear deletes only an existing private bucket, with count decrement; an
       absent clear never reads or changes overflow.
-- [ ] P12 prunes the exact rolling-hour cutoff, admits below thirty and retains
+- [x] P12 prunes the exact rolling-hour cutoff, admits below thirty and retains
       the newest denied attempt by replacing the oldest at thirty. Keep the
       array bounded and ordered. Every denial returns Retry-After one.
-- [ ] P22 derives the accepted unkeyed SHA-256 client key. New reserve counts
+- [x] P22 derives the accepted unkeyed SHA-256 client key. New reserve counts
       failures plus pending debt, starts the first fifteen-minute window and
       denies without inserting an attempt at ten. Expiry resolves only the
       selected bucket's pending rows; unrelated expired pending debt stays
       bound.
-- [ ] Exact retained reserve replay checks attempt/client identity and returns
+- [x] Exact retained reserve replay checks attempt/client identity and returns
       historical allowed shape with replayed=true for pending or terminal rows,
       even after private bucket deletion. It never reroutes or creates debt.
       Fresh allow/deny has replayed=false. No lookup or retry function is added.
-- [ ] Finish implements failure conversion, neutral-only release, atomic private
+- [x] Finish implements failure conversion, neutral-only release, atomic private
       success/sibling clear, and overflow success that preserves other debt.
       Restore an empty window only when count and stored pending are zero.
       Preserve exact caller replay, system no-op for every later outcome and
@@ -154,56 +154,56 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run
 
 ## Task 4: Implement bounded cleanup
 
-- [ ] Rate cleanup accepts page 1..256, discovers candidates without locks, then
+- [x] Rate cleanup accepts page 1..256, discovers candidates without locks, then
       locks partitions numeric, ordinary digests, overflow and selected P22
       attempts in accepted order. Recheck each candidate and decrement counts
       only with deletion. The idle backstop never detaches effective P22 debt.
-- [ ] Normalize overflow only through matured token refill, fixed expiry or
+- [x] Normalize overflow only through matured token refill, fixed expiry or
       rolling pruning. Resolve expired P22 pending rows through the accepted
       path. Never delete overflow, erase live debt by idle age, synthesize an
       admission or add a global cleanup operation.
-- [ ] Return policy_idle only when no ordinary row, neutral overflow and no P22
+- [x] Return policy_idle only when no ordinary row, neutral overflow and no P22
       pending row remain. Terminal receipts do not block it. A partial page or
       remaining debt returns false. This predicate lasts only through commit.
-- [ ] Receipt cleanup deletes at most page_size terminal rows at the accepted
+- [x] Receipt cleanup deletes at most page_size terminal rows at the accepted
       twenty-four-hour cutoff in terminal_at/UUID order. It locks clock then
       receipts, never a bucket or partition, and excludes pending rows. Both
       cleanup functions return one valid zero-count row when no work exists.
 
 ## Task 5: Prove SQL and store boundaries
 
-- [ ] Test every policy's exact refill/consume/deny/retry boundaries and checked
+- [x] Test every policy's exact refill/consume/deny/retry boundaries and checked
       arithmetic, backward and long forward clocks; all P07 State/Record/Clear
       routes; P12 29/30/31 and repeated denied debt; and the full P22 reserve,
       replay, outcome, expiry, sibling and retained-receipt matrices.
-- [ ] Prove 10000-key ownership, lowest enabled routing, both-disabled overflow,
+- [x] Prove 10000-key ownership, lowest enabled routing, both-disabled overflow,
       existing disabled debt, count equality, and both cleanup page/cutoff/idle
       boundaries. Cover overflow debt and policy_idle false until all debt is
       gone. Use complete fixtures with no disabled trigger or forged count.
-- [ ] Use independent pools and observed lock waits for same policy/key,
+- [x] Use independent pools and observed lock waits for same policy/key,
       allocation versus cleanup/clear, P22 success/failure/expiry and partition
       enable/disable. Independent policies must not serialize on rate locks.
       Assert final rows/debt/counts and exact losing outcomes after joined work.
-- [ ] Test actual named roles, fixed error privacy, all owners/ACLs/search
+- [x] Test actual named roles, fixed error privacy, all owners/ACLs/search
       paths, helper replacement denial and hostile search paths. Use the
       accepted disposable-database clock fixture for deterministic
       independent-pool cases; change its helper only before pool work and
       restore/drop after join.
-- [ ] Add nine one-call MATERIALIZED scalar queries with explicit nullable
+- [x] Add nine one-call MATERIALIZED scalar queries with explicit nullable
       value/presence fields; request root sqlc generation before store work.
       Test every result matrix, NULL versus present zero, copied values after
       connection reuse and one real function execution per method.
-- [ ] Test entry/query/finish/commit order; malformed/nil input, driver/decode
+- [x] Test entry/query/finish/commit order; malformed/nil input, driver/decode
       failure, cancellation, panic, AM001 physical retirement and commit
       ambiguity. Every returned error yields zero authority, even after a
       decoded allow, replay, clear or policy_idle result. Never retry.
-- [ ] Upgrade a populated version 20 fixture to 21 without changing prior
+- [x] Upgrade a populated version 20 fixture to 21 without changing prior
       business, membership, lifecycle, transition, claim or rate rows. Injected
       failure rolls back functions/types/grants and write generation together.
 
 ## Task 6: Verify and release
 
-- [ ] Run focused checks from apps/server:
+- [x] Run focused checks from apps/server:
 
 ```sh
 REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./migrations -run '^TestRuntimeSharedRateOperations'
@@ -211,11 +211,89 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL=... go test -race -count=1 ./internal/store 
 GOGC=50 golangci-lint run ./migrations ./internal/store --tests
 ```
 
-- [ ] Report exact red/green commands, policy/role/time/lock evidence, all
+- [x] Report exact red/green commands, policy/role/time/lock evidence, all
       paths, generation needs and unresolved boundaries in
       `.dev/phase-10/runtime-shared-rate-operations-author-report.txt`. Release
       all eight paths. Root inspects, reruns key checks and owns broader gates,
       staging, gitleaks and commit.
+
+## Implementation evidence
+
+Delivered in three commits: migration 21 with its tests and query sources, the
+store transport, and the fresh review fixes. Two authors wrote the halves; the
+integration owner reran every check before each commit and ran sqlc generation
+between them.
+
+### Checks at the final commit
+
+| Check                                       | Result          |
+| ------------------------------------------- | --------------- |
+| `^TestRuntimeSharedRateOperations`, `-race` | 22 tests, 69.6s |
+| `^TestRuntimeRate` store, `-race`           | 26 tests, 3.1s  |
+| Whole `./internal/store`, `-race`           | 10.5s           |
+| Whole `./migrations`, `-race`               | 251.6s          |
+| `golangci-lint` migrations and store        | 0 issues        |
+| `make sqlc-check`                           | no drift        |
+
+### Fresh review
+
+CLEAR WITH FINDINGS. All five invariants confirmed with cited evidence: role
+isolation, no caller-controlled time, checked arithmetic, capacity pressure
+never granting work, and zero authority on error. The reviewer independently
+proved that token refill saturates before multiplication and cannot overflow,
+and that a hostile caller search path cannot substitute its own clock.
+
+Three defects were fixed and one open item was raised.
+
+1. Two token helpers were declared IMMUTABLE while adding an interval to a
+   timestamptz. No answer was wrong, because the interval carries its whole
+   quantity in the microsecond field, but a later refactor to a day component
+   would have made them timezone dependent under an unchanged label. Both are
+   STABLE, and the tests now pin the declared volatility of all twenty-six
+   installed functions.
+2. Bucket cleanup read the stored algorithm and passed it back as the expected
+   algorithm, so the catalog mismatch check compared a row to itself. Cleanup is
+   policy agnostic by contract, so a NULL expectation now means any algorithm
+   and the check still does real work for the eight callers that fix one. A test
+   across all twenty-four policies would fail if cleanup named a concrete
+   algorithm.
+3. The two token helpers disagreed on the same numeric contract. Neither shape
+   is reachable through the nine operations, so this is contract parity.
+
+### Required follow-up, not yet done
+
+`shared_rate_buckets` has no index supporting the `ORDER BY last_seen` expiry
+candidate scan. Migration 18 gave `shared_admission_attempts` four
+purpose-shaped indexes but gave this table none, so this reads as an omission.
+With both partitions full, about twenty thousand keys, every new-key admission
+reads every row of the partition twice while holding the exclusive
+`shared_policy_clocks` row lock that serializes all work for that policy. That
+turns key exhaustion into a throughput collapse of the rate limiter itself.
+
+The index belongs in schema 18 as
+`(policy_id, partition, last_seen, key_digest)`. Because migration versions must
+stay contiguous, adding it as a new migration would take the number reserved for
+lifecycle operations and shift every later reservation, while editing schema 18
+in place consumes no number but requires recreating the native development
+database. That choice is the owner's and is open. **This must land before UAT.**
+Confirm with `EXPLAIN` at ten thousand keys.
+
+### Open, lower priority
+
+Migration 20 asserts write entry before checking the role, while migration 21
+checks the role first. `runtime_require_write_entry` reads the mutable write
+gate, so migration 21 matches the contract and migration 20 does not. The
+reviewer recommends a later forward `CREATE OR REPLACE` for migration 20's five
+definers rather than an in-place edit, since migration 21 builds on the database
+migration 20 produces. Defense in depth, not a live vulnerability: the EXECUTE
+grants already confine those functions to app and maintenance.
+
+### Left to callers
+
+R5 must prove that a replayed reserve cannot start work. The decoded reserve
+result carries `Allowed` true alongside `Replayed` true, so a caller branching
+on `Allowed` alone would grant work from a replay. An attempt UUID is also a
+capability that clears real debt, so it must not be logged, echoed or reused.
 
 R5/R7 prove canonical key shapes, ordered caller debt, replay rejection and
 unchanged responses. R8 proves private key versions, composition and rotation.
