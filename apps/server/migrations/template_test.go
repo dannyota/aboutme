@@ -119,7 +119,7 @@ func TestEnsureTemplateDatabaseBuildsOnceAndClonesProvisioned(t *testing.T) {
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
-		if _, dropErr := DropStaleTemplateDatabases(cleanup, base, nil); dropErr != nil {
+		if _, dropErr := DropStaleTemplateDatabases(cleanup, base, expectedTemplateNames(t)); dropErr != nil {
 			t.Errorf("drop templates: %v", dropErr)
 		}
 	})
@@ -230,7 +230,7 @@ func TestEnsureTemplateDatabaseSerializesConcurrentBuilders(t *testing.T) {
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
-		if _, dropErr := DropStaleTemplateDatabases(cleanup, base, nil); dropErr != nil {
+		if _, dropErr := DropStaleTemplateDatabases(cleanup, base, expectedTemplateNames(t)); dropErr != nil {
 			t.Errorf("drop templates: %v", dropErr)
 		}
 	})
@@ -248,5 +248,37 @@ func TestEnsureTemplateDatabaseSerializesConcurrentBuilders(t *testing.T) {
 	first, second := <-names, <-names
 	if err := errors.Join(<-errs, <-errs); err != nil || first != second || first == "" {
 		t.Fatalf("names=%s/%s error=%v", first, second, err)
+	}
+}
+
+func TestNewMigratedTestDatabaseClonesAndIsolates(t *testing.T) {
+	ctx := context.Background()
+	first := newMigratedTestDatabase(t, 0)
+	second := newMigratedTestDatabase(t, 0)
+	var firstName, secondName string
+	if err := first.QueryRowContext(ctx, `SELECT current_database()`).Scan(&firstName); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.QueryRowContext(ctx, `SELECT current_database()`).Scan(&secondName); err != nil {
+		t.Fatal(err)
+	}
+	if firstName == secondName || !disposableDatabasePattern.MatchString(firstName) {
+		t.Fatalf("names %s/%s", firstName, secondName)
+	}
+	if err := membershipWrite(t, first, replicaInsert("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "i-aaaaaaaaaaaaaaaaa", "a")...); err != nil {
+		t.Fatal(err)
+	}
+	var leaked int
+	if err := second.QueryRowContext(ctx, `SELECT count(*) FROM public.runtime_replicas`).Scan(&leaked); err != nil || leaked != 0 {
+		t.Fatalf("rows leaked between clones=%d error=%v", leaked, err)
+	}
+	statuses, err := Status(ctx, second, LocalAdminMigratorIdentity())
+	if err != nil || PendingCount(statuses) != 0 {
+		t.Fatalf("pending=%d error=%v", PendingCount(statuses), err)
+	}
+	older := newMigratedTestDatabase(t, 19)
+	statuses, err = Status(ctx, older, LocalAdminMigratorIdentity())
+	if err != nil || PendingCount(statuses) != 1 {
+		t.Fatalf("version 19 pending=%d error=%v", PendingCount(statuses), err)
 	}
 }

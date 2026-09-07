@@ -704,15 +704,9 @@ func TestRuntimeSharedRateSchemaAllTablesRejectTruncate(t *testing.T) {
 }
 
 func TestRuntimeSharedRateSchemaPreservesPopulatedVersion17(t *testing.T) {
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 17)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := applyFS(ctx, db, runtimeTransitionFixtureFS(t, 17), LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO public.users(id,email,name) VALUES('18181818-1818-4818-8818-181818181818','rate-preserve@example.test','rate preserved')`); err != nil {
 		t.Fatal(err)
 	}
@@ -738,15 +732,9 @@ func TestRuntimeSharedRateSchemaPreservesPopulatedVersion17(t *testing.T) {
 }
 
 func TestRuntimeSharedRateSchemaFailedMigrationRollsBackObjectsAndGeneration(t *testing.T) {
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 17)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := applyFS(ctx, db, runtimeTransitionFixtureFS(t, 17), LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
 	var before int64
 	if err := db.QueryRowContext(ctx, `SELECT generation FROM public.runtime_write_state WHERE singleton`).Scan(&before); err != nil {
 		t.Fatal(err)
