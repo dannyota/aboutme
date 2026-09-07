@@ -817,9 +817,8 @@ func TestRuntimeLifecycleTransportTerminationReasonsAndRequestBounds(t *testing.
 // barrier order of every fixed action and proves no decoded value survives a
 // lost finish, an ambiguous commit or a poisoned backend.
 //
-// The shared fake transaction only names claim functions, so each lifecycle
-// query reaches it as "function:unknown". The exact SQL function name of
-// every lifecycle operation is asserted in the per-method stub tests above.
+// The asserted sequence names the operation in the function position, so a
+// method wired to the wrong query fails here as well as in its stub test.
 func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	identity := registrationStoreIdentity()
 	active := lifecycleReplicaProjection(identity.ReplicaID, "serving", "active", lifecycleStoreOperationID, lifecycleStoreExpected)
@@ -830,7 +829,7 @@ func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if err != nil || result.DesiredReplicas != 2 || lease.tx.functions != 1 {
 		t.Fatalf("result=%+v error=%v functions=%d", result, err, lease.tx.functions)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_prepare_scale_out", "finish", "commit", "release")
 
 	invalid := lifecycleReplicaProjection(identity.ReplicaID, "serving", "joining", lifecycleStoreOperationID, lifecycleStoreExpected)
 	runner, lease = claimOrderRunner(lifecycleReplicaValues(invalid))
@@ -838,7 +837,7 @@ func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if err == nil || replica != (RuntimeReplicaResult{}) {
 		t.Fatalf("invalid replica=%+v error=%v", replica, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "rollback", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_activate_replica_capacity", "rollback", "release")
 
 	runner, lease = claimOrderRunner(lifecycleReplicaValues(active))
 	lease.tx.finishErr = errors.New("finish lost")
@@ -846,7 +845,7 @@ func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if !errors.Is(err, lease.tx.finishErr) || replica != (RuntimeReplicaResult{}) {
 		t.Fatalf("finish failure replica=%+v error=%v", replica, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "rollback", "destroy")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_activate_replica_capacity", "finish", "rollback", "destroy")
 
 	draining := lifecycleReplicaProjection(identity.ReplicaID, "serving", "draining", lifecycleStoreOperationID, lifecycleStoreExpected)
 	runner, lease = claimOrderRunner(lifecycleReplicaValues(draining))
@@ -856,7 +855,7 @@ func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if !errors.Is(err, lease.tx.commitErr) || replica != (RuntimeReplicaResult{}) {
 		t.Fatalf("commit failure replica=%+v error=%v", replica, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "destroy")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_prepare_scale_in", "finish", "commit", "destroy")
 
 	runner, lease = claimOrderRunner(nil)
 	lease.tx.queryErr = &pgconn.PgError{Code: "AM001", Message: "lifecycle step is corrupt"}
@@ -864,7 +863,7 @@ func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if !isSQLState(err, "AM001") || replica != (RuntimeReplicaResult{}) {
 		t.Fatalf("AM001 replica=%+v error=%v", replica, err)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "rollback", "destroy")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_finish_scale_in", "rollback", "destroy")
 
 	terminating := lifecycleReplicaProjection(identity.ReplicaID, "maintenance", "terminating", lifecycleStoreOperationID, lifecycleStoreExpected)
 	runner, lease = claimOrderRunner(lifecycleReplicaValues(terminating))
@@ -872,7 +871,7 @@ func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if err != nil || replica.State != "terminating" || lease.tx.functions != 1 {
 		t.Fatalf("terminate replica=%+v error=%v functions=%d", replica, err, lease.tx.functions)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_begin_replica_termination", "finish", "commit", "release")
 
 	maintenance := lifecycleReplicaProjection(identity.ReplicaID, "maintenance", "draining", lifecycleStoreOperationID, lifecycleStoreExpected)
 	runner, lease = claimOrderRunner(lifecycleReplicaValues(maintenance))
@@ -881,7 +880,7 @@ func TestRuntimeLifecycleTransportEntryFunctionFinishCommitOrder(t *testing.T) {
 	if err != nil || replica.State != "draining" || lease.tx.functions != 1 {
 		t.Fatalf("drain replica=%+v error=%v functions=%d", replica, err, lease.tx.functions)
 	}
-	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:unknown", "finish", "commit", "release")
+	assertEvents(t, lease.events, "acquire", "begin", "entry", "function:runtime_prepare_maintenance_drain", "finish", "commit", "release")
 }
 
 // lifecycleCommandPool returns a single-connection pool authenticated as
