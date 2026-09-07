@@ -119,8 +119,9 @@ separately. [Wake operations](../../../design/scaling/wake-operations.md) and
 [protected wake migration](../../../design/scaling/wake-migrations.md) define
 the exclusive runner, fixed ApplyWake path and source admission.
 [R1.12 exclusive wake](exclusive-wake.md) reserves migration 24 after
-evidence 23. ApplyWake remains a separate later slice; neither path is composed
-until both pass.
+evidence 23. [R1.13 protected wake migration](wake-migrations.md) reserves
+migration 25 and the fixed ApplyWake/source-admission path. Neither path is
+composed until both pass.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption
@@ -163,6 +164,15 @@ fixes their grants, scalar transport, partition checks and replay-error limits.
 original deadline, parent-first execution fence and separate lifecycle recovery
 of a proved fenced initiator. R1 installs their real named-role grants. R8 owns
 composition and readiness; it introduces no additional SQL privilege gate.
+
+The [fixed declarations](../../../design/scaling/transition-functions.md),
+[operation contract](../../../design/scaling/transition-operations.md) and
+[store transport](../../../design/scaling/transition-transport.md) fix all ten
+functions, replay matrices, parent-first commit callback and pure-read physical
+cleanup. R1 may install uncomposed operations and test isolated fully fenced
+fixtures. R1a and R2-R7 integration follow; complete structural writer coverage
+is required before composition or multi-replica authority. R2 must fix exact
+Coordinator dependency injection before its author begins.
 
 [Recovery evidence](../../../design/scaling/transition-recovery.md) fixes the
 ordinary parent-locked rollback and atomic outcome authority. No unresolved

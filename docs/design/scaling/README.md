@@ -25,6 +25,9 @@ precede infrastructure wiring; hosted proof remains a Phase 10 gate.
 | [Transition reconciliation](transition-reconciliation.md) | One snapshot, local apply order and durable retirement                   |
 | [Transition storage](transition-storage.md)               | Four-table constraints, complete results and immutable evidence          |
 | [Transition commit](transition-commit.md)                 | Business execution fence and fenced-initiator rollback                   |
+| [Transition functions](transition-functions.md)           | Exact SQL declarations, result presence and database time                |
+| [Transition operations](transition-operations.md)         | Entry, roles, lock order and terminal replay                             |
+| [Transition transport](transition-transport.md)           | Typed Go values, commit callback and physical connection cleanup         |
 | [Admission](admission.md)                                 | Fleet rate policies, heavy work, render affinity and realtime            |
 | [Rate storage](rate-storage.md)                           | Exact state, clock arithmetic, pending debt and bounded cleanup          |
 | [Rate operations](rate-operations.md)                     | Fixed results, historical replay, roles, query transport and clock tests |
