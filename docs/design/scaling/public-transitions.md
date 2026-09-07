@@ -16,6 +16,11 @@ and write framing.
 
 ## Durable tables
 
+The [fixed function catalog](transition-functions.md),
+[operation contract](transition-operations.md) and
+[store transport](transition-transport.md) define exact SQL arguments, result
+presence, replay outcomes and connection cleanup for this protocol.
+
 The schema adds `public_transitions`, `public_transition_targets`,
 `public_transition_replicas`, and `public_transition_acks` as specified in
 [runtime schema](runtime-schema.md#public_transitions) and the exact

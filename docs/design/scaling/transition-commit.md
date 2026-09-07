@@ -112,9 +112,12 @@ transaction replays a committed transition.
 
 The store exposes `WithTransitionCommitFence`. Its callback receives only
 transaction-bound `*store.Queries`. The method runs commit entry first, invokes
-the callback, requires one complete `CommittedState`, records the terminal
-results, then returns to `WriteTxRunner`. It exposes no raw transaction, commit,
-rollback, connection, capability, or post-finish query.
+the callback, requires one complete `store.TransitionCommitResults`, records the
+terminal results, then returns to `WriteTxRunner`. It exposes no raw
+transaction, commit, rollback, connection, capability, or post-finish query. R3
+maps the existing `publicstate.CommittedState` to this private store value;
+store never imports publicstate. The exact interfaces are in
+[store transport](transition-transport.md).
 
 ## Rollback and unresolved state
 

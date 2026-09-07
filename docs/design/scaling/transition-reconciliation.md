@@ -123,7 +123,11 @@ returns no snapshot; R2 keeps fences closed. The store defines closed
 string-backed TransitionState, TransitionOperation, TargetKind, TransitionClass
 and TargetResultKind types and rejects unknown database values before returning.
 The publicstate adapter converts these private store values; store does not
-import publicstate.
+import publicstate. The [transport contract](transition-transport.md) requires
+an explicit pool lease and physical-retirement capability before the read. AM001
+retires that exact backend even after clean protocol completion. Every uncertain
+cleanup path returns no snapshot and cannot release an unproved connection for
+reuse.
 
 ## Local application order
 
