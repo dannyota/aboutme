@@ -14,6 +14,26 @@ import (
 	"time"
 )
 
+// headMigrationVersion returns the highest embedded migration version and
+// asserts the set is contiguous from one, so version-relative expectations
+// below survive a new migration while still catching enumeration breakage.
+func headMigrationVersion(t *testing.T) int64 {
+	t.Helper()
+	sources, err := migrationSourcesFromFS(FS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sources) == 0 {
+		t.Fatal("no embedded migration sources")
+	}
+	for i, source := range sources {
+		if source.Version != int64(i+1) {
+			t.Fatalf("migration versions are not contiguous from one: index %d is version %d", i, source.Version)
+		}
+	}
+	return sources[len(sources)-1].Version
+}
+
 func TestTemplateDatabaseNameIsVersionedAndSourceBound(t *testing.T) {
 	head, err := TemplateDatabaseName(FS, 0)
 	if err != nil {
@@ -23,8 +43,10 @@ func TestTemplateDatabaseNameIsVersionedAndSourceBound(t *testing.T) {
 	if err != nil || again != head {
 		t.Fatalf("head=%s again=%s error=%v", head, again, err)
 	}
-	if !templateDatabasePattern.MatchString(head) || !localMigrationDatabasePattern.MatchString(head) || !strings.HasPrefix(head, "aboutme_migrate_template_20_") {
-		t.Fatalf("head name %q", head)
+	headVersion := headMigrationVersion(t)
+	headPrefix := fmt.Sprintf("aboutme_migrate_template_%d_", headVersion)
+	if !templateDatabasePattern.MatchString(head) || !localMigrationDatabasePattern.MatchString(head) || !strings.HasPrefix(head, headPrefix) {
+		t.Fatalf("head name %q want prefix %q", head, headPrefix)
 	}
 	nineteen, err := TemplateDatabaseName(FS, 19)
 	if err != nil || !strings.HasPrefix(nineteen, "aboutme_migrate_template_19_") || nineteen == head {
@@ -63,8 +85,8 @@ func TestThroughFSHidesHigherVersionsFromGlobAndOpen(t *testing.T) {
 	}
 	unlimited := throughFS{FS: FS}
 	names, err = fs.Glob(unlimited, "*.sql")
-	if err != nil || len(names) != 20 {
-		t.Fatalf("unbounded view count=%d error=%v", len(names), err)
+	if want := int(headMigrationVersion(t)); err != nil || len(names) != want {
+		t.Fatalf("unbounded view count=%d want=%d error=%v", len(names), want, err)
 	}
 }
 
@@ -156,9 +178,10 @@ func TestEnsureTemplateDatabaseBuildsOnceAndClonesProvisioned(t *testing.T) {
 			t.Errorf("close clone: %v", closeErr)
 		}
 	})
+	head := headMigrationVersion(t)
 	statuses, err := Status(ctx, db, LocalAdminMigratorIdentity())
-	if err != nil || PendingCount(statuses) != 1 {
-		t.Fatalf("clone pending=%d error=%v", PendingCount(statuses), err)
+	if want := int(head - 19); err != nil || PendingCount(statuses) != want {
+		t.Fatalf("clone pending=%d want=%d error=%v", PendingCount(statuses), want, err)
 	}
 	if err = ProvisionDatabase(ctx, db); err != nil {
 		t.Fatalf("clone provisioning is not idempotent: %v", err)
@@ -168,7 +191,7 @@ func TestEnsureTemplateDatabaseBuildsOnceAndClonesProvisioned(t *testing.T) {
 	if err = db.QueryRowContext(ctx, `SELECT generation,to_regprocedure('public.runtime_register_serving_replica(uuid,text,text,text,text,text,text)') IS NOT NULL FROM public.runtime_write_state WHERE singleton`).Scan(&generation, &registration); err != nil || !registration {
 		t.Fatalf("clone state generation=%d registration=%t error=%v", generation, registration, err)
 	}
-	if _, err = applyFS(ctx, db, runtimeTransitionFixtureFS(t, 20), LocalAdminMigratorIdentity()); err != nil {
+	if _, err = applyFS(ctx, db, runtimeTransitionFixtureFS(t, head), LocalAdminMigratorIdentity()); err != nil {
 		t.Fatalf("upgrade clone: %v", err)
 	}
 	statuses, err = Status(ctx, db, LocalAdminMigratorIdentity())
@@ -368,7 +391,7 @@ func TestNewMigratedTestDatabaseClonesAndIsolates(t *testing.T) {
 	}
 	older := newMigratedTestDatabase(t, 19)
 	statuses, err = Status(ctx, older, LocalAdminMigratorIdentity())
-	if err != nil || PendingCount(statuses) != 1 {
-		t.Fatalf("version 19 pending=%d error=%v", PendingCount(statuses), err)
+	if want := int(headMigrationVersion(t) - 19); err != nil || PendingCount(statuses) != want {
+		t.Fatalf("version 19 pending=%d want=%d error=%v", PendingCount(statuses), want, err)
 	}
 }
