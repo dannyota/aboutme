@@ -439,10 +439,10 @@ migrate: migrate-provision ## Apply pending migrations
 migrate-check: ## Report pending migrations without applying them
 	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate -check
 
-server-migration-test: ## Run the migration harness + migrate CLI (needs test-db-up or TEST_DATABASE_URL)
-	@printf '%s\n' 'server-migration-test: go test migration harness and CLI packages'
+server-migration-test: ## Run the migration harness + migrate CLI under -race (needs test-db-up or TEST_DATABASE_URL)
+	@printf '%s\n' 'server-migration-test: go test -race migration harness and CLI packages'
 	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
-	  go test ./migrations/... ./cmd/migrate/... -count=1 -timeout 30m -v
+	  go test ./migrations/... ./cmd/migrate/... -race -count=1 -timeout 30m -v
 
 test-db-templates-clean: ## Drop the cached migration template databases from aboutme-test-db
 	@for d in $$(podman exec aboutme-test-db psql -U aboutme -d postgres -tAc \
