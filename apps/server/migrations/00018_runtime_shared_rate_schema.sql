@@ -106,7 +106,7 @@ CREATE TABLE public.shared_rate_buckets (
   (algorithm='rolling_slug' AND token_numerator IS NULL AND refill_at IS NULL AND window_started_at IS NULL AND count=cardinality(rolling_events)
    AND cardinality(rolling_events) BETWEEN 0 AND 30 AND CASE WHEN COALESCE(array_ndims(rolling_events),1)=1 THEN array_position(rolling_events,NULL) IS NULL AND public.runtime_rate_events_sorted(rolling_events) ELSE false END)) IS TRUE)
 );
-CREATE INDEX shared_rate_buckets_expiry_idx ON public.shared_rate_buckets(policy_id,partition,last_seen,key_digest);
+CREATE INDEX shared_rate_buckets_expiry_idx ON public.shared_rate_buckets(policy_id,last_seen,key_digest);
 
 CREATE TABLE public.shared_rate_overflow (
  policy_id text PRIMARY KEY,

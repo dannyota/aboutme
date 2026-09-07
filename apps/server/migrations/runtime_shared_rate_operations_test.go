@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1790,12 +1791,12 @@ func TestRuntimeSharedRateOperationsCleanupAcceptsEveryCatalogPolicy(t *testing.
 	requireRateOperationError(t, unknownErr, "55000")
 }
 
-// rateExplainPlan returns the EXPLAIN text for statement.
-func rateExplainPlan(t *testing.T, db *sql.DB, statement string) string {
+// rateExplainPlan returns the EXPLAIN text for statement under options.
+func rateExplainPlan(t *testing.T, db *sql.DB, options, statement string) string {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
-	rows, err := db.QueryContext(ctx, `EXPLAIN (COSTS OFF) `+statement)
+	rows, err := db.QueryContext(ctx, `EXPLAIN (`+options+`) `+statement)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1819,40 +1820,99 @@ func rateExplainPlan(t *testing.T, db *sql.DB, statement string) string {
 	return plan.String()
 }
 
-// TestRuntimeSharedRateOperationsExpiryCandidateWalksTheExpiryIndex proves the
-// allocation-path expiry candidate query runs as an ordered index walk that
-// stops at the first eligible row, not a full partition scan plus sort. The
-// query runs while runtime_rate_sample holds the exclusive shared_policy_clocks
-// row, so a full scan there serializes every operation for the policy behind
-// max_keys_per_partition non-inlinable predicate calls.
-func TestRuntimeSharedRateOperationsExpiryCandidateWalksTheExpiryIndex(t *testing.T) {
+// requireRateOrderedIndexWalk fails unless plan reads shared_rate_buckets as an
+// ordered walk of shared_rate_buckets_expiry_idx, with no sort and no
+// sequential or bitmap read of the table.
+func requireRateOrderedIndexWalk(t *testing.T, name, plan string) {
+	t.Helper()
+	if !strings.Contains(plan, "Index Scan using shared_rate_buckets_expiry_idx on shared_rate_buckets") {
+		t.Fatalf("%s does not walk shared_rate_buckets_expiry_idx:\n%s", name, plan)
+	}
+	for _, forbidden := range []string{"Seq Scan on shared_rate_buckets", "Bitmap Heap Scan on shared_rate_buckets", "Sort"} {
+		if strings.Contains(plan, forbidden) {
+			t.Fatalf("%s still plans %q:\n%s", name, forbidden, plan)
+		}
+	}
+}
+
+// rateFilterRejections returns the largest "Rows Removed by Filter" count in
+// plan, or 0 when the plan reports none.
+func rateFilterRejections(t *testing.T, plan string) int {
+	t.Helper()
+	worst := 0
+	for _, line := range strings.Split(plan, "\n") {
+		_, rest, found := strings.Cut(line, "Rows Removed by Filter: ")
+		if !found {
+			continue
+		}
+		count, err := strconv.Atoi(strings.TrimSpace(rest))
+		if err != nil {
+			t.Fatalf("unreadable filter count %q: %v", line, err)
+		}
+		if count > worst {
+			worst = count
+		}
+	}
+	return worst
+}
+
+// TestRuntimeSharedRateOperationsExpiryCandidatesWalkTheExpiryIndex proves both
+// last_seen-ordered candidate queries read shared_rate_buckets as an ordered
+// index walk rather than a full read plus sort: the allocation expiry candidate
+// in runtime_rate_expire_one, which is partition scoped, and the maintenance
+// candidate in runtime_cleanup_rate_buckets, which is policy scoped. Both run
+// while runtime_rate_sample holds the exclusive shared_policy_clocks row for the
+// policy, so a full read there serializes every operation for that policy.
+//
+// shared_rate_buckets_expiry_idx omits partition deliberately. The partition
+// predicate survives as a filter clause the planner orders ahead of the costly
+// runtime_rate_bucket_eligible call, and dropping the column is what lets one
+// index order the policy-scoped query too.
+func TestRuntimeSharedRateOperationsExpiryCandidatesWalkTheExpiryIndex(t *testing.T) {
 	db, _ := runtimeSharedRateDB(t)
-	const policy = ratePolicyToken
+	const policy, page = ratePolicyToken, 256
 	rateFillBuckets(t, db, policy, 1, 10000, true)
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	rateFillBuckets(t, db, policy, 2, 10000, false)
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
 	var rows int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM public.shared_rate_buckets WHERE policy_id=$1 AND partition=1`, policy).Scan(&rows); err != nil || rows != 10000 {
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM public.shared_rate_buckets WHERE policy_id=$1`, policy).Scan(&rows); err != nil || rows != 20000 {
 		t.Fatalf("fixture rows=%d error=%v", rows, err)
+	}
+	// An idle key is an old key, so the eligible rows are the oldest by
+	// last_seen. One in ten is idle, which is more than the maintenance page
+	// size and therefore lets the LIMIT stop early.
+	if err := membershipWrite(t, db, fmt.Sprintf(`UPDATE public.shared_rate_buckets SET last_seen=transaction_timestamp()-interval '48 hours' WHERE policy_id='%s' AND get_byte(key_digest,0)<26`, policy)); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := db.ExecContext(ctx, `ANALYZE public.shared_rate_buckets`); err != nil {
 		t.Fatal(err)
 	}
-	// The exact candidate shape runtime_rate_expire_one runs, with the
-	// catalog row supplied as a single-evaluation subquery in place of the
-	// function's composite argument.
-	candidate := `SELECT b.key_digest FROM public.shared_rate_buckets b
- WHERE b.policy_id='` + policy + `' AND b.partition=1::smallint
-  AND public.runtime_rate_bucket_eligible(b,(SELECT p FROM public.shared_rate_policies p WHERE p.policy_id='` + policy + `'),clock_timestamp())
- ORDER BY b.last_seen,b.key_digest LIMIT 1`
-	plan := rateExplainPlan(t, db, candidate)
-	if !strings.Contains(plan, "Index Scan using shared_rate_buckets_expiry_idx on shared_rate_buckets") {
-		t.Fatalf("expiry candidate does not walk shared_rate_buckets_expiry_idx:\n%s", plan)
+	var eligible int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM public.shared_rate_buckets b WHERE b.policy_id=$1 AND public.runtime_rate_bucket_eligible(b,(SELECT p FROM public.shared_rate_policies p WHERE p.policy_id=$1),clock_timestamp())`, policy).Scan(&eligible); err != nil || eligible <= page {
+		t.Fatalf("eligible fixture rows=%d want>%d error=%v", eligible, page, err)
 	}
-	for _, forbidden := range []string{"Seq Scan on shared_rate_buckets", "Bitmap Heap Scan on shared_rate_buckets", "Sort"} {
-		if strings.Contains(plan, forbidden) {
-			t.Fatalf("expiry candidate still plans %q:\n%s", forbidden, plan)
-		}
+	catalog := `(SELECT p FROM public.shared_rate_policies p WHERE p.policy_id='` + policy + `')`
+	// The exact candidate shape runtime_rate_expire_one runs, with the catalog
+	// composite supplied as a single-evaluation subquery in place of the
+	// function's composite argument.
+	expiry := `SELECT b.key_digest FROM public.shared_rate_buckets b
+ WHERE b.policy_id='` + policy + `' AND b.partition=1::smallint
+  AND public.runtime_rate_bucket_eligible(b,` + catalog + `,clock_timestamp())
+ ORDER BY b.last_seen,b.key_digest LIMIT 1`
+	// The exact candidate shape runtime_cleanup_rate_buckets runs. It fixes no
+	// partition, which is why the index must not lead with one.
+	cleanup := fmt.Sprintf(`SELECT b.key_digest,b.last_seen FROM public.shared_rate_buckets b
+ WHERE b.policy_id='%s'
+  AND public.runtime_rate_bucket_eligible(b,%s,clock_timestamp())
+ ORDER BY b.last_seen,b.key_digest LIMIT %d`, policy, catalog, page)
+	requireRateOrderedIndexWalk(t, "expiry candidate", rateExplainPlan(t, db, "COSTS OFF", expiry))
+	cleanupPlan := rateExplainPlan(t, db, "ANALYZE, TIMING OFF, COSTS OFF", cleanup)
+	requireRateOrderedIndexWalk(t, "cleanup candidate", cleanupPlan)
+	// The ordered walk is only worth its write cost if the LIMIT stops early.
+	// A full read would reject every ineligible row in the policy.
+	if rejected := rateFilterRejections(t, cleanupPlan); rejected >= rows/2 {
+		t.Fatalf("cleanup candidate rejected %d of %d rows, so the page did not stop early:\n%s", rejected, rows, cleanupPlan)
 	}
 }
 

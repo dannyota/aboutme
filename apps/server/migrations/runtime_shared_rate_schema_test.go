@@ -647,7 +647,7 @@ func TestRuntimeSharedRateSchemaPrivilegesEntryAndCatalog(t *testing.T) {
 		t.Fatalf("attempt partial indexes=%d error=%v", attemptIndexes, err)
 	}
 	var expiryIndex int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND tablename='shared_rate_buckets' AND indexname='shared_rate_buckets_expiry_idx' AND indexdef LIKE '%(policy_id, partition, last_seen, key_digest)%'`).Scan(&expiryIndex); err != nil || expiryIndex != 1 {
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_indexes WHERE schemaname='public' AND tablename='shared_rate_buckets' AND indexname='shared_rate_buckets_expiry_idx' AND indexdef LIKE '%(policy_id, last_seen, key_digest)%'`).Scan(&expiryIndex); err != nil || expiryIndex != 1 {
 		t.Fatalf("bucket expiry index=%d error=%v", expiryIndex, err)
 	}
 	var deferredAssertions int
