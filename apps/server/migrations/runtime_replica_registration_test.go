@@ -569,15 +569,9 @@ func TestRuntimeReplicaRegistrationDetectsStoredChildCorruption(t *testing.T) {
 }
 
 func TestRuntimeReplicaRegistrationPreservesPopulatedVersion18(t *testing.T) {
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 18)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := applyFS(ctx, db, runtimeTransitionFixtureFS(t, 18), LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO public.users(id,email,name) VALUES('19191919-1919-4919-8919-191919191919','registration-preserve@example.test','registration preserved')`); err != nil {
 		t.Fatal(err)
 	}
@@ -604,15 +598,9 @@ func TestRuntimeReplicaRegistrationPreservesPopulatedVersion18(t *testing.T) {
 }
 
 func TestRuntimeReplicaRegistrationFailedMigrationRollsBackFunctionsAndGeneration(t *testing.T) {
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 18)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := applyFS(ctx, db, runtimeTransitionFixtureFS(t, 18), LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
 	var before int64
 	if err := db.QueryRowContext(ctx, `SELECT generation FROM public.runtime_write_state WHERE singleton`).Scan(&before); err != nil {
 		t.Fatal(err)

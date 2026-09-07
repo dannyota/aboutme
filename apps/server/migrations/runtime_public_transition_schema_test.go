@@ -36,15 +36,9 @@ func TestRuntimePublicTransitionSchemaObjectsExist(t *testing.T) {
 }
 
 func TestRuntimePublicTransitionSchemaPreservesVersion15Data(t *testing.T) {
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 15)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := applyFS(ctx, db, runtimeTransitionFixtureFS(t, 15), LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO public.users(id,email,name) VALUES('cccccccc-cccc-4ccc-8ccc-cccccccccccc','transition-preserve@example.test','transition preserved')`); err != nil {
 		t.Fatal(err)
 	}

@@ -809,15 +809,9 @@ func TestRuntimeSharedClaimOperationsReceiptCleanupBounds(t *testing.T) {
 }
 
 func TestRuntimeSharedClaimOperationsPreservesPopulatedVersion19(t *testing.T) {
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 19)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := applyFS(ctx, db, runtimeTransitionFixtureFS(t, 19), LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO public.users(id,email,name) VALUES('20202020-2020-4020-8020-202020202020','claim-operations-preserve@example.test','claim operations preserved')`); err != nil {
 		t.Fatal(err)
 	}
@@ -858,15 +852,9 @@ func TestRuntimeSharedClaimOperationsPreservesPopulatedVersion19(t *testing.T) {
 }
 
 func TestRuntimeSharedClaimOperationsFailedMigrationRollsBackTypeFunctionsAndGeneration(t *testing.T) {
-	db := newCompositionTestDatabase(t)
+	db := newMigratedTestDatabase(t, 19)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := applyFS(ctx, db, runtimeTransitionFixtureFS(t, 19), LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
 	var before int64
 	if err := db.QueryRowContext(ctx, `SELECT generation FROM public.runtime_write_state WHERE singleton`).Scan(&before); err != nil {
 		t.Fatal(err)

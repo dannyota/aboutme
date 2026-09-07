@@ -25,15 +25,7 @@ var runtimeMembershipTables = []string{
 
 func runtimeMembershipDB(t *testing.T) (*sql.DB, context.Context) {
 	t.Helper()
-	db := newCompositionTestDatabase(t)
-	ctx := context.Background()
-	if err := ProvisionDatabase(ctx, db); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Apply(ctx, db, LocalAdminMigratorIdentity()); err != nil {
-		t.Fatal(err)
-	}
-	return db, ctx
+	return newMigratedTestDatabase(t, 0), context.Background()
 }
 
 func membershipWrite(t *testing.T, db *sql.DB, statements ...string) (resultErr error) {
