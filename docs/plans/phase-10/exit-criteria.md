@@ -17,13 +17,20 @@
       passes. One fresh review, local `make ci`, and connected `make scan` pass
       at the candidate before deployment; heavy checks run serially.
 - [ ] The migration baseline marker is committed before the first UAT migration.
-- [ ] `shared_rate_buckets` has an index supporting the ordered expiry candidate
-      scan, `(policy_id, partition, last_seen, key_digest)`, confirmed with
-      `EXPLAIN` at ten thousand keys. Without it a full partition makes every
-      new-key admission scan every row while holding the exclusive policy clock
-      lock, so key exhaustion throttles the rate limiter itself. It belongs in
-      schema 18 while migrations stay editable, because a new migration would
-      take a reserved number.
+- [x] `shared_rate_buckets` has an index supporting both ordered candidate
+      scans, `(policy_id, last_seen, key_digest)`, proved with `EXPLAIN` at
+      twenty thousand rows. The partition column was measured and removed: it
+      served the allocation scan only, leaving maintenance cleanup sorting the
+      whole policy under the exclusive clock. Keeping both shapes cost 13
+      percent more write-ahead log on the hottest write for no further gain.
+- [ ] Rate candidate selection no longer evaluates the eligibility predicate on
+      every row of a policy while holding the exclusive clock. Indexing fixed
+      the ordering, not the predicate: below the cleanup page size, and for an
+      allocation scan whose partition holds nothing expirable, every index shape
+      including none costs 150 to 300 milliseconds at twenty thousand rows.
+      Either make the idle branch a real index condition, or move candidate
+      discovery outside the clock lock, which is safe because both call sites
+      revalidate each candidate under lock afterwards.
 - [ ] The resource/DNS inventory, spending ceiling, UAT lifetime, cleanup scope,
       and any global-service region exceptions are recorded for the authorized
       Singapore environment and `uat.aboutme.vn`.

@@ -278,6 +278,17 @@ in place consumes no number but requires recreating the native development
 database. That choice is the owner's and is open. **This must land before UAT.**
 Confirm with `EXPLAIN` at ten thousand keys.
 
+### Planner dependency worth making explicit
+
+`runtime_rate_bucket_eligible` is SECURITY DEFINER, never inlinable, and carries
+PostgreSQL's default function cost. That default is what makes the planner apply
+the cheap partition comparison before the expensive eligibility call, which is
+why removing the partition column from the expiry index left the allocation scan
+unchanged. The behaviour is correct by default rather than by declaration; an
+explicit `COST` would make the dependency deliberate. The `EXPLAIN` test pins
+the chosen plan, so a planner change fails loudly rather than regressing
+silently.
+
 ### Open, lower priority
 
 Migration 20 asserts write entry before checking the role, while migration 21
