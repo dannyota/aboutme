@@ -441,8 +441,8 @@ func lifecycleLeaveReceiptSQL(id registrationIdentity, operation string) string 
 }
 
 func lifecycleProofSQL(id registrationIdentity, evidence string) string {
-	return fmt.Sprintf(`INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,evidence_id,requested_at,observed_terminated_at,observed_state) VALUES('%s','%s','%s','ec2_terminated_v1','%s',clock_timestamp(),clock_timestamp(),'terminated')`,
-		id.replicaID, id.instanceID, id.release, evidence)
+	return fmt.Sprintf(`INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,request_id,evidence_id,requested_at,observed_terminated_at,observed_state,reclaimed_claim_count) VALUES('%s','%s','%s','ec2_terminated_v1','request-%s','%s',clock_timestamp(),clock_timestamp(),'terminated',0)`,
+		id.replicaID, id.instanceID, id.release, evidence, evidence)
 }
 
 // lifecycleWakeFixture builds the accepted durable wake parent and its two

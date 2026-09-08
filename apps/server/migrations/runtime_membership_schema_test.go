@@ -101,14 +101,14 @@ func TestRuntimeMembershipSchemaEvidenceImmutableAndTupleBound(t *testing.T) {
 	if err := membershipWrite(t, db, valid...); err != nil {
 		t.Fatal(err)
 	}
-	badTuple := `INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,evidence_id,requested_at,observed_terminated_at,observed_state) VALUES('11111111-1111-4111-8111-111111111111','i-99999999999999999','sha256:` + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" + `','ec2_terminated_v1','evidence-1',transaction_timestamp(),transaction_timestamp(),'terminated')`
+	badTuple := `INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,request_id,evidence_id,requested_at,observed_terminated_at,observed_state,reclaimed_claim_count) VALUES('11111111-1111-4111-8111-111111111111','i-99999999999999999','sha256:` + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" + `','ec2_terminated_v1','request-1','evidence-1',transaction_timestamp(),transaction_timestamp(),'terminated',0)`
 	requireMembershipFailure(t, membershipWrite(t, db, badTuple))
-	proof := `INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,evidence_id,requested_at,observed_terminated_at,observed_state) VALUES('11111111-1111-4111-8111-111111111111','i-11111111111111111','sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','ec2_terminated_v1','evidence-1',transaction_timestamp(),transaction_timestamp(),'terminated')`
+	proof := `INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,request_id,evidence_id,requested_at,observed_terminated_at,observed_state,reclaimed_claim_count) VALUES('11111111-1111-4111-8111-111111111111','i-11111111111111111','sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','ec2_terminated_v1','request-1','evidence-1',transaction_timestamp(),transaction_timestamp(),'terminated',0)`
 	if err := membershipWrite(t, db, proof); err != nil {
 		t.Fatal(err)
 	}
 	second := replicaInsert("22222222-2222-4222-8222-222222222222", "i-22222222222222222", "b")
-	futureObservation := `INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,evidence_id,requested_at,observed_terminated_at,observed_state) VALUES('22222222-2222-4222-8222-222222222222','i-22222222222222222','sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','ec2_terminated_v1','evidence-future',transaction_timestamp(),transaction_timestamp()+interval '1 hour','terminated')`
+	futureObservation := `INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,request_id,evidence_id,requested_at,observed_terminated_at,observed_state,reclaimed_claim_count) VALUES('22222222-2222-4222-8222-222222222222','i-22222222222222222','sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','ec2_terminated_v1','request-future','evidence-future',transaction_timestamp(),transaction_timestamp()+interval '1 hour','terminated',0)`
 	if err := membershipWrite(t, db, append(second, futureObservation)...); err != nil {
 		t.Fatalf("future external observation rejected by database clock: %v", err)
 	}
