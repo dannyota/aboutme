@@ -65,8 +65,10 @@ in one place.
   `RuntimeRecordEC2Termination`), `WriteTxRunner`, and the accepted result
   shapes in
   [membership evidence transport](../../../design/scaling/membership-evidence-transport.md).
-- Produces: `RuntimeMembershipEvidenceStore` with three context-first methods
-  returning owned `RuntimeLeaveResult` and `RuntimeFenceResult` values.
+- Produces: `RuntimeMembershipEvidenceTransport` and its pool constructor, with
+  three context-first methods returning owned `RuntimeLeaveResult` and
+  `RuntimeFenceResult` values. The name comes from the design document's Go
+  block, which outranks this plan, and matches the three sibling transports.
 
 - [ ] **Step 1: Read the accepted transport contract and the two siblings**
 
