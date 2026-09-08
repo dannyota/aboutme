@@ -81,12 +81,16 @@ graph LR
 Each application node runs distinct Caddy, Go, and Nuxt ECS tasks with separate
 cgroups: Caddy uses 128 MiB and 128 CPU units, Go plus Chromium uses 512 MiB and
 512 CPU units, and Nuxt uses 256 MiB and 256 CPU units. Scheduled ops tasks use
-256 MiB and 256 CPU units. One application replica is placed per node. The
-initial production capacity range is one to two replicas and scales in both
-directions; this launch bound is not a permanent product limit. RDS compute is
-fixed and sized separately. Increasing the application replica count alone is
-unsafe until Phase 10 replaces or coordinates process-local publication fences,
-render jobs and capabilities, SSE state, and limiters across the fleet.
+256 MiB and 256 CPU units. One application replica is placed per node. The first
+release runs one serving replica under
+[ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md); the
+one to two range in
+[ADR 0034](../adr/0034-scheduled-uat-and-production-autoscaling.md) is the
+growth target, not this launch. The growth path is a larger instance before a
+second replica. RDS compute is fixed and sized separately. Raising the replica
+count alone is unsafe: the deferred coordination named in ADR 0036 must land
+first, because publication fences, render jobs and capabilities, and SSE state
+remain process-local.
 
 Application nodes use public IPv4 for outbound access without a NAT gateway.
 Their inbound security group accepts only the ALB security group, and Caddy
@@ -244,16 +248,22 @@ availability decision. Backup retention is 30 days. Restore evidence matters
 more than backup configuration: staging performs a real isolated restore and
 data verification before launch.
 
-Production migration order is: stop admission and drain admitted requests on
-every replica, verify backup, take the migration advisory lock, run embedded
-goose migrations exactly once, start the new tasks, wait for fleet readiness,
-then reopen traffic. Scaling and deployment drains must preserve publication,
+Production migration order is: stop admission and drain admitted requests,
+verify backup, run the migration task to completion, start the new tasks, wait
+for readiness, then reopen traffic. The migration task is a separate task that
+exits, not the application server: the server never migrates at startup, and a
+nonzero migration exit blocks the service update. It takes the migration
+advisory lock and applies pending goose migrations exactly once, so a second
+concurrent runner is made safe rather than expected. With one serving replica
+this sequence interrupts service briefly, which
+[ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md)
+accepts. Scaling and deployment drains must preserve publication,
 account-deletion, private-media, artifact-revocation, render, and SSE
 invariants. Rollback uses a forward corrective migration; migrations fixed by
 the first UAT baseline never change
 ([ADR 0020](../adr/0020-uat-migration-baseline.md)).
 
-The embedded runner uses goose's Provider with a PostgreSQL session advisory
+The migration runner uses goose's Provider with a PostgreSQL session advisory
 locker. The Provider acquires the lock before it checks which migrations remain
 pending, applies that set, and releases the lock. This prevents concurrent
 runners from acting on a stale pre-lock pending list and keeps lock handling in
@@ -287,9 +297,12 @@ The accepted [UAT lifecycle](scaling/uat-lifecycle.md) keeps RDS on during a
 booked campaign and its final 24-hour application writer tail. Application nodes
 and the temporary ALB are removed outside test windows. RDS may stop only after
 due cleanup, drained and terminated replicas, and an immutable final stop
-receipt that closes database writes. Hourly controller checks wake it before any
-category deadline or the seven-day service limit. Missing proof keeps RDS
-available. RDS storage, keys, state, images and required logs remain.
+receipt that closes database writes. Hourly controller checks start it before
+any category deadline or the seven-day service limit. Starting a stopped
+environment is an operational sequence and not a database protocol: start RDS,
+run the migration task, then start the service, and reverse it to stop. Missing
+proof keeps RDS available. RDS storage, keys, state, images and required logs
+remain.
 
 The [lifecycle forecast](../research/aws-cost/uat-lifecycle.md) includes
 retained costs and recovery reserves within USD 30. Orphaned volumes and
