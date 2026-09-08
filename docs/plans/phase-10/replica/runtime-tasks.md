@@ -110,18 +110,21 @@ retain key encoding, operation state and caller responses.
 
 [R1.10 ordinary lifecycle operations](lifecycle-operations.md) follows migration
 21 with six controller actions, immutable replay and atomic logical partition
-changes. Leave, exact EC2 proof, exclusive wake and transition functions remain
-separate later slices. [R1.11 membership evidence](membership-evidence.md)
-follows migration 22 with three fixed leave/proof functions and retained proof
-request/count fields. Cleanup stays atomic under a bounded caller context, with
-no fixed claim-row bound. Exclusive wake and transition functions still follow
-separately. [Wake operations](../../../design/scaling/wake-operations.md) and
-[protected wake migration](../../../design/scaling/wake-migrations.md) define
-the exclusive runner, fixed ApplyWake path and source admission.
-[R1.12 exclusive wake](exclusive-wake.md) reserves migration 24 after
-evidence 23. [R1.13 protected wake migration](wake-migrations.md) reserves
-migration 25 and the fixed ApplyWake/source-admission path. Neither path is
-composed until both pass.
+changes. Leave, exact EC2 proof and transition functions remain separate later
+slices. [R1.11 membership evidence](membership-evidence.md) follows migration 22
+with three fixed leave/proof functions and retained proof request/count fields.
+Cleanup stays atomic under a bounded caller context, with no fixed claim-row
+bound.
+
+Migration 23 is the last reserved runtime version. Migrations 24 and upward are
+unreserved.
+[ADR 0036](../../../adr/0036-single-replica-launch-and-pipeline-migrations.md)
+retires the two wake slices that previously held those numbers, because the
+first release runs one serving replica and migrations run from the deployment
+rather than from a waking fleet.
+[Wake operations](../../../design/scaling/wake-operations.md) and
+[protected wake migration](../../../design/scaling/wake-migrations.md) remain
+accepted contracts for a later second replica; neither is implemented.
 
 [B3 migrator composition](migrator-composition.md) protects history before any
 runtime migration after 00013. Its fixed object manifest and local adoption

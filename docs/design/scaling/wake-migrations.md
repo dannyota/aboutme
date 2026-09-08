@@ -5,6 +5,12 @@ Status: Accepted detail of [exclusive wake](wake-operations.md) and
 [ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md).
 Implementation and runtime proof remain Phase 10 gates.
 
+> **Implementation deferred.**
+> [ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)
+> retires this path for the first release, which runs one serving replica and
+> migrates from the deployment rather than from a waking fleet. The contract
+> stays accepted for a later second replica.
+
 Normal migration entry requires an open gate. This fixed path permits protected
 versions during the recorded wake's closing gate while ordinary writers remain
 unavailable. It adds no closed-gate bypass or final-stop authority.

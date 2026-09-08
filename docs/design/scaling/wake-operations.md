@@ -4,6 +4,12 @@ Status: Accepted detail of [exclusive write entry](lifecycle-write-entry.md)
 under [ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md).
 Implementation and runtime proof remain Phase 10 gates.
 
+> **Implementation deferred.**
+> [ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)
+> retires this path for the first release, which runs one serving replica and
+> migrates from the deployment rather than from a waking fleet. The contract
+> stays accepted for a later second replica.
+
 This contract fixes fresh state, historical replay and the scalar store result
 for begin_wake and complete_wake. The entry contract retains exact SQL
 signatures, markers, statement/row containment and finish guards.
