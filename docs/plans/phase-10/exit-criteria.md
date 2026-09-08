@@ -44,9 +44,13 @@
 - [ ] Task 10.15 deploys the candidate digests and passes the activation
       handoff.
 - [ ] Tasks 10.14–10.16 pass all required workflows through real HTTPS and SES.
-- [ ] Production-shaped UAT proves actual 1 → 2 → 1 capacity during writes,
-      revocation, render, and SSE, including abrupt failure and graceful drain,
-      without multiplying limits or exceeding the pgx connection budget.
+- [ ] Production-shaped UAT proves one serving replica under writes, revocation,
+      render, and SSE, including a deploy that interrupts service and recovers,
+      without exceeding the pgx connection budget.
+      [ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)
+      sets one replica for this release. Proving 1 → 2 → 1 capacity, and that
+      two replicas multiply no limit, becomes a Phase 11 precondition for
+      raising the service maximum, not a Phase 10 exit item.
 - [ ] Task 10.17 passes security, performance, restore, rotation, migration,
       rollback, edge, alarm, and cost checks with private supporting evidence.
 - [ ] Affected traceability rows have accurate evidence; no required row is

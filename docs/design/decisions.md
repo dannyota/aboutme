@@ -13,45 +13,48 @@ UAT. ADR 0033 records the owner's 2026-09-06 approval of public image builds
 with private AWS publication and deployment. ADR 0034 records the approved
 monthly operating range, scheduled UAT, and production scale-out and scale-in.
 ADR 0035 records the reviewed replica coordination, admission, connection
-envelope and recoverable UAT lifecycle under that approval.
+envelope and recoverable UAT lifecycle under that approval. ADR 0036 then sets
+one serving replica for the first release and moves migrations into the
+deployment, deferring the coordination that only a second replica needs.
 
-| ADR                                                                 | Status   | Integrated outcome                                                                                                |
-| ------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
-| [0001](../adr/0001-agpl-3.0-license.md)                             | Accepted | Repository and hosted service use AGPL-3.0                                                                        |
-| [0002](../adr/0002-go-api-nuxt-ssr-split.md)                        | Accepted | Go API and one shared Nuxt/Vue renderer                                                                           |
-| [0003](../adr/0003-sse-over-websocket.md)                           | Accepted | HTTP autosave and SSE invalidation                                                                                |
-| [0004](../adr/0004-resume-slug-only-urls.md)                        | Accepted | Globally unique resume slugs; users are not public                                                                |
-| [0005](../adr/0005-draft-permissive-documents.md)                   | Accepted | Draft-permissive storage and publish-strict completeness                                                          |
-| [0006](../adr/0006-schema-derived-codegen.md)                       | Accepted | Schema-derived code generation and cross-language conformance                                                     |
-| [0007](../adr/0007-unversioned-health-endpoints.md)                 | Accepted | Root health and readiness routes                                                                                  |
-| [0008](../adr/0008-template-apply-semantics.md)                     | Accepted | Presets compute placement against current section keys                                                            |
-| [0009](../adr/0009-section-order-authority.md)                      | Accepted | Layout arrays own section order                                                                                   |
-| [0010](../adr/0010-goose-only-migrations.md)                        | Accepted | Goose migrations are the relational schema source                                                                 |
-| [0011](../adr/0011-risk-tiered-delivery-gates.md)                   | Accepted | Risk-tiered task review and two phase gates                                                                       |
-| [0012](../adr/0012-ssr-sanitizer-authority.md)                      | Accepted | Go owns SSR sanitizing; DOMPurify is client-only                                                                  |
-| [0013](../adr/0013-contact-detail-rendering.md)                     | Accepted | Array-ordered plain-text contacts with custom labels                                                              |
-| [0014](../adr/0014-oauth-start-methods.md)                          | Accepted | GET login start; CSRF-protected POST link and reauth start                                                        |
-| [0015](../adr/0015-session-rotation-delivery.md)                    | Accepted | One successor with bounded predecessor fallback until delivery                                                    |
-| [0016](../adr/0016-transactional-idempotency.md)                    | Accepted | Mutation and replay record commit together                                                                        |
-| [0017](../adr/0017-resume-document-versioning.md)                   | Accepted | Pure read projection, CAS persistence, explicit converters                                                        |
-| [0018](../adr/0018-bounded-rate-limiter.md)                         | Accepted | No active-bucket eviction under key churn                                                                         |
-| [0019](../adr/0019-private-media-delivery.md)                       | Accepted | Private object storage behind live-gated Go reads                                                                 |
-| [0020](../adr/0020-uat-migration-baseline.md)                       | Accepted | First UAT freezes development migration history                                                                   |
-| [0021](../adr/0021-template-placement-order.md)                     | Accepted | Validate exact placement; order by selector then current position                                                 |
-| [0022](../adr/0022-public-artifact-revocation.md)                   | Accepted | Revalidate every public reuse; fence and drain generation leases                                                  |
-| [0023](../adr/0023-private-print-capability.md)                     | Accepted | One-use 256-bit, 60-second capability bound to snapshot and job                                                   |
-| [0024](../adr/0024-single-pass-delivery-gates.md)                   | Accepted | One author pass per task and one review per phase                                                                 |
-| [0025](../adr/0025-password-authentication-and-identity-linking.md) | Accepted | Email/password credential alongside providers; email is never an identity key                                     |
-| [0026](../adr/0026-mcp-agent-access.md)                             | Accepted | Remote MCP endpoint and first-party OAuth 2.1 server; editor parity minus publish                                 |
-| [0027](../adr/0027-provider-login-flag.md)                          | Accepted | Provider login behind `PROVIDER_LOGIN_ENABLED`, off for v1; web reads capabilities                                |
-| [0028](../adr/0028-no-operator-surface.md)                          | Accepted | No platform-admin page, privileged role, or operator route in the public app                                      |
-| [0029](../adr/0029-application-ui-toolkit.md)                       | Accepted | Tailwind v4 and shadcn-vue chrome without Preflight; renderer stays isolated                                      |
-| [0030](../adr/0030-stamped-document-visual-identity.md)             | Accepted | Stamped-document identity: seal red only for public state, signature ink actions, Be Vietnam Pro chrome           |
-| [0031](../adr/0031-aws-cost-research-and-hosted-uat.md)             | Accepted | Phase 9 AWS cost research, OpenTofu, managed AWS services, Phase 10 hosted UAT, separate Phase 11 launch          |
-| [0032](../adr/0032-public-share-image.md)                           | Accepted | One live-gated public PNG share image from the continuous resume renderer                                         |
-| [0033](../adr/0033-public-image-builds-private-deployment.md)       | Accepted | Public ARM64 build/smoke; private verified ECR publication and AWS deployment                                     |
-| [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)     | Accepted | Scheduled UAT; ECS production autoscaling with a one-server minimum; fixed RDS compute                            |
-| [0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)       | Accepted | PostgreSQL fleet coordination; paired render authority; 60-connection envelope; durable UAT stop and wake control |
+| ADR                                                                  | Status   | Integrated outcome                                                                                                |
+| -------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| [0001](../adr/0001-agpl-3.0-license.md)                              | Accepted | Repository and hosted service use AGPL-3.0                                                                        |
+| [0002](../adr/0002-go-api-nuxt-ssr-split.md)                         | Accepted | Go API and one shared Nuxt/Vue renderer                                                                           |
+| [0003](../adr/0003-sse-over-websocket.md)                            | Accepted | HTTP autosave and SSE invalidation                                                                                |
+| [0004](../adr/0004-resume-slug-only-urls.md)                         | Accepted | Globally unique resume slugs; users are not public                                                                |
+| [0005](../adr/0005-draft-permissive-documents.md)                    | Accepted | Draft-permissive storage and publish-strict completeness                                                          |
+| [0006](../adr/0006-schema-derived-codegen.md)                        | Accepted | Schema-derived code generation and cross-language conformance                                                     |
+| [0007](../adr/0007-unversioned-health-endpoints.md)                  | Accepted | Root health and readiness routes                                                                                  |
+| [0008](../adr/0008-template-apply-semantics.md)                      | Accepted | Presets compute placement against current section keys                                                            |
+| [0009](../adr/0009-section-order-authority.md)                       | Accepted | Layout arrays own section order                                                                                   |
+| [0010](../adr/0010-goose-only-migrations.md)                         | Accepted | Goose migrations are the relational schema source                                                                 |
+| [0011](../adr/0011-risk-tiered-delivery-gates.md)                    | Accepted | Risk-tiered task review and two phase gates                                                                       |
+| [0012](../adr/0012-ssr-sanitizer-authority.md)                       | Accepted | Go owns SSR sanitizing; DOMPurify is client-only                                                                  |
+| [0013](../adr/0013-contact-detail-rendering.md)                      | Accepted | Array-ordered plain-text contacts with custom labels                                                              |
+| [0014](../adr/0014-oauth-start-methods.md)                           | Accepted | GET login start; CSRF-protected POST link and reauth start                                                        |
+| [0015](../adr/0015-session-rotation-delivery.md)                     | Accepted | One successor with bounded predecessor fallback until delivery                                                    |
+| [0016](../adr/0016-transactional-idempotency.md)                     | Accepted | Mutation and replay record commit together                                                                        |
+| [0017](../adr/0017-resume-document-versioning.md)                    | Accepted | Pure read projection, CAS persistence, explicit converters                                                        |
+| [0018](../adr/0018-bounded-rate-limiter.md)                          | Accepted | No active-bucket eviction under key churn                                                                         |
+| [0019](../adr/0019-private-media-delivery.md)                        | Accepted | Private object storage behind live-gated Go reads                                                                 |
+| [0020](../adr/0020-uat-migration-baseline.md)                        | Accepted | First UAT freezes development migration history                                                                   |
+| [0021](../adr/0021-template-placement-order.md)                      | Accepted | Validate exact placement; order by selector then current position                                                 |
+| [0022](../adr/0022-public-artifact-revocation.md)                    | Accepted | Revalidate every public reuse; fence and drain generation leases                                                  |
+| [0023](../adr/0023-private-print-capability.md)                      | Accepted | One-use 256-bit, 60-second capability bound to snapshot and job                                                   |
+| [0024](../adr/0024-single-pass-delivery-gates.md)                    | Accepted | One author pass per task and one review per phase                                                                 |
+| [0025](../adr/0025-password-authentication-and-identity-linking.md)  | Accepted | Email/password credential alongside providers; email is never an identity key                                     |
+| [0026](../adr/0026-mcp-agent-access.md)                              | Accepted | Remote MCP endpoint and first-party OAuth 2.1 server; editor parity minus publish                                 |
+| [0027](../adr/0027-provider-login-flag.md)                           | Accepted | Provider login behind `PROVIDER_LOGIN_ENABLED`, off for v1; web reads capabilities                                |
+| [0028](../adr/0028-no-operator-surface.md)                           | Accepted | No platform-admin page, privileged role, or operator route in the public app                                      |
+| [0029](../adr/0029-application-ui-toolkit.md)                        | Accepted | Tailwind v4 and shadcn-vue chrome without Preflight; renderer stays isolated                                      |
+| [0030](../adr/0030-stamped-document-visual-identity.md)              | Accepted | Stamped-document identity: seal red only for public state, signature ink actions, Be Vietnam Pro chrome           |
+| [0031](../adr/0031-aws-cost-research-and-hosted-uat.md)              | Accepted | Phase 9 AWS cost research, OpenTofu, managed AWS services, Phase 10 hosted UAT, separate Phase 11 launch          |
+| [0032](../adr/0032-public-share-image.md)                            | Accepted | One live-gated public PNG share image from the continuous resume renderer                                         |
+| [0033](../adr/0033-public-image-builds-private-deployment.md)        | Accepted | Public ARM64 build/smoke; private verified ECR publication and AWS deployment                                     |
+| [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)      | Accepted | Scheduled UAT; ECS production autoscaling with a one-server minimum; fixed RDS compute                            |
+| [0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)        | Accepted | PostgreSQL fleet coordination; paired render authority; 60-connection envelope; durable UAT stop and wake control |
+| [0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md) | Accepted | One serving replica for the first release; migrations run as a deployment step; wake implementation retired       |
 
 ## Remaining gates
 
@@ -71,7 +74,8 @@ $20–30/month UAT,
 $140–170/month production, and $160–200/month combined on
 2026-09-06. These estimates do not waive production launch approval. Phase 10
 implements and proves the operating controls and replica safety required by ADRs
-0034 and 0035.
+0034 and 0035, as narrowed by ADR 0036: the first release runs one replica, so
+the two-replica proof moves to Phase 11.
 
 ADRs 0022 and 0023 carry the highest implementation complexity in the design and
 belong to the completed public-surface phase and task 7.1. They are accepted as

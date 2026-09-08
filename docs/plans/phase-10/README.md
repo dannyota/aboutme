@@ -1,9 +1,19 @@
 # Phase 10 — Infrastructure and AWS UAT
 
-Status: **In progress: local replica implementation** (2026-09-06). Phase 9 is
+Status: **In progress: local replica implementation** (2026-09-08). Phase 9 is
 merged. The owner authorized UAT in AWS Singapore and Cloudflare DNS for
-`uat.aboutme.vn`. Task 10.18 design is accepted under ADR 0035. Local
-implementation is pending. Nothing has been deployed by this phase.
+`uat.aboutme.vn`. Task 10.18 design is accepted under ADR 0035. Nothing has been
+deployed by this phase.
+
+**The first release runs one serving replica.**
+[ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)
+narrows ADR 0034's one-to-two target for this release, moves migrations to a
+deployment step that completes before the service starts, and defers the
+coordination that only a second replica needs. Migrations 13 through 23 are
+built and proved and are retained. Applying migrations from a waking fleet is
+retired. Raising the service maximum above one requires the deferred work that
+ADR 0036 names, and proving 1 → 2 → 1 capacity is a Phase 11 precondition rather
+than a Phase 10 exit item.
 
 **Goal:** deploy the completed web v1 to `https://uat.aboutme.vn`, prove its
 user workflows, and rehearse the operational requirements before production.
