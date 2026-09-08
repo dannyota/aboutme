@@ -260,23 +260,25 @@ Three defects were fixed and one open item was raised.
 3. The two token helpers disagreed on the same numeric contract. Neither shape
    is reachable through the nine operations, so this is contract parity.
 
-### Required follow-up, not yet done
+### Index outcome
 
-`shared_rate_buckets` has no index supporting the `ORDER BY last_seen` expiry
-candidate scan. Migration 18 gave `shared_admission_attempts` four
-purpose-shaped indexes but gave this table none, so this reads as an omission.
-With both partitions full, about twenty thousand keys, every new-key admission
-reads every row of the partition twice while holding the exclusive
-`shared_policy_clocks` row lock that serializes all work for that policy. That
-turns key exhaustion into a throughput collapse of the rate limiter itself.
+`shared_rate_buckets` now carries `(policy_id, last_seen, key_digest)`, added to
+schema 18 in place under owner authorisation while migrations stay editable.
 
-The index belongs in schema 18 as
-`(policy_id, partition, last_seen, key_digest)`. Because migration versions must
-stay contiguous, adding it as a new migration would take the number reserved for
-lifecycle operations and shift every later reservation, while editing schema 18
-in place consumes no number but requires recreating the native development
-database. That choice is the owner's and is open. **This must land before UAT.**
-Confirm with `EXPLAIN` at ten thousand keys.
+The first shape tried was `(policy_id, partition, last_seen, key_digest)`, which
+measurement rejected. It served the allocation candidate but not the maintenance
+cleanup candidate, which is scoped to a policy and carries no partition
+predicate, so cleanup kept sorting the whole policy under the exclusive
+`shared_policy_clocks` lock. Dropping the partition column serves both: the
+allocation scan is unchanged within noise, because the planner applies the cheap
+partition comparison before the expensive eligibility call. Cleanup falls from
+282 to 3 milliseconds at two thousand candidates, and a twenty thousand key
+drain from about 23 seconds of clock-held work to about 3. Keeping both shapes
+was measured and rejected at 13 percent more write-ahead log per hot-path write
+for no further gain.
+
+Do not re-add the partition column. The `EXPLAIN` test proves both candidate
+queries walk this index without a sort.
 
 ### Planner dependency worth making explicit
 
@@ -289,15 +291,14 @@ explicit `COST` would make the dependency deliberate. The `EXPLAIN` test pins
 the chosen plan, so a planner change fails loudly rather than regressing
 silently.
 
-### Open, lower priority
+### Role ordering, resolved
 
-Migration 20 asserts write entry before checking the role, while migration 21
-checks the role first. `runtime_require_write_entry` reads the mutable write
-gate, so migration 21 matches the contract and migration 20 does not. The
-reviewer recommends a later forward `CREATE OR REPLACE` for migration 20's five
-definers rather than an in-place edit, since migration 21 builds on the database
-migration 20 produces. Defense in depth, not a live vulnerability: the EXECUTE
-grants already confine those functions to app and maintenance.
+Migration 20 asserted write entry before checking the role, so a forbidden role
+learned the write gate state first. The owner authorised editing migrations in
+place, so its five definers were corrected there rather than through a forward
+replacement. Migration 19 was examined and left alone: its wrappers already
+check the role first and delegate to inner helpers that no login may execute, a
+false positive caught by the author with a live probe.
 
 ### Left to callers
 

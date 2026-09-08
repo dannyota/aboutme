@@ -231,8 +231,9 @@ func TestTemplateDatabaseNameIsVersionedAndSourceBound(t *testing.T) {
 }
 ```
 
-Update the literal `20` when the head version moves; the test names the head on
-purpose so a new migration forces a deliberate edit.
+The test derives the head version rather than pinning it, and separately asserts
+the versions are contiguous from one, so a new migration needs no edit here
+while enumeration breakage still fails.
 
 - [x] **Step 2: Run it and observe the missing symbols**
 
