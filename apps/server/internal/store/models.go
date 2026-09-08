@@ -268,6 +268,8 @@ type RuntimeFencingProof struct {
 	ObservedTerminatedAt time.Time
 	RecordedAt           time.Time
 	ObservedState        string
+	RequestID            string
+	ReclaimedClaimCount  int32
 }
 
 type RuntimeLeaveReceipt struct {

@@ -1029,9 +1029,9 @@ func lifecycleFenceFixture(t *testing.T, admin *sql.DB, identity RuntimeReplicaI
 	t.Helper()
 	claimLiveOwnerWrite(t, admin,
 		fmt.Sprintf(`UPDATE public.runtime_replicas SET state='fenced',fenced_at=clock_timestamp() WHERE replica_id='%s'`, identity.ReplicaID),
-		fmt.Sprintf(`INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,evidence_id,requested_at,observed_terminated_at,observed_state)`+
-			` VALUES('%s','%s','%s','ec2_terminated_v1','%s',clock_timestamp(),clock_timestamp(),'terminated')`,
-			identity.ReplicaID, identity.InstanceID, identity.ReleaseDigest, evidenceID))
+		fmt.Sprintf(`INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,request_id,evidence_id,requested_at,observed_terminated_at,observed_state,reclaimed_claim_count)`+
+			` VALUES('%s','%s','%s','ec2_terminated_v1','request-%s','%s',clock_timestamp(),clock_timestamp(),'terminated',0)`,
+			identity.ReplicaID, identity.InstanceID, identity.ReleaseDigest, evidenceID, evidenceID))
 }
 
 func TestRuntimeLifecycleTransportLiveOrdinaryScaleOutAndScaleIn(t *testing.T) {

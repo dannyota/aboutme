@@ -411,7 +411,7 @@ func TestRuntimePublicTransitionSchemaEveryChildRequiredColumnRejectsNull(t *tes
 func TestRuntimePublicTransitionSchemaFencedRollbackRequiresRealEvidence(t *testing.T) {
 	db, _ := runtimeMembershipDB(t)
 	fixture := transitionFixture()
-	proof := fmt.Sprintf(`INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,evidence_id,requested_at,observed_terminated_at,observed_state) VALUES('%s','%s','sha256:%s','ec2_terminated_v1','transition-fence-proof',transaction_timestamp(),transaction_timestamp(),'terminated')`, initiatorID, initiatorInstance, strings.Repeat("a", 64))
+	proof := fmt.Sprintf(`INSERT INTO public.runtime_fencing_proofs(replica_id,instance_id,release_digest,adapter,request_id,evidence_id,requested_at,observed_terminated_at,observed_state,reclaimed_claim_count) VALUES('%s','%s','sha256:%s','ec2_terminated_v1','transition-fence-request','transition-fence-proof',transaction_timestamp(),transaction_timestamp(),'terminated',0)`, initiatorID, initiatorInstance, strings.Repeat("a", 64))
 	fixture = append(fixture[:2], append([]string{proof}, fixture[2:]...)...)
 	fixture = append(fixture, fmt.Sprintf(`UPDATE public.public_transitions SET state='rolled_back',terminal_at=clock_timestamp(),terminal_error_code='initiator_fenced',recovery_fencing_evidence_id='transition-fence-proof' WHERE transition_id='%s'`, transitionID))
 	if err := transitionWrite(t, db, fixture...); err != nil {
