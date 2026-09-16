@@ -187,7 +187,6 @@ provider "cloudflare" {}
 ```hcl
 variable "account_id" { type = string }
 variable "state_kms_key_arn" { type = string }
-variable "alarm_email" { type = string }
 variable "media_bucket_name" { type = string }
 variable "ses_from_address" {
   type    = string
@@ -218,7 +217,6 @@ bucket = "aboutme-prod-tfstate-<account id>"
 # prod.tfvars.example
 account_id         = ""
 state_kms_key_arn  = ""
-alarm_email        = ""
 media_bucket_name  = ""
 image_server       = "ghcr.io/dannyota/aboutme-server@sha256:..."
 image_web          = "ghcr.io/dannyota/aboutme-web@sha256:..."
@@ -499,11 +497,11 @@ creation takes about ten minutes. `aws rds describe-db-instances` shows
 Result (2026-09-17): network, RDS and bucket exist and `tofu plan` reports no
 changes. RDS 18.6 is private, encrypted, keeps 30-day backups, has deletion
 protection and runs in `ap-southeast-1a`; `rds.force_ssl` is 1. The first apply
-placed the subnets in the account's opted-in Hanoi and Manila Local Zones, so
-the zone lookup now filters `zone-type = availability-zone`. `rds.force_ssl`
-carries `apply_method = "pending-reboot"` to match what RDS records. The
-Cloudflare ranges come from the public `/client/v4/ips` endpoint through the
-`http` provider.
+placed the subnets in Local Zones, so the zone lookup now filters
+`zone-type = availability-zone`. `rds.force_ssl` carries
+`apply_method = "pending-reboot"` to match what RDS records. The Cloudflare
+ranges come from the public `/client/v4/ips` endpoint through the `http`
+provider.
 
 ## Task 10
 
@@ -1064,7 +1062,7 @@ until the owner uploads the certificate and the first deploy is healthy.
 
 ## Task 12
 
-### Jobs, alarms and budget
+### Jobs and alarms
 
 **Files:**
 
@@ -1072,7 +1070,7 @@ until the owner uploads the certificate and the first deploy is healthy.
 - Modify: `deploy/aws/prod/main.tf`
 
 **Interfaces:** Produces SNS topic `aboutme-prod-alerts`, four schedules, the
-Route 53 health check, alarms, the budget and the maintenance window.
+Route 53 health check, alarms and the maintenance window.
 
 - [ ] **Step 1: Write the schedules**
 
@@ -1146,7 +1144,7 @@ with the first real run; if Scheduler rejects an unversioned ARN, `deploy.sh`
 updates each schedule's target to the new revision while it re-enables them.
 `deploy.sh` disables the group's schedules during a deploy.
 
-- [ ] **Step 2: Write alarms, health check, budget and updates**
+- [ ] **Step 2: Write alarms, health check and updates**
 
 ```hcl
 resource "aws_sns_topic" "alerts" { name = "${var.name}-alerts" }
@@ -1218,54 +1216,9 @@ resource "aws_route53_health_check" "site" {
 }
 ```
 
-Budget and anomaly detection:
-
-```hcl
-resource "aws_budgets_budget" "monthly" {
-  name         = "${var.name}-monthly"
-  budget_type  = "COST"
-  limit_amount = "60"
-  limit_unit   = "USD"
-  time_unit    = "MONTHLY"
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_email_addresses = [var.alarm_email]
-  }
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 100
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "FORECASTED"
-    subscriber_email_addresses = [var.alarm_email]
-  }
-}
-
-resource "aws_ce_anomaly_monitor" "services" {
-  name              = "${var.name}-services"
-  monitor_type      = "DIMENSIONAL"
-  monitor_dimension = "SERVICE"
-}
-
-resource "aws_ce_anomaly_subscription" "email" {
-  name             = "${var.name}-anomalies"
-  frequency        = "DAILY"
-  monitor_arn_list = [aws_ce_anomaly_monitor.services.arn]
-  subscriber {
-    type    = "EMAIL"
-    address = var.alarm_email
-  }
-  threshold_expression {
-    dimension {
-      key           = "ANOMALY_TOTAL_IMPACT_ABSOLUTE"
-      values        = ["10"]
-      match_options = ["GREATER_THAN_OR_EQUAL"]
-    }
-  }
-}
-```
+Budgets, anomaly monitoring and the alert address are account-level and stay out
+of this repository. The owner's private notes record them. OpenTofu takes the
+alert address from the ignored `prod.tfvars` as `alarm_email`.
 
 Monthly OS updates:
 

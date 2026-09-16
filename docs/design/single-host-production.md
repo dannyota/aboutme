@@ -244,15 +244,15 @@ already hold advisory locks against overlap.
 
 All alarms notify one SNS topic that emails the owner.
 
-| Signal   | Mechanism                                                                 |
-| -------- | ------------------------------------------------------------------------- |
-| Logs     | awslogs to CloudWatch Logs, 180-day retention                             |
-| App down | ECS running count below one; Route 53 health check on `/healthz`          |
-| Host     | EC2 status check with auto-recovery; ECS CPU and memory                   |
-| Database | RDS CPU, credit balance, free storage and connections                     |
-| Jobs     | ECS task stopped with nonzero exit; Scheduler invocation failures         |
-| Mail     | SES bounce and complaint rates                                            |
-| Spend    | AWS Budget at $60 with actual and forecast alerts; Cost Anomaly Detection |
+| Signal   | Mechanism                                                             |
+| -------- | --------------------------------------------------------------------- |
+| Logs     | awslogs to CloudWatch Logs, 180-day retention                         |
+| App down | ECS running count below one; Route 53 health check on `/healthz`      |
+| Host     | EC2 status check with auto-recovery; ECS CPU and memory               |
+| Database | RDS CPU, credit balance, free storage and connections                 |
+| Jobs     | ECS task stopped with nonzero exit; Scheduler invocation failures     |
+| Mail     | SES bounce and complaint rates                                        |
+| Spend    | Budget filtered to `Project=aboutme`, managed outside this repository |
 
 Expected monthly cost is about $45–55: EC2 $15.48, RDS $18.25 plus $2.76
 storage, root disk $1.92, Elastic IP $3.65, the state KMS key $1, and a few

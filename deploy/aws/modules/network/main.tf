@@ -1,8 +1,7 @@
 # VPC with one public subnet for the host and two private subnets for RDS.
 # There is no NAT gateway; RDS needs no outbound access.
 
-# Standard zones only: the account has opted-in Local Zones, which RDS and
-# this design do not use.
+# Standard Availability Zones only; RDS and this design use no Local Zones.
 data "aws_availability_zones" "available" {
   state = "available"
   filter {
