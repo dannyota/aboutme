@@ -40,21 +40,17 @@ The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. Separate
 one-shot commands bootstrap roles, provision database grants, apply migrations
 and initialize media storage. PostgreSQL is not published to the host. Caddy is
 the only published service. The current Compose Caddyfile serves HTTP; this is
-suitable for deployment smoke checks. Complete hosted UAT is planned for Phase
-10 at `https://uat.aboutme.vn` after Phase 9 AWS cost research; see
-[ADR 0031](adr/0031-aws-cost-research-and-hosted-uat.md). No AWS application
-deployment is claimed by these local checks.
+suitable for deployment smoke checks. No AWS application deployment exists yet.
 
-The owner has approved the costed Singapore ECS/EC2 and RDS target in
-[ADR 0034](adr/0034-scheduled-uat-and-production-autoscaling.md). UAT will stop
-between test windows; production will scale application capacity out and in with
-at least one server. Those controls are not implemented yet. Revocation leases,
-print jobs, event subscribers, and limiters still hold process-local state.
-Phase 10 must implement and prove coordination across replicas before enabling
-autoscaling. [ADR 0035](adr/0035-replica-coordination-and-uat-lifecycle.md) and
-the [scaling contract](design/scaling/README.md) settle the target, including
-proof-based UAT shutdown and a 60-connection RDS envelope. Replica coordination
-and shutdown remain unimplemented. RDS compute remains separately sized.
+Production is planned as one AWS Singapore host behind Cloudflare, with RDS and
+private S3, per
+[ADR 0037](adr/0037-single-host-production-without-hosted-uat.md) and the
+[single-host design](design/single-host-production.md). It runs one replica
+under [ADR 0036](adr/0036-single-replica-launch-and-pipeline-migrations.md).
+Revocation leases, print jobs, event subscribers, and limiters hold
+process-local state, which is correct only with one replica. The
+[scaling contract](design/scaling/README.md) records which parts of a
+multi-replica runtime exist.
 
 The local candidate includes seven fixed database roles and migration 00013's
 runtime write-entry, finish and migrator-session primitives. Live tests prove
@@ -173,9 +169,8 @@ resume HTTP surface. The implemented boundary provides:
   adjacent converters, and released/accepted/emitted registries for both
   versions;
 - hand-written goose migrations as the sole relational schema source; their
-  pre-UAT history remains correctable until the first candidate adds the
-  immutable baseline marker required by
-  [ADR 0020](adr/0020-uat-migration-baseline.md);
+  history remains correctable until the first release adds the immutable
+  baseline marker required by [ADR 0020](adr/0020-uat-migration-baseline.md);
 - sqlc-generated data access from those migrations and `sql/` query sources;
 - schema-derived bounds, aggregate validation, and a bounded codec;
 - owner-scoped CRUD primitives, a three-resume cap, and revision
@@ -353,12 +348,10 @@ agent metadata is redacted after 90 days. See the
 
 ## Known delivery gaps
 
-- Complete product UAT and live operational evidence remain planned for Phase 10
-  at `https://uat.aboutme.vn` in AWS Singapore. Native HTTPS checks support
-  development; the missing release evidence is hosted UAT, not a local port-443
-  deployment.
+- Production infrastructure, deployment, scheduled jobs and live operational
+  evidence are not built yet. The owner tests the complete product in production
+  after the first deploy.
 
 ## Not implemented
 
-Hosted scheduling, infrastructure, UAT, production deployment, and Flutter
-remain planned.
+AWS infrastructure, production deployment, and Flutter remain planned.

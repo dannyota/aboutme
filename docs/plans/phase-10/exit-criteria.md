@@ -1,22 +1,8 @@
 # Phase 10 exit criteria
 
-## Before activation
+## Before the first deploy
 
-- [ ] Task 10.18's detailed design, bounded implementation tasks, runtime
-      implementation, and local multi-process/lifecycle proofs are complete.
-      Dependent infrastructure and hosted work consume those outputs.
-- [ ] Task 10.14's harness, workflow specs, operational scripts, and runbooks
-      are authored, tested locally, and included in the reviewed candidate.
-      After task 10.15 deploys it, only live preflight and acceptance execution
-      remain; no new test code is required to begin the hosted run.
-
-- [ ] Phase 6–8 behavior and Phase 9's cost/configuration decision are complete.
-- [ ] Infrastructure contracts match the runtime and cost decision, including
-      mail/MCP settings, disabled-provider startup, edge routes, and UAT access.
-- [ ] The [infrastructure local checkpoint](infrastructure/exit-criteria.md)
-      passes. One fresh review, local `make ci`, and connected `make scan` pass
-      at the candidate before deployment; heavy checks run serially.
-- [ ] The migration baseline marker is committed before the first UAT migration.
+- [ ] The single-replica direction plan's verification and fresh review pass.
 - [x] `shared_rate_buckets` has an index supporting both ordered candidate
       scans, `(policy_id, last_seen, key_digest)`, proved with `EXPLAIN` at
       twenty thousand rows. The partition column was measured and removed: it
@@ -31,37 +17,32 @@
       Either make the idle branch a real index condition, or move candidate
       discovery outside the clock lock, which is safe because both call sites
       revalidate each candidate under lock afterwards.
-- [ ] The resource/DNS inventory, spending ceiling, UAT lifetime, cleanup scope,
-      and any global-service region exceptions are recorded for the authorized
-      Singapore environment and `uat.aboutme.vn`.
-- [ ] The email runbook's existing SES stack is inventoried. OpenTofu ownership
-      and runtime IAM are settled without replacing resources or Google DNS.
-      Sandbox-compatible workflow recipients and missing integration have
-      owners.
+- [ ] Hosted provisioning works without superuser, `set-login` sends only SCRAM
+      verifiers, and the server image verifies RDS TLS. Each has passing tests.
+- [ ] The first-task checks on a real Bottlerocket host pass: host-mode task
+      roles, the bridge-gateway listener, and the IMDS hop-limit block.
+- [ ] Image builds and ARM64 smoke pass; `tofu validate` and a reviewed
+      `tofu plan` pass.
+- [ ] One fresh review, local `make ci`, and connected `make scan` pass at the
+      candidate. The review confirms client-IP trust, origin lockdown, secret
+      handling, IAM scope, and migration order by name.
+- [ ] `apps/server/migrations/.uat-baseline` is committed.
 
-## Hosted acceptance
+## In production
 
-- [ ] Task 10.15 deploys the candidate digests and passes the activation
-      handoff.
-- [ ] Tasks 10.14–10.16 pass all required workflows through real HTTPS and SES.
-- [ ] Production-shaped UAT proves one serving replica under writes, revocation,
-      render, and SSE, including a deploy that interrupts service and recovers,
-      without exceeding the pgx connection budget.
-      [ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)
-      sets one replica for this release. Proving 1 → 2 → 1 capacity, and that
-      two replicas multiply no limit, becomes a Phase 11 precondition for
-      raising the service maximum, not a Phase 10 exit item.
-- [ ] Task 10.17 passes security, performance, restore, rotation, migration,
-      rollback, edge, alarm, and cost checks with private supporting evidence.
-- [ ] Affected traceability rows have accurate evidence; no required row is
-      blocked or claimed proven by configuration alone.
-- [ ] The same fresh reviewer confirms fixes and the final evidence. Any
-      candidate change reruns required gates and invalidated UAT results.
-- [ ] Scheduled UAT stop/start, RDS seven-day guard, required-job deadlines,
-      temporary ALB removal, cleanup/retention, and residual cost are recorded;
-      unrelated resources and the owner's shared mail setup are preserved.
-- [ ] The integration owner completes this checklist and records local gates and
-      hosted evidence against one unchanged final candidate before closure.
+- [ ] The first deploy completes, including the three first-deploy database
+      steps, and its smoke checks pass. A direct request to the origin address
+      fails.
+- [ ] The owner tests registration, sign-in, editing, publishing, exports,
+      realtime, MCP, account export and deletion.
+- [ ] Every alarm is triggered once and its email arrives.
+- [ ] Scheduled jobs run and report success.
+- [ ] Traceability rows name their production evidence; none is claimed by
+      configuration alone.
 
-Production is Phase 11 and needs separate owner approval. Correct wrong criteria
-in this phase and note the change, per ADR 0024.
+## Before the public announcement
+
+- [ ] A snapshot restores to a temporary instance, the data verifies, and the
+      instance is deleted.
+- [ ] SES production access is granted.
+- [ ] Privacy, terms, and name reviews are complete.

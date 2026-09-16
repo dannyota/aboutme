@@ -190,11 +190,11 @@ feedback consumer. Price a new consumer and polling before activation. Simulator
 delivery is separate from real verification/reset workflows. Preserve Google
 Workspace records and the existing MAIL FROM subdomain.
 
-The [runtime handoff](../../plans/phase-10/runtime-refresh.md) carries the
-remaining startup, private print, ARM64, access, and workflow contracts. Local
-checks precede AWS activation. Hosted UAT proves load, scaling, mail, restore,
-rollback, alarms, origin-secret rotation, and concurrent migrations. A failed
-capacity check needs a priced correction within the approved ceiling.
+A Phase 10 runtime handoff, since removed, carried the remaining startup,
+private print, ARM64, access, and workflow contracts. Local checks precede AWS
+activation. Hosted UAT proves load, scaling, mail, restore, rollback, alarms,
+origin-secret rotation, and concurrent migrations. A failed capacity check needs
+a priced correction within the approved ceiling.
 
 Reproduce the gross comparison with
 `python3 -B docs/research/aws-cost/calculate.py` and the operating model with
