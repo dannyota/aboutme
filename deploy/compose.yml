@@ -159,7 +159,7 @@ services:
       - db
 
   media:
-    image: docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: ["server", "/data"]
     environment:
@@ -184,7 +184,7 @@ services:
       - media
 
   media-init:
-    image: docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
