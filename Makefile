@@ -105,6 +105,10 @@ idempotency-expiry-sweep media-deletion-sweep media-orphan-sweep privacy-retenti
 media-orphan-sweep-dry-run: ## Report orphan candidates without changing media or sweep state
 	cd apps/server && go run ./cmd/server media-orphan-sweep --dry-run
 
+.PHONY: caddy-prod-test
+caddy-prod-test: ## Build the production Caddy image and test routing, origin-pull mTLS, and client-IP trust
+	bash deploy/caddy/production/test.sh
+
 .PHONY: server-test-realtime-stress
 server-test-realtime-stress: ## Measure 2,000 real SSE connections and churn locally; run alone
 	@cd apps/server && ABOUTME_REALTIME_STRESS=1 go test ./internal/realtimebench -run TestPublicSSEConnectionChurn -count=1 -v -timeout=70s

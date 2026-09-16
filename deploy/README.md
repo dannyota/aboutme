@@ -4,13 +4,14 @@
 environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
-| Path                 | Purpose                                               |
-| -------------------- | ----------------------------------------------------- |
-| `compose.yml`        | Podman Compose services and isolated networks         |
-| `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle  |
-| `web.Dockerfile`     | Nuxt production image                                 |
-| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary |
-| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof  |
+| Path                 | Purpose                                                  |
+| -------------------- | -------------------------------------------------------- |
+| `compose.yml`        | Podman Compose services and isolated networks            |
+| `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle     |
+| `web.Dockerfile`     | Nuxt production image                                    |
+| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary    |
+| `caddy/production/`  | Production Caddy image: Cloudflare trust and origin mTLS |
+| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof     |
 
 AWS infrastructure has not landed. It will live in `deploy/aws/`, with images
 built on GitHub Actions `ubuntu-24.04-arm` for `linux/arm64`. See the
