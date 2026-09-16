@@ -31,7 +31,7 @@ flowchart TD
     SES[SES]
   end
   EIP --> C
-  C -->|/api/v1, /mcp, /oauth, public slugs| G
+  C -->|/api, /mcp, /oauth, /.well-known,<br/>/healthz, public slugs| G
   C -->|everything else| N
   G -->|public render 127.0.0.1:3000| N
   N -->|one-use print redemption| G
@@ -43,13 +43,20 @@ flowchart TD
 ## Edge
 
 - Cloudflare proxies `aboutme.vn` in Full (strict) mode. Caddy presents a
-  Cloudflare Origin CA certificate and requires the Cloudflare client
-  certificate (Authenticated Origin Pulls).
+  Cloudflare Origin CA certificate.
+- Zone-level Authenticated Origin Pulls uses our own client certificate, and
+  Caddy accepts only that certificate. The global Cloudflare certificate is
+  shared by every Cloudflare account, so it proves only that a request came
+  through some Cloudflare zone.
 - A cache rule bypasses the cache for every path except `/_nuxt/*`. Public PDF
   and image exports have extensions Cloudflare caches by default, and a cached
   copy would survive unpublish or deletion.
-- Bot Fight Mode is off for `/mcp`, `/oauth/*` and `/api/*`. Cloudflare passes
-  `Authorization` unchanged.
+- Bot Fight Mode is off. It cannot exempt paths, and it would block MCP clients,
+  API calls and the health check. DDoS protection and Go's rate limits remain.
+  Cloudflare passes `Authorization` unchanged.
+- Cloudflare's IP ranges feed both the security group and Caddy's trusted proxy
+  list. `deploy.sh` compares the live ranges with the deployed ones and stops on
+  a difference until `tofu apply` refreshes them.
 - SSE heartbeats every 25 seconds stay under Cloudflare's 100-second idle
   timeout.
 - Cloudflare decrypts all traffic. The privacy notice states this.
@@ -165,11 +172,14 @@ through write-only attributes. The first implementation task confirms write-only
 support in the pinned OpenTofu and AWS provider versions; the fallback is a
 script that generates values and writes them straight to SSM.
 
-The Origin CA key cannot follow that path, because a value derived from an
-ephemeral key cannot feed the certificate resource. A local script generates the
-key and certificate signing request, writes the key straight to SSM, and passes
-only the request to OpenTofu, which issues the certificate. The key never
-touches disk outside a temporary directory the script removes.
+TLS keys cannot follow that path, because a value derived from an ephemeral key
+cannot feed a regular resource. A local script generates two key pairs in a
+temporary directory it removes afterwards:
+
+- The Origin CA key goes to SSM. Only its certificate signing request goes to
+  OpenTofu, which issues the certificate.
+- The origin-pull client key and certificate go straight to Cloudflare's API.
+  Caddy receives only the public certificate.
 
 The `app` task role may get, put, list and delete objects in the media bucket
 and send mail from the verified SES identity. The `jobs` task role has the same
@@ -194,18 +204,27 @@ starts.
 1. Resolve the tag to digests. Require the tag on `main` with green CI.
 2. Take an RDS snapshot named for the tag and wait for it.
 3. Register new task definition revisions by digest.
-4. Scale `app` to zero and wait. The site is down from here.
+4. Disable the job schedules, scale `app` to zero and wait. The site is down
+   from here.
 5. With `--first-deploy`, run the three `db-admin` steps.
 6. Run `migrate` and require exit 0. On failure, restore the previous `app`
    revision and stop.
-7. Update `web`, then `app`, and wait for steady state.
+7. Update `web`, then `app`, wait for steady state, and re-enable the job
+   schedules.
 8. Smoke through Cloudflare: health, TLS and security headers. A direct request
    to the Elastic IP must fail.
 
-`deploy.sh --rollback <tag>` redeploys earlier digests without migrating.
-Deployment rules already keep every migration compatible with the previous
-server. OpenTofu owns infrastructure and first task definitions and ignores
-later revisions on the services.
+`deploy.sh --rollback <tag>` redeploys earlier digests without migrating. It is
+safe only when the failed release applied no migration, because this script does
+not run the prior-digest compatibility test from the deployment design. After a
+migration, recovery is a forward fix or a point-in-time restore.
+
+`apps/server/migrations/.uat-baseline` is committed before the first production
+migration. From then on, migrations are immutable, per
+[ADR 0020](../adr/0020-uat-migration-baseline.md).
+
+OpenTofu owns infrastructure and first task definitions and ignores later
+revisions on the services.
 
 Deploys take about one to three minutes of downtime. A monthly SSM maintenance
 window applies Bottlerocket updates with `apiclient update apply --reboot`.
@@ -232,9 +251,9 @@ All alarms notify one SNS topic that emails the owner.
 | Mail     | SES bounce and complaint rates                                            |
 | Spend    | AWS Budget at $60 with actual and forecast alerts; Cost Anomaly Detection |
 
-Expected monthly cost is about $45–50: EC2 $15.48, RDS $18.25 plus $2.76
-storage, root disk $1.92, Elastic IP $3.65, and a few dollars for logs, the
-health check, Secrets Manager, S3 and SES, using
+Expected monthly cost is about $45–55: EC2 $15.48, RDS $18.25 plus $2.76
+storage, root disk $1.92, Elastic IP $3.65, the state KMS key $1, and a few
+dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
 [recorded prices](../research/aws-cost/pricing.csv).
 
 ## Infrastructure code

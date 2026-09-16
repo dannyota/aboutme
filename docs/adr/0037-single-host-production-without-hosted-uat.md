@@ -42,7 +42,7 @@ the resulting rules.
 
 ## Consequences
 
-- Monthly cost falls to about $45–50 from the $140–170 production estimate.
+- Monthly cost falls to about $45–55 from the $140–170 production estimate.
 - Deploys and monthly OS updates interrupt service for a few minutes.
 - A host failure takes the site down until EC2 auto-recovery or a manual
   replacement completes.
@@ -54,6 +54,10 @@ the resulting rules.
 - Three code changes become launch prerequisites: hosted database provisioning
   without superuser, a login-verifier command, and the RDS CA bundle in the
   server image.
+
+- Accepting this record updates the deployment design, the roadmap and the Phase
+  10 plans in the same change, so no document still describes hosted UAT or the
+  fleet topology as the release path.
 
 ## Compatibility and review
 
