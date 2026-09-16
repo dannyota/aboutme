@@ -15,20 +15,21 @@ corrected.
 
 ## Sections
 
-| Section | File                                   | Purpose                                             |
-| ------- | -------------------------------------- | --------------------------------------------------- |
-| 1       | [Product](product.md)                  | Users, core journeys, v1 scope, and public states   |
-| 2       | [System](system.md)                    | Components, route ownership, and failure boundaries |
-| 3       | [Data](data.md)                        | Relational model, resume document, and versioning   |
-| 4       | [API](api.md)                          | HTTP conventions, endpoints, and write safety       |
-| 5       | [Web and rendering](web.md)            | Editor, renderer, templates, fonts, and sanitizing  |
-| 6       | [Deployment](deployment.md)            | Environments, network trust, storage, and backups   |
-| 7       | [Repository boundaries](repository.md) | Sources of truth and dependency direction           |
-| 8       | [Realtime](realtime.md)                | Autosave, Server-Sent Events, and fallback behavior |
-| 9       | [Operations](operations.md)            | Privacy lifecycle, monitoring, and launch evidence  |
-| 10      | [Decision status](decisions.md)        | Integrated ADRs, open gates, and approval rules     |
-| —       | [Font catalog](fonts.md)               | License gate, v2 choices, coverage, and provenance  |
-| —       | [Numeric budgets](budgets.md)          | Hard limits, rate policies, SLOs, and benchmarks    |
+| Section | File                                                | Purpose                                                  |
+| ------- | --------------------------------------------------- | -------------------------------------------------------- |
+| 1       | [Product](product.md)                               | Users, core journeys, v1 scope, and public states        |
+| 2       | [System](system.md)                                 | Components, route ownership, and failure boundaries      |
+| 3       | [Data](data.md)                                     | Relational model, resume document, and versioning        |
+| 4       | [API](api.md)                                       | HTTP conventions, endpoints, and write safety            |
+| 5       | [Web and rendering](web.md)                         | Editor, renderer, templates, fonts, and sanitizing       |
+| 6       | [Deployment](deployment.md)                         | Environments, network trust, storage, and backups        |
+| 6a      | [Single-host production](single-host-production.md) | First-release production host, edge, database and deploy |
+| 7       | [Repository boundaries](repository.md)              | Sources of truth and dependency direction                |
+| 8       | [Realtime](realtime.md)                             | Autosave, Server-Sent Events, and fallback behavior      |
+| 9       | [Operations](operations.md)                         | Privacy lifecycle, monitoring, and launch evidence       |
+| 10      | [Decision status](decisions.md)                     | Integrated ADRs, open gates, and approval rules          |
+| —       | [Font catalog](fonts.md)                            | License gate, v2 choices, coverage, and provenance       |
+| —       | [Numeric budgets](budgets.md)                       | Hard limits, rate policies, SLOs, and benchmarks         |
 
 The [template system](templates/README.md) is the detailed contract for preset
 data, rendering tokens, and print behavior. The
