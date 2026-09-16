@@ -1,115 +1,34 @@
-# Phase 10 — Infrastructure and AWS UAT
+# Phase 10 — Production deployment
 
-Status: **In progress: local replica implementation** (2026-09-08). Phase 9 is
-merged. The owner authorized UAT in AWS Singapore and Cloudflare DNS for
-`uat.aboutme.vn`. Task 10.18 design is accepted under ADR 0035. Nothing has been
-deployed by this phase.
+Status: **In progress** (2026-09-16). Nothing is deployed.
 
-**The first release runs one serving replica.**
-[ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)
-narrows ADR 0034's one-to-two target for this release, moves migrations to a
-deployment step that completes before the service starts, and defers the
-coordination that only a second replica needs. Migrations 13 through 23 are
-built and proved and are retained. Applying migrations from a waking fleet is
-retired. Raising the service maximum above one requires the deferred work that
-ADR 0036 names, and proving 1 → 2 → 1 capacity is a Phase 11 precondition rather
-than a Phase 10 exit item.
+**Goal:** deploy web v1 to `https://aboutme.vn` on one AWS Singapore host and
+test the product there, under
+[ADR 0037](../../adr/0037-single-host-production-without-hosted-uat.md). There
+is no hosted UAT environment.
 
-**Goal:** deploy the completed web v1 to `https://uat.aboutme.vn`, prove its
-user workflows, and rehearse the operational requirements before production.
+**Authority:** the
+[single-host production design](../../design/single-host-production.md), the
+[deployment design](../../design/deployment.md), and
+[ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md) for
+the one-replica runtime.
 
-Infrastructure uses OpenTofu and the managed AWS services selected in Phase 9.
-Deployment images build natively on GitHub Actions `ubuntu-24.04-arm` in the
-public app repository under
-[ADR 0033](../../adr/0033-public-image-builds-private-deployment.md). Private
-`aboutme-infra` validates those artifacts and owns AWS publication/deployment.
-Development stays on the laptop; the existing AMD64 browser baseline gate keeps
-its pinned architecture. The
-[build contract](infrastructure/contracts.md#build-and-runner-contract) defines
-the ARM64 smoke tests and immutable image handoff.
+## Work
 
-**Authority:** [ADR 0031](../../adr/0031-aws-cost-research-and-hosted-uat.md),
-[deployment](../../design/deployment.md), [budgets](../../design/budgets.md),
-[roadmap](../implementation-plan.md), and Phase 9's completed cost
-recommendation.
+| Plan                                                            | Scope                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Replica runtime](replica/README.md)                            | Migrations 13–23 and their transports; closing checks pending |
+| [Single-replica direction](replica/single-replica-direction.md) | Final verification and review of the replica work             |
+| Single-host production plan                                     | To be written: code changes, infrastructure, deploy, launch   |
 
-## Sequence and ownership
-
-| Tasks                                                   | Work                                                                       | Gate                                                                          |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [10.18](task-18-replica-safety-and-scaling-contract.md) | Replica safety, autoscaling, and scheduled UAT design and implementation   | Complete locally before dependent infrastructure dispatch                     |
-| [10.1–10.13](infrastructure/README.md)                  | Refresh contracts, implement IaC, images, policies, workflows and runbooks | Phase 9 and final Phase 6–8 runtime; local checks before activation           |
-| [10.14](harness.md)                                     | Hosted browser harness and fixtures                                        | Author/test before 10.15; live preflight after deployment                     |
-| [10.15](infrastructure/task-15-uat-activation.md)       | Provision and deploy UAT                                                   | Infrastructure local checkpoint, cost limits, and recorded resource inventory |
-| [10.16](execution.md)                                   | Complete product workflows                                                 | Healthy deployed candidate and SES handoff                                    |
-| [10.17](evidence.md)                                    | Operational drills, evidence, and closure                                  | Same candidate, workflow results, and provisioned runbooks                    |
-
-The integration owner owns activation, Git, shared configuration, evidence, and
-phase closure. Assign implementation paths before dispatch and follow ADR 0024:
-one author per task, one fresh phase review. Run local heavy checks one at a
-time to stay within laptop RAM limits.
-
-## Deployment scope
-
-- Application and data region: `ap-southeast-1` (Singapore).
-- UAT origin: `https://uat.aboutme.vn`; DNS is managed in Cloudflare. The
-  accepted topology uses DNS-only records, CloudFront, and a temporary
-  internet-facing ALB. Application nodes use public IPv4 for outbound access;
-  RDS remains private and single-AZ.
-- Record supporting origin/certificate records and any global-service region
-  exceptions in the deployment inventory. Keep UAT state, database, media,
-  fixtures, and deployment roles separate from production.
-- Existing internal `staging` environment names may remain implementation
-  details. They refer to this UAT environment, not a second paid deployment.
-- Production DNS cutover and launch belong to Phase 11 and need separate
-  approval.
-- UAT application nodes and its ALB are absent between scheduled test windows.
-  RDS stays available through the campaign and final 24-hour writer tail; later
-  stops require the ADR 0035 final receipt and next-due proof. RDS storage,
-  keys, state, ECR images, and required logs remain. Full-month root-disk and
-  public-IPv4 amounts are conservative cost reserves, not retained-resource
-  claims. Production autoscaling has minimum one and initial maximum two
-  replicas. Its serialized snapshot and migration workflow may drain to zero and
-  must restore at least one healthy replica afterward.
-
-## Required contract refresh
-
-Before implementation, reconcile every infrastructure task against the Phase 9
-decision and current code. Resolve `PUBLIC_RENDER_ORIGIN`, password/MCP flags,
-disabled-provider startup validation, and the current mail runtime settings. The
-[runtime handoff](runtime-refresh.md) records the inspected Phase 8 inputs,
-private print wiring gap, ARM64 browser path, and remaining resource checks.
-Read the [email runbook](../../runbooks/email.md) and inventory the existing
-`aboutme-email` CloudFormation stack before OpenTofu adopts overlapping
-resources. It records the Singapore sandbox, `danny@aboutme.vn`, `aboutme-auth`,
-missing runtime IAM, and an unconsumed feedback queue. Preserve Google Workspace
-DNS. Use simulator smoke separately from real verification/reset tests, which
-need approved verified recipients while SES remains in sandbox. Broader
-production mail waits for production access. Do not infer feedback processing
-from SQS delivery.
-
-Specify the complete edge policy for MCP discovery, `/oauth/*`, `/authorize`,
-and `/mcp`, including methods, cookies, Bearer authorization, and no-store. The
-old blanket Basic-auth staging gate conflicts with MCP Bearer authorization;
-settle a route-aware UAT access policy and tests before implementing it. Noindex
-remains required and is not a substitute for access control.
-
-Task 10.18 owns the distributed-runtime design and implementation-task split.
-Tasks 10.2, 10.5–10.7, 10.9–10.12, 10.14, and 10.15 are not dispatchable until
-its local implementation and checks pass. Replica count two alone is not a valid
-test because publication, render, SSE, and limit state are process-local.
+The integration owner owns Git, shared configuration, deploys, and phase
+closure. Follow ADR 0024: one author per task, one fresh phase review. Run local
+heavy checks one at a time.
 
 ## Candidate and verification
 
-The candidate contains completed Phase 6–8 behavior and locally verified
-infrastructure. Commit `apps/server/migrations/.uat-baseline` before the first
-hosted database migration; never rewrite that history afterward.
-
-Run local `make ci`, connected `make scan`, and the fresh review before
-activation. Then deploy immutable candidate image digests and execute the hosted
-checks at that unchanged candidate. A later fix creates a new candidate and
-requires affected checks and stale UAT evidence to be rerun. Complete the
-[exit checklist](exit-criteria.md) before phase closure and push.
-
-The native HTTPS harness remains the local feature-check tool. No isolated
-localhost port-443 stack or host sysctl change is needed for Phase 10.
+Run local `make ci`, connected `make scan`, and the fresh review at one
+candidate commit before the first deploy. Commit
+`apps/server/migrations/.uat-baseline` before the first production migration;
+never rewrite migration history afterward. Complete the
+[exit checklist](exit-criteria.md) before closing the phase.

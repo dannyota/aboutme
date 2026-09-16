@@ -1,24 +1,16 @@
 # aboutme implementation plan
 
-Status: **Revision 40, active** (2026-09-06).
+Status: **Revision 41, active** (2026-09-16).
 
-The goal is a tested v1 deployed in AWS Singapore (`ap-southeast-1`). The
-[design](../design/README.md) owns intended behavior and is approved at v4. This
-plan owns delivery order, phase state, and gates. A plan cannot redefine the
-design: a phase that changes a decision amends the Approved v4 text and records
-an ADR first.
+The goal is a tested v1 in production at `https://aboutme.vn`, hosted in AWS
+Singapore (`ap-southeast-1`). The [design](../design/README.md) owns intended
+behavior. This plan owns delivery order, phase state, and gates. A plan cannot
+redefine the design: a changed decision needs an ADR first.
 
-We build and verify features locally. Complete user acceptance testing (UAT)
-runs in AWS at `https://uat.aboutme.vn`, under
-[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md).
-
-Use OpenTofu for infrastructure and prefer managed AWS services. Phase 9
-compares their cost, workload fit, and operating effort before selecting sizes.
-OpenTofu and AWS publication/deployment will live in private `aboutme-infra`.
-All four image builds and native smoke stay in public `aboutme` under
-[ADR 0033](../adr/0033-public-image-builds-private-deployment.md). Phase 9 cost
-research and the owner's budget decision are recorded under
-[ADR 0034](../adr/0034-scheduled-uat-and-production-autoscaling.md).
+Features are built and verified locally. The first release then deploys straight
+to production on one host, and the owner tests there, under
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). A separate
+UAT environment returns at about 500 users.
 
 A phase's plan lives in `phase-<number>/` while the phase is active. When the
 phase exits, its plan directory is deleted; git history keeps it. What the phase
@@ -46,46 +38,40 @@ password authentication, the native HTTPS development harness, and the v1 entry
 experience, including MCP agent access and the owner publish UX, the application
 UI toolkit, and the application visual identity.
 
-| Phase | Work                                                                   | State                                                              |
-| ----- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                                   |
-| 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete and merged                                                |
-| 8     | [Privacy lifecycle](../runbooks/privacy.md)                            | Complete and merged                                                |
-| 9     | [AWS Singapore cost research](../research/aws-cost/recommendation.md)  | Complete and merged                                                |
-| 10    | [Infrastructure and AWS UAT](phase-10/README.md)                       | In progress: local replica implementation; no deployment performed |
-| 11    | Production promotion                                                   | After Phase 10 and separate launch approval                        |
-| 12    | Flutter app                                                            | Deferred beyond web v1                                             |
+| Phase | Work                                                                   | State                                                  |
+| ----- | ---------------------------------------------------------------------- | ------------------------------------------------------ |
+| 6     | [Realtime: SSE transport, refetch, unpublish](../runbooks/realtime.md) | Complete locally                                       |
+| 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete and merged                                    |
+| 8     | [Privacy lifecycle](../runbooks/privacy.md)                            | Complete and merged                                    |
+| 9     | [AWS Singapore cost research](../research/aws-cost/recommendation.md)  | Complete and merged                                    |
+| 10    | [Production deployment](phase-10/README.md)                            | In progress: single-host plan; no deployment performed |
+| 11    | Flutter app                                                            | Deferred beyond web v1                                 |
 
 Active phases and tasks use numbers, such as Phase 7 and task 7.1. Completed
 lettered identifiers remain historical evidence and are not reassigned.
 
 ## Delivery order
 
-1. Phase 9 cost research using the completed runtime's resource measurements.
-   Read-only pricing research may start earlier; final sizing uses those
-   results.
-2. Phase 10: implement and prove the accepted replica contract in task 10.18,
-   refresh infrastructure contracts from Phase 9, build and check them locally,
-   deploy AWS UAT, then run complete workflows, scaling, and operational drills.
-3. Phase 11 production promotion after its legal and launch gates.
+1. Phase 10: close the local replica work, land the three hosted-database and
+   image changes, build the infrastructure in `deploy/aws/`, deploy production,
+   and test the product there.
+2. Before the public announcement: restore drill, SES production access, privacy
+   and name reviews.
 
 Security controls are delivered inside every route-owning phase and verified end
-to end in Phase 10. The Go sanitizer runs on every write and on the public read
-that feeds public SSR and the read that feeds internal print SSR.
+to end in production. The Go sanitizer runs on every write and on the public
+read that feeds public SSR and the read that feeds internal print SSR.
 
 ## Remaining gates
 
-| Item                                                      | Owner                                     | State or due                                                                                               |
-| --------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| AWS UAT in Singapore; Cloudflare DNS for `uat.aboutme.vn` | Human owner                               | Authorized 2026-09-05; scope in ADR 0031                                                                   |
-| Sizes, cost assumptions, UAT schedule and spending limit  | Phase 9 and human owner                   | Approved 2026-09-06; $20–30/month UAT, $140–170/month production, $160–200 combined; before tax            |
-| SES application integration                               | Phase 10                                  | [Email runbook](../runbooks/email.md) available; sandbox, runtime IAM and controlled stack adoption remain |
-| Product name and trademark review                         | Human owner                               | Before Phase 11 promotion                                                                                  |
-| Privacy and disclosure review                             | Qualified privacy counsel and human owner | Before Phase 11 promotion                                                                                  |
-| Production launch authorization                           | Human owner                               | After Phase 10 passes                                                                                      |
+| Item                              | Owner                                     | Due                            |
+| --------------------------------- | ----------------------------------------- | ------------------------------ |
+| SES production access             | Human owner                               | Before the public announcement |
+| Product name and trademark review | Human owner                               | Before the public announcement |
+| Privacy and disclosure review     | Qualified privacy counsel and human owner | Before the public announcement |
 
-No other approval blocks development. Design v4, the template contract v2, and
-ADRs 0001–0035 are accepted, subject to recorded supersessions.
+ADR 0037 is the production approval. Design v4, the template contract v2, and
+ADRs 0001–0037 are accepted, subject to recorded supersessions.
 
 ## Dependency graph
 
@@ -94,13 +80,10 @@ graph TD
     P6[Phase 6 realtime] --> P9[Phase 9 AWS cost research]
     P7[Phase 7 exports] --> P9
     P8[Phase 8 privacy] --> P9
-    P9 --> SCALE[Task 10.18 replica coordination and scaling design]
-    SCALE --> PREP[Phase 10 local runtime and infrastructure checks]
-    PREP --> UAT[Phase 10 AWS deployment and UAT]
-    SES[Owner SES documentation] --> UAT
-    UAT --> LAUNCH{Owner approves production}
-    LAUNCH --> P11[Phase 11 production]
-    P11 --> P12[Phase 12 Flutter - deferred]
+    P9 --> LOCAL[Phase 10 local runtime and infrastructure checks]
+    LOCAL --> PROD[Phase 10 production deploy and owner testing]
+    PROD --> ANN{Launch gates pass}
+    ANN --> P11[Phase 11 Flutter - deferred]
 ```
 
 ## Gates
@@ -114,8 +97,8 @@ and connected `make scan` at one unchanged candidate commit before pushing.
 
 Classify authentication, authorization, sessions, CSRF, concurrency, CAS,
 idempotency, migrations, schema, sanitizing, publish and cache invalidation,
-SSE, render and resource bounds, and secret handling as high risk. The phase
-reviewer confirms those invariants by name.
+SSE, render and resource bounds, secret handling, and production deployment as
+high risk. The phase reviewer confirms those invariants by name.
 
 ## Environment
 
@@ -125,25 +108,9 @@ at `https://localhost:20443`; see the
 [local checks runbook](../runbooks/local-uat.md). Preserve TLS, network
 restrictions, and the laptop's resource limits. Run heavy gates serially.
 
-GitHub Actions builds deployment images natively on `ubuntu-24.04-arm` for
-`linux/arm64`. The existing AMD64 browser baseline gate stays on AMD64. Tasks
-10.8 and 10.13 cover native image smoke checks and workflow checks; task 10.12
-deploys the tested digests without a rebuild. Public standard image-build
-runners are free; task 9.1 separately models private validation, publication,
-and deployment usage before account allowances. See the
-[build contract](phase-10/infrastructure/contracts.md#build-and-runner-contract).
-
-Phase 10 uses `https://uat.aboutme.vn`, Cloudflare DNS, and AWS Singapore. It
-proves complete workflows, SES delivery, edge routing, restore, rollback,
-alarms, origin-secret rotation, and concurrent migration safety. It replaces the
-separate local port-443 UAT and staging rehearsal. Its local infrastructure
-checkpoint precedes activation; completed UAT is not a provisioning
-prerequisite.
-
-The [email runbook](../runbooks/email.md) records the owner's SES setup. Phase
-10 consumes that handoff and inventories existing resources before adding
-missing integration. Production promotion needs separate human approval after
-Phase 10 passes.
+The [single-host design](../design/single-host-production.md) owns the image
+build, deploy steps, and production checks. The
+[email runbook](../runbooks/email.md) records the owner's SES setup.
 
 Before dispatching a phase, create its directory, task files, and acceptance
 rows. [Traceability](traceability/README.md) owns acceptance ownership;

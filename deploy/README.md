@@ -12,12 +12,9 @@ environment and trust boundaries live in the
 | `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary   |
 | `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof    |
 
-AWS infrastructure has not landed. The planned private `aboutme-infra`
-repository will build deployment images on GitHub Actions `ubuntu-24.04-arm`,
-targeting `linux/arm64`, then deploy tested image digests to AWS Singapore.
-Development stays on this laptop; existing AMD64 browser baselines retain their
-pinned architecture. See the
-[build contract](../docs/plans/phase-10/infrastructure/contracts.md#build-and-runner-contract).
+AWS infrastructure has not landed. It will live in `deploy/aws/`, with images
+built on GitHub Actions `ubuntu-24.04-arm` for `linux/arm64`. See the
+[single-host design](../docs/design/single-host-production.md).
 
 ## Which stack to use
 
@@ -36,10 +33,9 @@ read-write, and runs with a read-only container root.
 `make dev` builds and starts the Compose deployment. Reserve it for local
 deployment smoke checks and self-hosting evaluation because it is heavier. The
 current Compose Caddyfile is HTTP-only. Local authenticated checks use the
-native HTTPS harness; complete UAT belongs to Phase 10 in AWS at
-`https://uat.aboutme.vn`. See the
-[local checks runbook](../docs/runbooks/local-uat.md) and
-[hosted UAT plan](../docs/plans/phase-10/README.md).
+native HTTPS harness; complete product checks run in production. See the
+[local checks runbook](../docs/runbooks/local-uat.md) and the
+[single-host design](../docs/design/single-host-production.md).
 
 ## Start the Compose deployment
 

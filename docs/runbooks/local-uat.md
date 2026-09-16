@@ -1,11 +1,9 @@
 # Local HTTPS checks
 
 Status: **available for feature verification**. Native authenticated checks run
-at `https://localhost:20443`. Complete product UAT runs in AWS during
-[Phase 10](../plans/phase-10/README.md), after Phase 9 cost research.
-[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md) replaces the old
-local port-443 acceptance prerequisite; no host sysctl change is needed for this
-plan.
+at `https://localhost:20443`. Complete product checks run in production, per
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). No host
+sysctl change is needed.
 
 Keep Secure cookies, normal TLS verification, and the local network allowlist.
 The HTTP Compose smoke does not prove authenticated browser behavior.
@@ -123,8 +121,8 @@ last Nuxt build for spec-only edits). It is a development loop, not a gate; the
 hermetic `make web-e2e` remains the gate.
 
 This check supports authenticated feature development. Complete product and
-operational acceptance belong to the hosted AWS Phase 10 environment; see the
-[handoff below](#handoff-to-hosted-uat).
+operational acceptance happen in production; see the
+[handoff below](#handoff-to-production).
 
 ## Current Compose smoke check
 
@@ -156,19 +154,12 @@ the daily development environment. Restore the shared database only after
 Compose teardown, and only when later work needs it. A worker never performs
 this handoff or stops the shared database.
 
-## Handoff to hosted UAT
+## Handoff to production
 
-These checks remain local and use only the shared development database. Do not
-point their seed, reset, or cleanup commands at AWS. Phase 10 supplies a
-separate hosted harness for `https://uat.aboutme.vn`, with synthetic fixtures
-and bounded cleanup, after its local infrastructure checks pass.
+These checks remain local and use only the shared development database. Never
+point their seed, reset, or cleanup commands at AWS.
 
-The migration baseline marker must be committed before the first hosted UAT
-migration. Phase 10 records candidate/image identities and proves complete user
-workflows, SES delivery, and the live operational drills. The owner has already
-authorized that Singapore UAT environment and its Cloudflare DNS; production
-promotion is Phase 11 and requires separate approval.
-
-Use the [email runbook](email.md) for the existing SES setup. Its sandbox and
-runtime IAM/adoption requirements are part of the hosted UAT handoff, not a
-reason to contact SES from native feature checks.
+The migration baseline marker is committed before the first production
+migration. The [single-host design](../design/single-host-production.md) owns
+the deploy and launch checks. Use the [email runbook](email.md) for the existing
+SES setup; native feature checks never contact SES.

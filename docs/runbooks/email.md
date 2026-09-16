@@ -81,17 +81,13 @@ Runtime IAM has not been created. The application runtime role needs only
 identity and `aboutme-auth` configuration set. Add another sending action only
 with a documented caller and an affected policy test.
 
-The existing `aboutme-email` CloudFormation stack must be imported/adopted into
-Phase 10 OpenTofu before OpenTofu applies overlapping SES, SNS, SQS, or
-CloudWatch resources. Do not apply overlapping OpenTofu resources first.
-
-Importing an object into OpenTofu does not remove CloudFormation ownership.
-Before migration, follow the
-[Phase 10 ownership contract](../plans/phase-10/infrastructure/contracts.md#existing-email-ownership):
-either manage the stack as one unit with no duplicate child resources, or
-transfer retained resources out of CloudFormation before individual imports.
-Require a no-change plan and rollback instructions; do not delete the stack as a
-shortcut.
+The existing `aboutme-email` CloudFormation stack keeps owning its SES, SNS, SQS
+and CloudWatch resources. Production OpenTofu only grants the app task role
+permission to send from the verified identity; it creates no overlapping
+resource. Moving the stack into OpenTofu later needs its own plan: manage the
+stack as one unit, or transfer retained resources out of CloudFormation before
+importing them, with a no-change plan and rollback steps. Never delete the stack
+as a shortcut.
 
 ## Verification
 
