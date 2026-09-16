@@ -9,8 +9,8 @@ ROOT=$PWD
 readonly CONTAINER=aboutme-test-s3
 readonly ENV_FILE=$ROOT/.dev/test-s3.env
 readonly ENDPOINT=http://127.0.0.1:20091
-readonly MINIO_IMAGE=docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-readonly MC_IMAGE=docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+readonly MINIO_IMAGE=quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+readonly MC_IMAGE=quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
 
 die() {
   printf 'test-s3: %s\n' "$*" >&2
