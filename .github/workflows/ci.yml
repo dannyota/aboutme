@@ -354,3 +354,21 @@ jobs:
       - name: Assert sqlc is present and pinned
         run: sqlc version | grep -q 'v1.31.1'
       - run: make sqlc-check
+
+  # Formats and validates the public OpenTofu code without cloud credentials or
+  # a backend. Deploys happen only from the owner's machine.
+  tofu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - run: tofu fmt -check -recursive deploy/aws
+      - name: Validate each root
+        run: |
+          for root in deploy/aws/probe deploy/aws/bootstrap deploy/aws/prod; do
+            tofu -chdir="$root" init -backend=false -input=false >/dev/null
+            tofu -chdir="$root" validate
+          done

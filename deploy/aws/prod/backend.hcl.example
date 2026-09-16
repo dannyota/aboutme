@@ -1,0 +1,2 @@
+# Copy to backend.hcl (ignored) and fill in.
+bucket = "aboutme-prod-tfstate-<account id>"
