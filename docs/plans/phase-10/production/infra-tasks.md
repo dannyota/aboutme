@@ -14,6 +14,9 @@ tofu -chdir=deploy/aws/prod fmt -check -recursive
 tofu -chdir=deploy/aws/prod validate
 ```
 
+State encryption reads `state_kms_key_arn` before the plan is loaded, so
+`tofu apply` needs `-var-file=prod.tfvars` even when it applies a saved plan.
+
 If a resource attribute named below differs in the locked provider version,
 follow the provider documentation for that version and note the change in the
 task report.
@@ -262,7 +265,7 @@ see Task 11. The bucket keeps 20 noncurrent state versions for 90 days.
 `host_security_group_id`, `db_security_group_id`; `module.data.db_endpoint`,
 `db_master_secret_arn`, `media_bucket_arn`, `media_bucket_name`.
 
-- [ ] **Step 1: Write the network module**
+- [x] **Step 1: Write the network module**
 
 ```hcl
 # modules/network/main.tf
@@ -347,7 +350,7 @@ resource "aws_vpc_security_group_ingress_rule" "db_from_host" {
 Outputs: `vpc_id`, `public_subnet_id`, `private_subnet_ids`,
 `host_security_group_id`, `db_security_group_id`.
 
-- [ ] **Step 2: Write the data module**
+- [x] **Step 2: Write the data module**
 
 ```hcl
 # modules/data/main.tf
@@ -454,7 +457,7 @@ The media bucket has no versioning, as the deployment design requires. Outputs:
 `db_master_secret_arn = aws_db_instance.main.master_user_secret[0].secret_arn`,
 `media_bucket_arn`, `media_bucket_name`.
 
-- [ ] **Step 3: Wire both into the root**
+- [x] **Step 3: Wire both into the root**
 
 ```hcl
 # Cloudflare publishes its ranges without authentication. Add
@@ -482,16 +485,25 @@ module "data" {
 }
 ```
 
-- [ ] **Step 4: Plan, review, apply**
+- [x] **Step 4: Plan, review, apply**
 
 ```sh
 tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars -out=prod.tfplan
-tofu -chdir=deploy/aws/prod apply prod.tfplan
+tofu -chdir=deploy/aws/prod apply -var-file=prod.tfvars prod.tfplan
 ```
 
 Expected: the VPC, subnets, security groups, RDS instance and bucket exist. RDS
 creation takes about ten minutes. `aws rds describe-db-instances` shows
 `PubliclyAccessible: false` and `BackupRetentionPeriod: 30`.
+
+Result (2026-09-17): network, RDS and bucket exist and `tofu plan` reports no
+changes. RDS 18.6 is private, encrypted, keeps 30-day backups, has deletion
+protection and runs in `ap-southeast-1a`; `rds.force_ssl` is 1. The first apply
+placed the subnets in the account's opted-in Hanoi and Manila Local Zones, so
+the zone lookup now filters `zone-type = availability-zone`. `rds.force_ssl`
+carries `apply_method = "pending-reboot"` to match what RDS records. The
+Cloudflare ranges come from the public `/client/v4/ips` endpoint through the
+`http` provider.
 
 ## Task 10
 
@@ -882,7 +894,7 @@ bash deploy/aws/scripts/tls.sh
 # Authenticated Origin Pulls > upload the zone-level certificate and key.
 bash deploy/aws/scripts/tls.sh --forget-pull
 tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars -out=prod.tfplan
-tofu -chdir=deploy/aws/prod apply prod.tfplan
+tofu -chdir=deploy/aws/prod apply -var-file=prod.tfvars prod.tfplan
 ```
 
 Expected: five `created` lines, the TLS script's final line, then seven task
