@@ -97,13 +97,13 @@ The trust boundaries match the Compose deployment:
 
 `t4g` instances do not support ENI trunking and allow two `awsvpc` tasks, and
 `awsvpc` tasks on EC2 cannot hold a public IP. That is why `app` uses host
-networking. Four points are unverified and are the first implementation task:
-task IAM roles for host-mode tasks on Bottlerocket, a bridge container reaching
-a host listener on `172.17.0.1`, a host-mode process reaching a bridge
-container's published port on `127.0.0.1`, and the IMDS hop-limit block. If a
-host-mode task cannot get a task role, the design returns for review before any
-infrastructure is built. If a bridge or loopback path fails, `web` moves to
-`awsvpc` and is found through Cloud Map DNS.
+networking. A probe on Bottlerocket `aws-ecs-2` 1.65.0 (2026-09-16) confirmed
+the four facts this layout depends on: host-mode tasks receive task-role
+credentials, a bridge container reaches a host listener on `172.17.0.1`, a
+host-mode process reaches a bridge container's published port on `127.0.0.1`,
+and IMDSv2 hop limit one blocks bridge containers while host-mode containers
+still get a token. `deploy/aws/probe/` can rerun the probe after a Bottlerocket
+major update.
 
 Memory fits in 2 GiB: roughly 300 MiB for Bottlerocket and the agent, the
 existing 512 MiB Go and Chromium cap, and about 300 MiB for Nuxt and Caddy. A
