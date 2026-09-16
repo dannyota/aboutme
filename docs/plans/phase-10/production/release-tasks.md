@@ -224,7 +224,7 @@ fail.
 
 The workflow holds no cloud credential and never deploys.
 
-- [ ] **Step 1: Resolve action pins**
+- [x] **Step 1: Resolve action pins**
 
 ```sh
 gh api repos/actions/attest-build-provenance/releases/latest --jq .tag_name
@@ -234,7 +234,7 @@ gh api repos/actions/attest-build-provenance/git/ref/tags/<tag> --jq .object.sha
 Use `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1` as in
 `ci.yml`, and the attestation SHA from above.
 
-- [ ] **Step 2: Write the workflow**
+- [x] **Step 2: Write the workflow**
 
 ```yaml
 name: release-images
@@ -305,7 +305,7 @@ jobs:
 
 Replace each `<...>` pin with the resolved SHA and tag before committing.
 
-- [ ] **Step 3: Check the workflow locally**
+- [x] **Step 3: Check the workflow locally**
 
 ```sh
 npx prettier --check .github/workflows/release-images.yml
@@ -317,3 +317,10 @@ Expected: clean. A real run needs a tag; Task 14 creates the first one.
 
 After the first run, the owner sets each of the three GHCR packages to public in
 the GitHub package settings, so the host pulls without a credential.
+
+Result (2026-09-16): the workflow is written; `actionlint` and Prettier pass.
+Each image uploads its own `digest-<name>` artifact and writes its digest to the
+job summary. Writing it found that the server image pinned the amd64-only
+Playwright manifest and a Chromium path that exists only on amd64; commit
+`e68c37b` pins the multi-architecture index and picks `chrome-linux` on arm64.
+The first real run happens at Task 14's tag; Step 4 waits for it.
