@@ -49,11 +49,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          # go.mod is not at the repository root, so name the module files the
-          # module and build caches are keyed on.
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - run: make schema-check
       - run: go build ./... && go vet ./... && go test ./...
         working-directory: packages/schema/gen/go
@@ -84,11 +92,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          # go.mod is not at the repository root, so name the module files the
-          # module and build caches are keyed on.
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - run: make server-build
       - run: make server-vet
       - run: make server-test
@@ -115,11 +131,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          # go.mod is not at the repository root, so name the module files the
-          # module and build caches are keyed on.
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - run: make test-s3-up
       - run: make server-test-s3
       - if: always()
@@ -199,11 +223,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          # go.mod is not at the repository root, so name the module files the
-          # module and build caches are keyed on.
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - name: Initialize database roles
         run: make db-role-bootstrap
         env:
@@ -306,11 +338,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          # go.mod is not at the repository root, so name the module files the
-          # module and build caches are keyed on.
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - name: Install the pinned gitleaks (8.30.1)
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
@@ -366,9 +406,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - name: Initialize database roles
         run: make db-role-bootstrap
         env:
@@ -384,11 +434,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          # go.mod is not at the repository root, so name the module files the
-          # module and build caches are keyed on.
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - name: Install the pinned caddy (2.11.4)
         run: |
           go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
@@ -415,11 +473,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
-          # go.mod is not at the repository root, so name the module files the
-          # module and build caches are keyed on.
-          cache-dependency-path: |
-            apps/server/go.sum
-            go.work.sum
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       - name: Install the pinned sqlc (v1.31.1)
         run: |
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
