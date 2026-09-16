@@ -32,6 +32,10 @@ intended model, not replacement DDL.
 | `privacy_sweep_state`       | Durable cursor for bounded weekly media reconciliation                                                                    |
 | `public_state`              | Singleton durable discovery generation advanced with public-membership mutations                                          |
 
+Runtime coordination tables, such as the write barrier, replica membership,
+claims, rate buckets and publication transitions, are defined in the
+[runtime schema](scaling/runtime-schema.md).
+
 Server-owned relational rows use PostgreSQL UUIDv7 defaults. Client-generated
 UUIDs occur only inside resume documents as entry identifiers.
 
@@ -51,11 +55,11 @@ and an idle client with no live grant and no live token is garbage-collected.
 `public_state` has one checked singleton row and a positive monotonic
 `discovery_generation`. A transaction that changes a resume slug, live state,
 discovery eligibility, or deletes a public resume increments it with the same
-commit. P5A owns its forward migration and every public-state caller. Go loads
-the committed generation before readiness and uses it for aggregate discovery
-cache keys, entity tags, and the in-process response fence. Aggregate discovery
-contains only a fixed heading and the slug-ordered eligible public URLs; it has
-no other mutable resume field, so other document edits cannot change its bytes.
+commit. Go loads the committed generation before readiness and uses it for
+aggregate discovery cache keys, entity tags, and the in-process response fence.
+Aggregate discovery contains only a fixed heading and the slug-ordered eligible
+public URLs; it has no other mutable resume field, so other document edits
+cannot change its bytes.
 
 Database constraints enforce global slug uniqueness and format, valid publish
 flag combinations, and the three-resume cap. Resume creation also locks the

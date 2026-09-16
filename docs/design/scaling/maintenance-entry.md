@@ -1,10 +1,8 @@
 # Maintenance command sessions
 
-Status: Accepted target under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). R7d
-implements this contract after the store and database seams exist. R8 owns
-command composition and the final operation inventory. Local proof precedes
-hosted activation.
+Status: Accepted under
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 ## One backend for each command
 

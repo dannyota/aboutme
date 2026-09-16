@@ -1,8 +1,8 @@
 # Public transition store transport
 
 Status: Accepted detail under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md).
-Implementation and local concurrency proof remain Phase 10 gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 This is the copied-value boundary for the
 [fixed SQL functions](transition-functions.md) and

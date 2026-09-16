@@ -1,9 +1,8 @@
 # Durable public transitions
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). This is
-the target contract. Local implementation and hosted proof remain Phase 10
-gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 This contract extends the current `publicstate.Plan` and `CommittedState` with
 durable fleet coordination. It preserves public HTTP, OpenAPI, server-sent event

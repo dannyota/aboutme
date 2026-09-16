@@ -1,9 +1,8 @@
 # Exclusive lifecycle write entry
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). This is
-the target contract. Local implementation and hosted proof remain Phase 10
-gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 This contract defines the exclusive transaction path for only `begin_wake` and
 `complete_wake`. [Transaction entry](transaction-entry.md) remains the ordinary

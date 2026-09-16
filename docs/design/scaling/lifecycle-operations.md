@@ -1,8 +1,8 @@
 # Replica lifecycle operations
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). Local
-implementation and hosted proof remain Phase 10 gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 This contract defines desired serving capacity, logical rate partitions, exact
 activation and scale changes, and the private maintenance wake path.

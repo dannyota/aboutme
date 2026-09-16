@@ -1,9 +1,8 @@
 # Runtime schema and privileges
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). This is
-the target contract. Local implementation and hosted proof remain Phase 10
-gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 ## Durable schema contract
 

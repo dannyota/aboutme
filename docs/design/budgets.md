@@ -36,7 +36,8 @@ and 16 for administration. Shared rate policies use database time, preserve debt
 and overflow, and retain at most 10,000 private keys per enabled partition. Two
 outer API chains share one 300/IP/minute policy. The
 [policy catalog](scaling/policy-catalog.md) fixes their identities and scopes.
-These targets require the pending Task 10.18 implementation and local proof.
+Callers use these shared policies only after the caller integration that ADR
+0036 defers.
 
 ## Runtime bounds
 
@@ -308,8 +309,8 @@ bound a slow consumer independently of document size. Overflow disconnects it so
 the next unconditional read repairs the missed changes. A two-second write
 deadline stays within the five-second revocation drain and is cleared after
 flush, preserving quiet connections. A process FD probe rejects admission when
-25% headroom cannot be established. Phase 6 tests these bounds under churn;
-Phase 10 repeats resource measurements on the selected AWS runtime.
+25% headroom cannot be established. Tests cover these bounds under churn, and
+resource measurements are repeated on the hosted runtime.
 
 ## Benchmark protocol
 
@@ -335,9 +336,10 @@ the job and returns only after browser teardown joins. Scheduler delay and
 joined teardown are measured separately from that configured deadline. Timeout
 failures never count as successful latency samples; a successful result above 20
 seconds fails the render benchmark. Normalization's five-second ceiling is a
-measured provisional gate and staging launch gate because its in-process decoder
-cannot be killed safely. The latency numbers are service-level objectives
-(SLOs), measured against the corpus above and not enforced per request.
+measured provisional gate and a hosted launch gate because its in-process
+decoder cannot be killed safely. The latency numbers are service-level
+objectives (SLOs), measured against the corpus above and not enforced per
+request.
 
 **Baseline before freeze.** The riskiest limits (512 MiB whole-task memory with
 Chromium, 2000 SSE connections) are **baselined with a real measurement by the

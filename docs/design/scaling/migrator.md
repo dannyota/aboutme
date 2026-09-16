@@ -1,14 +1,8 @@
 # Dedicated database migration runner
 
-Status: Accepted target under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md).
-Implementation follows the
-[B3 task](../../plans/phase-10/replica/migrator-composition.md). The
-[write-entry contract](transaction-entry.md) owns the barrier and markers;
-[database provisioning](migration-provisioning.md) owns fixed grants and
-adoption. [Wake migrations](wake-migrations.md) adds a separate ApplyWake entry
-for the exact recorded closing-gate window. Normal Apply and read-only Status
-retain the behavior below; wake implementation remains a later R1 slice.
+Status: Accepted under
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 ## Fixed identities and API
 

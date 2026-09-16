@@ -141,15 +141,15 @@ because their execution costs differ:
   deterministic, and byte-diffable, and they are what pins the per-surface
   resolution above for the presets that tint.
 - **Screenshot baselines: a named representative subset, roughly six presets,
-  plus the continuous-mode case.** The subset is named explicitly in the Phase 3
-  golden and Playwright tasks, not derived at run time, and is chosen against
+  plus the continuous-mode case.** The subset is named explicitly in the golden
+  and Playwright suites, not derived at run time, and is chosen against
   `contract.md` §8 so that it covers at minimum one one-column preset, one
   two-column preset, one tinted sidebar (`fixtures/full.json`,
   `surfaceTarget: "sidebar"`), one tinted header (`surfaceTarget: "header"`),
   one `pageFormat: "letter"`, and one dense/small-type preset. A preset outside
   the subset is still covered by string goldens; what it loses is pixel-level
   regression detection.
-- Phase 10 browser UAT exercises **the same named subset**, not all twenty
+- Browser acceptance tests exercise **the same named subset**, not all twenty
   presets, so the three coverage surfaces cannot drift apart.
 
 ## 5. Accessibility floor

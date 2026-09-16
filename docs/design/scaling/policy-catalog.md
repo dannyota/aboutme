@@ -1,10 +1,10 @@
 # Admission policy catalog
 
 This catalog records the current production limiter constructors and the settled
-fleet target for replica-safe admission. It supports Task 10.18 and
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
-catalog is descriptive until the implementation tasks add the shared store and
-complete the local proof.
+fleet target for replica-safe admission under
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The shared
+store exists; callers still use the process-local limiters until the deferred
+caller integration lands.
 
 ## Scope and shared rules
 

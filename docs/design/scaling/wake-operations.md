@@ -1,8 +1,8 @@
 # Exclusive wake operations
 
 Status: Accepted detail of [exclusive write entry](lifecycle-write-entry.md)
-under [ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md).
-Implementation and runtime proof remain Phase 10 gates.
+under [ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 > **Implementation deferred.**
 > [ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)

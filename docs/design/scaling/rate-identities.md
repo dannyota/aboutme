@@ -1,9 +1,8 @@
 # Fleet rate identities and key versions
 
 Status: Accepted detail of [fleet admission](admission.md) under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). R1 owns
-schema/store work, R5 owns encoding/adapters and R7 owns callers. Implementation
-and local proof remain pending.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 Use the existing canonical caller identities and one private deployment tuple
 for every keyed fleet policy. Keys are resolved only inside the process that

@@ -1,17 +1,16 @@
 # UAT maintenance and database stop
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). This is
-the target contract. Local implementation and hosted proof remain Phase 10
-gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 ## Authority and scope
 
 This contract preserves docs/design/operations.md, docs/design/budgets.md, ADR
-0016, ADR 0019, ADR 0034, and Task 10.18. The hourly managed-controller
-heartbeat still runs. It may avoid starting RDS and an EC2 maintenance replica
-only when the last immutable receipt proves that no work can become due before
-the next planned wake. Missing proof starts maintenance or keeps RDS running.
+0016, ADR 0019, ADR 0034, and ADR 0035. The hourly managed-controller heartbeat
+still runs. It may avoid starting RDS and an EC2 maintenance replica only when
+the last immutable receipt proves that no work can become due before the next
+planned wake. Missing proof starts maintenance or keeps RDS running.
 
 ## Maintenance placement and identity
 
