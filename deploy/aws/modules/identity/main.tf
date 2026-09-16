@@ -61,6 +61,30 @@ resource "aws_iam_role_policy_attachment" "instance" {
   policy_arn = each.value
 }
 
+# AmazonSSMManagedInstanceCore allows ssm:GetParameter* on every parameter,
+# and host-network containers can reach the instance role. This keeps the
+# instance role away from production secrets; only task execution roles read
+# them.
+resource "aws_iam_role_policy" "instance_deny_secrets" {
+  name = "deny-production-secrets"
+  role = aws_iam_role.instance.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Deny"
+        Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:GetParameterHistory"]
+        Resource = ["${local.param}/*", "${local.param}"]
+      },
+      {
+        Effect   = "Deny"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.db_master_secret_arn
+      },
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "instance" {
   name = "${var.name}-instance"
   role = aws_iam_role.instance.name

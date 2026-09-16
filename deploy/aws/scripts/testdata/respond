@@ -23,7 +23,15 @@ case "$cmd $args" in
     echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/new:4' ;;
   "aws "*"ecs run-task"*)
     by=$(sed -E 's/.*--started-by ([^ ]+).*/\1/' <<<"$args")
+    if [[ $STUB_CASE == runtask_fails && $by == deploy-migrate ]]; then
+      echo "placement failed" >&2
+      exit 255
+    fi
     echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/$by" ;;
+  "aws "*"ecs wait tasks-stopped"*)
+    if [[ $STUB_CASE == wait_timeout && $args == *deploy-migrate* ]]; then exit 255; fi ;;
+  "aws "*"ecs describe-tasks"*"lastStatus"*)
+    if [[ $STUB_CASE == wait_timeout ]]; then echo RUNNING; else echo STOPPED; fi ;;
   "aws "*"ecs describe-tasks"*)
     if [[ $STUB_CASE == *migrate_fails && $args == *deploy-migrate* ]]; then echo 1; else echo 0; fi ;;
   "aws "*"scheduler list-schedules"*) printf 'a\tb\tc\td\n' ;;

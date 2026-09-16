@@ -50,6 +50,10 @@ resource "aws_instance" "host" {
 
     [settings.host-containers.admin]
     enabled = false
+
+    # Chromium's sandbox needs user namespaces; Bottlerocket disables them.
+    [settings.kernel.sysctl]
+    "user.max_user_namespaces" = "16384"
   EOT
 
   # The data volume is set at creation only; AWS reports computed fields and

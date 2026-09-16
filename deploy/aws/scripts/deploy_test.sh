@@ -16,7 +16,7 @@ STUB
 done
 cp "$here/testdata/respond" "$work/respond"
 
-run_case() { # name expected-exit args...
+run_case() { # name expected-exit|fail args...
   local name=$1 want=$2 got
   shift 2
   : >"$work/$name.calls"
@@ -25,7 +25,10 @@ run_case() { # name expected-exit args...
     DEPLOY_SMOKE_TIMEOUT=1 bash "$here/deploy.sh" "$@" >"$work/$name.out" 2>&1
   got=$?
   set -e
-  if ((got != want)); then
+  if [[ $want == fail ]] && ((got != 0 && got != 2)); then
+    return
+  fi
+  if [[ $want == fail ]] || ((got != want)); then
     echo "$name: exit $got, want $want" >&2
     cat "$work/$name.out" >&2
     exit 1
@@ -66,6 +69,8 @@ before "$f" "--service aboutme-prod-web --task-definition arn:aws:ecs:ap-southea
 absent "$f" "deploy-db-bootstrap"
 [[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "ok: want 8 schedule updates" >&2; exit 1; }
 grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "ok: schedules not enabled at the end" >&2; exit 1; }
+jq -e '.Target.EcsParameters.TaskDefinitionArn == "arn:aws:ecs:ap-southeast-1:1:task-definition/new:4"' \
+  "$work/last-schedule.json" >/dev/null || { echo "ok: schedules not pinned to the released revision" >&2; exit 1; }
 
 run_case first 0 v0.1.0 --first-deploy
 f=$work/first.calls
@@ -74,7 +79,7 @@ before "$f" "--started-by deploy-db-provision" "--started-by deploy-db-set-login
 before "$f" "--started-by deploy-db-set-login" "--started-by deploy-migrate"
 grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "first: schedules not enabled at the end" >&2; exit 1; }
 
-run_case migrate_fails 1 v0.1.0
+run_case migrate_fails fail v0.1.0
 f=$work/migrate_fails.calls
 grep -q -F -- "--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3 --desired-count 1" "$f" ||
   { echo "migrate_fails: previous app not restored" >&2; exit 1; }
@@ -82,10 +87,28 @@ absent "$f" "$start_app"
 [[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "migrate_fails: schedules not restored" >&2; exit 1; }
 grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "migrate_fails: schedules left disabled" >&2; exit 1; }
 
-run_case first_migrate_fails 1 v0.1.0 --first-deploy
+run_case first_migrate_fails fail v0.1.0 --first-deploy
 f=$work/first_migrate_fails.calls
 absent "$f" "--desired-count 1"
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "first_migrate_fails: schedules must stay disabled" >&2; exit 1; }
+
+run_case runtask_fails fail v0.1.0
+f=$work/runtask_fails.calls
+grep -q -F -- "--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3 --desired-count 1" "$f" ||
+  { echo "runtask_fails: previous app not restored" >&2; exit 1; }
+[[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "runtask_fails: schedules not restored" >&2; exit 1; }
+
+run_case wait_timeout fail v0.1.0
+f=$work/wait_timeout.calls
+absent "$f" "--desired-count 1"
+[[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "wait_timeout: schedules must stay disabled" >&2; exit 1; }
+grep -q "may still be running" "$work/wait_timeout.out" || { echo "wait_timeout: no warning about the running task" >&2; exit 1; }
+
+run_case bad_flag 2 v0.1.0 --first_deploy
+[[ ! -s $work/bad_flag.calls ]] || { echo "bad_flag: commands ran" >&2; exit 1; }
+
+run_case extra_arg 2 --rollback v0.0.9 extra
+[[ ! -s $work/extra_arg.calls ]] || { echo "extra_arg: commands ran" >&2; exit 1; }
 
 run_case rollback 0 --rollback v0.0.9
 f=$work/rollback.calls

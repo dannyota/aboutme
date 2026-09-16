@@ -37,7 +37,7 @@ dashboard, and update this table in the same change.
 | Bot Fight Mode             | Off                                                                                                               |
 | Cache rule                 | `not starts_with(http.request.uri.path, "/_nuxt/")` → bypass cache                                                |
 | Origin CA certificate      | ECC, `aboutme.vn` and `www.aboutme.vn`, expires 2041-09-12; stored at `/aboutme/prod/tls/origin-cert`             |
-| Authenticated Origin Pulls | Zone-level certificate from `tls.sh pull`, active, expires 2036-09-13; enable only after the first healthy deploy |
+| Authenticated Origin Pulls | On; zone-level certificate from `tls.sh pull`, active, expires 2036-09-13. Caddy requires it from its first start |
 
 Mail records (MX, TXT, DKIM and the SES `bounce` records) predate this setup and
 stay unchanged.
@@ -88,9 +88,14 @@ schedules, stops `app`, runs the database steps, starts `web` then `app`,
 re-enables the schedules and smoke-tests through Cloudflare. The site is down
 between "site down" and "site up", usually one to three minutes.
 
-If a database step fails, the script restores the previous `app` revision and
-the schedules' earlier state, then exits non-zero. On `--first-deploy` it leaves
-`app` stopped instead, because there is no earlier release.
+Any failure after "site down" restores the previous `app` revision and the job
+schedules' earlier state, then exits non-zero. On `--first-deploy` it leaves
+`app` stopped, because there is no earlier release. If it reports that a
+database task may still be running, it leaves the app and schedules stopped:
+check that task with
+`aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and when it has
+stopped, rerun the deploy. Enabled schedules always point at the released `jobs`
+revision.
 
 ## Rollback
 
