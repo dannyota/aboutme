@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same ref supersedes a running check.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docs:
     runs-on: ubuntu-latest
@@ -44,6 +49,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+          # go.mod is not at the repository root, so name the module files the
+          # module and build caches are keyed on.
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
       - run: make schema-check
       - run: go build ./... && go vet ./... && go test ./...
         working-directory: packages/schema/gen/go
@@ -74,6 +84,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+          # go.mod is not at the repository root, so name the module files the
+          # module and build caches are keyed on.
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
       - run: make server-build
       - run: make server-vet
       - run: make server-test
@@ -100,6 +115,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+          # go.mod is not at the repository root, so name the module files the
+          # module and build caches are keyed on.
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
       - run: make test-s3-up
       - run: make server-test-s3
       - if: always()
@@ -169,7 +189,9 @@ jobs:
           POSTGRES_DB: aboutme
         ports:
           - 5432:5432
+        # A throwaway database on tmpfs removes disk latency from the suites.
         options: >-
+          --tmpfs /var/lib/postgresql:rw
           --health-cmd "pg_isready -U aboutme"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
@@ -177,6 +199,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+          # go.mod is not at the repository root, so name the module files the
+          # module and build caches are keyed on.
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
       - name: Initialize database roles
         run: make db-role-bootstrap
         env:
@@ -193,9 +220,6 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
       - run: make server-test-p2b
-        env:
-          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      - run: make server-migration-test
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
       - run: make test-s3-up
@@ -282,6 +306,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+          # go.mod is not at the repository root, so name the module files the
+          # module and build caches are keyed on.
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
       - name: Install the pinned gitleaks (8.30.1)
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
@@ -314,6 +343,40 @@ jobs:
   # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005) through a
   # live caddy process fronting stub backends. Needs a caddy binary but no
   # database; pinned to 2.11.4 to match deploy/compose.yml's caddy image tag.
+  # The migration suite is the slowest; it runs beside the other database
+  # suites instead of after them.
+  server-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: aboutme
+          POSTGRES_PASSWORD: aboutme_dev
+          POSTGRES_DB: aboutme
+        ports:
+          - 5432:5432
+        # A throwaway database on tmpfs removes disk latency from the suites.
+        options: >-
+          --tmpfs /var/lib/postgresql:rw
+          --health-cmd "pg_isready -U aboutme"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
+      - name: Initialize database roles
+        run: make db-role-bootstrap
+        env:
+          CLUSTER_BOOTSTRAP_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/postgres?sslmode=disable
+      - run: make server-migration-test
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+
   route-table:
     runs-on: ubuntu-latest
     steps:
@@ -321,6 +384,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+          # go.mod is not at the repository root, so name the module files the
+          # module and build caches are keyed on.
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
       - name: Install the pinned caddy (2.11.4)
         run: |
           go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
@@ -347,6 +415,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
+          # go.mod is not at the repository root, so name the module files the
+          # module and build caches are keyed on.
+          cache-dependency-path: |
+            apps/server/go.sum
+            go.work.sum
       - name: Install the pinned sqlc (v1.31.1)
         run: |
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
