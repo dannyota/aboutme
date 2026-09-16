@@ -104,6 +104,12 @@ absent "$f" "--desired-count 1"
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "wait_timeout: schedules must stay disabled" >&2; exit 1; }
 grep -q "may still be running" "$work/wait_timeout.out" || { echo "wait_timeout: no warning about the running task" >&2; exit 1; }
 
+run_case start_fails fail v0.1.0
+f=$work/start_fails.calls
+absent "$f" "task-definition/aboutme-prod-app:3 --desired-count 1"
+[[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "start_fails: schedules must stay disabled after a migration" >&2; exit 1; }
+grep -q "migrations were applied" "$work/start_fails.out" || { echo "start_fails: no warning about applied migrations" >&2; exit 1; }
+
 run_case bad_flag 2 v0.1.0 --first_deploy
 [[ ! -s $work/bad_flag.calls ]] || { echo "bad_flag: commands ran" >&2; exit 1; }
 

@@ -228,10 +228,11 @@ starts.
 8. Smoke through Cloudflare: health, TLS and security headers. A direct request
    to the Elastic IP must fail.
 
-Any failure after step 4 restores the previous `app` revision and the job
-schedules' earlier state. If a database task may still be running, the script
-leaves both stopped and names the task instead, so an old server never starts
-over an unfinished migration. A failed first deploy leaves `app` stopped.
+A failure after step 4 but before migrations complete restores the previous
+`app` revision and the job schedules' earlier state. The script leaves both
+stopped instead when a database task may still be running, or when migrations
+have already been applied, because the previous release is not proven against
+the migrated schema. A failed first deploy leaves `app` stopped.
 
 `deploy.sh --rollback <tag>` redeploys earlier digests without migrating. It is
 safe only when the failed release applied no migration, because this script does
