@@ -90,10 +90,22 @@ The trust boundaries match the Compose deployment:
   OpenTofu from Cloudflare's public IP list. Host port 3000 is unreachable from
   outside.
 - IMDSv2 with hop limit one keeps bridge containers away from the instance role.
-  The instance role holds only ECS agent and SSM permissions, because host-mode
-  containers can still reach instance metadata.
+  Host-mode containers can still reach instance metadata, so the instance role
+  holds only ECS agent and SSM permissions and an explicit deny on every
+  `/aboutme/prod` parameter and the RDS master secret. A remaining risk is
+  accepted: code running in the `app` task could use the instance role's ECS
+  agent permissions to request other tasks' credentials on this host. Every task
+  on the host is ours, and the `app` task already holds the widest runtime
+  secrets. Moving Chromium into its own task removes most of this risk and
+  belongs with the second-replica work.
 - Chromium's outbound network stays blocked by its proxy setting, independent of
   the network mode.
+- Chromium keeps its sandbox. Bottlerocket disables user namespaces, so the host
+  sets `user.max_user_namespaces` to 16384, and the `app` server container adds
+  `SYS_ADMIN` so Docker's seccomp profile allows the sandbox's namespaces. The
+  image runs as a non-root user, so the process gains no effective capability. A
+  probe on the production host (2026-09-17) showed the sandbox failing without
+  either setting and starting with both.
 
 `t4g` instances do not support ENI trunking and allow two `awsvpc` tasks, and
 `awsvpc` tasks on EC2 cannot hold a public IP. That is why `app` uses host
@@ -210,12 +222,16 @@ starts.
 4. Disable the job schedules, scale `app` to zero and wait. The site is down
    from here.
 5. With `--first-deploy`, run the three `db-admin` steps.
-6. Run `migrate` and require exit 0. On failure, restore the previous `app`
-   revision and stop.
+6. Run `migrate` and require exit 0.
 7. Update `web`, then `app`, wait for steady state, and re-enable the job
    schedules.
 8. Smoke through Cloudflare: health, TLS and security headers. A direct request
    to the Elastic IP must fail.
+
+Any failure after step 4 restores the previous `app` revision and the job
+schedules' earlier state. If a database task may still be running, the script
+leaves both stopped and names the task instead, so an old server never starts
+over an unfinished migration. A failed first deploy leaves `app` stopped.
 
 `deploy.sh --rollback <tag>` redeploys earlier digests without migrating. It is
 safe only when the failed release applied no migration, because this script does
@@ -244,15 +260,15 @@ already hold advisory locks against overlap.
 
 All alarms notify one SNS topic that emails the owner.
 
-| Signal   | Mechanism                                                             |
-| -------- | --------------------------------------------------------------------- |
-| Logs     | awslogs to CloudWatch Logs, 180-day retention                         |
-| App down | ECS running count below one; Route 53 health check on `/healthz`      |
-| Host     | EC2 status check with auto-recovery; ECS CPU and memory               |
-| Database | RDS CPU, credit balance, free storage and connections                 |
-| Jobs     | ECS task stopped with nonzero exit; Scheduler invocation failures     |
-| Mail     | SES bounce and complaint rates                                        |
-| Spend    | Budget filtered to `Project=aboutme`, managed outside this repository |
+| Signal   | Mechanism                                                                    |
+| -------- | ---------------------------------------------------------------------------- |
+| Logs     | awslogs to CloudWatch Logs, 180-day retention                                |
+| App down | Stopped-task events for `app` and `web`; Route 53 health check on `/healthz` |
+| Host     | EC2 status check with auto-recovery; ECS CPU and memory                      |
+| Database | RDS CPU, credit balance, free storage and connections                        |
+| Jobs     | ECS task stopped with nonzero exit; Scheduler invocation failures            |
+| Mail     | SES bounce and complaint alarms from the existing email stack                |
+| Spend    | Budget filtered to `Project=aboutme`, managed outside this repository        |
 
 Expected monthly cost is about $45–55: EC2 $15.48, RDS $18.25 plus $2.76
 storage, root disk $1.92, Elastic IP $3.65, the state KMS key $1, and a few
@@ -270,8 +286,9 @@ dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
   settings are applied through the owner's authenticated Cloudflare connection
   and listed in the production runbook: the two proxied DNS records, Full
   (strict) SSL, HTTPS redirect, minimum TLS 1.2, HSTS, Bot Fight Mode off, the
-  cache rule, zone-level origin pulls, and the Origin CA certificate. A change
-  to any of them updates the runbook in the same change.
+  cache rule, zone-level origin pulls (enabled before the first deploy, because
+  Caddy requires the client certificate from its first start), and the Origin CA
+  certificate. A change to any of them updates the runbook in the same change.
 - Public CI runs `tofu fmt -check` and `tofu validate` without cloud
   credentials. No workflow deploys.
 

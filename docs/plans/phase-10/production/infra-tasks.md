@@ -1039,8 +1039,8 @@ reading each setting back afterwards:
 
 Store the issued Origin CA certificate, which is public, as the `String`
 parameter `/aboutme/prod/tls/origin-cert` with `aws ssm put-parameter`. Enable
-zone-level origin pulls only after the first deploy is healthy, so Cloudflare
-does not present a client certificate before Caddy expects one.
+zone-level origin pulls before the first deploy: Caddy requires the client
+certificate from its first start (review finding B1).
 
 Record each setting and its value in the Cloudflare section of
 `docs/runbooks/production.md`. `include_subdomains` stays off so Google
@@ -1060,8 +1060,9 @@ answer, as expected before a deploy. Differences: both services start at zero
 tasks because no image exists yet, so Task 13's `deploy.sh` must set the `web`
 count to one as well as `app`; the data volume is in `ignore_changes`, because
 AWS reports computed fields and default tags on it that would force a host
-replacement; Bot Fight Mode was already off. Zone-level origin pulls stay off
-until the owner uploads the certificate and the first deploy is healthy.
+replacement; Bot Fight Mode was already off. Zone-level origin pulls were turned
+on on 2026-09-17, before the first deploy, after the review found that Caddy
+requires the certificate from its first start.
 
 ## Task 12
 

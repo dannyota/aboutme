@@ -85,7 +85,14 @@ resource "aws_ecs_task_definition" "app" {
         { name = "AUTH_EMAIL_ACTIVE_KEY", valueFrom = "${local.param}/auth-email/active-key" },
         { name = "PASSWORD_RATE_HMAC_KEY", valueFrom = "${local.param}/password-rate-hmac-key" },
       ]
-      linuxParameters = { initProcessEnabled = true, sharedMemorySize = 128 }
+      # SYS_ADMIN lets Docker's seccomp profile allow the user namespaces that
+      # Chromium's sandbox needs. The image runs as a non-root user, so the
+      # process gains no effective capability.
+      linuxParameters = {
+        initProcessEnabled = true
+        sharedMemorySize   = 128
+        capabilities       = { add = ["SYS_ADMIN"], drop = [] }
+      }
       healthCheck = {
         command     = ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
         interval    = 10

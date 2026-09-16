@@ -6,8 +6,9 @@
 #   deploy.sh --rollback <tag>       earlier images, no snapshot, no migration
 #
 # Order: snapshot, register revisions, stop jobs and app, migrate, start web
-# and app, re-enable jobs, smoke. A failed migration restores the previous app
-# and the previous job schedule state.
+# and app, re-enable jobs, smoke. Any failure after the app stops restores the
+# previous app and job schedules, unless a database task may still be running;
+# then both stay stopped for the operator.
 set -euo pipefail
 
 region=ap-southeast-1
@@ -16,27 +17,36 @@ group=aboutme-prod-jobs
 repo=dannyota/aboutme
 families=(app web migrate jobs db-bootstrap db-provision db-set-login)
 
+usage() {
+  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag>" >&2
+  exit 2
+}
 first=0
 rollback=0
-case "${1:-}" in
-  --rollback)
-    rollback=1
-    tag=${2:?usage: deploy.sh --rollback <tag>}
-    ;;
-  "" | -*)
-    echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag>" >&2
-    exit 2
-    ;;
-  *)
-    tag=$1
-    [[ ${2:-} == --first-deploy ]] && first=1
-    ;;
+case "$#:${1:-}:${2:-}" in
+  2:--rollback:?*) rollback=1 tag=$2 ;;
+  1:[!-]*:) tag=$1 ;;
+  2:[!-]*:--first-deploy) first=1 tag=$1 ;;
+  *) usage ;;
 esac
 
 aws_() { aws --region "$region" "$@"; }
 say() { printf 'deploy: %s\n' "$*" >&2; }
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+
+# phase: prepare -> changing -> finished. oneshot_task is set while a database task
+# may be running.
+phase=prepare
+oneshot_task=""
+on_exit() {
+  local status=$?
+  if ((status != 0)) && [[ $phase == changing ]]; then
+    restore
+  fi
+  rm -rf "$work"
+  exit "$status"
+}
+trap on_exit EXIT
 
 digest() { # image name -> sha256:...
   local token
@@ -100,34 +110,48 @@ say "registered revisions for $tag"
 # 4. Stop jobs and the app.
 schedules=$(aws_ scheduler list-schedules --group-name "$group" --query 'Schedules[].Name' --output text)
 declare -A schedule_state
-set_schedule() { # name state
+set_schedule() { # name state [task-definition]
   aws_ scheduler get-schedule --group-name "$group" --name "$1" --output json |
-    jq --arg s "$2" '{Name, GroupName, ScheduleExpression, ScheduleExpressionTimezone,
+    jq --arg s "$2" --arg td "${3:-}" '{Name, GroupName, ScheduleExpression, ScheduleExpressionTimezone,
       FlexibleTimeWindow, Target, Description, StartDate, EndDate, KmsKeyArn,
-      ActionAfterCompletion, State: $s} | with_entries(select(.value != null))' >"$work/schedule.json"
+      ActionAfterCompletion, State: $s}
+      | if $td != "" then .Target.EcsParameters.TaskDefinitionArn = $td else . end
+      | with_entries(select(.value != null))' >"$work/schedule.json"
   aws_ scheduler update-schedule --cli-input-json "file://$work/schedule.json" >/dev/null
 }
+
+previous_app=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app \
+  --query 'services[0].taskDefinition' --output text)
+
+restore() {
+  set +e
+  if [[ -n $oneshot_task ]]; then
+    local status
+    status=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$oneshot_task" \
+      --query 'tasks[0].lastStatus' --output text)
+    if [[ $status != STOPPED ]]; then
+      say "failed while a database task may still be running: $oneshot_task ($status)"
+      say "the app and job schedules stay stopped; check the task, then rerun deploy.sh"
+      return
+    fi
+  fi
+  say "failed; restoring the previous app and job schedules"
+  if ((!first)); then
+    aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
+      --task-definition "$previous_app" --desired-count 1 >/dev/null
+  fi
+  for name in $schedules; do
+    if [[ ${schedule_state[$name]} == ENABLED ]]; then
+      set_schedule "$name" ENABLED
+    fi
+  done
+}
+
+phase=changing
 for name in $schedules; do
   schedule_state[$name]=$(aws_ scheduler get-schedule --group-name "$group" --name "$name" --query State --output text)
   set_schedule "$name" DISABLED
 done
-
-previous_app=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app \
-  --query 'services[0].taskDefinition' --output text)
-restore() {
-  trap - ERR
-  say "failed; restoring the previous app and job schedules"
-  if ((!first)); then
-    aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
-      --task-definition "$previous_app" --desired-count 1 >/dev/null || true
-  fi
-  for name in $schedules; do
-    if [[ ${schedule_state[$name]} == ENABLED ]]; then
-      set_schedule "$name" ENABLED || true
-    fi
-  done
-}
-trap restore ERR
 
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app --desired-count 0 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
@@ -135,13 +159,15 @@ say "site down"
 
 # 5. Database steps.
 run_once() { # family
-  local task code
-  task=$(aws_ ecs run-task --cluster "$cluster" --launch-type EC2 \
+  local code
+  oneshot_task=$(aws_ ecs run-task --cluster "$cluster" --launch-type EC2 \
     --task-definition "${revision[$1]}" --started-by "deploy-$1" \
     --query 'tasks[0].taskArn' --output text)
-  aws_ ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"
-  code=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$task" \
+  [[ $oneshot_task == arn:* ]] || { oneshot_task=""; say "$1 did not start"; return 1; }
+  aws_ ecs wait tasks-stopped --cluster "$cluster" --tasks "$oneshot_task"
+  code=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$oneshot_task" \
     --query 'tasks[0].containers[0].exitCode' --output text)
+  oneshot_task=""
   [[ $code == 0 ]] || { say "$1 exited with $code"; return 1; }
   say "$1 done"
 }
@@ -159,10 +185,10 @@ aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-web
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
   --task-definition "${revision[app]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
-trap - ERR
 for name in $schedules; do
-  set_schedule "$name" ENABLED
+  set_schedule "$name" ENABLED "${revision[jobs]}"
 done
+phase=finished
 say "site up; job schedules enabled"
 
 # 7. Smoke through Cloudflare, and prove the origin rejects direct requests.

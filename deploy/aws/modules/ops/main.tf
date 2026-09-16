@@ -61,7 +61,7 @@ resource "aws_iam_role_policy" "scheduler" {
 }
 
 # Schedules start disabled; deploy.sh enables them once a real image runs,
-# and disables them around each deploy.
+# disables them around each deploy, and points them at the released revision.
 resource "aws_scheduler_schedule" "job" {
   for_each                     = local.jobs
   name                         = each.key
@@ -92,8 +92,9 @@ resource "aws_scheduler_schedule" "job" {
     }
   }
 
+  # deploy.sh owns the state and pins the target to the released revision.
   lifecycle {
-    ignore_changes = [state]
+    ignore_changes = [state, target[0].ecs_parameters[0].task_definition_arn]
   }
 }
 
