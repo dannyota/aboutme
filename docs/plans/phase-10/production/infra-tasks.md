@@ -911,8 +911,10 @@ mail. Differences from the steps above: the AWS CLI cannot read
 and delete it; `ListBucket` has no prefix condition, because `HeadObject`
 reports a missing key as 404 only with it; the Origin CA certificate was issued
 here through the Cloudflare MCP; the task definitions start with `:unreleased`
-image tags until the first deploy. The owner's dashboard upload of the
-origin-pull certificate is still pending.
+image tags until the first deploy. The first client certificate lacked leaf
+extensions, so `tls.sh` now has `origin`, `pull` and `forget-pull` steps and
+marks the client certificate `CA:FALSE` for client authentication. The owner
+uploaded it on 2026-09-17, and Cloudflare shows it active.
 
 ## Task 11
 
