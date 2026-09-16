@@ -70,7 +70,7 @@ in one place.
   `RuntimeFenceResult` values. The name comes from the design document's Go
   block, which outranks this plan, and matches the three sibling transports.
 
-- [ ] **Step 1: Read the accepted transport contract and the two siblings**
+- [x] **Step 1: Read the accepted transport contract and the two siblings**
 
 Read `docs/design/scaling/membership-evidence-transport.md` for the exact method
 set and result fields. Then read
@@ -78,7 +78,7 @@ set and result fields. Then read
 are the accepted shape for this exact kind of transport, including the generic
 write-runner helper and decode-inside-the-callback rule.
 
-- [ ] **Step 2: Write the failing per-method tests**
+- [x] **Step 2: Write the failing per-method tests**
 
 One test per method proving one runner call, one query, the right SQL name in
 the query text, and a fully decoded result. Reuse `registrationRunnerStub`,
@@ -86,7 +86,7 @@ the query text, and a fully decoded result. Reuse `registrationRunnerStub`,
 `commitResponseLostTx`, `registrationFinishResponseLostTx` and
 `testutil.NewMigratedTestDatabase` rather than writing new harness code.
 
-- [ ] **Step 3: Run them and record the failure**
+- [x] **Step 3: Run them and record the failure**
 
 ```sh
 REQUIRE_TEST_DB=1 TEST_DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable' go test -race -count=1 -timeout 30m ./internal/store -run '^TestRuntimeMembershipEvidence' -v
@@ -94,7 +94,7 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20
 
 Expected: build failure naming the missing store type and methods.
 
-- [ ] **Step 4: Implement the transport**
+- [x] **Step 4: Implement the transport**
 
 Each method validates input before touching the runner, runs one generated
 query, and validates and copies the result inside the callback so an invalid row
@@ -102,7 +102,7 @@ rolls the transaction back. Every returned error yields the exact zero result,
 including a finish failure or commit ambiguity after a value decoded. No retry.
 No driver value escapes.
 
-- [ ] **Step 5: Prove the matrices and the role boundary**
+- [x] **Step 5: Prove the matrices and the role boundary**
 
 Add: an invalid-row matrix per result type, proving each returns the zero value
 and fails before finish; input rejection proving the runner is never called; the
@@ -113,7 +113,7 @@ rolling back, and the role boundary in both directions. Graceful leave belongs
 to the application and maintenance roles; termination proof belongs to the
 fencing proof role.
 
-- [ ] **Step 6: Run the required checks**
+- [x] **Step 6: Run the required checks**
 
 ```sh
 go build ./... && go vet ./internal/store
@@ -123,7 +123,7 @@ GOGC=50 golangci-lint run ./internal/store --tests
 
 The lint run must end with `0 issues.`
 
-- [ ] **Step 7: Report**
+- [x] **Step 7: Report**
 
 Write `.dev/phase-10/runtime-membership-evidence-store-author-report.txt` with
 base commit, red evidence per method, exact green output, a coverage map, any
@@ -141,7 +141,7 @@ files. Root inspects, reruns and commits.
 - Modify: `docs/runbooks/` deploy or UAT runbook, same
 - Modify: `docs/design/deployment.md`
 
-- [ ] **Step 1: Find every place the deploy sequence is written**
+- [x] **Step 1: Find every place the deploy sequence is written**
 
 ```sh
 grep -rln "migrate\|migration" docs/design/deployment.md docs/plans/phase-10/infrastructure docs/runbooks
@@ -150,7 +150,7 @@ grep -rln "migrate\|migration" docs/design/deployment.md docs/plans/phase-10/inf
 List the files that state when migrations run. The infrastructure tasks are
 unimplemented, so this is a contract change, not a code change.
 
-- [ ] **Step 2: State the sequence in one place and reference it elsewhere**
+- [x] **Step 2: State the sequence in one place and reference it elsewhere**
 
 The sequence is: start the database; run the migration task to completion; only
 then update the service. Stopping reverses it. Record that the migration task
@@ -160,13 +160,13 @@ task that exits, and that a nonzero exit blocks the service update.
 Record that the application does not migrate at startup, and that the existing
 advisory lock makes a second concurrent migrator safe rather than expected.
 
-- [ ] **Step 3: Record the single-replica service configuration**
+- [x] **Step 3: Record the single-replica service configuration**
 
 The service maximum is one for this release. Note that raising it requires the
 deferred work named in ADR 0036, so a future reader does not raise a number and
 assume the coordination is finished.
 
-- [ ] **Step 4: Check the docs gate**
+- [x] **Step 4: Check the docs gate**
 
 ```sh
 make docs-lint
@@ -184,26 +184,26 @@ npx prettier --check --ignore-path /dev/null <each changed file>
 - Modify: `docs/plans/phase-10/replica/runtime-tasks.md`
 - Modify: `docs/design/scaling/README.md`
 
-- [ ] **Step 1: Delete the two retired plans**
+- [x] **Step 1: Delete the two retired plans**
 
 Git keeps them and ADR 0036 records why they went. A plan that describes work
 nobody will do is worse than no plan.
 
-- [ ] **Step 2: Remove their reservations from the task index**
+- [x] **Step 2: Remove their reservations from the task index**
 
 In `runtime-tasks.md`, remove the R1.12 and R1.13 paragraphs and the migration
 24 and 25 reservations. Say instead that migrations 24 and upward are
 unreserved, and that the wake contracts remain accepted design for a later
 second replica.
 
-- [ ] **Step 3: Keep the design documents, mark their status**
+- [x] **Step 3: Keep the design documents, mark their status**
 
 Do not delete `wake-operations.md` or `wake-migrations.md` under
 `docs/design/scaling/`. They are accepted contracts and ADR 0036 does not
 withdraw them. Add one line to each saying implementation is deferred under ADR
 0036, so a reader does not start on them.
 
-- [ ] **Step 4: Check the links and the docs gate**
+- [x] **Step 4: Check the links and the docs gate**
 
 ```sh
 grep -rn "exclusive-wake.md\|replica/wake-migrations.md" docs/
@@ -224,7 +224,7 @@ Every link to a deleted plan must be gone. Expected: no hits, then a clean gate.
 - Modify: `docs/plans/phase-10/README.md`
 - Modify: `docs/design/decisions.md`
 
-- [ ] **Step 1: Tick the two completed plans and record their evidence**
+- [x] **Step 1: Tick the two completed plans and record their evidence**
 
 Both are complete in code but unticked. Follow the pattern the claim and rate
 plans already use: mark the checklist, then add an implementation evidence
@@ -232,7 +232,7 @@ section with what the checks measured, what the fresh review found, and what
 each slice left open. Membership evidence is only complete once Task 1 lands, so
 do this after it.
 
-- [ ] **Step 2: State the direction once, at the top of the phase**
+- [x] **Step 2: State the direction once, at the top of the phase**
 
 In `docs/plans/phase-10/README.md`, state that the first release runs one
 serving replica, that migrations run from the deployment, and that the
@@ -240,19 +240,19 @@ coordination work beyond migration 23 is deferred under ADR 0036. Link the ADR.
 Remove or correct any sentence that promises a two-replica proof as a phase
 exit.
 
-- [ ] **Step 3: Map the new decision in the index**
+- [x] **Step 3: Map the new decision in the index**
 
 Add ADR 0036 to `docs/design/decisions.md` in the established format, naming the
 rule it establishes.
 
-- [ ] **Step 4: Correct the exit criteria**
+- [x] **Step 4: Correct the exit criteria**
 
 In `docs/plans/phase-10/exit-criteria.md`, the hosted acceptance item requiring
 production-shaped one to two capacity during writes no longer applies to this
 release. Rewrite it as a single-replica acceptance, and record the two-replica
 proof as a Phase 11 precondition instead of deleting the requirement.
 
-- [ ] **Step 5: Check the docs gate**
+- [x] **Step 5: Check the docs gate**
 
 ```sh
 make docs-lint
@@ -262,7 +262,7 @@ make docs-lint
 
 ## Verification and release
 
-- [ ] Run the full local gate at one unchanged candidate, one heavy command at a
+- [x] Run the full local gate at one unchanged candidate, one heavy command at a
       time, and record each result:
 
 ```sh
@@ -272,15 +272,26 @@ make server-migration-test
 make sqlc-check
 ```
 
-- [ ] Confirm the working tree is clean and every changed document passes
+- [x] Confirm the working tree is clean and every changed document passes
       `make docs-lint`.
-- [ ] A fresh reviewer who authored none of this reads the integrated diff and
+- [x] A fresh reviewer who authored none of this reads the integrated diff and
       confirms by name: the transport returns zero authority on every error; the
       deleted plans are unreferenced; no retained document still describes wake
       implementation as pending; and the deployment sequence states that
       migrations complete before the service starts.
-- [ ] Record the outcome in this plan's implementation evidence section, then
+- [x] Record the outcome in this plan's implementation evidence section, then
       delete this plan at phase exit as the lean-docs rule requires.
+
+## Implementation evidence
+
+- Task 1 landed as `8ad40f0`; tasks 2 to 4 as `ca4bf90`, `60896e0`, `848cf28`
+  and `8528006`.
+- 2026-09-17 local gate, run in chunks: `make check` (build, vet, tests,
+  golangci-lint, sqlc drift), `make server-test-db`,
+  `make server-migration-test` and `make docs-lint` passed.
+- The fresh Phase 10 reviewer confirmed the four points by name. It found three
+  plans that still described wake as pending work (`runtime-tasks.md`,
+  `lifecycle-operations.md`, `membership-schema.md`); they now mark it deferred.
 
 ## What this plan does not do
 

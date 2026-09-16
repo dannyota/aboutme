@@ -14,7 +14,8 @@ design is committed at `1149ac5`.
 
 This slice contributes to AC-INF-009 and Task 10.18's topology/lifecycle rows.
 It proves storage constraints and privileges only. Activation, fencing,
-admission, wake, transition, caller, and hosted acceptance remain open.
+admission, transition, caller, and hosted acceptance belong to later slices;
+wake is deferred under ADR 0036.
 
 ## Ownership
 
