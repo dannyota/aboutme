@@ -193,6 +193,9 @@ commit; the repository is public.
 - Do not weaken security controls: least privilege, strict input bounds,
   versioned sanitizing, CSRF and Origin checks, `__Host-` cookies,
   route-specific rate limits, CSP, secret-free logs.
+- Write docs and code comments short, clear, and concise. Say each fact once, in
+  plain words. When a change makes a statement false, fix or delete it in the
+  same change; never leave stale text behind.
 - Design rationale belongs in `docs/`, not code comments. Cite files, commands,
   and uncertainty; claim only checks that actually ran. Use Mermaid, not ASCII
   diagrams. Keep living Markdown near 300 lines. A phase's plan is deleted when
