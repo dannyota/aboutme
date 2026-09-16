@@ -38,6 +38,7 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
 	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
 	bash scripts/test/render-topology-test.sh
+	bash deploy/aws/scripts/deploy_test.sh
 	bash -n scripts/test/db-role-bootstrap-wiring-test.sh
 	bash scripts/test/db-role-bootstrap-wiring-test.sh
 	bash scripts/dev-https-test.sh --static
@@ -104,6 +105,10 @@ idempotency-expiry-sweep media-deletion-sweep media-orphan-sweep privacy-retenti
 
 media-orphan-sweep-dry-run: ## Report orphan candidates without changing media or sweep state
 	cd apps/server && go run ./cmd/server media-orphan-sweep --dry-run
+
+.PHONY: deploy-script-test
+deploy-script-test: ## Test deploy.sh step order and failure recovery with stubbed AWS, GitHub and Cloudflare calls
+	bash deploy/aws/scripts/deploy_test.sh
 
 .PHONY: caddy-prod-test
 caddy-prod-test: ## Build the production Caddy image and test routing, origin-pull mTLS, and client-IP trust

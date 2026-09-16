@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Canned responses for deploy_test.sh. $STUB_CASE selects the scenario.
+cmd=$1
+shift
+args="$*"
+case "$cmd $args" in
+  "git fetch"*) exit 0 ;;
+  "git rev-list"*) echo 0123456789abcdef0123456789abcdef01234567 ;;
+  "git merge-base"*) exit 0 ;;
+  "gh run list"*) echo success ;;
+  "curl "*"ghcr.io/token"*) echo '{"token":"stub"}' ;;
+  "curl "*"/manifests/"*) printf 'docker-content-digest: sha256:%064d\r\n' 1 ;;
+  "curl "*"api.cloudflare.com/client/v4/ips"*) echo '{"success":true,"result":{"ipv4_cidrs":["198.51.100.0/24","192.0.2.0/24"]}}' ;;
+  "curl -fsSI https://aboutme.vn/") printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\n' ;;
+  "curl "*"https://aboutme.vn/"*) echo 200 ;;
+  "curl "*) exit 28 ;;
+  "aws "*"ecs describe-task-definition"*)
+    echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]}]}' ;;
+  "aws "*"ecs describe-services"*) echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3' ;;
+  "aws "*"ecs register-task-definition"*)
+    file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
+    jq -e '.containerDefinitions and (has("revision") | not)' "$file" >/dev/null || exit 3
+    echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/new:4' ;;
+  "aws "*"ecs run-task"*)
+    by=$(sed -E 's/.*--started-by ([^ ]+).*/\1/' <<<"$args")
+    echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/$by" ;;
+  "aws "*"ecs describe-tasks"*)
+    if [[ $STUB_CASE == *migrate_fails && $args == *deploy-migrate* ]]; then echo 1; else echo 0; fi ;;
+  "aws "*"scheduler list-schedules"*) printf 'a\tb\tc\td\n' ;;
+  "aws "*"scheduler get-schedule"*)
+    state=ENABLED
+    [[ $STUB_CASE == first* ]] && state=DISABLED
+    if [[ $args == *"--query State"* ]]; then
+      echo "$state"
+      exit 0
+    fi
+    printf '{"Name":"a","GroupName":"g","ScheduleExpression":"rate(1 hour)","FlexibleTimeWindow":{"Mode":"OFF"},"Target":{"Arn":"x","RoleArn":"y"},"State":"%s","Arn":"z"}\n' "$state" ;;
+  "aws "*"scheduler update-schedule"*)
+    file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
+    cp "$file" "$STUB_DIR/last-schedule.json" ;;
+  "aws "*"ec2 describe-addresses"*) echo 192.0.2.10 ;;
+  *) exit 0 ;;
+esac

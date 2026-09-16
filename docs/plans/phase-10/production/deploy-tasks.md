@@ -18,7 +18,7 @@
 - Every external command goes through the `aws`, `gh`, `git` and `curl` binaries
   on `PATH`, so the test replaces them with stubs.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `deploy_test.sh` puts stub commands first on `PATH`. Each stub appends its
 arguments to `$CALLS` and prints a canned response from `$STUB_DIR`. The test
@@ -125,7 +125,7 @@ Each one-shot task starts with `--started-by deploy-<family>`. The stub puts
 that value in the task ARN, so the later `describe-tasks` call for the migrate
 task carries `deploy-migrate` and the `migrate_fails` case can fail it.
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 ```sh
 bash deploy/aws/scripts/deploy_test.sh
@@ -133,7 +133,7 @@ bash deploy/aws/scripts/deploy_test.sh
 
 Expected: fails because `deploy.sh` does not exist.
 
-- [ ] **Step 3: Write `deploy.sh`**
+- [x] **Step 3: Write `deploy.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -274,7 +274,7 @@ fi
 say "deployed $tag"
 ```
 
-- [ ] **Step 4: Run the test and lint**
+- [x] **Step 4: Run the test and lint**
 
 ```sh
 bash deploy/aws/scripts/deploy_test.sh
@@ -283,6 +283,17 @@ shellcheck deploy/aws/scripts/*.sh deploy/caddy/production/*.sh
 
 Expected: `deploy-script-test: ok` and no shellcheck findings. Ask the
 integration owner to add `deploy-script-test` to the `Makefile`.
+
+Result (2026-09-17): `make deploy-script-test` passes five scenarios: normal,
+first deploy, failed migration, failed first-deploy migration and rollback, plus
+the usage error. It also runs in `make operational-test`. Differences from the
+code above: request bodies go through files, because the AWS CLI cannot read
+`file:///dev/stdin`; `web` is started with `--desired-count 1`, because both
+services begin at zero; the script records each schedule's state and a failure
+restores that state, so a failed first deploy leaves the jobs off and `app`
+stopped; the Elastic IP is found by its `Name` tag, because the account holds
+other tagged resources. Removing the snapshot or the failure restore makes the
+test fail.
 
 ## Task 14
 
