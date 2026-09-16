@@ -1,0 +1,40 @@
+# Production route table for the single-host deployment. See
+# docs/design/single-host-production.md. {client_ip} is CF-Connecting-IP only
+# when the peer is in CLOUDFLARE_RANGES; otherwise it is the peer address.
+{
+	admin off
+	servers {
+		trusted_proxies static {$CLOUDFLARE_RANGES}
+		trusted_proxies_strict
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+(origin_tls) {
+	tls /run/caddy/origin.pem /run/caddy/origin-key.pem {
+		client_auth {
+			mode require_and_verify
+			trust_pool file /run/caddy/origin-pull-ca.pem
+		}
+	}
+}
+
+www.aboutme.vn {
+	import origin_tls
+	redir https://aboutme.vn{uri} permanent
+}
+
+aboutme.vn {
+	import origin_tls
+	encode zstd gzip
+
+	request_header -X-Real-IP
+	request_header -X-Forwarded-For
+	request_header -Forwarded
+
+	import /etc/caddy/routes.caddy
+
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

@@ -25,7 +25,7 @@ Compose hostnames and the peer address. `render.sh` rewrites exactly those
 tokens for production and fails on any unexpected count, so a generator change
 cannot silently skip the rewrite.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 `deploy/caddy/production/test.sh`:
 
@@ -78,7 +78,7 @@ podman exec aboutme-caddy-test sh -c 'test ! -r /proc/1/environ || ! grep -qa OR
 echo "caddy-prod-test: ok"
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 ```sh
 bash deploy/caddy/production/test.sh
@@ -86,7 +86,7 @@ bash deploy/caddy/production/test.sh
 
 Expected: fails because `render.sh` does not exist.
 
-- [ ] **Step 3: Write `render.sh`**
+- [x] **Step 3: Write `render.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -109,7 +109,7 @@ replace '{http.request.remote.host}' '{client_ip}' 2
 printf '%s\n' "$content"
 ```
 
-- [ ] **Step 4: Write the Caddyfile**
+- [x] **Step 4: Write the Caddyfile**
 
 ```caddyfile
 {
@@ -154,7 +154,7 @@ aboutme.vn {
 `{client_ip}` is the `CF-Connecting-IP` value only when the peer is inside
 `CLOUDFLARE_RANGES`; otherwise it is the peer address.
 
-- [ ] **Step 5: Write the entrypoint and Dockerfile**
+- [x] **Step 5: Write the entrypoint and Dockerfile**
 
 `entrypoint.sh`:
 
@@ -189,7 +189,7 @@ ENTRYPOINT ["/usr/local/bin/aboutme-caddy"]
 
 Replace `<pinned digest>` with the real digest before running Step 6.
 
-- [ ] **Step 6: Run the test**
+- [x] **Step 6: Run the test**
 
 ```sh
 bash deploy/caddy/production/test.sh
@@ -197,6 +197,13 @@ bash deploy/caddy/production/test.sh
 
 Expected: `caddy-prod-test: ok`. Ask the integration owner to add
 `caddy-prod-test: ; bash deploy/caddy/production/test.sh` to the `Makefile`.
+
+Result (2026-09-16): `make caddy-prod-test` passes. The implemented test also
+runs a stand-in for Go inside the Caddy network namespace and proves that Go
+receives the peer address from an untrusted peer and `CF-Connecting-IP` from a
+trusted one. Caddy's `permanent` redirect returns 301, not 308. Removing the
+client certificate requirement or the `CF-Connecting-IP` setting makes the test
+fail.
 
 ## Task 7
 
