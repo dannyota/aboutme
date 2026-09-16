@@ -195,7 +195,9 @@ commit; the repository is public.
   route-specific rate limits, CSP, secret-free logs.
 - Write docs and code comments short, clear, and concise. Say each fact once, in
   plain words. When a change makes a statement false, fix or delete it in the
-  same change; never leave stale text behind.
+  same change; never leave stale text behind. When your work touches a doc or
+  comment that breaks this rule, rewrite it as part of that work. Do not start
+  separate sweeps for it.
 - Design rationale belongs in `docs/`, not code comments. Cite files, commands,
   and uncertainty; claim only checks that actually ran. Use Mermaid, not ASCII
   diagrams. Keep living Markdown near 300 lines. A phase's plan is deleted when
