@@ -641,7 +641,7 @@ Expected: all pass.
 **Interfaces:** The image contains `/etc/ssl/rds/global-bundle.pem` and
 `/usr/local/bin/db-set-login`.
 
-- [ ] **Step 1: Pin the bundle hash**
+- [x] **Step 1: Pin the bundle hash**
 
 ```sh
 curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem | sha256sum
@@ -649,7 +649,7 @@ curl -fsSL https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem | s
 
 Record the hash as `RDS_BUNDLE_SHA256` in the Dockerfile.
 
-- [ ] **Step 2: Edit the Dockerfile**
+- [x] **Step 2: Edit the Dockerfile**
 
 In the build stage, after the existing `go build` lines:
 
@@ -670,7 +670,7 @@ COPY --from=build /out/rds-global-bundle.pem /etc/ssl/rds/global-bundle.pem
 Write the real hash in place of `<hash from step 1>`; the build fails on a
 mismatch.
 
-- [ ] **Step 3: Build and smoke**
+- [x] **Step 3: Build and smoke**
 
 ```sh
 podman build -f deploy/server.Dockerfile -t localhost/aboutme/server:probe .
