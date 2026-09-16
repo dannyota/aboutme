@@ -68,3 +68,22 @@ module "host" {
     web = module.tasks.web_task_definition_arn
   }
 }
+
+module "ops" {
+  source = "../modules/ops"
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+  name                 = local.name
+  account_id           = var.account_id
+  alarm_email          = var.alarm_email
+  cluster_arn          = module.host.cluster_arn
+  cluster_name         = module.host.cluster_name
+  instance_id          = module.host.instance_id
+  db_instance_id       = module.data.db_instance_id
+  jobs_task_family_arn = module.tasks.jobs_task_family_arn
+  jobs_exec_role_arn   = module.identity.exec_role_arns["jobs"]
+  jobs_task_role_arn   = module.identity.jobs_task_role_arn
+  site_alarm_enabled   = var.site_alarm_enabled
+}

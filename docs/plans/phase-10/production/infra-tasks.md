@@ -1072,7 +1072,7 @@ until the owner uploads the certificate and the first deploy is healthy.
 **Interfaces:** Produces SNS topic `aboutme-prod-alerts`, four schedules, the
 Route 53 health check, alarms and the maintenance window.
 
-- [ ] **Step 1: Write the schedules**
+- [x] **Step 1: Write the schedules**
 
 ```hcl
 locals {
@@ -1144,7 +1144,7 @@ with the first real run; if Scheduler rejects an unversioned ARN, `deploy.sh`
 updates each schedule's target to the new revision while it re-enables them.
 `deploy.sh` disables the group's schedules during a deploy.
 
-- [ ] **Step 2: Write alarms, health check and updates**
+- [x] **Step 2: Write alarms, health check and updates**
 
 ```hcl
 resource "aws_sns_topic" "alerts" { name = "${var.name}-alerts" }
@@ -1263,8 +1263,19 @@ resource "aws_ssm_maintenance_window_task" "update" {
 
 Sunday 20:00 UTC is Monday 03:00 in Vietnam.
 
-- [ ] **Step 3: Wire, plan, apply, confirm the subscription**
+- [x] **Step 3: Wire, plan, apply, confirm the subscription**
 
 Expected: the owner receives and confirms two SNS subscription emails (one per
 region). `aws scheduler list-schedules --group-name aboutme-prod-jobs` lists
 four schedules.
+
+Result (2026-09-17): 28 resources exist and `tofu plan` reports no changes. SSM
+Run Command reaches the host and `apiclient update check` works, so the update
+window is usable. Differences: the schedules start `DISABLED` and ignore later
+state, so jobs never run the `:unreleased` image, and `deploy.sh` enables them;
+the site-down alarm has `actions_enabled` from `site_alarm_enabled`, false until
+the first healthy deploy (Task 15 turns it on); the weekly orphan sweep runs
+Sunday 18:45 UTC, before the monthly update window; SES bounce and complaint
+alarms are not added, because the email stack already has them; the connection
+alarm threshold is 60. The owner still has to confirm the two SNS subscription
+emails.

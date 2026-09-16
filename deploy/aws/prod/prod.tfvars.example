@@ -6,3 +6,6 @@ media_bucket_name = "aboutme-prod-media-<account id>"
 image_server = "ghcr.io/dannyota/aboutme-server:unreleased"
 image_web    = "ghcr.io/dannyota/aboutme-web:unreleased"
 image_caddy  = "ghcr.io/dannyota/aboutme-caddy:unreleased"
+alarm_email = ""
+# Set to true after the first healthy deploy.
+site_alarm_enabled = false
