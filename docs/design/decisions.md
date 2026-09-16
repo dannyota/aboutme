@@ -55,6 +55,7 @@ deployment, deferring the coordination that only a second replica needs.
 | [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)      | Accepted | Scheduled UAT; ECS production autoscaling with a one-server minimum; fixed RDS compute                            |
 | [0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)        | Accepted | PostgreSQL fleet coordination; paired render authority; 60-connection envelope; durable UAT stop and wake control |
 | [0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md) | Accepted | One serving replica for the first release; migrations run as a deployment step; wake implementation retired       |
+| [0037](../adr/0037-single-host-production-without-hosted-uat.md)     | Proposed | First release deploys straight to single-host production behind Cloudflare; no hosted UAT until about 500 users   |
 
 ## Remaining gates
 
