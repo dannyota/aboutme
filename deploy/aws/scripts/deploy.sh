@@ -7,8 +7,8 @@
 #
 # Order: snapshot, register revisions, stop jobs and app, migrate, start web
 # and app, re-enable jobs, smoke. Any failure after the app stops restores the
-# previous app and job schedules, unless a database task may still be running;
-# then both stay stopped for the operator.
+# previous app and job schedules, unless a database task may still be running
+# or migrations were applied; then both stay stopped for the operator.
 set -euo pipefail
 
 region=ap-southeast-1
@@ -38,6 +38,7 @@ work=$(mktemp -d)
 # may be running.
 phase=prepare
 oneshot_task=""
+migrated=0
 on_exit() {
   local status=$?
   if ((status != 0)) && [[ $phase == changing ]]; then
@@ -135,13 +136,18 @@ restore() {
       return
     fi
   fi
+  if ((migrated)); then
+    say "failed after migrations were applied; the previous app and job schedules stay stopped"
+    say "the previous release is not proven against the migrated schema: fix forward, or restore the snapshot"
+    return
+  fi
   say "failed; restoring the previous app and job schedules"
   if ((!first)); then
     aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
       --task-definition "$previous_app" --desired-count 1 >/dev/null
   fi
   for name in $schedules; do
-    if [[ ${schedule_state[$name]} == ENABLED ]]; then
+    if [[ ${schedule_state[$name]:-} == ENABLED ]]; then
       set_schedule "$name" ENABLED
     fi
   done
@@ -176,7 +182,10 @@ if ((first)); then
   run_once db-provision
   run_once db-set-login
 fi
-((rollback)) || run_once migrate
+if ((!rollback)); then
+  run_once migrate
+  migrated=1
+fi
 
 # 6. Start the release.
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-web \
