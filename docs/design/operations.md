@@ -69,14 +69,8 @@ The server exposes one-shot `idempotency-expiry-sweep` and
 `media-deletion-sweep` commands hourly, `media-orphan-sweep` weekly, and
 `privacy-retention-sweep` daily. These commands use PostgreSQL advisory overlap
 locks, bounded runs and fixed numeric result fields. They never start the HTTP
-listeners or Chromium. Local tests execute them directly; Phase 10 activates
-their schedules and proves heartbeat, failure and overdue alarm delivery. For
-stopped UAT, [ADR 0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)
-permits a controller evaluation to report `proved_empty` without starting a
-database job only when the final stop receipt proves nothing can become due
-before the next wake. This does not advance a job-success timestamp or waive any
-deadline. The [lifecycle contract](scaling/uat-lifecycle.md) defines each
-category, the shared write barrier, final receipt and measured wake lead.
+listeners or Chromium. Local tests execute them directly. In production,
+EventBridge Scheduler runs them and a failed run raises an alarm.
 
 Session metadata is redacted 90 days after the session's creation. Lifecycle
 events contain only a generated event ID, fixed kind, occurrence time and an
@@ -85,8 +79,8 @@ durable; audit insertion and the state they describe commit together. Completed
 media jobs remain for 180 days from completion to preserve outcome and
 ambiguous-commit proof. Audit events expire after 180 days from occurrence.
 Pending and overdue jobs never expire. Security diagnostic logs use the same
-180-day hosted retention, configured and proved in Phase 10; cleared mail
-delivery bookkeeping remains on its existing seven-day cleanup schedule.
+180-day hosted log retention; cleared mail delivery bookkeeping remains on its
+existing seven-day cleanup schedule.
 
 Orphan dry runs do not mutate objects, jobs, audit or the stored cursor. Failed
 orphan removal creates exact durable retry work before advancing the cursor.
@@ -110,7 +104,7 @@ evidence.
 Production alerts cover:
 
 - RDS storage, CPU, connections, backup, and restore verification.
-- Task readiness, restart loops, and CloudFront 5xx rate.
+- Service running count, restart loops, and the external health check.
 - Render queue depth, timeout, and out-of-memory kills.
 - SSE connection and file-descriptor headroom.
 - TLS expiry and origin-path failures.
@@ -119,7 +113,8 @@ Production alerts cover:
   weekly reconciliation drift.
 
 Every critical alert has a documented trigger and its delivery is proven in
-staging. Dashboards without a tested notification path do not satisfy the gate.
+production before the public announcement. Dashboards without a tested
+notification path do not satisfy the gate.
 
 ## Verification layers
 
@@ -130,10 +125,11 @@ staging. Dashboards without a tested notification path do not satisfy the gate.
 - Golden and visual tests cover renderer determinism.
 - Phase acceptance uses one fresh review and a correctable exit checklist under
   ADR 0024; missing required evidence fails the gate.
-- Native HTTPS browser checks prove features locally. Phase 10 drives the
-  complete product through `https://uat.aboutme.vn` in AWS Singapore.
-- The same UAT environment proves infrastructure, restore, rotation, migration,
-  rollback, alarms, real email, and edge behavior before production.
+- Native HTTPS browser checks prove features locally.
+- Production at `https://aboutme.vn` is where the owner tests the complete
+  product, restore, migration, alarms, real email, and edge behavior before the
+  public announcement. A separate UAT environment returns at about 500 users,
+  per [ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md).
 
 The tracked engineering gates are summarized in
 [`../standards/engineering.md`](../standards/engineering.md).

@@ -174,7 +174,7 @@ not need one compiled code path per old version.
   ([ADR 0006](../adr/0006-schema-derived-codegen.md)).
 - `apps/server/migrations/*.sql` is the sole relational schema source. Migration
   DDL is hand-written, applied by the embedded goose command, read by sqlc, and
-  becomes append-only at the first UAT baseline
+  becomes append-only once the baseline marker lands
   ([ADR 0010](../adr/0010-goose-only-migrations.md),
   [ADR 0020](../adr/0020-uat-migration-baseline.md)).
 - Generated artifacts are committed and changed only through their source and
@@ -184,11 +184,11 @@ There is no separate declarative relational schema file. Reading migrations and
 sqlc queries together gives the applied schema and typed access layer without a
 second schema source that can drift.
 
-Before the first UAT baseline, migration history is development-only. The
+Before the baseline marker lands, migration history is development-only. The
 integration owner may correct it and recreate the shared development database
-after every live-database worker is idle. The first UAT candidate adds
-`apps/server/migrations/.uat-baseline` before the first hosted UAT migration, as
-clarified by [ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). After
-that marker lands, the integration gate rejects changing the marker or any
-existing migration; only new forward migrations may be added. Goose tracks
-applied versions, not file checksums, at runtime.
+after every live-database worker is idle. The first release commits
+`apps/server/migrations/.uat-baseline` before the first production migration.
+The file keeps its original name. After that marker lands, the integration gate
+rejects changing the marker or any existing migration; only new forward
+migrations may be added. Goose tracks applied versions, not file checksums, at
+runtime.

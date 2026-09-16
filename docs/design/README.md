@@ -9,7 +9,7 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. ADRs
-0001–0036 are accepted, subject to recorded supersessions. If a page disagrees
+0001–0037 are accepted, subject to recorded supersessions. If a page disagrees
 with an accepted ADR, the ADR controls that decision until this text is
 corrected.
 
@@ -34,13 +34,13 @@ corrected.
 The [template system](templates/README.md) is the detailed contract for preset
 data, rendering tokens, and print behavior. The
 [scaling contract](scaling/README.md) defines replica coordination, admission,
-and the UAT lifecycle under ADR 0035.
+and what a second replica needs under ADR 0035.
 
 ## System summary
 
 ```mermaid
 graph LR
-    B[Browser or crawler] --> C[CloudFront and Caddy]
+    B[Browser or crawler] --> C[Cloudflare proxy and Caddy]
     A[Connected agent] --> C
     C --> N[Nuxt SSR and Vue renderer]
     C --> G[Go API]

@@ -1,8 +1,8 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. Records 0001–0036
-are accepted. ADR 0037 is proposed.
+supersession record; these pages state the resulting design. Records 0001–0037
+are accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                |
 | -------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -42,21 +42,20 @@ are accepted. ADR 0037 is proposed.
 | [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)      | Accepted | Scheduled UAT; ECS production autoscaling with a one-server minimum; fixed RDS compute                            |
 | [0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)        | Accepted | PostgreSQL fleet coordination; paired render authority; 60-connection envelope; durable UAT stop and wake control |
 | [0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md) | Accepted | One serving replica for the first release; migrations run as a deployment step; wake implementation retired       |
-| [0037](../adr/0037-single-host-production-without-hosted-uat.md)     | Proposed | First release deploys straight to single-host production behind Cloudflare; no hosted UAT until about 500 users   |
+| [0037](../adr/0037-single-host-production-without-hosted-uat.md)     | Accepted | First release deploys straight to single-host production behind Cloudflare; no hosted UAT until about 500 users   |
 
 ## Remaining gates
 
-| Gate                                                   | Owner                                     | Due                               |
-| ------------------------------------------------------ | ----------------------------------------- | --------------------------------- |
-| Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added    |
-| Product name and trademark review                      | Human owner                               | Before production launch          |
-| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before production launch          |
-| Production authorization                               | Human owner                               | ADR 0037 records it on acceptance |
+| Gate                                                   | Owner                                     | Due                            |
+| ------------------------------------------------------ | ----------------------------------------- | ------------------------------ |
+| Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added |
+| Product name and trademark review                      | Human owner                               | Before production launch       |
+| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before production launch       |
+| SES production access                                  | Human owner                               | Before the public announcement |
 
 The font gate stays per asset because it is a legal check on exact bytes. Name
-and privacy reviews gate production. Hosting cost, topology and the release path
-follow the accepted deployment ADRs, as narrowed by ADR 0036 and, once accepted,
-ADR 0037.
+and privacy reviews gate the public announcement. ADR 0037 is the production
+approval; hosting cost, topology and the release path follow it.
 
 ## Proposed v1 limits
 

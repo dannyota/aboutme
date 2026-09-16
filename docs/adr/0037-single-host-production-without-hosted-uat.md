@@ -1,6 +1,6 @@
 # 0037 — Single-host production without hosted UAT
 
-Status: Proposed (2026-09-16), by the human owner's direction.
+Status: Accepted (2026-09-16), by the human owner's direction.
 
 ## Context
 

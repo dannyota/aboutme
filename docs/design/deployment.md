@@ -11,17 +11,16 @@ in [`../architecture.md`](../architecture.md) and operator guides.
 | Tests               | One capped PostgreSQL container; native test processes; optional isolated service harnesses | Kernel-assigned or `20090+` ports |
 | Native development  | Shared test DB container plus native Go, Nuxt, and Caddy processes                          | `http://localhost:20080`          |
 | Native HTTPS checks | Shared DB, native processes, and disposable browser                                         | `https://localhost:20443`         |
-| AWS UAT             | Scheduled ECS/EC2 Graviton and RDS PostgreSQL in Singapore; stopped between test windows    | `https://uat.aboutme.vn`          |
 | Self-hosted         | Podman Compose with operator-supplied credentials and TLS configuration                     | Operator-defined HTTPS origin     |
-| Production          | CloudFront, Caddy on ECS/EC2 Graviton, Go, Nuxt, RDS PostgreSQL, and private S3             | `https://aboutme.vn`              |
+| Production          | Cloudflare proxy, one Bottlerocket ECS host (Caddy, Go, Nuxt), RDS PostgreSQL, private S3   | `https://aboutme.vn`              |
 
 Native development uses ports `20432` (PostgreSQL), `20081` (Go), `20030`
 (Nuxt), and `20080` (Caddy). The test and development databases are separate
-logical databases in the one container. AWS UAT has separate data and media; it
-never receives a copy of the native development account or database. The native
-script idempotently seeds `aboutme_dev` with one development account and one
-private sample resume. The command refuses any other database and is never run
-by Compose or cloud environments.
+logical databases in the one container. Production never receives a copy of the
+native development account or database. The native script idempotently seeds
+`aboutme_dev` with one development account and one private sample resume. The
+command refuses any other database and is never run by Compose or cloud
+environments.
 
 `PROVIDER_LOGIN_ENABLED` defaults to false and accepts only `true`, `false`, or
 blank. The native HTTPS harness sets it to true for provider authentication
@@ -31,166 +30,109 @@ it unset for the password-only v1 surface.
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI
 and API work. Auth feature checks run at the native HTTPS origin. Complete
-product acceptance runs at the AWS UAT origin.
+product acceptance runs in production, per
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md).
 
 ## Build and deployment architecture
 
 Daily development and feature checks run on the laptop. GitHub Actions runs the
-existing app CI jobs and builds AWS deployment images natively on
-`ubuntu-24.04-arm`, targeting `linux/arm64`. The pinned AMD64 Playwright
-baseline job stays on AMD64. ARM64 container smoke tests cover runtime
-compatibility, including Chromium and fonts; they do not replace the browser
-baseline gate.
+app CI jobs. A version tag builds the server, web and Caddy images natively on
+`ubuntu-24.04-arm` for `linux/arm64`, smoke-tests them, and publishes them to
+public GitHub Container Registry packages with build provenance. The pinned
+AMD64 Playwright baseline job stays on AMD64; ARM64 smoke tests cover runtime
+compatibility, including Chromium and fonts, and do not replace it.
 
-The public app builds and smoke-tests all four images from an explicit reviewed
-app commit, per
-[ADR 0033](../adr/0033-public-image-builds-private-deployment.md). Its workflow
-emits OCI archives and canonical source/run evidence without AWS access. The
-planned private `aboutme-infra` repository validates that evidence and owns
-protected image publication and deployment. Its release record binds the public
-build to the infrastructure commit and four ECR digests. UAT deploys those
-digests; production reuses the UAT-proven images without rebuilding them. Public
-app checks stay independent of AWS and the private repository.
-
-Native ARM64 builds avoid emulation overhead. Graviton runtime cost and
-performance still depend on instance size and workload: Phase 9 prices the
-Singapore options, and Phase 10 measures the selected configuration. GitHub
-build machines are separate from the Singapore application and data region.
+OpenTofu modules live in `deploy/aws/`. State and environment values stay out of
+Git, and GitHub holds no cloud credentials. The owner applies infrastructure and
+runs deploys from the laptop against image digests, never a moving tag.
 
 ## Production topology
 
-[ADR 0034](../adr/0034-scheduled-uat-and-production-autoscaling.md) replaces the
-earlier single-host comparison baseline for AWS. OpenTofu remains the
-infrastructure tool.
-[ADR 0035](../adr/0035-replica-coordination-and-uat-lifecycle.md) and the
-[scaling contract](scaling/README.md) define the distributed runtime. Phase 10
-implements and proves it locally before infrastructure wiring.
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md) sets the
+first-release topology. The
+[single-host production design](single-host-production.md) owns its details:
+host networking, edge settings, database roles, secrets, deploy steps, jobs and
+alarms.
 
 ```mermaid
 graph LR
-    DNS[Cloudflare DNS only] --> CF[CloudFront]
-    CF -->|HTTPS and origin secret| ALB[Internet-facing ALB across two AZs]
-    ALB --> A1[Application node 1]
-    ALB --> A2[Application node 2 when scaled]
-    A1 --> PG[(Private single-AZ RDS PostgreSQL)]
-    A2 --> PG
-    A1 --> S3[(Private S3)]
-    A2 --> S3
+    V[Viewer] --> CF[Cloudflare proxy]
+    CF -->|Full strict TLS and origin-pull certificate| H[EC2 host: Caddy, Go, Nuxt]
+    H --> PG[(Private single-AZ RDS PostgreSQL)]
+    H --> S3[(Private S3)]
 ```
 
-Each application node runs distinct Caddy, Go, and Nuxt ECS tasks with separate
-cgroups: Caddy uses 128 MiB and 128 CPU units, Go plus Chromium uses 512 MiB and
-512 CPU units, and Nuxt uses 256 MiB and 256 CPU units. Scheduled ops tasks use
-256 MiB and 256 CPU units. One application replica is placed per node. The first
-release runs one serving replica under
-[ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md); the
-one to two range in
-[ADR 0034](../adr/0034-scheduled-uat-and-production-autoscaling.md) is the
-growth target, not this launch. The growth path is a larger instance before a
-second replica. RDS compute is fixed and sized separately. Raising the replica
-count alone is unsafe: the deferred coordination named in ADR 0036 must land
-first, because publication fences, render jobs and capabilities, and SSE state
-remain process-local.
-
-Application nodes use public IPv4 for outbound access without a NAT gateway.
-Their inbound security group accepts only the ALB security group, and Caddy
-still requires the rotating origin secret. RDS remains private and single-AZ at
-launch. Three DAEMON services form one complete node-local replica; mixed or
-partial releases cannot become ready. Exact-node scale-in closes admission,
-drains work, and terminates that node. Unresolved claims require independent
-proof of its EC2 termination. [Topology](scaling/topology.md) owns the details.
-
-Cloudflare is DNS-only. CloudFront owns viewer TLS and uses an ACM certificate
-in `us-east-1`. The internet-facing ALB spans two public subnets and is the
-stable origin in `ap-southeast-1`; the former elastic-IP origin is superseded
-for production. CloudFront reaches the ALB over HTTPS and overwrites the origin
-secret. ALB reaches Caddy over HTTPS without validating its target certificate.
-Security groups, target registration and exact-one origin-secret validation
-authenticate this hop. Only the narrow nonsensitive ALB health route bypasses
-the secret. The complete route and bypass proof precedes activation.
-
-Viewer policy redirects HTTP to HTTPS, requires TLS 1.2 or newer, and sends HTTP
-Strict Transport Security. Caddy accepts current and next origin secrets during
-rotation.
+One serving replica runs under
+[ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md). The
+growth path is a larger instance before a second replica. Raising the replica
+count alone is unsafe: publication fences, render jobs and capabilities, and SSE
+state are process-local until the deferred work in the
+[scaling contract](scaling/README.md) lands.
 
 ## Client-IP boundary
 
-CloudFront overwrites `X-Aboutme-Client-IP` with the viewer address. Caddy
-requires the ALB peer and exact-one origin secret, rejects duplicate or invalid
-client-IP values, strips forwarding headers, and emits one `X-Real-IP`. Go
-accepts that canonical header only from the colocated trusted Caddy boundary,
-normalizes it with `netip`, and fails closed in production when its
-trusted-proxy set is empty. Go never parses `X-Forwarded-For` itself. Phase 10
-tests forged viewer headers, direct ALB and node bypass, and the exact ALB
-header behavior before activation.
+Cloudflare sets `CF-Connecting-IP`. Caddy trusts it only from Cloudflare's
+published ranges, rejects duplicate or invalid values, strips every other
+forwarding header, and emits one `X-Real-IP`. Go accepts that canonical header
+only from the colocated Caddy on loopback, normalizes it with `netip`, and fails
+closed in production when its trusted-proxy set is empty. Go never parses
+`X-Forwarded-For`. Tests cover forged viewer headers and direct requests to the
+origin address.
 
-## CloudFront behavior
+## Edge behavior
 
-| Surface                                    | Cookies               | Cache policy                                                     |
-| ------------------------------------------ | --------------------- | ---------------------------------------------------------------- |
-| Authenticated API and `/api/v1/events` SSE | Forwarded as required | Disabled; origin sends `no-store`                                |
-| Public JSON and photo                      | Never forwarded       | Stored up to 60 seconds; revalidated through the live-state gate |
-| `/api/v1/live/*` SSE                       | Never forwarded       | Never cached                                                     |
-| Public HTML and discovery                  | Never forwarded       | Stored up to 60 seconds; revalidated through the live-state gate |
-| Public PDF and generated images            | Never forwarded       | Stored up to 60 seconds; revalidated through the live-state gate |
+Cloudflare terminates viewer TLS, redirects HTTP to HTTPS, requires TLS 1.2 or
+newer, and sends HTTP Strict Transport Security. Apex is the sole application
+origin; `www` redirects before any authentication route. The origin accepts only
+Cloudflare's address ranges and its origin-pull client certificate.
 
-Viewer responses never cache `Set-Cookie`. Apex is the sole application origin;
-`www` redirects before any authentication route.
-
-CloudFront storage is not publication authority. A public reuse reaches the
-origin, where the current slug, state, route flag, and public generation are
-checked before a strong ETag can validate retained bytes. Cacheable public
-responses use `Cache-Control: no-cache, must-revalidate`. Their CloudFront
-behaviors set minimum and default TTL to zero and maximum TTL to 60 seconds, so
-retained bytes always revalidate and are never served under positive freshness.
-Origin render caches are private and generation-keyed. The state mutation waits
-for old-generation origin leases to drain before success; edge invalidation
-remains cleanup and defense in depth.
+A cache rule bypasses Cloudflare's cache for every path except `/_nuxt/*` hashed
+assets. Cookies, `Authorization` and SSE pass through unchanged. Edge storage is
+therefore never publication authority: every public request reaches the origin,
+where the current slug, state, route flag and public generation are checked
+before a strong ETag can validate retained bytes. Cacheable public responses
+still send `Cache-Control: no-cache, must-revalidate`. Origin render caches are
+private and generation-keyed. The state mutation waits for old-generation origin
+leases to drain before success.
 [ADR 0022](../adr/0022-public-artifact-revocation.md) owns the trade-off.
 
 Public resume HTML reaches Go first. Go holds the origin connection and
 per-resume generation lease while Nuxt renders a private frozen snapshot, then
-returns the completed or streaming body to Caddy or CloudFront. Nuxt does not
-receive the public origin socket. An edge viewer request already admitted under
-the old state may finish after revocation; later admission or revalidation must
-see the new state. Sitemap and `llms.txt` responses use a global discovery
-generation lease; any mutation that changes their membership advances and drains
-that generation before success.
+returns the body to Caddy. Nuxt does not receive the public origin socket. A
+request already admitted under the old state may finish after revocation; later
+admission or revalidation must see the new state. Sitemap and `llms.txt`
+responses use a global discovery generation lease; any mutation that changes
+their membership advances and drains that generation before success.
 
-Within one application replica, Go reaches its colocated Nuxt task through the
-deployment-private route selected in Phase 10 and the equivalent direct native
-Nuxt address in development. Routing must preserve replica affinity for the
-frozen public snapshot and one-use print capability. Caddy denies
-`/internal-render` and `/internal-render/*` before its default web proxy. The
-Nuxt route is POST-only, accepts only the bounded frozen snapshot, and has no
-ambient session, ID lookup, API fetch, or database path. Route-parity tests pin
-the Caddy denial and direct-origin caller so topology drift cannot expose it.
+Go reaches Nuxt on the host's private network, and the native Nuxt address in
+development. Caddy denies `/internal-render` and `/internal-render/*` before its
+default web proxy. The Nuxt route is POST-only, accepts only the bounded frozen
+snapshot, and has no ambient session, ID lookup, API fetch, or database path.
+Route-parity tests pin the Caddy denial and direct-origin caller.
 
 ## Internal print
 
-The render browser reaches its selected Nuxt replica only on the internal
-application network. Go authorizes and freezes the render snapshot, then issues
-a 256-bit one-use capability with a maximum 60-second lifetime. Nuxt redeems it
-through a loopback or deployment-private Go interface and receives the document
-and inline photo context. The browser has no account cookie or general outbound
-network access. Caddy's external `/print/**` denial and network placement are
-defense in depth; Nuxt still rejects a missing, expired, mismatched, or consumed
-capability. Go retains the consumed job binding and is the only component that
-can accept completed bytes after the terminal digest and public-generation
-check. Nuxt and Chromium have no artifact-publish credential. Completion
-requires a controller authority separate from the job ID. Phase 10 must replace
-the current process-local queue, redeemed-capability state, and controller
-handle with a fleet-safe contract before a second replica can serve traffic; the
-job ID alone grants no completion authority.
-[ADR 0023](../adr/0023-private-print-capability.md) owns the protocol.
+The render browser reaches Nuxt only on the host's private network. Go
+authorizes and freezes the render snapshot, then issues a 256-bit one-use
+capability with a maximum 60-second lifetime. Nuxt redeems it through a loopback
+or deployment-private Go interface and receives the document and inline photo
+context. The browser has no account cookie or general outbound network access.
+Caddy's external `/print/**` denial and network placement are defense in depth;
+Nuxt still rejects a missing, expired, mismatched, or consumed capability. Go
+retains the consumed job binding and is the only component that can accept
+completed bytes after the terminal digest and public-generation check. Nuxt and
+Chromium have no artifact-publish credential. Completion requires a controller
+authority separate from the job ID. The render queue, redeemed-capability state
+and controller handle are process-local, which is correct only while one replica
+serves. [ADR 0023](../adr/0023-private-print-capability.md) owns the protocol.
 
 ## Media
 
 Object storage is private. Go is the authorization boundary for owner and public
-media reads. P2B adds owner upload and read routes. P5A adds a live-gated public
-photo route. V1 has no direct `/assets` object-store origin because a leaked key
-must not keep an unpublished photo public.
-[ADR 0019](../adr/0019-private-media-delivery.md) records the decision.
+media reads, including the live-gated public photo route. V1 has no direct
+`/assets` object-store origin because a leaked key must not keep an unpublished
+photo public. [ADR 0019](../adr/0019-private-media-delivery.md) records the
+decision.
 
 The media bucket is unversioned. Object keys are immutable and random, so
 replacement never needs an older version at the same key. An object delete must
@@ -218,8 +160,8 @@ finishes. The weekly orphan job reconciles storage, live references, and the
 durable queue; it is not the ordinary deletion path.
 
 Only normalized JPEG or PNG bytes enter object storage. Photo normalization and
-Chromium rendering share one task-wide heavy-work permit before P7 combines
-those workloads, so their memory peaks cannot overlap.
+Chromium rendering share one task-wide heavy-work permit, so their memory peaks
+cannot overlap.
 
 ## Authentication email
 
@@ -230,86 +172,48 @@ configuration set, and delivery/bounce/complaint alarms. AWS credentials use the
 standard runtime credential chain and never enter repository files.
 
 Native development starts a loopback-only mail-capture command that retains a
-bounded number of messages and never initializes AWS. Real SES and DNS changes
-follow the owner's recorded UAT authorization and SES handoff under
-[ADR 0031](../adr/0031-aws-cost-research-and-hosted-uat.md). The
-[email runbook](../runbooks/email.md) records an existing Singapore SES sandbox
-setup. Preserve its Google Workspace root DNS and SES resources. Phase 10 adds
-runtime IAM, adopts existing infrastructure without overlapping ownership, and
-proves application mail with approved recipients. Unrestricted production mail
-requires SES production access; a simulator smoke does not prove a user's
+bounded number of messages and never initializes AWS. The
+[email runbook](../runbooks/email.md) records the existing Singapore SES sandbox
+setup. Preserve its Google Workspace root DNS and SES resources. The production
+task role adds send permission without taking over those resources. Mail to real
+users requires SES production access; a simulator smoke does not prove a user's
 verification or reset flow.
 
 ## Database and releases
 
 RDS PostgreSQL uses Graviton-compatible instances, gp3 storage, automated
-backups, and point-in-time recovery. V1 may begin single-AZ; Multi-AZ is a later
+backups, and point-in-time recovery. It starts single-AZ; Multi-AZ is a later
 availability decision. Backup retention is 30 days. Restore evidence matters
-more than backup configuration: staging performs a real isolated restore and
-data verification before launch.
+more than backup configuration: one isolated restore with data verification
+precedes the public announcement.
 
-Production migration order is: stop admission and drain admitted requests,
-verify backup, run the migration task to completion, start the new tasks, wait
-for readiness, then reopen traffic. The migration task is a separate task that
-exits, not the application server: the server never migrates at startup, and a
-nonzero migration exit blocks the service update. It takes the migration
-advisory lock and applies pending goose migrations exactly once, so a second
-concurrent runner is made safe rather than expected. With one serving replica
-this sequence interrupts service briefly, which
-[ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md)
-accepts. Scaling and deployment drains must preserve publication,
-account-deletion, private-media, artifact-revocation, render, and SSE
-invariants. Rollback uses a forward corrective migration; migrations fixed by
-the first UAT baseline never change
-([ADR 0020](../adr/0020-uat-migration-baseline.md)).
+A deploy snapshots the database, stops the job schedules and the service, runs
+the migration task to completion, then starts the new service, waits for
+readiness, and re-enables the schedules. The migration task exits; the server
+never migrates at startup, and a nonzero migration exit blocks the update. It
+takes the migration advisory lock and applies pending goose migrations exactly
+once, so a second concurrent runner is safe rather than expected. With one
+replica this interrupts service briefly, which ADR 0036 accepts. Migrations are
+immutable once `apps/server/migrations/.uat-baseline` lands before the first
+production migration ([ADR 0020](../adr/0020-uat-migration-baseline.md)).
 
 The migration runner uses goose's Provider with a PostgreSQL session advisory
 locker. The Provider acquires the lock before it checks which migrations remain
-pending, applies that set, and releases the lock. This prevents concurrent
-runners from acting on a stale pre-lock pending list and keeps lock handling in
-goose instead of duplicating it in application code.
+pending, applies that set, and releases it, so no runner acts on a stale pending
+list.
 
-Every release migration remains compatible with both the candidate server and
-the immediately prior server digest for the full rollback window. A breaking
-schema change uses expand, backfill, and contract across releases; the contract
-step cannot land while the prior digest is still a rollback target. Before
-deployment, the release gate applies candidate migrations to a seeded database
-and runs the prior digest's readiness plus supported read/write smoke against
-that migrated schema. Code-back/schema-forward rollback is a recovery claim only
-when this test passes.
+A breaking schema change uses expand, backfill, and contract across releases, so
+the previous server keeps working against the migrated schema. The deploy script
+does not test that, so redeploying an earlier image is a supported rollback only
+when the failed release applied no migration. Otherwise recovery is a forward
+fix or a point-in-time restore.
 
 Application secrets use AWS Systems Manager Parameter Store `SecureString`
-values in `ap-southeast-1` and are injected at runtime. They do not enter
-images, source, command lines, logs, or OpenTofu state where the platform
-permits a reference instead. Secret names and rotation procedures are tracked;
-values are never evidence artifacts.
+values in `ap-southeast-1`, injected at runtime. They never enter images,
+source, command lines, logs, or OpenTofu state. Secret names and rotation
+procedures are tracked; values are never evidence.
 
-Fleet admission uses the private pinned admission/password-email key-version
-tuple from [rate identities](scaling/rate-identities.md). Composition verifies
-loaded versions before readiness; the existing controller checks exact target
-evidence before activation. A key change requires closed admission, joined or
-fenced work and proved zero claim/rate/pending debt. Rotation adds no membership
-or lifecycle SQL. Its executable runbook is written when the infrastructure and
-runtime cleanup operations exist, following the
-[runbook policy](../runbooks/README.md).
-
-The accepted [UAT lifecycle](scaling/uat-lifecycle.md) keeps RDS on during a
-booked campaign and its final 24-hour application writer tail. Application nodes
-and the temporary ALB are removed outside test windows. RDS may stop only after
-due cleanup, drained and terminated replicas, and an immutable final stop
-receipt that closes database writes. Hourly controller checks start it before
-any category deadline or the seven-day service limit. Starting a stopped
-environment is an operational sequence and not a database protocol: start RDS,
-run the migration task, then start the service, and reverse it to stop. Missing
-proof keeps RDS available. RDS storage, keys, state, images and required logs
-remain.
-
-The [lifecycle forecast](../research/aws-cost/uat-lifecycle.md) includes
-retained costs and recovery reserves within USD 30. Orphaned volumes and
-addresses are removed. A failed forecast shortens optional testing; privacy
-deadlines remain. Production autoscaling never selects zero. A serialized,
-operator-approved snapshot and migration deployment may drain to zero, then must
-restore at least one healthy replica. The owner authorized Phase 10 AWS UAT and
-Cloudflare DNS at `uat.aboutme.vn`. Local candidate checks and infrastructure
-simulation precede deployment. Hosted UAT and drills follow; Phase 11 production
-launch requires separate approval under ADR 0031.
+A later second replica uses the pinned admission and password-email key versions
+from [rate identities](scaling/rate-identities.md). A key change then requires
+closed admission, joined or fenced work, and proved zero claim, rate and pending
+debt.
