@@ -3,8 +3,8 @@
 Status: **infrastructure built; not yet serving** (2026-09-17). This runbook
 covers the single-host production environment at `https://aboutme.vn`. The
 [single-host design](../design/single-host-production.md) explains why it is
-shaped this way. Deploy, rollback, restore and rotation sections are added when
-their scripts exist.
+shaped this way. Restore and full rotation sections are added after the first
+deploy.
 
 ## Access
 
@@ -70,6 +70,38 @@ List names only:
 ```sh
 aws ssm get-parameters-by-path --path /aboutme/prod --recursive --query 'Parameters[].Name'
 ```
+
+## Deploy
+
+A release is a `v*` tag on `main` with green CI. The `release-images` workflow
+publishes `ghcr.io/dannyota/aboutme-{server,web,caddy}` for that tag; the
+packages must be public so the host can pull them.
+
+```sh
+bash deploy/aws/scripts/deploy.sh v0.1.0                 # normal release
+bash deploy/aws/scripts/deploy.sh v0.1.0 --first-deploy  # first release only
+```
+
+The script checks the tag and CI, resolves image digests, compares Cloudflare
+ranges, snapshots RDS, registers task definition revisions, disables the job
+schedules, stops `app`, runs the database steps, starts `web` then `app`,
+re-enables the schedules and smoke-tests through Cloudflare. The site is down
+between "site down" and "site up", usually one to three minutes.
+
+If a database step fails, the script restores the previous `app` revision and
+the schedules' earlier state, then exits non-zero. On `--first-deploy` it leaves
+`app` stopped instead, because there is no earlier release.
+
+## Rollback
+
+```sh
+bash deploy/aws/scripts/deploy.sh --rollback v0.0.9
+```
+
+It redeploys earlier images without a snapshot or migration. It is safe only
+when the failed release applied no migration. After a migration, fix forward
+with a new release, or restore the database from the snapshot the failed deploy
+took.
 
 ## Expected state before the first deploy
 
