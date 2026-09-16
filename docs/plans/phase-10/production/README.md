@@ -78,7 +78,7 @@ both before any task.
 | 9    | [Infra](infra-tasks.md#task-9)     | Network, RDS and S3                                 | 8          |
 | 10   | [Infra](infra-tasks.md#task-10)    | Secrets, IAM roles and ECS task definitions         | 9          |
 | 11   | [Infra](infra-tasks.md#task-11)    | Host, ECS services and Cloudflare edge (MCP)        | 10         |
-| 12   | [Infra](infra-tasks.md#task-12)    | Jobs, alarms and budget                             | 11         |
+| 12   | [Infra](infra-tasks.md#task-12)    | Jobs and alarms                                     | 11         |
 | 13   | [Deploy](deploy-tasks.md#task-13)  | `deploy.sh` with first-deploy and rollback modes    | 10         |
 | 14   | [Deploy](deploy-tasks.md#task-14)  | Phase review, candidate gates, baseline marker      | 2–13       |
 | 15   | [Deploy](deploy-tasks.md#task-15)  | First production deploy and smoke                   | 14         |

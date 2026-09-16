@@ -6,12 +6,11 @@ changing a number requires a reviewed change with evidence.
 
 ## AWS operating budget
 
-Production runs about
-$45–55 a month before tax, per
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). An AWS
-Budget alerts at $60
-on actual and forecast cost. Budget alerts are delayed and are not a technical
-hard cap. The
+Production runs about $45–55 a month before tax, per
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). A budget
+filtered to the `Project=aboutme` cost allocation tag alerts the owner on actual
+and forecast cost. It is account-level and managed outside this repository.
+Budget alerts are delayed and are not a technical hard cap. The
 [single-host design](single-host-production.md#monitoring-and-cost) itemizes the
 estimate from [recorded prices](../research/aws-cost/pricing.csv).
 
