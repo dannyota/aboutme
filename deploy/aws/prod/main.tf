@@ -56,3 +56,15 @@ module "tasks" {
   image_web             = var.image_web
   image_caddy           = var.image_caddy
 }
+
+module "host" {
+  source                 = "../modules/host"
+  name                   = local.name
+  public_subnet_id       = module.network.public_subnet_id
+  host_security_group_id = module.network.host_security_group_id
+  instance_profile_name  = module.identity.instance_profile_name
+  task_definition_arns = {
+    app = module.tasks.app_task_definition_arn
+    web = module.tasks.web_task_definition_arn
+  }
+}
