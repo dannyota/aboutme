@@ -35,13 +35,17 @@ RUN wget -qO /out/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com
     && echo "${RDS_BUNDLE_SHA256}  /out/rds-global-bundle.pem" | sha256sum -c -
 
 # ---- runtime ----
-FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac AS runtime
+# Multi-architecture index digest, so the same pin builds amd64 and arm64.
+FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e AS runtime
 
 USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
-    && ln -s /ms-playwright/chromium-1234/chrome-linux64 /opt/chromium
+    && chromium=/ms-playwright/chromium-1234/chrome-linux64 \
+    && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1234/chrome-linux; } \
+    && ln -s "$chromium" /opt/chromium \
+    && test -x /opt/chromium/chrome
 ENV CHROMIUM_PATH=/opt/chromium/chrome TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 COPY --from=build /out/server /usr/local/bin/server
