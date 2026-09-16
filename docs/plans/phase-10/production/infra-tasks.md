@@ -928,13 +928,13 @@ origin-pull certificate is still pending.
 **Interfaces:** Produces `module.host.instance_id`, `public_ip`, `cluster_name`,
 service names `aboutme-prod-app` and `aboutme-prod-web`.
 
-- [ ] **Step 1: Inventory existing DNS read-only**
+- [x] **Step 1: Inventory existing DNS read-only**
 
 Through the Cloudflare MCP, list the zone's DNS records. On 2026-09-16 the zone
 held only mail records (MX, TXT, DKIM CNAMEs and the SES `bounce` records) and
 no apex `A` or `www` record. Keep every existing record.
 
-- [ ] **Step 2: Write the host module**
+- [x] **Step 2: Write the host module**
 
 ```hcl
 data "aws_ssm_parameter" "bottlerocket" {
@@ -1016,7 +1016,7 @@ resource "aws_ecs_service" "web" {
 The AMI is ignored after creation; Bottlerocket updates itself in place (Task
 12). The root volume holds the OS and the second volume holds container data.
 
-- [ ] **Step 3: Apply the host, then the Cloudflare edge**
+- [x] **Step 3: Apply the host, then the Cloudflare edge**
 
 Wire the host module in `prod/main.tf`, then plan and apply. After the host has
 its Elastic IP, apply these through the Cloudflare MCP for zone `aboutme.vn`,
@@ -1050,6 +1050,17 @@ instance, and both services report `runningCount 0` or a failing task until Task
 15 runs the first deploy; that is expected before migrations exist.
 `curl -sS https://aboutme.vn/healthz` returns a Cloudflare 5xx page at this
 point, and `curl -m 5 https://<elastic ip>/` times out.
+
+Result (2026-09-17): the host runs Bottlerocket 1.65.0 in `ap-southeast-1a` with
+IMDSv2 hop limit 1 and registered with the cluster. The Cloudflare records and
+settings above are applied and read back, and `docs/runbooks/production.md`
+records them. `https://aboutme.vn/` returns 521 and the Elastic IP does not
+answer, as expected before a deploy. Differences: both services start at zero
+tasks because no image exists yet, so Task 13's `deploy.sh` must set the `web`
+count to one as well as `app`; the data volume is in `ignore_changes`, because
+AWS reports computed fields and default tags on it that would force a host
+replacement; Bot Fight Mode was already off. Zone-level origin pulls stay off
+until the owner uploads the certificate and the first deploy is healthy.
 
 ## Task 12
 
