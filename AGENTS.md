@@ -35,6 +35,9 @@ for fast correct delivery, not token cost.
   affected checks. The integration owner makes reviewed local commits as tasks
   become coherent, then runs full `make ci`, connected `make scan`, and the
   phase exit checklist once at the candidate commit before pushing.
+- **Merge to `main` locally and push; no pull requests.** Do not keep work on a
+  long-lived branch. After a branch is merged, delete it locally and on the
+  remote.
 - **Parallel by default, up to 20 workers, at most 3 build-heavy.** Builds,
   tests, linters, Semgrep, and browsers are heavy; queue the rest.
 - **Every feature is built and verified locally first.** Phase 10 then deploys
