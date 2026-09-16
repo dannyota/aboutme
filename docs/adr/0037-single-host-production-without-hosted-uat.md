@@ -51,9 +51,8 @@ the resulting rules.
 - Test accounts and real accounts share one database.
 - Infrastructure code is public. It must contain no account identifier, secret
   or private hostname, and CI never receives cloud credentials.
-- Three code changes become launch prerequisites: hosted database provisioning
-  without superuser, a login-verifier command, and the RDS CA bundle in the
-  server image.
+- Small code changes become launch prerequisites. The single-host design lists
+  them.
 
 - Accepting this record updates the deployment design, the roadmap and the Phase
   10 plans in the same change, so no document still describes hosted UAT or the
