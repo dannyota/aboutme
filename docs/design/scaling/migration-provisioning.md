@@ -6,9 +6,9 @@ Status: Accepted under
 
 ## Database-local privileges
 
-Before migration on a target database without runtime_write_state, the existing
-bootstrap administrator performs one separately named, idempotent database-local
-provision step. It:
+Before migration on a target database without runtime_write_state, the database
+owner `aboutme`, which need not be a superuser, performs one separately named,
+idempotent database-local provision step. It:
 
 - grants aboutme_migrator CONNECT, TEMPORARY, and CREATE on that database;
 - grants USAGE and CREATE WITH GRANT OPTION on schema public to migrator;
