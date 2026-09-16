@@ -13,6 +13,9 @@ func TestPrintConfigurationRestrictsPrivateListener(t *testing.T) {
 		{"dev", "0.0.0.0:20082", false}, {"dev", "localhost:20082", false},
 		{"dev", "127.0.0.1:20081", false}, {"prod", "127.0.0.1:20082", false},
 		{"dev", "127.0.0.1:020082", false}, {"dev", "127.0.0.1:20082 ", false},
+		{"prod", "172.17.0.1:8081", true}, {"staging", "172.17.0.1:8081", true},
+		{"dev", "172.17.0.1:8081", false}, {"prod", "172.17.0.2:8081", false},
+		{"prod", "172.17.0.1:8082", false},
 	} {
 		t.Run(test.environment+"/"+test.address, func(t *testing.T) {
 			_, _, err := loadPrintConfig(func(key string) string {

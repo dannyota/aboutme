@@ -31,6 +31,7 @@ const printOrigins = new Set([
   'http://127.0.0.1:20445',
   'http://127.0.0.1:8081',
   'http://10.91.0.2:8081',
+  'http://172.17.0.1:8081',
 ]);
 
 export const directPrintTransport: typeof fetch = (async (input, init) => {
