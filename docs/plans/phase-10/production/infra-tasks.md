@@ -1,9 +1,11 @@
 # Infrastructure tasks
 
 Every task here writes to AWS or Cloudflare. Show the owner the `tofu plan`
-summary and get a go-ahead before each `tofu apply`. Credentials come from
-`aws login` and a `CLOUDFLARE_API_TOKEN` in the owner's shell; nothing is
-written to the repository.
+summary and get a go-ahead before each `tofu apply`. AWS credentials come from
+`aws login`. OpenTofu manages AWS only; Cloudflare changes go through the
+owner's authenticated Cloudflare MCP connection, and the origin-pull certificate
+is uploaded once in the Cloudflare dashboard. No credential is written to the
+repository.
 
 Common check for every task:
 
@@ -182,7 +184,6 @@ provider "cloudflare" {}
 ```hcl
 variable "account_id" { type = string }
 variable "state_kms_key_arn" { type = string }
-variable "cloudflare_zone_id" { type = string }
 variable "alarm_email" { type = string }
 variable "media_bucket_name" { type = string }
 variable "ses_from_address" {
@@ -214,7 +215,6 @@ bucket = "aboutme-prod-tfstate-<account id>"
 # prod.tfvars.example
 account_id         = ""
 state_kms_key_arn  = ""
-cloudflare_zone_id = ""
 alarm_email        = ""
 media_bucket_name  = ""
 image_server       = "ghcr.io/dannyota/aboutme-server@sha256:..."
@@ -245,9 +245,8 @@ Ask the integration owner to add a `tofu` job to `ci.yml` that installs OpenTofu
 The job receives no secrets.
 
 Result (2026-09-16): the bucket and key exist, the `prod` root initializes and
-its state object is OpenTofu ciphertext. The Cloudflare provider block moves to
-Task 9, where its first data source appears, so the skeleton plans without a
-Cloudflare token. The bucket keeps 20 noncurrent state versions for 90 days.
+its state object is OpenTofu ciphertext. OpenTofu has no Cloudflare provider;
+see Task 11. The bucket keeps 20 noncurrent state versions for 90 days.
 
 ## Task 9
 
@@ -458,12 +457,20 @@ The media bucket has no versioning, as the deployment design requires. Outputs:
 - [ ] **Step 3: Wire both into the root**
 
 ```hcl
-data "cloudflare_ip_ranges" "current" {}
+# Cloudflare publishes its ranges without authentication. Add
+# hashicorp/http ~> 3.0 to required_providers.
+data "http" "cloudflare_ips" {
+  url = "https://api.cloudflare.com/client/v4/ips"
+}
+
+locals {
+  cloudflare_ipv4 = sort(jsondecode(data.http.cloudflare_ips.response_body).result.ipv4_cidrs)
+}
 
 module "network" {
   source                = "../modules/network"
   name                  = local.name
-  cloudflare_ipv4_cidrs = data.cloudflare_ip_ranges.current.ipv4_cidrs
+  cloudflare_ipv4_cidrs = local.cloudflare_ipv4
 }
 
 module "data" {
@@ -562,40 +569,46 @@ script never reads a value back.
 ```bash
 #!/usr/bin/env bash
 # Generates the origin key and CSR, and the origin-pull client certificate.
-# Private keys go to SSM or Cloudflare and are then deleted locally.
+# The origin key goes straight to SSM. The origin-pull files wait in a private
+# directory until the owner uploads them in the Cloudflare dashboard, then
+# `tls.sh --forget-pull` deletes them. No private key is printed.
 set -euo pipefail
-: "${CLOUDFLARE_API_TOKEN:?}" "${CLOUDFLARE_ZONE_ID:?}"
 region=ap-southeast-1
 root=$(git rev-parse --show-toplevel)
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+pull_dir=${XDG_RUNTIME_DIR:?}/aboutme-origin-pull
 umask 077
 
-openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-  -subj /CN=aboutme.vn -keyout "$work/origin.key" \
+if [[ ${1:-} == --forget-pull ]]; then
+  rm -rf "$pull_dir"
+  echo "origin-pull files deleted"
+  exit 0
+fi
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+ec=(-newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes)
+
+openssl req -new "${ec[@]}" -subj /CN=aboutme.vn -keyout "$work/origin.key" \
   -out "$root/deploy/aws/prod/origin.csr" 2>/dev/null
 jq -Rs '{Name: "/aboutme/prod/tls/origin-key", Type: "SecureString", Value: ., Overwrite: true}' \
   "$work/origin.key" | aws ssm put-parameter --region "$region" --cli-input-json file:///dev/stdin >/dev/null
 
-openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
-  -subj /CN=aboutme-origin-pull-ca -keyout "$work/ca.key" -out "$work/ca.pem" 2>/dev/null
-openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
-  -subj /CN=aboutme-origin-pull -keyout "$work/pull.key" -out "$work/pull.csr" 2>/dev/null
+mkdir -p "$pull_dir"
+openssl req -x509 "${ec[@]}" -days 3650 -subj /CN=aboutme-origin-pull-ca \
+  -keyout "$work/ca.key" -out "$work/ca.pem" 2>/dev/null
+openssl req -new "${ec[@]}" -subj /CN=aboutme-origin-pull \
+  -keyout "$pull_dir/client.key" -out "$work/pull.csr" 2>/dev/null
 openssl x509 -req -in "$work/pull.csr" -CA "$work/ca.pem" -CAkey "$work/ca.key" \
-  -CAcreateserial -days 3650 -out "$work/pull.pem" 2>/dev/null
-
-jq -n --rawfile c "$work/pull.pem" --rawfile k "$work/pull.key" '{certificate: $c, private_key: $k}' \
-  | curl -fsS -o /dev/null -X POST \
-      -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
-      --data-binary @- \
-      "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/origin_tls_client_auth"
+  -CAcreateserial -days 3650 -out "$pull_dir/client.pem" 2>/dev/null
 jq -Rs '{Name: "/aboutme/prod/tls/origin-pull-ca", Type: "String", Value: ., Overwrite: true}' \
   "$work/ca.pem" | aws ssm put-parameter --region "$region" --cli-input-json file:///dev/stdin >/dev/null
-echo "origin CSR written; keys stored; CA key discarded"
+echo "origin CSR written to deploy/aws/prod/origin.csr; origin key stored in SSM"
+echo "upload $pull_dir/client.pem and client.key in the Cloudflare dashboard, then run: tls.sh --forget-pull"
 ```
 
-The CSR is public and is committed. The CA key is deleted with the temporary
-directory, so a new client certificate needs a new CA.
+`$XDG_RUNTIME_DIR` is a per-user tmpfs, so the origin-pull key never reaches
+disk. The CSR is public and is committed. The CA key is deleted with the
+temporary directory, so a new client certificate needs a new CA.
 
 - [ ] **Step 3: Write the identity module**
 
@@ -864,7 +877,10 @@ parameter names only." Run `make docs-lint`.
 
 ```sh
 bash deploy/aws/scripts/secrets.sh
-CLOUDFLARE_ZONE_ID=<zone> bash deploy/aws/scripts/tls.sh
+bash deploy/aws/scripts/tls.sh
+# Owner: Cloudflare dashboard > aboutme.vn > SSL/TLS > Origin Server >
+# Authenticated Origin Pulls > upload the zone-level certificate and key.
+bash deploy/aws/scripts/tls.sh --forget-pull
 tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars -out=prod.tfplan
 tofu -chdir=deploy/aws/prod apply prod.tfplan
 ```
@@ -881,7 +897,7 @@ lists the names only.
 **Files:**
 
 - Create: `deploy/aws/modules/host/{main,variables,outputs}.tf`
-- Create: `deploy/aws/modules/edge/{main,variables,outputs}.tf`
+- Create: `docs/runbooks/production.md` (Cloudflare settings section)
 - Modify: `deploy/aws/prod/main.tf`
 
 **Interfaces:** Produces `module.host.instance_id`, `public_ip`, `cluster_name`,
@@ -889,15 +905,9 @@ service names `aboutme-prod-app` and `aboutme-prod-web`.
 
 - [ ] **Step 1: Inventory existing DNS read-only**
 
-```sh
-curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-  "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?per_page=100" \
-  | jq -r '.result[] | [.type, .name, .proxied] | @tsv'
-```
-
-Keep every MX, TXT and SES record. If an apex `A`/`AAAA` or a `www` record
-already exists, import it with `tofu import` into the resources below instead of
-creating a duplicate.
+Through the Cloudflare MCP, list the zone's DNS records. On 2026-09-16 the zone
+held only mail records (MX, TXT, DKIM CNAMEs and the SES `bounce` records) and
+no apex `A` or `www` record. Keep every existing record.
 
 - [ ] **Step 2: Write the host module**
 
@@ -981,99 +991,34 @@ resource "aws_ecs_service" "web" {
 The AMI is ignored after creation; Bottlerocket updates itself in place (Task
 12). The root volume holds the OS and the second volume holds container data.
 
-- [ ] **Step 3: Write the edge module**
+- [ ] **Step 3: Apply the host, then the Cloudflare edge**
 
-```hcl
-resource "cloudflare_dns_record" "apex" {
-  zone_id = var.zone_id
-  name    = "aboutme.vn"
-  type    = "A"
-  content = var.origin_ip
-  proxied = true
-  ttl     = 1
-}
+Wire the host module in `prod/main.tf`, then plan and apply. After the host has
+its Elastic IP, apply these through the Cloudflare MCP for zone `aboutme.vn`,
+reading each setting back afterwards:
 
-resource "cloudflare_dns_record" "www" {
-  zone_id = var.zone_id
-  name    = "www.aboutme.vn"
-  type    = "CNAME"
-  content = "aboutme.vn"
-  proxied = true
-  ttl     = 1
-}
+| Setting                 | API call                                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Apex record             | `POST /zones/{zone}/dns_records` `{type: A, name: aboutme.vn, content: <eip>, proxied: true, ttl: 1}`                                                                                             |
+| `www` record            | `POST /zones/{zone}/dns_records` `{type: CNAME, name: www, content: aboutme.vn, proxied: true, ttl: 1}`                                                                                           |
+| SSL mode                | `PATCH /zones/{zone}/settings/ssl` `{value: strict}`                                                                                                                                              |
+| HTTPS redirect          | `PATCH /zones/{zone}/settings/always_use_https` `{value: on}`                                                                                                                                     |
+| Minimum TLS             | `PATCH /zones/{zone}/settings/min_tls_version` `{value: "1.2"}`                                                                                                                                   |
+| TLS 1.3                 | `PATCH /zones/{zone}/settings/tls_1_3` `{value: on}`                                                                                                                                              |
+| HSTS                    | `PATCH /zones/{zone}/settings/security_header`, max-age 31536000, no subdomains, no preload, nosniff                                                                                              |
+| Bot Fight Mode          | `PUT /zones/{zone}/bot_management` `{fight_mode: false}`                                                                                                                                          |
+| Cache rule              | `PUT /zones/{zone}/rulesets/phases/http_request_cache_settings/entrypoint`, one rule: expression `not starts_with(http.request.uri.path, "/_nuxt/")`, action `set_cache_settings`, `cache: false` |
+| Origin CA certificate   | `POST /certificates` with the CSR from `deploy/aws/prod/origin.csr`, hostnames `aboutme.vn` and `www.aboutme.vn`, `request_type: origin-ecc`, validity 5475 days                                  |
+| Zone-level origin pulls | `PUT /zones/{zone}/origin_tls_client_auth/settings` `{enabled: true}`, after the owner's upload                                                                                                   |
 
-resource "cloudflare_zone_setting" "this" {
-  for_each = {
-    ssl              = "strict"
-    always_use_https = "on"
-    min_tls_version  = "1.2"
-    tls_1_3          = "on"
-  }
-  zone_id    = var.zone_id
-  setting_id = each.key
-  value      = each.value
-}
+Store the issued Origin CA certificate, which is public, as the `String`
+parameter `/aboutme/prod/tls/origin-cert` with `aws ssm put-parameter`. Enable
+zone-level origin pulls only after the first deploy is healthy, so Cloudflare
+does not present a client certificate before Caddy expects one.
 
-resource "cloudflare_zone_setting" "hsts" {
-  zone_id    = var.zone_id
-  setting_id = "security_header"
-  value = {
-    strict_transport_security = {
-      enabled            = true
-      max_age            = 31536000
-      include_subdomains = false
-      preload            = false
-      nosniff            = true
-    }
-  }
-}
-
-resource "cloudflare_bot_management" "this" {
-  zone_id    = var.zone_id
-  fight_mode = false
-}
-
-resource "cloudflare_authenticated_origin_pulls_settings" "this" {
-  zone_id = var.zone_id
-  enabled = true
-}
-
-resource "cloudflare_ruleset" "cache" {
-  zone_id = var.zone_id
-  name    = "aboutme cache policy"
-  kind    = "zone"
-  phase   = "http_request_cache_settings"
-  rules = [{
-    description = "Bypass cache except hashed Nuxt assets"
-    expression  = "not starts_with(http.request.uri.path, \"/_nuxt/\")"
-    action      = "set_cache_settings"
-    action_parameters = { cache = false }
-    enabled     = true
-  }]
-}
-
-resource "cloudflare_origin_ca_certificate" "origin" {
-  csr                = file("${path.root}/origin.csr")
-  hostnames          = ["aboutme.vn", "www.aboutme.vn"]
-  request_type       = "origin-ecc"
-  requested_validity = 5475
-}
-
-resource "aws_ssm_parameter" "origin_cert" {
-  name  = "/aboutme/prod/tls/origin-cert"
-  type  = "String"
-  value = cloudflare_origin_ca_certificate.origin.certificate
-}
-```
-
-`include_subdomains` stays false so Google Workspace and other subdomains are
-not forced onto HSTS by this change.
-
-- [ ] **Step 4: Wire, plan, apply**
-
-Wire both modules in `prod/main.tf`, passing
-`origin_ip = module.host.public_ip`. Apply the edge module with the host in the
-same plan.
+Record each setting and its value in the Cloudflare section of
+`docs/runbooks/production.md`. `include_subdomains` stays off so Google
+Workspace and other subdomains are not forced onto HSTS.
 
 Expected: `aws ecs list-container-instances --cluster aboutme-prod` shows one
 instance, and both services report `runningCount 0` or a failing task until Task

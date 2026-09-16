@@ -14,7 +14,7 @@ infrastructure; a laptop script deploys image digests built by a public GitHub
 workflow.
 
 **Tech stack:** Go 1.27.1, Nuxt, Caddy 2.11.4, OpenTofu 1.12.6, AWS provider v6,
-Cloudflare provider v5, Bottlerocket `aws-ecs-2`, PostgreSQL 18, Bash.
+Cloudflare MCP for edge settings, Bottlerocket `aws-ecs-2`, PostgreSQL 18, Bash.
 
 **Spec:**
 [single-host production design](../../../design/single-host-production.md) and
@@ -46,22 +46,22 @@ both before any task.
 
 ## File map
 
-| Path                                                        | Responsibility                                  |
-| ----------------------------------------------------------- | ----------------------------------------------- |
-| `apps/server/migrations/migrator_provision.go`              | Provisioning authority check                    |
-| `apps/server/internal/dbroles/login.go`                     | SCRAM verifier and fixed login-role writes      |
-| `apps/server/cmd/db-set-login/main.go`                      | `db-set-login` one-shot command                 |
-| `apps/server/internal/config/{print,config}.go`             | Print listener and provider credential rules    |
-| `apps/web/server/utils/print/redemption.ts`                 | Print origin allowlist                          |
-| `deploy/server.Dockerfile`                                  | RDS CA bundle and the new binary                |
-| `deploy/caddy/production/{Dockerfile,Caddyfile,render.sh}`  | Production Caddy image                          |
-| `.github/workflows/release-images.yml`                      | Tag-triggered ARM64 build, smoke, GHCR publish  |
-| `deploy/aws/probe/`                                         | Throwaway Bottlerocket probe                    |
-| `deploy/aws/bootstrap/`                                     | State bucket and KMS key                        |
-| `deploy/aws/modules/{network,data,identity,host,edge,ops}/` | Production modules                              |
-| `deploy/aws/prod/`                                          | Production root                                 |
-| `deploy/aws/scripts/{secrets,tls,deploy}.sh`                | Secret generation, TLS keys, deploy             |
-| `docs/runbooks/production.md`                               | Operator steps for deploy, rollback and restore |
+| Path                                                         | Responsibility                                  |
+| ------------------------------------------------------------ | ----------------------------------------------- |
+| `apps/server/migrations/migrator_provision.go`               | Provisioning authority check                    |
+| `apps/server/internal/dbroles/login.go`                      | SCRAM verifier and fixed login-role writes      |
+| `apps/server/cmd/db-set-login/main.go`                       | `db-set-login` one-shot command                 |
+| `apps/server/internal/config/{print,config}.go`              | Print listener and provider credential rules    |
+| `apps/web/server/utils/print/redemption.ts`                  | Print origin allowlist                          |
+| `deploy/server.Dockerfile`                                   | RDS CA bundle and the new binary                |
+| `deploy/caddy/production/{Dockerfile,Caddyfile,render.sh}`   | Production Caddy image                          |
+| `.github/workflows/release-images.yml`                       | Tag-triggered ARM64 build, smoke, GHCR publish  |
+| `deploy/aws/probe/`                                          | Throwaway Bottlerocket probe                    |
+| `deploy/aws/bootstrap/`                                      | State bucket and KMS key                        |
+| `deploy/aws/modules/{network,data,identity,tasks,host,ops}/` | Production modules                              |
+| `deploy/aws/prod/`                                           | Production root                                 |
+| `deploy/aws/scripts/{secrets,tls,deploy}.sh`                 | Secret generation, TLS keys, deploy             |
+| `docs/runbooks/production.md`                                | Operator steps for deploy, rollback and restore |
 
 ## Tasks
 
@@ -77,7 +77,7 @@ both before any task.
 | 8    | [Infra](infra-tasks.md#task-8)     | State bootstrap and production root skeleton        | 1          |
 | 9    | [Infra](infra-tasks.md#task-9)     | Network, RDS and S3                                 | 8          |
 | 10   | [Infra](infra-tasks.md#task-10)    | Secrets, IAM roles and ECS task definitions         | 9          |
-| 11   | [Infra](infra-tasks.md#task-11)    | Host, ECS services and Cloudflare edge              | 10         |
+| 11   | [Infra](infra-tasks.md#task-11)    | Host, ECS services and Cloudflare edge (MCP)        | 10         |
 | 12   | [Infra](infra-tasks.md#task-12)    | Jobs, alarms and budget                             | 11         |
 | 13   | [Deploy](deploy-tasks.md#task-13)  | `deploy.sh` with first-deploy and rollback modes    | 10         |
 | 14   | [Deploy](deploy-tasks.md#task-14)  | Phase review, candidate gates, baseline marker      | 2–13       |
