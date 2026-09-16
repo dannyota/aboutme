@@ -164,7 +164,7 @@ not be a superuser, performs". Run `make docs-lint`.
 PostgreSQL stores a value already in `SCRAM-SHA-256$` form as the verifier, so
 no plaintext password reaches the server or its logs.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `login_test.go`:
 
@@ -329,7 +329,7 @@ func mapEnv(m map[string]string) func(string) string {
 }
 ```
 
-- [ ] **Step 2: Run them and confirm they fail**
+- [x] **Step 2: Run them and confirm they fail**
 
 ```sh
 cd apps/server
@@ -338,7 +338,7 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20
 
 Expected: build failure, `undefined: ScramVerifier`.
 
-- [ ] **Step 3: Implement `login.go`**
+- [x] **Step 3: Implement `login.go`**
 
 ```go
 package dbroles
@@ -457,7 +457,7 @@ Add `"time"` to the imports. The role names are fixed literals and the verifier
 matches a closed pattern, so the statement cannot carry injected SQL. Use
 `crypto/rand.Reader` in production.
 
-- [ ] **Step 4: Implement the command**
+- [x] **Step 4: Implement the command**
 
 `cmd/db-set-login/main.go`:
 
@@ -518,7 +518,7 @@ func setURL(ctx context.Context, databaseURL string, p dbroles.LoginPasswords) e
 }
 ```
 
-- [ ] **Step 5: Run the checks**
+- [x] **Step 5: Run the checks**
 
 ```sh
 REQUIRE_TEST_DB=1 TEST_DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable' go test -race -count=1 ./internal/dbroles ./cmd/db-set-login
