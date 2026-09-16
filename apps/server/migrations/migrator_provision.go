@@ -14,8 +14,17 @@ import (
 
 var localMigrationDatabasePattern = regexp.MustCompile(`^(aboutme|aboutme_dev|aboutme_migrate_(cmd_)?test_[0-9]+_[0-9]+|aboutme_migrate_template_[0-9]+_[0-9a-f]{16})$`)
 
-// ProvisionDatabase installs the fixed database-local grants for local and test databases.
-func ProvisionDatabase(ctx context.Context, db *sql.DB) (resultErr error) {
+// provisioningOwner is the fixed database owner that installs the grants. It
+// need not be a superuser, so an RDS master user can provision.
+const provisioningOwner = "aboutme"
+
+// ProvisionDatabase installs the fixed database-local grants as the database
+// owner.
+func ProvisionDatabase(ctx context.Context, db *sql.DB) error {
+	return provisionDatabase(ctx, db, provisioningOwner)
+}
+
+func provisionDatabase(ctx context.Context, db *sql.DB, owner string) (resultErr error) {
 	if db == nil {
 		return errors.New("migrations: nil provisioning database")
 	}
@@ -42,8 +51,8 @@ func ProvisionDatabase(ctx context.Context, db *sql.DB) (resultErr error) {
 	if err := conn.QueryRowContext(ctx, `SELECT session_user,current_setting('is_superuser'),current_database(),pg_backend_pid(),pg_get_userbyid(d.datdba),pg_get_userbyid(n.nspowner) FROM pg_database d CROSS JOIN pg_namespace n WHERE d.datname=current_database() AND n.oid='public'::regnamespace`).Scan(&user, &superuser, &database, &pid, &databaseOwner, &schemaOwner); err != nil {
 		return fmt.Errorf("migrations: inspect provisioning authority: %w", err)
 	}
-	if user != "aboutme" || superuser != "on" || databaseOwner != "aboutme" || (schemaOwner != "aboutme" && schemaOwner != "pg_database_owner") {
-		return errors.New("migrations: local provisioning authority or owner mismatch")
+	if user != owner || databaseOwner != owner || (schemaOwner != owner && schemaOwner != "pg_database_owner") {
+		return errors.New("migrations: provisioning authority or owner mismatch")
 	}
 	wrapped, err := lock.NewPostgresSessionLocker(lock.WithLockID(LockID))
 	if err != nil {
@@ -90,7 +99,7 @@ func ProvisionDatabase(ctx context.Context, db *sql.DB) (resultErr error) {
 	if err := wrapped.SessionUnlock(cleanupCtx, conn); err != nil {
 		return fmt.Errorf("migrations: release provisioning Goose lock: %w", err)
 	}
-	if err := verifySessionIdentity(cleanupCtx, conn, pid, "aboutme", "on"); err != nil {
+	if err := verifySessionIdentity(cleanupCtx, conn, pid, owner, superuser); err != nil {
 		return err
 	}
 	return nil

@@ -183,7 +183,7 @@ func runCommand(command string, check bool, stdout io.Writer) error {
 			return fmt.Errorf("provision does not accept -check")
 		}
 		if err := migrations.ProvisionDatabase(ctx, db); err != nil {
-			return fmt.Errorf("database provisioning failed; verify fixed local grants")
+			return fmt.Errorf("database provisioning failed; verify the database owner and fixed grants")
 		}
 		return writeLine(stdout, "migrate: database provisioning verified")
 	}

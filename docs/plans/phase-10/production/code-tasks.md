@@ -24,7 +24,7 @@ RDS never grants superuser. The grants that provisioning installs need only
 database ownership, so the check drops `is_superuser` and keeps the owner
 requirement. History adoption is unchanged and still requires superuser.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `migrator_provision_test.go` (add `database/sql`, `fmt`, `net/url`
 imports):
@@ -81,7 +81,7 @@ func TestProvisionDatabaseAcceptsNonSuperuserOwner(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 ```sh
 cd apps/server
@@ -90,7 +90,7 @@ REQUIRE_TEST_DB=1 TEST_DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20
 
 Expected: build failure, `undefined: provisionDatabase`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `migrator_provision.go`, split the function and replace the two identity
 checks:
@@ -125,7 +125,7 @@ Replace the final identity check so it pins the value read at the start:
     }
 ```
 
-- [ ] **Step 4: Run the package tests**
+- [x] **Step 4: Run the package tests**
 
 ```sh
 REQUIRE_TEST_DB=1 TEST_DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable' go test -race -count=1 -timeout 30m ./migrations ./cmd/migrate
@@ -134,7 +134,7 @@ GOGC=50 golangci-lint run ./migrations ./cmd/migrate --tests
 
 Expected: PASS and `0 issues.`
 
-- [ ] **Step 5: Update the design sentence**
+- [x] **Step 5: Update the design sentence**
 
 In `docs/design/scaling/migration-provisioning.md`, change "the existing
 bootstrap administrator performs" to "the database owner `aboutme`, which need
