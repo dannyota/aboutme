@@ -1,8 +1,8 @@
 # Replica membership and fencing
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). Local
-implementation and hosted proof remain Phase 10 gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 This contract defines immutable replica identity, join readiness, graceful
 leave, exact EC2 fencing, role grants, and the lock boundary with public

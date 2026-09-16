@@ -226,12 +226,12 @@ surface. See
 [Authentication and security](security.md#untrusted-document-content).
 
 Discoverable public HTML contains exactly one deterministic JSON-LD script. Its
-response keeps the Phase 3 Content Security Policy (CSP) and adds exactly one
+response keeps the public Content Security Policy (CSP) and adds exactly one
 response-specific `'sha256-<base64>'` source for that script's exact UTF-8 text
 bytes. Go verifies the matching script and policy before sending success.
-Non-discoverable public HTML contains no JSON-LD and uses the exact Phase 3 base
-policy. A nonce, `'unsafe-inline'` in `script-src`, and any other inline script
-are forbidden.
+Non-discoverable public HTML contains no JSON-LD and uses the exact base policy.
+A nonce, `'unsafe-inline'` in `script-src`, and any other inline script are
+forbidden.
 
 ## Pagination and print
 
@@ -242,9 +242,9 @@ are forbidden.
 
 Content, order, type, color, and visibility must agree across targets; only page
 break placement may differ. If Chromium cannot fragment the supported two-column
-layout deterministically, P3 is blocked until a print-specific layout with the
-same content and order passes. Divergent or clipped output is not an accepted
-residual risk.
+layout deterministically, release is blocked until a print-specific layout with
+the same content and order passes. Divergent or clipped output is not an
+accepted residual risk.
 
 Golden HTML covers every preset and both display modes against two in-memory
 starting states of the `full` fixture: populated one-column and populated two-

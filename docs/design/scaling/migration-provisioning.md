@@ -1,10 +1,8 @@
 # Database migration provisioning and adoption
 
-Status: Accepted target under
+Status: Accepted under
 [ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
-[dedicated runner](migrator.md) owns identities, lock order and history
-validation. [B3](../../plans/phase-10/replica/migrator-composition.md) owns
-implementation.
+[scaling index](README.md) records whether it is built.
 
 ## Database-local privileges
 
@@ -133,12 +131,12 @@ driver's separate CancelRequest may finish after confirmed data-socket closure.
 
 ## Fixed ownership manifest
 
-The [version-13 manifest](../../plans/phase-10/replica/migrator-manifest.md)
-fixes every transferred table and function and every validated index, sequence
-and row type. Fresh migration 00014 and local adoption converge on
-aboutme_runtime_owner for those exact objects. Already-owned foundation objects
-are verified, never transferred. Exclude extension members and PostgreSQL
-internals. Reject a missing, extra or mixed-owner object before mutation.
+The version-13 manifest in `apps/server/migrations/migrator_manifest.go` fixes
+every transferred table and function and every validated index, sequence and row
+type. Fresh migration 00014 and local adoption converge on aboutme_runtime_owner
+for those exact objects. Already-owned foundation objects are verified, never
+transferred. Exclude extension members and PostgreSQL internals. Reject a
+missing, extra or mixed-owner object before mutation.
 
 Execute reviewed fixed ALTER statements only. Never use REASSIGN OWNED, a schema
 wildcard or a catalog name as an ALTER target. Verify unchanged OIDs, rows,
@@ -149,18 +147,10 @@ result without an independent ALTER SEQUENCE OWNER.
 
 ## Hosted initial provisioning boundary
 
-Task 10.8's one-shot `deploy/aws/scripts/db-bootstrap.sh` performs initial
-database-local provisioning before foundation installation. Its bootstrap
-execution role supplies Task 10.4's `/aboutme/<env>/db/master-password` only to
-that one-shot task. The later migrate task uses only
-`/aboutme/<env>/db/migrator-password` and hardcodes MIGRATION_IDENTITY=direct.
-Values resolve inside the consuming process; no secret is a command argument,
-log, workflow output or tracked value. This records the task boundary; actual
-hosted role/SSM wiring remains an infrastructure task after local runtime proof.
-The hosted migrate task has no admin credential or local adoption mode.
-
-Cluster role bootstrap remains separate from this database-local step. It uses
-the fixed seven-role contract and does not rotate credentials implicitly. The
-older three-role/bootstrap ownership wording in infrastructure tasks must be
-aligned before their implementation. Production still requires Phase 11
-approval.
+A hosted deployment runs cluster role bootstrap and this database-local
+provisioning once, as one-shot tasks that alone hold the admin credential. The
+migrate task holds only the migrator password, hardcodes
+`MIGRATION_IDENTITY=direct`, and has no adoption mode. Bootstrap never rotates
+credentials. No secret appears in a command argument, log, workflow output or
+tracked file. The [single-host production design](../single-host-production.md)
+names the tasks and secrets.

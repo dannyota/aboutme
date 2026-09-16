@@ -48,15 +48,15 @@ published resume. A font update uses a new catalog version or stable ID.
 
 The initial v2 catalog has 26 families. The renderer exposes upright 400 and 700
 roles and no italic style token, so this catalog freezes only the upright inputs
-needed by v2. Variable inputs retain their upstream axes until Task 5 creates
-the final web subset. Rankings guide preset defaults and UI order only.
+needed by v2. Variable inputs retain their upstream axes until subsetting
+creates the final web subset. Rankings guide preset defaults and UI order only.
 
 Every commit below is a full immutable commit in the official project. Every
 hash is SHA-256. An input hash identifies the exact upstream asset consumed by
-Task 5; it is not the final subset hash. Task 5 generates, measures, and freezes
-the final asset hashes in the manifest. For archive inputs, both the archive and
-inner-file hash must match. A mismatch blocks admission rather than selecting a
-newer asset.
+subsetting; it is not the final subset hash. Subsetting generates, measures, and
+freezes the final asset hashes in the manifest. For archive inputs, both the
+archive and inner-file hash must match. A mismatch blocks admission rather than
+selecting a newer asset.
 
 All rows use `OFL-1.1`. “None” in the RFN column means the reviewed license and
 selected asset declare no Reserved Font Name. Those rows use
@@ -127,9 +127,9 @@ V2-to-v1 conversion uses a separate manifest field. The five existing v1
 families map to themselves: Be Vietnam Pro, Inter, Source Sans 3, Alegreya, and
 Roboto Serif. Every other sans family maps to Inter. Every other serif, slab
 serif, or display serif family maps to Alegreya. Every monospace family maps to
-Source Sans 3. Task 5B proves the mapping for all 26 entries without changing
-any non-font value.
+Source Sans 3. Tests prove the mapping for all 26 entries without changing any
+non-font value.
 
 Only the selected face and required fallback load for a document. Screenshot and
-PDF capture waits for both. P7 renders one PDF per family and uses font
-inspection to prove that the intended face is embedded.
+PDF capture waits for both. The print tests render one PDF per family and uses
+font inspection to prove that the intended face is embedded.

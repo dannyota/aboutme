@@ -1,10 +1,8 @@
 # OAuth failed-grant reservations
 
 Status: Accepted detail of [fleet admission](admission.md) under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md).
-[R1](../../plans/phase-10/replica/runtime-tasks.md) owns schema/store work, R5
-owns the admission package, and R7b owns OAuth callers. Implementation and live
-proof remain pending.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 ## Policy and identity
 

@@ -1,9 +1,8 @@
 # Fleet admission, render and realtime
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). This is
-the target contract. Local implementation and hosted proof remain Phase 10
-gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 ## Shared-time model
 
@@ -201,9 +200,10 @@ The per-task SSE 2,000 and photo intake one/wait one second remain local.
 This classification has no authoritative contradiction. `budgets.md` leaves hash
 two/16 and mail two-send concurrency unqualified, while it explicitly says photo
 intake, SSE task admission, and cache ownership are per task/instance. Current
-password/mail comments describe the one-process implementation, which is the
-Task 10.18 gap; the inventory is evidence, not design authority. Each Go task
-still enforces 512 MiB, so global claims supplement local memory safety.
+password/mail comments describe the one-process implementation, which the
+deferred caller integration replaces; the inventory is evidence, not design
+authority. Each Go task still enforces 512 MiB, so global claims supplement
+local memory safety.
 
 MCP denial retains its current MCP error and Retry-After 1. SSE identity denial
 retains 429 and Retry-After 5; shared-store failure uses existing 503 and 5.

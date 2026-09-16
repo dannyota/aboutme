@@ -1,9 +1,8 @@
 # Fixed rate operations and results
 
 Status: Accepted detail of [rate storage](rate-storage.md) under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). R1 owns
-fixed SQL and scalar store transport. R5 owns domain types and callers.
-Implementation and local proof remain Phase 10 gates.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 This contract fixes results, role checks, errors and the database-time test
 seam. It preserves schema 18, algorithms, limits, function inputs, grants and

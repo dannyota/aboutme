@@ -152,10 +152,10 @@ Behavior required across a page break:
 grid containers across print pages is its least reliable behavior. The golden
 set must therefore include a two-column fixture whose sidebar alone overflows
 one page, and one whose `main` alone does. If Chromium's behavior diverges from
-the rules above, preserve the failing output as review evidence and block P3. Do
-not replace the accepted baseline with the divergent output. The correction is a
-shared print layout or a reviewed design change, never a per-template
-workaround.
+the rules above, preserve the failing output as review evidence and block the
+release. Do not replace the accepted baseline with the divergent output. The
+correction is a shared print layout or a reviewed design change, never a
+per-template workaround.
 
 ## 6. Photo and images
 

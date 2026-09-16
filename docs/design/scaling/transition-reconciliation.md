@@ -1,9 +1,8 @@
 # Public transition reconciliation
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). R1 owns
-fixed SQL/store operations; R2/R3 own caller integration. Implementation and
-local concurrency proof remain pending.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 Use one database snapshot and one local apply lock to reconcile durable
 [transition outcomes](transition-recovery.md) with current public state.

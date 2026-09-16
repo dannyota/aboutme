@@ -1,9 +1,8 @@
 # Fixed claim operations and results
 
 Status: Accepted detail of [shared claims](shared-claims.md) under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). R1 owns
-database operations and store transport; R5 owns the private operation object
-and admission adapter. Runtime implementation and local proof remain pending.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 This contract fixes result rows, error codes, role checks and the Go boundary.
 It preserves the stored schema, function names and argument order, lock order,

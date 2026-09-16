@@ -1,21 +1,8 @@
 # 10. Decision status
 
-This design integrates the outcomes below. The ADR remains the rationale and
-supersession record; these pages state the resulting design. Every record
-through 0031 is accepted; 0014–0019 and 0021–0023 were accepted with the v4
-approval on 2026-08-12, 0025 with the password-authentication authority on
-2026-08-16, 0026 with the MCP agent-access authority on 2026-09-01, 0027–0028
-with the v1 entry-experience authority on 2026-09-02, 0029 with the application
-UI authority on 2026-09-02, and 0030 with the visual identity authority on
-2026-09-04. ADR 0031 records the owner's 2026-09-05 direction: numeric phases,
-AWS Singapore cost research, OpenTofu, managed-service preference, and hosted
-UAT. ADR 0033 records the owner's 2026-09-06 approval of public image builds
-with private AWS publication and deployment. ADR 0034 records the approved
-monthly operating range, scheduled UAT, and production scale-out and scale-in.
-ADR 0035 records the reviewed replica coordination, admission, connection
-envelope and recoverable UAT lifecycle under that approval. ADR 0036 then sets
-one serving replica for the first release and moves migrations into the
-deployment, deferring the coordination that only a second replica needs.
+This design integrates the outcomes below. Each ADR keeps its rationale and
+supersession record; these pages state the resulting design. Records 0001–0036
+are accepted. ADR 0037 is proposed.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                |
 | -------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -59,30 +46,17 @@ deployment, deferring the coordination that only a second replica needs.
 
 ## Remaining gates
 
-| Gate                                                   | Owner                                     | Due                                                             |
-| ------------------------------------------------------ | ----------------------------------------- | --------------------------------------------------------------- |
-| Per-asset font license, notice, and Reserved Font Name | Integration owner                         | As each P3 Task 5 asset is admitted, and before T5B             |
-| Product name and trademark review                      | Human owner                               | Before Phase 11 production promotion                            |
-| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before Phase 11 production promotion                            |
-| UAT operating controls and booked test windows         | Phase 10                                  | Prove the approved $30/month ceiling controls before activation |
-| Production authorization                               | Human owner                               | After Phase 10 UAT and operational rehearsal                    |
+| Gate                                                   | Owner                                     | Due                               |
+| ------------------------------------------------------ | ----------------------------------------- | --------------------------------- |
+| Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added    |
+| Product name and trademark review                      | Human owner                               | Before production launch          |
+| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before production launch          |
+| Production authorization                               | Human owner                               | ADR 0037 records it on acceptance |
 
 The font gate stays per asset because it is a legal check on exact bytes. Name
-and privacy reviews gate production. The owner has authorized AWS UAT in
-Singapore and Cloudflare DNS for `uat.aboutme.vn`; that scope does not require
-another general permission request. The owner approved
-$20–30/month UAT,
-$140–170/month production, and $160–200/month combined on
-2026-09-06. These estimates do not waive production launch approval. Phase 10
-implements and proves the operating controls and replica safety required by ADRs
-0034 and 0035, as narrowed by ADR 0036: the first release runs one replica, so
-the two-replica proof moves to Phase 11.
-
-ADRs 0022 and 0023 carry the highest implementation complexity in the design and
-belong to the completed public-surface phase and task 7.1. They are accepted as
-the target behavior. If their mechanisms prove disproportionate when those
-phases are planned, simplify through a superseding ADR rather than by quietly
-implementing less.
+and privacy reviews gate production. Hosting cost, topology and the release path
+follow the accepted deployment ADRs, as narrowed by ADR 0036 and, once accepted,
+ADR 0037.
 
 ## Proposed v1 limits
 

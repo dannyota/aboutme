@@ -1,8 +1,8 @@
 # Migration connection retirement
 
 Status: Accepted correction to the [dedicated migrator](migrator.md) under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md).
-[B3](../../plans/phase-10/replica/migrator-composition.md) owns implementation.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+[scaling index](README.md) records whether it is built.
 
 ## Physical closure
 
