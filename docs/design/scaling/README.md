@@ -1,4 +1,4 @@
-# Replica scaling and UAT lifecycle
+# Replica scaling
 
 Status: Accepted under
 [ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md), narrowed
@@ -9,6 +9,8 @@ record of what exists:
 
 - **Built:** migrations 13–23 and their store transports implement it.
 - **Deferred:** ADR 0036 postpones it until a second replica is wanted.
+- **Superseded by ADR 0037:** the single-host design replaces it for the first
+  release; it remains the reference for a later fleet.
 
 These pages name code areas by their implementation slice:
 
@@ -59,12 +61,12 @@ These pages name code areas by their implementation slice:
 | [Maintenance entry](maintenance-entry.md)                 | One backend per maintenance command                                      | Deferred                                  |
 | [Migrator retirement](migrator-retirement.md)             | Physical closure of migration connections                                | Built                                     |
 | [Policy catalog](policy-catalog.md)                       | Exact limiter identities, scopes and existing caller behavior            | Describes current limiters and the target |
-| [UAT lifecycle](uat-lifecycle.md)                         | Maintenance deadlines, write barriers and final stop receipts            | Deferred                                  |
+| [UAT lifecycle](uat-lifecycle.md)                         | Maintenance deadlines, write barriers and final stop receipts            | Superseded by ADR 0037                    |
 | [Transaction entry](transaction-entry.md)                 | Shared barrier before any row lock or write                              | Built                                     |
 | [Migrator](migrator.md)                                   | Dedicated backend, protected history and read-only status                | Built                                     |
 | [Migration provisioning](migration-provisioning.md)       | Fixed grants and data-preserving ownership adoption                      | Built; hosted provisioning pending        |
-| [Topology](topology.md)                                   | Complete replicas, paired routes and edge trust                          | Deferred                                  |
-| [Controller](controller.md)                               | Off-environment ownership, recovery, tasks and infrastructure changes    | Deferred                                  |
+| [Topology](topology.md)                                   | Complete replicas, paired routes and edge trust                          | Superseded by ADR 0037                    |
+| [Controller](controller.md)                               | Off-environment ownership, recovery, tasks and infrastructure changes    | Superseded by ADR 0037                    |
 
 PostgreSQL owns shared application coordination. Public HTTP and SSE schemas
 stay unchanged. Raising the service above one replica requires the deferred rows

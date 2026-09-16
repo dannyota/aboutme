@@ -1,6 +1,6 @@
 # Single-host production
 
-Status: Proposed under
+Status: Accepted under
 [ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). This
 document states how the first release runs at `https://aboutme.vn`. It narrows
 the [deployment design](deployment.md) for that release; trust boundaries not

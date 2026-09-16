@@ -4,6 +4,12 @@ Status: Accepted under
 [ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
 [scaling index](README.md) records whether it is built.
 
+> **Superseded for the first release.**
+> [ADR 0037](../../adr/0037-single-host-production-without-hosted-uat.md)
+> replaces the CloudFront, ALB, fleet and scheduled-UAT parts of this page with
+> the [single-host design](../single-host-production.md). The page stays as the
+> reference for a later fleet.
+
 ## 6. Managed controller execution and trust boundary
 
 Select EventBridge Scheduler plus one Step Functions Standard state machine as

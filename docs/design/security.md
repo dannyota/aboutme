@@ -299,4 +299,4 @@ object existence an authority.
 
 Secrets never enter source, OpenTofu state where avoidable, URLs, or logs.
 Production fails closed when trusted proxies, provider credentials, origin
-settings, or origin-secret configuration is incomplete.
+settings, or origin certificate configuration is incomplete.

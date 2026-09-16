@@ -272,10 +272,10 @@ Caddy routes public resume HTML through Go. Go holds the per-resume generation
 lease and origin response, passes a frozen snapshot to Nuxt over the private
 render interface, and releases the lease only after the response finishes or
 aborts. Nuxt remains the sole HTML renderer but never owns the public origin
-response authority. A CloudFront viewer request already validated before a
-revocation may finish; every request admitted or revalidated afterward sees the
-new state. Go's sitemap and `llms.txt` handlers hold the separate discovery
-generation lease through their aggregate origin responses.
+response authority. A viewer request already validated before a revocation may
+finish; every request admitted or revalidated afterward sees the new state. Go's
+sitemap and `llms.txt` handlers hold the separate discovery generation lease
+through their aggregate origin responses.
 
 The private public-render interface is exactly Nuxt
 `POST /internal-render/public` on the direct origin listener. It accepts the
