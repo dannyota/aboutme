@@ -19,14 +19,15 @@ if [[ -e $pull_dir ]]; then
   exit 1
 fi
 
-work=$(mktemp -d)
+work=$(mktemp -d -p "$XDG_RUNTIME_DIR")
 trap 'rm -rf "$work"' EXIT
 ec=(-newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes)
 
 openssl req -new "${ec[@]}" -subj /CN=aboutme.vn -keyout "$work/origin.key" \
   -out "$root/deploy/aws/prod/origin.csr" 2>/dev/null
 jq -Rs '{Name: "/aboutme/prod/tls/origin-key", Type: "SecureString", Value: ., Overwrite: true}' \
-  "$work/origin.key" | aws ssm put-parameter --region "$region" --cli-input-json file:///dev/stdin >/dev/null
+  "$work/origin.key" >"$work/request.json"
+aws ssm put-parameter --region "$region" --cli-input-json "file://$work/request.json" >/dev/null
 
 mkdir -p "$pull_dir"
 openssl req -x509 "${ec[@]}" -days 3650 -subj /CN=aboutme-origin-pull-ca \
@@ -36,7 +37,8 @@ openssl req -new "${ec[@]}" -subj /CN=aboutme-origin-pull \
 openssl x509 -req -in "$work/pull.csr" -CA "$work/ca.pem" -CAkey "$work/ca.key" \
   -CAcreateserial -days 3650 -out "$pull_dir/client.pem" 2>/dev/null
 jq -Rs '{Name: "/aboutme/prod/tls/origin-pull-ca", Type: "String", Value: ., Overwrite: true}' \
-  "$work/ca.pem" | aws ssm put-parameter --region "$region" --cli-input-json file:///dev/stdin >/dev/null
+  "$work/ca.pem" >"$work/request.json"
+aws ssm put-parameter --region "$region" --cli-input-json "file://$work/request.json" >/dev/null
 
 echo "origin CSR written to deploy/aws/prod/origin.csr; origin key stored in SSM"
 echo "upload $pull_dir/client.pem and $pull_dir/client.key in the Cloudflare dashboard,"
