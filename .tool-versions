@@ -1,4 +1,4 @@
-nodejs 24.20.0
+nodejs 24.21.0
 golang 1.27.1
 sqlc 1.31.1
 semgrep 1.176.0

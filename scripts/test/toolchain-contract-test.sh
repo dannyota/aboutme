@@ -20,7 +20,7 @@ mkdir -p "$BIN"
 
 cat >"$BIN/node" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' v24.20.0
+printf '%s\n' v24.21.0
 EOF
 
 cat >"$BIN/go" <<'EOF'
@@ -80,8 +80,8 @@ fi
 grep -Fq 'sqlc: want v1.31.1, got v9.9.9' "$WORK/out" ||
   fail "CI tool check did not report the exact sqlc mismatch"
 
-grep -Fq 'node-version: 24.20.0' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin Node 24.20.0"
+grep -Fq 'node-version: 24.21.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin Node 24.21.0"
 grep -Fq 'go-version: "1.27.1"' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin Go 1.27.1"
 grep -Fq 'version: v2.13.2' "$ROOT/.github/workflows/ci.yml" ||
@@ -128,7 +128,7 @@ cp "$ROOT/deploy/web.Dockerfile" "$ROOT/deploy/server.Dockerfile" \
 awk '
   $1 == "node-version:" {
     count++
-    if (count == 2) sub("24.20.0", "99.0.0")
+    if (count == 2) sub("24.21.0", "99.0.0")
   }
   { print }
 ' "$CONTRACT/.github/workflows/ci.yml" >"$CONTRACT/.github/workflows/ci.yml.next"
@@ -138,7 +138,7 @@ if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
   >"$WORK/partial-drift.out" 2>&1; then
   fail "repository contract accepted one drifted Node job"
 fi
-grep -Fq 'node: .github/workflows/ci.yml has 99.0.0, want 24.20.0' \
+grep -Fq 'node: .github/workflows/ci.yml has 99.0.0, want 24.21.0' \
   "$WORK/partial-drift.out" ||
   fail "repository contract did not identify the drifted Node job"
 
