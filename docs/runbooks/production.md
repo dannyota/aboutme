@@ -92,9 +92,16 @@ A failure after "site down" but before migrations complete restores the previous
 `app` revision and the job schedules' earlier state, then exits non-zero. If
 migrations were already applied, the script leaves the app and schedules stopped
 and says so: fix forward with a new release, or restore the snapshot the deploy
-took. On `--first-deploy` it leaves `app` stopped, because there is no earlier
-release. If it reports that a database task may still be running, it leaves the
-app and schedules stopped: check that task with
+took.
+
+Goose applies each migration in its own transaction. When a release carries
+several migrations and `migrate` fails partway, the earlier ones stay applied
+while the script still restores the previous app. After any migrate failure,
+check the applied head in the migrate task's log before trusting the restored
+app; if it moved, treat the deploy as migrated. On `--first-deploy` it leaves
+`app` stopped, because there is no earlier release. If it reports that a
+database task may still be running, it leaves the app and schedules stopped:
+check that task with
 `aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and when it has
 stopped, rerun the deploy. Enabled schedules always point at the released `jobs`
 revision.
