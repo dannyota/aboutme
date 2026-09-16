@@ -35,3 +35,13 @@ variable "image_web" {
 variable "image_caddy" {
   type = string
 }
+
+variable "alarm_email" {
+  type        = string
+  description = "Where alarm mail goes; kept in the ignored prod.tfvars"
+}
+
+variable "site_alarm_enabled" {
+  type    = bool
+  default = false
+}
