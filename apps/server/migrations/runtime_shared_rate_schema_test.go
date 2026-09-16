@@ -285,10 +285,12 @@ func TestRuntimeSharedRateSchemaClockPartitionAndOverflowIdentity(t *testing.T) 
 }
 
 func TestRuntimeSharedRateSchemaPartitionTenThousandBoundary(t *testing.T) {
-	db, ctx := runtimeSharedRateDB(t)
+	db, _ := runtimeSharedRateDB(t)
 	insert := `INSERT INTO public.shared_rate_buckets(policy_id,key_digest,partition,algorithm,last_seen,token_numerator,refill_at) SELECT 'api.outer_request',sha256(i::text::bytea),1,'token_bucket',transaction_timestamp(),18000000000,transaction_timestamp() FROM generate_series(1,10000) i`
-	_, tx := beginRateWrite(t, db, 45*time.Second)
-	writeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// The 10,000-row insert takes about 30 seconds on hosted CI runners, so the
+	// write and the later read each get their own budget.
+	_, tx := beginRateWrite(t, db, 150*time.Second)
+	writeCtx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	if _, err := tx.ExecContext(writeCtx, insert); err != nil {
 		t.Fatal(err)
@@ -302,8 +304,10 @@ func TestRuntimeSharedRateSchemaPartitionTenThousandBoundary(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	readCtx, cancelRead := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelRead()
 	var rows, active int
-	if err := db.QueryRowContext(ctx, `SELECT count(*),(SELECT active_keys FROM public.shared_rate_partitions WHERE policy_id='api.outer_request' AND partition=1) FROM public.shared_rate_buckets WHERE policy_id='api.outer_request'`).Scan(&rows, &active); err != nil || rows != 10000 || active != 10000 {
+	if err := db.QueryRowContext(readCtx, `SELECT count(*),(SELECT active_keys FROM public.shared_rate_partitions WHERE policy_id='api.outer_request' AND partition=1) FROM public.shared_rate_buckets WHERE policy_id='api.outer_request'`).Scan(&rows, &active); err != nil || rows != 10000 || active != 10000 {
 		t.Fatalf("boundary rows/active=%d/%d error=%v", rows, active, err)
 	}
 	requireRateError(t, membershipWrite(t, db, `INSERT INTO public.shared_rate_buckets(policy_id,key_digest,partition,algorithm,last_seen,token_numerator,refill_at) VALUES('api.outer_request',decode(repeat('ff',32),'hex'),1,'token_bucket',transaction_timestamp(),18000000000,transaction_timestamp())`, `UPDATE public.shared_rate_partitions SET active_keys=10001 WHERE policy_id='api.outer_request' AND partition=1`), "23514", "shared_rate_partitions_active_keys_check", "")
@@ -372,8 +376,10 @@ func TestRuntimeSharedRateSchemaDuplicateAllocationWaitsAndKeepsCount(t *testing
 	if err := second.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 		t.Fatal(err)
 	}
+	readCtx, cancelRead := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelRead()
 	var rows, active int
-	if err := db.QueryRowContext(ctx, `SELECT count(*),(SELECT active_keys FROM public.shared_rate_partitions WHERE policy_id='api.outer_request' AND partition=1) FROM public.shared_rate_buckets WHERE policy_id='api.outer_request'`).Scan(&rows, &active); err != nil || rows != 1 || active != 1 {
+	if err := db.QueryRowContext(readCtx, `SELECT count(*),(SELECT active_keys FROM public.shared_rate_partitions WHERE policy_id='api.outer_request' AND partition=1) FROM public.shared_rate_buckets WHERE policy_id='api.outer_request'`).Scan(&rows, &active); err != nil || rows != 1 || active != 1 {
 		t.Fatalf("duplicate final rows/active=%d/%d error=%v", rows, active, err)
 	}
 }
