@@ -12,3 +12,26 @@ variable "media_bucket_name" {
   type        = string
   description = "Private media bucket name"
 }
+
+variable "ses_from_address" {
+  type    = string
+  default = "danny@aboutme.vn"
+}
+
+variable "ses_configuration_set" {
+  type    = string
+  default = "aboutme-auth"
+}
+
+# Initial task definition images. deploy.sh registers later revisions.
+variable "image_server" {
+  type = string
+}
+
+variable "image_web" {
+  type = string
+}
+
+variable "image_caddy" {
+  type = string
+}

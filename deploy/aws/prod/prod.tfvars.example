@@ -2,3 +2,7 @@
 account_id        = ""
 state_kms_key_arn = ""
 media_bucket_name = "aboutme-prod-media-<account id>"
+# Initial images; deploy.sh replaces them by digest on the first deploy.
+image_server = "ghcr.io/dannyota/aboutme-server:unreleased"
+image_web    = "ghcr.io/dannyota/aboutme-web:unreleased"
+image_caddy  = "ghcr.io/dannyota/aboutme-caddy:unreleased"

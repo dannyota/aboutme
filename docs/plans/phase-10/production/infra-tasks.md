@@ -535,7 +535,7 @@ exactly 32 bytes in unpadded base64url, which the OpenTofu random provider does
 not produce, and one mechanism for every value is simpler to review. OpenTofu
 only references parameter names.
 
-- [ ] **Step 1: Write `secrets.sh`**
+- [x] **Step 1: Write `secrets.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -576,7 +576,7 @@ put password-rate-hmac-key SecureString key32
 `get-parameters` without `--with-decryption` returns only metadata here; the
 script never reads a value back.
 
-- [ ] **Step 2: Write `tls.sh`**
+- [x] **Step 2: Write `tls.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -622,7 +622,7 @@ echo "upload $pull_dir/client.pem and client.key in the Cloudflare dashboard, th
 disk. The CSR is public and is committed. The CA key is deleted with the
 temporary directory, so a new client certificate needs a new CA.
 
-- [ ] **Step 3: Write the identity module**
+- [x] **Step 3: Write the identity module**
 
 Roles and policies:
 
@@ -752,7 +752,7 @@ Outputs: `instance_profile_name`, `exec_role_arns` (map), `app_task_role_arn`,
 reading a `SecureString`, add `kms:Decrypt` on the `aws/ssm` key to that
 execution role.
 
-- [ ] **Step 4: Write the tasks module**
+- [x] **Step 4: Write the tasks module**
 
 The module takes the images, DB endpoint, bucket name, role ARNs, account ID and
 Cloudflare ranges, and renders the container definitions below. In the code,
@@ -877,7 +877,7 @@ role `jobs`, environment `DATABASE_URL` for `aboutme_app`, `MEDIA_BACKEND=s3`,
 `MEDIA_BUCKET`, `MEDIA_REGION=ap-southeast-1`, secret `PGPASSWORD` from
 `db/app-password`. The scheduler supplies the command.
 
-- [ ] **Step 5: Update the design paragraph**
+- [x] **Step 5: Update the design paragraph**
 
 In `docs/design/single-host-production.md`, replace the paragraph that says
 OpenTofu generates passwords as ephemeral values with:
@@ -885,7 +885,7 @@ OpenTofu generates passwords as ephemeral values with:
 straight to SSM, and never overwrites or prints one. OpenTofu references
 parameter names only." Run `make docs-lint`.
 
-- [ ] **Step 6: Run the scripts, wire the modules, apply**
+- [x] **Step 6: Run the scripts, wire the modules, apply**
 
 ```sh
 bash deploy/aws/scripts/secrets.sh
@@ -901,6 +901,19 @@ Expected: five `created` lines, the TLS script's final line, then seven task
 definition families and the roles.
 `aws ssm get-parameters-by-path --path /aboutme/prod --recursive --query 'Parameters[].Name'`
 lists the names only.
+
+Result (2026-09-17): five secrets, the origin key, the origin-pull CA and the
+Origin CA certificate are in SSM; 26 IAM, log and task definition resources
+exist, and `tofu plan` reports no changes. IAM simulation confirmed each
+execution role reads only its own parameters, only `db-admin` reads the master
+secret, and the task roles are limited to `resumes/` objects and, for `app`,
+mail. Differences from the steps above: the AWS CLI cannot read
+`file:///dev/stdin`, so both scripts write each request to a private tmpfs file
+and delete it; `ListBucket` has no prefix condition, because `HeadObject`
+reports a missing key as 404 only with it; the Origin CA certificate was issued
+here through the Cloudflare MCP; the task definitions start with `:unreleased`
+image tags until the first deploy. The owner's dashboard upload of the
+origin-pull certificate is still pending.
 
 ## Task 11
 
