@@ -97,10 +97,13 @@ The trust boundaries match the Compose deployment:
 
 `t4g` instances do not support ENI trunking and allow two `awsvpc` tasks, and
 `awsvpc` tasks on EC2 cannot hold a public IP. That is why `app` uses host
-networking. Three points are unverified and are the first implementation task:
+networking. Four points are unverified and are the first implementation task:
 task IAM roles for host-mode tasks on Bottlerocket, a bridge container reaching
-a host listener on `172.17.0.1`, and the IMDS hop-limit block. If the bridge
-gateway path fails, `web` moves to `awsvpc` and is found through Cloud Map DNS.
+a host listener on `172.17.0.1`, a host-mode process reaching a bridge
+container's published port on `127.0.0.1`, and the IMDS hop-limit block. If a
+host-mode task cannot get a task role, the design returns for review before any
+infrastructure is built. If a bridge or loopback path fails, `web` moves to
+`awsvpc` and is found through Cloud Map DNS.
 
 Memory fits in 2 GiB: roughly 300 MiB for Bottlerocket and the agent, the
 existing 512 MiB Go and Chromium cap, and about 300 MiB for Nuxt and Caddy. A
@@ -164,7 +167,7 @@ enter images, Git, logs or OpenTofu state.
 | RDS master secret (Secrets Manager)           | `db-admin`                |
 | `aboutme_migrator` password                   | `db-admin`, `migrate`     |
 | `aboutme_app` password                        | `db-admin`, `app`, `jobs` |
-| Auth email key and key ID, password-rate HMAC | `app`, `jobs`             |
+| Auth email key and key ID, password-rate HMAC | `app`                     |
 | Origin CA private key                         | `app`                     |
 
 OpenTofu generates the passwords and keys as ephemeral values and writes them
@@ -186,7 +189,7 @@ and send mail from the verified SES identity. The `jobs` task role has the same
 bucket access and no mail access. `migrate` and `db-admin` task roles grant
 nothing.
 
-Non-secret configuration is plain task definition values: `ENV=production`,
+Non-secret configuration is plain task definition values: `ENV=prod`,
 `PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`, `PROVIDER_LOGIN_ENABLED`
 unset, `MEDIA_BACKEND=s3` without static keys, and the SES settings.
 
@@ -265,12 +268,24 @@ dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
   bucket.
 - A Cloudflare API token scoped to the `aboutme.vn` zone, with DNS, SSL, Origin
   CA and cache rule rights, stays in the owner's environment.
-- Public CI runs `tofu fmt`, `tofu validate` and tflint without cloud
+- Public CI runs `tofu fmt -check` and `tofu validate` without cloud
   credentials. No workflow deploys.
+
+## Code changes
+
+The current code needs five changes before the first deploy:
+
+1. `migrate provision` accepts the non-superuser database owner.
+2. A fixed `set-login` command sends SCRAM verifiers for the two login roles.
+3. The server image ships the RDS CA bundle for `sslmode=verify-full`.
+4. Production allows the print listener at exactly `172.17.0.1:8081`, in Go's
+   configuration and in Nuxt's redemption allowlist.
+5. Provider OAuth credentials are required only when `PROVIDER_LOGIN_ENABLED` is
+   true, so the password-only release starts without them.
 
 ## Launch checks
 
-Before the first deploy: the three code changes pass their tests, the image
-smoke passes, and `tofu plan` is reviewed. Before announcing the site: one
+Before the first deploy: the code changes listed below pass their tests, the
+image smoke passes, and `tofu plan` is reviewed. Before announcing the site: one
 restore drill from a snapshot to a temporary instance, SES production access,
 and live privacy and terms pages.
