@@ -26,18 +26,18 @@ A clean environment prints `No changes.`
 These live only in Cloudflare. Change them through the MCP connection or the
 dashboard, and update this table in the same change.
 
-| Setting                    | Value                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `aboutme.vn`               | `A` to the host Elastic IP (`tofu output host_public_ip`), proxied                                    |
-| `www.aboutme.vn`           | `CNAME` to `aboutme.vn`, proxied; the origin redirects it to the apex                                 |
-| SSL/TLS mode               | Full (strict)                                                                                         |
-| Always Use HTTPS           | On                                                                                                    |
-| Minimum TLS version        | 1.2; TLS 1.3 on                                                                                       |
-| HSTS                       | On, max-age 31536000, no subdomains, no preload, nosniff                                              |
-| Bot Fight Mode             | Off                                                                                                   |
-| Cache rule                 | `not starts_with(http.request.uri.path, "/_nuxt/")` → bypass cache                                    |
-| Origin CA certificate      | ECC, `aboutme.vn` and `www.aboutme.vn`, expires 2041-09-12; stored at `/aboutme/prod/tls/origin-cert` |
-| Authenticated Origin Pulls | Zone-level certificate from `tls.sh`; enable only after the first healthy deploy                      |
+| Setting                    | Value                                                                                                             |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `aboutme.vn`               | `A` to the host Elastic IP (`tofu output host_public_ip`), proxied                                                |
+| `www.aboutme.vn`           | `CNAME` to `aboutme.vn`, proxied; the origin redirects it to the apex                                             |
+| SSL/TLS mode               | Full (strict)                                                                                                     |
+| Always Use HTTPS           | On                                                                                                                |
+| Minimum TLS version        | 1.2; TLS 1.3 on                                                                                                   |
+| HSTS                       | On, max-age 31536000, no subdomains, no preload, nosniff                                                          |
+| Bot Fight Mode             | Off                                                                                                               |
+| Cache rule                 | `not starts_with(http.request.uri.path, "/_nuxt/")` → bypass cache                                                |
+| Origin CA certificate      | ECC, `aboutme.vn` and `www.aboutme.vn`, expires 2041-09-12; stored at `/aboutme/prod/tls/origin-cert`             |
+| Authenticated Origin Pulls | Zone-level certificate from `tls.sh pull`, active, expires 2036-09-13; enable only after the first healthy deploy |
 
 Mail records (MX, TXT, DKIM and the SES `bounce` records) predate this setup and
 stay unchanged.
@@ -52,11 +52,16 @@ Values live in SSM Parameter Store under `/aboutme/prod/`. Never print them.
 
 - `deploy/aws/scripts/secrets.sh` creates missing database passwords and keys
   and never overwrites one.
-- `deploy/aws/scripts/tls.sh` creates the origin key and certificate request and
-  the origin-pull client certificate. It leaves the origin-pull files in
-  `$XDG_RUNTIME_DIR/aboutme-origin-pull` for the dashboard upload (SSL/TLS →
-  Origin Server → Authenticated Origin Pulls); run `tls.sh --forget-pull`
-  afterwards.
+- `deploy/aws/scripts/tls.sh origin` creates a new origin key (to SSM) and
+  `deploy/aws/prod/origin.csr`. A new key needs a new Origin CA certificate from
+  that request, stored at `/aboutme/prod/tls/origin-cert`.
+- `deploy/aws/scripts/tls.sh pull` creates a new origin-pull CA (certificate to
+  SSM, key discarded) and a leaf client certificate in
+  `$XDG_RUNTIME_DIR/aboutme-origin-pull`. Upload it in the dashboard: SSL/TLS →
+  Origin Server → Authenticated Origin Pulls → Zone-level → Upload certificate,
+  pasting each file with `wl-copy < <file>`. Then run
+  `wl-copy --clear && tls.sh forget-pull`. The deploy after a new CA picks up
+  the new trust pool.
 - The RDS master password is managed by RDS in Secrets Manager. Only the
   one-shot `db-admin` tasks can read it.
 

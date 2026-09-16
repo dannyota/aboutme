@@ -887,10 +887,11 @@ parameter names only." Run `make docs-lint`.
 
 ```sh
 bash deploy/aws/scripts/secrets.sh
-bash deploy/aws/scripts/tls.sh
+bash deploy/aws/scripts/tls.sh origin
+bash deploy/aws/scripts/tls.sh pull
 # Owner: Cloudflare dashboard > aboutme.vn > SSL/TLS > Origin Server >
 # Authenticated Origin Pulls > upload the zone-level certificate and key.
-bash deploy/aws/scripts/tls.sh --forget-pull
+bash deploy/aws/scripts/tls.sh forget-pull
 tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars -out=prod.tfplan
 tofu -chdir=deploy/aws/prod apply -var-file=prod.tfvars prod.tfplan
 ```
