@@ -13,23 +13,22 @@ FROM docker.io/library/node:24.21.0-alpine3.24 AS build
 
 WORKDIR /src
 
-# apps/web's package.json/lock plus the config files `postinstall: nuxt
-# prepare` needs, and @aboutme/schema's own package.json + the generated TS
-# types its "exports"/"types" point at (packages/schema/gen/ts/) — nothing
-# else from packages/schema is needed to install or build (resume.schema.json
-# and the Go/generator/test trees are irrelevant to `npm ci`/`nuxt build`).
-# Copied before `npm ci` so this layer only invalidates on dependency/config
-# changes, not every source edit. `nuxt prepare` doesn't require app/ to
-# exist (verified: an isolated `npm ci` with only these files succeeds).
+# `npm ci` runs `nuxt prepare`, which loads nuxt.config.ts, and that config
+# builds validators from app/, server/, the OpenAPI contract and the schema
+# package. So every build input is copied before install. The list mirrors the
+# non-test entries of scripts/web-e2e-source.manifest.
 COPY apps/web/package.json apps/web/package-lock.json apps/web/nuxt.config.ts apps/web/tsconfig.json ./apps/web/
-COPY packages/schema/package.json ./packages/schema/
-COPY packages/schema/gen/ts/ ./packages/schema/gen/ts/
-
-RUN npm --prefix apps/web ci
-
+COPY apps/web/types/ ./apps/web/types/
 COPY apps/web/app/ ./apps/web/app/
 COPY apps/web/public/ ./apps/web/public/
 COPY apps/web/server/ ./apps/web/server/
+COPY docs/api/openapi.yaml ./docs/api/openapi.yaml
+COPY packages/schema/package.json packages/schema/resume.schema.json ./packages/schema/
+COPY packages/schema/gen/ts/ ./packages/schema/gen/ts/
+COPY packages/schema/fixtures/full.json packages/schema/fixtures/vn-full.json ./packages/schema/fixtures/
+COPY packages/schema/validation/store.ts ./packages/schema/validation/
+
+RUN npm --prefix apps/web ci
 
 RUN npm --prefix apps/web run build
 
