@@ -11,8 +11,8 @@ exact replacement evidence and atomic fleet partition changes.
 **Architecture:** Migration 22 follows accepted rate operations 21. It uses the
 membership ledger from 15, transition visibility from 16 and rate partitions
 from 18. One generated query per store method runs inside WriteTxRunner.
-Graceful leave, EC2 proof, exclusive wake and caller composition follow in
-separate slices.
+Graceful leave and EC2 proof landed in the membership evidence slice. Exclusive
+wake and caller composition are deferred under ADR 0036.
 
 **Tech stack:** PostgreSQL 18, Goose, Go, pgx and sqlc; repository pins apply.
 

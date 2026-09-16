@@ -156,9 +156,8 @@ sequenceDiagram
 ```
 
 - `db-role-bootstrap` already works for a non-superuser holding CREATEROLE.
-- `migrate provision` currently requires a superuser. Database and `public`
-  schema grants need only database ownership, so hosted provisioning requires
-  `session_user` `aboutme` owning the database and drops the superuser check.
+- `migrate provision` requires `session_user` `aboutme` owning the database and
+  no superuser, because database and `public` schema grants need only ownership.
   History adoption keeps its superuser requirement and stays local-only.
 - `set-login` is a new fixed command. It accepts only `aboutme_migrator` and
   `aboutme_app`, reads their passwords from its environment, and sends a
