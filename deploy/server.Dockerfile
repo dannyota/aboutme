@@ -21,11 +21,18 @@ COPY apps/server/internal/ ./apps/server/internal/
 COPY apps/server/migrations/ ./apps/server/migrations/
 COPY packages/schema/gen/go/ ./packages/schema/gen/go/
 
-# The API server, role bootstrap, and migration runner share one image.
+# The API server and the one-shot database commands share one image.
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/render-browser-supervisor ./cmd/render-browser-supervisor
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
 RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/db-role-bootstrap ./cmd/db-role-bootstrap
+RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/db-set-login ./cmd/db-set-login
+
+# AWS RDS CA bundle for sslmode=verify-full. A changed upstream bundle fails the
+# build until this hash is reviewed and updated.
+ARG RDS_BUNDLE_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+RUN wget -qO /out/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+    && echo "${RDS_BUNDLE_SHA256}  /out/rds-global-bundle.pem" | sha256sum -c -
 
 # ---- runtime ----
 FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac AS runtime
@@ -41,6 +48,8 @@ COPY --from=build /out/server /usr/local/bin/server
 COPY --from=build /out/render-browser-supervisor /usr/local/bin/render-browser-supervisor
 COPY --from=build /out/migrate /usr/local/bin/migrate
 COPY --from=build /out/db-role-bootstrap /usr/local/bin/db-role-bootstrap
+COPY --from=build /out/db-set-login /usr/local/bin/db-set-login
+COPY --from=build /out/rds-global-bundle.pem /etc/ssl/rds/global-bundle.pem
 
 USER pwuser
 EXPOSE 8080 8081
