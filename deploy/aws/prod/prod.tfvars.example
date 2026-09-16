@@ -1,0 +1,3 @@
+# Copy to prod.tfvars (ignored) and fill in. Later tasks add variables here.
+account_id        = ""
+state_kms_key_arn = ""

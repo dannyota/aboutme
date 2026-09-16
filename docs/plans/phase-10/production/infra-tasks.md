@@ -31,7 +31,7 @@ task report.
 **Interfaces:** Produces the S3 state bucket, the state KMS key, and a `prod`
 root that later tasks extend with `module` blocks.
 
-- [ ] **Step 1: Ignore private files**
+- [x] **Step 1: Ignore private files**
 
 Add to `.gitignore`:
 
@@ -46,7 +46,7 @@ deploy/aws/prod/prod.tfvars
 
 Lock files (`.terraform.lock.hcl`) are committed.
 
-- [ ] **Step 2: Write the bootstrap root**
+- [x] **Step 2: Write the bootstrap root**
 
 `deploy/aws/bootstrap/main.tf` uses local state, kept only on the owner's
 laptop:
@@ -124,7 +124,7 @@ output "state_bucket" { value = aws_s3_bucket.state.bucket }
 output "state_kms_key_arn" { value = aws_kms_key.state.arn }
 ```
 
-- [ ] **Step 3: Write the production root skeleton**
+- [x] **Step 3: Write the production root skeleton**
 
 `deploy/aws/prod/versions.tf`:
 
@@ -222,7 +222,7 @@ image_web          = "ghcr.io/dannyota/aboutme-web@sha256:..."
 image_caddy        = "ghcr.io/dannyota/aboutme-caddy@sha256:..."
 ```
 
-- [ ] **Step 4: Apply the bootstrap and initialize the root**
+- [x] **Step 4: Apply the bootstrap and initialize the root**
 
 ```sh
 tofu -chdir=deploy/aws/bootstrap init
@@ -237,12 +237,17 @@ Expected: `No changes.` The state object in S3 is ciphertext
 (`aws s3 cp s3://.../prod/terraform.tfstate - | head -c 80` shows the OpenTofu
 encrypted envelope, not JSON resources).
 
-- [ ] **Step 5: Add the public CI check**
+- [x] **Step 5: Add the public CI check**
 
 Ask the integration owner to add a `tofu` job to `ci.yml` that installs OpenTofu
 1.12.6 and runs `tofu fmt -check -recursive deploy/aws` and
 `tofu -chdir=deploy/aws/prod init -backend=false && tofu -chdir=deploy/aws/prod validate`.
 The job receives no secrets.
+
+Result (2026-09-16): the bucket and key exist, the `prod` root initializes and
+its state object is OpenTofu ciphertext. The Cloudflare provider block moves to
+Task 9, where its first data source appears, so the skeleton plans without a
+Cloudflare token. The bucket keeps 20 noncurrent state versions for 90 days.
 
 ## Task 9
 
