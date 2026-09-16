@@ -19,7 +19,7 @@ the one-replica runtime.
 | --------------------------------------------------------------- | ------------------------------------------------------------- |
 | [Replica runtime](replica/README.md)                            | Migrations 13–23 and their transports; closing checks pending |
 | [Single-replica direction](replica/single-replica-direction.md) | Final verification and review of the replica work             |
-| Single-host production plan                                     | To be written: code changes, infrastructure, deploy, launch   |
+| [Single-host production](production/README.md)                  | Code changes, infrastructure, deploy, and launch checks       |
 
 The integration owner owns Git, shared configuration, deploys, and phase
 closure. Follow ADR 0024: one author per task, one fresh phase review. Run local
