@@ -19,3 +19,9 @@ coverage/
 
 !AGENTS.md
 !CLAUDE.md
+deploy/aws/**/.terraform/
+deploy/aws/**/*.tfstate
+deploy/aws/**/*.tfstate.*
+deploy/aws/**/*.tfplan
+deploy/aws/prod/backend.hcl
+deploy/aws/prod/prod.tfvars

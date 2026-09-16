@@ -15,7 +15,7 @@ only when all four pass.
 The probe costs a few cents and creates AWS resources. Get the owner's go-ahead
 first. It uses local state in `deploy/aws/probe/` and the default VPC.
 
-- [ ] **Step 1: Write the probe root**
+- [x] **Step 1: Write the probe root**
 
 `deploy/aws/probe/main.tf`:
 
@@ -103,7 +103,7 @@ output "cluster" { value = aws_ecs_cluster.probe.name }
 output "task_role_arn" { value = aws_iam_role.task.arn }
 ```
 
-- [ ] **Step 2: Apply**
+- [x] **Step 2: Apply**
 
 ```sh
 cd deploy/aws/probe && tofu init && tofu apply
@@ -112,7 +112,7 @@ cd deploy/aws/probe && tofu init && tofu apply
 Expected: one instance registers in cluster `aboutme-probe` within five minutes
 (`aws ecs list-container-instances --cluster aboutme-probe`).
 
-- [ ] **Step 3: Run the four checks as ECS tasks**
+- [x] **Step 3: Run the four checks as ECS tasks**
 
 Register and run a host-mode task and a bridge-mode task with
 `public.ecr.aws/docker/library/busybox:1.37` and the task role from the output:
@@ -133,7 +133,7 @@ Register and run a host-mode task and a bridge-mode task with
 Record each result, with no credential content, in
 `.dev/phase-10/host-probe-report.txt`.
 
-- [ ] **Step 4: Destroy**
+- [x] **Step 4: Destroy**
 
 ```sh
 tofu destroy
@@ -141,9 +141,13 @@ tofu destroy
 
 Expected: `Destroy complete`. Confirm no `aboutme-probe` instance remains.
 
-- [ ] **Step 5: Decide**
+- [x] **Step 5: Decide**
 
 All four PASS: continue to Task 8. Check 1 FAIL: stop and return the design for
 review. Check 2 or 3 FAIL: amend the design to run `web` in `awsvpc` mode with
 Cloud Map DNS before Task 10. Commit only `deploy/aws/probe/`; its state files
 stay ignored.
+
+Result (2026-09-16): all four checks passed on Bottlerocket 1.65.0. The first
+run failed checks 2 and 3 only because the probe image lacked `httpd`; the fixed
+run added a host-mode IMDS control for check 4.
