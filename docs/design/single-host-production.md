@@ -87,7 +87,7 @@ The trust boundaries match the Compose deployment:
   only Go's private print listener on the bridge gateway, where the one-use
   capability still applies.
 - The security group admits only TCP 443 from Cloudflare ranges, read by
-  OpenTofu from the Cloudflare provider. Host port 3000 is unreachable from
+  OpenTofu from Cloudflare's public IP list. Host port 3000 is unreachable from
   outside.
 - IMDSv2 with hop limit one keeps bridge containers away from the instance role.
   The instance role holds only ECS agent and SSM permissions, because host-mode
@@ -170,19 +170,19 @@ enter images, Git, logs or OpenTofu state.
 | Auth email key and key ID, password-rate HMAC | `app`                     |
 | Origin CA private key                         | `app`                     |
 
-OpenTofu generates the passwords and keys as ephemeral values and writes them
-through write-only attributes. The first implementation task confirms write-only
-support in the pinned OpenTofu and AWS provider versions; the fallback is a
-script that generates values and writes them straight to SSM.
+`deploy/aws/scripts/secrets.sh` generates each password and key with `openssl`,
+writes it straight to SSM, and never overwrites or prints one. OpenTofu
+references parameter names only.
 
-TLS keys cannot follow that path, because a value derived from an ephemeral key
-cannot feed a regular resource. A local script generates two key pairs in a
-temporary directory it removes afterwards:
+`deploy/aws/scripts/tls.sh` generates the TLS keys in a private temporary
+directory and deletes it at the end:
 
-- The Origin CA key goes to SSM. Only its certificate signing request goes to
-  OpenTofu, which issues the certificate.
-- The origin-pull client key and certificate go straight to Cloudflare's API.
-  Caddy receives only the public certificate.
+- The Origin CA key goes straight to SSM. Only the public certificate signing
+  request leaves the script; Cloudflare issues the certificate from it.
+- The origin-pull CA signs a client certificate, and the CA key is discarded.
+  The owner uploads the client certificate and key once in the Cloudflare
+  dashboard as the zone-level origin-pull certificate. Caddy receives only the
+  CA certificate.
 
 The `app` task role may get, put, list and delete objects in the media bucket
 and send mail from the verified SES identity. The `jobs` task role has the same
@@ -266,8 +266,12 @@ dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
 - State lives in a versioned, encrypted S3 bucket with OpenTofu's lock file and
   client-side state encryption through KMS. A small bootstrap root creates the
   bucket.
-- A Cloudflare API token scoped to the `aboutme.vn` zone, with DNS, SSL, Origin
-  CA and cache rule rights, stays in the owner's environment.
+- OpenTofu manages AWS only; there is no Cloudflare API token. The Cloudflare
+  settings are applied through the owner's authenticated Cloudflare connection
+  and listed in the production runbook: the two proxied DNS records, Full
+  (strict) SSL, HTTPS redirect, minimum TLS 1.2, HSTS, Bot Fight Mode off, the
+  cache rule, zone-level origin pulls, and the Origin CA certificate. A change
+  to any of them updates the runbook in the same change.
 - Public CI runs `tofu fmt -check` and `tofu validate` without cloud
   credentials. No workflow deploys.
 
