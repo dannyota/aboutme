@@ -546,7 +546,7 @@ role passwords do not change.
 `NUXT_PRINT_ORIGIN=http://172.17.0.1:8081`. Production starts without provider
 credentials while `PROVIDER_LOGIN_ENABLED` is not `true`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `print_test.go`, add these cases to the table in
 `TestPrintConfigurationRestrictsPrivateListener`:
@@ -586,7 +586,7 @@ In `redemption.test.ts`, add `'http://172.17.0.1:8081'` to the `valid` list, add
 `'http://172.17.0.2:8081'` to the rejected list, and rename the test to
 `'allows only the five configured direct origins'`.
 
-- [ ] **Step 2: Run them and confirm they fail**
+- [x] **Step 2: Run them and confirm they fail**
 
 ```sh
 cd apps/server && go test -count=1 ./internal/config
@@ -595,7 +595,7 @@ cd ../web && npx vitest run test/print/redemption.test.ts
 
 Expected: the new Go cases fail, and the TypeScript test rejects the new origin.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `print.go`:
 
@@ -620,7 +620,7 @@ credentials are required only when provider login is enabled.
 
 `redemption.ts`: add `'http://172.17.0.1:8081',` to `printOrigins`.
 
-- [ ] **Step 4: Run the checks**
+- [x] **Step 4: Run the checks**
 
 ```sh
 make server-build server-vet server-test

@@ -16,9 +16,10 @@ executing Chromium, so server credentials do not enter the browser environment.
 `PRINT_LISTEN_ADDR` is private redemption traffic only. Native development uses
 `127.0.0.1:20082`, native HTTPS uses `127.0.0.1:20445`, and the Compose render
 network uses `10.91.0.2:8081`. Nuxt receives the corresponding
-`NUXT_PRINT_ORIGIN`. Production and staging permit only `127.0.0.1:8081` for the
-shared task network. Caddy never routes this listener. The public `/print/<id>`
-path accepts no ID-only, cookie, or browser-owner authority.
+`NUXT_PRINT_ORIGIN`. Production and staging permit only `127.0.0.1:8081` or the
+Docker bridge gateway `172.17.0.1:8081`, which the single-host deployment uses.
+Caddy never routes this listener. The public `/print/<id>` path accepts no
+ID-only, cookie, or browser-owner authority.
 
 The queue allows one active render and eight queued calls. Its configured
 20-second cancellation deadline starts at admission. Saturation returns 503 and

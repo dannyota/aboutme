@@ -603,23 +603,9 @@ func TestLoad_ValidEnvValues(t *testing.T) {
 				"ENV":           envValue,
 			}
 			if envValue == "prod" || envValue == "staging" {
-				// prod and staging both require TRUSTED_PROXY_CIDRS (fail
-				// closed — see TestLoad_TrustedProxyCIDRs_RequiredInProd and
-				// TestLoad_TrustedProxyCIDRs_RequiredInStaging),
-				// GOOGLE_CLIENT_ID/SECRET (see
-				// TestLoad_GoogleCredentials_RequiredInProd/Staging),
-				// GITHUB_CLIENT_ID/SECRET (see
-				// TestLoad_GitHubCredentials_RequiredInProd/Staging), and
-				// LINKEDIN_CLIENT_ID/SECRET (see
-				// TestLoad_LinkedInCredentials_RequiredInProd/Staging);
-				// LISTEN_HOST is left at its loopback default.
+				// prod and staging require TRUSTED_PROXY_CIDRS; see
+				// TestLoad_TrustedProxyCIDRs_RequiredInProd.
 				vars["TRUSTED_PROXY_CIDRS"] = "127.0.0.1/32,::1/128"
-				vars["GOOGLE_CLIENT_ID"] = "client-id"
-				vars["GOOGLE_CLIENT_SECRET"] = "client-secret"
-				vars["GITHUB_CLIENT_ID"] = "github-client-id"
-				vars["GITHUB_CLIENT_SECRET"] = "github-client-secret"
-				vars["LINKEDIN_CLIENT_ID"] = "client-id"
-				vars["LINKEDIN_CLIENT_SECRET"] = "client-secret"
 			}
 
 			got, err := config.Load(env(vars))
@@ -1033,11 +1019,8 @@ func TestLoad_GoogleCredentials_OptionalInDev(t *testing.T) {
 	}
 }
 
-// TestLoad_GoogleCredentials_RequiredInProd guards the fail-closed half: a
-// production server cannot offer "Sign in with Google" without real
-// credentials, so Load must refuse to start rather than silently booting
-// with an empty client id/secret that would only fail later, per-request,
-// against the real Google endpoint.
+// TestLoad_GoogleCredentials_RequiredInProd proves a production server with
+// provider login enabled refuses to start without Google credentials.
 func TestLoad_GoogleCredentials_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -1064,11 +1047,12 @@ func TestLoad_GoogleCredentials_RequiredInProd(t *testing.T) {
 			t.Parallel()
 
 			vars := map[string]string{
-				"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-				"PUBLIC_ORIGIN":       "https://aboutme.vn",
-				"ENV":                 "prod",
-				"LISTEN_HOST":         "127.0.0.1",
-				"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+				"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":          "https://aboutme.vn",
+				"ENV":                    "prod",
+				"PROVIDER_LOGIN_ENABLED": "true",
+				"LISTEN_HOST":            "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
 			}
 			for k, v := range tt.vars {
 				vars[k] = v
@@ -1092,11 +1076,12 @@ func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL":        "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":       "https://aboutme.vn",
-		"ENV":                 "staging",
-		"LISTEN_HOST":         "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"PROVIDER_LOGIN_ENABLED": "true",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error: GOOGLE_CLIENT_ID/SECRET required when ENV=staging")
@@ -1157,16 +1142,8 @@ func TestLoad_GitHubCredentials_OptionalInDev(t *testing.T) {
 	}
 }
 
-// TestLoad_GitHubCredentials_RequiredInProd guards the fail-closed half: a
-// production server cannot offer "Sign in with GitHub" without real
-// credentials, so Load must refuse to start rather than silently booting
-// with an empty client id/secret that would only fail later, per-request,
-// against the real GitHub endpoint. Every case also supplies valid Google
-// credentials, so the failure asserted here is unambiguously GitHub's own
-// (not Google's check firing first). LinkedIn credentials are NOT needed
-// here: Load checks GitHub before LinkedIn (see Load's own call order), so
-// a missing GitHub credential is always reported first regardless of
-// LinkedIn's state.
+// TestLoad_GitHubCredentials_RequiredInProd proves a production server with
+// provider login enabled refuses to start without GitHub credentials.
 func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -1193,13 +1170,14 @@ func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
 			t.Parallel()
 
 			vars := map[string]string{
-				"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-				"PUBLIC_ORIGIN":        "https://aboutme.vn",
-				"ENV":                  "prod",
-				"LISTEN_HOST":          "127.0.0.1",
-				"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-				"GOOGLE_CLIENT_ID":     "client-id",
-				"GOOGLE_CLIENT_SECRET": "client-secret",
+				"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":          "https://aboutme.vn",
+				"ENV":                    "prod",
+				"PROVIDER_LOGIN_ENABLED": "true",
+				"LISTEN_HOST":            "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+				"GOOGLE_CLIENT_ID":       "client-id",
+				"GOOGLE_CLIENT_SECRET":   "client-secret",
 			}
 			for k, v := range tt.vars {
 				vars[k] = v
@@ -1223,13 +1201,14 @@ func TestLoad_GitHubCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "staging",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-		"GOOGLE_CLIENT_ID":     "client-id",
-		"GOOGLE_CLIENT_SECRET": "client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"PROVIDER_LOGIN_ENABLED": "true",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "client-id",
+		"GOOGLE_CLIENT_SECRET":   "client-secret",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error: GITHUB_CLIENT_ID/SECRET required when ENV=staging")
@@ -1285,16 +1264,8 @@ func TestLoad_LinkedInCredentials_OptionalInDev(t *testing.T) {
 	}
 }
 
-// TestLoad_LinkedInCredentials_RequiredInProd mirrors
-// TestLoad_GoogleCredentials_RequiredInProd: a production server cannot
-// offer "Sign in with LinkedIn" without real credentials, so Load must
-// refuse to start rather than silently booting with an empty client
-// id/secret that would only fail later, per-request, against the real
-// LinkedIn endpoint. Google AND GitHub credentials are both set (valid)
-// here: Load checks Google, then GitHub, then LinkedIn (Load's own call
-// order), so both earlier checks must already pass or their own error
-// would mask the LINKEDIN_CLIENT_* failure this test is actually
-// targeting.
+// TestLoad_LinkedInCredentials_RequiredInProd proves a production server with
+// provider login enabled refuses to start without LinkedIn credentials.
 func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
 	t.Parallel()
 
@@ -1321,15 +1292,16 @@ func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
 			t.Parallel()
 
 			vars := map[string]string{
-				"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-				"PUBLIC_ORIGIN":        "https://aboutme.vn",
-				"ENV":                  "prod",
-				"LISTEN_HOST":          "127.0.0.1",
-				"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-				"GOOGLE_CLIENT_ID":     "google-client-id",
-				"GOOGLE_CLIENT_SECRET": "google-client-secret",
-				"GITHUB_CLIENT_ID":     "github-client-id",
-				"GITHUB_CLIENT_SECRET": "github-client-secret",
+				"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":          "https://aboutme.vn",
+				"ENV":                    "prod",
+				"PROVIDER_LOGIN_ENABLED": "true",
+				"LISTEN_HOST":            "127.0.0.1",
+				"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+				"GOOGLE_CLIENT_ID":       "google-client-id",
+				"GOOGLE_CLIENT_SECRET":   "google-client-secret",
+				"GITHUB_CLIENT_ID":       "github-client-id",
+				"GITHUB_CLIENT_SECRET":   "github-client-secret",
 			}
 			for k, v := range tt.vars {
 				vars[k] = v
@@ -1355,15 +1327,16 @@ func TestLoad_LinkedInCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
 	_, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "staging",
-		"LISTEN_HOST":          "127.0.0.1",
-		"TRUSTED_PROXY_CIDRS":  "127.0.0.1/32",
-		"GOOGLE_CLIENT_ID":     "google-client-id",
-		"GOOGLE_CLIENT_SECRET": "google-client-secret",
-		"GITHUB_CLIENT_ID":     "github-client-id",
-		"GITHUB_CLIENT_SECRET": "github-client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "staging",
+		"PROVIDER_LOGIN_ENABLED": "true",
+		"LISTEN_HOST":            "127.0.0.1",
+		"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+		"GOOGLE_CLIENT_ID":       "google-client-id",
+		"GOOGLE_CLIENT_SECRET":   "google-client-secret",
+		"GITHUB_CLIENT_ID":       "github-client-id",
+		"GITHUB_CLIENT_SECRET":   "github-client-secret",
 	}))
 	if err == nil {
 		t.Fatal("Load() error = nil, want error: LINKEDIN_CLIENT_ID/SECRET required when ENV=staging")
@@ -1652,5 +1625,26 @@ func TestLoad_MediaErrorsDoNotExposeCredentials(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), accessSentinel) || strings.Contains(err.Error(), secretSentinel) {
 		t.Errorf("Load() error leaks a credential sentinel: %v", err)
+	}
+}
+
+// TestLoad_ProdStartsWithoutProviderCredentialsWhenLoginDisabled proves the
+// password-only release needs no provider credentials.
+func TestLoad_ProdStartsWithoutProviderCredentialsWhenLoginDisabled(t *testing.T) {
+	t.Parallel()
+
+	for _, environment := range []string{"prod", "staging"} {
+		for _, flag := range []string{"", "false"} {
+			_, err := config.Load(env(map[string]string{
+				"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":          "https://aboutme.vn",
+				"ENV":                    environment,
+				"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+				"PROVIDER_LOGIN_ENABLED": flag,
+			}))
+			if err != nil {
+				t.Fatalf("ENV=%s flag %q: Load() error = %v", environment, flag, err)
+			}
+		}
 	}
 }

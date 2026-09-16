@@ -132,12 +132,13 @@ describe('direct print redemption client', () => {
     },
   );
 
-  it('allows only the four configured direct origins', async () => {
+  it('allows only the five configured direct origins', async () => {
     const valid = [
       'http://127.0.0.1:20082',
       'http://127.0.0.1:20445',
       'http://127.0.0.1:8081',
       'http://10.91.0.2:8081',
+      'http://172.17.0.1:8081',
     ];
     for (const origin of valid) {
       const transport = vi.fn<typeof fetch>(async () =>
@@ -150,6 +151,8 @@ describe('direct print redemption client', () => {
       'http://127.0.0.1:20082/',
       'http://user@127.0.0.1:20082',
       'http://10.91.0.3:8081',
+      'http://172.17.0.2:8081',
+      'http://172.17.0.1:8082',
     ]) {
       const transport = vi.fn<typeof fetch>();
       await expect(redeem(transport, undefined, origin))

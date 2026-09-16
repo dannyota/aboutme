@@ -63,34 +63,14 @@ type Config struct {
 	// topology's correct value (e.g. a podman-compose network's subnet)
 	// isn't something this package can know in advance.
 	TrustedProxyCIDRs []netip.Prefix
-	// GoogleClientID is the OAuth2 client id for "Sign in with Google"
-	// (see docs/design/security.md). Required (non-empty) when
-	// Env is "prod" or "staging" — same fail-closed, staging-shares-prod
-	// pattern as TrustedProxyCIDRs, since a production/staging server
-	// cannot genuinely offer Google login without real credentials.
-	// Optional in dev: a developer working on an unrelated feature must
-	// not be forced to obtain real Google OAuth credentials just to start
-	// the server.
-	GoogleClientID string
-	// GoogleClientSecret is the OAuth2 client secret paired with
-	// GoogleClientID. Same required-in-prod/staging, optional-in-dev
-	// semantics.
-	GoogleClientSecret string
-	// GitHubClientID is the OAuth2 client id for "Sign in with GitHub"
-	// (plain OAuth2, not OIDC). Same required-in-prod/staging, optional-in-dev
-	// semantics as GoogleClientID.
-	GitHubClientID string
-	// GitHubClientSecret is the OAuth2 client secret paired with
-	// GitHubClientID. Same required-in-prod/staging, optional-in-dev
-	// semantics.
-	GitHubClientSecret string
-	// LinkedInClientID is the OAuth2 client id for "Sign in with LinkedIn"
-	// (see docs/design/security.md). Same required-in-prod/
-	// staging, optional-in-dev semantics as GoogleClientID.
-	LinkedInClientID string
-	// LinkedInClientSecret is the OAuth2 client secret paired with
-	// LinkedInClientID. Same required-in-prod/staging, optional-in-dev
-	// semantics.
+	// Provider OAuth2 client credentials. Each pair is required in prod and
+	// staging only when provider login is enabled; see loadProviderCredentials.
+	// GitHub uses plain OAuth2; Google and LinkedIn use OIDC.
+	GoogleClientID       string
+	GoogleClientSecret   string
+	GitHubClientID       string
+	GitHubClientSecret   string
+	LinkedInClientID     string
 	LinkedInClientSecret string
 	// GoogleOIDCIssuerURL and LinkedInOIDCIssuerURL select local development
 	// OIDC issuers. Empty values retain the built-in production issuers.
@@ -254,17 +234,22 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
-	googleClientID, googleClientSecret, err := loadGoogleCredentials(getenv("GOOGLE_CLIENT_ID"), getenv("GOOGLE_CLIENT_SECRET"), env)
+	providerLogin, err := loadProviderLoginFlag(getenv("PROVIDER_LOGIN_ENABLED"))
 	if err != nil {
 		return Config{}, err
 	}
 
-	githubClientID, githubClientSecret, err := loadGitHubCredentials(getenv("GITHUB_CLIENT_ID"), getenv("GITHUB_CLIENT_SECRET"), env)
+	googleClientID, googleClientSecret, err := loadProviderCredentials("GOOGLE", "Google", getenv, env, providerLogin)
 	if err != nil {
 		return Config{}, err
 	}
 
-	linkedInClientID, linkedInClientSecret, err := loadLinkedInCredentials(getenv("LINKEDIN_CLIENT_ID"), getenv("LINKEDIN_CLIENT_SECRET"), env)
+	githubClientID, githubClientSecret, err := loadProviderCredentials("GITHUB", "GitHub", getenv, env, providerLogin)
+	if err != nil {
+		return Config{}, err
+	}
+
+	linkedInClientID, linkedInClientSecret, err := loadProviderCredentials("LINKEDIN", "LinkedIn", getenv, env, providerLogin)
 	if err != nil {
 		return Config{}, err
 	}
@@ -279,10 +264,6 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	agentAccess, err := loadAgentAccessConfig(getenv("MCP_ENABLED"))
-	if err != nil {
-		return Config{}, err
-	}
-	providerLogin, err := loadProviderLoginFlag(getenv("PROVIDER_LOGIN_ENABLED"))
 	if err != nil {
 		return Config{}, err
 	}
@@ -718,88 +699,22 @@ func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
 	return cidrs, nil
 }
 
-// requiresProductionOAuthCredentials reports whether env must supply real
-// GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET rather than being allowed to leave
-// them empty. Same prod+staging strictness as
-// requiresProductionTrustBoundary (staging validates the real deployment
-// before it reaches prod), kept as its own named predicate rather than
-// reusing that function directly: the two concerns — client-IP trust
-// boundary vs. OAuth provider credentials — are unrelated and should not
-// be coupled by sharing one function that merely has the same boolean
-// expression.
-func requiresProductionOAuthCredentials(env string) bool {
-	return env == "prod" || env == "staging"
-}
-
-// loadGoogleCredentials validates GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET.
-// Required (both, non-empty) when env requires production OAuth
-// credentials (see requiresProductionOAuthCredentials): a production or
-// staging server cannot genuinely offer "Sign in with Google" without real
-// credentials, so Load fails fast rather than booting and only failing
-// later, per-request, against the real Google endpoint. Optional outside
-// that — both empty is a valid dev configuration (Google login simply
-// won't work until set).
-func loadGoogleCredentials(rawClientID, rawClientSecret, env string) (clientID, clientSecret string, err error) {
-	clientID = strings.TrimSpace(rawClientID)
-	clientSecret = strings.TrimSpace(rawClientSecret)
-
-	if requiresProductionOAuthCredentials(env) {
-		if clientID == "" {
-			return "", "", fmt.Errorf("config: GOOGLE_CLIENT_ID is required when ENV=%s: "+
-				"production and staging cannot offer Google login without real credentials", env)
-		}
-		if clientSecret == "" {
-			return "", "", fmt.Errorf("config: GOOGLE_CLIENT_SECRET is required when ENV=%s: "+
-				"production and staging cannot offer Google login without real credentials", env)
-		}
+// loadProviderCredentials reads <PREFIX>_CLIENT_ID and <PREFIX>_CLIENT_SECRET.
+// Both are required in prod and staging only when provider login is enabled,
+// so a server that offers the login cannot boot without real credentials.
+func loadProviderCredentials(prefix, provider string, getenv func(string) string, env string, providerLogin bool) (clientID, clientSecret string, err error) {
+	clientID = strings.TrimSpace(getenv(prefix + "_CLIENT_ID"))
+	clientSecret = strings.TrimSpace(getenv(prefix + "_CLIENT_SECRET"))
+	if !providerLogin || (env != "prod" && env != "staging") {
+		return clientID, clientSecret, nil
 	}
-	return clientID, clientSecret, nil
-}
-
-// loadGitHubCredentials validates GITHUB_CLIENT_ID/GITHUB_CLIENT_SECRET.
-// Required (both, non-empty) when env requires production OAuth
-// credentials (see requiresProductionOAuthCredentials) — the same
-// fail-closed, staging-shares-prod pattern as loadGoogleCredentials.
-// GitHub login itself is plain OAuth2, not OIDC, but its client credentials
-// carry the identical requirement: a production or staging server cannot genuinely
-// offer "Sign in with GitHub" without real credentials, so Load fails fast
-// rather than booting and only failing later, per-request, against the
-// real GitHub endpoint. Optional outside that — both empty is a valid dev
-// configuration (GitHub login simply won't work until set).
-func loadGitHubCredentials(rawClientID, rawClientSecret, env string) (clientID, clientSecret string, err error) {
-	clientID = strings.TrimSpace(rawClientID)
-	clientSecret = strings.TrimSpace(rawClientSecret)
-
-	if requiresProductionOAuthCredentials(env) {
-		if clientID == "" {
-			return "", "", fmt.Errorf("config: GITHUB_CLIENT_ID is required when ENV=%s: "+
-				"production and staging cannot offer GitHub login without real credentials", env)
-		}
-		if clientSecret == "" {
-			return "", "", fmt.Errorf("config: GITHUB_CLIENT_SECRET is required when ENV=%s: "+
-				"production and staging cannot offer GitHub login without real credentials", env)
-		}
-	}
-	return clientID, clientSecret, nil
-}
-
-// loadLinkedInCredentials validates LINKEDIN_CLIENT_ID/
-// LINKEDIN_CLIENT_SECRET. Same required-in-prod/staging,
-// optional-in-dev semantics as loadGoogleCredentials -- a production or
-// staging server cannot genuinely offer "Sign in with LinkedIn" without
-// real credentials.
-func loadLinkedInCredentials(rawClientID, rawClientSecret, env string) (clientID, clientSecret string, err error) {
-	clientID = strings.TrimSpace(rawClientID)
-	clientSecret = strings.TrimSpace(rawClientSecret)
-
-	if requiresProductionOAuthCredentials(env) {
-		if clientID == "" {
-			return "", "", fmt.Errorf("config: LINKEDIN_CLIENT_ID is required when ENV=%s: "+
-				"production and staging cannot offer LinkedIn login without real credentials", env)
-		}
-		if clientSecret == "" {
-			return "", "", fmt.Errorf("config: LINKEDIN_CLIENT_SECRET is required when ENV=%s: "+
-				"production and staging cannot offer LinkedIn login without real credentials", env)
+	for _, field := range []struct{ name, value string }{
+		{prefix + "_CLIENT_ID", clientID},
+		{prefix + "_CLIENT_SECRET", clientSecret},
+	} {
+		if field.value == "" {
+			return "", "", fmt.Errorf("config: %s is required when ENV=%s and PROVIDER_LOGIN_ENABLED=true: "+
+				"%s login needs real credentials", field.name, env, provider)
 		}
 	}
 	return clientID, clientSecret, nil

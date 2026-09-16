@@ -14,7 +14,7 @@ func loadPrintConfig(getenv func(string) string, environment string) (string, st
 			address = "127.0.0.1:20082"
 		}
 	}
-	allowed := address == "127.0.0.1:8081" && requiresProductionTrustBoundary(environment)
+	allowed := (address == "127.0.0.1:8081" || address == "172.17.0.1:8081") && requiresProductionTrustBoundary(environment)
 	if environment == "dev" {
 		allowed = address == "127.0.0.1:20082" || address == "127.0.0.1:20445" || address == "10.91.0.2:8081"
 	}
