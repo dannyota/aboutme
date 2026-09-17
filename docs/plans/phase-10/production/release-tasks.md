@@ -263,7 +263,7 @@ jobs:
             smoke:
               docker run --rm --entrypoint sh "$IMAGE" -c 'test -s
               /etc/ssl/rds/global-bundle.pem && /opt/chromium/chrome --version
-              && test -x /usr/local/bin/db-set-login'
+              && test -x /usr/local/bin/db-setup'
           - name: web
             dockerfile: deploy/web.Dockerfile
             smoke:

@@ -7,6 +7,11 @@ Every task below is complete. Each entry keeps its goal, the files it owns, its
 interfaces, and its recorded result; the full steps are in Git history at commit
 `a37d863`.
 
+[ADR 0038](../../../adr/0038-single-baseline-and-plain-migrator.md) later
+replaced `db-set-login`, `ProvisionDatabase`, and `migrator_provision.go` with
+one `db-setup` command (`apps/server/cmd/db-setup`). Tasks 2 and 3 below record
+what shipped at the time; the names they mention no longer exist.
+
 ## Task 2
 
 ### Provisioning accepts the non-superuser database owner

@@ -48,9 +48,9 @@ both before any task.
 
 | Path                                                         | Responsibility                                  |
 | ------------------------------------------------------------ | ----------------------------------------------- |
-| `apps/server/migrations/migrator_provision.go`               | Provisioning authority check                    |
+| `apps/server/internal/dbroles/dbroles.go`                    | Fixed role creation and grant authority         |
 | `apps/server/internal/dbroles/login.go`                      | SCRAM verifier and fixed login-role writes      |
-| `apps/server/cmd/db-set-login/main.go`                       | `db-set-login` one-shot command                 |
+| `apps/server/cmd/db-setup/main.go`                           | `db-setup` one-shot command                     |
 | `apps/server/internal/config/{print,config}.go`              | Print listener and provider credential rules    |
 | `apps/web/server/utils/print/redemption.ts`                  | Print origin allowlist                          |
 | `deploy/server.Dockerfile`                                   | RDS CA bundle and the new binary                |

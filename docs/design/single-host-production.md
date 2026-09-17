@@ -156,8 +156,11 @@ sequenceDiagram
   existing one, applies database and schema grants, and, when both
   `MIGRATOR_PASSWORD` and `APP_PASSWORD` are set, stores their SCRAM-SHA-256
   verifiers so no plaintext password reaches PostgreSQL logs.
-- `db-setup` reruns only verify; it never weakens an existing grant. The deploy
-  script runs it only with `--first-deploy`.
+- Every `db-setup` run re-applies the database and schema grants; a run with
+  both `MIGRATOR_PASSWORD` and `APP_PASSWORD` set rewrites both SCRAM verifiers.
+  It never weakens an existing grant, and it still fails closed on role
+  attribute or membership drift. The deploy script runs it only with
+  `--first-deploy`.
 - `migrate` always runs as `aboutme_migrator` (see
   [ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)): its
   `DATABASE_URL` login already is that role, and the migration runner verifies

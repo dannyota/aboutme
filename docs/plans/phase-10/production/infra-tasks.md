@@ -111,8 +111,8 @@ provider.
   (`String`), `auth-email/active-key`, `password-rate-hmac-key`,
   `tls/origin-key`, `tls/origin-cert` (`String`, written by Task 11),
   `tls/origin-pull-ca` (`String`).
-- Task definition families: `aboutme-prod-app`, `-web`, `-migrate`,
-  `-db-bootstrap`, `-db-provision`, `-db-set-login`, `-jobs`.
+- Task definition families: `aboutme-prod-app`, `-web`, `-migrate`, `-db-setup`,
+  `-jobs`.
 - Container names used by Task 13: `caddy`, `server`, `web`, `migrate`, `jobs`,
   `admin`.
 
@@ -135,14 +135,15 @@ task roles: `app` (media bucket access under `resumes/*` plus
 `jobs` (media bucket access only). Every role logs to `/aboutme/prod` (180-day
 retention).
 
-The tasks module renders the seven task definition families. `app` runs on the
-host network with two containers: `server` (port 8080, health check on
-`/healthz`, environment includes `PRINT_LISTEN_ADDR`, `MCP_ENABLED=true`,
-media/SES/build-digest settings) and `caddy` (port 443, tmpfs `/run/caddy`,
-`CLOUDFLARE_RANGES`, depends on `server` being healthy). `web`, `migrate` and
-the three first-deploy families (`db-bootstrap`, `db-provision`, `db-set-login`,
-container name `admin`) run bridge-network, single-container, no task role; the
-first-deploy families share the `db-admin` execution role and read `PGPASSWORD`
+The tasks module renders the task definition families (five since
+[ADR 0038](../../../adr/0038-single-baseline-and-plain-migrator.md) collapsed
+first-deploy setup into one task). `app` runs on the host network with two
+containers: `server` (port 8080, health check on `/healthz`, environment
+includes `PRINT_LISTEN_ADDR`, `MCP_ENABLED=true`, media/SES/build-digest
+settings) and `caddy` (port 443, tmpfs `/run/caddy`, `CLOUDFLARE_RANGES`,
+depends on `server` being healthy). `web`, `migrate` and the first-deploy family
+(`db-setup`, container name `admin`) run bridge-network, single-container, no
+task role; `db-setup` uses the `db-admin` execution role and reads `PGPASSWORD`
 from the RDS master secret. `jobs` runs the `server` binary under the `jobs`
 task role; the scheduler (Task 12) supplies its command.
 

@@ -62,7 +62,7 @@ Values live in SSM Parameter Store under `/aboutme/prod/`. Never print them.
   `wl-copy --clear && tls.sh forget-pull`. The deploy after a new CA picks up
   the new trust pool.
 - The RDS master password is managed by RDS in Secrets Manager. Only the
-  one-shot `db-admin` tasks can read it.
+  one-shot `db-setup` task can read it.
 
 List names only:
 
