@@ -1,14 +1,14 @@
-// Regression test for the independent re-review's finding C1: goose's
-// exported Provider.Status always requests the configured advisory lock
-// internally when a SessionLocker is configured (Provider.status calls
+// Regression test proving Status is genuinely lock-free: goose's exported
+// Provider.Status always requests the configured advisory lock internally
+// when a SessionLocker is configured (Provider.status calls
 // initialize(ctx, true) — verified against pressly/goose/v3@v3.27.3's
-// source). A prior version of this package routed a fast lock-wait budget
-// into Status's own provider, which still took the real lock, just
-// faster; it did not skip it. Status must be genuinely lock-free through
-// its pinned repeatable-read, read-only transaction, so a readiness check
-// built on it (cmd/migrate's `-check` flag) can run concurrently with an
-// in-progress deploy instead of blocking for the full lock-wait budget and
-// then failing.
+// source), so only a provider built with no SessionLocker at all (see
+// migrations.go's newLockFreeProvider) skips lock acquisition; a fast
+// lock-wait budget on a locked provider still takes the real lock, just
+// faster. Status runs through its pinned repeatable-read, read-only
+// transaction, so a readiness check built on it (cmd/migrate's `-check`
+// flag) can run concurrently with an in-progress deploy instead of
+// blocking for the full lock-wait budget and then failing.
 package migrations_test
 
 import (
@@ -36,18 +36,22 @@ func TestStatus_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	t.Parallel()
 
 	dsn := newTestDatabase(t)
-	db := openTestDB(t, dsn)
+	db, err := migrations.Open(dsn)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
+		}
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), statusLockFreeTimeout)
 	defer cancel()
 
 	// Apply the real embedded migrations first so Status has real,
 	// non-trivial state to report on, not just an empty database.
-	if err := migrations.ProvisionDatabase(ctx, db); err != nil {
-		t.Fatalf("ProvisionDatabase() error: %v", err)
-	}
-	identity := migrations.LocalAdminMigratorIdentity()
-	if _, err := migrations.Apply(ctx, db, identity); err != nil {
+	if _, err := migrations.Apply(ctx, db); err != nil {
 		t.Fatalf("Apply() error: %v", err)
 	}
 
@@ -73,7 +77,7 @@ func TestStatus_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	}
 
 	start := time.Now()
-	statuses, err := migrations.Status(ctx, db, identity)
+	statuses, err := migrations.Status(ctx, db)
 	elapsed := time.Since(start)
 
 	if err != nil {

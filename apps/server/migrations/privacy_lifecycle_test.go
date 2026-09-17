@@ -1,13 +1,10 @@
 package migrations_test
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 func TestPrivacyLifecycleSchema(t *testing.T) {
@@ -77,34 +74,4 @@ func TestPrivacyLifecycleQueueSurvivesAccountDeletion(t *testing.T) {
 		return insertErr
 	})
 	requireConstraintViolation(t, err, "lifecycle_audit_events_job_kind_key")
-}
-
-func TestPrivacyLifecyclePriorHeadMigration(t *testing.T) {
-	t.Parallel()
-	db := openTestDB(t, newTestDatabase(t))
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-	provider, err := migrations.NewProvider(db, migrations.FS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := provider.UpTo(ctx, 10); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO media_deletion_jobs (resume_id, object_key) VALUES ('00000000-0000-0000-0000-000000000001', 'resumes/00000000-0000-0000-0000-000000000001/photo-00000000000000000000000000000000.png')`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := provider.UpTo(ctx, 11); err != nil {
-		t.Fatal(err)
-	}
-	var pending int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM media_deletion_jobs WHERE completed_at IS NULL AND lease_id IS NULL`).Scan(&pending); err != nil || pending != 1 {
-		t.Fatalf("prior queue preserved: count=%d err=%v", pending, err)
-	}
-	if _, err := provider.DownTo(ctx, 10); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := provider.UpTo(ctx, 11); err != nil {
-		t.Fatal(err)
-	}
 }

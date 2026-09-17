@@ -2,17 +2,22 @@ package testutil
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/dannyota/aboutme/apps/server/internal/dbroles"
 )
 
-// BootstrapTestDatabaseRoles ensures cluster roles through the common postgres database.
+// BootstrapTestDatabaseRoles ensures the fixed aboutme_migrator/aboutme_app
+// roles exist and applies databaseURL's database and schema grants --
+// exactly what a real deployment's db-setup does before migrating. Safe to
+// call repeatedly, including from multiple test databases that share a
+// cluster: role creation is idempotent cluster-wide, and the grants it
+// (re)applies are idempotent per database (see internal/dbroles.Ensure).
 func BootstrapTestDatabaseRoles(t *testing.T, databaseURL string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -23,12 +28,10 @@ func BootstrapTestDatabaseRoles(t *testing.T, databaseURL string) {
 }
 
 func bootstrapTestDatabaseRoles(ctx context.Context, databaseURL string) (resultErr error) {
-	config, err := pgx.ParseConfig(databaseURL)
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		return errors.New("testutil: invalid role-bootstrap connection configuration")
 	}
-	config.Database = "postgres"
-	db := stdlib.OpenDB(*config)
 	db.SetMaxOpenConns(1)
 	defer func() {
 		if err := db.Close(); err != nil {

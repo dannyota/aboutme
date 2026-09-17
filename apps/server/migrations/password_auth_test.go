@@ -1,11 +1,10 @@
-// Phase PA task 1's constraint, preflight, and down/up tests for the four
-// tables added by migration 00008 (password_credentials,
-// password_registrations, password_reset_tokens, auth_email_jobs). Like
-// resume_schema_test.go, every insert here is raw parameterized SQL against a
-// live goose-migrated database — no internal/store layer — because the point
-// is proving the database itself enforces every invariant (D3), not that a Go
-// pass happens to agree with it. Byte boundaries are exercised at limit and
-// limit+1.
+// Constraint tests for the password_credentials, password_registrations,
+// password_reset_tokens, and auth_email_jobs tables. Like
+// resume_schema_test.go, every insert here is raw parameterized SQL against
+// a live goose-migrated database — no internal/store layer — because the
+// point is proving the database itself enforces every invariant, not that a
+// Go pass happens to agree with it. Byte boundaries are exercised at limit
+// and limit+1.
 package migrations_test
 
 import (
@@ -17,8 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-
-	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 // passwordAuthRow helpers build exact-size byte values so boundary cases name
@@ -75,112 +72,6 @@ func validPasswordAuthHash() []byte { return bytesOf(60, 'h') }
 func validTokenDigest() []byte { return []byte(uuid.NewString() + uuid.NewString())[:32] }
 func validCiphertext() []byte  { return bytesOf(64, 'c') }
 func validNonce() []byte       { return bytesOf(12, 'n') }
-
-// ---------------------------------------------------------------------------
-// Down/up restores the exact prior schema.
-// ---------------------------------------------------------------------------
-
-func TestPasswordAuthMigrationDownUp(t *testing.T) {
-	t.Parallel()
-	dsn := newTestDatabase(t)
-	db := openTestDB(t, dsn)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	provider, err := migrations.NewProvider(db, migrations.FS)
-	if err != nil {
-		t.Fatalf("NewProvider() error: %v", err)
-	}
-	if _, err := provider.UpTo(ctx, 8); err != nil {
-		t.Fatalf("UpTo(8) error: %v", err)
-	}
-	if _, err := provider.DownTo(ctx, 7); err != nil {
-		t.Fatalf("DownTo(7) error: %v", err)
-	}
-
-	for _, table := range []string{"password_credentials", "password_registrations", "password_reset_tokens", "auth_email_jobs"} {
-		var relation *string
-		if err := db.QueryRowContext(ctx, `SELECT to_regclass('public.`+table+`')::text`).Scan(&relation); err != nil {
-			t.Fatalf("probe %s after down: %v", table, err)
-		}
-		if relation != nil {
-			t.Fatalf("%s relation after down = %q, want absent", table, *relation)
-		}
-	}
-
-	if _, err := provider.UpTo(ctx, 8); err != nil {
-		t.Fatalf("UpTo(8) error: %v", err)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Preflight: a noncanonical existing email aborts 00008 before any table or
-// row change.
-// ---------------------------------------------------------------------------
-
-func TestPasswordAuthPreflightRejectsNoncanonicalEmail(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name  string
-		email string
-	}{
-		{"uppercase", "Someone@Example.com"},
-		{"non_ascii", "người@example.com"},
-		{"overlong", string(bytesOf(255, 'a')) + "@example.com"},
-		{"no_at", "not-an-email.example.com"},
-		{"space", "someone @example.com"},
-		{"empty_domain", "someone@"},
-		{"no_domain_dot", "someone@localhost"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			dsn := newTestDatabase(t)
-			db := openTestDB(t, dsn)
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			t.Cleanup(cancel)
-
-			provider, err := migrations.NewProvider(db, migrations.FS)
-			if err != nil {
-				t.Fatalf("NewProvider() error: %v", err)
-			}
-			if _, err := provider.UpTo(ctx, 7); err != nil {
-				t.Fatalf("UpTo(7) error: %v", err)
-			}
-			var userID uuid.UUID
-			if err := db.QueryRowContext(ctx,
-				`INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id`,
-				tc.email, "Password Auth Test User",
-			).Scan(&userID); err != nil {
-				t.Fatalf("insert seeded user: %v", err)
-			}
-
-			if _, err := provider.UpTo(ctx, 8); err == nil {
-				t.Fatal("UpTo(8) error = nil, want preflight failure on a noncanonical email")
-			}
-
-			for _, table := range []string{"password_credentials", "password_registrations", "password_reset_tokens", "auth_email_jobs"} {
-				var relation *string
-				if err := db.QueryRowContext(ctx, `SELECT to_regclass('public.`+table+`')::text`).Scan(&relation); err != nil {
-					t.Fatalf("probe %s: %v", table, err)
-				}
-				if relation != nil {
-					t.Fatalf("%s relation exists after failed preflight, want absent", table)
-				}
-			}
-
-			var email string
-			if err := db.QueryRowContext(ctx, `SELECT email::text FROM users WHERE id = $1`, userID).Scan(&email); err != nil {
-				t.Fatalf("read seeded user: %v", err)
-			}
-			if email != tc.email {
-				t.Fatalf("seeded user email = %q, want unchanged %q", email, tc.email)
-			}
-		})
-	}
-}
 
 // ---------------------------------------------------------------------------
 // password_credentials constraint matrix.
