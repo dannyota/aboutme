@@ -1,8 +1,8 @@
 -- +goose Up
 -- Baseline migration (ADR 0038): the full schema before the first
--- production deploy. Column order, constraint names, index names, and
--- function/trigger bodies match the released schema exactly, so sqlc
--- output stays byte-identical. See ADR 0038 and docs/design/data.md.
+-- production deploy, including every table, index, function, and
+-- trigger, plus aboutme_app's explicit grant on each business table.
+-- See ADR 0038 and docs/design/data.md.
 CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE users (
