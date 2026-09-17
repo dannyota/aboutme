@@ -73,7 +73,7 @@ through SSM.
 | `app` (service) | host    | Caddy, Go  | Always; desired and maximum count one |
 | `web` (service) | bridge  | Nuxt       | Always                                |
 | `migrate`       | bridge  | server     | Every deploy, before `app` starts     |
-| `db-admin` (3)  | bridge  | server     | First deploy only                     |
+| `db-admin`      | bridge  | server     | First deploy only                     |
 | `jobs`          | bridge  | server     | EventBridge Scheduler                 |
 
 The trust boundaries match the Compose deployment:
@@ -134,36 +134,34 @@ its password in Secrets Manager. It is not a superuser.
 ```mermaid
 sequenceDiagram
   participant D as deploy.sh
-  participant A as db-admin tasks (as aboutme)
+  participant A as db-admin task (as aboutme)
   participant M as migrate (as aboutme_migrator)
   participant S as app (as aboutme_app)
   participant P as RDS
   Note over D,A: first deploy only
-  D->>A: db-role-bootstrap
-  A->>P: create fixed roles, no passwords
-  D->>A: migrate provision
-  A->>P: database and schema grants for migrator
-  D->>A: set-login
+  D->>A: db-setup
+  A->>P: create fixed roles, database and schema grants
   A->>P: SCRAM verifiers for migrator and app
   Note over D,S: every deploy
-  D->>M: migrate apply, MIGRATION_IDENTITY=direct
+  D->>M: migrate apply
   M->>P: pending migrations under advisory lock
   M-->>D: exit 0
   D->>S: start app
   S->>P: serve with pool of at most 20
 ```
 
-- `db-role-bootstrap` works for a non-superuser holding CREATEROLE.
-- `migrate provision` requires `session_user` `aboutme` owning the database and
-  no superuser, because database and `public` schema grants need only ownership.
-  History adoption keeps its superuser requirement and stays local-only.
-- `set-login` is a new fixed command. It accepts only `aboutme_migrator` and
-  `aboutme_app`, reads their passwords from its environment, and sends a
-  client-computed SCRAM-SHA-256 verifier, so no plaintext password reaches
-  PostgreSQL logs. The other login roles keep no password until needed.
-- Provisioning refuses to run once the migration foundation exists. Bootstrap
-  reruns only verify. The deploy script runs these steps only with
-  `--first-deploy`.
+- `db-setup` (`cmd/db-setup`) is one idempotent command run as the RDS master
+  user `aboutme`, which owns the database but is not a superuser: it creates any
+  missing fixed role, fails closed on attribute or membership drift in an
+  existing one, applies database and schema grants, and, when both
+  `MIGRATOR_PASSWORD` and `APP_PASSWORD` are set, stores their SCRAM-SHA-256
+  verifiers so no plaintext password reaches PostgreSQL logs.
+- `db-setup` reruns only verify; it never weakens an existing grant. The deploy
+  script runs it only with `--first-deploy`.
+- `migrate` always runs as `aboutme_migrator` (see
+  [ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)): its
+  `DATABASE_URL` login already is that role, and the migration runner verifies
+  this on every connection, so no separate identity flag selects it.
 
 ## Secrets and identity
 
@@ -219,7 +217,7 @@ starts.
 3. Register new task definition revisions by digest.
 4. Disable the job schedules, scale `app` to zero and wait. The site is down
    from here.
-5. With `--first-deploy`, run the three `db-admin` steps.
+5. With `--first-deploy`, run the `db-admin` `db-setup` task.
 6. Run `migrate` and require exit 0.
 7. Update `web`, then `app`, wait for steady state, and re-enable the job
    schedules.
@@ -239,7 +237,8 @@ migration, recovery is a forward fix or a point-in-time restore.
 
 `apps/server/migrations/.uat-baseline` freezes the existing migrations; only new
 forward migrations may be added, per
-[ADR 0020](../adr/0020-uat-migration-baseline.md).
+[ADR 0020](../adr/0020-uat-migration-baseline.md) and
+[ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md).
 
 OpenTofu owns infrastructure and first task definitions and ignores later
 revisions on the services.

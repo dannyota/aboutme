@@ -2,7 +2,7 @@
 
 The repository currently ships a Podman Compose deployment for local evaluation.
 It runs PostgreSQL, private MinIO object storage, the Go API, Nuxt, Caddy, a
-one-shot database-role bootstrap, a goose migration service, and a
+one-shot database role and grant setup, a goose migration service, and a
 private-bucket initializer.
 
 This artifact is not ready for direct Internet exposure. Its Caddy listener is
@@ -68,18 +68,18 @@ curl --fail http://localhost:8080/healthz
 curl --fail http://localhost:8080/readyz
 ```
 
-Use `http://localhost` when `CADDY_HTTP_PORT` is unset. Role bootstrap must pass
+Use `http://localhost` when `CADDY_HTTP_PORT` is unset. Database setup must pass
 before migrations; migrations and bucket initialization must pass before the
-server starts. Bootstrap creates missing fixed roles without passwords and
-verifies existing permissions. It stops on privilege drift without changing
-existing roles or credentials.
+server starts. Setup creates missing fixed roles without passwords, applies
+their grants, and verifies existing permissions. It stops on privilege drift
+without changing existing roles or credentials.
 
 Only Caddy publishes a host port. PostgreSQL and MinIO stay inside separate
 Compose networks. Only MinIO, its initializer, and Go join the `media` network;
-Caddy and Nuxt cannot reach object storage. The server, role bootstrap and
+Caddy and Nuxt cannot reach object storage. The server, database setup and
 migration processes receive the database password through `PGPASSWORD`; it is
 not inserted into a URI. Current Compose still uses the initialization login for
-application access; hosted role separation remains Phase 10 work.
+application access; hosted deployment uses the separate `aboutme_app` role.
 
 Inspect logs without printing `.env`:
 

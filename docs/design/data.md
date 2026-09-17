@@ -33,8 +33,10 @@ intended model, not replacement DDL.
 | `public_state`              | Singleton durable discovery generation advanced with public-membership mutations                                          |
 
 Runtime coordination tables, such as the write barrier, replica membership,
-claims, rate buckets and publication transitions, are defined in the
-[runtime schema](scaling/runtime-schema.md).
+claims, rate buckets and publication transitions, are not part of the current
+schema. Their design is kept in [the runtime schema](scaling/runtime-schema.md)
+as reference for a later fleet
+([ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)).
 
 Server-owned relational rows use PostgreSQL UUIDv7 defaults. Client-generated
 UUIDs occur only inside resume documents as entry identifiers.
@@ -176,7 +178,8 @@ not need one compiled code path per old version.
   DDL is hand-written, applied by the embedded goose command, read by sqlc, and
   is append-only under the baseline marker
   ([ADR 0010](../adr/0010-goose-only-migrations.md),
-  [ADR 0020](../adr/0020-uat-migration-baseline.md)).
+  [ADR 0020](../adr/0020-uat-migration-baseline.md),
+  [ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)).
 - Generated artifacts are committed and changed only through their source and
   generator.
 

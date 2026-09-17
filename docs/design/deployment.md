@@ -195,7 +195,10 @@ takes the migration advisory lock and applies pending goose migrations exactly
 once, so a second concurrent runner is safe rather than expected. With one
 replica this interrupts service briefly, which ADR 0036 accepts.
 `apps/server/migrations/.uat-baseline` makes existing migrations immutable
-([ADR 0020](../adr/0020-uat-migration-baseline.md)).
+([ADR 0020](../adr/0020-uat-migration-baseline.md),
+[ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)). Every migration
+runs as the fixed `aboutme_migrator` role, which `db-setup` (`cmd/db-setup`)
+creates and grants ahead of the first deploy.
 
 The migration runner uses goose's Provider with a PostgreSQL session advisory
 locker. The Provider acquires the lock before it checks which migrations remain
