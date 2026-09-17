@@ -134,7 +134,7 @@ resource "aws_iam_role_policy" "app" {
     Version = "2012-10-17"
     Statement = concat(local.media_statements, [{
       Effect    = "Allow"
-      Action    = ["ses:SendEmail", "ses:SendRawEmail"]
+      Action    = ["ses:SendEmail"]
       Resource  = "*"
       Condition = { StringEquals = { "ses:FromAddress" = var.ses_from_address } }
     }])

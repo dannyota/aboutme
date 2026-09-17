@@ -1,4 +1,4 @@
-# Copy to prod.tfvars (ignored) and fill in. Later tasks add variables here.
+# Copy to prod.tfvars (ignored) and fill in.
 account_id        = ""
 state_kms_key_arn = ""
 media_bucket_name = "aboutme-prod-media-<account id>"

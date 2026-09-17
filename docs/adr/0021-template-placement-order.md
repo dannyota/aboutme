@@ -1,4 +1,4 @@
-# 0021 — Template placement has one deterministic total order
+# 0021: Template placement has one deterministic total order
 
 Status: Accepted (2026-08-12)
 

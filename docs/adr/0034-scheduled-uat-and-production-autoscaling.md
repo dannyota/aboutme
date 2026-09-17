@@ -1,13 +1,16 @@
-# 0034 — Scheduled UAT and production application autoscaling
+# 0034: Scheduled UAT and production application autoscaling
 
-Status: Accepted (2026-09-06), by the human owner's direction.
+Status: Accepted (2026-09-06), by the human owner's direction. Superseded in
+part by [ADR 0035](0035-replica-coordination-and-uat-lifecycle.md),
+[ADR 0036](0036-single-replica-launch-and-pipeline-migrations.md), and
+[ADR 0037](0037-single-host-production-without-hosted-uat.md).
 
 ## Context
 
-The Phase 9 comparison baseline used one ECS on EC2 Graviton host, a stable
-elastic IP, fixed host ports, and no application load balancer or horizontal
-scaling. It also treated UAT as a disposable environment rather than one that is
-normally stopped between test windows.
+The comparison baseline used one ECS on EC2 Graviton host, a stable elastic IP,
+fixed host ports, and no application load balancer or horizontal scaling. It
+also treated UAT as a disposable environment rather than one that is normally
+stopped between test windows.
 
 The owner selected ECS on EC2 Graviton with RDS PostgreSQL in Singapore. The
 production application tier must increase and decrease capacity automatically,
@@ -37,15 +40,15 @@ bounds as well as those invariants.
   healthy replica afterward.
 - Nodes use public IPv4 for outbound access to avoid a NAT gateway. Node ingress
   is restricted to the ALB security group and the origin-secret boundary.
-  CloudFront reaches the ALB with HTTPS. Phase 10 must resolve and prove the
-  ALB-to-Caddy TLS and authentication model, source-specific forwarding chain,
-  and absence of an ALB or node bypass before implementation. The design must
+  CloudFront reaches the ALB with HTTPS. Implementation must resolve and prove
+  the ALB-to-Caddy TLS and authentication model, source-specific forwarding
+  chain, and absence of an ALB or node bypass before deployment. The design must
   account for the ALB target TLS behavior instead of assuming native target
   certificate validation.
-- Phase 10 begins with a bounded distributed-runtime design and implementation
-  contract. It owns shared publication-generation fences and admitted-request
-  drains; account deletion, private-media deletion, and artifact-revocation
-  ordering; replica-safe render jobs, one-use print capability redemption, and
+- A bounded distributed-runtime design and implementation contract is required.
+  It owns shared publication-generation fences and admitted-request drains;
+  account deletion, private-media deletion, and artifact-revocation ordering;
+  replica-safe render jobs, one-use print capability redemption, and
   origin-replica routing; SSE fanout, rechecks, reconnect repair, and scale-in
   draining; fleet-wide rate and heavy-work limits; per-task 512 MiB bounds and
   the RDS/pgx connection budget; colocated network trust; startup readiness; and
@@ -72,31 +75,31 @@ bounds as well as those invariants.
 ## Supersession
 
 This decision supersedes single-host-only placement and routing, the stable-EIP
-origin, and the no-load-balancer clauses in the deployment design and Phase 10
+origin, and the no-load-balancer clauses in the deployment design and
 infrastructure baseline. Fixed ports may remain inside one colocated replica if
-Task 10.18 proves its placement and isolation. It does not claim that the
+implementation proves its placement and isolation. It does not claim that the
 current application or infrastructure code already implements replica safety,
 autoscaling, or scheduled UAT.
 
 ADR 0031 still owns the Singapore region, UAT and Cloudflare authorization, and
-the separate Phase 11 production approval. ADR 0033 still owns public image
-builds and private publication and deployment.
+the separate launch approval. ADR 0033 still owns public image builds and
+private publication and deployment.
 
 ## Consequences
 
-Phase 10 must update its infrastructure contracts before dispatch. The temporary
-UAT ALB cannot accrue a full idle month. RDS storage, keys, state, ECR images,
-and required logs remain after application nodes terminate. The cost model may
-keep a full-month 30 GB root-disk and public-IPv4 reserve as conservative
-headroom; it does not claim those resources persist after normal termination.
-Any orphaned volume or address requires cleanup. Schedules reconcile ECS desired
-capacity and Auto Scaling group capacity so host replacement cannot turn a
-stopped environment back on.
+Infrastructure contracts must be updated to match before implementation. The
+temporary UAT ALB cannot accrue a full idle month. RDS storage, keys, state, ECR
+images, and required logs remain after application nodes terminate. The cost
+model may keep a full-month 30 GB root-disk and public-IPv4 reserve as
+conservative headroom; it does not claim those resources persist after normal
+termination. Any orphaned volume or address requires cleanup. Schedules
+reconcile ECS desired capacity and Auto Scaling group capacity so host
+replacement cannot turn a stopped environment back on.
 
 The one-host deployment remains useful only as historical comparison context and
 an interim UAT implementation if it is never represented as the production
-target or as scaling evidence. Production launch remains Phase 11 and requires
-separate owner approval.
+target or as scaling evidence. Production launch remains a separate decision
+requiring owner approval.
 
 ## Later decision: replica scaling (2026-09-06)
 

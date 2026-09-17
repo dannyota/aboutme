@@ -1,4 +1,4 @@
-# 0002 — Go API + Nuxt SSR with one shared renderer
+# 0002: Go API + Nuxt SSR with one shared renderer
 
 Status: Accepted (2026-08-01)
 

@@ -1,4 +1,4 @@
-# 0012 — Go is the sole SSR sanitization authority; DOMPurify is client-only
+# 0012: Go is the sole SSR sanitization authority; DOMPurify is client-only
 
 Status: Accepted (2026-08-11)
 
@@ -14,17 +14,15 @@ plain reading of "render" puts DOMPurify inside the SSR path.
 
 Three further documents restate that reading rather than resolve it:
 [template contract §5.5](../design/templates/contract.md#55-rich-text) ("The
-renderer re-sanitizes with DOMPurify against the same versioned allowlist"),
-`docs/plans/implementation-plan.md` (the security-testing row names the corpus
-surfaces as "bluemonday+DOMPurify+SSR+real browser"), and the `packages/schema`
-validation artifacts, which describe DOMPurify as the "render path" without
-qualification. Phase 3 ruled the opposite way in
-`docs/plans/phase-3/decisions.md` D3, and the whole of
-`task-03-client-render-sanitizer.md` is written to that ruling — but D3 is a
-plan-level note, the master plan still lists the question as a pre-dispatch
-blocker, and no ADR exists on sanitizer authority. The contradiction is
-therefore live in four places at once, and it decides a production dependency,
-so it cannot be left to the implementer.
+renderer re-sanitizes with DOMPurify against the same versioned allowlist"), the
+delivery plan's security-testing row (which names the corpus surfaces as
+"bluemonday+DOMPurify+SSR+real browser"), and the `packages/schema` validation
+artifacts, which describe DOMPurify as the "render path" without qualification.
+A prior planning note ruled the opposite way, reaching the conclusion this ADR
+ratifies, but that ruling was plan-level only, not binding, and no ADR existed
+yet on sanitizer authority. The contradiction was therefore live in four places
+at once, and it decides a production dependency, so it cannot be left to the
+implementer.
 
 Two facts settle it.
 
@@ -35,8 +33,8 @@ no outbound network access. That is a large, network-capable surface added to
 the one process that renders untrusted documents.
 
 An SSR DOMPurify pass would also be the only pass. Vue's `hydrateElement`
-re-applies event handlers, value props, and `.prop` keys — never `innerHTML` —
-so on an SSR'd page whatever the server serialized is what Blink keeps, and a
+re-applies event handlers, value props, and `.prop` keys, never `innerHTML`, so
+on an SSR'd page whatever the server serialized is what Blink keeps, and a
 client-side pass contributes nothing there. The earlier hydration rationale for
 requiring DOMPurify on both sides was factually wrong.
 
@@ -45,13 +43,13 @@ requiring DOMPurify on both sides was factually wrong.
 **Go (bluemonday) is the sole sanitization authority for anything SSR renders.
 DOMPurify is client-only.**
 
-- P2B wires `sanitize.RichText` into every rich-text write path, and the Go
-  **public read path re-sanitizes** as defense in depth, so a document stored
+- The write path wires `sanitize.RichText` into every rich-text write, and the
+  Go **public read path re-sanitizes** as defense in depth, so a document stored
   before an allowlist change cannot be served under the old rules.
 - The renderer's `RichText` primitive calls DOMPurify under `import.meta.client`
   only, and always **before** any `innerHTML` assignment. On SSR it passes the
   string through. The client pass guards the surfaces where the server did not
-  produce the markup: P4's editor preview and P6B's SSE-refetch re-render.
+  produce the markup: the editor preview and the SSE-refetch re-render.
 - **The built server bundle contains no `dompurify` and no `jsdom`.** `jsdom`
   stays a test-only devDependency (the Vitest environment). This is asserted
   against the built output, not merely intended.
@@ -64,45 +62,46 @@ DOMPurify is client-only.**
 
 Each of the following disagreed with this decision and is corrected by this ADR:
 
-- The former monolithic design's §5 — the renderer-tree line ("`RichText` w/
+- The former monolithic design's §5: the renderer-tree line ("`RichText` w/
   DOMPurify re-sanitize") and the sanitizer-contract line ("bluemonday (write)
   and DOMPurify (render)"). Both are edited in the same change; the design spec
   is `DRAFT v3` and this is the design owner's ruling, so the correction lands
   in the text rather than only here. The result now lives in the
   [web rich-text design](../design/web.md#rich-text).
-- [Template contract §5.5](../design/templates/contract.md#55-rich-text) — "the
+- [Template contract §5.5](../design/templates/contract.md#55-rich-text): "the
   renderer re-sanitizes with DOMPurify" is scoped to the client render path.
   Edited in the same change.
-- `docs/plans/implementation-plan.md` — the security-testing row and the hostile
-  corpus paragraph list "bluemonday+DOMPurify+SSR+real browser". The four
-  surfaces stand; "SSR" is not to be read as DOMPurify executing under Node.
+- The delivery plan's security-testing row and hostile corpus paragraph list
+  "bluemonday+DOMPurify+SSR+real browser". The four surfaces stand; "SSR" is not
+  to be read as DOMPurify executing under Node.
 - `packages/schema/README.md`,
   `packages/schema/validation/sanitizer-allowlist.v1.json`,
-  `packages/schema/validation/hostile-corpus.json`, and `.semgrep.yml` — each
+  `packages/schema/validation/hostile-corpus.json`, and `.semgrep.yml`: each
   describes DOMPurify as the "render path" sanitizer. True of the **client**
   render path only.
-- `docs/plans/phase-3/decisions.md` D3 reached this conclusion first. This ADR
-  ratifies it and makes it authority rather than a plan note.
+- A prior planning note reached this conclusion first. This ADR ratifies it and
+  makes it authority rather than a plan note.
 
 ## Consequences
 
 - The SSR path loses one parser boundary. Three parsers in series (`x/net/html`
   → parse5 → Blink) is where mutation-XSS lives, and this decision leaves two
   (`x/net/html` → Blink). That cost is accepted knowingly. The mitigation is
-  that the shared hostile corpus proves neutralization **on the SSR output** —
-  bluemonday's committed output through `renderToString` — rather than assuming
-  a second sanitizer would have caught what the first missed.
+  that the shared hostile corpus proves neutralization **on the SSR output**,
+  bluemonday's committed output through `renderToString`, rather than assuming a
+  second sanitizer would have caught what the first missed.
 - The Go public-read re-sanitize stops being an "owner-landing item" and becomes
-  a required P2B/P5A deliverable. Without it, the defense-in-depth half of this
-  decision does not exist and Go's write-time pass is the only barrier.
-- Phase 3's Task 3 keeps its interface and its build assertion that the server
-  bundle contains no `dompurify`; that assertion is now the mechanical check for
-  this ADR and must not be weakened to a source-level grep.
+  a required deliverable. Without it, the defense-in-depth half of this decision
+  does not exist and Go's write-time pass is the only barrier.
+- The build assertion that the server bundle contains no `dompurify` stays. It
+  is the mechanical check for this ADR and must not be weakened to a
+  source-level grep.
 - Assigning `innerHTML` from server-provided HTML on a client path without the
   DOMPurify pass is a defect this ADR names in advance, and is what the
   `.semgrep.yml` rules exist to catch.
 - The CSP backstop is unaffected. It was never load-bearing for this split, and
-  the renderer-surface baseline CSP stays as phase 3's D5 defines it.
+  the renderer-surface baseline CSP stays as the
+  [rich-text design](../design/web.md#rich-text) defines it.
 - If a future change needs DOMPurify on the server, it needs a new ADR and it
   needs to justify the `jsdom` dependency against the no-outbound-network
-  posture — not merely observe that the spec once implied it.
+  posture. It is not enough to observe that the spec once implied it.

@@ -1,4 +1,4 @@
-# 0038 — Single baseline migration and plain migrator
+# 0038: Single baseline migration and plain migrator
 
 Status: Accepted (2026-09-17), by the human owner's direction.
 

@@ -1,6 +1,7 @@
-# 0020 — First UAT freezes migration history
+# 0020: First UAT freezes migration history
 
-Status: Accepted (2026-08-12)
+Status: Accepted (2026-08-12). Superseded in part by
+[ADR 0038](0038-single-baseline-and-plain-migrator.md).
 
 ## Context
 

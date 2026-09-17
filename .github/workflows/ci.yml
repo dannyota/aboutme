@@ -35,6 +35,7 @@ jobs:
       - run: npm ci
         working-directory: deploy/dev-https-browser
       - run: make docs-lint
+      - run: make lengths-check
       - run: make operational-test
 
   schema:
@@ -251,11 +252,11 @@ jobs:
       - run: make server-test-db
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      - run: make server-test-p2b
+      - run: make server-test-resumeapi
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
       - run: make test-s3-up
-      - run: make server-test-p2b-s3
+      - run: make server-test-resumeapi-s3
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
       - if: always()
@@ -360,10 +361,9 @@ jobs:
 
   # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
   # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
-  # It replaces the separate osv-scanner job: Supply Chain covers dependency
-  # CVEs across both ecosystems. It authenticates with SEMGREP_APP_TOKEN, which
-  # GitHub withholds from FORK pull requests, so run it on push and same-repo
-  # PRs only — a fork PR would have no token and fail.
+  # Supply Chain covers dependency CVEs for Go and npm. It authenticates with
+  # SEMGREP_APP_TOKEN, which GitHub withholds from FORK pull requests, so run
+  # it on push and same-repo PRs only — a fork PR would have no token and fail.
   semgrep:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -380,9 +380,6 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-  # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005) through a
-  # live caddy process fronting stub backends. Needs a caddy binary but no
-  # database; pinned to 2.11.4 to match deploy/compose.yml's caddy image tag.
   # The migration suite is the slowest; it runs beside the other database
   # suites instead of after them.
   server-migrations:
@@ -427,6 +424,9 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
 
+  # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005) through a
+  # live caddy process fronting stub backends. Needs a caddy binary but no
+  # database; pinned to 2.11.4 to match deploy/compose.yml's caddy image tag.
   route-table:
     runs-on: ubuntu-latest
     steps:
@@ -462,10 +462,8 @@ jobs:
   # `git diff --exit-code`.
   #
   # This needs no database and no DATABASE_URL: sqlc parses the migration files
-  # statically. It replaces the former data-drift job, whose other half diffed
-  # sql/schema.sql against the migrations through Atlas — with one source there
-  # is nothing left to diff. sqlc stays pinned so the gate flags real drift
-  # rather than generator formatting changes.
+  # statically. sqlc stays pinned so the gate flags real drift rather than
+  # generator formatting changes.
   sqlc-drift:
     runs-on: ubuntu-latest
     steps:

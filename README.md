@@ -5,11 +5,10 @@ build resumes in one account and publish each resume at its own URL. Accounts do
 not have public profile pages.
 
 Status: authentication, the resume API and private media, the authenticated
-editor, and publishing with server-rendered public pages are on `main`.
-User-authorized MCP agent access is in its phase review. Realtime updates, PDF
-and image export, the privacy lifecycle workers, and production deployment
-remain planned. The [current-state architecture](docs/architecture.md) records
-exactly what exists.
+editor, publishing, agent access over MCP, realtime updates, PDF and image
+export, and the privacy workers are on `main`. Production infrastructure is
+built and not yet serving. The
+[current-state architecture](docs/architecture.md) records exactly what exists.
 
 The intended product and architecture live in the
 [Approved v4 design](docs/design/README.md).
@@ -35,28 +34,29 @@ The intended product and architecture live in the
 - Per-resume publishing with clean slug URLs, server-rendered public HTML,
   JSON-LD, Markdown, sitemap, robots, and `llms.txt`, and immediate revocation.
 - User-authorized agent access: first-party OAuth 2.1 with PKCE and a
-  bearer-authenticated MCP server with fifteen resume tools (in phase review).
+  bearer-authenticated MCP server with fifteen resume tools.
+
+- Live editor and public-page refresh over Server-Sent Events.
+- Owner PDF and image export.
+- Privacy workers: media deletion, orphan reconciliation, retention, and account
+  deletion.
 
 ## Planned v1
 
-- Publish-flow UX and live public-page refresh over Server-Sent Events.
-- PDF and image export.
-- Privacy lifecycle workers: media deletion, orphan reconciliation, and
-  retention.
-- Production infrastructure and deployment.
+- The first production deploy at `https://aboutme.vn`.
 
 Flutter is deferred until after the web service launches.
 
 ## Repository
 
-| Path              | Responsibility                                                                 |
-| ----------------- | ------------------------------------------------------------------------------ |
-| `apps/server`     | Go API: authentication, resume domain, media, publish, public read, OAuth, MCP |
-| `apps/web`        | Nuxt SSR, authenticated editor, renderer, public pages, generated API client   |
-| `apps/mobile`     | Deferred Flutter client                                                        |
-| `packages/schema` | Resume JSON Schema, immutable releases, generated types, fixtures, and presets |
-| `deploy`          | Compose deployment, Caddy route table, and the trusted browser harness         |
-| `docs`            | Design, ADRs, API contract, plans, guides, standards, and runbooks             |
+| Path              | Responsibility                                                                  |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `apps/server`     | Go API: authentication, resume domain, media, publish, public read, OAuth, MCP  |
+| `apps/web`        | Nuxt SSR, authenticated editor, renderer, public pages, generated API client    |
+| `apps/mobile`     | Deferred Flutter client                                                         |
+| `packages/schema` | Resume JSON Schema, immutable releases, generated types, fixtures, and presets  |
+| `deploy`          | Compose deployment, Caddy images, AWS OpenTofu modules, and the browser harness |
+| `docs`            | Design, ADRs, API contract, plans, guides, standards, and runbooks              |
 
 See the [documentation map](docs/README.md) for authority and lifecycle rules.
 
@@ -84,7 +84,7 @@ coordinated worker session, the integration owner runs it before integration.
 ## Self-hosting
 
 The current Compose artifact supports local deployment evaluation. It does not
-yet provide the HTTPS/443 path required for authentication UAT or safe public
+yet provide the HTTPS/443 path required for authentication checks or safe public
 exposure. See the [self-hosting guide](docs/guides/self-hosting.md) for its
 exact scope and limits.
 

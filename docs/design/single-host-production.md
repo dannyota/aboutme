@@ -103,19 +103,17 @@ The trust boundaries match the Compose deployment:
 - Chromium keeps its sandbox. Bottlerocket disables user namespaces, so the host
   sets `user.max_user_namespaces` to 16384, and the `app` server container adds
   `SYS_ADMIN` so Docker's seccomp profile allows the sandbox's namespaces. The
-  image runs as a non-root user, so the process gains no effective capability. A
-  probe on the production host (2026-09-17) showed the sandbox failing without
-  either setting and starting with both.
+  image runs as a non-root user, so the process gains no effective capability.
+  The sandbox fails to start without both settings.
 
 `t4g` instances do not support ENI trunking and allow two `awsvpc` tasks, and
 `awsvpc` tasks on EC2 cannot hold a public IP. That is why `app` uses host
-networking. A probe on Bottlerocket `aws-ecs-2` 1.65.0 (2026-09-16) confirmed
-the four facts this layout depends on: host-mode tasks receive task-role
-credentials, a bridge container reaches a host listener on `172.17.0.1`, a
-host-mode process reaches a bridge container's published port on `127.0.0.1`,
-and IMDSv2 hop limit one blocks bridge containers while host-mode containers
-still get a token. `deploy/aws/probe/` can rerun the probe after a Bottlerocket
-major update.
+networking. The layout depends on four facts, which hold on Bottlerocket
+`aws-ecs-2` 1.65.0: host-mode tasks receive task-role credentials, a bridge
+container reaches a host listener on `172.17.0.1`, a host-mode process reaches a
+bridge container's published port on `127.0.0.1`, and IMDSv2 hop limit one
+blocks bridge containers while host-mode containers still get a token.
+`deploy/aws/probe/` rechecks them after a Bottlerocket major update.
 
 Memory fits in 2 GiB: roughly 300 MiB for Bottlerocket and the agent, the
 existing 512 MiB Go and Chromium cap, and about 300 MiB for Nuxt and Caddy. A
@@ -155,7 +153,7 @@ sequenceDiagram
   S->>P: serve with pool of at most 20
 ```
 
-- `db-role-bootstrap` already works for a non-superuser holding CREATEROLE.
+- `db-role-bootstrap` works for a non-superuser holding CREATEROLE.
 - `migrate provision` requires `session_user` `aboutme` owning the database and
   no superuser, because database and `public` schema grants need only ownership.
   History adoption keeps its superuser requirement and stays local-only.
@@ -202,7 +200,8 @@ nothing.
 
 Non-secret configuration is plain task definition values: `ENV=prod`,
 `PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`, `PROVIDER_LOGIN_ENABLED`
-unset, `MEDIA_BACKEND=s3` without static keys, and the SES settings.
+unset (provider OAuth credentials are then not required), `MEDIA_BACKEND=s3`
+without static keys, and the SES settings.
 
 ## Release and deploy
 
@@ -213,7 +212,7 @@ prints the digests. The Caddy image carries the Caddyfile and generated route
 table; its entrypoint writes the Origin CA key to a tmpfs file before Caddy
 starts.
 
-`deploy/aws/deploy.sh <tag>` runs from the laptop:
+`deploy/aws/scripts/deploy.sh <tag>` runs from the laptop:
 
 1. Resolve the tag to digests. Require the tag on `main` with green CI.
 2. Take an RDS snapshot named for the tag and wait for it.
@@ -238,8 +237,8 @@ safe only when the failed release applied no migration, because this script does
 not run the prior-digest compatibility test from the deployment design. After a
 migration, recovery is a forward fix or a point-in-time restore.
 
-`apps/server/migrations/.uat-baseline` is committed before the first production
-migration. From then on, migrations are immutable, per
+`apps/server/migrations/.uat-baseline` freezes the existing migrations; only new
+forward migrations may be added, per
 [ADR 0020](../adr/0020-uat-migration-baseline.md).
 
 OpenTofu owns infrastructure and first task definitions and ignores later
@@ -254,7 +253,7 @@ EventBridge Scheduler runs the `jobs` task with the server image's privacy
 commands, per the [privacy runbook](../runbooks/privacy.md):
 `idempotency-expiry-sweep` and `media-deletion-sweep` hourly,
 `privacy-retention-sweep` daily, and `media-orphan-sweep` weekly. The commands
-already hold advisory locks against overlap.
+hold advisory locks against overlap.
 
 ## Monitoring and cost
 
@@ -292,21 +291,8 @@ dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
 - Public CI runs `tofu fmt -check` and `tofu validate` without cloud
   credentials. No workflow deploys.
 
-## Code changes
-
-The current code needs five changes before the first deploy:
-
-1. `migrate provision` accepts the non-superuser database owner.
-2. A fixed `set-login` command sends SCRAM verifiers for the two login roles.
-3. The server image ships the RDS CA bundle for `sslmode=verify-full`.
-4. Production allows the print listener at exactly `172.17.0.1:8081`, in Go's
-   configuration and in Nuxt's redemption allowlist.
-5. Provider OAuth credentials are required only when `PROVIDER_LOGIN_ENABLED` is
-   true, so the password-only release starts without them.
-
 ## Launch checks
 
-Before the first deploy: the code changes listed below pass their tests, the
-image smoke passes, and `tofu plan` is reviewed. Before announcing the site: one
-restore drill from a snapshot to a temporary instance, SES production access,
-and live privacy and terms pages.
+Before the first deploy: the tests pass, the image smoke passes, and `tofu plan`
+is reviewed. Before announcing the site: one restore drill from a snapshot to a
+temporary instance, SES production access, and live privacy and terms pages.

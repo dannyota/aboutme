@@ -57,13 +57,5 @@ Design v4 is approved. Changing a decision needs a new ADR; see the
 
 ## Writing and checks
 
-- Use relative links inside `docs/`.
-- Use Mermaid for Markdown diagrams.
-- Keep living Markdown files near 300 lines. Split larger subjects into a
-  directory with a `README.md` index and focused pages.
-- Delete a phase's plan when the phase exits; git history keeps it.
-- Move long-lived design reasoning out of code comments and into the owning
-  design page or ADR.
-- Run `make docs-fmt` and `make docs-lint` after Markdown or YAML changes.
-
-The full rules are in [`standards/engineering.md`](standards/engineering.md).
+Follow [`standards/engineering.md`](standards/engineering.md). Run
+`make docs-fmt` and `make docs-lint` after Markdown or YAML changes.

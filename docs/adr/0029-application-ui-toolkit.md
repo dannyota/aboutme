@@ -1,4 +1,4 @@
-# 0029 — Tailwind and shadcn-vue as the application UI toolkit
+# 0029: Tailwind and shadcn-vue as the application UI toolkit
 
 Status: Accepted (2026-09-02)
 

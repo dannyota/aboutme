@@ -1,6 +1,7 @@
-# 0018 — Rate-limit state uses bounded overflow and expiry
+# 0018: Rate-limit state uses bounded overflow and expiry
 
-Status: Accepted (2026-08-12)
+Status: Accepted (2026-08-12). Superseded in part by
+[ADR 0035](0035-replica-coordination-and-uat-lifecycle.md).
 
 ## Context
 

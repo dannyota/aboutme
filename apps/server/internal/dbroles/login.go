@@ -23,8 +23,8 @@ const (
 
 var verifierPattern = regexp.MustCompile(`^SCRAM-SHA-256\$[0-9]+:[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$`)
 
-// LoginPasswords holds the passwords for the two login roles that a hosted
-// deployment uses.
+// LoginPasswords holds the passwords for the aboutme_migrator and
+// aboutme_app login roles.
 type LoginPasswords struct{ Migrator, App string }
 
 // ScramVerifier returns the PostgreSQL SCRAM-SHA-256 verifier for password.

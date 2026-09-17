@@ -62,28 +62,9 @@ func (b budgets) lockOpts() []lock.SessionLockerOption {
 	return []lock.SessionLockerOption{lock.WithLockTimeout(uint64(b.lockPeriod/time.Second), b.lockRetries)} //nolint:gosec // lockPeriod is always a small, hardcoded positive duration (defaultBudgets: 5s; test overrides: 1s), so lockPeriod/time.Second is always a small non-negative int64, never near uint64 overflow range
 }
 
-// validate rejects a budgets value that would silently misbehave instead
-// of doing what its fields claim:
-//
-//   - lockPeriod below one second doesn't just round awkwardly, it
-//     truncates to exactly 0 in lockOpts' uint64(lockPeriod/time.Second)
-//     (integer division), while lockWait() keeps using the untruncated
-//     lockPeriod to compute outer()'s deadline. The result: outer() is
-//     sized for a lock-wait budget that lockOpts never actually
-//     configures — goose's own lock.WithLockTimeout(0, retries) rejects a
-//     zero period outright ("period must be greater than 0"), so this
-//     fails closed today, but as a confusing error from deep inside
-//     goose instead of a clear one here, and the zero value silently
-//     "succeeding" at computing a plausible-looking (but meaningless)
-//     outer() duration is exactly the kind of latent trap validation
-//     exists to catch before it depends on today's specific downstream
-//     behavior remaining that way.
-//   - lockRetries of 0 makes lockWait() always 0 regardless of lockPeriod,
-//     collapsing the "wait for a contended lock" budget to nothing.
-//   - migration <= 0 leaves no time to actually apply or check anything
-//     once the lock is free.
-//   - slack < 0 would shrink outer() below lockWait()+migration, defeating
-//     the whole point of the split (see outer's doc comment).
+// validate rejects budgets that would misbehave: lockPeriod below one
+// second (lockOpts truncates it to 0), lockRetries of 0, migration <= 0, or
+// slack < 0.
 func (b budgets) validate() error {
 	if b.lockPeriod < time.Second {
 		return fmt.Errorf("lockPeriod must be at least 1s, got %s (shorter values truncate to 0 in lockOpts)", b.lockPeriod)
@@ -100,15 +81,9 @@ func (b budgets) validate() error {
 	return nil
 }
 
-// defaultBudgets is production's split: a five-minute lock-wait budget —
-// the same total goose's own library default already uses (5s period x 60
-// retries), now explicit here instead of implicit — plus a separate
-// five-minute budget for actually applying or checking migrations, plus
-// 30s slack. Before this split existed, the command's entire deadline
-// *was* the lock-wait budget (goose's default), so a runner that legitimately
-// waited the full five minutes for a concurrent deploy's lock could
-// acquire it with zero time left to do anything, failing a deploy that
-// should have succeeded once its turn came.
+// defaultBudgets is production's split: five minutes of lock wait (5s x 60,
+// goose's default), five minutes to apply or check, and 30s slack. A runner
+// that waits the full lock budget still has the full migration budget.
 var defaultBudgets = budgets{
 	lockPeriod:  5 * time.Second,
 	lockRetries: 60,
@@ -240,14 +215,9 @@ func runApply(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrat
 	return nil
 }
 
-// runCheck reports every migration's state without applying anything and
-// without ever taking the advisory lock (migrations.Status is
-// unconditionally lock-free — see its doc comment for exactly why that
-// requires more than a fast lock-wait budget), then fails (non-zero exit)
-// if any are pending — so it doubles as a scriptable drift check, e.g. in
-// a pre-deploy readiness gate that must return promptly even while a
-// concurrent deploy is migrating, not block for the lock-wait budget and
-// then report a false failure.
+// runCheck reports each migration's state without taking the advisory lock
+// and exits non-zero if any are pending, so a readiness check returns
+// promptly during a concurrent migration.
 func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrations.MigrationIdentity) error {
 	statuses, err := migrations.Status(ctx, db, identity)
 	if err != nil {

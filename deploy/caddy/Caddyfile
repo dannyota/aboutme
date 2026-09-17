@@ -1,6 +1,7 @@
 # Current Compose route table. docs/design/system.md owns intended route
 # ownership; docs/api/openapi.yaml owns implemented HTTP contracts. This
-# listener is HTTP-only and does not satisfy the P9 HTTPS/443 UAT gate.
+# listener is HTTP-only and does not satisfy the local-UAT HTTPS/443 contract
+# (docs/runbooks/local-uat.md).
 #
 # Generated fixed routes and valid public slugs go to their registry owner.
 # Denied and reserved roots never reach an upstream. Other paths go to Nuxt.

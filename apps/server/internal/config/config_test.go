@@ -24,7 +24,7 @@ func env(vars map[string]string) func(string) string {
 		if value, ok := vars[key]; ok {
 			return value
 		}
-		// Media is required startup configuration. Existing tests exercise
+		// Media is required startup configuration. Most tests exercise
 		// unrelated fields, so give them one explicit valid filesystem mode;
 		// media-specific tests override these keys, including with an empty
 		// value when they need to prove a missing-variable failure.
@@ -39,7 +39,7 @@ func env(vars map[string]string) func(string) string {
 			return "fs"
 		case "MEDIA_FS_DIR":
 			return "/tmp/aboutme-config-test-media"
-		// Password-mail config defaults to a valid SES mode so every existing
+		// Password-mail config defaults to a valid SES mode so every
 		// Load test (dev, staging, and prod) has a complete, valid config; the
 		// auth-email tests override these keys, including with an empty value
 		// when proving a missing-variable failure.
@@ -781,8 +781,7 @@ func TestLoad_TrustedProxyCIDRs_RequiredInProd(t *testing.T) {
 
 // TestLoad_TrustedProxyCIDRs_RequiredInStaging is the staging counterpart
 // of TestLoad_TrustedProxyCIDRs_RequiredInProd: staging fails closed on
-// an absent client-IP trust boundary too. Staging validates the real
-// deployment topology before it reaches prod.
+// an absent client-IP trust boundary too.
 func TestLoad_TrustedProxyCIDRs_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -945,7 +944,7 @@ func TestLoad_TrustedProxyCIDRs_RejectsIPv4MappedPrefix(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
-		"::ffff:0.0.0.0/104",     // every IPv4 address, expressed 4-in-6; passed the old /48 bound
+		"::ffff:0.0.0.0/104",     // every IPv4 address, expressed 4-in-6; passes the /48 IPv6 bound
 		"::ffff:203.0.113.0/120", // a specific v4-mapped /24, still inert against unmapped peers
 		"::ffff:10.90.0.0/124",   // the compose /28 written in mapped form
 	}
@@ -998,8 +997,7 @@ func TestLoad_GoogleCredentials_ValidConfig(t *testing.T) {
 
 // TestLoad_GoogleCredentials_OptionalInDev proves a developer working on an
 // unrelated feature is never forced to obtain real Google OAuth
-// credentials just to start the server in dev — the same
-// optional-outside-prod/staging shape TRUSTED_PROXY_CIDRS already has.
+// credentials just to start the server in dev.
 func TestLoad_GoogleCredentials_OptionalInDev(t *testing.T) {
 	t.Parallel()
 
@@ -1070,8 +1068,7 @@ func TestLoad_GoogleCredentials_RequiredInProd(t *testing.T) {
 }
 
 // TestLoad_GoogleCredentials_RequiredInStaging is the staging counterpart
-// of TestLoad_GoogleCredentials_RequiredInProd — staging shares prod's
-// strictness so a misconfiguration is caught before it reaches prod.
+// of TestLoad_GoogleCredentials_RequiredInProd: staging uses prod's rules.
 func TestLoad_GoogleCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -1121,8 +1118,7 @@ func TestLoad_GitHubCredentials_ValidConfig(t *testing.T) {
 
 // TestLoad_GitHubCredentials_OptionalInDev proves a developer working on an
 // unrelated feature is never forced to obtain real GitHub OAuth
-// credentials just to start the server in dev — the same
-// optional-outside-prod/staging shape GOOGLE_CLIENT_ID/SECRET already has.
+// credentials just to start the server in dev.
 func TestLoad_GitHubCredentials_OptionalInDev(t *testing.T) {
 	t.Parallel()
 
@@ -1195,8 +1191,7 @@ func TestLoad_GitHubCredentials_RequiredInProd(t *testing.T) {
 }
 
 // TestLoad_GitHubCredentials_RequiredInStaging is the staging counterpart
-// of TestLoad_GitHubCredentials_RequiredInProd — staging shares prod's
-// strictness so a misconfiguration is caught before it reaches prod.
+// of TestLoad_GitHubCredentials_RequiredInProd: staging uses prod's rules.
 func TestLoad_GitHubCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 
@@ -1319,10 +1314,8 @@ func TestLoad_LinkedInCredentials_RequiredInProd(t *testing.T) {
 }
 
 // TestLoad_LinkedInCredentials_RequiredInStaging is the staging
-// counterpart of TestLoad_LinkedInCredentials_RequiredInProd — staging
-// shares prod's strictness so a misconfiguration is caught before it
-// reaches prod. Google AND GitHub credentials are both set (valid) for
-// the same reason as TestLoad_LinkedInCredentials_RequiredInProd above.
+// counterpart of TestLoad_LinkedInCredentials_RequiredInProd: staging uses
+// prod's rules.
 func TestLoad_LinkedInCredentials_RequiredInStaging(t *testing.T) {
 	t.Parallel()
 

@@ -1,4 +1,4 @@
-# 0016 — Resume mutations store idempotency results transactionally
+# 0016: Resume mutations store idempotency results transactionally
 
 Status: Accepted (2026-08-12)
 
@@ -76,5 +76,4 @@ request batch is opportunistic latency protection, not the retention guarantee.
 - Media upload bytes are an external side effect and need the compensation and
   orphan-sweep rules in ADR 0019; the database idempotency transaction cannot
   make object storage atomic.
-- P8 privacy owns the scheduled expiry sweep; it is a launch prerequisite, not
-  an optional cleanup.
+- The scheduled expiry sweep is a launch prerequisite, not an optional cleanup.

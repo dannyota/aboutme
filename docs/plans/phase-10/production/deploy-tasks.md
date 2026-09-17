@@ -309,9 +309,9 @@ reads the integrated diff.
 
 - [ ] **Step 1: Close the single-replica plan**
 
-Run the verification section of
-[single-replica direction](../replica/single-replica-direction.md) and record
-its results there.
+Run the verification section of single-replica direction (deleted; see
+[ADR 0036](../../../adr/0036-single-replica-launch-and-pipeline-migrations.md))
+and record its results there.
 
 - [ ] **Step 2: Fresh review**
 

@@ -39,7 +39,7 @@ Run affected checks under the repository's heavy-command limit:
 ```sh
 make dev-https-exports-check
 make dev-https-public-check
-make p5a-native-http-check
+make native-http-check
 ```
 
 The export proof checks save-before-download, owner authorization, PDF and PNG

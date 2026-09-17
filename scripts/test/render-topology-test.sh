@@ -88,7 +88,7 @@ node scripts/generate-public-roots.mjs --check >/dev/null ||
   fail 'generated public-root outputs are stale'
 
 native=$(<scripts/dev-native.sh)
-https=$(<scripts/dev-https.sh)
+https=$(cat scripts/dev-https.sh scripts/lib/dev-https-*.sh)
 dockerfile=$(<deploy/web.Dockerfile)
 server_dockerfile=$(<deploy/server.Dockerfile)
 

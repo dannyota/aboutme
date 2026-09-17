@@ -1,4 +1,4 @@
-# 0008 — A template preset carries a placement rule, not a section list
+# 0008: A template preset carries a placement rule, not a section list
 
 Status: Accepted (2026-08-02)
 
@@ -29,13 +29,13 @@ store-layer aggregate validator (`validateLayoutSections`, AC-DOC-008) rejects
 the result on write. Template apply, as literally specified, cannot be
 implemented.
 
-The Phase 3 plan first proposed resolving this by preserving `layout.sections`
-verbatim and letting a preset carry only typography and spacing. That satisfies
-both constraints, but a preset can then never express placement: applying the
-two-column `sidebar` or `compact` preset to a document whose `sidebar` array is
-empty — the state of every document created in one-column mode, and of three of
-the four golden fixtures — produces a two-column layout with an empty second
-column. Templates would differ only by fonts and spacing, and the golden
+One resolution proposes preserving `layout.sections` verbatim and letting a
+preset carry only typography and spacing. That satisfies both constraints, but a
+preset can then never express placement: applying the two-column `sidebar` or
+`compact` preset to a document whose `sidebar` array is empty produces a
+two-column layout with an empty second column. That empty-sidebar state is true
+of every document created in one-column mode, and of three of the four golden
+fixtures. Templates would differ only by fonts and spacing, and the golden
 snapshots would enshrine a broken layout as the reference rendering.
 
 ## Decision
@@ -44,12 +44,11 @@ A preset does not carry section keys. It carries a **placement rule**, and
 `applyTemplate` computes `layout.sections` as a total function of the document's
 actual content keys:
 
-- `layout.placement: "keep"` — preserve the document's current placement.
+- `layout.placement: "keep"`: preserve the document's current placement.
   One-column presets use this.
-- `layout.placement: "byType"` with an ordered `sidebarSectionTypes` list —
-  every content key whose section type appears in the list goes to `sidebar`, in
-  that order; every other key goes to `main`, preserving its current relative
-  order.
+- `layout.placement: "byType"` with an ordered `sidebarSectionTypes` list: every
+  content key whose section type appears in the list goes to `sidebar`, in that
+  order; every other key goes to `main`, preserving its current relative order.
 
 Because the function assigns each content key to exactly one column, the
 exactly-once invariant holds **by construction** rather than by validation, and
@@ -70,16 +69,16 @@ semantics. §5's preservation language describes that toggle.
 - `applyTemplate` takes the document's content keys as an argument and returns a
   complete `customization`. It is a pure function and is unit-testable without a
   database.
-- This is the rule an implementer is most likely to invert — the naive
-  implementation is the specified-but-unimplementable one — so it is covered by
-  the phase's independent blind adversarial suite, derived from this ADR and the
-  spec rather than from the implementation.
+- This is the rule an implementer is most likely to invert: the naive
+  implementation is the specified-but-unimplementable one. It needs an
+  independent, blind adversarial test suite, derived from this ADR and the spec
+  rather than from the implementation.
 - Golden fixtures render each preset against documents in both one- and
   two-column states, so an empty-sidebar regression is visible in a snapshot
   diff rather than only in production.
 - Spec §5's "apply = full customization replace" is superseded by this ADR for
   the `layout.sections` sub-object only. The spec file itself is frozen and is
   not edited; this ADR is the authority, per `docs/README.md`.
-- P4's customize panel and P7B's template thumbnails both consume
-  `applyTemplate`; they inherit this contract rather than reimplementing
+- Any code that consumes `applyTemplate`, including the customize panel and
+  template thumbnails, inherits this contract rather than reimplementing
   placement.

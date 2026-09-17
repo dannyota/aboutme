@@ -1,4 +1,4 @@
-# 0017 — Resume document versions use explicit adjacent converters
+# 0017: Resume document versions use explicit adjacent converters
 
 Status: Accepted (2026-08-12)
 

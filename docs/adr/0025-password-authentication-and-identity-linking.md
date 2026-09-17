@@ -1,4 +1,4 @@
-# 0025 — Password authentication and provider identity linking
+# 0025: Password authentication and provider identity linking
 
 Status: Accepted (2026-08-16)
 

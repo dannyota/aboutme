@@ -223,7 +223,7 @@ an explicit read-only proof are:
   preserves the existing claim/ambiguity protocol.
 - resumeapi/accountapi recovery pools are read-only today. Any recovery DML must
   use ExecWrite; structural tests keep these pools read-only.
-- cmd/password-auth-fixture, cmd/p5a-native-fixture, cmd/dev-seed, and
+- cmd/password-auth-fixture, cmd/native-http-fixture, cmd/dev-seed, and
   cmd/mcp-uat-fixture direct ExecContext DML. Development/test fixture roles use
   the same entry helper or a database/sql equivalent; there is no trigger
   bypass.

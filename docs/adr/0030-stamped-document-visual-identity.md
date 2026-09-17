@@ -1,4 +1,4 @@
-# 0030 — Stamped-document visual identity for the application chrome
+# 0030: Stamped-document visual identity for the application chrome
 
 Status: Accepted (2026-09-04)
 

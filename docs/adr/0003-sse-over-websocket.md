@@ -1,4 +1,4 @@
-# 0003 — SSE for live refresh; HTTP PATCH for autosave (no WebSocket)
+# 0003: SSE for live refresh; HTTP PATCH for autosave (no WebSocket)
 
 Status: Accepted (2026-08-01)
 

@@ -1,4 +1,4 @@
-# 0024 — Delivery uses one author pass and one phase review
+# 0024: Delivery uses one author pass and one phase review
 
 Status: Accepted (2026-08-12)
 
@@ -20,11 +20,11 @@ costs survived that cut:
 - Criteria were immutable during a run, so a criterion that was wrong failed the
   phase instead of being corrected.
 
-Phase 2A paid that bill: five catalog revisions and two failed acceptance runs,
-most of them evidence and process defects rather than product defects. The
-repository has no users, no production data, no cloud footprint, and one owner.
-Assurance priced for a live service is being charged against a pre-release
-codebase, and it is the dominant cost per landed change.
+One early delivery paid that bill: five catalog revisions and two failed
+acceptance runs, most of them evidence and process defects rather than product
+defects. The repository has no users, no production data, no cloud footprint,
+and one owner. Assurance priced for a live service is being charged against a
+pre-release codebase, and it is the dominant cost per landed change.
 
 ## Decision
 
