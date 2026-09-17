@@ -11,9 +11,7 @@
 # sqlc replays the migrations' "-- +goose Up" sections itself to derive the
 # schema, so there is no second file that can drift from them.
 #
-# Simplified from an earlier multi-schema pattern that used five
-# medallion-layer schemas, each with its own sqlc config block and output
-# package. aboutme has ONE schema, so this file has a single entry.
+# aboutme has one schema, so this file has a single entry.
 version: "2"
 sql:
   - engine: "postgresql"
@@ -83,7 +81,7 @@ sql:
             go_type:
               type: "int64"
               pointer: true
-          # 00002_add_auth_tables.sql declares users.email as
+          # The baseline migration declares users.email as
           # `public.citext` (schema-qualified). sqlc maps a BARE `citext` to
           # string by default, but does NOT recognize the qualified form and
           # silently degrades it to interface{} — which still compiles here
