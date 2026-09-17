@@ -90,6 +90,12 @@ f=$work/first_migrate_fails.calls
 absent "$f" "--desired-count 1"
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "first_migrate_fails: schedules must stay disabled" >&2; exit 1; }
 
+run_case first_db_setup_fails fail v0.1.0 --first-deploy
+f=$work/first_db_setup_fails.calls
+absent "$f" "deploy-migrate"
+absent "$f" "--desired-count 1"
+[[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "first_db_setup_fails: schedules must stay disabled" >&2; exit 1; }
+
 run_case runtask_fails fail v0.1.0
 f=$work/runtask_fails.calls
 grep -q -F -- "--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3 --desired-count 1" "$f" ||
