@@ -320,6 +320,27 @@ if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
   exit 1
 fi
 
+repo=$WORK/hosted-baseline-reset-wrong-base-marker
+mkdir -p "$repo/apps/server/migrations" "$repo/scripts"
+cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
+git -C "$repo" init -q -b main
+git -C "$repo" config user.email test@example.invalid
+git -C "$repo" config user.name "migration gate test"
+printf '%s\n' '-- old migration one' >"$repo/apps/server/migrations/00001_old.sql"
+printf '%s\n' 'an unpinned pre-reset marker' >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" add -- apps/server/migrations scripts
+git -C "$repo" commit -qm "test: pre-reset baseline with an unpinned marker"
+base=$(git -C "$repo" rev-parse HEAD)
+rm -f "$repo"/apps/server/migrations/*.sql
+cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
+printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" add -A -- apps/server/migrations
+git -C "$repo" commit -qm "test: reset from an unpinned base marker"
+if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
+  echo "migration-append-only-test: a reset from an unpinned base marker passed" >&2
+  exit 1
+fi
+
 repo=$WORK/hosted-baseline-already-reset-edit-rejected
 mkdir -p "$repo/apps/server/migrations" "$repo/scripts"
 cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
@@ -347,5 +368,57 @@ cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
 printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
 git -C "$repo" add -A -- apps/server/migrations
 run_local "$repo" >/dev/null
+
+repo=$WORK/local-baseline-reset-wrong-marker
+new_pre_reset_repo "$repo"
+git -C "$repo" update-ref refs/remotes/origin/main HEAD
+rm -f "$repo"/apps/server/migrations/*.sql
+cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
+printf '%s\n' "${RESET_NEW_MARKER} (tampered)" >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" add -A -- apps/server/migrations
+if run_local "$repo" >/dev/null 2>&1; then
+  echo "migration-append-only-test: a local reset with the wrong marker text passed" >&2
+  exit 1
+fi
+
+repo=$WORK/local-baseline-reset-extra-sql
+new_pre_reset_repo "$repo"
+git -C "$repo" update-ref refs/remotes/origin/main HEAD
+rm -f "$repo"/apps/server/migrations/*.sql
+cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
+printf '%s\n' '-- extra migration alongside the baseline' >"$repo/apps/server/migrations/00002_extra.sql"
+printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" add -A -- apps/server/migrations
+if run_local "$repo" >/dev/null 2>&1; then
+  echo "migration-append-only-test: a local reset with an extra migration file passed" >&2
+  exit 1
+fi
+
+repo=$WORK/local-baseline-reset-changed-baseline
+new_pre_reset_repo "$repo"
+git -C "$repo" update-ref refs/remotes/origin/main HEAD
+rm -f "$repo"/apps/server/migrations/*.sql
+cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
+printf '\n-- one extra byte\n' >>"$repo/apps/server/migrations/00001_baseline.sql"
+printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" add -A -- apps/server/migrations
+if run_local "$repo" >/dev/null 2>&1; then
+  echo "migration-append-only-test: a local reset with a changed baseline file passed" >&2
+  exit 1
+fi
+
+repo=$WORK/local-baseline-reset-index-mismatch
+new_pre_reset_repo "$repo"
+git -C "$repo" update-ref refs/remotes/origin/main HEAD
+rm -f "$repo"/apps/server/migrations/*.sql
+cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
+printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
+# Deliberately left unstaged: the worktree matches the pinned reset
+# byte-for-byte, but the index still holds the pre-reset files, so a
+# commit right now would not record the reset this check is verifying.
+if run_local "$repo" >/dev/null 2>&1; then
+  echo "migration-append-only-test: an unstaged reset with a stale index passed" >&2
+  exit 1
+fi
 
 echo "Migration append-only tests passed"
