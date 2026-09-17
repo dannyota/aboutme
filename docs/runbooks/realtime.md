@@ -65,11 +65,10 @@ stress test does not emit a machine hostname or resume content.
 Run heavy commands serially at the repository root. `make server-test-db` proves
 committed notification delivery, rollback silence, and real-session routes
 against the one shared database. Injected listener lifecycle tests prove
-recovery, single-connection ownership, and joined shutdown. This distinction
-corrects Phase 6's exit criterion, which had grouped listener recovery under
-PostgreSQL integration. `make server-test-realtime-stress` is opt-in and opens
-thousands of local sockets; do not run it beside another build, browser, or
-scan.
+recovery, single-connection ownership, and joined shutdown, proven separately
+from PostgreSQL integration. `make server-test-realtime-stress` is opt-in and
+opens thousands of local sockets; do not run it beside another build, browser,
+or scan.
 
 `make dev-https-publish-check` uses the trusted local HTTPS harness to check
 cross-tab owner refresh, in-place public refresh, scroll preservation, and
@@ -82,5 +81,5 @@ accepted proof state.
 The [accepted fleet contract](../design/scaling/admission.md) retains PostgreSQL
 revision notifications, local queues and reconnect/refetch. Fleet claims enforce
 100 connections per IP and 20 per account; 2,000 connections remains a per-task
-cap. Cross-replica revocation, drain and admission are pending Task 10.18 local
-and hosted proof.
+cap. Cross-replica revocation, drain and admission proof remains pending for
+both local and hosted environments.

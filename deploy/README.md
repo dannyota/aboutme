@@ -89,12 +89,11 @@ and only when later work needs it.
 ## Runtime boundaries
 
 Compose runs PostgreSQL, MinIO, Go, Nuxt, and Caddy as long-lived services.
-`db-role-bootstrap` first creates or verifies the fixed roles in the common
-`postgres` database. It sets no role passwords and fails on existing privilege
-drift. `db-provision` then installs the fixed database-local migration grants,
-and `migrate` applies goose migrations. Both local commands select
-`MIGRATION_IDENTITY=local-aboutme`. The media initializer creates the private
-bucket. Any prerequisite failure prevents the server from starting.
+`db-setup` creates or verifies the fixed roles and their database and schema
+grants against the target database. It sets no role passwords and fails on
+existing privilege drift. `migrate` then applies goose migrations, always as
+`aboutme_migrator`. The media initializer creates the private bucket. Any
+prerequisite failure prevents the server from starting.
 
 PostgreSQL and the MinIO API are not published to the host. Only Caddy publishes
 a port. MinIO, its initializer, and Go are the only members of the isolated

@@ -11,6 +11,8 @@ record of what exists:
 - **Deferred:** ADR 0036 postpones it until a second replica is wanted.
 - **Superseded by ADR 0037:** the single-host design replaces it for the first
   release; it remains the reference for a later fleet.
+- **Removed by ADR 0038:** the single-baseline migration and plain migrator
+  replace it; the design is kept as reference.
 
 These pages name code areas by their implementation slice:
 
@@ -29,7 +31,7 @@ These pages name code areas by their implementation slice:
 
 | Contract                                                  | Scope                                                                    | State                                     |
 | --------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
-| [Runtime schema](runtime-schema.md)                       | Durable state, immutable outcomes and database privileges                | Built                                     |
+| [Runtime schema](runtime-schema.md)                       | Durable state, immutable outcomes and database privileges                | Removed by ADR 0038; design kept          |
 | [Replica coordination](runtime-coordination.md)           | Joining, transitions, recovery, draining and connection limits           | Deferred                                  |
 | [Replica membership](replica-membership.md)               | Exact node identity, task trios, leave and EC2 proof                     | Built                                     |
 | [Membership evidence](membership-evidence.md)             | Historical leave and proof records, atomic claim reclamation             | Built                                     |
@@ -59,12 +61,12 @@ These pages name code areas by their implementation slice:
 | [Claim identities](claim-identities.md)                   | Scope digests and ambiguous outcomes                                     | Database built; encoding deferred         |
 | [Admission attempts](admission-attempts.md)               | OAuth failed-grant reservations                                          | Database built; callers deferred          |
 | [Maintenance entry](maintenance-entry.md)                 | One backend per maintenance command                                      | Deferred                                  |
-| [Migrator retirement](migrator-retirement.md)             | Physical closure of migration connections                                | Built                                     |
+| [Migrator retirement](migrator-retirement.md)             | Physical closure of migration connections                                | Removed by ADR 0038; design kept          |
 | [Policy catalog](policy-catalog.md)                       | Exact limiter identities, scopes and existing caller behavior            | Describes current limiters and the target |
 | [UAT lifecycle](uat-lifecycle.md)                         | Maintenance deadlines, write barriers and final stop receipts            | Superseded by ADR 0037                    |
 | [Transaction entry](transaction-entry.md)                 | Shared barrier before any row lock or write                              | Built                                     |
-| [Migrator](migrator.md)                                   | Dedicated backend, protected history and read-only status                | Built                                     |
-| [Migration provisioning](migration-provisioning.md)       | Fixed grants and data-preserving ownership adoption                      | Built; hosted provisioning pending        |
+| [Migrator](migrator.md)                                   | Dedicated backend, protected history and read-only status                | Removed by ADR 0038; design kept          |
+| [Migration provisioning](migration-provisioning.md)       | Fixed grants and data-preserving ownership adoption                      | Removed by ADR 0038; design kept          |
 | [Topology](topology.md)                                   | Complete replicas, paired routes and edge trust                          | Superseded by ADR 0037                    |
 | [Controller](controller.md)                               | Off-environment ownership, recovery, tasks and infrastructure changes    | Superseded by ADR 0037                    |
 

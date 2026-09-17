@@ -50,45 +50,41 @@ Isolated capture harnesses that seed their own fixture database set
 `ABOUTME_DEV_AUTO_SEED=0` for startup. Daily development defaults to `1`;
 `make dev-seed` remains an explicit request to seed `aboutme_dev`.
 
-The command is idempotent. It starts or reuses `aboutme-test-db`, creates the
-fixed database roles, verifies their privileges on reuse, creates `aboutme_dev`
-if needed, provisions its fixed migration grants, applies goose migrations,
-builds Go and its browser supervisor, then starts the
+The command is idempotent. It starts or reuses `aboutme-test-db`, creates
+`aboutme_dev` if needed, runs `db-setup` against `aboutme` and `aboutme_dev` to
+create the fixed database roles and their grants (verifying them on reuse),
+applies goose migrations, builds Go and its browser supervisor, then starts the
 authentication-mail-capture server, Go, Nuxt, and Caddy. The mail-capture
 bearer, rate-HMAC, and mail-encryption secrets are created once under
 `.dev/secrets/` and reused across restarts; they are never printed.
 
-If `ABOUTME_DEV_DATABASE_URL` selects another cluster, first export its
-`CLUSTER_BOOTSTRAP_DATABASE_URL` for the `postgres` database and run
-`make db-role-bootstrap`. Use an admin connection; bootstrap preserves existing
-passwords and fails on privilege drift.
+If `ABOUTME_DEV_DATABASE_URL` selects another cluster, first run `db-setup`
+against it directly: `DATABASE_URL=<its DSN> make db-setup`. Use an admin
+connection; `db-setup` preserves existing passwords and fails on privilege
+drift.
 
 Open only `http://localhost:20080` in a browser. Direct upstream ports are for
 diagnostics.
 
-## Upgrade an existing local database
+## Recreate a database that predates the release baseline
 
-The version-13 foundation requires an explicit ownership adoption for an
-existing `aboutme` or `aboutme_dev` database. Stop native and HTTPS services
-first. Keep the shared database container running and wait for database tests to
-finish. Use the target database's existing `DATABASE_URL`; do not copy
-credentials into the command or logs.
-
-For a database below version 13, run `make migrate` once. It installs the
-foundation and stops with the adoption-required message. For a database already
-at version 13, proceed directly to adoption:
+The release baseline
+([ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)) has no
+ownership-adoption path: an `aboutme` or `aboutme_dev` database created before
+it cannot be migrated forward and must be recreated. Stop native and HTTPS
+services first. Keep the shared database container running and wait for database
+tests to finish.
 
 ```sh
-(cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate adopt-history-owner)
+podman exec aboutme-test-db psql -U aboutme -d postgres -c 'DROP DATABASE IF EXISTS aboutme_dev WITH (FORCE)'
+podman exec aboutme-test-db psql -U aboutme -d postgres -c 'CREATE DATABASE aboutme_dev'
+DATABASE_URL=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable make db-setup
 make migrate
 make migrate-check
 ```
 
-Adoption preserves application rows and transfers only the fixed ownership and
-grants. A database already at version 14 or later needs no adoption. A corrupt
-manifest or privilege mismatch fails without repair; inspect that failure before
-restarting the stack. See the
-[adoption contract](../design/scaling/migration-provisioning.md).
+Substitute the target database's name throughout; do not copy credentials into
+the command or logs. This drops all data in that database.
 
 ## Verify
 

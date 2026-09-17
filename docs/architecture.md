@@ -36,11 +36,12 @@ disposable pinned Playwright image imports the invocation's Caddy root into an
 isolated NSS database and writes only bounded local verdicts. It does not change
 the host trust store or use a certificate bypass.
 
-The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. Separate
-one-shot commands bootstrap roles, provision database grants, apply migrations
-and initialize media storage. PostgreSQL is not published to the host. Caddy is
-the only published service. The current Compose Caddyfile serves HTTP; this is
-suitable for deployment smoke checks. No AWS application deployment exists yet.
+The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. A one-shot
+`db-setup` command creates the fixed database roles and grants, a one-shot
+`migrate` command then applies migrations, and a media initializer sets up
+private storage. PostgreSQL is not published to the host. Caddy is the only
+published service. The current Compose Caddyfile serves HTTP; this is suitable
+for deployment smoke checks. No AWS application deployment exists yet.
 
 Production is planned as one AWS Singapore host behind Cloudflare, with RDS and
 private S3, per
@@ -52,15 +53,14 @@ process-local state, which is correct only with one replica. The
 [scaling contract](design/scaling/README.md) records which parts of a
 multi-replica runtime exist.
 
-The local candidate includes seven fixed database roles and migration 00013's
-runtime write-entry, finish and migrator-session primitives. Live tests prove
-real-role permissions, transaction completion, lock order, cancellation and
-contamination rejection. The private Go write runner passes live pool reuse and
-physical discard checks; response-loss cases use test-only fault injection.
-Caller adoption remains pending. Goose history still uses the legacy runner. The
-[dedicated migrator design](design/scaling/migrator.md) protects that history
-next and converges exact legacy object ownership on aboutme_runtime_owner while
-preserving data. Final-stop authority is absent.
+The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
+`db-setup` creates and grants them, and every migration runs as
+`aboutme_migrator` behind a PostgreSQL session advisory lock
+([ADR 0038](adr/0038-single-baseline-and-plain-migrator.md)). `aboutme_app`
+holds exactly SELECT/INSERT/UPDATE/DELETE on each business table and nothing on
+`goose_db_version`. Live tests prove the exact grant set, migrator ownership of
+every object, and a store smoke flow under `aboutme_app`. Final-stop authority
+is absent.
 
 ## Implemented HTTP surface
 
