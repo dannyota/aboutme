@@ -18,7 +18,7 @@ import (
 )
 
 // resumeCapViolationCode/Message are the exact SQLSTATE and message the
-// trigger (enforce_resume_cap, migrations/00005_add_resume_cap_trigger.sql)
+// trigger (enforce_resume_cap, migrations/00001_baseline.sql)
 // raises when it backstops the store's own cap check. Both must match
 // exactly -- other CHECK constraints on resumes (e.g.
 // resumes_title_length_check) also raise 23514, so the code alone is not

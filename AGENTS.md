@@ -185,11 +185,10 @@ commit; the repository is public.
 - Follow Google Go and TypeScript style. Use `gofmt`/`goimports` and configured
   ESLint. Tests inject clocks, randomness, and UUIDs and pin renderer inputs.
   Never retry a flaky test into a pass.
-- Never hand-edit generated files; change the source and regenerate. Before the
-  baseline marker lands, the integration owner may correct migration SQL and
-  recreate the development database. After
-  `apps/server/migrations/.uat-baseline` lands, goose migrations are immutable
-  and rollback uses a forward migration.
+- Never hand-edit generated files; change the source and regenerate. Migrations
+  under `apps/server/migrations/.uat-baseline` are immutable; add a forward
+  migration that grants `aboutme_app` explicitly
+  ([ADR 0038](docs/adr/0038-single-baseline-and-plain-migrator.md)).
 - A contract change updates schema/OpenAPI sources, generated clients and types,
   tests, examples, design docs, and traceability in one reviewed change.
 - Do not weaken security controls: least privilege, strict input bounds,
@@ -267,10 +266,5 @@ rules; read it before writing docs or comments. The ones most often broken:
 - `make docs-lint` scans ignored Markdown too. Keep `PROGRESS.md` formatted.
 - If host DB TCP fails while in-container `pg_isready` passes, recreate the
   container; rootless pasta can lose its forward while the container stays up.
-- Migration and store live tests clone cached template databases named
-  `aboutme_migrate_template_<version>_<hash>`. Editing any migration builds a
-  new one; only a `./migrations` test run sweeps the names it no longer needs,
-  so other live-DB targets accumulate templates at about 20 MB each. Run
-  `make test-db-templates-clean` to remove them all.
 - FlowCV credentials stay in `.env`; findings go in `docs/research/flowcv/`.
   External references are evidence, not authority.
