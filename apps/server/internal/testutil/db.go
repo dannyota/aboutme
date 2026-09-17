@@ -85,17 +85,17 @@ func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := admin.Close(); err != nil {
-			t.Errorf("close admin connection: %v", err)
+		if closeErr := admin.Close(); closeErr != nil {
+			t.Errorf("close admin connection: %v", closeErr)
 		}
 	})
-	if err := admin.PingContext(ctx); err != nil {
-		t.Fatalf("ping admin connection (is TEST_DATABASE_URL reachable?): %v", err)
+	if pingErr := admin.PingContext(ctx); pingErr != nil {
+		t.Fatalf("ping admin connection (is TEST_DATABASE_URL reachable?): %v", pingErr)
 	}
 
 	name := fmt.Sprintf("aboutme_migrate_test_%d_%d", time.Now().UnixNano(), newMigratedTestDatabaseCounter.Add(1))
-	if _, err := admin.ExecContext(ctx, `CREATE DATABASE `+name); err != nil {
-		t.Fatalf("create database %s: %v", name, err)
+	if _, createErr := admin.ExecContext(ctx, `CREATE DATABASE `+name); createErr != nil {
+		t.Fatalf("create database %s: %v", name, createErr)
 	}
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
@@ -116,8 +116,8 @@ func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
 	u.Path = "/" + name
 	dsn := u.String()
 
-	if err := bootstrapTestDatabaseRoles(ctx, dsn); err != nil {
-		t.Fatalf("bootstrap roles on %s: %v", name, err)
+	if bootstrapErr := bootstrapTestDatabaseRoles(ctx, dsn); bootstrapErr != nil {
+		t.Fatalf("bootstrap roles on %s: %v", name, bootstrapErr)
 	}
 
 	db, err := migrations.Open(dsn)

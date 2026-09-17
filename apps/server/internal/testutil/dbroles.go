@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	// Registers the pgx driver under database/sql's "pgx" name for the
+	// sql.Open call below. testutil is imported only by _test.go files, so
+	// this registration only ever runs inside a test binary.
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/dannyota/aboutme/apps/server/internal/dbroles"
