@@ -39,23 +39,12 @@ locals {
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },
   ])
 
-  # One-shot tasks that run as the RDS master user on the first deploy.
+  # One-shot task that runs as the RDS master user on the first deploy: it
+  # creates the fixed roles, applies database and schema grants, and sets
+  # their SCRAM login verifiers.
   admin_tasks = {
-    db-bootstrap = {
-      entry_point = ["/usr/local/bin/db-role-bootstrap"]
-      environment = [{ name = "CLUSTER_BOOTSTRAP_DATABASE_URL", value = format(local.db_url, "aboutme", "postgres") }]
-      secrets     = []
-    }
-    db-provision = {
-      entry_point = ["/usr/local/bin/migrate", "provision"]
-      environment = [
-        { name = "DATABASE_URL", value = format(local.db_url, "aboutme", "aboutme") },
-        { name = "MIGRATION_IDENTITY", value = "direct" },
-      ]
-      secrets = []
-    }
-    db-set-login = {
-      entry_point = ["/usr/local/bin/db-set-login"]
+    db-setup = {
+      entry_point = ["/usr/local/bin/db-setup"]
       environment = [{ name = "DATABASE_URL", value = format(local.db_url, "aboutme", "aboutme") }]
       secrets = [
         { name = "MIGRATOR_PASSWORD", valueFrom = "${local.param}/db/migrator-password" },
@@ -163,7 +152,6 @@ resource "aws_ecs_task_definition" "migrate" {
     essential  = true
     entryPoint = ["/usr/local/bin/migrate"]
     environment = [
-      { name = "MIGRATION_IDENTITY", value = "direct" },
       { name = "DATABASE_URL", value = format(local.db_url, "aboutme_migrator", "aboutme") },
     ]
     secrets          = [{ name = "PGPASSWORD", valueFrom = "${local.param}/db/migrator-password" }]
