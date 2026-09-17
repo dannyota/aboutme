@@ -132,19 +132,19 @@ func TestTestDatabaseSetupCacheDoesNotRepeatSuccessfulPreparation(t *testing.T) 
 	}
 }
 
-func TestNewMigratedTestDatabaseIsCloneAtHead(t *testing.T) {
+func TestNewMigratedTestDatabaseIsFreshAtHead(t *testing.T) {
 	RequireTestDatabaseURL(t)
 	dsn, db := NewMigratedTestDatabase(t)
 	if !strings.Contains(dsn, "/aboutme_migrate_test_") {
 		t.Fatalf("dsn %q", dsn)
 	}
-	statuses, err := migrations.Status(context.Background(), db, migrations.LocalAdminMigratorIdentity())
+	statuses, err := migrations.Status(context.Background(), db)
 	if err != nil || migrations.PendingCount(statuses) != 0 {
 		t.Fatalf("pending=%d error=%v", migrations.PendingCount(statuses), err)
 	}
 	other, otherDB := NewMigratedTestDatabase(t)
 	if other == dsn {
-		t.Fatal("clones share a database")
+		t.Fatal("two calls share a database")
 	}
 	if err := otherDB.PingContext(context.Background()); err != nil {
 		t.Fatal(err)

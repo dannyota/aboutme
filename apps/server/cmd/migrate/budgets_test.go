@@ -1,9 +1,7 @@
-// Tests for the lock-wait/migration deadline split (item 4 of the
-// data-layer review, review-datalayer.txt "Important" — cmd/migrate/main.go's
-// old single five-minute timeout doubled as goose's own lock-wait budget,
-// so a runner that legitimately waited the full budget for a contended
-// advisory lock could acquire it with zero time left to actually apply or
-// check anything).
+// Tests for the lock-wait/migration deadline split: the outer deadline
+// must exceed the lock-wait budget by at least the migration budget, so a
+// runner that waits the full lock-wait budget for a contended advisory
+// lock still has time left to actually apply or check migrations.
 package main
 
 import (
@@ -18,13 +16,9 @@ import (
 
 // TestBudgets_OuterExceedsLockWaitAndMigrationBudgetsIndependently is a
 // hermetic, deterministic guard on the budgets arithmetic itself: no
-// database or timing involved, just the invariant the review requires —
-// "the outer deadline strictly greater than both [the lock-wait budget and
-// the migration budget]". This is what would have caught the original bug
-// immediately: before this task, there was no separate lock-wait/migration
-// split at all, so outer() (then just the single `timeout` constant) was
-// exactly goose's own default lock-wait budget — the exact regression the
-// last assertion below guards against by name.
+// database or timing involved, just the invariant that the outer deadline
+// must be strictly greater than both the lock-wait budget and the
+// migration budget on their own, not merely their sum.
 func TestBudgets_OuterExceedsLockWaitAndMigrationBudgetsIndependently(t *testing.T) {
 	t.Parallel()
 
@@ -125,7 +119,6 @@ func TestBudgets_ValidateRejectsNegativeSlack(t *testing.T) {
 // itself rather than hiding behind a connection error.
 func TestRun_InvalidBudgets_FailsFastWithoutDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
-	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "")
 
 	orig := runBudgets
@@ -205,7 +198,6 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 	t.Cleanup(func() { runBudgets = origBudgets })
 
 	t.Setenv("DATABASE_URL", dsn)
-	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "dev")
 	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
@@ -213,9 +205,6 @@ func TestRun_DeadlineBudgets_ContenderSucceedsAfterApproachingLockWait(t *testin
 	defer cancel()
 
 	holderDB := openMigrateTestDB(t, dsn)
-	if err := migrations.ProvisionDatabase(ctx, holderDB); err != nil {
-		t.Fatalf("setup migration grants: %v", err)
-	}
 	holderConn, err := holderDB.Conn(ctx)
 	if err != nil {
 		t.Fatalf("open holder connection: %v", err)
@@ -293,7 +282,6 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	t.Cleanup(func() { runBudgets = origBudgets })
 
 	t.Setenv("DATABASE_URL", dsn)
-	t.Setenv("MIGRATION_IDENTITY", "local-aboutme")
 	t.Setenv("ENV", "dev")
 	t.Setenv("PUBLIC_ORIGIN", "https://aboutme.vn")
 
@@ -303,12 +291,20 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 	// Migrate to head first (no lock contention yet), so -check's only
 	// possible reason to report a non-nil error later is a genuine
 	// pending migration — not simply "this fresh database was never
-	// migrated" masking the lock-contention behavior under test.
-	setupDB := openMigrateTestDB(t, dsn)
-	if err := migrations.ProvisionDatabase(ctx, setupDB); err != nil {
-		t.Fatalf("setup migration grants: %v", err)
+	// migrated" masking the lock-contention behavior under test. Opened
+	// through migrations.Open (not openMigrateTestDB), so the setup
+	// migration runs as aboutme_migrator, exactly like run(true, ...)'s
+	// own connection below and every real deploy.
+	setupDB, err := migrations.Open(dsn)
+	if err != nil {
+		t.Fatalf("open setup database: %v", err)
 	}
-	if _, err := migrations.Apply(ctx, setupDB, migrations.LocalAdminMigratorIdentity()); err != nil {
+	t.Cleanup(func() {
+		if closeErr := setupDB.Close(); closeErr != nil {
+			t.Logf("close setup database: %v", closeErr)
+		}
+	})
+	if _, err := migrations.Apply(ctx, setupDB); err != nil {
 		t.Fatalf("setup Apply() error: %v", err)
 	}
 

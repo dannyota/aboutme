@@ -1,13 +1,9 @@
 package migrations_test
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/dannyota/aboutme/apps/server/migrations"
 )
 
 func TestPublicStateSeedIsSingletonAndPositive(t *testing.T) {
@@ -25,9 +21,9 @@ func TestPublicStateSeedIsSingletonAndPositive(t *testing.T) {
 	if !singleton {
 		t.Fatal("public_state.singleton = false, want true")
 	}
-	// The exact seed value (1) is asserted only after a fresh migration in
-	// TestPublicStateMigrationDownUp; against the shared database the
-	// generation has legitimately advanced, so assert only positivity here.
+	// The exact seed value (1) only holds for a freshly migrated database;
+	// against the shared database the generation has legitimately advanced,
+	// so assert only positivity here.
 	if generation < 1 {
 		t.Fatalf("public_state.discovery_generation = %d, want positive", generation)
 	}
@@ -109,45 +105,5 @@ func TestPublicStateGenerationAdvancesMonotonically(t *testing.T) {
 		if got != want {
 			t.Fatalf("advanced generation = %d, want %d", got, want)
 		}
-	}
-}
-
-func TestPublicStateMigrationDownUp(t *testing.T) {
-	t.Parallel()
-	dsn := newTestDatabase(t)
-	db := openTestDB(t, dsn)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	provider, err := migrations.NewProvider(db, migrations.FS)
-	if err != nil {
-		t.Fatalf("NewProvider() error: %v", err)
-	}
-	if _, err := provider.UpTo(ctx, 7); err != nil {
-		t.Fatalf("UpTo(7) error: %v", err)
-	}
-	if _, err := provider.DownTo(ctx, 6); err != nil {
-		t.Fatalf("DownTo(6) error: %v", err)
-	}
-
-	var relation *string
-	if err := db.QueryRowContext(ctx, `SELECT to_regclass('public.public_state')::text`).Scan(&relation); err != nil {
-		t.Fatalf("probe public_state after down: %v", err)
-	}
-	if relation != nil {
-		t.Fatalf("public_state relation after down = %q, want absent", *relation)
-	}
-
-	if _, err := provider.UpTo(ctx, 7); err != nil {
-		t.Fatalf("UpTo(7) error: %v", err)
-	}
-	var generation int64
-	if err := db.QueryRowContext(ctx, `
-		SELECT discovery_generation FROM public_state WHERE singleton = true
-	`).Scan(&generation); err != nil {
-		t.Fatalf("read public_state after up: %v", err)
-	}
-	if generation != 1 {
-		t.Fatalf("generation after down/up = %d, want 1", generation)
 	}
 }

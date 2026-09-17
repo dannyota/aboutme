@@ -22,11 +22,15 @@ import (
 var testDatabaseCounter atomic.Uint64
 
 // newTestDatabase creates a fresh, uniquely named database on the server
-// pointed to by TEST_DATABASE_URL and returns a connection URL for it. The
-// database is dropped in t.Cleanup. Every harness test gets its own
-// database — never a shared one — so migration state, advisory locks, and
-// concurrent-runner timing from one test can never leak into another; that
-// isolation is what lets the harness tests run with t.Parallel().
+// pointed to by TEST_DATABASE_URL, ensures the fixed aboutme_migrator/
+// aboutme_app roles and this new database's grants (database ACLs are
+// per-database, so this must run against the new database, not the shared
+// one newTestDatabase connects to create it), and returns a connection URL
+// for it. The database is dropped in t.Cleanup. Every harness test gets
+// its own database — never a shared one — so migration state, advisory
+// locks, and concurrent-runner timing from one test can never leak into
+// another; that isolation is what lets the harness tests run with
+// t.Parallel().
 //
 // Skips the test (not a failure) when TEST_DATABASE_URL is unset, exactly
 // like the existing internal/store integration test, so `go test ./...`
@@ -38,7 +42,6 @@ func newTestDatabase(t *testing.T) string {
 	if base == "" {
 		t.Skip("TEST_DATABASE_URL not set; skipping live-database integration test")
 	}
-	testutil.BootstrapTestDatabaseRoles(t, base)
 
 	admin, err := sql.Open("pgx", base)
 	if err != nil {
@@ -73,7 +76,9 @@ func newTestDatabase(t *testing.T) string {
 		}
 	})
 
-	return dsnWithDatabase(t, base, name)
+	dsn := dsnWithDatabase(t, base, name)
+	testutil.BootstrapTestDatabaseRoles(t, dsn)
+	return dsn
 }
 
 // dsnWithDatabase returns base with its database (URL path) replaced by

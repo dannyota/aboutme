@@ -1,19 +1,19 @@
-// Migration harness tests (task 0.3b): empty database -> head, previous-
-// release state -> head, two concurrent runners, and partial-failure
-// recovery — run against a real Postgres instance, gated behind
+// Migration harness tests: empty database -> head, previous-release state
+// -> head, two concurrent runners, and partial-failure recovery — run
+// against a real Postgres instance, gated behind
 // TEST_DATABASE_URL exactly like internal/store's integration test (see
 // testdb_test.go's newTestDatabase, and the package comment there).
 //
 // The "previous release", "concurrent runners", and "partial failure"
 // scenarios use small synthetic migration sets built with fstest.MapFS
 // instead of the real embedded FS. This keeps the harness's correctness
-// independent of how many real product migrations exist at any given
-// time (today: exactly one, the hand-written citext extension — see
-// migrations.go's package comment) while still exercising the exact same
-// production code path (migrations.NewProvider, the same goose Provider +
-// session-locker machinery cmd/migrate uses). Only the "empty database ->
-// head" test needs the real schema, since its whole point is proving the
-// real embedded migrations apply cleanly end-to-end.
+// independent of how many real product migrations exist at any given time
+// (today: exactly one, the baseline migration — see migrations.go's
+// package comment) while still exercising the exact same production code
+// path (migrations.NewProvider, the same goose Provider + session-locker
+// machinery cmd/migrate uses). Only the "empty database -> head" test needs
+// the real schema, since its whole point is proving the real embedded
+// migrations apply cleanly end-to-end.
 package migrations_test
 
 import (
@@ -61,16 +61,20 @@ func TestHarness_EmptyDatabaseToHead(t *testing.T) {
 	t.Parallel()
 
 	dsn := newTestDatabase(t)
-	db := openTestDB(t, dsn)
+	db, err := migrations.Open(dsn)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("close database: %v", closeErr)
+		}
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), harnessTimeout)
 	defer cancel()
 
-	if err := migrations.ProvisionDatabase(ctx, db); err != nil {
-		t.Fatalf("ProvisionDatabase() error: %v", err)
-	}
-	identity := migrations.LocalAdminMigratorIdentity()
-	results, err := migrations.Apply(ctx, db, identity)
+	results, err := migrations.Apply(ctx, db)
 	if err != nil {
 		t.Fatalf("Apply() error: %v", err)
 	}
@@ -78,7 +82,7 @@ func TestHarness_EmptyDatabaseToHead(t *testing.T) {
 		t.Fatal("Apply() applied zero migrations against an empty database")
 	}
 
-	statuses, err := migrations.Status(ctx, db, identity)
+	statuses, err := migrations.Status(ctx, db)
 	if err != nil {
 		t.Fatalf("Status() error: %v", err)
 	}
@@ -89,15 +93,15 @@ func TestHarness_EmptyDatabaseToHead(t *testing.T) {
 	}
 
 	// Confirm real product state, not just goose's own bookkeeping: the
-	// hand-written extensions migration (migrations/00001_extensions.sql)
-	// must have actually installed citext.
+	// baseline migration (migrations/00001_baseline.sql) must have actually
+	// installed citext.
 	installed := mustQueryInt(ctx, t, db, `SELECT count(*) FROM pg_extension WHERE extname = 'citext'`)
 	if installed != 1 {
 		t.Errorf("pg_extension citext count = %d, want 1 after Apply()", installed)
 	}
 
 	// Re-applying at head must be a safe no-op.
-	results, err = migrations.Apply(ctx, db, identity)
+	results, err = migrations.Apply(ctx, db)
 	if err != nil {
 		t.Fatalf("second Apply() at head error: %v", err)
 	}
@@ -333,7 +337,7 @@ func TestHarness_ConcurrentRunners_ExactlyOneApplies(t *testing.T) {
 	// checks the real embedded migrations.FS, which (unlike this test's
 	// synthetic fsys) grows with every real product migration — see the
 	// package doc comment's "independent of how many real product
-	// migrations exist" guarantee, which this exact call previously broke.
+	// migrations exist" guarantee.
 	statuses, err := providerA.Status(ctx)
 	if err != nil {
 		t.Fatalf("Status() error: %v", err)
@@ -364,13 +368,10 @@ const partialFailureGood = "-- +goose Up\n" +
 // Unlike a real bug in the migration's own SQL, this file's bytes are
 // never edited between the failing run and the recovery below — see the
 // test body: recovery repairs the *data*, then reruns this exact,
-// unchanged file, matching how an append-only, immutable migration
-// history (design spec §3 "Lifecycle" post-release; the CI append-only
-// gate at .github/workflows/ci.yml's migrations-append-only job) is
-// actually recovered from in production. A prior version of this test
-// instead swapped in a second file with corrected SQL under the same
-// version number, which demonstrates a pre-release *edit*, not recovery —
-// see review-datalayer.txt's "Important" findings.
+// unchanged file, matching how an append-only, immutable migration history
+// (docs/design/data.md, enforced by the migrations-append-only CI job) is
+// actually recovered from in production: a released migration is never
+// edited, even to fix a bug it exposes.
 const partialFailureBroken = "-- +goose Up\nALTER TABLE accounts ADD CONSTRAINT balance_non_negative CHECK (balance >= 0);\n"
 
 func TestHarness_PartialFailureRecovers(t *testing.T) {

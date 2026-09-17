@@ -37,11 +37,12 @@ func requireMigrateTestDatabaseURL(t *testing.T) string {
 var migrateTestDatabaseCounter atomic.Uint64
 
 // newMigrateTestDatabase creates a fresh, uniquely named database on the
-// server pointed to by base and returns a connection URL for it, dropped
-// in t.Cleanup.
+// server pointed to by base, ensures the fixed aboutme_migrator/
+// aboutme_app roles and this new database's grants (database ACLs are
+// per-database, so this must run against the new database, not base), and
+// returns a connection URL for it, dropped in t.Cleanup.
 func newMigrateTestDatabase(t *testing.T, base string) string {
 	t.Helper()
-	testutil.BootstrapTestDatabaseRoles(t, base)
 
 	admin, err := sql.Open("pgx", base)
 	if err != nil {
@@ -76,7 +77,9 @@ func newMigrateTestDatabase(t *testing.T, base string) string {
 		t.Fatalf("parse TEST_DATABASE_URL: %v", err)
 	}
 	u.Path = "/" + strings.TrimPrefix(name, "/")
-	return u.String()
+	dsn := u.String()
+	testutil.BootstrapTestDatabaseRoles(t, dsn)
+	return dsn
 }
 
 func openMigrateTestDB(t *testing.T, dsn string) *sql.DB {

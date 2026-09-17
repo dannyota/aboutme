@@ -1,6 +1,7 @@
 // Command migrate applies embedded Goose migrations or reports pending work
-// with -check. Apply serializes each version through the fixed migration locks.
-// See docs/design/data.md and docs/design/deployment.md.
+// with -check. Apply serializes through the fixed migration lock and
+// always runs as aboutme_migrator (see migrations.Open). See
+// docs/design/data.md and docs/design/deployment.md.
 //
 // Usage:
 //
@@ -19,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 
 	"github.com/dannyota/aboutme/apps/server/migrations"
@@ -100,36 +102,25 @@ var runBudgets = defaultBudgets
 func main() {
 	check := flag.Bool("check", false, "report pending migrations without applying them")
 	flag.Parse()
-	command := "apply"
 	if flag.NArg() > 0 {
-		command = flag.Arg(0)
+		fmt.Fprintln(os.Stderr, "migrate: arguments are not accepted")
+		os.Exit(1)
 	}
 
-	if err := runCommand(command, *check, os.Stdout); err != nil {
+	if err := run(*check, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "migrate:", err)
 		os.Exit(1)
 	}
 }
 
 func run(check bool, stdout io.Writer) error {
-	return runCommand("apply", check, stdout)
-}
-
-func runCommand(command string, check bool, stdout io.Writer) error {
 	// Cheapest, dependency-free check first: fail fast and clearly on an
-	// invalid budgets configuration before requiring DATABASE_URL/ENV or a
+	// invalid budgets configuration before requiring DATABASE_URL or a
 	// reachable database at all — see budgets.validate's doc comment for
 	// what it catches and why.
 	b := runBudgets
 	if err := b.validate(); err != nil {
 		return fmt.Errorf("invalid deadline budgets: %w", err)
-	}
-	if command != "apply" && command != "provision" && command != "adopt-history-owner" {
-		return fmt.Errorf("unknown migrate command")
-	}
-	identity, err := migrationIdentityFromEnvironment()
-	if err != nil {
-		return err
 	}
 
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
@@ -137,7 +128,11 @@ func runCommand(command string, check bool, stdout io.Writer) error {
 		return fmt.Errorf("load config: DATABASE_URL is required")
 	}
 
-	db, err := sql.Open("pgx", databaseURL)
+	// migrations.Open always runs as aboutme_migrator (see its doc
+	// comment): every migration, and goose_db_version itself, is created
+	// by -- and so owned by -- that one role, regardless of which login
+	// DATABASE_URL names.
+	db, err := migrations.Open(databaseURL)
 	if err != nil {
 		return fmt.Errorf("open database: invalid configuration")
 	}
@@ -153,53 +148,18 @@ func runCommand(command string, check bool, stdout io.Writer) error {
 	if err := db.PingContext(ctx); err != nil {
 		return fmt.Errorf("ping database: connection failed")
 	}
-	if command == "provision" {
-		if check {
-			return fmt.Errorf("provision does not accept -check")
-		}
-		if err := migrations.ProvisionDatabase(ctx, db); err != nil {
-			return fmt.Errorf("database provisioning failed; verify the database owner and fixed grants")
-		}
-		return writeLine(stdout, "migrate: database provisioning verified")
-	}
-	if command == "adopt-history-owner" {
-		if check || identity != migrations.LocalAdminMigratorIdentity() {
-			return fmt.Errorf("history adoption requires MIGRATION_IDENTITY=local-aboutme without -check")
-		}
-		adoption, err := migrations.AdoptHistoryOwner(ctx, db, b.lockOpts()...)
-		if err != nil {
-			return fmt.Errorf("history owner adoption failed; inspect local migration state")
-		}
-		if adoption.Outcome() == migrations.ReconciledConverged {
-			if err := writeLine(stdout, "migrate: warning MIGRATION_ADOPTION_RECONCILED"); err != nil {
-				return err
-			}
-		}
-		return writeLine(stdout, "migrate: history owner adopted")
-	}
 
 	// -check never contends for the advisory lock at all (migrations.Status
 	// is lock-free — see its doc comment), so the lock-wait budget below is
 	// only ever built and passed for the apply path.
 	if check {
-		return runCheck(ctx, db, stdout, identity)
+		return runCheck(ctx, db, stdout)
 	}
-	return runApply(ctx, db, stdout, identity, b.lockOpts()...)
+	return runApply(ctx, db, stdout, b.lockOpts()...)
 }
 
-func migrationIdentityFromEnvironment() (migrations.MigrationIdentity, error) {
-	switch strings.TrimSpace(os.Getenv("MIGRATION_IDENTITY")) {
-	case "direct":
-		return migrations.DirectMigratorIdentity(), nil
-	case "local-aboutme":
-		return migrations.LocalAdminMigratorIdentity(), nil
-	default:
-		return migrations.MigrationIdentity{}, fmt.Errorf("MIGRATION_IDENTITY must be direct or local-aboutme")
-	}
-}
-
-func runApply(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrations.MigrationIdentity, lockOpts ...lock.SessionLockerOption) error {
-	results, err := migrations.Apply(ctx, db, identity, lockOpts...)
+func runApply(ctx context.Context, db *sql.DB, stdout io.Writer, lockOpts ...lock.SessionLockerOption) error {
+	results, err := migrations.Apply(ctx, db, lockOpts...)
 	if err != nil {
 		return migrationCommandError(err)
 	}
@@ -218,8 +178,8 @@ func runApply(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrat
 // runCheck reports each migration's state without taking the advisory lock
 // and exits non-zero if any are pending, so a readiness check returns
 // promptly during a concurrent migration.
-func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrations.MigrationIdentity) error {
-	statuses, err := migrations.Status(ctx, db, identity)
+func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer) error {
+	statuses, err := migrations.Status(ctx, db)
 	if err != nil {
 		return migrationCommandError(err)
 	}
@@ -236,21 +196,26 @@ func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer, identity migrat
 	return writeLine(stdout, "migrate: up to date")
 }
 
-// migrationCommandError keeps database, driver, and catalog detail out of the
-// command's public output while retaining stable operator guidance.
+// migrationCommandError keeps database, driver, and catalog detail out of
+// this command's public output, while still naming the failing
+// migration's version and its Postgres SQLSTATE — never a value, a query,
+// or the DSN — so an operator can find the exact migration and error
+// class from the output alone.
 func migrationCommandError(err error) error {
-	switch {
-	case errors.Is(err, migrations.ErrMigrationHistoryMissing):
-		return errors.New("migration database is uninitialized; run migrate provision")
-	case errors.Is(err, migrations.ErrHistoryAdoptionRequired):
-		return errors.New("migration history adoption is required; run migrate adopt-history-owner")
-	case errors.Is(err, migrations.ErrMigrationHistoryCorrupt):
-		return errors.New("migration state is corrupt; inspect the database catalog")
-	case errors.Is(err, migrations.ErrMigrationProvisioningDrift):
-		return errors.New("migration database provisioning has drifted")
-	default:
-		return errors.New("migration operation failed")
+	var partial *goose.PartialError
+	if errors.As(err, &partial) {
+		version := int64(0)
+		if partial.Failed != nil && partial.Failed.Source != nil {
+			version = partial.Failed.Source.Version
+		}
+		sqlstate := "unknown"
+		var pgErr *pgconn.PgError
+		if errors.As(partial.Err, &pgErr) {
+			sqlstate = pgErr.Code
+		}
+		return fmt.Errorf("migration %d failed: SQLSTATE %s", version, sqlstate)
 	}
+	return errors.New("migration operation failed")
 }
 
 // writeLine writes s followed by a newline to w, wrapping any write

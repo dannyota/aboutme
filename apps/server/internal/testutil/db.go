@@ -3,17 +3,15 @@ package testutil
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	// Registers the pgx driver under database/sql's "pgx" name, so
-	// prepareMigratedTestDatabase's sql.Open("pgx", dsn) resolves. testutil is
+	// NewMigratedTestDatabase's admin connection resolves. testutil is
 	// imported only by _test.go files (never production code, see the
 	// package doc comment in clock.go), so this registration only ever runs
 	// inside a test binary.
@@ -64,99 +62,76 @@ func RequireMigratedTestDatabaseURL(t *testing.T) string {
 	return dsn
 }
 
-var (
-	migratedTemplateMu    sync.Mutex
-	migratedTemplateName  string
-	migratedTemplateReady bool
-	migratedTemplateErr   error
-	migratedCloneCounter  atomic.Uint64
-)
+var newMigratedTestDatabaseCounter atomic.Uint64
 
-// migratedTemplate returns the cached head template name for base,
-// bootstrapping cluster roles and building the template at most once per
-// process in the normal case. A build failure is cached too, so every
-// caller in this process sees the same error instead of retrying
-// concurrently. invalidateMigratedTemplate clears the cache so the next
-// call rebuilds.
-func migratedTemplate(ctx context.Context, base string) (string, error) {
-	migratedTemplateMu.Lock()
-	defer migratedTemplateMu.Unlock()
-	if migratedTemplateReady {
-		return migratedTemplateName, migratedTemplateErr
-	}
-	if rolesErr := bootstrapTestDatabaseRoles(ctx, base); rolesErr != nil {
-		migratedTemplateErr = rolesErr
-		migratedTemplateReady = true
-		return "", migratedTemplateErr
-	}
-	migratedTemplateName, migratedTemplateErr = migrations.EnsureTemplateDatabase(ctx, base, migrations.FS, 0)
-	migratedTemplateReady = true
-	return migratedTemplateName, migratedTemplateErr
-}
-
-// invalidateMigratedTemplate clears the cached template name so the next
-// migratedTemplate call rebuilds it. Called when CloneTemplateDatabase
-// reports migrations.ErrTemplateMissing, e.g. after another process swept
-// the template this process had cached.
-func invalidateMigratedTemplate() {
-	migratedTemplateMu.Lock()
-	defer migratedTemplateMu.Unlock()
-	migratedTemplateReady = false
-	migratedTemplateName = ""
-	migratedTemplateErr = nil
-}
-
-// NewMigratedTestDatabase returns the DSN and an open pool for a disposable
-// clone of every embedded migration. The clone is dropped in t.Cleanup.
+// NewMigratedTestDatabase creates a fresh, uniquely named database on the
+// server pointed to by TEST_DATABASE_URL, brings it to head (fixed-role and
+// grant setup, then every embedded migration -- see
+// prepareMigratedTestDatabase), and returns its DSN and an open pool. The
+// database is dropped, and the pool closed, in t.Cleanup.
+//
+// Every call migrates a brand-new database from scratch (ADR 0038): there
+// is no shared head-state template to clone. Callers that only need a
+// single shared, already-migrated database should prefer
+// RequireMigratedTestDatabaseURL instead.
 func NewMigratedTestDatabase(t *testing.T) (string, *sql.DB) {
 	t.Helper()
 	base := RequireTestDatabaseURL(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	template, templateErr := migratedTemplate(ctx, base)
-	if templateErr != nil {
-		t.Fatalf("build migrated template: %v", templateErr)
-	}
-	name := fmt.Sprintf("aboutme_migrate_test_%d_%d", time.Now().UnixNano(), migratedCloneCounter.Add(1))
-	cloneErr := migrations.CloneTemplateDatabase(ctx, base, template, name)
-	if errors.Is(cloneErr, migrations.ErrTemplateMissing) {
-		invalidateMigratedTemplate()
-		template, templateErr = migratedTemplate(ctx, base)
-		if templateErr != nil {
-			t.Fatalf("rebuild migrated template: %v", templateErr)
-		}
-		cloneErr = migrations.CloneTemplateDatabase(ctx, base, template, name)
-	}
-	if cloneErr != nil {
-		t.Fatalf("clone migrated template: %v", cloneErr)
-	}
+
 	admin, err := sql.Open("pgx", base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
-		defer stop()
-		if _, dropErr := admin.ExecContext(cleanup, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`); dropErr != nil {
-			t.Errorf("drop migrated clone: %v", dropErr)
-		}
-		if closeErr := admin.Close(); closeErr != nil {
-			t.Errorf("close admin: %v", closeErr)
+		if err := admin.Close(); err != nil {
+			t.Errorf("close admin connection: %v", err)
 		}
 	})
+	if err := admin.PingContext(ctx); err != nil {
+		t.Fatalf("ping admin connection (is TEST_DATABASE_URL reachable?): %v", err)
+	}
+
+	name := fmt.Sprintf("aboutme_migrate_test_%d_%d", time.Now().UnixNano(), newMigratedTestDatabaseCounter.Add(1))
+	if _, err := admin.ExecContext(ctx, `CREATE DATABASE `+name); err != nil {
+		t.Fatalf("create database %s: %v", name, err)
+	}
+	t.Cleanup(func() {
+		cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
+		defer stop()
+		// WITH (FORCE) (Postgres 13+) disconnects any lingering sessions --
+		// e.g. this test's own pool that hasn't finished closing yet --
+		// instead of DROP DATABASE failing with "database is being accessed
+		// by other users".
+		if _, dropErr := admin.ExecContext(cleanup, `DROP DATABASE IF EXISTS `+name+` WITH (FORCE)`); dropErr != nil {
+			t.Errorf("drop database %s: %v", name, dropErr)
+		}
+	})
+
 	u, err := url.Parse(base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	u.Path = "/" + name
-	db, err := sql.Open("pgx", u.String())
+	dsn := u.String()
+
+	if err := bootstrapTestDatabaseRoles(ctx, dsn); err != nil {
+		t.Fatalf("bootstrap roles on %s: %v", name, err)
+	}
+
+	db, err := migrations.Open(dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
-			t.Errorf("close migrated clone: %v", err)
+			t.Errorf("close migrated database: %v", err)
 		}
 	})
-	return u.String(), db
+	if _, err := migrations.Apply(ctx, db); err != nil {
+		t.Fatalf("apply migrations to %s: %v", name, err)
+	}
+
+	return dsn, db
 }

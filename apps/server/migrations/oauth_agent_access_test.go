@@ -1,10 +1,10 @@
-// Phase PM task 1's constraint, cascade, and lineage tests for the four tables
-// added by migration 00009 (oauth_clients, oauth_authorization_codes,
-// oauth_grants, oauth_tokens). Like password_auth_test.go, every statement here
-// is raw parameterized SQL against a live goose-migrated database — no
-// internal/store layer — because the point is proving the database itself
-// enforces every M1/M2/M3 bound, not that a Go pass happens to agree with it.
-// Boundaries are exercised at limit and limit+1.
+// Constraint, cascade, and lineage tests for the oauth_clients,
+// oauth_authorization_codes, oauth_grants, and oauth_tokens tables. Like
+// password_auth_test.go, every statement here is raw parameterized SQL
+// against a live goose-migrated database — no internal/store layer —
+// because the point is proving the database itself enforces every bound,
+// not that a Go pass happens to agree with it. Boundaries are exercised at
+// limit and limit+1.
 package migrations_test
 
 import (
@@ -140,74 +140,6 @@ func insertOAuthTokenReturningID(ctx context.Context, t *testing.T, db sqlExecer
 		t.Fatalf("insert oauth token: %v", err)
 	}
 	return id
-}
-
-// ---------------------------------------------------------------------------
-// Down/up restores the exact prior schema.
-// ---------------------------------------------------------------------------
-
-func TestOAuthAgentAccessMigrationDownUp(t *testing.T) {
-	t.Parallel()
-	dsn := newTestDatabase(t)
-	db := openTestDB(t, dsn)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	t.Cleanup(cancel)
-
-	provider, err := migrations.NewProvider(db, migrations.FS)
-	if err != nil {
-		t.Fatalf("NewProvider() error: %v", err)
-	}
-	if _, err := provider.UpTo(ctx, 9); err != nil {
-		t.Fatalf("UpTo(9) error: %v", err)
-	}
-	if _, err := provider.DownTo(ctx, 8); err != nil {
-		t.Fatalf("DownTo(8) error: %v", err)
-	}
-	var returnPathAfterDown int
-	if err := db.QueryRowContext(ctx, `
-		SELECT count(*) FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'oauth_transactions'
-		  AND column_name = 'return_path'
-	`).Scan(&returnPathAfterDown); err != nil {
-		t.Fatalf("count return_path after down: %v", err)
-	}
-	if returnPathAfterDown != 0 {
-		t.Fatalf("return_path columns after down = %d, want 0", returnPathAfterDown)
-	}
-
-	for _, table := range oauthAgentAccessTables {
-		var relation *string
-		if err := db.QueryRowContext(ctx, `SELECT to_regclass('public.`+table+`')::text`).Scan(&relation); err != nil {
-			t.Fatalf("probe %s after down: %v", table, err)
-		}
-		if relation != nil {
-			t.Fatalf("%s relation after down = %q, want absent", table, *relation)
-		}
-	}
-
-	if _, err := provider.UpTo(ctx, 9); err != nil {
-		t.Fatalf("UpTo(9) error: %v", err)
-	}
-	for _, table := range oauthAgentAccessTables {
-		var relation *string
-		if err := db.QueryRowContext(ctx, `SELECT to_regclass('public.`+table+`')::text`).Scan(&relation); err != nil {
-			t.Fatalf("probe %s after up: %v", table, err)
-		}
-		if relation == nil {
-			t.Fatalf("%s relation after up = absent, want present", table)
-		}
-	}
-	var returnPathAfterUp string
-	if err := db.QueryRowContext(ctx, `
-		SELECT column_name FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = 'oauth_transactions'
-		  AND column_name = 'return_path'
-	`).Scan(&returnPathAfterUp); err != nil {
-		t.Fatalf("return_path after up: %v", err)
-	}
-	if returnPathAfterUp != "return_path" {
-		t.Fatalf("column after up = %q, want return_path", returnPathAfterUp)
-	}
 }
 
 func TestOAuthTransactionReturnPathConstraint(t *testing.T) {
@@ -630,8 +562,8 @@ func TestOAuthGrantSingleLiveRowUnderConcurrentInserts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider() error: %v", err)
 	}
-	if _, upErr := provider.UpTo(ctx, 9); upErr != nil {
-		t.Fatalf("UpTo(9) error: %v", upErr)
+	if _, upErr := provider.Up(ctx); upErr != nil {
+		t.Fatalf("Up() error: %v", upErr)
 	}
 
 	pool, err := pgxpool.New(ctx, dsn)
@@ -1028,10 +960,11 @@ func TestOAuthAgentAccessCascades(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestOAuthAgentAccessStoresNoRawMaterial proves the adversarial rule two ways:
-// migration 00009 and sql/queries.sql never mention the raw access/refresh
-// token prefixes at all, and a full fixture set leaves no text column holding a
-// value with those prefixes. Digests are bytea and length-checked, so a 43-plus
-// character raw spelling cannot be stored in a digest column either.
+// the baseline migration and sql/queries.sql never mention the raw
+// access/refresh token prefixes at all, and a full fixture set leaves no text
+// column holding a value with those prefixes. Digests are bytea and
+// length-checked, so a 43-plus character raw spelling cannot be stored in a
+// digest column either.
 func TestOAuthAgentAccessStoresNoRawMaterial(t *testing.T) {
 	t.Parallel()
 
@@ -1041,7 +974,7 @@ func TestOAuthAgentAccessStoresNoRawMaterial(t *testing.T) {
 	)
 
 	for _, path := range []string{
-		"00009_add_oauth_agent_access.sql",
+		"00001_baseline.sql",
 		"../sql/queries.sql",
 	} {
 		content, err := os.ReadFile(path)
