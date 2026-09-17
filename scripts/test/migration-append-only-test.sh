@@ -369,6 +369,21 @@ printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
 git -C "$repo" add -A -- apps/server/migrations
 run_local "$repo" >/dev/null
 
+repo=$WORK/local-baseline-reset-wrong-base-marker
+new_pre_reset_repo "$repo"
+printf '%s\n' 'an unpinned pre-reset marker' >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" add -- apps/server/migrations
+git -C "$repo" commit -qm "test: pre-reset baseline with an unpinned marker"
+git -C "$repo" update-ref refs/remotes/origin/main HEAD
+rm -f "$repo"/apps/server/migrations/*.sql
+cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
+printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
+git -C "$repo" add -A -- apps/server/migrations
+if run_local "$repo" >/dev/null 2>&1; then
+  echo "migration-append-only-test: a local reset from an unpinned base marker passed" >&2
+  exit 1
+fi
+
 repo=$WORK/local-baseline-reset-wrong-marker
 new_pre_reset_repo "$repo"
 git -C "$repo" update-ref refs/remotes/origin/main HEAD
