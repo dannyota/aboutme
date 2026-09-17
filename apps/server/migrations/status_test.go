@@ -51,8 +51,8 @@ func TestStatus_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 
 	// Apply the real embedded migrations first so Status has real,
 	// non-trivial state to report on, not just an empty database.
-	if _, err := migrations.Apply(ctx, db); err != nil {
-		t.Fatalf("Apply() error: %v", err)
+	if _, applyErr := migrations.Apply(ctx, db); applyErr != nil {
+		t.Fatalf("Apply() error: %v", applyErr)
 	}
 
 	holderDB := openTestDB(t, dsn)

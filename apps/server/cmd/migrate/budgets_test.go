@@ -304,8 +304,8 @@ func TestRun_Check_DoesNotBlockOnAdvisoryLock(t *testing.T) {
 			t.Logf("close setup database: %v", closeErr)
 		}
 	})
-	if _, err := migrations.Apply(ctx, setupDB); err != nil {
-		t.Fatalf("setup Apply() error: %v", err)
+	if _, applyErr := migrations.Apply(ctx, setupDB); applyErr != nil {
+		t.Fatalf("setup Apply() error: %v", applyErr)
 	}
 
 	holderDB := openMigrateTestDB(t, dsn)
