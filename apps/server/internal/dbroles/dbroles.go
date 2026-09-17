@@ -1,4 +1,6 @@
-// Package dbroles creates and verifies the fixed cluster roles used by aboutme.
+// Package dbroles creates and verifies the fixed database roles used by
+// aboutme, and grants them the database and schema privileges the migrator
+// and the app need on the database db-setup targets.
 package dbroles
 
 import (
@@ -6,17 +8,18 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
-// LockID serializes cluster role bootstrap in the common postgres database.
-const LockID int64 = -7309311299645240732
+// LockID is the advisory lock key that serializes db-setup runs on one
+// database: the first 8 bytes of sha256("aboutme.db-setup.v1") as a
+// big-endian int64 (TestLockIDMatchesNamespaceDigest).
+const LockID int64 = 1229627785684121947
 
 var (
 	// ErrDrift reports that an existing fixed role set is not exact.
 	ErrDrift = errors.New("database role configuration drift")
-	// ErrWrongDatabase reports an attempt outside the common postgres database.
-	ErrWrongDatabase = errors.New("database role bootstrap requires the postgres database")
 )
 
 // Result reports fixed-role outcomes without connection information.
@@ -31,23 +34,17 @@ type role struct {
 	replication, bypassRLS                          bool
 }
 
+// fixedRoles are the two login roles: aboutme_migrator owns every schema
+// object, and aboutme_app is the server's runtime identity. Neither holds a
+// role membership (ADR 0038).
 var fixedRoles = []role{
-	{name: "aboutme_runtime_owner"},
 	{name: "aboutme_migrator", login: true},
 	{name: "aboutme_app", login: true},
-	{name: "aboutme_restore_verify", login: true},
-	{name: "aboutme_lifecycle_command", login: true},
-	{name: "aboutme_fencing_proof", login: true},
-	{name: "aboutme_maintenance", login: true},
 }
 
 type membership struct {
 	role, member, grantor string
 	admin, inherit, set   bool
-}
-
-var migratorMembership = membership{
-	role: "aboutme_runtime_owner", member: "aboutme_migrator", inherit: false, set: true, admin: false,
 }
 
 type catalogStore interface {
@@ -56,11 +53,13 @@ type catalogStore interface {
 	readRoles(context.Context) (map[string]role, error)
 	readMemberships(context.Context) ([]membership, error)
 	createRole(context.Context, role) error
-	grant(context.Context, membership) error
+	grantDatabaseAndSchema(context.Context, string) error
 }
 
-// Ensure atomically creates a new fixed role set or verifies an existing one.
-// It never repairs, alters, drops, or changes a password on an existing role.
+// Ensure atomically creates the fixed role set (or verifies an existing
+// one) and grants the database and schema privileges aboutme_migrator and
+// aboutme_app need on the database db is connected to. It never repairs,
+// alters, drops, or changes a password on an existing role.
 func Ensure(ctx context.Context, db *sql.DB) (Result, error) {
 	if db == nil {
 		return Result{}, errors.New("dbroles: nil database")
@@ -112,9 +111,6 @@ func ensureCatalog(ctx context.Context, store catalogStore) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("dbroles: identify database: %w", err)
 	}
-	if database != "postgres" {
-		return Result{}, ErrWrongDatabase
-	}
 	if lockErr := store.lock(ctx); lockErr != nil {
 		return Result{}, fmt.Errorf("dbroles: acquire lock: %w", lockErr)
 	}
@@ -128,10 +124,11 @@ func ensureCatalog(ctx context.Context, store catalogStore) (Result, error) {
 		return Result{}, fmt.Errorf("dbroles: read memberships: %w", err)
 	}
 
-	if len(roles) != 0 && len(roles) != len(fixedRoles) {
+	var result Result
+	switch {
+	case len(roles) != 0 && len(roles) != len(fixedRoles):
 		return Result{}, fmt.Errorf("%w: partial fixed role set", ErrDrift)
-	}
-	if len(roles) == len(fixedRoles) {
+	case len(roles) == len(fixedRoles):
 		for _, want := range fixedRoles {
 			got, ok := roles[want.name]
 			if !ok || got != want {
@@ -141,40 +138,34 @@ func ensureCatalog(ctx context.Context, store catalogStore) (Result, error) {
 		if err := verifyMemberships(memberships, currentUser); err != nil {
 			return Result{}, err
 		}
-		return Result{Verified: len(fixedRoles)}, nil
-	}
-	if len(memberships) != 0 {
-		return Result{}, fmt.Errorf("%w: membership references absent fixed role", ErrDrift)
+		result.Verified = len(fixedRoles)
+	default:
+		if len(memberships) != 0 {
+			return Result{}, fmt.Errorf("%w: membership references absent fixed role", ErrDrift)
+		}
+		for _, spec := range fixedRoles {
+			if err := store.createRole(ctx, spec); err != nil {
+				return Result{}, fmt.Errorf("dbroles: create %s: %w", spec.name, err)
+			}
+		}
+		result.Created = len(fixedRoles)
 	}
 
-	for _, spec := range fixedRoles {
-		if err := store.createRole(ctx, spec); err != nil {
-			return Result{}, fmt.Errorf("dbroles: create %s: %w", spec.name, err)
-		}
+	if err := store.grantDatabaseAndSchema(ctx, database); err != nil {
+		return Result{}, fmt.Errorf("dbroles: grant database and schema privileges: %w", err)
 	}
-	if err := store.grant(ctx, migratorMembership); err != nil {
-		return Result{}, fmt.Errorf("dbroles: create migrator membership: %w", err)
-	}
-	return Result{Created: len(fixedRoles)}, nil
+	return result, nil
 }
 
+// verifyMemberships allows only the ADMIN grant that PostgreSQL gives a
+// non-superuser creator (INHERIT and SET false). Any other membership on a
+// fixed role is drift.
 func verifyMemberships(got []membership, currentUser string) error {
-	required := 0
 	for _, edge := range got {
-		if edge.role == migratorMembership.role && edge.member == migratorMembership.member && edge.admin == migratorMembership.admin && edge.inherit == migratorMembership.inherit && edge.set == migratorMembership.set {
-			required++
-			continue
-		}
-		// PostgreSQL 18 gives a non-superuser CREATEROLE identity this
-		// administrative edge on each role it creates. SET and INHERIT are
-		// false, so it conveys administration without role privileges.
 		if edge.member == currentUser && edge.admin && !edge.inherit && !edge.set {
 			continue
 		}
 		return fmt.Errorf("%w: unexpected fixed-role membership", ErrDrift)
-	}
-	if required != 1 {
-		return fmt.Errorf("%w: migrator membership count %d", ErrDrift, required)
 	}
 	return nil
 }
@@ -200,8 +191,7 @@ func (s sqlCatalog) readRoles(ctx context.Context) (map[string]role, error) {
 SELECT rolname, rolcanlogin, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
        rolreplication, rolbypassrls
 FROM pg_catalog.pg_roles
-WHERE rolname IN ('aboutme_runtime_owner','aboutme_migrator','aboutme_app',
- 'aboutme_restore_verify','aboutme_lifecycle_command','aboutme_fencing_proof','aboutme_maintenance')`)
+WHERE rolname IN ('aboutme_migrator','aboutme_app')`)
 	if err != nil {
 		return nil, err
 	}
@@ -224,10 +214,8 @@ FROM pg_catalog.pg_auth_members AS m
 JOIN pg_catalog.pg_roles AS granted ON granted.oid = m.roleid
 JOIN pg_catalog.pg_roles AS member ON member.oid = m.member
 JOIN pg_catalog.pg_roles AS grantor ON grantor.oid = m.grantor
-WHERE granted.rolname IN ('aboutme_runtime_owner','aboutme_migrator','aboutme_app',
- 'aboutme_restore_verify','aboutme_lifecycle_command','aboutme_fencing_proof','aboutme_maintenance')
-   OR member.rolname IN ('aboutme_runtime_owner','aboutme_migrator','aboutme_app',
- 'aboutme_restore_verify','aboutme_lifecycle_command','aboutme_fencing_proof','aboutme_maintenance')`)
+WHERE granted.rolname IN ('aboutme_migrator','aboutme_app')
+   OR member.rolname IN ('aboutme_migrator','aboutme_app')`)
 	if err != nil {
 		return nil, err
 	}
@@ -250,20 +238,36 @@ func (s sqlCatalog) createRole(ctx context.Context, r role) error {
 	_, err := s.tx.ExecContext(ctx, statement)
 	return err
 }
-func (s sqlCatalog) grant(ctx context.Context, m membership) error {
-	if m != migratorMembership {
-		return errors.New("dbroles: unknown fixed membership")
+
+// grantDatabaseAndSchema applies the fixed grants on every run. The database
+// name comes from current_database() and is quoted because DDL takes no
+// identifier parameters.
+func (s sqlCatalog) grantDatabaseAndSchema(ctx context.Context, database string) error {
+	ident := quoteIdentifier(database)
+	statements := []string{
+		`REVOKE ALL ON DATABASE ` + ident + ` FROM PUBLIC`,
+		`GRANT CONNECT, CREATE ON DATABASE ` + ident + ` TO aboutme_migrator`,
+		`GRANT CONNECT ON DATABASE ` + ident + ` TO aboutme_app`,
+		`REVOKE CREATE ON SCHEMA public FROM PUBLIC`,
+		`GRANT USAGE, CREATE ON SCHEMA public TO aboutme_migrator`,
+		`GRANT USAGE ON SCHEMA public TO aboutme_app`,
 	}
-	_, err := s.tx.ExecContext(ctx, `GRANT aboutme_runtime_owner TO aboutme_migrator WITH INHERIT FALSE, SET TRUE, ADMIN FALSE`)
-	return err
+	for _, stmt := range statements {
+		if _, err := s.tx.ExecContext(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// quoteIdentifier double-quotes a PostgreSQL identifier, doubling any
+// embedded double quote, so it is safe to interpolate into DDL that has no
+// bind-parameter form for identifiers.
+func quoteIdentifier(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
 
 var createStatements = map[string]string{
-	"aboutme_runtime_owner":     `CREATE ROLE aboutme_runtime_owner NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
-	"aboutme_migrator":          `CREATE ROLE aboutme_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
-	"aboutme_app":               `CREATE ROLE aboutme_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
-	"aboutme_restore_verify":    `CREATE ROLE aboutme_restore_verify LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
-	"aboutme_lifecycle_command": `CREATE ROLE aboutme_lifecycle_command LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
-	"aboutme_fencing_proof":     `CREATE ROLE aboutme_fencing_proof LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
-	"aboutme_maintenance":       `CREATE ROLE aboutme_maintenance LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
+	"aboutme_migrator": `CREATE ROLE aboutme_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
+	"aboutme_app":      `CREATE ROLE aboutme_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT`,
 }
