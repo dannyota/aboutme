@@ -53,7 +53,7 @@ func hmacSHA256(key []byte, message string) []byte {
 // aboutme_app in one transaction. PostgreSQL keeps a pre-hashed value as the
 // verifier, so no plaintext password reaches the server or its logs.
 func SetLoginVerifiers(ctx context.Context, db *sql.DB, p LoginPasswords, random io.Reader) error {
-	if err := validatePasswords(p); err != nil {
+	if err := ValidatePasswords(p); err != nil {
 		return err
 	}
 	if db == nil {
@@ -73,7 +73,10 @@ func SetLoginVerifiers(ctx context.Context, db *sql.DB, p LoginPasswords, random
 	return nil
 }
 
-func validatePasswords(p LoginPasswords) error {
+// ValidatePasswords checks the length and inequality rules SetLoginVerifiers
+// requires, without touching a database. Callers can run it before opening a
+// connection to fail fast on a bad password input.
+func ValidatePasswords(p LoginPasswords) error {
 	for _, value := range []string{p.Migrator, p.App} {
 		if len(value) < minPasswordBytes || len(value) > maxPasswordBytes {
 			return errors.New("dbroles: login password must be 32 to 1024 bytes")
@@ -86,7 +89,7 @@ func validatePasswords(p LoginPasswords) error {
 }
 
 func setLoginVerifiers(ctx context.Context, tx *sql.Tx, p LoginPasswords, random io.Reader) error {
-	if err := validatePasswords(p); err != nil {
+	if err := ValidatePasswords(p); err != nil {
 		return err
 	}
 	for _, role := range []struct{ name, password string }{
