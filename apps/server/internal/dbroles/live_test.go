@@ -122,10 +122,14 @@ func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 	checks := []privilege{
 		{"aboutme_migrator", "database", "", "CONNECT", true},
 		{"aboutme_migrator", "database", "", "CREATE", true},
+		{"aboutme_migrator", "database", "", "TEMP", false},
 		{"aboutme_app", "database", "", "CONNECT", true},
 		{"aboutme_app", "database", "", "CREATE", false},
+		{"aboutme_app", "database", "", "TEMP", false},
 		{probe, "database", "", "CONNECT", false},
 		{probe, "database", "", "CREATE", false},
+		// db-setup revokes ALL from PUBLIC, including TEMP.
+		{probe, "database", "", "TEMP", false},
 		{"aboutme_migrator", "schema", "public", "USAGE", true},
 		{"aboutme_migrator", "schema", "public", "CREATE", true},
 		{"aboutme_app", "schema", "public", "USAGE", true},
@@ -155,5 +159,25 @@ func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 		if got != c.want {
 			t.Fatalf("%s %s privilege %s = %v, want %v", c.role, c.kind, c.grant, got, c.want)
 		}
+	}
+}
+
+// TestEnsureLiveSetsNoDefaultACLs asserts Ensure never runs ALTER DEFAULT
+// PRIVILEGES: every migration grants aboutme_app explicitly, so a future
+// object never inherits a standing default grant.
+func TestEnsureLiveSetsNoDefaultACLs(t *testing.T) {
+	db := livePostgresDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := Ensure(ctx, db); err != nil {
+		t.Fatalf("prepare roles: %v", err)
+	}
+
+	var count int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_default_acl`).Scan(&count); err != nil {
+		t.Fatalf("count pg_default_acl: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("pg_default_acl rows = %d, want 0", count)
 	}
 }
