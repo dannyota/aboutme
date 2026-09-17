@@ -1,5 +1,11 @@
 # Deploy tasks
 
+Task 13 records `deploy.sh` as first written, with three first-deploy task
+families: `db-bootstrap`, `db-provision`, and `db-set-login`.
+[ADR 0038](../../../adr/0038-single-baseline-and-plain-migrator.md) later
+collapsed them into one `db-setup` family; `deploy.sh` and its test now run that
+single task. The steps and results below stay as recorded.
+
 ## Task 13
 
 ### `deploy.sh` with first-deploy and rollback modes

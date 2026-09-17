@@ -59,8 +59,7 @@ The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
 ([ADR 0038](adr/0038-single-baseline-and-plain-migrator.md)). `aboutme_app`
 holds exactly SELECT/INSERT/UPDATE/DELETE on each business table and nothing on
 `goose_db_version`. Live tests prove the exact grant set, migrator ownership of
-every object, and a store smoke flow under `aboutme_app`. Final-stop authority
-is absent.
+every object, and a store smoke flow under `aboutme_app`.
 
 ## Implemented HTTP surface
 

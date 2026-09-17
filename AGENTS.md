@@ -186,9 +186,9 @@ commit; the repository is public.
   ESLint. Tests inject clocks, randomness, and UUIDs and pin renderer inputs.
   Never retry a flaky test into a pass.
 - Never hand-edit generated files; change the source and regenerate. Migrations
-  under `apps/server/migrations/.uat-baseline` are immutable; add a forward
-  migration that grants `aboutme_app` explicitly
-  ([ADR 0038](docs/adr/0038-single-baseline-and-plain-migrator.md)).
+  are append-only once `apps/server/migrations/.uat-baseline` is on the base;
+  roll back with a forward migration, and grant `aboutme_app` explicitly in each
+  migration ([ADR 0038](docs/adr/0038-single-baseline-and-plain-migrator.md)).
 - A contract change updates schema/OpenAPI sources, generated clients and types,
   tests, examples, design docs, and traceability in one reviewed change.
 - Do not weaken security controls: least privilege, strict input bounds,
