@@ -2,7 +2,7 @@
 # Deploys a tagged release to aboutme-prod. See docs/runbooks/production.md.
 #
 #   deploy.sh <tag>                  normal deploy
-#   deploy.sh <tag> --first-deploy   also bootstraps roles, grants and logins
+#   deploy.sh <tag> --first-deploy   also creates roles, grants, and logins
 #   deploy.sh --rollback <tag>       earlier images, no snapshot, no migration
 #
 # Order: snapshot, register revisions, stop jobs and app, migrate, start web
@@ -15,7 +15,7 @@ region=ap-southeast-1
 cluster=aboutme-prod
 group=aboutme-prod-jobs
 repo=dannyota/aboutme
-families=(app web migrate jobs db-bootstrap db-provision db-set-login)
+families=(app web migrate jobs db-setup)
 
 usage() {
   echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag>" >&2
@@ -178,9 +178,7 @@ run_once() { # family
   say "$1 done"
 }
 if ((first)); then
-  run_once db-bootstrap
-  run_once db-provision
-  run_once db-set-login
+  run_once db-setup
 fi
 if ((!rollback)); then
   run_once migrate

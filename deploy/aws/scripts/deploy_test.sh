@@ -66,7 +66,7 @@ before "$f" "scheduler update-schedule" "$stop_app"
 before "$f" "$stop_app" "--started-by deploy-migrate"
 before "$f" "--started-by deploy-migrate" "$start_app"
 before "$f" "--service aboutme-prod-web --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --desired-count 1" "$start_app"
-absent "$f" "deploy-db-bootstrap"
+absent "$f" "deploy-db-setup"
 [[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "ok: want 8 schedule updates" >&2; exit 1; }
 grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "ok: schedules not enabled at the end" >&2; exit 1; }
 jq -e '.Target.EcsParameters.TaskDefinitionArn == "arn:aws:ecs:ap-southeast-1:1:task-definition/new:4"' \
@@ -74,9 +74,7 @@ jq -e '.Target.EcsParameters.TaskDefinitionArn == "arn:aws:ecs:ap-southeast-1:1:
 
 run_case first 0 v0.1.0 --first-deploy
 f=$work/first.calls
-before "$f" "--started-by deploy-db-bootstrap" "--started-by deploy-db-provision"
-before "$f" "--started-by deploy-db-provision" "--started-by deploy-db-set-login"
-before "$f" "--started-by deploy-db-set-login" "--started-by deploy-migrate"
+before "$f" "--started-by deploy-db-setup" "--started-by deploy-migrate"
 grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "first: schedules not enabled at the end" >&2; exit 1; }
 
 run_case migrate_fails fail v0.1.0
