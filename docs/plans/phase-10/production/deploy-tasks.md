@@ -364,29 +364,23 @@ the three packages public.
 
 ### First production deploy
 
-**Owner:** integration owner with the owner present.
+**Owner:** integration owner.
 
-- [ ] **Step 1: Point the task definitions at the first images**
+- [x] **Step 1: Task definitions.** Not needed: `deploy.sh` registers revisions
+      with the release digests.
+- [x] **Step 2: Deploy.** `deploy.sh v0.1.1 --first-deploy` printed the
+      snapshot, `site down`, `db-setup done`, `migrate done`, `site up` and
+      `deployed v0.1.1`.
+- [x] **Step 3: Confirm by hand.** `/`, `/healthz`, `/readyz` and `/robots.txt`
+      return 200 through Cloudflare with HSTS; `/print` and an unknown API path
+      return 404; `www` redirects to the apex; the Elastic IP does not answer.
+      Server logs record no client IP, so the client-IP check rests on the
+      production Caddy image test (`make caddy-prod-test`).
+- [x] **Step 4: Site alarm.** `site_alarm_enabled = true` applied.
 
-Set `image_server`, `image_web` and `image_caddy` in `prod.tfvars` to the
-`v0.1.0` digests, then `tofu plan` and `tofu apply`. Later releases change
-images only through `deploy.sh`.
-
-- [ ] **Step 2: Deploy**
-
-```sh
-bash deploy/aws/scripts/deploy.sh v0.1.0 --first-deploy
-```
-
-Expected: `snapshot ...`, `site down`, `site up`, `deployed v0.1.0`.
-
-- [ ] **Step 3: Confirm by hand**
-
-- `https://aboutme.vn/` loads the landing page over Cloudflare.
-- `https://www.aboutme.vn/` redirects to the apex.
-- A request to the Elastic IP times out.
-- The server log in CloudWatch shows the client IP of a test request, not a
-  Cloudflare address.
+Result (2026-09-17): v0.1.1 serves `https://aboutme.vn/`. HTML app pages such as
+`/` and `/login` send no CSP or `frame-ancestors`; public resume pages and Go
+routes do. That is a code gap to fix in a later release.
 
 ## Task 16
 
