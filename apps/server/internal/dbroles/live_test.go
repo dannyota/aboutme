@@ -3,14 +3,13 @@ package dbroles
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func livePostgresDB(t *testing.T) *sql.DB {
@@ -22,11 +21,10 @@ func livePostgresDB(t *testing.T) *sql.DB {
 	if databaseURL == "" {
 		t.Fatal("TEST_DATABASE_URL is required when REQUIRE_TEST_DB=1")
 	}
-	config, err := parseLivePostgresConfig(databaseURL)
+	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
-		t.Fatal("parse TEST_DATABASE_URL")
+		t.Fatal("open TEST_DATABASE_URL")
 	}
-	db := stdlib.OpenDB(*config)
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
 			t.Errorf("close database: %v", err)
@@ -35,50 +33,32 @@ func livePostgresDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func parseLivePostgresConfig(databaseURL string) (*pgx.ConnConfig, error) {
-	if strings.TrimSpace(databaseURL) == "" {
-		return nil, errors.New("TEST_DATABASE_URL is required")
-	}
-	config, err := pgx.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, err
-	}
-	config.Database = "postgres"
-	return config, nil
-}
-
-func TestParseLivePostgresConfigRejectsEmptyURL(t *testing.T) {
-	if _, err := parseLivePostgresConfig(""); err == nil {
-		t.Fatal("empty TEST_DATABASE_URL accepted")
-	}
-}
-
 func TestEnsureLiveCreatesOrReusesExactRoles(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	var before int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname IN ('aboutme_runtime_owner','aboutme_migrator','aboutme_app','aboutme_restore_verify','aboutme_lifecycle_command','aboutme_fencing_proof','aboutme_maintenance')`).Scan(&before); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM pg_catalog.pg_roles WHERE rolname IN ('aboutme_migrator','aboutme_app')`).Scan(&before); err != nil {
 		t.Fatal("count fixed roles")
 	}
 	result, err := Ensure(ctx, db)
 	if err != nil {
 		t.Fatalf("Ensure() error = %v", err)
 	}
-	if result.Created+result.Verified != 7 {
-		t.Fatalf("result = %+v, want seven roles", result)
+	if result.Created+result.Verified != 2 {
+		t.Fatalf("result = %+v, want two roles", result)
 	}
 	t.Logf("fixed roles existing=%d created=%d verified=%d", before, result.Created, result.Verified)
 	reused, err := Ensure(ctx, db)
 	if err != nil {
 		t.Fatalf("second Ensure() error = %v", err)
 	}
-	if reused != (Result{Verified: 7}) {
-		t.Fatalf("second result = %+v, want seven verified", reused)
+	if reused != (Result{Verified: 2}) {
+		t.Fatalf("second result = %+v, want two verified", reused)
 	}
 }
 
-func TestEnsureLiveSerializesOnCommonDatabase(t *testing.T) {
+func TestEnsureLiveSerializesWithinDatabase(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -90,7 +70,7 @@ func TestEnsureLiveSerializesOnCommonDatabase(t *testing.T) {
 		t.Fatal("begin holder")
 	}
 	if _, err := holder.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, LockID); err != nil {
-		t.Fatal("hold bootstrap lock")
+		t.Fatal("hold db-setup lock")
 	}
 	done := make(chan error, 1)
 	go func() { _, err := Ensure(ctx, db); done <- err }()
@@ -100,7 +80,7 @@ func TestEnsureLiveSerializesOnCommonDatabase(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 	if err := holder.Rollback(); err != nil {
-		t.Fatal("release bootstrap lock")
+		t.Fatal("release db-setup lock")
 	}
 	select {
 	case err := <-done:
@@ -112,61 +92,68 @@ func TestEnsureLiveSerializesOnCommonDatabase(t *testing.T) {
 	}
 }
 
-func TestOnlyMigratorCanSetRuntimeOwner(t *testing.T) {
+// TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges checks the database
+// and schema privileges each role holds after Ensure. A role with no grants
+// stands in for PUBLIC.
+func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if _, err := Ensure(ctx, db); err != nil {
 		t.Fatalf("prepare roles: %v", err)
 	}
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		t.Fatal("dedicated connection")
-	}
-	defer resetAndCloseConnection(t, conn)
-	for _, spec := range fixedRoles {
-		if _, err := conn.ExecContext(ctx, "SET SESSION AUTHORIZATION "+spec.name); err != nil {
-			t.Fatalf("authorize %s: %v", spec.name, err)
-		}
-		var current string
-		if err := conn.QueryRowContext(ctx, `SELECT current_user`).Scan(&current); err != nil {
-			t.Fatalf("current user for %s", spec.name)
-		}
-		if current != spec.name {
-			t.Fatalf("current_user = %s, want %s", current, spec.name)
-		}
-		if spec.name == "aboutme_migrator" {
-			if _, err := conn.ExecContext(ctx, `SET ROLE aboutme_runtime_owner`); err != nil {
-				t.Fatalf("migrator cannot set runtime owner: %v", err)
-			}
-			if _, err := conn.ExecContext(ctx, `RESET ROLE`); err != nil {
-				t.Fatalf("reset migrator role: %v", err)
-			}
-		} else if spec.name != "aboutme_runtime_owner" {
-			if _, err := conn.ExecContext(ctx, `SET ROLE aboutme_runtime_owner`); err == nil {
-				t.Fatalf("%s unexpectedly set runtime owner", spec.name)
-			}
-		}
-		resetCtx, resetCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, resetErr := conn.ExecContext(resetCtx, `RESET SESSION AUTHORIZATION`)
-		resetCancel()
-		if resetErr != nil {
-			t.Fatalf("reset authorization after %s", spec.name)
-		}
-	}
-}
 
-func resetAndCloseConnection(t *testing.T, conn *sql.Conn) {
-	t.Helper()
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, err := conn.ExecContext(cleanupCtx, `RESET ROLE`); err != nil {
-		t.Errorf("cleanup RESET ROLE: %v", err)
+	probe := fmt.Sprintf("aboutme_dbroles_probe_%d", time.Now().UnixNano())
+	if _, err := db.ExecContext(ctx, `CREATE ROLE `+probe+` NOLOGIN NOINHERIT`); err != nil {
+		t.Fatalf("create probe role: %v", err)
 	}
-	if _, err := conn.ExecContext(cleanupCtx, `RESET SESSION AUTHORIZATION`); err != nil {
-		t.Errorf("cleanup RESET SESSION AUTHORIZATION: %v", err)
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+		if _, err := db.ExecContext(cleanupCtx, `DROP ROLE IF EXISTS `+probe); err != nil {
+			t.Errorf("drop probe role: %v", err)
+		}
+	})
+
+	type privilege struct {
+		role, kind, name, grant string
+		want                    bool
 	}
-	if err := conn.Close(); err != nil {
-		t.Errorf("close dedicated connection: %v", err)
+	checks := []privilege{
+		{"aboutme_migrator", "database", "", "CONNECT", true},
+		{"aboutme_migrator", "database", "", "CREATE", true},
+		{"aboutme_app", "database", "", "CONNECT", true},
+		{"aboutme_app", "database", "", "CREATE", false},
+		{probe, "database", "", "CONNECT", false},
+		{probe, "database", "", "CREATE", false},
+		{"aboutme_migrator", "schema", "public", "USAGE", true},
+		{"aboutme_migrator", "schema", "public", "CREATE", true},
+		{"aboutme_app", "schema", "public", "USAGE", true},
+		{"aboutme_app", "schema", "public", "CREATE", false},
+		// db-setup keeps PUBLIC's default USAGE on schema public.
+		{probe, "schema", "public", "USAGE", true},
+		{probe, "schema", "public", "CREATE", false},
+	}
+	for _, c := range checks {
+		var query string
+		switch c.kind {
+		case "database":
+			query = `SELECT has_database_privilege($1, current_database(), $2)`
+		case "schema":
+			query = `SELECT has_schema_privilege($1, $3, $2)`
+		}
+		var got bool
+		var err error
+		if c.kind == "schema" {
+			err = db.QueryRowContext(ctx, query, c.role, c.grant, c.name).Scan(&got)
+		} else {
+			err = db.QueryRowContext(ctx, query, c.role, c.grant).Scan(&got)
+		}
+		if err != nil {
+			t.Fatalf("check %s %s %s: %v", c.role, c.kind, c.grant, err)
+		}
+		if got != c.want {
+			t.Fatalf("%s %s privilege %s = %v, want %v", c.role, c.kind, c.grant, got, c.want)
+		}
 	}
 }

@@ -12,38 +12,50 @@ import (
 )
 
 func TestLockIDMatchesNamespaceDigest(t *testing.T) {
-	digest := sha256.Sum256([]byte("aboutme.cluster-role-bootstrap.v1"))
+	digest := sha256.Sum256([]byte("aboutme.db-setup.v1"))
 	if got := int64(binary.BigEndian.Uint64(digest[:8])); got != LockID {
 		t.Fatalf("derived lock ID = %d, want %d", got, LockID)
 	}
 }
 
-func TestEnsureCatalogCreatesAllRolesBeforeMembership(t *testing.T) {
+func TestEnsureCatalogCreatesRolesThenGrants(t *testing.T) {
 	store := newFakeStore()
 	result, err := ensureCatalog(context.Background(), store)
 	if err != nil {
 		t.Fatalf("ensureCatalog() error = %v", err)
 	}
-	if want := (Result{Created: 7}); result != want {
+	if want := (Result{Created: 2}); result != want {
 		t.Fatalf("result = %+v, want %+v", result, want)
 	}
-	want := []string{"create:aboutme_runtime_owner", "create:aboutme_migrator", "create:aboutme_app", "create:aboutme_restore_verify", "create:aboutme_lifecycle_command", "create:aboutme_fencing_proof", "create:aboutme_maintenance", "grant:aboutme_runtime_owner:aboutme_migrator:false:true:false"}
+	want := []string{"create:aboutme_migrator", "create:aboutme_app", "grant:postgres"}
 	if !reflect.DeepEqual(store.mutations, want) {
 		t.Fatalf("mutations = %#v, want %#v", store.mutations, want)
 	}
 }
 
-func TestEnsureCatalogVerifiesExactExistingSetup(t *testing.T) {
+func TestEnsureCatalogVerifiesExactExistingSetupThenGrants(t *testing.T) {
 	store := exactFakeStore()
 	result, err := ensureCatalog(context.Background(), store)
 	if err != nil {
 		t.Fatalf("ensureCatalog() error = %v", err)
 	}
-	if want := (Result{Verified: 7}); result != want {
+	if want := (Result{Verified: 2}); result != want {
 		t.Fatalf("result = %+v, want %+v", result, want)
 	}
-	if len(store.mutations) != 0 {
-		t.Fatalf("mutations = %v, want none", store.mutations)
+	want := []string{"grant:postgres"}
+	if !reflect.DeepEqual(store.mutations, want) {
+		t.Fatalf("mutations = %#v, want %#v", store.mutations, want)
+	}
+}
+
+func TestEnsureCatalogGrantsAgainstTheConnectedDatabase(t *testing.T) {
+	store := exactFakeStore()
+	store.database = "aboutme_dev"
+	if _, err := ensureCatalog(context.Background(), store); err != nil {
+		t.Fatalf("ensureCatalog() error = %v", err)
+	}
+	if want := []string{"grant:aboutme_dev"}; !reflect.DeepEqual(store.mutations, want) {
+		t.Fatalf("mutations = %#v, want %#v", store.mutations, want)
 	}
 }
 
@@ -100,13 +112,11 @@ func TestEnsureCatalogRejectsMembershipDrift(t *testing.T) {
 		name string
 		edit func(*fakeStore)
 	}{
-		{"missing", func(s *fakeStore) { s.memberships = nil }},
-		{"wrong options", func(s *fakeStore) { s.memberships[0].inherit = true }},
-		{"extra fixed member", func(s *fakeStore) {
-			s.memberships = append(s.memberships, membership{role: "aboutme_runtime_owner", member: "aboutme_app", set: true})
+		{"wrong options", func(s *fakeStore) {
+			s.memberships = []membership{{role: "aboutme_migrator", member: "aboutme", grantor: "aboutme", set: true}}
 		}},
-		{"ordinary role member", func(s *fakeStore) {
-			s.memberships = append(s.memberships, membership{role: "aboutme_runtime_owner", member: "intruder", set: true})
+		{"non-creator member", func(s *fakeStore) {
+			s.memberships = []membership{{role: "aboutme_migrator", member: "intruder", admin: true}}
 		}},
 	}
 	for _, tt := range tests {
@@ -135,12 +145,15 @@ func TestEnsureCatalogAllowsCreatorAdministrativeMembership(t *testing.T) {
 	}
 }
 
-func TestEnsureCatalogRejectsWrongDatabaseAndPropagatesFailures(t *testing.T) {
+func TestEnsureCatalogRejectsMembershipReferencingAbsentRole(t *testing.T) {
 	store := newFakeStore()
-	store.database = "aboutme"
-	if _, err := ensureCatalog(context.Background(), store); !errors.Is(err, ErrWrongDatabase) {
-		t.Fatalf("wrong database error = %v", err)
+	store.memberships = []membership{{role: "aboutme_migrator", member: "aboutme", set: true}}
+	if _, err := ensureCatalog(context.Background(), store); !errors.Is(err, ErrDrift) {
+		t.Fatalf("error = %v, want ErrDrift", err)
 	}
+}
+
+func TestEnsureCatalogPropagatesFailures(t *testing.T) {
 	for _, failAt := range []string{"database", "lock", "roles", "memberships", "create", "grant"} {
 		t.Run(failAt, func(t *testing.T) {
 			s := newFakeStore()
@@ -180,7 +193,7 @@ func TestEnsureTransactionDoesNotRetryUnknownCommitOutcome(t *testing.T) {
 	if store.commits != 1 {
 		t.Fatalf("commits = %d, want 1", store.commits)
 	}
-	if len(store.mutations) != 8 {
+	if len(store.mutations) != 3 {
 		t.Fatalf("mutations = %d, want one attempt", len(store.mutations))
 	}
 }
@@ -215,7 +228,6 @@ func exactFakeStore() *fakeStore {
 	for _, r := range fixedRoles {
 		s.roles[r.name] = r
 	}
-	s.memberships = []membership{{role: "aboutme_runtime_owner", member: "aboutme_migrator", grantor: "aboutme", set: true}}
 	return s
 }
 func (s *fakeStore) databaseAndUser(context.Context) (string, string, error) {
@@ -249,18 +261,12 @@ func (s *fakeStore) createRole(_ context.Context, r role) error {
 	s.mutations = append(s.mutations, "create:"+r.name)
 	return nil
 }
-func (s *fakeStore) grant(_ context.Context, m membership) error {
+func (s *fakeStore) grantDatabaseAndSchema(_ context.Context, database string) error {
 	if s.failAt == "grant" {
 		return errors.New("grant failed")
 	}
-	s.mutations = append(s.mutations, "grant:"+m.role+":"+m.member+":"+boolText(m.inherit)+":"+boolText(m.set)+":"+boolText(m.admin))
+	s.mutations = append(s.mutations, "grant:"+database)
 	return nil
-}
-func boolText(v bool) string {
-	if v {
-		return "true"
-	}
-	return "false"
 }
 func (s *fakeStore) Commit() error { s.commits++; return s.commitErr }
 func (s *fakeStore) Rollback() error {
