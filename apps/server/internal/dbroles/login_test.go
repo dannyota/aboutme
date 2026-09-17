@@ -159,26 +159,28 @@ func TestScramVerifierAuthenticatesRealLogin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = admin.ExecContext(ctx, `CREATE ROLE `+role+` LOGIN PASSWORD '`+verifier+`'`); err != nil {
-		t.Fatal(err)
-	}
-	// db-setup revokes CONNECT from PUBLIC, so the test role needs its own
-	// grant.
 	var dbName string
 	if err = admin.QueryRowContext(ctx, `SELECT current_database()`).Scan(&dbName); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = admin.ExecContext(ctx, `GRANT CONNECT ON DATABASE `+quoteIdentifier(dbName)+` TO `+role); err != nil {
+	if _, err = admin.ExecContext(ctx, `CREATE ROLE `+role+` LOGIN PASSWORD '`+verifier+`'`); err != nil {
 		t.Fatal(err)
 	}
+	// Registered immediately after CREATE ROLE succeeds, so a failure in
+	// any later step still drops the role instead of leaking it.
 	defer func() {
-		if _, revokeErr := admin.ExecContext(context.Background(), `REVOKE CONNECT ON DATABASE `+quoteIdentifier(dbName)+` FROM `+role); revokeErr != nil {
+		if _, revokeErr := admin.ExecContext(context.Background(), `REVOKE ALL ON DATABASE `+quoteIdentifier(dbName)+` FROM `+role); revokeErr != nil {
 			t.Error(revokeErr)
 		}
 		if _, dropErr := admin.ExecContext(context.Background(), `DROP ROLE IF EXISTS `+role); dropErr != nil {
 			t.Error(dropErr)
 		}
 	}()
+	// db-setup revokes CONNECT from PUBLIC, so the test role needs its own
+	// grant.
+	if _, err = admin.ExecContext(ctx, `GRANT CONNECT ON DATABASE `+quoteIdentifier(dbName)+` TO `+role); err != nil {
+		t.Fatal(err)
+	}
 	u, err := url.Parse(dsn)
 	if err != nil {
 		t.Fatal(err)
