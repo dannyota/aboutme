@@ -2,20 +2,25 @@
 // owns every object in public (including goose_db_version and the citext
 // extension) and belongs to no other role, and aboutme_app holds exactly
 // SELECT/INSERT/UPDATE/DELETE (no grant option, nothing else) on each of
-// the twenty business tables, nothing at all on goose_db_version, and
-// cannot create or alter schema objects. Every check is proven against the
-// real ACL and catalog state a live goose-migrated database produces, not
-// against the migration source text.
+// the twenty business tables, nothing at all on any other relation in
+// public, and cannot create or alter schema objects. Every check is proven
+// against the real ACL and catalog state a live goose-migrated database
+// produces, not against the migration source text.
 package migrations_test
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 // businessTables is the exact table set 00001_baseline.sql's GRANT
-// statement names.
+// statement names. TestBusinessTableSetMatchesPublicSchema fails when
+// schema public gains a table this list does not name.
 var businessTables = []string{
 	"users", "identities", "oauth_transactions", "sessions", "idempotency_records",
 	"resumes", "slug_tombstones", "idempotency_usage", "media_deletion_jobs",
@@ -23,6 +28,46 @@ var businessTables = []string{
 	"password_reset_tokens", "auth_email_jobs", "oauth_clients",
 	"oauth_authorization_codes", "oauth_grants", "oauth_tokens",
 	"lifecycle_audit_events", "privacy_sweep_state",
+}
+
+func TestBusinessTableSetMatchesPublicSchema(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+
+	rows, err := tx.Query(ctx, `
+		SELECT c.relname FROM pg_class c
+		WHERE c.relnamespace = 'public'::regnamespace
+		  AND c.relkind IN ('r', 'p')
+		  AND c.relname <> 'goose_db_version'
+	`)
+	if err != nil {
+		t.Fatalf("query public tables: %v", err)
+	}
+	defer rows.Close()
+	got := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan table name: %v", err)
+		}
+		got[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate tables: %v", err)
+	}
+
+	want := map[string]bool{}
+	for _, table := range businessTables {
+		want[table] = true
+	}
+	if len(got) != len(want) {
+		t.Fatalf("public tables excluding goose_db_version = %v, want exactly businessTables %v", got, want)
+	}
+	for table := range want {
+		if !got[table] {
+			t.Errorf("businessTables lists %s, which is not a table in public", table)
+		}
+	}
 }
 
 func TestAppRoleHasExactTablePrivileges(t *testing.T) {
@@ -67,6 +112,38 @@ func TestAppRoleHasExactTablePrivileges(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestAppRoleHasNoPrivilegeOutsideBusinessTables asserts aboutme_app holds
+// no privilege on any relation in public other than businessTables:
+// goose_db_version, and any view, sequence, or other relation a later
+// migration might add without granting aboutme_app on it.
+func TestAppRoleHasNoPrivilegeOutsideBusinessTables(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+
+	rows, err := tx.Query(ctx, `
+		SELECT c.relname, a.privilege_type
+		FROM pg_class c, aclexplode(c.relacl) a
+		JOIN pg_roles r ON r.oid = a.grantee
+		WHERE c.relnamespace = 'public'::regnamespace
+		  AND r.rolname = 'aboutme_app'
+		  AND NOT (c.relname = ANY ($1::text[]))
+	`, businessTables)
+	if err != nil {
+		t.Fatalf("query grants outside business tables: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var relname, privilege string
+		if err := rows.Scan(&relname, &privilege); err != nil {
+			t.Fatalf("scan grant row: %v", err)
+		}
+		t.Errorf("aboutme_app holds %s on %s, want no privilege outside businessTables", privilege, relname)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate grants: %v", err)
 	}
 }
 
@@ -116,7 +193,12 @@ func TestAppRoleCannotCreateAlterOrReadGooseVersion(t *testing.T) {
 	}
 }
 
-func TestMigratorOwnsEveryObjectInPublicIncludingGooseVersionAndCitext(t *testing.T) {
+// TestMigratorOwnsEveryRelationInPublic covers every relation kind
+// PostgreSQL supports in schema public (table, index, sequence, view,
+// materialized view, partitioned table, foreign table, and composite
+// type), not only the table and index kinds the baseline currently uses,
+// so a later view or sequence still needs aboutme_migrator ownership.
+func TestMigratorOwnsEveryRelationInPublic(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
 
@@ -125,22 +207,28 @@ func TestMigratorOwnsEveryObjectInPublicIncludingGooseVersionAndCitext(t *testin
 		SELECT count(*) FROM pg_class c
 		JOIN pg_roles r ON r.oid = c.relowner
 		WHERE c.relnamespace = 'public'::regnamespace
-		  AND c.relkind IN ('r', 'i', 'S')
+		  AND c.relkind IN ('r', 'i', 'S', 'v', 'm', 'p', 'f', 'c')
 		  AND r.rolname <> 'aboutme_migrator'
 	`).Scan(&relationMismatches); err != nil {
-		t.Fatalf("query object owners: %v", err)
+		t.Fatalf("query relation owners: %v", err)
 	}
 	if relationMismatches != 0 {
-		t.Errorf("relations (tables/indexes/sequences) in public not owned by aboutme_migrator = %d, want 0", relationMismatches)
+		t.Errorf("relations in public not owned by aboutme_migrator = %d, want 0", relationMismatches)
 	}
+}
 
-	// Excludes a trusted extension's own member functions (pg_depend
-	// deptype 'e'): PostgreSQL always attributes a trusted extension's
-	// C-language functions to the cluster's bootstrap role, never to the
-	// non-superuser role that ran CREATE EXTENSION, regardless of grants.
-	// The extension's own catalog entry still records aboutme_migrator as
-	// owner (checked below), which is what governs who may alter or drop
-	// it.
+// TestMigratorOwnsEveryFunctionInPublicExceptTrustedExtensionMembers
+// excludes only a function that pg_depend records as a member of a
+// trusted extension whose own extnamespace is public (deptype 'e'): for
+// such an extension, PostgreSQL always attributes its member objects to
+// the cluster's bootstrap superuser, never to the non-superuser role
+// that ran CREATE EXTENSION, regardless of grants. The extension's own
+// catalog entry still records aboutme_migrator as owner (checked below),
+// which is what governs who may alter or drop it.
+func TestMigratorOwnsEveryFunctionInPublicExceptTrustedExtensionMembers(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+
 	var funcMismatches int
 	if err := tx.QueryRow(ctx, `
 		SELECT count(*) FROM pg_proc p
@@ -149,13 +237,83 @@ func TestMigratorOwnsEveryObjectInPublicIncludingGooseVersionAndCitext(t *testin
 		  AND r.rolname <> 'aboutme_migrator'
 		  AND NOT EXISTS (
 		    SELECT 1 FROM pg_depend d
-		    WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'
+		    JOIN pg_extension e ON e.oid = d.refobjid
+		    WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid
+		      AND d.deptype = 'e' AND d.refclassid = 'pg_extension'::regclass
+		      AND e.extnamespace = 'public'::regnamespace
 		  )
 	`).Scan(&funcMismatches); err != nil {
 		t.Fatalf("query function owners: %v", err)
 	}
 	if funcMismatches != 0 {
 		t.Errorf("non-extension functions in public not owned by aboutme_migrator = %d, want 0", funcMismatches)
+	}
+}
+
+// TestMigratorOwnsEveryTypeInPublicExceptExtensionMembers covers standalone
+// types in public (domains, enums, and standalone composite types), which
+// no other check here reaches. It excludes a trusted extension's member
+// types (same pg_depend rule as the function check above) and a table's
+// automatic row type and array type, whose ownership already follows the
+// table and is covered by TestMigratorOwnsEveryRelationInPublic.
+func TestMigratorOwnsEveryTypeInPublicExceptExtensionMembers(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+
+	var typeMismatches int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) FROM pg_type t
+		JOIN pg_roles r ON r.oid = t.typowner
+		WHERE t.typnamespace = 'public'::regnamespace
+		  AND r.rolname <> 'aboutme_migrator'
+		  AND NOT EXISTS (
+		    SELECT 1 FROM pg_depend d
+		    JOIN pg_extension e ON e.oid = d.refobjid
+		    WHERE d.classid = 'pg_type'::regclass AND d.objid = t.oid
+		      AND d.deptype = 'e' AND d.refclassid = 'pg_extension'::regclass
+		      AND e.extnamespace = 'public'::regnamespace
+		  )
+		  AND NOT (t.typtype = 'c' AND t.typrelid <> 0)
+		  AND NOT (t.typcategory = 'A' AND EXISTS (
+		    SELECT 1 FROM pg_type et
+		    WHERE et.oid = t.typelem AND et.typtype = 'c' AND et.typrelid <> 0
+		  ))
+	`).Scan(&typeMismatches); err != nil {
+		t.Fatalf("query type owners: %v", err)
+	}
+	if typeMismatches != 0 {
+		t.Errorf("standalone types in public not owned by aboutme_migrator = %d, want 0", typeMismatches)
+	}
+}
+
+func TestPublicExtensionsAreExactlyPlpgsqlAndCitext(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+
+	rows, err := tx.Query(ctx, `SELECT extname FROM pg_extension`)
+	if err != nil {
+		t.Fatalf("query extensions: %v", err)
+	}
+	defer rows.Close()
+	got := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan extension name: %v", err)
+		}
+		got[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate extensions: %v", err)
+	}
+	want := map[string]bool{"plpgsql": true, "citext": true}
+	if len(got) != len(want) {
+		t.Fatalf("installed extensions = %v, want exactly %v", got, want)
+	}
+	for name := range want {
+		if !got[name] {
+			t.Errorf("extension %s not installed", name)
+		}
 	}
 
 	var extensionOwner string
@@ -186,13 +344,14 @@ func TestMigratorHasNoRoleMembership(t *testing.T) {
 	}
 }
 
-// TestAppRoleSmokeFlowThroughRealStoreQueries proves aboutme_app's exact
-// grant set is enough for a real write path, not merely present in the
-// catalog: insert a user and a resume (exercising the resume-cap and
-// revision-notification triggers under the app role's own privileges,
-// since neither function is SECURITY DEFINER), update, read back, then
-// delete the user and confirm the resume cascades away.
-func TestAppRoleSmokeFlowThroughRealStoreQueries(t *testing.T) {
+// TestAppRoleSmokeFlowThroughInternalStoreQueries proves aboutme_app's
+// exact grant set is enough for internal/store's real generated queries,
+// not merely present in the catalog: it runs store.New against a
+// connection with SET ROLE aboutme_app, then creates a user, a session,
+// and a resume, takes a row lock on the user through the same FOR UPDATE
+// path a mutating store call takes before a write, reads each row back,
+// and confirms deleting the user cascades the session and resume away.
+func TestAppRoleSmokeFlowThroughInternalStoreQueries(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
 
@@ -200,31 +359,72 @@ func TestAppRoleSmokeFlowThroughRealStoreQueries(t *testing.T) {
 		t.Fatalf("set role aboutme_app: %v", err)
 	}
 
-	userID := createTestUser(ctx, t, tx)
-	row := defaultResumeRow(userID, "grants-smoke")
-	resumeID, err := insertResumeReturningID(ctx, tx, row)
+	queries := store.New(tx)
+
+	user, err := queries.CreateUser(ctx, store.CreateUserParams{
+		Email: "grants-smoke@aboutme.invalid",
+		Name:  "Grants Smoke",
+	})
 	if err != nil {
-		t.Fatalf("aboutme_app insert resume: %v", err)
-	}
-	if err := updateResumeUserID(ctx, tx, resumeID, userID); err != nil {
-		t.Fatalf("aboutme_app no-op update resume: %v", err)
-	}
-	var title string
-	if err := tx.QueryRow(ctx, `SELECT title FROM resumes WHERE id = $1`, resumeID).Scan(&title); err != nil {
-		t.Fatalf("aboutme_app select resume: %v", err)
-	}
-	if title != row.title {
-		t.Errorf("resume title = %q, want %q", title, row.title)
+		t.Fatalf("aboutme_app CreateUser: %v", err)
 	}
 
-	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
-		t.Fatalf("aboutme_app delete user: %v", err)
+	now := time.Now()
+	session, err := queries.CreateSession(ctx, store.CreateSessionParams{
+		UserID:            user.ID,
+		TokenHash:         []byte("grants-smoke-token-hash-32-bytes"),
+		CSRFSecret:        []byte("grants-smoke-csrf-secret-32-byte"),
+		CreatedAt:         now,
+		LastSeenAt:        now,
+		ReauthenticatedAt: now,
+		AbsoluteExpiresAt: now.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("aboutme_app CreateSession: %v", err)
 	}
-	var remaining int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM resumes WHERE id = $1`, resumeID).Scan(&remaining); err != nil {
-		t.Fatalf("aboutme_app count resumes: %v", err)
+
+	resume, err := queries.CreateResume(ctx, store.CreateResumeParams{
+		UserID:          user.ID,
+		Title:           "Grants smoke",
+		SchemaVersion:   1,
+		PersonalDetails: json.RawMessage(`{}`),
+		Content:         json.RawMessage(`{}`),
+		Customization:   json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("aboutme_app CreateResume: %v", err)
 	}
-	if remaining != 0 {
-		t.Errorf("resumes remaining after cascaded user delete = %d, want 0", remaining)
+
+	// The row lock a session-affecting store call takes before its write;
+	// exercises the FOR UPDATE path under aboutme_app's own privileges.
+	lockedUser, err := queries.GetUserForUpdate(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("aboutme_app GetUserForUpdate: %v", err)
+	}
+	if lockedUser.ID != user.ID {
+		t.Errorf("locked user id = %s, want %s", lockedUser.ID, user.ID)
+	}
+
+	gotSession, err := queries.GetSessionByTokenHash(ctx, session.TokenHash)
+	if err != nil {
+		t.Fatalf("aboutme_app GetSessionByTokenHash: %v", err)
+	}
+	if gotSession.ID != session.ID {
+		t.Errorf("session id = %s, want %s", gotSession.ID, session.ID)
+	}
+
+	gotResume, err := queries.GetResumeByID(ctx, resume.ID)
+	if err != nil {
+		t.Fatalf("aboutme_app GetResumeByID: %v", err)
+	}
+	if gotResume.Title != resume.Title {
+		t.Errorf("resume title = %q, want %q", gotResume.Title, resume.Title)
+	}
+
+	if _, err := queries.DeleteAccountUser(ctx, user.ID); err != nil {
+		t.Fatalf("aboutme_app DeleteAccountUser: %v", err)
+	}
+	if _, err := queries.GetResumeByID(ctx, resume.ID); err == nil {
+		t.Error("resume survived cascaded user delete, want not found")
 	}
 }
