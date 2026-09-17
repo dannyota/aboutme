@@ -209,8 +209,7 @@ build_and_migrate() {
     chmod 0755 -- "$BIN_DIR/server"
     go build -o "$BIN_DIR/render-browser-supervisor" ./cmd/render-browser-supervisor
     chmod 0755 -- "$BIN_DIR/render-browser-supervisor"
-    env DATABASE_URL="$DATABASE_URL" MIGRATION_IDENTITY=local-aboutme "$BIN_DIR/migrate" provision
-    env DATABASE_URL="$DATABASE_URL" MIGRATION_IDENTITY=local-aboutme "$BIN_DIR/migrate"
+    env DATABASE_URL="$DATABASE_URL" "$BIN_DIR/migrate"
   )
 }
 

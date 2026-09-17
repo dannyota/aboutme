@@ -23,7 +23,7 @@
 #
 # Five disjoint networks enforce the trust boundaries in
 # docs/design/deployment.md.
-#   - db:       postgres, db-role-bootstrap, migrate, server — the only peers allowed to reach
+#   - db:       postgres, db-setup, migrate, server — the only peers allowed to reach
 #     Postgres.
 #   - edge:     caddy, server ONLY, on a small fixed subnet. This is the
 #     server's entire TRUSTED_PROXY_CIDRS (see server.environment below):
@@ -71,40 +71,21 @@ services:
     networks:
       - db
 
-  db-role-bootstrap:
+  # Creates or verifies the fixed aboutme_migrator/aboutme_app roles and
+  # grants their database and schema privileges (cmd/db-setup; ADR 0038).
+  db-setup:
     build:
       context: ..
       dockerfile: deploy/server.Dockerfile
     image: localhost/aboutme/server:dev
-    entrypoint: ["/usr/local/bin/db-role-bootstrap"]
+    entrypoint: ["/usr/local/bin/db-setup"]
     restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      CLUSTER_BOOTSTRAP_DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/postgres?sslmode=disable
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
-    healthcheck:
-      disable: true
-    networks:
-      - db
-
-  db-provision:
-    build:
-      context: ..
-      dockerfile: deploy/server.Dockerfile
-    image: localhost/aboutme/server:dev
-    entrypoint: ["/usr/local/bin/migrate", "provision"]
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      db-role-bootstrap:
-        condition: service_completed_successfully
-    environment:
-      MIGRATION_IDENTITY: local-aboutme
       DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
-      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required - copy .env.example to .env and set it}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
     healthcheck:
       disable: true
     networks:
@@ -127,12 +108,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-role-bootstrap:
-        condition: service_completed_successfully
-      db-provision:
+      db-setup:
         condition: service_completed_successfully
     environment:
-      MIGRATION_IDENTITY: local-aboutme
       # DATABASE_URL carries no password. POSTGRES_PASSWORD goes in
       # PGPASSWORD, which pgx honors, so URI delimiters in the password
       # cannot corrupt the DSN.

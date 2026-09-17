@@ -102,8 +102,8 @@ if ! podman exec "$DB_CONTAINER" psql -U aboutme -d aboutme -tc \
 fi
 (
   cd "$ROOT/apps/server"
-  DATABASE_URL="$FIXTURE_DATABASE_URL" MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate provision >/dev/null
-  DATABASE_URL="$FIXTURE_DATABASE_URL" MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate >/dev/null
+  DATABASE_URL="$FIXTURE_DATABASE_URL" go run ./cmd/db-setup >/dev/null
+  DATABASE_URL="$FIXTURE_DATABASE_URL" go run ./cmd/migrate >/dev/null
 )
 
 mkdir -p "$ROOT/.dev/bin"

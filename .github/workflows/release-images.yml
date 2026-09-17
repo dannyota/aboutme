@@ -42,7 +42,7 @@ jobs:
           case "$NAME" in
             server)
               docker run --rm --entrypoint sh "$IMAGE" -c \
-                'test "$(uname -m)" = aarch64 && /opt/chromium/chrome --version && test -s /etc/ssl/rds/global-bundle.pem && test -x /usr/local/bin/db-set-login'
+                'test "$(uname -m)" = aarch64 && /opt/chromium/chrome --version && test -s /etc/ssl/rds/global-bundle.pem && test -x /usr/local/bin/db-setup'
               ;;
             web)
               docker run -d --name smoke -e HOST=0.0.0.0 -e PORT=3000 -p 127.0.0.1:3000:3000 "$IMAGE"

@@ -392,8 +392,7 @@ run_migrations() {
   )
   (
     cd "$ROOT/apps/server"
-    env DATABASE_URL="$DEV_DATABASE_URL" MIGRATION_IDENTITY=local-aboutme "$BIN_DIR/migrate" provision
-    env DATABASE_URL="$DEV_DATABASE_URL" MIGRATION_IDENTITY=local-aboutme "$BIN_DIR/migrate"
+    env DATABASE_URL="$DEV_DATABASE_URL" "$BIN_DIR/migrate"
   )
 }
 

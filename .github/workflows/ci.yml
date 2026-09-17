@@ -238,9 +238,9 @@ jobs:
             go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
             go-${{ runner.os }}-${{ github.job }}-
       - name: Initialize database roles
-        run: make db-role-bootstrap
+        run: make db-setup
         env:
-          CLUSTER_BOOTSTRAP_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/postgres?sslmode=disable
+          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
       - run: make server-test-integration
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
@@ -417,9 +417,9 @@ jobs:
             go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
             go-${{ runner.os }}-${{ github.job }}-
       - name: Initialize database roles
-        run: make db-role-bootstrap
+        run: make db-setup
         env:
-          CLUSTER_BOOTSTRAP_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/postgres?sslmode=disable
+          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
       - run: make server-migration-test
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable

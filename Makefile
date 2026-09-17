@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test test-db-templates-clean public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
+.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
@@ -39,8 +39,8 @@ operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-s
 	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
 	bash scripts/test/render-topology-test.sh
 	bash deploy/aws/scripts/deploy_test.sh
-	bash -n scripts/test/db-role-bootstrap-wiring-test.sh
-	bash scripts/test/db-role-bootstrap-wiring-test.sh
+	bash -n scripts/test/db-setup-wiring-test.sh
+	bash scripts/test/db-setup-wiring-test.sh
 	bash scripts/dev-https-test.sh --static
 	bash deploy/dev-https-browser/static-test.sh
 	scripts/test/ci-failure-propagation-test.sh
@@ -98,7 +98,7 @@ server-test: ## Test the Go API server
 server-test-db: ## Run the DB-backed suites against live Postgres; missing TEST_DATABASE_URL fails when REQUIRE_TEST_DB=1
 	@printf '%s\n' 'server-test-db: go test live roles/dev-seed/testutil/auth/store/user/resume/realtime/account/privacy packages'
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
-	  go test ./cmd/db-role-bootstrap ./internal/dbroles ./cmd/dev-seed ./internal/testutil ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... -race -count=1 -v
+	  go test ./cmd/db-setup ./internal/dbroles ./cmd/dev-seed ./internal/testutil ./internal/auth/... ./internal/store/... ./internal/user/... ./internal/resume/... ./internal/realtimeapi/... -race -count=1 -v
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... -p=1 -race -count=1 -v
 
@@ -399,16 +399,18 @@ test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the 
 	  fi; \
 	  sleep 1; \
 	done; \
-	CLUSTER_BOOTSTRAP_DATABASE_URL=postgres://aboutme:aboutme_dev@127.0.0.1:20432/postgres?sslmode=disable \
-	  $(MAKE) --no-print-directory db-role-bootstrap || exit $$?; \
 	podman exec aboutme-test-db psql -U aboutme -d aboutme -tc \
 	  "SELECT 1 FROM pg_database WHERE datname='aboutme_dev'" | grep -q 1 || \
 	  podman exec aboutme-test-db psql -U aboutme -d aboutme -c "CREATE DATABASE aboutme_dev"; \
+	DATABASE_URL=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable \
+	  $(MAKE) --no-print-directory db-setup || exit $$?; \
+	DATABASE_URL=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable \
+	  $(MAKE) --no-print-directory db-setup || exit $$?; \
 	echo "aboutme-test-db is ready (databases: aboutme, aboutme_dev)."
 
-.PHONY: db-role-bootstrap
-db-role-bootstrap: ## Create or verify the fixed database roles using an explicit postgres admin connection
-	@cd apps/server && go run ./cmd/db-role-bootstrap
+.PHONY: db-setup
+db-setup: ## Create or verify the fixed database roles and grants for DATABASE_URL's database
+	@cd apps/server && go run ./cmd/db-setup
 
 test-db-down: ## Stop the aboutme Postgres container (check no worker is mid-suite first)
 	podman rm -f aboutme-test-db
@@ -441,31 +443,16 @@ sqlc-check: ## Fail if the generated data layer drifts from migrations/ (uses --
 	    { echo "generated data layer drifts from migrations/ — run 'make sqlc-gen' and commit:"; \
 	      git status --porcelain -- internal/store; exit 1; }; }
 
-.PHONY: migrate-provision
-migrate-provision: ## Provision fixed local database migration grants
-	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate provision
-
-migrate: migrate-provision ## Apply pending migrations
-	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate
+migrate: ## Apply pending migrations
+	cd apps/server && go run ./cmd/migrate
 
 migrate-check: ## Report pending migrations without applying them
-	cd apps/server && MIGRATION_IDENTITY=local-aboutme go run ./cmd/migrate -check
+	cd apps/server && go run ./cmd/migrate -check
 
 server-migration-test: ## Run the migration harness + migrate CLI under -race (needs test-db-up or TEST_DATABASE_URL)
 	@printf '%s\n' 'server-migration-test: go test -race migration harness and CLI packages'
 	@cd apps/server && TEST_DATABASE_URL=$${TEST_DATABASE_URL:-postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme?sslmode=disable} \
 	  go test ./migrations/... ./cmd/migrate/... -race -count=1 -timeout 30m -v
-
-test-db-templates-clean: ## Drop the cached migration template databases from aboutme-test-db
-	@for d in $$(podman exec aboutme-test-db psql -U aboutme -d postgres -tAc \
-	  "SELECT datname FROM pg_database WHERE datname LIKE 'aboutme_migrate_template_%'"); do \
-	  podman exec aboutme-test-db psql -U aboutme -d postgres -c \
-	    "ALTER DATABASE \"$$d\" IS_TEMPLATE false" >/dev/null; \
-	  podman exec aboutme-test-db psql -U aboutme -d postgres -c \
-	    "DROP DATABASE IF EXISTS \"$$d\" WITH (FORCE)" >/dev/null; \
-	  echo "dropped $$d"; \
-	done; \
-	echo "migration template databases cleared."
 
 public-roots-check: ## Verify the closed public-root registry, go generated consumer, and source-manifest drift
 	node --test packages/publicroots/public-roots.test.mjs
