@@ -118,6 +118,12 @@ cat >"$out" <<'INNER'
 set -Eeuo pipefail
 name=${0##*/}
 if [ "$name" = migrate ]; then
+  # The real command takes no positional arguments; a stray one (e.g. a
+  # leftover "provision") must fail here the same way.
+  if [ "$#" -gt 0 ]; then
+    printf 'migrate: arguments are not accepted\n' >&2
+    exit 1
+  fi
   printf 'migrate:db=%s\n' "$DATABASE_URL" >>"$FAKE_EFFECTS"
   printf 'migrate:operation=apply\n' >>"$FAKE_EFFECTS"
   exit 0
