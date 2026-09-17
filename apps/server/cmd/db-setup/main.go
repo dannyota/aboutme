@@ -3,7 +3,8 @@
 // idempotent: it creates missing roles, fails on drift in existing ones, and
 // grants their database and schema privileges. If MIGRATOR_PASSWORD and
 // APP_PASSWORD are both set, it also stores their SCRAM verifiers. If only
-// one is set, it fails before connecting. See ADR 0038.
+// one is set, or a set password fails dbroles.ValidatePasswords, it fails
+// before connecting. See ADR 0038.
 package main
 
 import (
@@ -55,6 +56,11 @@ func run(args []string, getenv func(string) string, stdout io.Writer, ensure ens
 	passwords, setPasswords, err := passwordsFromEnv(getenv)
 	if err != nil {
 		return err
+	}
+	if setPasswords {
+		if validateErr := dbroles.ValidatePasswords(passwords); validateErr != nil {
+			return validateErr
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -84,6 +84,35 @@ func TestRunRejectsExactlyOnePassword(t *testing.T) {
 	}
 }
 
+func TestRunRejectsInvalidPasswordsBeforeConnecting(t *testing.T) {
+	strong := strings.Repeat("s", 32)
+	tests := []struct {
+		name     string
+		migrator string
+		app      string
+	}{
+		{"migrator too short", strings.Repeat("s", 31), strong + "x"},
+		{"app too short", strong, strings.Repeat("a", 31)},
+		{"migrator too long", strings.Repeat("s", 1025), strong + "x"},
+		{"equal passwords", strong, strong},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := validEnv()
+			env["MIGRATOR_PASSWORD"] = tt.migrator
+			env["APP_PASSWORD"] = tt.app
+			var out bytes.Buffer
+			err := run(nil, mapEnv(env), &out, neverEnsure(t), neverSetLogin(t))
+			if err == nil {
+				t.Fatal("run() error = nil, want a validation error")
+			}
+			if out.Len() != 0 {
+				t.Fatalf("output = %q, want empty", out.String())
+			}
+		})
+	}
+}
+
 func TestRunSkipsLoginWhenNeitherPasswordSet(t *testing.T) {
 	env := map[string]string{"DATABASE_URL": validEnv()["DATABASE_URL"]}
 	var out bytes.Buffer
