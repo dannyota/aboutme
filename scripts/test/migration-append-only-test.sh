@@ -247,193 +247,46 @@ git -C "$repo" add -- apps/server/migrations/00002_new.sql
 git -C "$repo" commit -qm "test: add forward migration"
 run_commits "$repo" "$base" HEAD >/dev/null
 
-# The one-time pinned release-baseline reset (ADR 0038). The pin matches
-# only the repository's real 00001_baseline.sql byte-for-byte and its exact
-# old and new marker text, so these cases spell that text out literally
-# and copy the real baseline file rather than approximating either.
-RESET_OLD_MARKER='First production migration baseline: 00023 and every earlier migration are immutable.'
-RESET_NEW_MARKER='Release migration baseline (ADR 0038): every migration on a base containing this marker is immutable.'
-REAL_BASELINE=$ROOT/apps/server/migrations/00001_baseline.sql
-
-new_pre_reset_repo() { # repo
+# A baseline reset (new marker, migrations collapsed) is rejected like any
+# other marker change, in both modes.
+new_marked_repo() { # repo
   local repo=$1
   mkdir -p "$repo/apps/server/migrations" "$repo/scripts"
   cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
   git -C "$repo" init -q -b main
   git -C "$repo" config user.email test@example.invalid
   git -C "$repo" config user.name "migration gate test"
-  printf '%s\n' '-- old migration one' >"$repo/apps/server/migrations/00001_old.sql"
-  printf '%s\n' '-- old migration two' >"$repo/apps/server/migrations/00002_old.sql"
-  printf '%s\n' "$RESET_OLD_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
+  printf '%s\n' '-- migration one' >"$repo/apps/server/migrations/00001_one.sql"
+  printf '%s\n' '-- migration two' >"$repo/apps/server/migrations/00002_two.sql"
+  printf '%s\n' 'baseline marker' >"$repo/apps/server/migrations/.uat-baseline"
   git -C "$repo" add -- apps/server/migrations scripts
-  git -C "$repo" commit -qm "test: pre-reset baseline"
+  git -C "$repo" commit -qm "test: marked baseline"
 }
 
-repo=$WORK/hosted-baseline-reset
-new_pre_reset_repo "$repo"
-base=$(git -C "$repo" rev-parse HEAD)
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-git -C "$repo" commit -qm "test: reset to the release baseline"
-run_commits "$repo" "$base" HEAD >/dev/null
+collapse_migrations() { # repo
+  local repo=$1
+  rm -f "$repo"/apps/server/migrations/*.sql
+  printf '%s\n' '-- collapsed baseline' >"$repo/apps/server/migrations/00001_baseline.sql"
+  printf '%s\n' 'new baseline marker' >"$repo/apps/server/migrations/.uat-baseline"
+  git -C "$repo" add -A -- apps/server/migrations
+}
 
-repo=$WORK/hosted-baseline-reset-wrong-marker
-new_pre_reset_repo "$repo"
+repo=$WORK/hosted-baseline-reset-rejected
+new_marked_repo "$repo"
 base=$(git -C "$repo" rev-parse HEAD)
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "${RESET_NEW_MARKER} (tampered)" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-git -C "$repo" commit -qm "test: reset with the wrong marker text"
+collapse_migrations "$repo"
+git -C "$repo" commit -qm "test: collapse migrations"
 if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
-  echo "migration-append-only-test: a reset with the wrong marker text passed" >&2
+  echo "migration-append-only-test: a hosted baseline reset passed" >&2
   exit 1
 fi
 
-repo=$WORK/hosted-baseline-reset-extra-sql
-new_pre_reset_repo "$repo"
-base=$(git -C "$repo" rev-parse HEAD)
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' '-- extra migration alongside the baseline' >"$repo/apps/server/migrations/00002_extra.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-git -C "$repo" commit -qm "test: reset with an extra migration file"
-if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
-  echo "migration-append-only-test: a reset with an extra migration file passed" >&2
-  exit 1
-fi
-
-repo=$WORK/hosted-baseline-reset-changed-baseline
-new_pre_reset_repo "$repo"
-base=$(git -C "$repo" rev-parse HEAD)
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '\n-- one extra byte\n' >>"$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-git -C "$repo" commit -qm "test: reset with a changed baseline file"
-if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
-  echo "migration-append-only-test: a reset with a changed baseline file passed" >&2
-  exit 1
-fi
-
-repo=$WORK/hosted-baseline-reset-wrong-base-marker
-mkdir -p "$repo/apps/server/migrations" "$repo/scripts"
-cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
-git -C "$repo" init -q -b main
-git -C "$repo" config user.email test@example.invalid
-git -C "$repo" config user.name "migration gate test"
-printf '%s\n' '-- old migration one' >"$repo/apps/server/migrations/00001_old.sql"
-printf '%s\n' 'an unpinned pre-reset marker' >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -- apps/server/migrations scripts
-git -C "$repo" commit -qm "test: pre-reset baseline with an unpinned marker"
-base=$(git -C "$repo" rev-parse HEAD)
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-git -C "$repo" commit -qm "test: reset from an unpinned base marker"
-if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
-  echo "migration-append-only-test: a reset from an unpinned base marker passed" >&2
-  exit 1
-fi
-
-repo=$WORK/hosted-baseline-already-reset-edit-rejected
-mkdir -p "$repo/apps/server/migrations" "$repo/scripts"
-cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
-git -C "$repo" init -q -b main
-git -C "$repo" config user.email test@example.invalid
-git -C "$repo" config user.name "migration gate test"
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -- apps/server/migrations scripts
-git -C "$repo" commit -qm "test: already at the release baseline"
-base=$(git -C "$repo" rev-parse HEAD)
-printf '\n-- tampered after the reset\n' >>"$repo/apps/server/migrations/00001_baseline.sql"
-git -C "$repo" add -- apps/server/migrations/00001_baseline.sql
-git -C "$repo" commit -qm "test: edit the baseline after the reset landed"
-if run_commits "$repo" "$base" HEAD >/dev/null 2>&1; then
-  echo "migration-append-only-test: editing the baseline after the reset passed" >&2
-  exit 1
-fi
-
-repo=$WORK/local-baseline-reset
-new_pre_reset_repo "$repo"
+repo=$WORK/local-baseline-reset-rejected
+new_marked_repo "$repo"
 git -C "$repo" update-ref refs/remotes/origin/main HEAD
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-run_local "$repo" >/dev/null
-
-repo=$WORK/local-baseline-reset-wrong-base-marker
-new_pre_reset_repo "$repo"
-printf '%s\n' 'an unpinned pre-reset marker' >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -- apps/server/migrations
-git -C "$repo" commit -qm "test: pre-reset baseline with an unpinned marker"
-git -C "$repo" update-ref refs/remotes/origin/main HEAD
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
+collapse_migrations "$repo"
 if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: a local reset from an unpinned base marker passed" >&2
-  exit 1
-fi
-
-repo=$WORK/local-baseline-reset-wrong-marker
-new_pre_reset_repo "$repo"
-git -C "$repo" update-ref refs/remotes/origin/main HEAD
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "${RESET_NEW_MARKER} (tampered)" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: a local reset with the wrong marker text passed" >&2
-  exit 1
-fi
-
-repo=$WORK/local-baseline-reset-extra-sql
-new_pre_reset_repo "$repo"
-git -C "$repo" update-ref refs/remotes/origin/main HEAD
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' '-- extra migration alongside the baseline' >"$repo/apps/server/migrations/00002_extra.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: a local reset with an extra migration file passed" >&2
-  exit 1
-fi
-
-repo=$WORK/local-baseline-reset-changed-baseline
-new_pre_reset_repo "$repo"
-git -C "$repo" update-ref refs/remotes/origin/main HEAD
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '\n-- one extra byte\n' >>"$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-git -C "$repo" add -A -- apps/server/migrations
-if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: a local reset with a changed baseline file passed" >&2
-  exit 1
-fi
-
-repo=$WORK/local-baseline-reset-index-mismatch
-new_pre_reset_repo "$repo"
-git -C "$repo" update-ref refs/remotes/origin/main HEAD
-rm -f "$repo"/apps/server/migrations/*.sql
-cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
-printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
-# Deliberately left unstaged: the worktree matches the pinned reset
-# byte-for-byte, but the index still holds the pre-reset files, so
-# committing the index as it stands would not record the reset this
-# check is verifying.
-if run_local "$repo" >/dev/null 2>&1; then
-  echo "migration-append-only-test: an unstaged reset with a stale index passed" >&2
+  echo "migration-append-only-test: a local baseline reset passed" >&2
   exit 1
 fi
 
