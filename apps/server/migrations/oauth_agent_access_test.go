@@ -1,7 +1,7 @@
 // Constraint, cascade, and lineage tests for the oauth_clients,
 // oauth_authorization_codes, oauth_grants, and oauth_tokens tables. Like
 // password_auth_test.go, every statement here is raw parameterized SQL
-// against a live goose-migrated database — no internal/store layer —
+// against a live goose-migrated database, with no internal/store layer,
 // because the point is proving the database itself enforces every bound,
 // not that a Go pass happens to agree with it. Boundaries are exercised at
 // limit and limit+1.

@@ -71,8 +71,8 @@ index_blob() { # path
 }
 
 # index_sql_list prints the *.sql files staged under MIGRATIONS, one per
-# line (empty if none). Unlike worktree_sql_list, this is what a commit
-# right now would actually contain.
+# line (empty if none). Unlike worktree_sql_list, this is what committing
+# the index as it stands would actually contain.
 index_sql_list() {
   git ls-files -- "$MIGRATIONS"/*.sql
 }

@@ -60,8 +60,8 @@ func TestRun_UnreachableDatabase_CheckMode(t *testing.T) {
 
 // TestMigrationCommandErrorReportsVersionAndSQLSTATEWithoutDetail proves
 // migrationCommandError names the failing migration's version and
-// Postgres SQLSTATE while keeping every other error detail — query text,
-// data values, the DSN — out of the command's output.
+// Postgres SQLSTATE while keeping every other error detail (query text,
+// data values, the DSN) out of the command's output.
 func TestMigrationCommandErrorReportsVersionAndSQLSTATEWithoutDetail(t *testing.T) {
 	sensitive := "dial tcp postgres://admin:secret@private-host:5432/db SQLSTATE 08006"
 	partial := &goose.PartialError{

@@ -27,7 +27,7 @@ var testDatabaseCounter atomic.Uint64
 // per-database, so this must run against the new database, not the shared
 // one newTestDatabase connects to create it), and returns a connection URL
 // for it. The database is dropped in t.Cleanup. Every harness test gets
-// its own database — never a shared one — so migration state, advisory
+// its own database, never a shared one, so migration state, advisory
 // locks, and concurrent-runner timing from one test can never leak into
 // another; that isolation is what lets the harness tests run with
 // t.Parallel().
