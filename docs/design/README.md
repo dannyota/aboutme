@@ -9,7 +9,7 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. ADRs
-0001–0037 are accepted, subject to recorded supersessions. If a page disagrees
+0001–0038 are accepted, subject to recorded supersessions. If a page disagrees
 with an accepted ADR, the ADR controls that decision until this text is
 corrected.
 

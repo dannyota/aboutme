@@ -1,6 +1,7 @@
-# 0011 — Delivery gates are risk-tiered, and the local gate is authoritative
+# 0011: Delivery gates are risk-tiered, and the local gate is authoritative
 
-Status: Accepted (2026-08-11)
+Status: Accepted (2026-08-11). Superseded in part by
+[ADR 0024](0024-single-pass-delivery-gates.md).
 
 ## Context
 
@@ -11,18 +12,18 @@ design and consistency review, traceability closure, a fresh adversarial review,
 independent fail-closed automated acceptance, and independent evidence
 verification.
 
-Phase 2A shows the cost concretely. Of its twelve tasks, three exist only to
-have a second worker write tests: Suite A (write-safety and cap concurrency),
-Suite B (doc-migration purity and CAS-vs-autosave races), and Suite C
-(independently derived size-bound limit+1 matrix). Every remaining task carries
-its own "independent defect review, then commit" step. A single task therefore
-costs roughly four agent passes before it lands.
+One phase shows the cost concretely. Of its twelve tasks, three exist only to
+have a second worker write tests: one for write-safety and cap concurrency, one
+for doc-migration purity and CAS-vs-autosave races, and one for an independently
+derived size-bound limit+1 matrix. Every remaining task carries its own
+"independent defect review, then commit" step. A single task therefore costs
+roughly four agent passes before it lands.
 
 That structure was not wrong. It was calibrated for changes where a defect is
-expensive and hard to detect — session rotation, CAS races, sanitizer bypass —
-and it caught real defects at the P0 and P1 gates, both of which returned
-no-ship on first run. The problem is that it is applied uniformly, so a Nuxt
-page or a documentation restructure pays the same price as the session store.
+expensive and hard to detect: session rotation, CAS races, sanitizer bypass. It
+caught real defects at two early phase gates, both of which returned no-ship on
+first run. The problem is that it is applied uniformly, so a Nuxt page or a
+documentation restructure pays the same price as the session store.
 
 Two of the five phase gates also overlap in practice. Design and consistency
 review, traceability closure, and adversarial review are all judgments a single
@@ -68,21 +69,22 @@ them per commit.
 
 **Browser validation moves earlier.** User-visible changes are exercised through
 scripted headless Playwright (`make web-e2e` and the `make dev-https-*-check`
-suites) as they land, instead of deferring all browser defects to P9. The
+suites) as they land, instead of deferring all browser defects to UAT. The
 project-scoped Playwright MCP server is for agent exploration and test authoring
-only. P9 UAT and its evidence review are unchanged and remain the gate before
-AWS authorization.
+only. UAT and its evidence review are unchanged and remain the gate before AWS
+authorization.
 
 **Design work runs in parallel with implementation.** Template, UI, and spec
 design depends only on frozen contracts, so it does not queue behind the store
 and API phases.
 
-Applied to the remainder of Phase 2A: Suites A and B stay, blind and
-independent, because write-safety and doc-migration races are high-risk. Suite C
-folds into the author's own tests — the size-bound limit+1 matrix is
-mechanically derivable from `budgets.md` and the schema, and a second worker
-re-deriving it buys accuracy that the shared bounds-parity test already
-provides.
+This carries forward the suites already in flight under the old five-gate
+system: independently derived, blind suites for write-safety, cap concurrency,
+doc-migration purity, and CAS-vs-autosave races stay separate, because those
+surfaces are high-risk. A suite whose expected values are mechanically derivable
+from `budgets.md` and the schema, such as the size-bound limit+1 matrix, folds
+into the author's own tests instead, because a second worker re-deriving it buys
+accuracy that the shared bounds-parity test already provides.
 
 ## Consequences
 
@@ -104,13 +106,13 @@ whole feature set, and `make semgrep` runs offline with no token for a quicker
 local check when a change is security-sensitive.
 
 Local CI shifts verification onto one machine. A defect that depends on the CI
-environment — a missing pinned tool, a Linux-only path, a permissions difference
-— will now be found at phase push rather than per commit. The append-only
+environment will now be found at phase push rather than per commit: a missing
+pinned tool, a Linux-only path, a permissions difference. The append-only
 migration check is the clearest example: locally it compares against
 `origin/main` rather than a pull-request base, so it is weaker than the CI job
 it mirrors.
 
-This changes process, not product. It supersedes the agent-workflow and
-testing-strategy sections of `docs/plans/implementation-plan.md` and the
-delivery gates section of `AGENTS.md`. Completed gate records keep their
-historical role labels and verdicts and are not rewritten.
+This changes process, not product. It supersedes prior agent-workflow and
+testing-strategy guidance and the delivery gates section of `AGENTS.md`.
+Completed gate records keep their historical role labels and verdicts and are
+not rewritten.

@@ -94,9 +94,8 @@ sweep removed 140 old unreferenced test objects with zero failures. The
 production server image also ran idempotency expiry through its normal entry
 point as a non-root, read-only container with no added capabilities.
 
-`make p5a-native-http-check` passed with bounded evidence at
-`.dev/p5a-evidence/run.7oVUTr`. It removed its isolated fixture database and
-left the shared development database running.
+`make native-http-check` removes its isolated fixture database and leaves the
+shared development database running.
 
 `make dev-https-privacy-check` passed all 11 steps with zero certificate,
 console, page, or external-request errors. The 355-byte verdict is retained

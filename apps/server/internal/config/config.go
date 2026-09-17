@@ -3,14 +3,12 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // Config holds the server's validated runtime configuration.
@@ -27,8 +25,7 @@ type Config struct {
 	// resolve to a loopback address: production's only supported topology
 	// has Caddy as the sole process allowed to reach this server directly,
 	// always over loopback, so port 8080 must never be reachable any other
-	// way. Staging enforces the same boundary so a
-	// misconfiguration is caught before it reaches prod. A compose/self-host
+	// way. Staging enforces the same boundary. A compose/self-host
 	// topology that instead reaches this process over a container network
 	// must set LISTEN_HOST explicitly to an interface Caddy's container can
 	// reach.
@@ -56,10 +53,8 @@ type Config struct {
 	// Required (non-empty) when Env is "prod" or "staging": there is no safe
 	// default in either direction (trusting everyone is a spoofing bypass;
 	// trusting no one collapses every real client behind the actual proxy
-	// into one shared bucket), so both production and staging fail closed —
-	// refusing to start — rather than silently guessing; staging shares
-	// prod's strictness so a mismatched boundary is caught before it reaches
-	// prod. Optional in dev, defaulting to nil (trust no one), since a dev
+	// into one shared bucket), so production and staging refuse to start
+	// without it. Optional in dev, defaulting to nil (trust no one), since a dev
 	// topology's correct value (e.g. a podman-compose network's subnet)
 	// isn't something this package can know in advance.
 	TrustedProxyCIDRs []netip.Prefix
@@ -83,7 +78,7 @@ type Config struct {
 	GitHubOAuthTokenURL     string
 	GitHubAPIBaseURL        string
 	// MediaBackend selects the private object store: "fs" for native
-	// development or "s3" for Compose, UAT, staging, and production.
+	// development or "s3" for Compose and AWS.
 	MediaBackend string
 	// MediaFSDir is the rooted filesystem store directory. It is required
 	// only when MediaBackend is "fs".
@@ -113,44 +108,6 @@ type Config struct {
 	// the provider code stays so the flag can turn on without a code change.
 	ProviderLoginEnabled bool
 }
-
-// AgentAccessConfig holds the frozen OAuth and MCP admission budgets. It is
-// populated as one complete unit even when disabled so enabling the feature
-// cannot expose a partially initialized limiter or body boundary.
-type AgentAccessConfig struct {
-	Enabled                bool
-	OAuthRegisterRequests  int
-	OAuthRegisterWindow    time.Duration
-	OAuthTokenRequests     int
-	OAuthTokenWindow       time.Duration
-	OAuthFailedGrantLimit  int
-	OAuthFailedGrantWindow time.Duration
-	MCPTokenRequests       int
-	MCPTokenWindow         time.Duration
-	MCPUserRequests        int
-	MCPUserWindow          time.Duration
-	MCPConcurrentPerUser   int
-	OAuthLiveGrantLimit    int
-	MCPBodyLimitBytes      int64
-	MaxRateKeys            int
-}
-
-const (
-	oauthRegisterRequests  = 5
-	oauthRegisterWindow    = time.Hour
-	oauthTokenRequests     = 30
-	oauthTokenWindow       = time.Minute
-	oauthFailedGrantLimit  = 10
-	oauthFailedGrantWindow = 15 * time.Minute
-	mcpTokenRequests       = 120
-	mcpTokenWindow         = time.Minute
-	mcpUserRequests        = 240
-	mcpUserWindow          = time.Minute
-	mcpConcurrentPerUser   = 4
-	oauthLiveGrantLimit    = 10
-	mcpBodyLimitBytes      = 4_194_304
-	agentRateMaxKeys       = 10_000
-)
 
 const (
 	defaultPort       = 8080
@@ -310,180 +267,6 @@ func Load(getenv func(string) string) (Config, error) {
 	return cfg, nil
 }
 
-func loadAgentAccessConfig(rawEnabled string) (AgentAccessConfig, error) {
-	var enabled bool
-	switch strings.TrimSpace(rawEnabled) {
-	case "", "false":
-	case "true":
-		enabled = true
-	default:
-		return AgentAccessConfig{}, errors.New("config: MCP_ENABLED must be true or false")
-	}
-	return AgentAccessConfig{
-		Enabled:                enabled,
-		OAuthRegisterRequests:  oauthRegisterRequests,
-		OAuthRegisterWindow:    oauthRegisterWindow,
-		OAuthTokenRequests:     oauthTokenRequests,
-		OAuthTokenWindow:       oauthTokenWindow,
-		OAuthFailedGrantLimit:  oauthFailedGrantLimit,
-		OAuthFailedGrantWindow: oauthFailedGrantWindow,
-		MCPTokenRequests:       mcpTokenRequests,
-		MCPTokenWindow:         mcpTokenWindow,
-		MCPUserRequests:        mcpUserRequests,
-		MCPUserWindow:          mcpUserWindow,
-		MCPConcurrentPerUser:   mcpConcurrentPerUser,
-		OAuthLiveGrantLimit:    oauthLiveGrantLimit,
-		MCPBodyLimitBytes:      mcpBodyLimitBytes,
-		MaxRateKeys:            agentRateMaxKeys,
-	}, nil
-}
-
-func loadProviderLoginFlag(raw string) (bool, error) {
-	switch strings.TrimSpace(raw) {
-	case "", "false":
-		return false, nil
-	case "true":
-		return true, nil
-	default:
-		return false, errors.New("config: PROVIDER_LOGIN_ENABLED must be true or false")
-	}
-}
-
-// ValidateAgentAccess rejects a manually assembled, partially enabled
-// configuration. Load always supplies the complete frozen values, but the
-// composition root also calls this method so tests and future constructors
-// cannot bypass startup validation with a Config literal.
-func (c Config) ValidateAgentAccess() error {
-	if !c.AgentAccess.Enabled {
-		return nil
-	}
-	a := c.AgentAccess
-	if c.PublicOrigin == "" || a.OAuthRegisterRequests != oauthRegisterRequests || a.OAuthRegisterWindow != oauthRegisterWindow ||
-		a.OAuthTokenRequests != oauthTokenRequests || a.OAuthTokenWindow != oauthTokenWindow ||
-		a.OAuthFailedGrantLimit != oauthFailedGrantLimit || a.OAuthFailedGrantWindow != oauthFailedGrantWindow ||
-		a.MCPTokenRequests != mcpTokenRequests || a.MCPTokenWindow != mcpTokenWindow ||
-		a.MCPUserRequests != mcpUserRequests || a.MCPUserWindow != mcpUserWindow ||
-		a.MCPConcurrentPerUser != mcpConcurrentPerUser || a.OAuthLiveGrantLimit != oauthLiveGrantLimit ||
-		a.MCPBodyLimitBytes != mcpBodyLimitBytes || a.MaxRateKeys != agentRateMaxKeys {
-		return errors.New("config: enabled MCP agent access configuration is incomplete")
-	}
-	return nil
-}
-
-type providerEndpoints struct {
-	googleIssuer    string
-	linkedinIssuer  string
-	githubAuthorize string
-	githubToken     string
-	githubAPI       string
-}
-
-func loadProviderEndpoints(getenv func(string) string, env, publicOrigin string) (providerEndpoints, error) {
-	values := map[string]string{
-		"GOOGLE_OIDC_ISSUER_URL":     strings.TrimSpace(getenv("GOOGLE_OIDC_ISSUER_URL")),
-		"LINKEDIN_OIDC_ISSUER_URL":   strings.TrimSpace(getenv("LINKEDIN_OIDC_ISSUER_URL")),
-		"GITHUB_OAUTH_AUTHORIZE_URL": strings.TrimSpace(getenv("GITHUB_OAUTH_AUTHORIZE_URL")),
-		"GITHUB_OAUTH_TOKEN_URL":     strings.TrimSpace(getenv("GITHUB_OAUTH_TOKEN_URL")),
-		"GITHUB_API_BASE_URL":        strings.TrimSpace(getenv("GITHUB_API_BASE_URL")),
-	}
-
-	if env != "dev" {
-		for _, name := range []string{
-			"GOOGLE_OIDC_ISSUER_URL",
-			"LINKEDIN_OIDC_ISSUER_URL",
-			"GITHUB_OAUTH_AUTHORIZE_URL",
-			"GITHUB_OAUTH_TOKEN_URL",
-			"GITHUB_API_BASE_URL",
-		} {
-			if values[name] != "" {
-				return providerEndpoints{}, fmt.Errorf("config: %s is permitted only when ENV=dev", name)
-			}
-		}
-		return providerEndpoints{}, nil
-	}
-
-	if err := validateLoopbackProviderURL("GOOGLE_OIDC_ISSUER_URL", values["GOOGLE_OIDC_ISSUER_URL"], "/google", false); err != nil {
-		return providerEndpoints{}, err
-	}
-	if err := validateLoopbackProviderURL("LINKEDIN_OIDC_ISSUER_URL", values["LINKEDIN_OIDC_ISSUER_URL"], "/linkedin", false); err != nil {
-		return providerEndpoints{}, err
-	}
-
-	githubNames := []string{"GITHUB_OAUTH_AUTHORIZE_URL", "GITHUB_OAUTH_TOKEN_URL", "GITHUB_API_BASE_URL"}
-	githubSet := 0
-	for _, name := range githubNames {
-		if values[name] != "" {
-			githubSet++
-		}
-	}
-	if githubSet != 0 && githubSet != len(githubNames) {
-		return providerEndpoints{}, fmt.Errorf("config: GITHUB_OAUTH_AUTHORIZE_URL, GITHUB_OAUTH_TOKEN_URL, and GITHUB_API_BASE_URL must be set together")
-	}
-	if githubSet == len(githubNames) {
-		if err := validateLoopbackProviderURL("GITHUB_OAUTH_AUTHORIZE_URL", values["GITHUB_OAUTH_AUTHORIZE_URL"], "/__uat/oauth/github/authorize", true); err != nil {
-			return providerEndpoints{}, err
-		}
-		wantAuthorize := publicOrigin + "/__uat/oauth/github/authorize"
-		if values["GITHUB_OAUTH_AUTHORIZE_URL"] != wantAuthorize {
-			return providerEndpoints{}, fmt.Errorf("config: GITHUB_OAUTH_AUTHORIZE_URL must equal PUBLIC_ORIGIN + /__uat/oauth/github/authorize")
-		}
-		if err := validateLoopbackProviderURL("GITHUB_OAUTH_TOKEN_URL", values["GITHUB_OAUTH_TOKEN_URL"], "/github/token", false); err != nil {
-			return providerEndpoints{}, err
-		}
-		if err := validateLoopbackProviderURL("GITHUB_API_BASE_URL", values["GITHUB_API_BASE_URL"], "/github", false); err != nil {
-			return providerEndpoints{}, err
-		}
-	}
-
-	return providerEndpoints{
-		googleIssuer:    values["GOOGLE_OIDC_ISSUER_URL"],
-		linkedinIssuer:  values["LINKEDIN_OIDC_ISSUER_URL"],
-		githubAuthorize: values["GITHUB_OAUTH_AUTHORIZE_URL"],
-		githubToken:     values["GITHUB_OAUTH_TOKEN_URL"],
-		githubAPI:       values["GITHUB_API_BASE_URL"],
-	}, nil
-}
-
-func validateLoopbackProviderURL(name, raw, wantPath string, requireHTTPS bool) error {
-	if raw == "" {
-		return nil
-	}
-
-	u, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("config: %s: invalid URL: %w", name, err)
-	}
-	if u.Opaque != "" || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("config: %s must be an absolute URL", name)
-	}
-	if requireHTTPS {
-		if u.Scheme != "https" {
-			return fmt.Errorf("config: %s must use https", name)
-		}
-	} else if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("config: %s must use http or https", name)
-	}
-	if u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
-		return fmt.Errorf("config: %s must not contain user info, query, or fragment", name)
-	}
-	if u.Port() == "" {
-		return fmt.Errorf("config: %s must include an explicit port", name)
-	}
-	port, err := strconv.Atoi(u.Port())
-	if err != nil || port < minPort || port > maxPort {
-		return fmt.Errorf("config: %s has an invalid port", name)
-	}
-	host := strings.ToLower(u.Hostname())
-	address, parseErr := netip.ParseAddr(host)
-	if host != "localhost" && (parseErr != nil || !address.IsLoopback()) {
-		return fmt.Errorf("config: %s host must be loopback", name)
-	}
-	if u.EscapedPath() != wantPath {
-		return fmt.Errorf("config: %s path must equal %s", name, wantPath)
-	}
-	return nil
-}
-
 // LoadEnv loads configuration from the real process environment.
 func LoadEnv() (Config, error) {
 	return Load(os.Getenv)
@@ -589,10 +372,7 @@ func loadPublicOrigin(raw string) (string, error) {
 // requiresProductionTrustBoundary reports whether env must satisfy
 // production's client-IP trust-boundary strictness: a loopback LISTEN_HOST
 // (loadListenHost) and a required, non-empty TRUSTED_PROXY_CIDRS
-// (loadTrustedProxyCIDRs). Both "prod" and "staging" require it — staging
-// exists specifically to validate the real deployment topology before it
-// reaches prod, so a lenient staging boundary would let a misconfiguration
-// reach prod undetected.
+// (loadTrustedProxyCIDRs). Both "prod" and "staging" require it.
 func requiresProductionTrustBoundary(env string) bool {
 	return env == "prod" || env == "staging"
 }
@@ -618,212 +398,4 @@ func loadListenHost(raw, env string) (string, error) {
 			"(design spec §6: Caddy is the only process ever allowed to reach this one directly)", raw, env)
 	}
 	return raw, nil
-}
-
-// minTrustedProxyPrefixBitsIPv4 and minTrustedProxyPrefixBitsIPv6 are the
-// narrowest (i.e. numerically smallest bit count, so widest address range)
-// prefix length TRUSTED_PROXY_CIDRS may configure per address family.
-// Anything broader is too implausible to be a real deployment's actual
-// reverse-proxy hop and silently approaches "trust everyone." Checking every
-// prefix also rejects an address space split into individually broad ranges,
-// such as "0.0.0.0/1,128.0.0.0/1".
-const (
-	minTrustedProxyPrefixBitsIPv4 = 8
-	minTrustedProxyPrefixBitsIPv6 = 48
-)
-
-// loadTrustedProxyCIDRs parses raw as a comma-separated list of CIDRs. When
-// env requires production trust-boundary strictness (see
-// requiresProductionTrustBoundary) it must be non-empty: see
-// Config.TrustedProxyCIDRs for why production has no safe default to fall
-// back to. Outside that, an empty/unset raw returns (nil, nil) — trust no
-// one, the same safe default api.TrustedProxies documents for its own zero
-// value.
-func loadTrustedProxyCIDRs(raw, env string) ([]netip.Prefix, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		if requiresProductionTrustBoundary(env) {
-			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS is required when ENV=%s: "+
-				"production and staging must fail closed on their client-IP trust boundary "+
-				"(design spec §6), never silently trust every peer or none", env)
-		}
-		return nil, nil
-	}
-
-	fields := strings.Split(raw, ",")
-	cidrs := make([]netip.Prefix, 0, len(fields))
-	for _, field := range fields {
-		field = strings.TrimSpace(field)
-		if field == "" {
-			continue
-		}
-		prefix, err := netip.ParsePrefix(field)
-		if err != nil {
-			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS: invalid value %q: "+
-				"must be a comma-separated list of CIDRs: %w", raw, err)
-		}
-		// An IPv4-in-IPv6 mapped prefix (e.g. "::ffff:0.0.0.0/104") is
-		// judged against the IPv6 minimum below, yet can never match a real
-		// peer: api.resolveClientIP Unmap()s every peer address before
-		// testing it, so a v4-mapped trusted prefix silently trusts nobody.
-		// Reject it with a message pointing at the plain IPv4 form rather than
-		// accept an inert value that appears configured.
-		if prefix.Addr().Is4In6() {
-			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS: invalid value %q: "+
-				"%s is an IPv4-in-IPv6 mapped prefix, which never matches a real peer "+
-				"(peer addresses are unmapped before the trust check); write it as a plain "+
-				"IPv4 CIDR (the %s address, e.g. its IPv4 form) instead (design spec §6)",
-				raw, field, prefix.Addr().Unmap().String())
-		}
-		// See the const doc comment above: a mismatched but non-trivial
-		// (i.e. within these bounds) CIDR can't be caught here, since Go
-		// has no way to know the real topology at config-load time; the
-		// runtime mismatch warning in api.RateLimit is what catches that
-		// case.
-		minBits := minTrustedProxyPrefixBitsIPv4
-		if !prefix.Addr().Is4() {
-			minBits = minTrustedProxyPrefixBitsIPv6
-		}
-		if prefix.Bits() < minBits {
-			return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS: invalid value %q: "+
-				"%s is broader than the minimum allowed /%d for its address family, which is "+
-				"too broad to plausibly identify the deployment's actual reverse-proxy hop and "+
-				"defeats the client-IP trust boundary (design spec §6); use the deployment's "+
-				"actual proxy CIDR", raw, field, minBits)
-		}
-		cidrs = append(cidrs, prefix)
-	}
-	if len(cidrs) == 0 && requiresProductionTrustBoundary(env) {
-		return nil, fmt.Errorf("config: TRUSTED_PROXY_CIDRS is required when ENV=%s", env)
-	}
-	return cidrs, nil
-}
-
-// loadProviderCredentials reads <PREFIX>_CLIENT_ID and <PREFIX>_CLIENT_SECRET.
-// Both are required in prod and staging only when provider login is enabled,
-// so a server that offers the login cannot boot without real credentials.
-func loadProviderCredentials(prefix, provider string, getenv func(string) string, env string, providerLogin bool) (clientID, clientSecret string, err error) {
-	clientID = strings.TrimSpace(getenv(prefix + "_CLIENT_ID"))
-	clientSecret = strings.TrimSpace(getenv(prefix + "_CLIENT_SECRET"))
-	if !providerLogin || (env != "prod" && env != "staging") {
-		return clientID, clientSecret, nil
-	}
-	for _, field := range []struct{ name, value string }{
-		{prefix + "_CLIENT_ID", clientID},
-		{prefix + "_CLIENT_SECRET", clientSecret},
-	} {
-		if field.value == "" {
-			return "", "", fmt.Errorf("config: %s is required when ENV=%s and PROVIDER_LOGIN_ENABLED=true: "+
-				"%s login needs real credentials", field.name, env, provider)
-		}
-	}
-	return clientID, clientSecret, nil
-}
-
-type mediaConfig struct {
-	backend         string
-	fsDir           string
-	bucket          string
-	region          string
-	endpoint        string
-	accessKeyID     string
-	secretAccessKey string
-	forcePathStyle  bool
-}
-
-// loadMediaConfig validates the selected backend as one closed mode. Values
-// for the other mode are rejected rather than ignored, so a stale credential
-// or path setting cannot silently take effect after a later backend switch.
-// Errors name variables only and never include credential or endpoint values.
-func loadMediaConfig(getenv func(string) string) (mediaConfig, error) {
-	cfg := mediaConfig{
-		backend:         strings.ToLower(strings.TrimSpace(getenv("MEDIA_BACKEND"))),
-		fsDir:           strings.TrimSpace(getenv("MEDIA_FS_DIR")),
-		bucket:          strings.TrimSpace(getenv("MEDIA_BUCKET")),
-		region:          strings.TrimSpace(getenv("MEDIA_REGION")),
-		endpoint:        strings.TrimSpace(getenv("MEDIA_ENDPOINT")),
-		accessKeyID:     strings.TrimSpace(getenv("MEDIA_ACCESS_KEY_ID")),
-		secretAccessKey: strings.TrimSpace(getenv("MEDIA_SECRET_ACCESS_KEY")),
-	}
-	forcePathStyleRaw := strings.TrimSpace(getenv("MEDIA_FORCE_PATH_STYLE"))
-	forcePathStyleSet := forcePathStyleRaw != ""
-	if forcePathStyleSet {
-		switch forcePathStyleRaw {
-		case "true":
-			cfg.forcePathStyle = true
-		case "false":
-			cfg.forcePathStyle = false
-		default:
-			return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE must be true or false")
-		}
-	}
-
-	switch cfg.backend {
-	case "":
-		return mediaConfig{}, errors.New("config: MEDIA_BACKEND is required: must be fs or s3")
-	case "fs":
-		if cfg.fsDir == "" {
-			return mediaConfig{}, errors.New("config: MEDIA_FS_DIR is required when MEDIA_BACKEND=fs")
-		}
-		for _, crossMode := range []struct {
-			name  string
-			value string
-		}{
-			{"MEDIA_BUCKET", cfg.bucket},
-			{"MEDIA_REGION", cfg.region},
-			{"MEDIA_ENDPOINT", cfg.endpoint},
-			{"MEDIA_ACCESS_KEY_ID", cfg.accessKeyID},
-			{"MEDIA_SECRET_ACCESS_KEY", cfg.secretAccessKey},
-		} {
-			if crossMode.value != "" {
-				return mediaConfig{}, fmt.Errorf("config: %s must be absent when MEDIA_BACKEND=fs", crossMode.name)
-			}
-		}
-		if forcePathStyleSet {
-			return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE must be absent when MEDIA_BACKEND=fs")
-		}
-		return cfg, nil
-	case "s3":
-		if cfg.fsDir != "" {
-			return mediaConfig{}, errors.New("config: MEDIA_FS_DIR must be absent when MEDIA_BACKEND=s3")
-		}
-		if cfg.bucket == "" {
-			return mediaConfig{}, errors.New("config: MEDIA_BUCKET is required when MEDIA_BACKEND=s3")
-		}
-		if cfg.region == "" {
-			return mediaConfig{}, errors.New("config: MEDIA_REGION is required when MEDIA_BACKEND=s3")
-		}
-	default:
-		return mediaConfig{}, errors.New("config: MEDIA_BACKEND must be fs or s3")
-	}
-
-	if cfg.endpoint == "" {
-		if cfg.accessKeyID != "" {
-			return mediaConfig{}, errors.New("config: MEDIA_ACCESS_KEY_ID must be absent in AWS S3 mode")
-		}
-		if cfg.secretAccessKey != "" {
-			return mediaConfig{}, errors.New("config: MEDIA_SECRET_ACCESS_KEY must be absent in AWS S3 mode")
-		}
-		if forcePathStyleSet {
-			return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE must be absent in AWS S3 mode")
-		}
-		return cfg, nil
-	}
-
-	u, err := url.Parse(cfg.endpoint)
-	if err != nil || !u.IsAbs() || u.Host == "" ||
-		(strings.ToLower(u.Scheme) != "http" && strings.ToLower(u.Scheme) != "https") ||
-		u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-		return mediaConfig{}, errors.New("config: MEDIA_ENDPOINT must be an absolute scheme://host[:port] HTTP(S) URL")
-	}
-	if !forcePathStyleSet || !cfg.forcePathStyle {
-		return mediaConfig{}, errors.New("config: MEDIA_FORCE_PATH_STYLE=true is required with MEDIA_ENDPOINT")
-	}
-	if cfg.accessKeyID == "" {
-		return mediaConfig{}, errors.New("config: MEDIA_ACCESS_KEY_ID is required with MEDIA_ENDPOINT")
-	}
-	if cfg.secretAccessKey == "" {
-		return mediaConfig{}, errors.New("config: MEDIA_SECRET_ACCESS_KEY is required with MEDIA_ENDPOINT")
-	}
-	return cfg, nil
 }

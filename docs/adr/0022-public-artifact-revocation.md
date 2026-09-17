@@ -1,6 +1,7 @@
-# 0022 — Public artifacts pass a live-state gate before reuse
+# 0022: Public artifacts pass a live-state gate before reuse
 
-Status: Accepted (2026-08-12)
+Status: Accepted (2026-08-12). Superseded in part by
+[ADR 0035](0035-replica-coordination-and-uat-lifecycle.md).
 
 ## Context
 

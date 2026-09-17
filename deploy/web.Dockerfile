@@ -1,11 +1,6 @@
 # Multi-stage build for apps/web (Nuxt 4 / Vue 3).
-# Build context is the REPO ROOT (set in deploy/compose.yml), not apps/web/:
-# apps/web now has a real dependency on @aboutme/schema, a local `file:`
-# reference to packages/schema (see apps/web/package.json — this repo has no
-# npm workspaces, so a plain relative file: dependency is what npm resolves
-# and symlinks), so the build needs to see both directories, not just
-# apps/web/. This file lives in deploy/ per the exclusive-ownership split for
-# Task C2.
+# Build context is the repository root: apps/web depends on packages/schema
+# through a relative `file:` reference, so the build needs both directories.
 
 # ---- build ----
 # Node 24.21.0: pinned exactly to apps/web/.nvmrc.

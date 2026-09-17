@@ -59,4 +59,5 @@
   items (deploy recovery; the Chromium sandbox on Bottlerocket) and four minor
   items. All are fixed and the same reviewer confirmed each fix. Local gates ran
   in chunks: `make check`, web lint, typecheck, test and build, the database,
-  migration, p2b and S3 suites, the route table test, and connected `make scan`.
+  migration, resume API and S3 suites, the route table test, and connected
+  `make scan`.

@@ -76,10 +76,9 @@ The SES account remains in sandbox: at setup it allowed 200 messages per day and
 and signup/contact details are live. Until then, use the mailbox simulator or
 approved test addresses.
 
-Runtime IAM has not been created. The application runtime role needs only
-`ses:SendEmail` for the current SES v2 sender, scoped to the `aboutme.vn`
-identity and `aboutme-auth` configuration set. Add another sending action only
-with a documented caller and an affected policy test.
+The app task role grants only `ses:SendEmail`, which the SES v2 sender uses,
+limited to the configured from address. Add another sending action only with a
+documented caller and an affected policy test.
 
 The existing `aboutme-email` CloudFormation stack keeps owning its SES, SNS, SQS
 and CloudWatch resources. Production OpenTofu only grants the app task role

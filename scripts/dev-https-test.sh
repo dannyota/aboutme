@@ -7,6 +7,7 @@ umask 077
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 readonly SOURCE_ROOT=$PWD
 readonly SOURCE_SCRIPT=$SOURCE_ROOT/scripts/dev-https.sh
+readonly SOURCE_LIB_DIR=$SOURCE_ROOT/scripts/lib
 
 fail() {
   printf 'dev-https-test: %s\n' "$*" >&2
@@ -310,10 +311,11 @@ EOF
 new_fixture() {
   local fixture
   fixture=$(mktemp -d)
-  mkdir -p "$fixture/repo/scripts" "$fixture/repo/deploy/caddy" \
+  mkdir -p "$fixture/repo/scripts/lib" "$fixture/repo/deploy/caddy" \
     "$fixture/repo/packages/publicroots" \
     "$fixture/repo/apps/server" "$fixture/repo/apps/web/node_modules"
   cp "$SOURCE_SCRIPT" "$fixture/repo/scripts/dev-https.sh"
+  cp "$SOURCE_LIB_DIR"/dev-https-*.sh "$fixture/repo/scripts/lib/"
   cp "$SOURCE_ROOT/scripts/generate-public-roots.mjs" "$fixture/repo/scripts/generate-public-roots.mjs"
   cp "$SOURCE_ROOT/scripts/chromium-path.mjs" "$fixture/repo/scripts/chromium-path.mjs"
   cp "$SOURCE_ROOT/deploy/caddy/Caddyfile" "$fixture/repo/deploy/caddy/Caddyfile"
@@ -1199,6 +1201,7 @@ run_missing_tool_check() (
 main() {
   [ "${1-}" = --static ] && [ "$#" -eq 1 ] || fail 'usage: scripts/dev-https-test.sh --static'
   [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
+  compgen -G "$SOURCE_LIB_DIR/dev-https-*.sh" >/dev/null || fail "missing production library files: $SOURCE_LIB_DIR"
   case ${DEV_HTTPS_TEST_CASE-} in
   manifest) run_happy_path_and_lifecycle_checks; return ;;
   listener-probe) run_listener_probe_failure_checks; return ;;

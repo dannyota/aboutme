@@ -8,11 +8,11 @@ ADRs are append-only history. Supersede an accepted decision with a new ADR; do
 not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
-Recent accepted decisions include [ADR 0032](0032-public-share-image.md) for the
-public share image and
-[ADR 0034](0034-scheduled-uat-and-production-autoscaling.md), which replaces the
-single-host AWS comparison baseline with scheduled UAT and a replica-safe,
-autoscaling production target.
+The most recent accepted decisions are
+[ADR 0037](0037-single-host-production-without-hosted-uat.md), which sends the
+first release straight to single-host production behind Cloudflare with no
+hosted UAT, and [ADR 0038](0038-single-baseline-and-plain-migrator.md), which
+sets one baseline migration and a plain goose migrator.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

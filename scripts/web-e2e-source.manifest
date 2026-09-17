@@ -289,6 +289,14 @@ apps/web/app/editor/coalesce.ts
 apps/web/app/editor/commands.ts
 apps/web/app/editor/conflicts.ts
 apps/web/app/editor/coordinator.ts
+apps/web/app/editor/coordinatorConflicts.ts
+apps/web/app/editor/coordinatorCreate.ts
+apps/web/app/editor/coordinatorGuards.ts
+apps/web/app/editor/coordinatorPhoto.ts
+apps/web/app/editor/coordinatorQueue.ts
+apps/web/app/editor/coordinatorReconcile.ts
+apps/web/app/editor/coordinatorSettle.ts
+apps/web/app/editor/coordinatorTypes.ts
 apps/web/app/editor/documentValidation.ts
 apps/web/app/editor/pageCountObserver.ts
 apps/web/app/editor/pdfDownload.ts
@@ -299,6 +307,8 @@ apps/web/app/editor/publishController.ts
 apps/web/app/editor/reconcile.ts
 apps/web/app/editor/reducer.ts
 apps/web/app/editor/resumeApi.ts
+apps/web/app/editor/resumeApiParsing.ts
+apps/web/app/editor/resumeApiRequests.ts
 apps/web/app/editor/revision.ts
 apps/web/app/editor/templateDiff.ts
 apps/web/app/editor/templateGroup.ts

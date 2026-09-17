@@ -1,4 +1,4 @@
-# 0014 — Privileged OAuth starts use authenticated POST
+# 0014: Privileged OAuth starts use authenticated POST
 
 Status: Accepted (2026-08-12)
 

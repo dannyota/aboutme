@@ -45,7 +45,7 @@ func schemaFilePath() string {
 
 // resumeSchemaSectionOneOf mirrors just enough of resume.schema.json's shape
 // to read $defs.section.oneOf[].properties.sectionType.const — the same
-// field packages/schema/scripts/generate.mjs's deriveSectionVariants and
+// field packages/schema/scripts/generateSchemaTransform.mjs's deriveSectionVariants and
 // packages/schema/test/conformance.test.ts's sectionTypesFromSchema both
 // read, kept as an independent third reader here rather than a shared
 // import so this test doesn't trust either of those derivations.

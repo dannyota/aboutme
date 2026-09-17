@@ -78,8 +78,8 @@ numbers commit on change. Optional customization groups are switches. The editor
 core keeps its presence model; the field UI does not expose it.
 
 Every stable test hook (`data-testid`, `data-action`, other `data-*` attributes,
-`aria-label` text, visible labels) survives a component change unless the owning
-task names its replacement. Tests query by role, label, and those attributes,
+`aria-label` text, visible labels) survives a component change unless the same
+change names its replacement. Tests query by role, label, and those attributes,
 never by tag, class, or index.
 
 ## Agent consent and connected agents

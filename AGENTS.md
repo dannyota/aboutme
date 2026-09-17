@@ -191,19 +191,11 @@ commit; the repository is public.
   `apps/server/migrations/.uat-baseline` lands, goose migrations are immutable
   and rollback uses a forward migration.
 - A contract change updates schema/OpenAPI sources, generated clients and types,
-  tests, examples, the phase plan, and traceability in one reviewed change.
+  tests, examples, design docs, and traceability in one reviewed change.
 - Do not weaken security controls: least privilege, strict input bounds,
   versioned sanitizing, CSRF and Origin checks, `__Host-` cookies,
   route-specific rate limits, CSP, secret-free logs.
-- Write docs and code comments short, clear, and concise. Say each fact once, in
-  plain words. When a change makes a statement false, fix or delete it in the
-  same change; never leave stale text behind. When your work touches a doc or
-  comment that breaks this rule, rewrite it as part of that work. Do not start
-  separate sweeps for it.
-- Design rationale belongs in `docs/`, not code comments. Cite files, commands,
-  and uncertainty; claim only checks that actually ran. Use Mermaid, not ASCII
-  diagrams. Keep living Markdown near 300 lines. A phase's plan is deleted when
-  the phase exits; git history keeps it.
+- Follow the writing rules below for every doc and code comment.
 
 Run the narrowest relevant checks:
 
@@ -219,7 +211,7 @@ Run the narrowest relevant checks:
 | Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`                                                                                                                   |
 | Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                                                                   |
 | Authenticated UI                | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check` (scripted headless Playwright); full product checks run in production |
-| Public surface                  | `make p5a-native-http-check` and `make dev-https-public-check`                                                                                                     |
+| Public surface                  | `make native-http-check` and `make dev-https-public-check`                                                                                                         |
 | Phase gate or security work     | `make scan` with `SEMGREP_APP_TOKEN` (connected SAST, SCA, secrets, full-history gitleaks)                                                                         |
 
 Reusable browser automation is scripted headless Playwright, committed and run
@@ -233,6 +225,22 @@ selectors, requests, and page state — then write what you observed as headless
 recorded automation.
 
 Report an unrun check with its exact command, reason, and remaining uncertainty.
+
+## Writing docs and code comments
+
+[`docs/standards/engineering.md`](docs/standards/engineering.md) holds the full
+rules; read it before writing docs or comments. The ones most often broken:
+
+- Keep text short, clear, and concise. Say each fact once.
+- Never cite plans, phases, tasks, slices, review findings, or probes, or their
+  IDs, in code, comments, tests, or living docs. Cite the design doc, ADR, or
+  `AC-*` ID instead, or state the rule. Plans are deleted; design stays.
+- Describe the current state, not history.
+- Fix stale text in files your work touches, in the same change. No
+  repository-wide sweeps.
+- Markdown files stay at or under 450 lines and non-test code at or under 700
+  (`scripts/check-lengths.sh`). Split by topic before a file passes the limit.
+- Worker briefs repeat these rules, so task IDs in a brief never reach the code.
 
 ## Gotchas
 

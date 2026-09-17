@@ -1,7 +1,10 @@
-# 0035 — Shared replica coordination and a recoverable UAT lifecycle
+# 0035: Shared replica coordination and a recoverable UAT lifecycle
 
 Status: Accepted (2026-09-06), following the owner's scaling and cost approval
 and delegated design review. Implementation and hosted proof remain pending.
+Superseded in part by
+[ADR 0036](0036-single-replica-launch-and-pipeline-migrations.md) and
+[ADR 0038](0038-single-baseline-and-plain-migrator.md).
 
 ## Context
 
@@ -100,7 +103,7 @@ hosted proof before a booking is enabled.
 The existing USD 30 UAT ceiling includes retained and allocated shared costs.
 The controller stops optional work at USD 25 actual or USD 30 forecast. These
 controls do not impose an instantaneous billing cap. Production activation
-remains a separate Phase 11 decision.
+remains a separate decision requiring owner approval.
 
 ## Compatibility and review
 
@@ -117,8 +120,8 @@ record supersedes these earlier mechanisms:
 - ADR 0022: distributed publication fences and replica recovery.
 - ADR 0034: executable lifecycle ownership and proved-empty UAT scheduling.
 
-Implementation follows the bounded Task 10.18 plan and its local checks. Hosted
-scaling and shutdown proofs remain Phase 10 gates.
+This work follows a bounded implementation plan and its local checks. Hosted
+scaling and shutdown proofs remain required before deployment.
 
 The transaction mechanism was corrected during local implementation on
 2026-09-06. PostgreSQL can force deferred constraint triggers before commit. The

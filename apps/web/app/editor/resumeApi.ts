@@ -1,6 +1,5 @@
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 
-import type { operations } from '../api/generated/openapi';
 import type {
   AttemptFailureCode,
   AttemptResult,
@@ -10,23 +9,25 @@ import type {
   ResumeConditionalReadResult,
   ResumeListResult,
   ResumeReadResult,
-  ResumeSummary,
-  ServerValidationIssue,
-  ValidatedStaleWinner,
 } from './attempt';
-import { applyIntent } from './commands';
+import { UnknownDocumentVersionError } from './documentValidation';
+import { compareRevision, parentETag, parseParentETag } from './revision';
 import {
-  parseCurrentDocument,
-  UnknownDocumentVersionError,
-} from './documentValidation';
-import {
-  compareRevision,
-  parentETag,
-  parseParentETag,
-  parseRevision,
-} from './revision';
-import type { AtomicEditorCommand, CreateResumeIntent } from './commands';
-import type { AcceptedResume, EditorRuntime, ParentETag } from './types';
+  dataOf,
+  hasCurrentSchemaHeader,
+  hasExactCachePolicy,
+  parseAcceptedResponse,
+  parseBodyless,
+  parseError,
+  parseObjectETag,
+  parseStale,
+  parseSummary,
+  retryAfterMs,
+  revisionFromParentETag,
+  safeIssues,
+} from './resumeApiParsing';
+import { requestFromAttempt } from './resumeApiRequests';
+import type { ParentETag } from './types';
 
 export type {
   AttemptFailureCode,
@@ -42,6 +43,13 @@ export type {
   ValidatedStaleWinner,
 } from './attempt';
 
+export {
+  freezeAttempt,
+  freezeCreateAttempt,
+  requestFromAttempt,
+} from './resumeApiRequests';
+export { parseAcceptedResponse, parseObjectETag } from './resumeApiParsing';
+
 export interface ResumeApi {
   list(): Promise<ResumeListResult>;
   read(id: string): Promise<ResumeReadResult>;
@@ -53,23 +61,6 @@ export interface ResumeApi {
   readOwnerPhoto(id: string, etag?: ObjectETag): Promise<OwnerPhotoReadResult>;
 }
 
-type JsonBody<Operation extends keyof operations>
-  = operations[Operation] extends {
-    requestBody: { content: { 'application/json': infer Body } };
-  }
-    ? Body
-    : never;
-
-type Wire = Readonly<{
-  operation: FrozenAttempt['operation'];
-  url: string;
-  method: FrozenAttempt['method'];
-  body?: unknown;
-  file?: File;
-}>;
-
-const CACHE_CONTROL = 'no-store, no-transform';
-const RETRY_WINDOW_MS = 23 * 60 * 60 * 1000;
 const FAILURE_CODES = new Set<AttemptFailureCode>([
   'bad_request',
   'body_too_large',
@@ -92,77 +83,6 @@ const FAILURE_CODES = new Set<AttemptFailureCode>([
   'resume_not_found',
   'unsupported_schema_version',
 ]);
-
-export function freezeAttempt(
-  command: AtomicEditorCommand,
-  accepted: AcceptedResume,
-  runtime: EditorRuntime,
-): FrozenAttempt {
-  const wire = wireForCommand(command, accepted);
-  return freezeWire(command.id, wire, parentETag(accepted.revision), runtime);
-}
-
-export function freezeCreateAttempt(
-  intent: CreateResumeIntent,
-  runtime: EditorRuntime,
-): FrozenAttempt {
-  const body: JsonBody<'createResume'>
-    = intent.lng === undefined
-      ? { title: intent.title }
-      : { title: intent.title, lng: intent.lng };
-  return freezeWire(
-    intent.id,
-    {
-      operation: 'createResume',
-      url: '/api/v1/resumes',
-      method: 'POST',
-      body,
-    },
-    undefined,
-    runtime,
-  );
-}
-
-export function requestFromAttempt(
-  attempt: FrozenAttempt,
-  csrfToken: string,
-): Request {
-  const headers = new Headers({
-    'Idempotency-Key': attempt.idempotencyKey,
-    'X-CSRF-Token': csrfToken,
-    'X-Resume-Schema-Version': String(attempt.schemaVersion),
-  });
-  if (attempt.ifMatch !== undefined) headers.set('If-Match', attempt.ifMatch);
-
-  let body: BodyInit | undefined;
-  if (attempt.payload.kind === 'json') {
-    body = attempt.payload.utf8;
-  } else if (attempt.payload.kind === 'photo') {
-    const form = new FormData();
-    form.append('file', attempt.payload.file);
-    body = form;
-  }
-
-  const request = new Request(attempt.url, {
-    method: attempt.method,
-    body,
-    cache: 'no-store',
-    credentials: 'include',
-  });
-  for (const [name, value] of headers) request.headers.set(name, value);
-  if (attempt.payload.kind === 'json') {
-    request.headers.set('Content-Type', 'application/json');
-  }
-  return request;
-}
-
-export function parseObjectETag(value: string | null): ObjectETag {
-  // eslint-disable-next-line no-control-regex -- ETags forbid C0 and DEL.
-  if (value === null || !/^"[^"\\\s,\x00-\x1F\x7F]+"$/.test(value)) {
-    throw new Error('invalid object ETag');
-  }
-  return value as ObjectETag;
-}
 
 export function createResumeApi(fetcher: typeof fetch = fetch): ResumeApi {
   return {
@@ -414,335 +334,4 @@ export function createResumeApi(fetcher: typeof fetch = fetch): ResumeApi {
       }
     },
   };
-}
-
-function freezeWire(
-  id: string,
-  wire: Wire,
-  ifMatch: ParentETag | undefined,
-  runtime: EditorRuntime,
-): FrozenAttempt {
-  const firstDispatchAt = runtime.nowEpochMs();
-  const payload
-    = wire.file === undefined
-      ? wire.body === undefined
-        ? Object.freeze({ kind: 'empty' as const })
-        : Object.freeze({
-            kind: 'json' as const,
-            utf8: JSON.stringify(wire.body),
-          })
-      : Object.freeze({ kind: 'photo' as const, file: wire.file });
-  return Object.freeze({
-    id,
-    operation: wire.operation,
-    url: wire.url,
-    method: wire.method,
-    schemaVersion: CURRENT_VERSION,
-    ...(ifMatch === undefined ? {} : { ifMatch }),
-    idempotencyKey: runtime.uuid(),
-    payload,
-    firstDispatchAt,
-    retryCutoff: firstDispatchAt + RETRY_WINDOW_MS,
-    automaticReplays: 0 as const,
-    staleRebases: 0 as const,
-  });
-}
-
-function wireForCommand(
-  command: AtomicEditorCommand,
-  accepted: AcceptedResume,
-): Wire {
-  const base = `/api/v1/resumes/${encodeURIComponent(command.resumeId)}`;
-  const updated = applyIntent(accepted, command);
-  switch (command.kind) {
-    case 'metadataField':
-      return {
-        operation: 'updateResumeMetadata',
-        url: base,
-        method: 'PATCH',
-        body: {
-          [command.field]: command.value,
-        } as JsonBody<'updateResumeMetadata'>,
-      };
-    case 'personalField': {
-      const { photo: _photo, ...personalDetails }
-        = updated.document.personalDetails;
-      return {
-        operation: 'updateResumePersonalDetails',
-        url: `${base}/personal-details`,
-        method: 'PATCH',
-        body: personalDetails as JsonBody<'updateResumePersonalDetails'>,
-      };
-    }
-    case 'entryField':
-    case 'entryUpsert': {
-      const section = updated.document.content[command.sectionKey];
-      const entryId
-        = command.kind === 'entryField' ? command.entryId : command.entry.id;
-      const entry = section?.entries.find(
-        (candidate) => candidate.id === entryId,
-      );
-      if (entry === undefined) throw new Error('entry missing after command');
-      return {
-        operation: 'upsertResumeEntry',
-        url: `${base}/entries/${encodeURIComponent(command.sectionKey)}`,
-        method: 'PATCH',
-        body: { entry } as unknown as JsonBody<'upsertResumeEntry'>,
-      };
-    }
-    case 'entryDelete': {
-      const sectionKey = encodeURIComponent(command.sectionKey);
-      const entryId = encodeURIComponent(command.entryId);
-      return {
-        operation: 'deleteResumeEntry',
-        url: `${base}/entries/${sectionKey}/${entryId}`,
-        method: 'DELETE',
-      };
-    }
-    case 'entryReorder':
-      return {
-        operation: 'updateResumeSection',
-        url: `${base}/sections/${encodeURIComponent(command.sectionKey)}`,
-        method: 'PATCH',
-        body: {
-          entryOrder: command.entryIds,
-        } as JsonBody<'updateResumeSection'>,
-      };
-    case 'sectionMetadata':
-      return {
-        operation: 'updateResumeSection',
-        url: `${base}/sections/${encodeURIComponent(command.sectionKey)}`,
-        method: 'PATCH',
-        body: {
-          [command.change.field]: command.change.value,
-        } as JsonBody<'updateResumeSection'>,
-      };
-    case 'structure':
-      return {
-        operation: 'updateResumeStructure',
-        url: `${base}/structure`,
-        method: 'PATCH',
-        body: {
-          commands: command.commands,
-        } as JsonBody<'updateResumeStructure'>,
-      };
-    case 'customization':
-      return {
-        operation: 'updateResumeCustomization',
-        url: `${base}/customization`,
-        method: 'PATCH',
-        body: {
-          deltas: command.deltas,
-        } as JsonBody<'updateResumeCustomization'>,
-      };
-    case 'photoUpload':
-      return {
-        operation: 'uploadResumePhoto',
-        url: `${base}/photo`,
-        method: 'POST',
-        file: command.file,
-      };
-    case 'photoCrop':
-      return {
-        operation: 'updateResumePhotoCrop',
-        url: `${base}/photo`,
-        method: 'PATCH',
-        body: { crop: command.crop } as JsonBody<'updateResumePhotoCrop'>,
-      };
-    case 'photoDelete':
-      return {
-        operation: 'deleteResumePhoto',
-        url: `${base}/photo`,
-        method: 'DELETE',
-      };
-    case 'resumeDelete':
-      return { operation: 'deleteResume', url: base, method: 'DELETE' };
-    default:
-      return assertNever(command);
-  }
-}
-
-export async function parseAcceptedResponse(
-  response: Response,
-): Promise<AcceptedResume> {
-  if (!hasCurrentSchemaHeader(response)) throw new Error('wrong schema header');
-  const data = dataOf(await response.json());
-  const summary = parseSummary(data);
-  if (!isRecord(data)) throw new Error('invalid resume');
-  const document = parseCurrentDocument(data.document);
-  const etag = parseParentETag(response.headers.get('ETag'));
-  if (etag !== parentETag(summary.revision)) {
-    throw new Error('mismatched revision');
-  }
-  return {
-    document,
-    metadata: summary,
-    revision: summary.revision,
-    metadataFreshness: 'complete',
-  };
-}
-
-async function parseBodyless(
-  response: Response,
-  attempt: FrozenAttempt,
-): Promise<AttemptResult> {
-  if (
-    response.headers.get('Content-Type') !== null
-    || (await response.arrayBuffer()).byteLength !== 0
-  ) {
-    throw new Error('unexpected 204 body');
-  }
-  if (attempt.operation === 'deleteResume') {
-    if (
-      response.headers.get('ETag') !== null
-      || response.headers.get('X-Resume-Schema-Version') !== null
-    ) {
-      throw new Error('unexpected delete headers');
-    }
-    return { kind: 'resume-deleted', status: 204 };
-  }
-  const scope
-    = attempt.operation === 'deleteResumeEntry'
-      ? 'entry'
-      : attempt.operation === 'deleteResumePhoto'
-        ? 'photo'
-        : null;
-  if (scope === null || !hasCurrentSchemaHeader(response)) {
-    throw new Error('invalid 204');
-  }
-  return {
-    kind: 'child-ack',
-    status: 204,
-    scope,
-    etag: parseParentETag(response.headers.get('ETag')),
-  };
-}
-
-async function parseStale(response: Response): Promise<AttemptResult> {
-  const error = await parseError(response);
-  if (error.code !== 'revision_mismatch' || !isRecord(error.details)) {
-    throw new Error('invalid stale response');
-  }
-  const revision = parseRevision(error.details.revision);
-  return {
-    kind: 'stale',
-    status: 412,
-    winner: Object.freeze({
-      document: parseCurrentDocument(error.details.document),
-      revision,
-    }) as ValidatedStaleWinner,
-  };
-}
-
-function parseSummary(value: unknown): ResumeSummary {
-  if (
-    !isRecord(value)
-    || typeof value.id !== 'string'
-    || typeof value.title !== 'string'
-    || typeof value.lng !== 'string'
-    || typeof value.live !== 'boolean'
-    || typeof value.downloadEnabled !== 'boolean'
-    || typeof value.seoGeoEnabled !== 'boolean'
-    || (value.slug !== null && typeof value.slug !== 'string')
-    || typeof value.createdAt !== 'string'
-    || typeof value.updatedAt !== 'string'
-    || value.schemaVersion !== CURRENT_VERSION
-  ) {
-    throw new Error('invalid summary');
-  }
-  return Object.freeze({
-    id: value.id,
-    title: value.title,
-    lng: value.lng,
-    live: value.live,
-    downloadEnabled: value.downloadEnabled,
-    seoGeoEnabled: value.seoGeoEnabled,
-    slug: value.slug,
-    schemaVersion: CURRENT_VERSION,
-    createdAt: value.createdAt,
-    updatedAt: value.updatedAt,
-    revision: parseRevision(value.revision),
-  });
-}
-
-function dataOf(value: unknown): unknown {
-  if (!isRecord(value) || !('data' in value)) {
-    throw new Error('invalid envelope');
-  }
-  return value.data;
-}
-
-async function parseError(
-  response: Response,
-): Promise<{ code: string; details?: unknown; issues?: unknown[] }> {
-  const value = await response.json();
-  if (
-    !isRecord(value)
-    || !isRecord(value.error)
-    || typeof value.error.code !== 'string'
-    || typeof value.error.message !== 'string'
-  ) {
-    throw new Error('invalid error envelope');
-  }
-  const details = value.error.details;
-  return {
-    code: value.error.code,
-    details,
-    issues:
-      isRecord(details) && Array.isArray(details.issues)
-        ? details.issues
-        : undefined,
-  };
-}
-
-function safeIssues(
-  issues: readonly unknown[],
-): readonly ServerValidationIssue[] {
-  if (
-    !issues.every(
-      (issue) =>
-        isRecord(issue)
-        && typeof issue.path === 'string'
-        && typeof issue.code === 'string',
-    )
-  ) {
-    throw new Error('invalid validation issues');
-  }
-  return issues.map((issue) => {
-    const validated = issue as Record<string, unknown>;
-    return Object.freeze({
-      path: validated.path as string,
-      code: validated.code as string,
-    });
-  });
-}
-
-function hasExactCachePolicy(response: Response): boolean {
-  return response.headers.get('Cache-Control') === CACHE_CONTROL;
-}
-
-function hasCurrentSchemaHeader(response: Response): boolean {
-  return (
-    response.headers.get('X-Resume-Schema-Version') === String(CURRENT_VERSION)
-  );
-}
-
-function revisionFromParentETag(etag: ParentETag) {
-  parseParentETag(etag);
-  return parseRevision(etag.slice(2, -1));
-}
-
-function retryAfterMs(response: Response): number | null {
-  const value = response.headers.get('Retry-After');
-  if (value === null || !/^[0-9]+$/.test(value)) return null;
-  const seconds = Number(value);
-  return Number.isSafeInteger(seconds) ? seconds * 1000 : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function assertNever(value: never): never {
-  throw new Error(`unhandled command: ${String(value)}`);
 }

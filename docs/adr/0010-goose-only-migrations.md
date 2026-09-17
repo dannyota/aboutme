@@ -1,6 +1,7 @@
-# 0010 — Migrations are goose-only; the migration directory is the schema source
+# 0010: Migrations are goose-only; the migration directory is the schema source
 
-Status: Accepted (2026-08-11)
+Status: Accepted (2026-08-11). Superseded in part by
+[ADR 0020](0020-uat-migration-baseline.md).
 
 ## Context
 
@@ -14,7 +15,7 @@ it needs a convergence gate. The repository grew one: `make data-drift` and
 `scripts/check-data-drift.sh` rebuilt a throwaway database and asked Atlas
 whether `schema.sql` and `migrations/` still described the same schema. Keeping
 that gate honest required pinning Atlas to v1.2.0, installing it in two CI jobs,
-committing `migrations/atlas.sum`, and maintaining `cmd/migrate/gen` — a
+committing `migrations/atlas.sum`, and maintaining `cmd/migrate/gen`, a
 generator wrapper carrying a `checkUndiffableObjects` cross-check, because
 Atlas's Postgres differ silently drops functions, triggers, procedures, views,
 sequences, rules, and policies from a generated migration.
@@ -24,7 +25,7 @@ resume cap trigger in migration `00005` had to be hand-written and then
 cross-checked against `schema.sql` byte-for-byte after comment and whitespace
 normalization, because Atlas could not generate it. `CREATE EXTENSION citext` in
 `00001` had the same problem. So the two statements Atlas could not diff needed
-bespoke machinery to prove they had not drifted — machinery whose only purpose
+bespoke machinery to prove they had not drifted. That machinery's only purpose
 was to compensate for having two sources in the first place.
 
 The alternative is to delete one source. sqlc parses goose-format migration
@@ -47,7 +48,7 @@ Removed: `sql/schema.sql`, `cmd/migrate/gen`, `migrations/atlas.sum`,
 and the pinned Atlas CLI from both CI jobs.
 
 `make sqlc-check` becomes the only drift gate, and it checks the one thing that
-can still drift — generated Go against the migrations that produced it. It now
+can still drift: generated Go against the migrations that produced it. It now
 uses `git status --porcelain` rather than `git diff --exit-code`, because the
 latter does not see a newly generated untracked file.
 
@@ -55,7 +56,7 @@ latter does not see a newly generated untracked file.
 declares the users email column as `public.citext`, schema-qualified, because
 Atlas generated it that way. sqlc maps bare `citext` to `string` by default but
 does not recognize the qualified spelling, and silently degrades it to
-`interface{}` — which compiles and then fails at the call sites. The override is
+`interface{}`, which compiles and then fails at the call sites. The override is
 required for the byte-identical result above.
 
 This supersedes the `sql/schema.sql` and `make migrate-gen` rows of the design

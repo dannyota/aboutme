@@ -1,4 +1,4 @@
-# 0027 — Provider login behind a server flag
+# 0027: Provider login behind a server flag
 
 Status: Accepted (2026-09-02)
 

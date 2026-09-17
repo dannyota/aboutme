@@ -46,6 +46,7 @@ group() {
 run() { group "$@" || true; }
 
 docs() { make docs-lint; }
+lengths() { make lengths-check; }
 tool_versions() { make tools-check ARGS=ci; }
 operational_contracts() { make operational-test; }
 schema() {
@@ -178,7 +179,7 @@ db_suites() {
   make server-test-integration &&
     make server-test-db &&
     make server-migration-test &&
-    make server-test-p2b
+    make server-test-resumeapi
 }
 
 s3_suites() {
@@ -187,7 +188,7 @@ s3_suites() {
   local status=0
   make server-test-s3 || status=$?
   if [ "$status" -eq 0 ]; then
-    make server-test-p2b-s3 || status=$?
+    make server-test-resumeapi-s3 || status=$?
   fi
   make test-s3-down || status=$?
   return "$status"
@@ -198,6 +199,7 @@ route_table() { make route-table-test; }
 run "tool versions" tool_versions
 run "operational contracts" operational_contracts
 run "docs-lint" docs
+run "file lengths" lengths
 run "schema-check" schema
 run "api-check" api
 run "go build/vet/test" go_build

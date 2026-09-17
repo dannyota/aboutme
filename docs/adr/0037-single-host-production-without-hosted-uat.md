@@ -1,4 +1,4 @@
-# 0037 — Single-host production without hosted UAT
+# 0037: Single-host production without hosted UAT
 
 Status: Accepted (2026-09-16), by the human owner's direction.
 
@@ -51,19 +51,17 @@ the resulting rules.
 - Test accounts and real accounts share one database.
 - Infrastructure code is public. It must contain no account identifier, secret
   or private hostname, and CI never receives cloud credentials.
-- Small code changes become launch prerequisites. The single-host design lists
-  them.
-
-- Accepting this record updates the deployment design, the roadmap and the Phase
-  10 plans in the same change, so no document still describes hosted UAT or the
-  fleet topology as the release path.
+- Small code changes become launch prerequisites.
+- Accepting this record updates the deployment design and the roadmap in the
+  same change, so no document still describes hosted UAT or the fleet topology
+  as the release path.
 
 ## Compatibility and review
 
 This record supersedes, for the first release only:
 
-- ADR 0031: hosted UAT before production and the separate Phase 11 approval.
-  This record is the production approval.
+- ADR 0031: hosted UAT before production and the separate launch approval. This
+  record is the production approval.
 - ADR 0033: the private `aboutme-infra` repository and private image
   publication. Public ARM64 image builds stand.
 - ADR 0034: CloudFront, the ALB, scheduled UAT and the fleet topology. The

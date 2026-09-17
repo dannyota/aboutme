@@ -1,6 +1,8 @@
-# 0031 — Research AWS cost before hosted UAT
+# 0031: Research AWS cost before hosted UAT
 
-Status: Accepted (2026-09-05), by the human owner's direction.
+Status: Accepted (2026-09-05), by the human owner's direction. Superseded in
+part by [ADR 0033](0033-public-image-builds-private-deployment.md) and
+[ADR 0037](0037-single-host-production-without-hosted-uat.md).
 
 ## Context
 
@@ -11,25 +13,26 @@ owner also wants numeric phase names that are easy to remember.
 
 ## Decision
 
-- Phase 9 researches AWS cost in Singapore (`ap-southeast-1`). It produces a
-  workload model, compares deployment options, and records the recommended
-  configuration, UAT lifetime, and spending limits before provisioning.
+- AWS cost research in Singapore (`ap-southeast-1`) precedes provisioning. It
+  produces a workload model, compares deployment options, and records the
+  recommended configuration, UAT lifetime, and spending limits.
 - OpenTofu is the infrastructure tool. Prefer managed AWS services over
   self-managed equivalents when they meet the workload and cost requirements.
-  Phase 9 includes operating effort, service limits, and compatibility in its
-  comparison; it does not choose an incompatible service solely for low price.
+  The cost comparison weighs operating effort, service limits, and
+  compatibility; it does not choose an incompatible service solely for low
+  price.
 - Deployment OpenTofu code and environment workflows belong in a separate
   private repository, planned as `aboutme-infra`. The public app keeps source,
   local development tools, and a deployment contract. Its contributors do not
   need the private repo or AWS access to build and test. Repository creation and
-  infrastructure implementation wait until the remaining product phases.
+  infrastructure implementation wait until deployment begins.
 - The owner selected native GitHub Actions ARM64 runners on 2026-09-05.
   Deployment images use `ubuntu-24.04-arm` and target `linux/arm64`; development
   and affected checks stay on the laptop. Existing AMD64 browser baselines keep
-  their pinned architecture. Phase 10 adds native ARM64 image smoke tests before
+  their pinned architecture. Native ARM64 image smoke tests run before
   publication. CodeBuild and self-hosted build runners are not required. The
   private infrastructure repository's Actions minutes and storage belong in the
-  Phase 9 cost model; public-repository free runner usage does not cover it.
+  cost model; public-repository free runner usage does not cover it.
 - Phase 10 contains infrastructure preparation, AWS deployment, complete product
   UAT, and the operational rehearsal previously assigned to staging.
   Infrastructure is a workstream within this phase, not a lettered phase.
@@ -41,27 +44,27 @@ owner also wants numeric phase names that are easy to remember.
   that environment. Record the resolved resource and DNS inventory before
   applying it. This does not authorize production cutover, unrelated DNS edits,
   or long-term purchase commitments.
-- Phase 9 settles cost assumptions and resource sizing before activation. No
-  budget amount is implied by the hostname authorization. Present the priced
+- Cost assumptions and resource sizing are settled before activation. No budget
+  amount is implied by the hostname authorization. Present the priced
   recommendation for any unresolved budget decision; do not ask again for the
   already-authorized region and UAT scope.
 - Features and affected checks remain local. Full local `make ci`, connected
   `make scan`, infrastructure simulation, and one fresh review precede
   activation at the candidate commit. Separate local port-443 UAT is no longer
   required.
-- The owner is configuring AWS SES and will provide documentation. Phase 10
-  consumes that handoff, inventories existing mail resources, and implements
-  only missing integration. It does not recreate the owner's mail setup. Local
-  mail capture remains the feature-development path.
-- Production still requires successful Phase 10 evidence and separate owner
+- The owner is configuring AWS SES and will provide documentation. Deployment
+  work consumes that handoff, inventories existing mail resources, and
+  implements only missing integration. It does not recreate the owner's mail
+  setup. Local mail capture remains the feature-development path.
+- Production still requires successful deployment evidence and separate owner
   approval. Cost reductions cannot silently weaken authentication, private
   media, revocation, backup, or recovery requirements.
 
 The [email runbook](../runbooks/email.md) now records the SES sandbox setup, the
-existing `aboutme-email` CloudFormation stack, and missing runtime IAM. Phase 10
-adopts existing resources under one management authority before OpenTofu applies
-overlapping changes. It preserves Google Workspace DNS and does not treat the
-unconsumed feedback queue as application processing.
+existing `aboutme-email` CloudFormation stack, and missing runtime IAM.
+Deployment work adopts existing resources under one management authority before
+OpenTofu applies overlapping changes. It preserves Google Workspace DNS and does
+not treat the unconsumed feedback queue as application processing.
 
 Singapore is the application and data region. Required global-service
 dependencies, such as CloudFront's ACM certificate in `us-east-1`, must be named
@@ -75,7 +78,7 @@ clarifies ADR 0020: the migration baseline marker must land before the first
 hosted UAT database migration. Later corrections use forward migrations even if
 the UAT environment is subsequently destroyed.
 
-The deployment design remains Phase 9's comparison baseline. Research may
+The deployment design remains the accepted comparison baseline. Research may
 recommend a different topology, but changing accepted architecture or security
 boundaries requires a follow-up ADR and matching design and plan updates before
 infrastructure implementation.
@@ -84,8 +87,9 @@ infrastructure implementation.
 
 UAT exercises real DNS, TLS, SES, edge routing, and runtime limits. It incurs
 cloud cost, so its lifetime, cleanup, backup retention, and idle charges are
-part of Phase 9's recommendation. Local development keeps one capped database
-and serial heavy checks; there is no new local UAT stack to keep running.
+part of the recommended configuration. Local development keeps one capped
+database and serial heavy checks; there is no new local UAT stack to keep
+running.
 
 UAT uses synthetic fixtures and owner-approved test mailboxes. Evidence remains
 private and ignored locally; only redacted summaries and stable acceptance

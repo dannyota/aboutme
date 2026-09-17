@@ -3,8 +3,7 @@
 Status: **infrastructure built; not yet serving** (2026-09-17). This runbook
 covers the single-host production environment at `https://aboutme.vn`. The
 [single-host design](../design/single-host-production.md) explains why it is
-shaped this way. Restore and full rotation sections are added after the first
-deploy.
+shaped this way.
 
 ## Access
 
@@ -39,8 +38,8 @@ dashboard, and update this table in the same change.
 | Origin CA certificate      | ECC, `aboutme.vn` and `www.aboutme.vn`, expires 2041-09-12; stored at `/aboutme/prod/tls/origin-cert`             |
 | Authenticated Origin Pulls | On; zone-level certificate from `tls.sh pull`, active, expires 2036-09-13. Caddy requires it from its first start |
 
-Mail records (MX, TXT, DKIM and the SES `bounce` records) predate this setup and
-stay unchanged.
+Mail records (MX, TXT, DKIM and the SES `bounce` records) belong to the
+[email runbook](email.md); do not change them here.
 
 Before a deploy, `deploy.sh` compares Cloudflare's published IPv4 ranges with
 the ranges in the running task definition. If they differ, run `tofu apply` to
@@ -78,8 +77,8 @@ publishes `ghcr.io/dannyota/aboutme-{server,web,caddy}` for that tag; the
 packages must be public so the host can pull them.
 
 ```sh
-bash deploy/aws/scripts/deploy.sh v0.1.0                 # normal release
-bash deploy/aws/scripts/deploy.sh v0.1.0 --first-deploy  # first release only
+bash deploy/aws/scripts/deploy.sh <tag>                 # normal release
+bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 ```
 
 The script checks the tag and CI, resolves image digests, compares Cloudflare
@@ -109,7 +108,7 @@ revision.
 ## Rollback
 
 ```sh
-bash deploy/aws/scripts/deploy.sh --rollback v0.0.9
+bash deploy/aws/scripts/deploy.sh --rollback <previous-tag>
 ```
 
 It redeploys earlier images without a snapshot or migration. It is safe only

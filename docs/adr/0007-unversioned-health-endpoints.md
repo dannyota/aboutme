@@ -1,4 +1,4 @@
-# 0007 — `/healthz` and `/readyz` unversioned, outside `/api/v1`
+# 0007: `/healthz` and `/readyz` unversioned, outside `/api/v1`
 
 Status: Accepted (2026-08-01)
 
@@ -8,8 +8,8 @@ Health checks are infrastructure, not product API: they exist for the ECS
 container agent and the CloudFront→Caddy→app synthetic check, not for clients of
 the resume API. An eventual `/api/v2` must never break an orchestrator or
 synthetic check that has no reason to know a version exists. The Caddy route
-table already sends other non-product paths — `/sitemap.xml`, `/robots.txt`,
-`/llms.txt` — to the Go server outside `/api/v1`; health checks follow the same
+table already sends other non-product paths to the Go server outside `/api/v1`:
+`/sitemap.xml`, `/robots.txt`, `/llms.txt`. Health checks follow the same
 pattern.
 
 ## Decision
@@ -19,7 +19,7 @@ pattern.
 
 ## Consequences
 
-- `/healthz` is liveness only and **never touches the database** — a database
+- `/healthz` is liveness only and **never touches the database**: a database
   outage must not cause the container health check to fail and restart-loop the
   task.
 - `/readyz` is readiness and **does** check the database (and render queue

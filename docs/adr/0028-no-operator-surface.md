@@ -1,4 +1,4 @@
-# 0028 — No operator surface in the public application
+# 0028: No operator surface in the public application
 
 Status: Accepted (2026-09-02)
 

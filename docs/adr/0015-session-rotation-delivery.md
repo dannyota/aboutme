@@ -1,4 +1,4 @@
-# 0015 — Session rotation waits for successor delivery
+# 0015: Session rotation waits for successor delivery
 
 Status: Accepted (2026-08-12)
 

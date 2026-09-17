@@ -1,6 +1,7 @@
 /**
- * Renderer-surface baseline CSP.
- * P5A and P8-sec own production enforcement.
+ * Renderer-surface baseline CSP, applied to `/_harness/**` in
+ * nuxt.config.ts and asserted by apps/web/e2e/normal-csp.spec.ts and
+ * corpus.spec.ts.
  */
 export const HTML_CSP
   = 'default-src \'none\'; base-uri \'none\'; object-src \'none\'; '

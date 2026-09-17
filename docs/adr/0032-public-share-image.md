@@ -7,7 +7,7 @@ Status: Accepted (2026-09-05).
 The approved design calls for generated images but does not specify a public
 path, format, viewport, crop, or eligibility rule. Its print target table also
 assigns page fragmentation to images, while the determinism section specifies a
-viewport capture. Phase 7 needs one exact contract.
+viewport capture. This record sets one exact contract.
 
 ## Decision
 
@@ -40,6 +40,6 @@ complete document. A resume may extend below it. PDF remains the full-document
 export. Unpublish, rename, and deletion revoke new image admission together with
 the other public representations.
 
-Phase 7 records a bounded PNG output size and tests exact dimensions, forbidden
-variants, download/discovery independence, and revocation of cached and running
-image jobs.
+Implementation records a bounded PNG output size and tests exact dimensions,
+forbidden variants, download/discovery independence, and revocation of cached
+and running image jobs.

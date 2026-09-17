@@ -1,6 +1,7 @@
-# 0036 — Single-replica launch and pipeline migrations
+# 0036: Single-replica launch and pipeline migrations
 
-Status: Accepted (2026-09-08), by the human owner's direction.
+Status: Accepted (2026-09-08), by the human owner's direction. Superseded in
+part by [ADR 0038](0038-single-baseline-and-plain-migrator.md).
 
 ## Context
 
@@ -11,17 +12,18 @@ coordination a second replica requires, because the publication coordinator,
 render authority and admission limits were process-local and a second copy could
 bypass revocation or multiply a limit.
 
-Task 10.18 implemented that coordination as migrations 13 through 23: the write
-barrier and protected migrator, membership, transition, claim and rate schemas,
-then registration, claim, rate and lifecycle operations and membership evidence.
-Each landed with a fresh review and local proof. That work is sound and is not
-in question here.
+That coordination was implemented as migrations 13 through 23: the write barrier
+and protected migrator, membership, transition, claim and rate schemas, then
+registration, claim, rate and lifecycle operations and membership evidence. Each
+landed with a fresh review and local proof. That work is sound and is not in
+question here.
 
 What changed is the estimate of what the first release needs. The remaining work
 is larger than the part completed: exclusive wake and protected wake migration,
-the public transition operations, live entry, caller integration across R2 to
-R7, then composition and readiness, and only then a local multi-replica proof.
-Almost all of it exists to make a second replica safe.
+the public transition operations, live entry, caller integration for
+publication, render, realtime, and rate-limit callers, then composition and
+readiness, and only then a local multi-replica proof. Almost all of it exists to
+make a second replica safe.
 
 The product has no users yet. A second replica buys capacity that is not needed,
 plus survival of a node failure and deploys without downtime. The second and
@@ -77,8 +79,8 @@ the deferred work in the consequences below to be completed first.
 
 Retired for this release, with their plans deleted and the reasoning kept here:
 
-- R1.12 exclusive wake, which reserved migration 24.
-- R1.13 protected wake migration, which reserved migration 25.
+- Exclusive wake, which reserved migration 24.
+- Protected wake migration, which reserved migration 25.
 
 Deferred until a second replica is actually wanted, in this order: the public
 transition operations, live entry, caller integration for render, realtime and
@@ -117,5 +119,5 @@ This record supersedes these parts of earlier decisions:
   the requirement that a second replica be proved before launch. Its
   coordination contracts stand and are the basis for any later second replica.
 
-The scaling contract, deployment design and Task 10.18 plans record this
-decision together. Production activation remains a separate Phase 11 decision.
+The scaling contract and deployment design record this decision together.
+Production activation remains a separate decision requiring owner approval.

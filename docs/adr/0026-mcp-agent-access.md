@@ -1,4 +1,4 @@
-# 0026 — MCP agent access
+# 0026: MCP agent access
 
 Status: Accepted (2026-09-01)
 

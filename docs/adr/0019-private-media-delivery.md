@@ -1,4 +1,4 @@
-# 0019 — Resume media stays private behind live-gated reads
+# 0019: Resume media stays private behind live-gated reads
 
 Status: Accepted (2026-08-12)
 
@@ -75,6 +75,6 @@ that reconciliation has proved unreferenced and removed.
   the storage or disclosure boundary.
 - Public photo responses share public-resume absence, live-state revalidation,
   and entity-tag behavior.
-- P2B cannot dispatch until this ADR, its durable deletion-job contract, the
-  image-processing bounds, the orphan-sweep bounds, and the media acceptance
+- Implementation cannot begin until this ADR, its durable deletion-job contract,
+  the image-processing bounds, the orphan-sweep bounds, and the media acceptance
   criteria are approved.

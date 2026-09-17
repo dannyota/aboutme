@@ -1,7 +1,9 @@
 # Engineering documentation and comments
 
-Write each fact in the artifact that owns it. This keeps source files readable
-and prevents an old task narrative from becoming an accidental contract.
+Write each fact once, in the artifact that owns it, in short plain words. Plans
+say what to do next and are deleted when the work ends; design docs and ADRs say
+how the system is and why. Code, tests, and living docs must stand on their own
+after every plan is gone.
 
 ## Documentation ownership
 
@@ -25,22 +27,34 @@ A comment explains a constraint that the code cannot express clearly. Useful
 examples include a security invariant, a non-obvious failure boundary, an
 external protocol requirement, or why a tempting simplification is unsafe.
 
-Keep a comment beside the smallest unit it governs. Name the effect before the
-history. Link to an ADR or design section when the reasoning is longer than a
-short paragraph.
+Keep a comment beside the smallest unit it governs. Link to an ADR or design
+section when the reasoning is longer than a short paragraph.
 
-Do not leave these in live source:
+Do not leave these in code, tests, or living docs:
 
-- task numbers, review rounds, reviewer names, or report filenames;
-- a narrative of how the implementation evolved;
+- plan, phase, task, slice, review-round, finding, or probe IDs (for example
+  "Task 11", "P8-priv", "phase 10", "finding B2"), reviewer names, or report
+  filenames; cite the design doc, ADR, or `AC-*` ID, or state the rule;
+- history: how the code evolved, or words such as "now", "no longer", and "used
+  to";
 - copied design sections or acceptance criteria;
 - claims about deleted files or retired tools;
 - line-by-line descriptions that repeat the code.
 
-Generated files and UAT-baselined migrations are exceptions. Change generated
-sources or leave immutable migration history intact; do not hand-edit either to
-improve prose. Before the first UAT baseline, the migration correction rule in
-the data design applies.
+Generated files and migrations frozen by `apps/server/migrations/.uat-baseline`
+are exceptions. Change generated sources or leave frozen migrations intact; do
+not hand-edit either to improve prose.
+
+## Keeping text current
+
+When a change makes a statement false, fix or delete it in the same change. When
+your work touches a doc or comment that breaks these rules, rewrite it as part
+of that work; do not start repository-wide sweeps. Cite files, commands, and
+uncertainty, and claim only checks that ran. Reviews check these rules on the
+files a change touches.
+
+ADRs are decision records. Edit an accepted ADR only for wording, links, plan
+IDs, and its status line; supersede a decision with a new ADR.
 
 ## Plans and records
 
@@ -56,6 +70,15 @@ review, acceptance, or design approval passed.
 
 ## Links and size
 
-Use relative links inside `docs/`. Keep Markdown files near 300 lines. Split a
-larger living document into a directory with a `README.md` index and focused
-topic pages. Do not split immutable history only to meet the guideline.
+Use relative links inside `docs/` and Mermaid for diagrams.
+
+`scripts/check-lengths.sh` enforces two limits in CI, `make check`, and the
+pre-commit hook:
+
+- Markdown files: at most 450 lines. Split a larger document into a directory
+  with a `README.md` index and focused pages, or trim it.
+- Non-test code (Go, TypeScript, Vue, JavaScript, shell): at most 700 lines.
+  Split by topic into sibling files; Go stays in the same package.
+
+Generated files and tests are exempt. Keep functions short enough to read in one
+screen; split long ones into helpers.

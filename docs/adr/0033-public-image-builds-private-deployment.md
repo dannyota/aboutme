@@ -1,6 +1,8 @@
-# 0033 — Public image builds and private AWS deployment
+# 0033: Public image builds and private AWS deployment
 
 Status: Accepted (2026-09-06), by the owner's approval of public image builds.
+Superseded in part by
+[ADR 0037](0037-single-host-production-without-hosted-uat.md).
 
 ## Context
 
@@ -38,7 +40,7 @@ repository. AWS hosting costs remain separate.
   that record and referenced images through UAT, production promotion, and the
   rollback window. Expired public artifacts do not permit reconstruction from
   mutable tags. Production promotes the UAT-proven digests without a rebuild.
-- Phase 9 separates free public build usage from private publication and
+- The cost model separates free public build usage from private publication and
   deployment usage. Private minutes and metadata storage use available account
   allowances first. Start with no paid Actions usage; any required overage or
   subscription needs a priced decision. Public caches remain within the included
@@ -51,8 +53,8 @@ cost assumption. Private AWS ownership, native ARM64, UAT scope, budget
 decisions, and local delivery gates remain in force. The public workflow's
 archives and logs must contain only public inputs and synthetic evidence.
 
-Phase 10 implements and tests the cross-repository artifact handoff. Public
-builds do not resolve the private deployment approval feature: verify the
+Deployment work implements and tests the cross-repository artifact handoff.
+Public builds do not resolve the private deployment approval feature: verify the
 private account's eligibility or review an equivalent approval contract before
 enabling AWS workflow access. This decision approves neither AWS spending nor a
 GitHub plan purchase.

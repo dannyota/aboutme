@@ -193,9 +193,9 @@ readiness, and re-enables the schedules. The migration task exits; the server
 never migrates at startup, and a nonzero migration exit blocks the update. It
 takes the migration advisory lock and applies pending goose migrations exactly
 once, so a second concurrent runner is safe rather than expected. With one
-replica this interrupts service briefly, which ADR 0036 accepts. Migrations are
-immutable once `apps/server/migrations/.uat-baseline` lands before the first
-production migration ([ADR 0020](../adr/0020-uat-migration-baseline.md)).
+replica this interrupts service briefly, which ADR 0036 accepts.
+`apps/server/migrations/.uat-baseline` makes existing migrations immutable
+([ADR 0020](../adr/0020-uat-migration-baseline.md)).
 
 The migration runner uses goose's Provider with a PostgreSQL session advisory
 locker. The Provider acquires the lock before it checks which migrations remain

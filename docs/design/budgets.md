@@ -7,10 +7,8 @@ changing a number requires a reviewed change with evidence.
 ## AWS operating budget
 
 Production runs about $45–55 a month before tax, per
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). A budget
-filtered to the `Project=aboutme` cost allocation tag alerts the owner on actual
-and forecast cost. It is account-level and managed outside this repository.
-Budget alerts are delayed and are not a technical hard cap. The
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). Spend
+alerts are managed outside this repository and are delayed, not a hard cap. The
 [single-host design](single-host-production.md#monitoring-and-cost) itemizes the
 estimate from [recorded prices](../research/aws-cost/pricing.csv).
 
@@ -168,8 +166,8 @@ provisionally to the frozen hostile and boundary image corpus on a pinned local
 controlled-cgroup profile. A production run repeats the same corpus on the ARM64
 Graviton host and 512 MiB task cgroup as a launch gate. A request returns only
 after normalization stops and releases the task-wide permit. A failing fixture
-blocks its phase or launch, or requires a reviewed isolated-worker design; it
-never creates detached work.
+blocks launch, or requires a reviewed isolated-worker design; it never creates
+detached work.
 
 Reads at 600/min and writes at 240/min permit several editor tabs above the
 expected one-second autosave cadence without making the limit inert. Photo
@@ -213,13 +211,13 @@ projection contains one document-shaped value, and its only possible growth is
 replacement of one bounded photo key by its authorized absolute URL.
 
 The 2,097,152-byte HTML bound is provisional until minimal, full, and 512 KiB
-renderer fixtures pass beneath it without truncation. A breach blocks the owning
-phase or changes the budget with measured evidence. The direct-render
-five-second hard deadline cancels and joins Nuxt work; it never returns while
-detached rendering continues. The dedicated slug limit applies only when a
-requested slug differs from the stored value. The existing shared five-second
-revocation bound remains one wall-clock deadline across all affected fence
-drains and fails before the mutation transaction.
+renderer fixtures pass beneath it without truncation. A breach blocks the change
+or changes the budget with measured evidence. The direct-render five-second hard
+deadline cancels and joins Nuxt work; it never returns while detached rendering
+continues. The dedicated slug limit applies only when a requested slug differs
+from the stored value. The existing shared five-second revocation bound remains
+one wall-clock deadline across all affected fence drains and fails before the
+mutation transaction.
 
 An orphan object is never public, but retained bytes still need a bound. The
 weekly sweep ignores objects younger than 48 hours, reads at most 1,000 keys per
@@ -313,7 +311,7 @@ applicable target under this protocol and retain the raw evidence.
 | Duration & samples | Minimum sustained duration and sample count declared per target; single-shot numbers are not accepted                                                                                                                                                              |
 | Percentile method  | Explicit (e.g. HdrHistogram); **queue time is included** in latency, never excluded                                                                                                                                                                                |
 | Repeatability      | Repeat runs; a target passes only if it holds across runs, not on a best-of                                                                                                                                                                                        |
-| Evidence           | Raw results retained locally and cited from the phase exit checklist                                                                                                                                                                                               |
+| Evidence           | Raw results retained locally and cited by the change that claims the gate                                                                                                                                                                                          |
 
 **Hard safety limits vs measured gates and SLOs.** The 512 MiB cgroup, render
 timeout, queue depth, and pgx pool ceiling are hard runtime limits. The render

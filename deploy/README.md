@@ -1,7 +1,7 @@
 # Deployment artifacts
 
-`deploy/` contains the current image-based local deployment. The intended
-environment and trust boundaries live in the
+`deploy/` contains the local Compose deployment and the production AWS
+deployment. The intended environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
 | Path                 | Purpose                                                  |
@@ -12,9 +12,10 @@ environment and trust boundaries live in the
 | `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary    |
 | `caddy/production/`  | Production Caddy image: Cloudflare trust and origin mTLS |
 | `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof     |
+| `aws/`               | Production OpenTofu roots, modules, and deploy scripts   |
 
-AWS infrastructure has not landed. It will live in `deploy/aws/`, with images
-built on GitHub Actions `ubuntu-24.04-arm` for `linux/arm64`. See the
+`deploy/aws/` holds the production OpenTofu code and deploy scripts. GitHub
+Actions builds the images on `ubuntu-24.04-arm` for `linux/arm64`. See the
 [single-host design](../docs/design/single-host-production.md).
 
 ## Which stack to use
@@ -134,9 +135,8 @@ The database password is supplied through `PGPASSWORD`, not inserted into the
 database URL. This preserves passwords containing URI delimiters.
 
 The current Caddyfile is a development trust boundary. Do not expose it to the
-Internet or place it unchanged behind another proxy. Production must validate
-the edge path and derive the viewer address as specified by the deployment
-design.
+Internet or place it unchanged behind another proxy. Production uses
+`caddy/production/`, which trusts only Cloudflare and requires origin-pull mTLS.
 
 The [self-hosting guide](../docs/guides/self-hosting.md) states the current
 operator scope and TLS limits.

@@ -1,4 +1,4 @@
-# 0023 — Internal print uses a one-use render capability
+# 0023: Internal print uses a one-use render capability
 
 Status: Accepted (2026-08-12)
 

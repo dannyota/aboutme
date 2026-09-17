@@ -1,5 +1,6 @@
-# General Compose and self-hosting stack. Its current edge is HTTP-only, so it
-# is not the Phase 10 UAT deployment. See deploy/README.md.
+# General Compose and self-hosting stack. Its edge is HTTP-only, so it does
+# not satisfy the local-UAT HTTPS/443 contract (docs/runbooks/local-uat.md).
+# See deploy/README.md.
 #
 # Caddy fronts one origin and the route table in deploy/caddy/Caddyfile.
 #
@@ -48,8 +49,8 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aboutme}
       # No baked-in default: this file also serves as the self-hosting
-      # artifact (spec §6), so a known password must never ship. Set
-      # POSTGRES_PASSWORD in .env — see deploy/README.md.
+      # artifact (docs/design/deployment.md), so a known password must
+      # never ship. Set POSTGRES_PASSWORD in .env — see deploy/README.md.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       POSTGRES_DB: ${POSTGRES_DB:-aboutme}
     # Postgres 18+ images store data under a major-version-specific
@@ -109,9 +110,9 @@ services:
     networks:
       - db
 
-  # One-shot migration runner: applies embedded goose migrations (cmd/migrate
-  # — spec §3 "Prod migration sequence") once Postgres is reachable, and
-  # exits. Same image as `server` (shared build + image tag, built once —
+  # One-shot migration runner: applies embedded goose migrations (cmd/migrate;
+  # docs/design/deployment.md) once Postgres is reachable, and exits. Same
+  # image as `server` (shared build + image tag, built once —
   # see the `image:` field on both services), just a different entrypoint.
   # Without this, a fresh or outdated database volume reports healthy at the
   # Postgres level while the server 500s on every request for missing
@@ -132,17 +133,9 @@ services:
         condition: service_completed_successfully
     environment:
       MIGRATION_IDENTITY: local-aboutme
-      # DATABASE_URL deliberately carries NO password: POSTGRES_PASSWORD is
-      # spliced in unencoded below only as a separate PGPASSWORD variable,
-      # not into the URI. Splicing it into the URI directly used to corrupt
-      # the DSN whenever the password (generated per deploy/README.md's
-      # `openssl rand -base64 24`) contained `/`, `@`, `:`, or `=` — the
-      # base64 alphabet includes `/` and `+`, so this broke roughly 2 tries
-      # in 5 with a misleading "no such host" error naming a fragment of the
-      # password. pgx's pgconn.ParseConfig honors the standard libpq
-      # PGPASSWORD environment variable for a URL that omits the password
-      # (verified directly against pgconn's settings-merge precedence), so
-      # this is a drop-in fix with no code change required.
+      # DATABASE_URL carries no password. POSTGRES_PASSWORD goes in
+      # PGPASSWORD, which pgx honors, so URI delimiters in the password
+      # cannot corrupt the DSN.
       DATABASE_URL: postgres://${POSTGRES_USER:-aboutme}@postgres:5432/${POSTGRES_DB:-aboutme}?sslmode=disable
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
     # migrate is a one-shot binary with no HTTP server, so it can never
@@ -307,8 +300,7 @@ services:
     ports:
       # Configurable for rootless Podman hosts that cannot bind privileged
       # ports without a one-time `sysctl net.ipv4.ip_unprivileged_port_start`
-      # (needs root once, not at container-run time). Defaults to 80, the
-      # real self-hosting/production port ("one origin http://localhost").
+      # (needs root once, not at container-run time). Defaults to 80.
       - "${CADDY_HTTP_PORT:-80}:80"
     volumes:
       # :Z relabels the bind mount for this container under SELinux
