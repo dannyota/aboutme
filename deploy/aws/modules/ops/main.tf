@@ -205,7 +205,6 @@ resource "aws_cloudwatch_metric_alarm" "alarm" {
   evaluation_periods  = each.value.periods
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  ok_actions          = [aws_sns_topic.alerts.arn]
 }
 
 # A failed EC2 system check moves the host to healthy hardware.
@@ -260,7 +259,6 @@ resource "aws_cloudwatch_metric_alarm" "site" {
   treat_missing_data  = "breaching"
   actions_enabled     = var.site_alarm_enabled
   alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
-  ok_actions          = [aws_sns_topic.alerts_us_east_1.arn]
 }
 
 # ---- Monthly Bottlerocket update: first Sunday 20:00 UTC ----
