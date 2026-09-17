@@ -64,6 +64,19 @@ worktree_sql_list() {
   done
 }
 
+# index_blob prints the staged (index) blob id of path, or nothing if path
+# is not staged.
+index_blob() { # path
+  git rev-parse --verify --quiet ":$1" 2>/dev/null
+}
+
+# index_sql_list prints the *.sql files staged under MIGRATIONS, one per
+# line (empty if none). Unlike worktree_sql_list, this is what a commit
+# right now would actually contain.
+index_sql_list() {
+  git ls-files -- "$MIGRATIONS"/*.sql
+}
+
 reject_sql_changes() {
   local diff=$1 changed
   changed=$(printf '%s\n' "$diff" |
@@ -127,8 +140,17 @@ check_local() {
 
   if ! git diff --cached --quiet "$base" -- "$BASELINE" ||
     ! git diff --quiet "$base" -- "$BASELINE"; then
-    if [ -f "$BASELINE" ] && pinned_reset_ok "$(tree_blob "$base" "$BASELINE")" "$(git hash-object "$BASELINE")" \
-      "$(worktree_sql_list)" "$(git hash-object "$NEW_BASELINE_PATH" 2>/dev/null)"; then
+    # A local reset must match the pin twice: once on disk (what the
+    # operator is looking at) and once in the index (what `git commit`
+    # would actually record). Checking only the worktree would let a
+    # correct-looking but unstaged change -- or a stale index left over
+    # from an earlier, different edit -- pass here and then commit
+    # something else entirely.
+    if [ -f "$BASELINE" ] &&
+      pinned_reset_ok "$(tree_blob "$base" "$BASELINE")" "$(git hash-object "$BASELINE")" \
+        "$(worktree_sql_list)" "$(git hash-object "$NEW_BASELINE_PATH" 2>/dev/null)" &&
+      pinned_reset_ok "$(tree_blob "$base" "$BASELINE")" "$(index_blob "$BASELINE")" \
+        "$(index_sql_list)" "$(index_blob "$NEW_BASELINE_PATH")"; then
       printf '%s\n' 'pinned release-baseline reset (ADR 0038) verified'
       return 0
     fi
