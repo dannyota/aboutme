@@ -50,7 +50,7 @@ const migratorRole = "aboutme_migrator"
 // connection and then verifies current_user is actually aboutme_migrator.
 // Hosted, the DSN's login already is aboutme_migrator, so SET ROLE is a
 // no-op; locally, a superuser login switches into it. Either way, every
-// object this package's migrations create — including goose_db_version —
+// object this package's migrations create, including goose_db_version,
 // ends up owned by aboutme_migrator, and a login that cannot SET ROLE
 // aboutme_migrator (e.g. aboutme_app) fails closed here instead of
 // silently running, or silently owning objects, as the wrong role.
@@ -106,7 +106,7 @@ func NewProvider(db *sql.DB, fsys fs.FS, lockOpts ...lock.SessionLockerOption) (
 // correct way to make [*goose.Provider.Status] lock-free:
 //
 //   - goose's exported Provider.Status always requests the configured
-//     lock internally when a SessionLocker is configured — its doc
+//     lock internally when a SessionLocker is configured; its doc
 //     comment carries no lock-free guarantee, unlike HasPending and
 //     GetVersions ("this method will not use a SessionLocker or Locker if
 //     one is configured"). Internally, Status -> status(ctx) ->
@@ -114,20 +114,20 @@ func NewProvider(db *sql.DB, fsys fs.FS, lockOpts ...lock.SessionLockerOption) (
 //     whenever one is configured, regardless of that boolean's caller
 //     (see pressly/goose/v3/provider_run.go). A fast lock-wait retry
 //     budget (lock.WithLockTimeout) still takes the *real* advisory lock
-//     through that path, just faster and with a shorter failure window —
+//     through that path, just faster and with a shorter failure window;
 //     it does not skip it.
 //   - goose's own lockEnabled config bit is set exclusively by
 //     WithSessionLocker/WithLocker (pressly/goose/v3/provider_options.go)
 //     and checked as `useLocker && p.cfg.lockEnabled` before ever touching
 //     a locker. A provider that never calls WithSessionLocker has
 //     lockEnabled permanently false, so Status's internal
-//     initialize(ctx, true) is a no-op with respect to locking — this is
+//     initialize(ctx, true) is a no-op with respect to locking: this is
 //     what actually skips lock acquisition, not any option passed to
 //     WithSessionLocker itself.
 //   - HasPending/GetVersions are genuinely lock-free but return a
 //     bool/version pair, not the per-migration Source+State+AppliedAt
 //     list Status (and this package's PendingCount, and cmd/migrate's
-//     `-check` output) need — switching to them would mean rebuilding
+//     `-check` output) need; switching to them would mean rebuilding
 //     that shape by hand instead of using goose's own Status.
 func newLockFreeProvider(db *sql.DB, fsys fs.FS) (*goose.Provider, error) {
 	p, err := goose.NewProvider(goose.DialectPostgres, db, fsys)
@@ -161,7 +161,7 @@ func Apply(ctx context.Context, db *sql.DB, lockOpts ...lock.SessionLockerOption
 
 // Status reports the state (applied or pending) of every embedded
 // migration without applying anything and without ever taking the
-// advisory lock — via newLockFreeProvider, whose doc comment explains why
+// advisory lock, via newLockFreeProvider, whose doc comment explains why
 // that (not a fast lock-wait budget on Apply's provider) is what's
 // actually required. This makes Status always safe to call, including
 // while another process holds the lock applying migrations: exactly the

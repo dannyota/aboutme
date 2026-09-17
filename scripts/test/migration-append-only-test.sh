@@ -414,8 +414,9 @@ rm -f "$repo"/apps/server/migrations/*.sql
 cp "$REAL_BASELINE" "$repo/apps/server/migrations/00001_baseline.sql"
 printf '%s\n' "$RESET_NEW_MARKER" >"$repo/apps/server/migrations/.uat-baseline"
 # Deliberately left unstaged: the worktree matches the pinned reset
-# byte-for-byte, but the index still holds the pre-reset files, so a
-# commit right now would not record the reset this check is verifying.
+# byte-for-byte, but the index still holds the pre-reset files, so
+# committing the index as it stands would not record the reset this
+# check is verifying.
 if run_local "$repo" >/dev/null 2>&1; then
   echo "migration-append-only-test: an unstaged reset with a stale index passed" >&2
   exit 1

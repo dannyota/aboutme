@@ -1,5 +1,5 @@
 // Migration harness tests: empty database -> head, previous-release state
-// -> head, two concurrent runners, and partial-failure recovery — run
+// -> head, two concurrent runners, and partial-failure recovery, run
 // against a real Postgres instance, gated behind
 // TEST_DATABASE_URL exactly like internal/store's integration test (see
 // testdb_test.go's newTestDatabase, and the package comment there).
@@ -7,8 +7,7 @@
 // The "previous release", "concurrent runners", and "partial failure"
 // scenarios use small synthetic migration sets built with fstest.MapFS
 // instead of the real embedded FS. This keeps the harness's correctness
-// independent of how many real product migrations exist at any given time
-// (today: exactly one, the baseline migration — see migrations.go's
+// independent of how many real product migrations exist (see migrations.go's
 // package comment) while still exercising the exact same production code
 // path (migrations.NewProvider, the same goose Provider + session-locker
 // machinery cmd/migrate uses). Only the "empty database -> head" test needs

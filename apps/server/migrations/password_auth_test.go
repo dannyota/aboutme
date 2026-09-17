@@ -1,7 +1,7 @@
 // Constraint tests for the password_credentials, password_registrations,
 // password_reset_tokens, and auth_email_jobs tables. Like
 // resume_schema_test.go, every insert here is raw parameterized SQL against
-// a live goose-migrated database — no internal/store layer — because the
+// a live goose-migrated database, with no internal/store layer, because the
 // point is proving the database itself enforces every invariant, not that a
 // Go pass happens to agree with it. Byte boundaries are exercised at limit
 // and limit+1.

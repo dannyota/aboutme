@@ -197,10 +197,10 @@ func runCheck(ctx context.Context, db *sql.DB, stdout io.Writer) error {
 }
 
 // migrationCommandError keeps database, driver, and catalog detail out of
-// this command's public output, while still naming the failing
-// migration's version and its Postgres SQLSTATE — never a value, a query,
-// or the DSN — so an operator can find the exact migration and error
-// class from the output alone.
+// this command's public output. It names only the failing migration's
+// version and its Postgres SQLSTATE, never a value, a query, or the DSN,
+// so an operator can find the exact migration and error class from the
+// output alone.
 func migrationCommandError(err error) error {
 	var partial *goose.PartialError
 	if errors.As(err, &partial) {

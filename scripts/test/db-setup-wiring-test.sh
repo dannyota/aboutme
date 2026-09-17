@@ -5,7 +5,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-db-setup-wiring.XXXXXX")
 trap 'rm -rf -- "$WORK"' EXIT
 mkdir -p "$WORK/repo/apps/server" "$WORK/bin"
-# Only the host-port readiness probe is replaced; all setup ordering runs
+# Only the host-port readiness probe is stubbed out; all setup ordering runs
 # through the real Make recipes with process fakes and no database connection.
 sed 's@(echo > /dev/tcp/127.0.0.1/20432)@true@' "$ROOT/Makefile" >"$WORK/repo/Makefile"
 cat >"$WORK/bin/podman" <<'SH'
