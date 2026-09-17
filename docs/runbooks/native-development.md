@@ -86,6 +86,18 @@ make migrate-check
 Substitute the target database's name throughout; do not copy credentials into
 the command or logs. This drops all data in that database.
 
+Roles live at the cluster level, not inside a database. If `db-setup` fails on
+privilege drift from a role the release baseline retired (for example
+`aboutme_migrator` still a member of a retired `aboutme_runtime_owner`),
+recreating one database does not fix it: recreate the whole container instead.
+
+```sh
+make test-db-down
+make test-db-up
+```
+
+This drops every database in the shared container.
+
 ## Verify
 
 ```sh

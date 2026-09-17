@@ -95,6 +95,13 @@ existing privilege drift. `migrate` then applies goose migrations, always as
 `aboutme_migrator`. The media initializer creates the private bucket. Any
 prerequisite failure prevents the server from starting.
 
+Roles live at the cluster level, so a PostgreSQL volume created before the
+release baseline ([ADR 0038](../docs/adr/0038-single-baseline-and-plain-migrator.md))
+can still hold a role the baseline retired. `db-setup` correctly fails on that
+drift. Fix it by recreating the volume: stop the stack, remove its
+`postgres-data` volume (`podman volume ls` shows the exact name), then start
+the stack again.
+
 PostgreSQL and the MinIO API are not published to the host. Only Caddy publishes
 a port. MinIO, its initializer, and Go are the only members of the isolated
 `media` network. Caddy and Nuxt cannot reach object storage. Separate `db`,

@@ -74,6 +74,12 @@ server starts. Setup creates missing fixed roles without passwords, applies
 their grants, and verifies existing permissions. It stops on privilege drift
 without changing existing roles or credentials.
 
+Roles live at the cluster level, not inside one database. A PostgreSQL volume
+from before [ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md) can
+still hold a role the release baseline retired, which setup correctly refuses.
+Recreate the volume to clear it: stop the stack, remove its `postgres-data`
+volume (`podman volume ls` shows the exact name), then start the stack again.
+
 Only Caddy publishes a host port. PostgreSQL and MinIO stay inside separate
 Compose networks. Only MinIO, its initializer, and Go join the `media` network;
 Caddy and Nuxt cannot reach object storage. The server, database setup and
