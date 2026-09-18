@@ -12,6 +12,8 @@ case "$cmd $args" in
   "curl "*"/manifests/"*) printf 'docker-content-digest: sha256:%064d\r\n' 1 ;;
   "curl "*"api.cloudflare.com/client/v4/ips"*) echo '{"success":true,"result":{"ipv4_cidrs":["198.51.100.0/24","192.0.2.0/24"]}}' ;;
   "curl -fsSI https://aboutme.vn/") printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\n' ;;
+  "curl "*"https://aboutme.vn/healthz"*)
+    if [[ $STUB_CASE == smoke_fails ]]; then echo 500; else echo 200; fi ;;
   "curl "*"https://aboutme.vn/"*) echo 200 ;;
   "curl "*) exit 28 ;;
   "aws "*"ecs describe-task-definition"*)
@@ -60,5 +62,13 @@ case "$cmd $args" in
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
     cp "$file" "$STUB_DIR/last-schedule.json" ;;
   "aws "*"ec2 describe-addresses"*) echo 192.0.2.10 ;;
+  "aws "*"rds describe-db-snapshots"*)
+    if [[ $STUB_CASE == list_fails ]]; then exit 254; fi
+    cat "$STUB_DIR/snapshots.json" ;;
+  "aws "*"rds delete-db-snapshot"*)
+    if [[ $STUB_CASE == delete_fails ]]; then exit 254; fi ;;
+  # Now is fixed at 2026-10-20T00:00:00Z.
+  "date -u +%s") echo 1792454400 ;;
+  "date -u +%Y%m%d%H%M") echo 202610200000 ;;
   *) exit 0 ;;
 esac

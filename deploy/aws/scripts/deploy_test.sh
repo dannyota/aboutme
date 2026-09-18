@@ -6,7 +6,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin"
-for cmd in aws gh git curl; do
+for cmd in aws gh git curl date; do
   cat >"$work/bin/$cmd" <<'STUB'
 #!/usr/bin/env bash
 printf '%s %s\n' "$(basename "$0")" "$*" >>"$CALLS"
@@ -15,6 +15,7 @@ STUB
   chmod +x "$work/bin/$cmd"
 done
 cp "$here/testdata/respond" "$work/respond"
+cp "$here/testdata/snapshots.json" "$work/snapshots.json"
 
 run_case() { # name expected-exit|fail args...
   local name=$1 want=$2 got
@@ -98,6 +99,30 @@ grep -q -F "missing secret /aboutme/prod/oauth/google-client-id" "$work/secret_m
 grep -q -F "missing secret arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12" "$work/secretsmanager_missing.out" ||
   { echo "secretsmanager_missing: the missing secret is not named" >&2; exit 1; }
 
+# Release snapshots: each is tagged at creation, and after a successful release
+# only deploy.sh snapshots of aboutme-prod older than 30 days are deleted: the
+# tagged 2026-07-01 one and the untagged v0.1.1 one.
+f=$work/ok.calls
+grep -q -F -- "rds create-db-snapshot --db-instance-identifier aboutme-prod --db-snapshot-identifier aboutme-prod-v0-1-0-202610200000 --tags Key=aboutme:created-by,Value=deploy.sh" "$f" ||
+  { echo "ok: snapshot not created with the deploy.sh tag" >&2; exit 1; }
+before "$f" "rds wait db-snapshot-available" "rds describe-db-snapshots"
+before "$f" "ec2 describe-addresses" "rds describe-db-snapshots"
+[[ $(count "$f" "rds delete-db-snapshot") == 2 ]] || { echo "ok: want exactly 2 snapshot deletions" >&2; grep -F delete-db-snapshot "$f" >&2; exit 1; }
+for id in aboutme-prod-v0-1-2-202607010000 aboutme-prod-v0-1-1-202609171438; do
+  grep -q -F -- "rds delete-db-snapshot --db-snapshot-identifier $id" "$f" || { echo "ok: $id not deleted" >&2; exit 1; }
+done
+
+run_case delete_fails 0 v0.1.0
+grep -q -F "rds delete-db-snapshot" "$work/delete_fails.calls" || { echo "delete_fails: no deletion attempted" >&2; exit 1; }
+grep -q "warning: could not delete snapshot" "$work/delete_fails.out" || { echo "delete_fails: no warning" >&2; exit 1; }
+
+run_case list_fails 0 v0.1.0
+absent "$work/list_fails.calls" "rds delete-db-snapshot"
+grep -q "warning: could not list release snapshots" "$work/list_fails.out" || { echo "list_fails: no warning" >&2; exit 1; }
+
+run_case smoke_fails fail v0.1.0
+absent "$work/smoke_fails.calls" "rds describe-db-snapshots"
+
 run_case first 0 v0.1.0 --first-deploy
 f=$work/first.calls
 before "$f" "--started-by deploy-db-setup" "--started-by deploy-migrate"
@@ -151,6 +176,13 @@ f=$work/rollback.calls
 absent "$f" "deploy-migrate"
 absent "$f" "create-db-snapshot"
 before "$f" "ssm describe-parameters" "ecs register-task-definition"
+
+# A failed release or a rollback never prunes a restore point.
+for name in secret_missing secretsmanager_missing migrate_fails first_migrate_fails first_db_setup_fails \
+  runtask_fails wait_timeout start_fails smoke_fails rollback; do
+  absent "$work/$name.calls" "rds describe-db-snapshots"
+  absent "$work/$name.calls" "rds delete-db-snapshot"
+done
 
 run_case usage 2
 echo "deploy-script-test: ok"

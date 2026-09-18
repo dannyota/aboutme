@@ -142,7 +142,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           items: [
             'Quyền truy cập bị thu hồi ngay lập tức.',
             'Ảnh đã tải lên được xoá, thường trong vòng 24 giờ.',
-            'Bản sao lưu cơ sở dữ liệu hết hạn trong vòng 30 ngày.',
+            'Bản sao lưu tự động của cơ sở dữ liệu hết hạn sau 30 ngày. Bản '
+            + 'sao lưu tạo khi phát hành phiên bản mới được xoá ở lần phát '
+            + 'hành sau, khi đã quá 30 ngày.',
             'Bản ghi về việc xoá (chỉ gồm loại sự kiện và thời điểm) được '
             + 'giữ tối đa 180 ngày.',
           ],
@@ -362,7 +364,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           items: [
             'Access is removed immediately.',
             'Uploaded photos are deleted, normally within 24 hours.',
-            'Database backups expire within 30 days.',
+            'Automatic database backups expire after 30 days. A backup taken '
+            + 'for a new release is deleted at a later release once it is more '
+            + 'than 30 days old.',
             'Records of the deletion, holding only the event type and time, '
             + 'are kept for up to 180 days.',
           ],
