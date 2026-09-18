@@ -3,12 +3,18 @@ import type { components } from '../api/generated/openapi';
 
 export type Capabilities = components['schemas']['Capabilities'];
 
+export const loginProviderIds = ['google', 'github', 'linkedin'] as const;
+
+export type LoginProvider = (typeof loginProviderIds)[number];
+
 interface CapabilitiesEnvelope {
   data: Capabilities;
 }
 
 export interface UseCapabilitiesReturn {
   providerLogin: ComputedRef<boolean>;
+  /** Providers whose sign-in button renders, in display order. */
+  loginProviders: ComputedRef<readonly LoginProvider[]>;
   agentAccess: ComputedRef<boolean>;
   resolved: ComputedRef<boolean>;
 }
@@ -27,11 +33,19 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const providerLogin = computed(
     () => data.value?.data?.providerLogin === true,
   );
+  // ADR 0039: only the providers the server lists render a button. A missing
+  // or malformed list renders none, never all three.
+  const loginProviders = computed<readonly LoginProvider[]>(() => {
+    const listed: unknown = data.value?.data?.providers;
+    return Array.isArray(listed)
+      ? loginProviderIds.filter((id) => listed.includes(id))
+      : [];
+  });
   const agentAccess = computed(() => data.value?.data?.agentAccess === true);
   const resolved = computed(
     () => status.value === 'success'
       || status.value === 'error'
       || error.value !== null,
   );
-  return { providerLogin, agentAccess, resolved };
+  return { providerLogin, loginProviders, agentAccess, resolved };
 }

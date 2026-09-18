@@ -72,9 +72,10 @@ so.
 - At most three resumes per account, enforced in PostgreSQL.
 - Slug grammar `^[a-z0-9]+(-[a-z0-9]+)*$`, 4 to 30 characters, globally unique;
   released slugs enter a 180-day tombstone. Reserved roots cannot be claimed.
-- Email and password authentication only in v1. Provider login (Google, GitHub,
-  LinkedIn) is implemented behind a server flag that is off; the UI shows
-  provider controls only when the capabilities read reports `providerLogin`.
+- Email and password authentication, plus provider login switched on one
+  provider at a time (ADR 0039). Production can enable only Google, and it stays
+  off until the owner turns it on. The UI shows a provider control only for a
+  name in the capabilities read's `providers` list.
 - The resume renderer is pure: `(document, renderContext) -> HTML`. Application
   chrome must never change how the renderer's output looks; renderer golden HTML
   and screenshot suites are the proof.

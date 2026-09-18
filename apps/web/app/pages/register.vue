@@ -5,13 +5,17 @@
  * The server is authoritative for password policy; the client checks only
  * required fields and local confirmation, then maps the closed policy issues
  * to fixed copy. The 202 success copy is fixed and reveals nothing about
- * email ownership.
+ * email ownership. The server answers 202 before any mail is sent, so the
+ * missing-email hint is shown to everyone and never claims a send failed.
  */
 import FormField from '@/components/app/FormField.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
+import ProviderButtons from '@/components/auth/ProviderButtons.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { useCapabilities } from '@/composables/useCapabilities';
 import { type AuthMessage, authCopy } from '@/i18n/auth';
 import {
   type PasswordAuthFailure,
@@ -21,6 +25,8 @@ import {
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
+const { loginProviders } = useCapabilities();
+const googleEnabled = computed(() => loginProviders.value.includes('google'));
 const name = ref('');
 const email = ref('');
 const password = ref('');
@@ -126,6 +132,23 @@ async function onSubmit() {
       </NuxtLink>
       {{ copy.register.afterVerify }}
     </p>
+    <div
+      v-if="success"
+      class="mt-6 grid gap-3 border-t border-border pt-6 text-sm
+        text-muted-foreground"
+      data-testid="register-no-email"
+    >
+      <p>{{ copy.register.noEmail }}</p>
+      <template v-if="googleEnabled">
+        <p data-testid="register-no-email-google">
+          {{ copy.register.noEmailGoogle }}
+        </p>
+        <ProviderButtons
+          :locale="locale"
+          :providers="['google']"
+        />
+      </template>
+    </div>
     <form
       v-if="!success"
       class="mt-8 grid gap-6"
@@ -178,6 +201,21 @@ async function onSubmit() {
         {{ pending ? copy.register.pending : copy.createAccount }}
       </Button>
     </form>
+    <template v-if="!success && loginProviders.length > 0">
+      <div
+        class="mt-8 flex items-center gap-3 text-xs text-muted-foreground"
+        data-testid="register-divider"
+      >
+        <Separator class="flex-1" />
+        {{ copy.or }}
+        <Separator class="flex-1" />
+      </div>
+      <ProviderButtons
+        class="mt-4"
+        :locale="locale"
+        :providers="loginProviders"
+      />
+    </template>
     <nav
       v-if="!success"
       class="mt-6 flex justify-between gap-3 text-sm"

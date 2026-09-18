@@ -2,10 +2,8 @@
 /**
  * Login page: email/password form + optional static OAuth provider links.
  *
- * Provider buttons render only when the capabilities read reports
- * `providerLogin`. They are plain `<a href>` elements, never fetch/JS-driven
- * navigation — `/api/v1/auth/{provider}/start` sets a cookie and issues a
- * redirect, which requires a real top-level browser navigation.
+ * Provider buttons render only for the providers the capabilities read
+ * enables (`ProviderButtons` explains why they are plain links).
  *
  * `?error=` is a closed vocabulary produced by the callback landing
  * redirect: `auth_failed`, `email_not_verified`, `cancelled`, and
@@ -17,6 +15,7 @@
  */
 import FormField from '@/components/app/FormField.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
+import ProviderButtons from '@/components/auth/ProviderButtons.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +28,7 @@ import {
 import { useCapabilities } from '../composables/useCapabilities';
 
 const route = useRoute();
-const { providerLogin } = useCapabilities();
+const { loginProviders } = useCapabilities();
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
 
@@ -55,8 +54,6 @@ function validateLoginNext(value: unknown): string | null {
 
 const explicitNext = computed(() => validateLoginNext(route.query.next));
 const loginDestination = computed(() => explicitNext.value ?? FALLBACK_NEXT);
-
-const providers = ['google', 'github', 'linkedin'] as const;
 
 const errorMessages: Record<string, AuthMessage> = {
   auth_failed: 'providerFailed',
@@ -187,36 +184,21 @@ async function onSubmit() {
         {{ pending ? copy.login.pending : copy.signIn }}
       </Button>
     </form>
-    <template v-if="providerLogin">
+    <template v-if="loginProviders.length > 0">
       <div
         class="mt-8 flex items-center gap-3 text-xs text-muted-foreground"
         data-testid="login-divider"
       >
         <Separator class="flex-1" />
-        {{ copy.login.or }}
+        {{ copy.or }}
         <Separator class="flex-1" />
       </div>
-      <ul class="mt-4 grid gap-2">
-        <li
-          v-for="provider in providers"
-          :key="provider"
-        >
-          <Button
-            as="a"
-            class="w-full"
-            :href="
-              explicitNext
-                ? `/api/v1/auth/${provider}/start?next=${encodeURIComponent(
-                  explicitNext,
-                )}`
-                : `/api/v1/auth/${provider}/start`
-            "
-            variant="outline"
-          >
-            {{ copy.login.providers[provider] }}
-          </Button>
-        </li>
-      </ul>
+      <ProviderButtons
+        class="mt-4"
+        :locale="locale"
+        :next="explicitNext"
+        :providers="loginProviders"
+      />
     </template>
     <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink

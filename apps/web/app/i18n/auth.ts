@@ -41,11 +41,11 @@ export type AuthCopy = {
   readonly hidePassword: (label: string) => string;
   readonly signIn: string;
   readonly createAccount: string;
+  readonly or: string;
+  readonly providers: Readonly<Record<Provider, string>>;
   readonly login: {
     readonly lead: string;
     readonly pending: string;
-    readonly or: string;
-    readonly providers: Readonly<Record<Provider, string>>;
     readonly forgotPassword: string;
   };
   readonly register: {
@@ -54,6 +54,8 @@ export type AuthCopy = {
     readonly success: string;
     readonly afterVerify: string;
     readonly haveAccount: string;
+    readonly noEmail: string;
+    readonly noEmailGoogle: string;
   };
   readonly forgot: {
     readonly title: string;
@@ -74,6 +76,7 @@ export type AuthCopy = {
     readonly lead: string;
     readonly pending: string;
     readonly success: string;
+    readonly useGoogle: string;
   };
 };
 
@@ -123,15 +126,15 @@ export const authCopy: Record<Locale, AuthCopy> = {
     hidePassword: (label) => `Ẩn ${label.toLowerCase()}`,
     signIn: 'Đăng nhập',
     createAccount: 'Tạo tài khoản',
+    or: 'hoặc',
+    providers: {
+      google: 'Tiếp tục với Google',
+      github: 'Tiếp tục với GitHub',
+      linkedin: 'Tiếp tục với LinkedIn',
+    },
     login: {
       lead: 'Dùng email và mật khẩu của tài khoản.',
       pending: 'Đang đăng nhập…',
-      or: 'hoặc',
-      providers: {
-        google: 'Tiếp tục với Google',
-        github: 'Tiếp tục với GitHub',
-        linkedin: 'Tiếp tục với LinkedIn',
-      },
       forgotPassword: 'Quên mật khẩu?',
     },
     register: {
@@ -140,6 +143,9 @@ export const authCopy: Record<Locale, AuthCopy> = {
       success: 'Hãy kiểm tra email để xác minh địa chỉ của bạn.',
       afterVerify: 'sau khi bạn xác minh email.',
       haveAccount: 'Đã có tài khoản?',
+      noEmail:
+        'Nếu sau vài phút vẫn chưa thấy email, hãy kiểm tra thư mục thư rác.',
+      noEmailGoogle: 'Hoặc đăng nhập bằng tài khoản Google của bạn:',
     },
     forgot: {
       title: 'Quên mật khẩu',
@@ -160,6 +166,7 @@ export const authCopy: Record<Locale, AuthCopy> = {
       lead: 'Mở đường dẫn trong email để xác minh địa chỉ của bạn.',
       pending: 'Đang xác minh địa chỉ email…',
       success: 'Đã xác minh email. Hãy đăng nhập.',
+      useGoogle: 'Hoặc đăng nhập bằng tài khoản Google của bạn:',
     },
   },
   en: {
@@ -207,15 +214,15 @@ export const authCopy: Record<Locale, AuthCopy> = {
     hidePassword: (label) => `Hide ${label.toLowerCase()}`,
     signIn: 'Sign in',
     createAccount: 'Create account',
+    or: 'or',
+    providers: {
+      google: 'Continue with Google',
+      github: 'Continue with GitHub',
+      linkedin: 'Continue with LinkedIn',
+    },
     login: {
       lead: 'Use the email and password for your account.',
       pending: 'Signing in…',
-      or: 'or',
-      providers: {
-        google: 'Continue with Google',
-        github: 'Continue with GitHub',
-        linkedin: 'Continue with LinkedIn',
-      },
       forgotPassword: 'Forgot password?',
     },
     register: {
@@ -224,6 +231,10 @@ export const authCopy: Record<Locale, AuthCopy> = {
       success: 'Check your email to verify your address.',
       afterVerify: 'after you verify your email.',
       haveAccount: 'Already have an account?',
+      noEmail:
+        'If the email has not arrived within a few minutes, check your spam '
+        + 'folder.',
+      noEmailGoogle: 'Or sign in with your Google account instead:',
     },
     forgot: {
       title: 'Forgot password',
@@ -244,6 +255,7 @@ export const authCopy: Record<Locale, AuthCopy> = {
       lead: 'Follow the link in your email to verify your address.',
       pending: 'Verifying your email address…',
       success: 'Email verified. Sign in.',
+      useGoogle: 'Or sign in with your Google account instead:',
     },
   },
 };

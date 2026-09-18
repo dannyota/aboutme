@@ -14,6 +14,8 @@ import {
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
 import StatusBanner from '@/components/app/StatusBanner.vue';
+import ProviderButtons from '@/components/auth/ProviderButtons.vue';
+import { useCapabilities } from '@/composables/useCapabilities';
 import { type AuthMessage, authCopy } from '@/i18n/auth';
 
 useHead({
@@ -22,6 +24,7 @@ useHead({
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
+const { loginProviders } = useCapabilities();
 const status = ref<'verifying' | 'success' | 'error'>('verifying');
 const errorMessage = ref<AuthMessage | null>(null);
 
@@ -60,6 +63,13 @@ if (token !== '') {
     });
 }
 
+// A dead or broken link can be sidestepped by signing in with Google, which
+// needs no verification email.
+const offerGoogle = computed(() =>
+  loginProviders.value.includes('google')
+  && (errorMessage.value === 'verifyLinkExpired'
+    || errorMessage.value === 'verifyLinkIncomplete'));
+
 function messageFor(failure: PasswordAuthFailure): AuthMessage {
   switch (failure.kind) {
     case 'invalid-token':
@@ -96,6 +106,17 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
     >
       {{ errorMessage ? copy.messages[errorMessage] : '' }}
     </StatusBanner>
+    <div
+      v-if="status === 'error' && offerGoogle"
+      class="mt-6 grid gap-3 text-sm text-muted-foreground"
+      data-testid="verify-google"
+    >
+      <p>{{ copy.verify.useGoogle }}</p>
+      <ProviderButtons
+        :locale="locale"
+        :providers="['google']"
+      />
+    </div>
     <StatusBanner
       v-else-if="status === 'success'"
       class="mt-6"
