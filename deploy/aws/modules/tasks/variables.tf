@@ -22,6 +22,10 @@ variable "ses_from_address" {
   type = string
 }
 
+variable "ses_from_name" {
+  type = string
+}
+
 variable "ses_configuration_set" {
   type = string
 }

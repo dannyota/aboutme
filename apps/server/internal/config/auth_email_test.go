@@ -15,6 +15,7 @@ func captureAuthEmail() map[string]string {
 		"AUTH_EMAIL_CAPTURE_URL":    "http://127.0.0.1:20091",
 		"AUTH_EMAIL_CAPTURE_BEARER": testBase64URL32,
 		"SES_FROM_ADDRESS":          "",
+		"SES_FROM_NAME":             "",
 		"SES_CONFIGURATION_SET":     "",
 		"AWS_REGION":                "",
 	}
@@ -26,6 +27,7 @@ func sesAuthEmail() map[string]string {
 	return map[string]string{
 		"AUTH_EMAIL_MODE":           "ses",
 		"SES_FROM_ADDRESS":          "noreply@example.com",
+		"SES_FROM_NAME":             "",
 		"SES_CONFIGURATION_SET":     "aboutme",
 		"AWS_REGION":                "ap-southeast-1",
 		"AUTH_EMAIL_CAPTURE_URL":    "",
@@ -87,6 +89,23 @@ func TestLoad_AuthEmailSESMode(t *testing.T) {
 	}
 }
 
+func TestLoad_AuthEmailSESFromName(t *testing.T) {
+	t.Parallel()
+
+	vars := validDevEnv()
+	for k, v := range sesAuthEmail() {
+		vars[k] = v
+	}
+	vars["SES_FROM_NAME"] = "  Danny from aboutme "
+	got, err := config.Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AuthEmail.SESFromName != "Danny from aboutme" {
+		t.Errorf("SESFromName = %q, want trimmed display name", got.AuthEmail.SESFromName)
+	}
+}
+
 func TestLoad_AuthEmailPreviousKeyPair(t *testing.T) {
 	t.Parallel()
 
@@ -133,6 +152,7 @@ func TestLoad_AuthEmailRejects(t *testing.T) {
 		{"capture no port", func(v map[string]string) { v["AUTH_EMAIL_CAPTURE_URL"] = "http://127.0.0.1" }},
 		{"capture missing bearer", func(v map[string]string) { v["AUTH_EMAIL_CAPTURE_BEARER"] = "" }},
 		{"capture with ses field", func(v map[string]string) { v["SES_FROM_ADDRESS"] = "noreply@example.com" }},
+		{"capture with ses from name", func(v map[string]string) { v["SES_FROM_NAME"] = "Danny" }},
 		{"ses with capture url", func(v map[string]string) {
 			applySES(v)
 			v["AUTH_EMAIL_CAPTURE_URL"] = "http://127.0.0.1:20091"
@@ -144,6 +164,10 @@ func TestLoad_AuthEmailRejects(t *testing.T) {
 		{"ses noncanonical from", func(v map[string]string) {
 			applySES(v)
 			v["SES_FROM_ADDRESS"] = "not an email"
+		}},
+		{"ses from name with control character", func(v map[string]string) {
+			applySES(v)
+			v["SES_FROM_NAME"] = "Danny\x07"
 		}},
 		{"ses bad config set", func(v map[string]string) {
 			applySES(v)

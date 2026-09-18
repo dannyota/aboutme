@@ -46,6 +46,7 @@ module "tasks" {
   db_master_secret_arn  = module.data.db_master_secret_arn
   media_bucket_name     = module.data.media_bucket_name
   ses_from_address      = var.ses_from_address
+  ses_from_name         = var.ses_from_name
   ses_configuration_set = var.ses_configuration_set
   exec_role_arns        = module.identity.exec_role_arns
   app_task_role_arn     = module.identity.app_task_role_arn

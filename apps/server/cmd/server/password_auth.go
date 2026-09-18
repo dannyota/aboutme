@@ -148,6 +148,7 @@ func newMailSender(ctx context.Context, cfg config.Config, logger *slog.Logger) 
 		sender, err := authmail.NewSESSender(authmail.SESOptions{
 			Region:           cfg.AuthEmail.SESRegion,
 			From:             cfg.AuthEmail.SESFrom,
+			FromName:         cfg.AuthEmail.SESFromName,
 			ConfigurationSet: cfg.AuthEmail.SESConfigSet,
 			Client:           client,
 			Logger:           logger,

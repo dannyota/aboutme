@@ -13,6 +13,8 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/dannyota/aboutme/apps/server/internal/accountemail"
 )
@@ -38,6 +40,7 @@ type AuthEmailConfig struct {
 	CaptureURL    string
 	CaptureBearer [32]byte
 	SESFrom       string
+	SESFromName   string
 	SESConfigSet  string
 	SESRegion     string
 }
@@ -100,6 +103,7 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 	captureURL := strings.TrimSpace(getenv("AUTH_EMAIL_CAPTURE_URL"))
 	captureBearerRaw := strings.TrimSpace(getenv("AUTH_EMAIL_CAPTURE_BEARER"))
 	sesFrom := strings.TrimSpace(getenv("SES_FROM_ADDRESS"))
+	sesFromName := strings.TrimSpace(getenv("SES_FROM_NAME"))
 	sesConfigSet := strings.TrimSpace(getenv("SES_CONFIGURATION_SET"))
 	sesRegion := strings.TrimSpace(getenv("AWS_REGION"))
 
@@ -121,6 +125,7 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 		cfg.CaptureBearer = bearer
 		for _, field := range []struct{ name, value string }{
 			{"SES_FROM_ADDRESS", sesFrom},
+			{"SES_FROM_NAME", sesFromName},
 			{"SES_CONFIGURATION_SET", sesConfigSet},
 			{"AWS_REGION", sesRegion},
 		} {
@@ -146,10 +151,14 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 	if _, err := accountemail.Canonicalize(sesFrom); err != nil {
 		return cfg, errors.New("config: SES_FROM_ADDRESS must be a canonical email address")
 	}
+	if !validFromName(sesFromName) {
+		return cfg, errors.New("config: SES_FROM_NAME must be at most 64 characters with no control characters")
+	}
 	if !isAWSSafeASCII(sesConfigSet) {
 		return cfg, errors.New("config: SES_CONFIGURATION_SET must be 1-64 ASCII letters, digits, hyphens, or underscores")
 	}
 	cfg.SESFrom = sesFrom
+	cfg.SESFromName = sesFromName
 	cfg.SESConfigSet = sesConfigSet
 	cfg.SESRegion = sesRegion
 	return cfg, nil
@@ -240,4 +249,18 @@ func parseLoopbackURL(raw string) (*url.URL, error) {
 		return nil, errors.New("host must be loopback")
 	}
 	return u, nil
+}
+
+// validFromName matches the SES sender's display-name rule: empty, or at most
+// 64 runes with no control characters, so it can never inject a header line.
+func validFromName(name string) bool {
+	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > 64 {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }

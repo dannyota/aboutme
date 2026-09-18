@@ -5,6 +5,9 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/mail"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,6 +22,9 @@ const sesRegion = "ap-southeast-1"
 // sesCharset is the charset for every text/HTML content part.
 const sesCharset = "UTF-8"
 
+// maxFromNameRunes bounds the optional From display name.
+const maxFromNameRunes = 64
+
 // SESClient is the minimal SendEmail surface production SES v2 provides; tests
 // inject a fake so no AWS client is ever constructed in tests.
 type SESClient interface {
@@ -26,12 +32,14 @@ type SESClient interface {
 }
 
 // SESOptions configures the SES sender. Region must be exactly ap-southeast-1,
-// From must be a configured verified sender, ConfigurationSet must be set, and
+// From must be a configured verified sender, FromName is an optional display
+// name shown beside it, ConfigurationSet must be set, and
 // Client is injected so production wiring can pass a retry-disabled client
 // while tests pass a fake.
 type SESOptions struct {
 	Region           string
 	From             string
+	FromName         string
 	ConfigurationSet string
 	Client           SESClient
 	Logger           *slog.Logger
@@ -67,7 +75,15 @@ func NewSESSender(opts SESOptions) (Sender, error) {
 	if opts.Client == nil || opts.Logger == nil {
 		return nil, ErrSES
 	}
-	return &sesSender{from: opts.From, configurationSet: opts.ConfigurationSet, client: opts.Client, logger: opts.Logger}, nil
+	if !ValidFromName(opts.FromName) {
+		return nil, ErrSES
+	}
+	from := opts.From
+	if opts.FromName != "" {
+		// mail.Address quotes the name and RFC 2047-encodes non-ASCII text.
+		from = (&mail.Address{Name: opts.FromName, Address: opts.From}).String()
+	}
+	return &sesSender{from: from, configurationSet: opts.ConfigurationSet, client: opts.Client, logger: opts.Logger}, nil
 }
 
 type sesSender struct {
@@ -156,4 +172,19 @@ func (o SendOutcome) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+// ValidFromName reports whether name is usable as a From display name: empty,
+// or at most 64 runes of valid UTF-8 with no control characters, so it can
+// never inject a header line.
+func ValidFromName(name string) bool {
+	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > maxFromNameRunes {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
