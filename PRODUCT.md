@@ -84,12 +84,13 @@ platform; aboutme publishes documents.
   (ADR 0029). Decided 2026-09-04: UI work builds on branch `codex/phase-pu`
   rebased onto `main`, which adds the publish dialog. The rebase and its fresh
   phase review are the first UI task, not an assumption.
-- Terminology: "resume" (never CV), "publish" and "unpublish", "public resume",
-  "PDF download", "SEO and GEO", "connected agents", "signed-in devices",
-  "slug". Buttons name the action they perform; copy is sentence case.
+- Terminology: "resume" (never CV in English), "publish" and "unpublish",
+  "public resume", "PDF download", "SEO and GEO", "connected agents", "signed-in
+  devices", "slug". Vietnamese copy uses "CV", the common Vietnamese word.
+  Buttons name the action they perform; copy is sentence case.
 - Out of v1: cover letters, job tracker, first-party AI writing, custom domains,
-  teams, analytics, a multilingual interface, collaborative editing, and any
-  operator or admin surface.
+  teams, analytics, a multilingual interface beyond the Vietnamese and English
+  homepage, collaborative editing, and any operator or admin surface.
 - Undecided: the product name is in use as `aboutme` and the domain as
   `aboutme.vn`, but a name and trademark review is pending before production. No
   logo or wordmark exists beyond the lowercase word.
