@@ -102,6 +102,9 @@ export async function renderPublicResume(
       '<meta property="og:image:height" content="630">',
       '<meta name="twitter:card" content="summary_large_image">',
       `<meta name="twitter:image" content="${escapeAttribute(imageURL)}">`,
+      // Template CSS and fonts, self-hosted and shared with the print document.
+      '<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css">',
+      '<link rel="stylesheet" href="/_nuxt/assets/print.css">',
       discoveryScript,
     ].join('');
     const html = [
