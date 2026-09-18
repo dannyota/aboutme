@@ -21,7 +21,10 @@ import { nextTick, type ComputedRef } from 'vue';
 export type AuthProvider = 'google' | 'github' | 'linkedin';
 
 export interface AuthIdentity {
+  id: string;
   provider: AuthProvider;
+  /** RFC 3339 UTC time the identity was linked. */
+  createdAt: string;
 }
 
 export interface AuthUser {

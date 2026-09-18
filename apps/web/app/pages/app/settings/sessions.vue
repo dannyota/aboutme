@@ -2,6 +2,7 @@
 import type { AuthProvider } from '../../../composables/useAuth';
 import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
 import ConnectedAgents from '../../../components/settings/ConnectedAgents.vue';
+import LinkedIdentities from '@/components/settings/LinkedIdentities.vue';
 import PrivacySettings from '../../../components/settings/PrivacySettings.vue';
 import StatusBanner from '../../../components/app/StatusBanner.vue';
 import { Button } from '../../../components/ui/button';
@@ -18,6 +19,10 @@ import {
   PrivacySettingsActionsKey,
   type PrivacySettingsActions,
 } from '../../../composables/privacySettings';
+import {
+  type LinkedIdentityActions,
+  mapUnlinkError,
+} from '../../../composables/identitySettings';
 import {
   providerNames,
   useCapabilities,
@@ -64,14 +69,6 @@ const {
 // Only providers the server enables (ADR 0039) get link or reauth controls;
 // a disabled provider's start route answers not found.
 const { loginProviders, agentAccess } = useCapabilities();
-// Every linked identity is listed, including one whose provider is now off.
-const notUsableLabel = 'Linked, not available for sign-in';
-const linkedIdentities = computed(() =>
-  identities.value.map((identity) => ({
-    provider: identity.provider,
-    name: providerNames[identity.provider],
-    usable: loginProviders.value.includes(identity.provider),
-  })));
 const enabledIdentities = computed(() =>
   identities.value.filter((identity) =>
     loginProviders.value.includes(identity.provider)));
@@ -157,6 +154,28 @@ async function revokeSession(id: string): Promise<void> {
     // An already-absent session means the stale list can be refreshed.
   }
   await refreshSessions();
+}
+
+// Unlinking keeps every session signed in. If the unlink was a response to a
+// compromised provider account, the person can end the other sessions here,
+// one existing revoke at a time, while this device stays signed in.
+const unlinkedNotice = ref<string | null>(null);
+const otherSessions = computed(() =>
+  sessions.value.filter((session) => !session.current));
+const signOutOthersPending = ref(false);
+
+async function signOutOtherDevices(): Promise<void> {
+  if (signOutOthersPending.value) return;
+  signOutOthersPending.value = true;
+  try {
+    for (const session of otherSessions.value) {
+      await revokeSession(session.id);
+      if (revokeError.value !== null || reauthRequired.value) return;
+    }
+    unlinkedNotice.value = null;
+  } finally {
+    signOutOthersPending.value = false;
+  }
 }
 
 async function revokeAll(): Promise<void> {
@@ -267,6 +286,20 @@ const passwordActions: PasswordSettingsActions = {
 };
 
 provide(PasswordSettingsActionsKey, passwordActions);
+
+const identityActions: LinkedIdentityActions = {
+  async unlink(id) {
+    try {
+      await mutate(`/api/v1/me/identities/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      throw mapUnlinkError(error);
+    }
+  },
+  reauthenticate: reauthenticatePassword,
+  startProviderReauth,
+};
 
 const exportController = createAccountExportController();
 onBeforeUnmount(() => exportController.dispose());
@@ -429,7 +462,7 @@ const linkErrorMessage = computed(() => {
     </section>
 
     <section
-      v-if="linkedIdentities.length > 0 || unlinkedProviders.length > 0"
+      v-if="identities.length > 0 || unlinkedProviders.length > 0"
       aria-labelledby="providers-title"
       class="border-t py-8"
     >
@@ -446,24 +479,38 @@ const linkErrorMessage = computed(() => {
       >
         {{ linkErrorMessage }}
       </StatusBanner>
-      <ul
-        v-if="linkedIdentities.length"
-        class="mt-4 divide-y divide-border border-y border-border"
-        data-testid="linked-providers"
+      <!-- Every linked identity is listed, even one whose provider is off. -->
+      <LinkedIdentities
+        v-if="identities.length"
+        :actions="identityActions"
+        class="mt-4"
+        :has-password="user?.hasPassword ?? false"
+        :identities="identities"
+        :login-providers="loginProviders"
+        @changed="refreshMe"
+        @unlinked="(name) => (unlinkedNotice = name)"
+      />
+      <StatusBanner
+        v-if="unlinkedNotice"
+        class="mt-4"
+        kind="success"
+        testid="unlink-success"
       >
-        <li
-          v-for="identity in linkedIdentities"
-          :key="identity.provider"
-          class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1
-            py-3"
-          :data-testid="`linked-provider-${identity.provider}`"
+        {{ unlinkedNotice }} is unlinked. Devices that are already signed in
+        stay signed in.
+        <Button
+          v-if="otherSessions.length"
+          class="mt-2"
+          data-testid="unlink-sign-out-others"
+          :disabled="!csrfToken || signOutOthersPending"
+          size="sm"
+          type="button"
+          variant="outline"
+          @click="signOutOtherDevices"
         >
-          <span class="font-medium">{{ identity.name }}</span>
-          <span class="text-sm text-muted-foreground">
-            {{ identity.usable ? 'Linked' : notUsableLabel }}
-          </span>
-        </li>
-      </ul>
+          Sign out other devices
+        </Button>
+      </StatusBanner>
       <StatusBanner
         v-if="reauthRequired && reauthProvider"
         kind="error"
