@@ -166,7 +166,13 @@ describe('typed client (runtime contract)', () => {
     expect(error).toBeUndefined();
     expect(data?.data.user.email).toBe('ada@example.com');
     expect(data?.data.csrfToken).toBe('kQ2f9Z3sV1n8LhTt7v0wYb-example');
-    expect(data?.data.identities).toEqual([{ provider: 'google' }]);
+    expect(data?.data.identities).toEqual([
+      {
+        id: '018f5b6a-9a3e-7c21-8b1e-000000000010',
+        provider: 'google',
+        createdAt: '2026-09-18T12:00:00Z',
+      },
+    ]);
   });
 
   it('decodes a 401 as the error envelope, not as data', async () => {

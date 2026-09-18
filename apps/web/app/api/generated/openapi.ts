@@ -338,6 +338,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/identities/{identityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A linked identity's id (`identities.id`, `uuidv7`), as `GET /me` returns it.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                identityId: components["parameters"]["IdentityID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink one of the caller's own provider identities
+         * @description Removes one linked provider identity from the caller's account. The route is cookie-authenticated with the full CSRF rule set and requires a recent reauthentication, checked before any row is touched. It never accepts a bearer token, so a connected agent cannot call it. It works for every provider, enabled or not, so a link to a provider that has been turned off can still be removed.
+         *
+         *     The account must keep a sign-in method: a password credential or an identity of a provider that `PROVIDER_LOGIN_ENABLED` enables. If this identity is the last one, the request returns `409 last_sign_in_method` and changes nothing. The check and the delete run in one transaction under the account's row lock, so two concurrent unlinks cannot both remove the last methods.
+         *
+         *     Other sessions, including the current one, stay signed in. An `identityId` that is malformed, unknown, or belongs to another account returns the same `404`, which never echoes the path value.
+         */
+        delete: operations["deleteMeIdentity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/export": {
         parameters: {
             query?: never;
@@ -1193,14 +1223,23 @@ export interface components {
             agentAccess: boolean;
         };
         /**
-         * @description One linked OAuth provider identity. `GET /me` exposes only the provider itself — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client.
+         * @description One linked OAuth provider identity. `GET /me` exposes the link's own id, its provider, and when it was linked — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client. `id` is the value `DELETE /me/identities/{identityId}` takes.
          * @example {
-         *       "provider": "google"
+         *       "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+         *       "provider": "google",
+         *       "createdAt": "2026-09-18T12:00:00Z"
          *     }
          */
         Identity: {
+            /** Format: uuid */
+            id: string;
             /** @enum {string} */
             provider: "google" | "github" | "linkedin";
+            /**
+             * Format: date-time
+             * @description When the identity was linked, in UTC.
+             */
+            createdAt: string;
         };
         /**
          * @description One of the caller's own live sessions, as returned by `GET /sessions`. Explicitly revoked, idle-expired, absolute-expired, and grace-dead rotation-predecessor sessions are never included — see `GET /sessions`' own operation description for the full exclusion rule.
@@ -3183,6 +3222,11 @@ export interface components {
          */
         IdempotencyKey: string;
         /**
+         * @description A linked identity's id (`identities.id`, `uuidv7`), as `GET /me` returns it.
+         * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+         */
+        IdentityID: string;
+        /**
          * @description A session's id (`sessions.id`, `uuidv7`).
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000002
          */
@@ -4060,7 +4104,9 @@ export interface operations {
                      *         "csrfToken": "kQ2f9Z3sV1n8LhTt7v0wYb-example",
                      *         "identities": [
                      *           {
-                     *             "provider": "google"
+                     *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                     *             "provider": "google",
+                     *             "createdAt": "2026-09-18T12:00:00Z"
                      *           }
                      *         ]
                      *       }
@@ -4206,6 +4252,110 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    deleteMeIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A linked identity's id (`identities.id`, `uuidv7`), as `GET /me` returns it.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                identityId: components["parameters"]["IdentityID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unlinked. No response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid `__Host-session` cookie. A bearer token alone is not a session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "session_required",
+                     *         "message": "a valid session is required"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description CSRF validation failed, or recent reauthentication is required. Nothing was unlinked. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No identity with this id belongs to the caller (malformed, unknown, or another account's id; indistinguishable by design). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "no such identity"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unsupported method. */
+            405: {
+                headers: {
+                    Allow?: "DELETE";
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "method_not_allowed",
+                     *         "message": "method not allowed"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The identity is the account's last sign-in method. Add a password or link another enabled provider first. Nothing was unlinked. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "last_sign_in_method",
+                     *         "message": "add a password or link another provider before removing this one"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
         };
     };
     getAccountExport: {

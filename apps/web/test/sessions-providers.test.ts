@@ -11,7 +11,11 @@ import { registerCapabilities } from './support/capabilities';
 mockNuxtImport('navigateTo', () => vi.fn());
 
 const now = new Date('2026-09-04T12:00:00Z');
-let linked: { provider: string }[] = [];
+let linked: { id: string; provider: string; createdAt: string }[] = [];
+
+function identity(provider: string) {
+  return { id: `id-${provider}`, provider, createdAt: '2026-09-18T03:00:00Z' };
+}
 
 registerEndpoint('/api/v1/me', () => ({
   data: {
@@ -85,23 +89,25 @@ describe('settings sign-in providers (ADR 0039)', () => {
     });
 
   it('lists a linked provider that is enabled', async () => {
-    linked = [{ provider: 'google' }];
+    linked = [identity('google')];
     const wrapper = await mountSettings(['google']);
     const row = wrapper.get('[data-testid="linked-provider-google"]');
     expect(row.text()).toContain('Google');
-    expect(row.text()).toContain('Linked');
-    expect(row.text()).not.toContain('not available');
+    expect(row.text()).toContain('Linked on September 18, 2026');
+    expect(row.text()).not.toContain('Not available');
   });
 
   it('lists a linked provider that is no longer enabled', async () => {
-    linked = [{ provider: 'github' }];
+    linked = [identity('github')];
     const wrapper = await mountSettings([]);
     expect(
       wrapper.find('[aria-labelledby="providers-title"]').exists(),
     ).toBe(true);
     const row = wrapper.get('[data-testid="linked-provider-github"]');
     expect(row.get('span').text()).toBe('GitHub');
-    expect(row.text()).toContain('Linked, not available for sign-in');
+    expect(row.text()).toContain(
+      'Linked on September 18, 2026. Not available for sign-in',
+    );
     expect(wrapper.find('[data-testid="add-provider-button"]').exists()).toBe(
       false,
     );
@@ -109,7 +115,7 @@ describe('settings sign-in providers (ADR 0039)', () => {
 
   it('skips a linked provider and offers nothing once all are linked',
     async () => {
-      linked = [{ provider: 'google' }];
+      linked = [identity('google')];
       const wrapper = await mountSettings(['google']);
       expect(
         wrapper.find('[aria-labelledby="providers-title"]').exists(),
@@ -121,7 +127,7 @@ describe('settings sign-in providers (ADR 0039)', () => {
 
   it('asks for reauthentication only through an enabled provider',
     async () => {
-      linked = [{ provider: 'github' }, { provider: 'google' }];
+      linked = [identity('github'), identity('google')];
       const wrapper = await mountSettings(
         ['google'],
         '/app/settings/sessions?error=reauth_required',
@@ -130,7 +136,7 @@ describe('settings sign-in providers (ADR 0039)', () => {
         'Sign in again with Google',
       );
 
-      linked = [{ provider: 'github' }];
+      linked = [identity('github')];
       clearNuxtData();
       const disabledOnly = await mountSettings(
         ['google'],
