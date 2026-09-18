@@ -42,7 +42,7 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain('Mục đích và cơ sở xử lý');
     expect(wrapper.text()).toContain('Quyền của bạn');
     expect(wrapper.text()).toContain(
-      'Bản ghi về việc xoá (chỉ gồm loại sự kiện và thời điểm)',
+      'Bản ghi về việc xoá tài khoản và gỡ liên kết nhà cung cấp',
     );
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(

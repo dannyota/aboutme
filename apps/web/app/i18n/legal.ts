@@ -114,7 +114,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           paragraphs: [
             'Dữ liệu của bạn được lưu tại Amazon Web Services ở Singapore '
             + '(ap-southeast-1): cơ sở dữ liệu, kho lưu ảnh, và việc gửi '
-            + 'email qua Amazon SES. Cloudflare phân phối trang web. Thư trả '
+            + 'email qua Amazon SES. Cloudflare phân phối trang web và xử lý '
+            + 'địa chỉ IP của bạn để làm việc đó. Thư trả '
             + 'lời email của chúng tôi được gửi đến một hộp thư Google '
             + 'Workspace. Nếu bạn ở Việt Nam, điều này có nghĩa là dữ liệu '
             + 'cá nhân của bạn được chuyển ra nước ngoài (Singapore).',
@@ -143,8 +144,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Quyền truy cập bị thu hồi ngay lập tức.',
             'Ảnh đã tải lên được xoá, thường trong vòng 24 giờ.',
             'Bản sao lưu cơ sở dữ liệu hết hạn trong vòng 30 ngày.',
-            'Bản ghi về việc xoá (chỉ gồm loại sự kiện và thời điểm) được '
-            + 'giữ tối đa 180 ngày.',
+            'Bản ghi về việc xoá tài khoản và gỡ liên kết nhà cung cấp (chỉ '
+            + 'gồm loại sự kiện và thời điểm) được giữ tối đa 180 ngày.',
           ],
         },
         {
@@ -334,7 +335,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           paragraphs: [
             'Your data is stored with Amazon Web Services in Singapore '
             + '(ap-southeast-1): the database, photo storage, and email '
-            + 'sending through Amazon SES. Cloudflare delivers the site. '
+            + 'sending through Amazon SES. Cloudflare delivers the site and '
+            + 'processes your IP address to do so. '
             + 'Replies to our emails reach a Google Workspace mailbox. If '
             + 'you are in Vietnam, this means your personal data is '
             + 'transferred abroad, to Singapore.',
@@ -363,8 +365,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Access is removed immediately.',
             'Uploaded photos are deleted, normally within 24 hours.',
             'Database backups expire within 30 days.',
-            'Records of the deletion, holding only the event type and time, '
-            + 'are kept for up to 180 days.',
+            'Records of account deletions and provider unlinks, holding only '
+            + 'the event type and time, are kept for up to 180 days.',
           ],
         },
         {
