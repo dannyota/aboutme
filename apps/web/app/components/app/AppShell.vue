@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { buttonVariants } from '@/components/ui/button';
-import { landingCopy, landingLocales, localeNames } from '@/landing/copy';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { isLocalizedPath, localeNames, locales } from '@/i18n/locale';
+import { shellCopy } from '@/i18n/shell';
 import { cn } from '@/lib/utils';
 import AccountMenu from './AccountMenu.vue';
 import ThemeToggle from './ThemeToggle.vue';
@@ -9,11 +10,12 @@ import ThemeToggle from './ThemeToggle.vue';
 const { authState } = useAuth();
 const route = useRoute();
 const signedIn = computed(() => authState.value === 'authenticated');
-// Only the homepage is bilingual; every other route keeps English chrome.
-const onLanding = computed(() => route.path === '/');
-const { locale, setLocale } = useLandingLocale();
-const shellLocale = computed(() => onLanding.value ? locale.value : 'en');
-const copy = computed(() => landingCopy[shellLocale.value]);
+// Only the homepage and account pages are bilingual; other routes stay
+// English (app/i18n/locale.ts).
+const localized = computed(() => isLocalizedPath(route.path));
+const { locale, setLocale } = useLocale();
+const shellLocale = useRouteLocale();
+const copy = computed(() => shellCopy[shellLocale.value]);
 const links = [
   { to: '/app/resumes', label: 'Resumes' },
   { to: '/app/settings/sessions', label: 'Settings' },
@@ -26,10 +28,9 @@ const linkClass = cn(
 // State is a mark, not a hue (DESIGN.md): the chosen language is ink with an
 // ink underline; the other stays pencil grey.
 const localeClass = cn(
-  'h-8 rounded-sm px-2 text-sm text-muted-foreground transition-colors',
-  'hover:text-foreground aria-pressed:text-foreground',
-  'aria-pressed:underline aria-pressed:decoration-2',
-  'aria-pressed:underline-offset-[6px]',
+  'px-2 font-normal text-muted-foreground hover:text-foreground',
+  'aria-pressed:text-foreground aria-pressed:underline',
+  'aria-pressed:decoration-2 aria-pressed:underline-offset-[6px]',
 );
 </script>
 
@@ -58,31 +59,31 @@ const localeClass = cn(
     </nav>
     <div class="ml-auto flex items-center gap-2">
       <template v-if="!signedIn">
-        <!-- On phones the homepage hero carries both actions. -->
+        <!-- On phones these pages carry their own account links. -->
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
-            onLanding && 'max-sm:hidden',
+            localized && 'max-sm:hidden',
           )"
           to="/login"
         >{{ copy.signIn }}</NuxtLink>
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'secondary', size: 'sm' }),
-            onLanding && 'max-sm:hidden',
+            localized && 'max-sm:hidden',
           )"
           to="/register"
         >{{ copy.createAccount }}</NuxtLink>
       </template>
       <div
-        v-if="onLanding"
+        v-if="localized"
         class="flex items-center"
         role="group"
         :aria-label="copy.localeLabel"
         data-testid="landing-locale"
       >
         <template
-          v-for="(option, index) in landingLocales"
+          v-for="(option, index) in locales"
           :key="option"
         >
           <span
@@ -90,16 +91,18 @@ const localeClass = cn(
             aria-hidden="true"
             class="h-4 w-px bg-border"
           />
-          <button
+          <Button
             type="button"
             :class="localeClass"
             :lang="option"
             :aria-pressed="locale === option"
             :data-testid="`landing-locale-${option}`"
+            size="sm"
+            variant="link"
             @click="setLocale(option)"
           >
             {{ localeNames[option] }}
-          </button>
+          </Button>
         </template>
       </div>
       <AccountMenu v-if="signedIn" />

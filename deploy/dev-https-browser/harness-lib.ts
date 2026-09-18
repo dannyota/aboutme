@@ -115,6 +115,14 @@ export interface SignInWithGoogleOptions {
   readonly returnPath?: string;
 }
 
+// pinEnglish sets the site-language cookie so the homepage and account pages
+// render English, the copy these proofs assert. Vietnamese is the default.
+export async function pinEnglish(context: BrowserContext): Promise<void> {
+  await context.addCookies([
+    { name: 'aboutme-locale', value: 'en', url: ALLOWED_ORIGIN },
+  ]);
+}
+
 // signInWithGoogle completes a provider login: it follows the login anchor to
 // the same-origin authorize page, resolves the named local account, and
 // returns after the callback lands on the expected path. The local provider

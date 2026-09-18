@@ -28,6 +28,7 @@ import {
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
   waitForHydration,
+  pinEnglish,
 } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
@@ -95,6 +96,7 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
   context,
   page,
 }) => {
+  await pinEnglish(context);
   const createdIDs = new Set<string>();
   const steps: EditorSteps = {
     auth: false,

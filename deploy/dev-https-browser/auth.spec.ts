@@ -9,6 +9,7 @@ import {
   isUnexpectedConsoleError,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
+  pinEnglish,
 } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
@@ -61,6 +62,7 @@ test('proves trusted local Google authentication and CSRF boundaries', async ({
   context,
   page,
 }) => {
+  await pinEnglish(context);
   const counters = newDiagnosticCounters();
   const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
     countConsoleError: isUnexpectedConsoleError,

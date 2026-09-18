@@ -26,11 +26,14 @@ const theme = computed(() => {
   return value === 'light' || value === 'dark' ? value : undefined;
 });
 
+const locale = useRouteLocale();
+
 useHead(
   computed(() => ({
     title: 'aboutme',
     htmlAttrs: isAppSurface.value
       ? {
+          'lang': locale.value,
           'data-ui': 'app',
           ...(theme.value ? { 'data-theme': theme.value } : {}),
         }

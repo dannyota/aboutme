@@ -14,13 +14,16 @@ import {
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
 import StatusBanner from '@/components/app/StatusBanner.vue';
+import { type AuthMessage, authCopy } from '@/i18n/auth';
 
 useHead({
   meta: [{ name: 'referrer', content: 'no-referrer' }],
 });
 
+const { locale } = useLocale();
+const copy = computed(() => authCopy[locale.value]);
 const status = ref<'verifying' | 'success' | 'error'>('verifying');
-const errorMessage = ref<string | null>(null);
+const errorMessage = ref<AuthMessage | null>(null);
 
 let token = '';
 
@@ -38,7 +41,7 @@ if (import.meta.client) {
     );
   } else {
     status.value = 'error';
-    errorMessage.value = 'This verification link is invalid or incomplete.';
+    errorMessage.value = 'verifyLinkIncomplete';
   }
 }
 
@@ -50,23 +53,23 @@ if (token !== '') {
     })
     .catch((failure: PasswordAuthFailure) => {
       status.value = 'error';
-      errorMessage.value = copyFor(failure);
+      errorMessage.value = messageFor(failure);
     })
     .finally(() => {
       token = '';
     });
 }
 
-function copyFor(failure: PasswordAuthFailure): string {
+function messageFor(failure: PasswordAuthFailure): AuthMessage {
   switch (failure.kind) {
     case 'invalid-token':
-      return 'This verification link is invalid or has expired.';
+      return 'verifyLinkExpired';
     case 'rate-limited':
-      return 'Too many attempts. Try again later.';
+      return 'rateLimited';
     case 'unavailable':
-      return 'Something went wrong. Please try again.';
+      return 'unavailable';
     default:
-      return 'This verification link is invalid or incomplete.';
+      return 'verifyLinkIncomplete';
   }
 }
 </script>
@@ -80,10 +83,10 @@ function copyFor(failure: PasswordAuthFailure): string {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      Verify email
+      {{ copy.verify.title }}
     </h1>
     <p class="mt-4 text-base text-muted-foreground">
-      Follow the link in your email to verify your address.
+      {{ copy.verify.lead }}
     </p>
     <StatusBanner
       v-if="status === 'error'"
@@ -91,7 +94,7 @@ function copyFor(failure: PasswordAuthFailure): string {
       kind="error"
       testid="verify-error"
     >
-      {{ errorMessage }}
+      {{ errorMessage ? copy.messages[errorMessage] : '' }}
     </StatusBanner>
     <StatusBanner
       v-else-if="status === 'success'"
@@ -99,20 +102,20 @@ function copyFor(failure: PasswordAuthFailure): string {
       kind="success"
       testid="verify-success"
     >
-      Email verified. Sign in.
+      {{ copy.verify.success }}
     </StatusBanner>
     <p
       v-else
       class="mt-8 text-base text-muted-foreground"
     >
-      Verifying your email address…
+      {{ copy.verify.pending }}
     </p>
     <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
         to="/login"
       >
-        Sign in
+        {{ copy.signIn }}
       </NuxtLink>
     </nav>
   </main>

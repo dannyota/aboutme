@@ -11,6 +11,7 @@
 import PasswordField from '@/components/auth/PasswordField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
+import { type AuthMessage, authCopy } from '@/i18n/auth';
 import {
   type PasswordAuthFailure,
   type PasswordIssue,
@@ -21,12 +22,14 @@ useHead({
   meta: [{ name: 'referrer', content: 'no-referrer' }],
 });
 
+const { locale } = useLocale();
+const copy = computed(() => authCopy[locale.value]);
 const password = ref('');
 const passwordField = ref<InstanceType<typeof PasswordField> | null>(null);
 const pending = ref(false);
-const errorMessage = ref<string | null>(null);
+const errorMessage = ref<AuthMessage | null>(null);
 const success = ref(false);
-const tokenError = ref<string | null>(null);
+const tokenError = ref<AuthMessage | null>(null);
 
 let token = '';
 
@@ -43,41 +46,40 @@ if (import.meta.client) {
       window.location.pathname + window.location.search,
     );
   } else {
-    tokenError.value = 'This reset link is invalid or incomplete.';
+    tokenError.value = 'resetLinkIncomplete';
   }
 }
 
-const PASSWORD_ISSUE_COPY: Record<PasswordIssue, string> = {
-  length: 'Password must be at least 12 characters.',
-  common: 'That password is too common. Choose a different one.',
-  breached:
-    'That password was exposed in a data breach. Choose a different one.',
+const PASSWORD_ISSUE_MESSAGE: Record<PasswordIssue, AuthMessage> = {
+  length: 'passwordLength',
+  common: 'passwordCommon',
+  breached: 'passwordBreached',
 };
 
-function copyFor(failure: PasswordAuthFailure): string {
+function messageFor(failure: PasswordAuthFailure): AuthMessage {
   switch (failure.kind) {
     case 'invalid-token':
-      return 'This reset link is invalid or has expired.';
+      return 'resetLinkExpired';
     case 'password-invalid':
       return failure.issue
-        ? PASSWORD_ISSUE_COPY[failure.issue]
-        : 'Password does not meet our requirements.';
+        ? PASSWORD_ISSUE_MESSAGE[failure.issue]
+        : 'passwordInvalid';
     case 'rate-limited':
-      return 'Too many attempts. Try again later.';
+      return 'rateLimited';
     case 'unavailable':
-      return 'Something went wrong. Please try again.';
+      return 'unavailable';
     default:
-      return 'Check your details and try again.';
+      return 'checkDetails';
   }
 }
 
 async function onSubmit() {
   if (passwordField.value?.confirmMismatch) {
-    errorMessage.value = 'Passwords do not match.';
+    errorMessage.value = 'passwordsDoNotMatch';
     return;
   }
   if (!password.value) {
-    errorMessage.value = 'Enter a new password.';
+    errorMessage.value = 'enterNewPassword';
     return;
   }
   pending.value = true;
@@ -91,7 +93,7 @@ async function onSubmit() {
     success.value = true;
     password.value = '';
   } catch (failure) {
-    errorMessage.value = copyFor(failure as PasswordAuthFailure);
+    errorMessage.value = messageFor(failure as PasswordAuthFailure);
   } finally {
     pending.value = false;
     token = '';
@@ -108,10 +110,10 @@ async function onSubmit() {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      Reset password
+      {{ copy.reset.title }}
     </h1>
     <p class="mt-4 text-base text-muted-foreground">
-      Choose a new password for your account.
+      {{ copy.reset.lead }}
     </p>
     <StatusBanner
       v-if="tokenError || errorMessage"
@@ -119,7 +121,7 @@ async function onSubmit() {
       kind="error"
       testid="reset-error"
     >
-      {{ tokenError ?? errorMessage }}
+      {{ copy.messages[tokenError ?? errorMessage ?? 'unavailable'] }}
     </StatusBanner>
     <StatusBanner
       v-if="success"
@@ -127,7 +129,7 @@ async function onSubmit() {
       kind="success"
       testid="reset-success"
     >
-      Password reset. Sign in.
+      {{ copy.reset.success }}
     </StatusBanner>
     <form
       v-else-if="!tokenError"
@@ -142,14 +144,15 @@ async function onSubmit() {
         v-model="password"
         autocomplete="new-password"
         confirm
-        label="New password"
+        :label="copy.newPassword"
+        :locale="locale"
       />
       <Button
         class="h-9 w-full"
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? 'Resetting…' : 'Reset password' }}
+        {{ pending ? copy.reset.pending : copy.reset.submit }}
       </Button>
     </form>
     <nav class="mt-6 flex justify-between gap-3 text-sm">
@@ -158,7 +161,7 @@ async function onSubmit() {
         class="text-primary underline-offset-4 hover:underline"
         to="/login"
       >
-        Sign in
+        {{ copy.signIn }}
       </NuxtLink>
     </nav>
   </main>

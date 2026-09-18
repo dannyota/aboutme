@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { Moon, Sun } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
-import { landingCopy, type LandingLocale } from '@/landing/copy';
+import type { Locale } from '@/i18n/locale';
+import { shellCopy } from '@/i18n/shell';
 import { cn } from '@/lib/utils';
 
-const props = withDefaults(defineProps<{ locale?: LandingLocale }>(), {
+const props = withDefaults(defineProps<{ locale?: Locale }>(), {
   locale: 'en',
 });
 const { theme, toggleTheme } = useTheme();
-const copy = computed(() => landingCopy[props.locale]);
+const copy = computed(() => shellCopy[props.locale]);
 </script>
 
 <template>

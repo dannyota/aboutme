@@ -7,6 +7,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import AppShell from '../../app/components/app/AppShell.vue';
+import { setSiteLocale } from '../support/locale';
 
 const me = {
   data: {
@@ -37,14 +38,10 @@ registerEndpoint('/api/v1/auth/logout', {
     return null;
   },
 });
-// The homepage localizes the shell, so default to an English-only route.
-function mountShell(route = '/login') {
+// The homepage and account pages localize the shell, so default to an
+// English-only route.
+function mountShell(route = '/app/resumes') {
   return mountSuspended(AppShell, { route });
-}
-function setLocaleCookie(value: string | undefined): void {
-  document.cookie = value === undefined
-    ? 'aboutme-locale=; max-age=0; path=/'
-    : `aboutme-locale=${value}; path=/`;
 }
 function links(
   wrapper: Awaited<ReturnType<typeof mountSuspended>>,
@@ -58,7 +55,7 @@ function links(
 
 describe('AppShell', () => {
   beforeEach(() => {
-    setLocaleCookie(undefined);
+    setSiteLocale(undefined);
     clearNuxtData();
     vi.mocked(navigateTo).mockClear();
   });
@@ -161,16 +158,16 @@ describe('AppShell', () => {
     const theme = wrapper.get('[aria-label^="Chuyển sang chế độ"]');
     expect(theme.text()).toMatch(/Chế độ (sáng|tối)/);
 
-    setLocaleCookie('en');
+    setSiteLocale('en');
     const english = await mountShell('/');
     await flushPromises();
     expect(links(english)['Sign in']).toBe('/login');
     expect(english.find('[aria-label^="Switch to"]').exists()).toBe(true);
   });
-  it('keeps English and no language toggle off the homepage', async () => {
+  it('keeps English and no language toggle elsewhere', async () => {
     meStatus = 401;
-    setLocaleCookie('vi');
-    const wrapper = await mountShell('/login');
+    setSiteLocale('vi');
+    const wrapper = await mountShell('/app/resumes');
     await flushPromises();
     expect(links(wrapper)['Sign in']).toBe('/login');
     expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(false);
@@ -182,5 +179,17 @@ describe('AppShell', () => {
     expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(true);
     expect(wrapper.find('[aria-label="Account menu"]').exists()).toBe(true);
     wrapper.unmount();
+  });
+  it('localizes the shell on the account pages', async () => {
+    meStatus = 401;
+    for (const route of ['/login', '/register', '/forgot-password']) {
+      setSiteLocale(undefined);
+      const wrapper = await mountShell(route);
+      await flushPromises();
+      expect(links(wrapper)['Tạo tài khoản']).toBe('/register');
+      expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(
+        true,
+      );
+    }
   });
 });

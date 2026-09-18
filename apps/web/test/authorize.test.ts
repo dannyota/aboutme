@@ -10,6 +10,10 @@ import AuthorizePage from '../app/pages/authorize.vue';
 import LoginPage from '../app/pages/login.vue';
 import { OAuthConsentFailure } from '../app/composables/useOAuthConsent';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
+
+// These tests pin the English copy; Vietnamese has its own cases.
+beforeEach(() => setSiteLocale('en'));
 
 mockNuxtImport('navigateTo', () => vi.fn());
 registerCapabilities();

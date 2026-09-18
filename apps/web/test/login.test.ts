@@ -9,6 +9,10 @@ import { nextTick } from 'vue';
 import { setResponseStatus } from 'h3';
 import LoginPage from '../app/pages/login.vue';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
+
+// These tests pin the English copy; Vietnamese has its own cases.
+beforeEach(() => setSiteLocale('en'));
 
 registerCapabilities();
 

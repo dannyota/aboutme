@@ -9,6 +9,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import AppRoot from '../app/app.vue';
 import LandingPage from '../app/pages/index.vue';
+import { setSiteLocale } from './support/locale';
 
 const mocks = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,14 +47,8 @@ function apiPaths(): string[] {
     .filter((path) => path.startsWith('/api/'));
 }
 
-function setLocaleCookie(value: string | undefined): void {
-  document.cookie = value === undefined
-    ? 'aboutme-locale=; max-age=0; path=/'
-    : `aboutme-locale=${value}; path=/`;
-}
-
 async function mountLanding(locale?: 'vi' | 'en') {
-  setLocaleCookie(locale);
+  setSiteLocale(locale);
   return mountSuspended(LandingPage);
 }
 
@@ -61,7 +56,7 @@ beforeEach(() => {
   meStatus = 401;
   meRequests = 0;
   mocks.fetchMock.mockClear();
-  setLocaleCookie(undefined);
+  setSiteLocale(undefined);
   clearNuxtData();
 });
 

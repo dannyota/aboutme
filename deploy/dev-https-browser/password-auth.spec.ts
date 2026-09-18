@@ -13,6 +13,7 @@ import {
   pageDiagnosticsAttacher,
   signInWithGoogle,
   waitForHydration,
+  pinEnglish,
 } from './harness-lib';
 import { ALLOWED_ORIGIN } from './network-policy';
 
@@ -138,6 +139,7 @@ test('proves password authentication over native HTTPS', async ({
   context,
   page,
 }) => {
+  await pinEnglish(context);
   const counters = newDiagnosticCounters();
   const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
     countConsoleError: isUnexpectedConsoleError,
@@ -207,6 +209,7 @@ test('proves password authentication over native HTTPS', async ({
 
   // 5. Provider-only account: sign in, then add a password.
   const providerContext = await browser.newContext();
+  await pinEnglish(providerContext);
   const providerPage = await providerContext.newPage();
   attachPageDiagnostics(providerPage);
   await installExternalRequestFirewall(providerContext, counters);
@@ -229,6 +232,7 @@ test('proves password authentication over native HTTPS', async ({
 
   // 6. A second live session for the registered account (context C).
   const secondContext = await browser.newContext();
+  await pinEnglish(secondContext);
   const secondPage = await secondContext.newPage();
   attachPageDiagnostics(secondPage);
   await installExternalRequestFirewall(secondContext, counters);

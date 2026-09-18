@@ -12,50 +12,52 @@ import PasswordField from '@/components/auth/PasswordField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { type AuthMessage, authCopy } from '@/i18n/auth';
 import {
   type PasswordAuthFailure,
   type PasswordIssue,
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
 
+const { locale } = useLocale();
+const copy = computed(() => authCopy[locale.value]);
 const name = ref('');
 const email = ref('');
 const password = ref('');
 const passwordField = ref<InstanceType<typeof PasswordField> | null>(null);
 const pending = ref(false);
-const errorMessage = ref<string | null>(null);
+const errorMessage = ref<AuthMessage | null>(null);
 const success = ref(false);
 const errorSummary = ref<HTMLElement | null>(null);
 
-const PASSWORD_ISSUE_COPY: Record<PasswordIssue, string> = {
-  length: 'Password must be at least 12 characters.',
-  common: 'That password is too common. Choose a different one.',
-  breached:
-    'That password was exposed in a data breach. Choose a different one.',
+const PASSWORD_ISSUE_MESSAGE: Record<PasswordIssue, AuthMessage> = {
+  length: 'passwordLength',
+  common: 'passwordCommon',
+  breached: 'passwordBreached',
 };
 
-function copyFor(failure: PasswordAuthFailure): string {
+function messageFor(failure: PasswordAuthFailure): AuthMessage {
   switch (failure.kind) {
     case 'password-invalid':
       return failure.issue
-        ? PASSWORD_ISSUE_COPY[failure.issue]
-        : 'Password does not meet our requirements.';
+        ? PASSWORD_ISSUE_MESSAGE[failure.issue]
+        : 'passwordInvalid';
     case 'rate-limited':
-      return 'Too many attempts. Try again later.';
+      return 'rateLimited';
     case 'unavailable':
-      return 'Something went wrong. Please try again.';
+      return 'unavailable';
     default:
-      return 'Check your details and try again.';
+      return 'checkDetails';
   }
 }
 
 async function onSubmit() {
   if (!name.value || !email.value || !password.value) {
-    errorMessage.value = 'Please fill in all fields.';
+    errorMessage.value = 'fillAllFields';
     return;
   }
   if (passwordField.value?.confirmMismatch) {
-    errorMessage.value = 'Passwords do not match.';
+    errorMessage.value = 'passwordsDoNotMatch';
     return;
   }
   pending.value = true;
@@ -69,7 +71,7 @@ async function onSubmit() {
     success.value = true;
     password.value = '';
   } catch (failure) {
-    errorMessage.value = copyFor(failure as PasswordAuthFailure);
+    errorMessage.value = messageFor(failure as PasswordAuthFailure);
     await nextTick();
     errorSummary.value?.focus();
   } finally {
@@ -87,10 +89,10 @@ async function onSubmit() {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      Create account
+      {{ copy.createAccount }}
     </h1>
     <p class="mt-4 text-base text-muted-foreground">
-      Create an account to build and publish your resumes.
+      {{ copy.register.lead }}
     </p>
     <StatusBanner
       v-if="errorMessage"
@@ -100,7 +102,7 @@ async function onSubmit() {
       kind="error"
       testid="register-error"
     >
-      {{ errorMessage }}
+      {{ copy.messages[errorMessage] }}
     </StatusBanner>
     <StatusBanner
       v-if="success"
@@ -109,7 +111,7 @@ async function onSubmit() {
       kind="success"
       testid="register-success"
     >
-      Check your email to verify your address.
+      {{ copy.register.success }}
     </StatusBanner>
     <p
       v-if="success"
@@ -120,9 +122,9 @@ async function onSubmit() {
         data-testid="register-success-sign-in"
         to="/login"
       >
-        Sign in
+        {{ copy.signIn }}
       </NuxtLink>
-      after you verify your email.
+      {{ copy.register.afterVerify }}
     </p>
     <form
       v-if="!success"
@@ -134,7 +136,7 @@ async function onSubmit() {
       <FormField
         id="register-name"
         v-slot="{ id, describedBy, invalid }"
-        label="Name"
+        :label="copy.name"
       >
         <Input
           :id="id"
@@ -148,7 +150,7 @@ async function onSubmit() {
       <FormField
         id="register-email"
         v-slot="{ id, describedBy, invalid }"
-        label="Email"
+        :label="copy.email"
       >
         <Input
           :id="id"
@@ -165,26 +167,27 @@ async function onSubmit() {
         v-model="password"
         autocomplete="new-password"
         confirm
-        label="Password"
+        :label="copy.password"
+        :locale="locale"
       />
       <Button
         class="h-9 w-full"
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? 'Creating account…' : 'Create account' }}
+        {{ pending ? copy.register.pending : copy.createAccount }}
       </Button>
     </form>
     <nav
       v-if="!success"
       class="mt-6 flex justify-between gap-3 text-sm"
     >
-      <span>Already have an account?</span>
+      <span>{{ copy.register.haveAccount }}</span>
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
         to="/login"
       >
-        Sign in
+        {{ copy.signIn }}
       </NuxtLink>
     </nav>
   </main>

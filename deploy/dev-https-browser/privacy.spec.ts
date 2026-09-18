@@ -18,6 +18,7 @@ import {
   pageDiagnosticsAttacher,
   signInWithGoogle,
   waitForHydration,
+  pinEnglish,
 } from "./harness-lib";
 import { ALLOWED_ORIGIN, httpFailureStatus } from "./network-policy";
 
@@ -524,6 +525,7 @@ test("proves account export, reauthentication, and deletion", async ({
   context,
   page,
 }) => {
+  await pinEnglish(context);
   const counters = newDiagnosticCounters();
   let deleting = false;
   let revoking = false;
@@ -575,6 +577,7 @@ test("proves account export, reauthentication, and deletion", async ({
     expect(oldSession).toBeDefined();
 
     publicContext = await browser.newContext();
+    await pinEnglish(publicContext);
     await installGuards(publicContext, counters);
     const publicPage = await publicContext.newPage();
     attach(publicPage);
@@ -660,6 +663,7 @@ test("proves account export, reauthentication, and deletion", async ({
 
     stage("revocation");
     const oldContext = await browser.newContext();
+    await pinEnglish(oldContext);
     try {
       await installGuards(oldContext, counters);
       const oldPage = await oldContext.newPage();

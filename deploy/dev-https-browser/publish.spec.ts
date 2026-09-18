@@ -17,6 +17,7 @@ import {
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
   waitForHydration,
+  pinEnglish,
 } from "./harness-lib";
 import {
   ALLOWED_ORIGIN,
@@ -188,6 +189,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   context,
   page,
 }) => {
+  await pinEnglish(context);
   const counters = newDiagnosticCounters();
   const events: string[] = [];
   let resumeID: string | undefined;

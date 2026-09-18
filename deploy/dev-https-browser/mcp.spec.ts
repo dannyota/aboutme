@@ -12,6 +12,7 @@ import {
   pageDiagnosticsAttacher,
   signInWithGoogle,
   waitForHydration,
+  pinEnglish,
 } from './harness-lib';
 import { ALLOWED_ORIGIN } from './network-policy';
 
@@ -248,6 +249,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
   context,
   page,
 }) => {
+  await pinEnglish(context);
   const counters = newDiagnosticCounters();
   const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
     countConsoleError: isUnexpectedConsoleError,
