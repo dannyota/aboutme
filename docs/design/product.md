@@ -75,7 +75,7 @@ Nuxt page manifest, or generated dispatch fails the build.
 
 The registry keys one row per literal top-level segment. Finer paths dispatch
 inside the owning router, so `/api/v1/resumes` and `/oauth/token` need no rows
-of their own. The v6 registry holds these exact roots:
+of their own. The v7 registry holds these exact roots:
 
 | Root              | Source and dispatch                                                              |
 | ----------------- | -------------------------------------------------------------------------------- |
@@ -94,11 +94,13 @@ of their own. The v6 registry holds these exact roots:
 | `oauth`           | Agent authorization server: authorize, token, register, revoke; Go               |
 | `people`          | Protected future namespace from ADR 0004; reserved-only, with no current handler |
 | `print`           | Caddy `/print` and `/print/*`; denied externally and capability-gated internally |
+| `privacy`         | Nuxt `/privacy` page; Nuxt                                                       |
 | `readyz`          | OpenAPI and Caddy `/readyz`; Go                                                  |
 | `register`        | Nuxt `/register` page; Nuxt                                                      |
 | `reset-password`  | Nuxt `/reset-password` page; Nuxt                                                |
 | `robots.txt`      | Caddy `/robots.txt`; Go                                                          |
 | `sitemap.xml`     | Caddy `/sitemap.xml`; Go                                                         |
+| `terms`           | Nuxt `/terms` page; Nuxt                                                         |
 | `u`               | Protected future namespace from ADR 0004; reserved-only, with no current handler |
 | `verify-email`    | Nuxt `/verify-email` page; Nuxt                                                  |
 

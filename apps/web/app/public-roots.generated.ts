@@ -23,11 +23,13 @@ export const publicRootRoutes = [
   { root: 'oauth', dispatch: 'go' },
   { root: 'people', dispatch: 'reserved' },
   { root: 'print', dispatch: 'deny' },
+  { root: 'privacy', dispatch: 'nuxt' },
   { root: 'readyz', dispatch: 'go' },
   { root: 'register', dispatch: 'nuxt' },
   { root: 'reset-password', dispatch: 'nuxt' },
   { root: 'robots.txt', dispatch: 'go' },
   { root: 'sitemap.xml', dispatch: 'go' },
+  { root: 'terms', dispatch: 'nuxt' },
   { root: 'u', dispatch: 'reserved' },
   { root: 'verify-email', dispatch: 'nuxt' },
 ] as const satisfies readonly PublicRootRoute[];
