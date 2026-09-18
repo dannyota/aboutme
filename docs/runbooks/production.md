@@ -80,25 +80,31 @@ credentials from two SecureString parameters:
 - `/aboutme/prod/oauth/google-client-id`
 - `/aboutme/prod/oauth/google-client-secret`
 
-The server refuses to start when Google is enabled and either value is missing.
-To enable it:
+The server refuses to start when Google is enabled and either value is missing,
+and `deploy.sh` refuses to begin a deploy while any task secret is missing.
+
+Enable Google as its own step, after a release that contains the provider list
+parser (commit `b8460d9` or later) and a web build that reads the capabilities
+`providers` list is live and healthy. Never combine the switch with that
+release: a rollback from it would give an older release `google`, which it
+refuses at startup.
 
 1. In the Google Cloud Console, create an OAuth client of type "Web application"
    with the authorized redirect URI
    `https://aboutme.vn/api/v1/auth/google/callback`. The app requests the
    `openid`, `email`, and `profile` scopes. Put the consent screen in production
    so that sign-in is not limited to test users.
-2. Store each value through a private tmpfs file, never a command argument. Put
-   the value in the file with an editor or `wl-paste`; the server trims a
-   trailing newline.
+2. Store each value through a private tmpfs file, never a command argument.
+   `mktemp` creates the file readable only by you. Copy each value in the
+   console, then write it to the file and clear the clipboard; the server trims
+   the trailing newline.
 
    ```sh
-   umask 077
    f=$(mktemp -p "$XDG_RUNTIME_DIR")
-   # write the client ID into "$f"
+   wl-paste >"$f" && wl-copy --clear # after copying the client ID
    aws ssm put-parameter --region ap-southeast-1 --type SecureString \
      --name /aboutme/prod/oauth/google-client-id --value "file://$f"
-   # overwrite "$f" with the client secret
+   wl-paste >"$f" && wl-copy --clear # after copying the client secret
    aws ssm put-parameter --region ap-southeast-1 --type SecureString \
      --name /aboutme/prod/oauth/google-client-secret --value "file://$f"
    rm -f "$f"
@@ -106,11 +112,14 @@ To enable it:
 
 3. Set `provider_login_enabled = "google"` in `prod.tfvars`, then run
    `tofu apply`. The plan changes the app task definition.
-4. Deploy a release whose web build renders only the providers named in the
-   capabilities `providers` list. `deploy.sh` builds the new revision from the
-   task definition that `tofu apply` registered.
+4. Redeploy the live tag with `deploy.sh <tag>`. It builds the new revision from
+   the task definition that `tofu apply` registered.
 5. Check `https://aboutme.vn/api/v1/capabilities`. It reports
    `"providers":["google"]`, and `/api/v1/auth/github/start` returns 404.
+
+To rotate a value, repeat step 2 with `--overwrite` on `put-parameter`. The
+running app keeps the old value until its task next starts, so deploy after
+rotating.
 
 To turn Google off, set `provider_login_enabled = ""`, apply, and deploy. Leave
 the parameters in place.
@@ -127,10 +136,11 @@ bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 ```
 
 The script checks the tag and CI, resolves image digests, compares Cloudflare
-ranges, snapshots RDS, registers task definition revisions, disables the job
-schedules, stops `app`, runs the database steps, starts `web` then `app`,
-re-enables the schedules and smoke-tests through Cloudflare. The site is down
-between "site down" and "site up", usually one to three minutes.
+ranges, checks that every secret the new revisions reference exists (by name,
+never reading a value), snapshots RDS, registers task definition revisions,
+disables the job schedules, stops `app`, runs the database steps, starts `web`
+then `app`, re-enables the schedules and smoke-tests through Cloudflare. The
+site is down between "site down" and "site up", usually one to three minutes.
 
 A failure after "site down" but before migrations complete restores the previous
 `app` revision and the job schedules' earlier state, then exits non-zero. If
@@ -160,6 +170,12 @@ It redeploys earlier images without a snapshot or migration. It is safe only
 when the failed release applied no migration. After a migration, fix forward
 with a new release, or restore the database from the snapshot the failed deploy
 took.
+
+A rollback builds from the current task definition, so it keeps the current
+settings. Before rolling back to a tag older than the provider list parser
+(older than `b8460d9`) while Google is on, set `provider_login_enabled = ""` and
+run `tofu apply`; that older release refuses to start with
+`PROVIDER_LOGIN_ENABLED=google`.
 
 ## Healthy state
 

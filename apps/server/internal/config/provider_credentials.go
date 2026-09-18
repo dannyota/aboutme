@@ -185,14 +185,17 @@ func validateLoopbackProviderURL(name, raw, wantPath string, requireHTTPS bool) 
 	return nil
 }
 
-// loadProviderCredentials reads <PREFIX>_CLIENT_ID and <PREFIX>_CLIENT_SECRET.
-// Both are required in prod and staging only when that provider's login is
-// enabled, so a server that offers the login cannot boot without real
-// credentials.
+// loadProviderCredentials reads <PREFIX>_CLIENT_ID and <PREFIX>_CLIENT_SECRET
+// only for an enabled provider; a disabled provider's values are never read.
+// Both are required in prod and staging when the provider is enabled, so a
+// server that offers the login cannot boot without real credentials.
 func loadProviderCredentials(prefix, provider string, getenv func(string) string, env string, enabled bool) (clientID, clientSecret string, err error) {
+	if !enabled {
+		return "", "", nil
+	}
 	clientID = strings.TrimSpace(getenv(prefix + "_CLIENT_ID"))
 	clientSecret = strings.TrimSpace(getenv(prefix + "_CLIENT_SECRET"))
-	if !enabled || (env != "prod" && env != "staging") {
+	if env != "prod" && env != "staging" {
 		return clientID, clientSecret, nil
 	}
 	for _, field := range []struct{ name, value string }{

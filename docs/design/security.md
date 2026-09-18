@@ -36,7 +36,8 @@ It takes blank or `false` (none), `true` (all three), or a comma list such as
 `google`. A disabled provider has no start or callback route, so its login,
 settings link, and reauthentication starts return the uniform not-found
 response. In prod and staging only an enabled provider requires its client ID
-and secret. Production enables Google only; GitHub and LinkedIn stay off.
+and secret. Production can enable only Google; it stays off until
+`provider_login_enabled = "google"`.
 [ADR 0027](../adr/0027-provider-login-flag.md) and
 [ADR 0039](../adr/0039-per-provider-login-enablement.md) record the decision.
 

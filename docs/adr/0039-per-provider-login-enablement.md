@@ -28,8 +28,9 @@ is enabled, and adds `providers`: the enabled provider names in the fixed order
 `google`, `github`, `linkedin`. The web renders a provider control only for a
 name in that list.
 
-Production sets `google`. Its client ID and secret come from SSM parameters that
-the task references only while Google is enabled.
+Production can enable only Google; it stays off until
+`provider_login_enabled = "google"`. Its client ID and secret come from SSM
+parameters that the task references only while Google is enabled.
 
 ## Rejected alternatives
 
@@ -46,3 +47,10 @@ the task references only while Google is enabled.
 - Enabling another provider in production means creating its SSM parameters,
   wiring them in `deploy/aws`, and changing the setting. No code change is
   needed.
+- A release older than this decision accepts only blank, `false`, and `true`,
+  and refuses to start with `google`. A rollback builds from the current task
+  definition, so before rolling back to such a release, set
+  `provider_login_enabled = ""` and apply. Enabling Google is therefore a
+  separate step after a release with the list parser is live, never part of that
+  release.
+- An account whose only credential is Google cannot sign in while Google is off.

@@ -5,8 +5,9 @@
 #   deploy.sh <tag> --first-deploy   also creates roles, grants, and logins
 #   deploy.sh --rollback <tag>       earlier images, no snapshot, no migration
 #
-# Order: snapshot, register revisions, stop jobs and app, migrate, start web
-# and app, re-enable jobs, smoke. Any failure after the app stops restores the
+# Order: build revisions, check that every task secret exists, snapshot,
+# register revisions, stop jobs and app, migrate, start web and app, re-enable
+# jobs, smoke. Any failure after the app stops restores the
 # previous app and job schedules, unless a database task may still be running
 # or migrations were applied; then both stay stopped for the operator.
 set -euo pipefail
@@ -81,16 +82,7 @@ deployed=$(current_def app | jq -r '.containerDefinitions[] | select(.name == "c
   | .environment[] | select(.name == "CLOUDFLARE_RANGES") | .value | split(" ") | sort | join(" ")')
 [[ -n $live && $live == "$deployed" ]] || { say "Cloudflare ranges changed; run tofu apply first"; exit 1; }
 
-# 2. Snapshot.
-if ((!rollback)); then
-  snap="aboutme-prod-${tag//./-}-$(date -u +%Y%m%d%H%M)"
-  aws_ rds create-db-snapshot --db-instance-identifier aboutme-prod --db-snapshot-identifier "$snap" >/dev/null
-  aws_ rds wait db-snapshot-available --db-snapshot-identifier "$snap"
-  say "snapshot $snap"
-fi
-
-# 3. Register revisions with the release images.
-declare -A revision
+# 2. Build revisions with the release images.
 for family in "${families[@]}"; do
   current_def "$family" | jq \
     --arg server "${image[server]}" --arg web "${image[web]}" --arg caddy "${image[caddy]}" '
@@ -103,12 +95,54 @@ for family in "${families[@]}"; do
     | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions,
        requiresCompatibilities, volumes}
     | with_entries(select(.value != null))' >"$work/$family.json"
+done
+
+# 3. Every secret the revisions reference must exist, or the app fails to start
+# after migrate has run. This checks names and metadata only, never a value.
+secret_exists() { # valueFrom: SSM parameter ARN or name, or Secrets Manager ARN
+  local ref=$1 region_=$region
+  if [[ $ref == arn:* ]]; then
+    region_=$(cut -d: -f4 <<<"$ref")
+  fi
+  case $ref in
+    arn:aws:secretsmanager:*)
+      # Drop any :json-key:version-stage:version-id suffix.
+      aws --region "$region_" secretsmanager describe-secret --secret-id "$(cut -d: -f1-7 <<<"$ref")" \
+        --query ARN --output text >/dev/null 2>&1 ;;
+    arn:aws:ssm:*)
+      [[ $(aws --region "$region_" ssm describe-parameters --parameter-filters "Key=Name,Values=${ref#*:parameter}" \
+        --query 'length(Parameters)' --output text 2>/dev/null) == 1 ]] ;;
+    *)
+      [[ $(aws_ ssm describe-parameters --parameter-filters "Key=Name,Values=$ref" \
+        --query 'length(Parameters)' --output text 2>/dev/null) == 1 ]] ;;
+  esac
+}
+missing=0
+while IFS= read -r ref; do
+  if ! secret_exists "$ref"; then
+    say "missing secret $ref (not found, or not describable with these credentials)"
+    missing=1
+  fi
+done < <(jq -r '.containerDefinitions[].secrets[]?.valueFrom' "$work"/*.json | sort -u)
+((!missing)) || { say "create the missing secrets, or turn off the setting that needs them, then rerun"; exit 1; }
+
+# 4. Snapshot.
+if ((!rollback)); then
+  snap="aboutme-prod-${tag//./-}-$(date -u +%Y%m%d%H%M)"
+  aws_ rds create-db-snapshot --db-instance-identifier aboutme-prod --db-snapshot-identifier "$snap" >/dev/null
+  aws_ rds wait db-snapshot-available --db-snapshot-identifier "$snap"
+  say "snapshot $snap"
+fi
+
+# 5. Register the revisions.
+declare -A revision
+for family in "${families[@]}"; do
   revision[$family]=$(aws_ ecs register-task-definition --cli-input-json "file://$work/$family.json" \
     --query taskDefinition.taskDefinitionArn --output text)
 done
 say "registered revisions for $tag"
 
-# 4. Stop jobs and the app.
+# 6. Stop jobs and the app.
 schedules=$(aws_ scheduler list-schedules --group-name "$group" --query 'Schedules[].Name' --output text)
 declare -A schedule_state
 set_schedule() { # name state [task-definition]
@@ -163,7 +197,7 @@ aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app --desire
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
 say "site down"
 
-# 5. Database steps.
+# 7. Database steps.
 run_once() { # family
   local code
   oneshot_task=$(aws_ ecs run-task --cluster "$cluster" --launch-type EC2 \
@@ -185,7 +219,7 @@ if ((!rollback)); then
   migrated=1
 fi
 
-# 6. Start the release.
+# 8. Start the release.
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-web \
   --task-definition "${revision[web]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-web
@@ -198,7 +232,7 @@ done
 phase=finished
 say "site up; job schedules enabled"
 
-# 7. Smoke through Cloudflare, and prove the origin rejects direct requests.
+# 9. Smoke through Cloudflare, and prove the origin rejects direct requests.
 for path in /healthz /readyz; do
   code=$(curl -s -o /dev/null -w '%{http_code}' "https://aboutme.vn$path")
   [[ $code == 200 ]] || { say "smoke: $path returned $code"; exit 1; }

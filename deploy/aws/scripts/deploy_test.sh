@@ -72,6 +72,32 @@ grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "ok: schedules
 jq -e '.Target.EcsParameters.TaskDefinitionArn == "arn:aws:ecs:ap-southeast-1:1:task-definition/new:4"' \
   "$work/last-schedule.json" >/dev/null || { echo "ok: schedules not pinned to the released revision" >&2; exit 1; }
 
+# Every task secret is checked by name, once, before anything changes, and no
+# value is ever read.
+before "$f" "ssm describe-parameters" "rds create-db-snapshot"
+before "$f" "secretsmanager describe-secret" "rds create-db-snapshot"
+before "$f" "ssm describe-parameters" "ecs register-task-definition"
+for want in "Key=Name,Values=/aboutme/prod/db/app-password " "Key=Name,Values=/aboutme/prod/oauth/google-client-id "; do
+  [[ $(count "$f" "$want") == 1 ]] || { echo "ok: want one describe-parameters for '$want'" >&2; exit 1; }
+done
+[[ $(count "$f" "--secret-id arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12 ") == 1 ]] ||
+  { echo "ok: want one describe-secret for the Secrets Manager ARN without its JSON key" >&2; exit 1; }
+absent "$f" "get-parameter"
+absent "$f" "get-secret-value"
+
+for missing in secret_missing secretsmanager_missing; do
+  run_case "$missing" fail v0.1.0
+  f=$work/$missing.calls
+  absent "$f" "create-db-snapshot"
+  absent "$f" "register-task-definition"
+  absent "$f" "update-service"
+  absent "$f" "scheduler update-schedule"
+done
+grep -q -F "missing secret /aboutme/prod/oauth/google-client-id" "$work/secret_missing.out" ||
+  { echo "secret_missing: the missing parameter is not named" >&2; exit 1; }
+grep -q -F "missing secret arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12" "$work/secretsmanager_missing.out" ||
+  { echo "secretsmanager_missing: the missing secret is not named" >&2; exit 1; }
+
 run_case first 0 v0.1.0 --first-deploy
 f=$work/first.calls
 before "$f" "--started-by deploy-db-setup" "--started-by deploy-migrate"
@@ -124,6 +150,7 @@ run_case rollback 0 --rollback v0.0.9
 f=$work/rollback.calls
 absent "$f" "deploy-migrate"
 absent "$f" "create-db-snapshot"
+before "$f" "ssm describe-parameters" "ecs register-task-definition"
 
 run_case usage 2
 echo "deploy-script-test: ok"
