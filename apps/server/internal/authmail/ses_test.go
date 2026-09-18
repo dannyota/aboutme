@@ -6,13 +6,17 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/sesv2"
 	sesv2types "github.com/aws/aws-sdk-go-v2/service/sesv2/types"
 	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 )
 
 // fakeSESClient records every SendEmail call and returns the configured error
@@ -216,8 +220,26 @@ func TestNewSESSenderRejectsUnsafeDisplayName(t *testing.T) {
 	}
 }
 
+// sdkSendError wraps inner the way the SES v2 client returns a service error:
+// an operation error around an HTTP response error that carries a request ID.
+func sdkSendError(inner error) error {
+	return &smithy.OperationError{
+		ServiceID:     "SESv2",
+		OperationName: "SendEmail",
+		Err: &awshttp.ResponseError{
+			ResponseError: &smithyhttp.ResponseError{
+				Response: &smithyhttp.Response{Response: &http.Response{StatusCode: http.StatusBadRequest}},
+				Err:      inner,
+			},
+			RequestID: "SECRET-REQUEST-ID",
+		},
+	}
+}
+
 func TestSESSendNoRecipientBodyOrRequestIDInLogs(t *testing.T) {
-	fake := &fakeSESClient{err: &sesv2types.MessageRejected{}}
+	fake := &fakeSESClient{err: sdkSendError(&sesv2types.MessageRejected{
+		Message: aws.String("Email address is not verified: secret-recipient@example.com"),
+	})}
 	s, buf := newTestSESSender(t, fake)
 
 	msg := Message{
@@ -235,13 +257,50 @@ func TestSESSendNoRecipientBodyOrRequestIDInLogs(t *testing.T) {
 		t.Fatalf("outcome = %v, want permanent", res.Outcome)
 	}
 	logged := buf.String()
-	for _, secret := range []string{"secret-recipient@example.com", "SECRET SUBJECT", "SECRET TEXT", "SECRET HTML", "MessageRejected"} {
+	for _, secret := range []string{"secret-recipient@example.com", "SECRET SUBJECT", "SECRET TEXT", "SECRET HTML", "SECRET-REQUEST-ID", "not verified"} {
 		if strings.Contains(logged, secret) {
 			t.Errorf("log leaks %q: %s", secret, logged)
 		}
 	}
-	if !strings.Contains(logged, "permanent") {
-		t.Errorf("log should name the closed outcome, got: %s", logged)
+	for _, want := range []string{"outcome=permanent", "code=MessageRejected"} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("log missing %q, got: %s", want, logged)
+		}
+	}
+}
+
+func TestSESSendLogsOnlyTokenErrorCodes(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string // expected code field, or "" for none
+	}{
+		{"access denied", sdkSendError(&smithy.GenericAPIError{Code: "AccessDeniedException", Fault: smithy.FaultClient}), "AccessDeniedException"},
+		{"validation", sdkSendError(&sesv2types.BadRequestException{}), "BadRequestException"},
+		{"code with spaces", sdkSendError(&smithy.GenericAPIError{Code: "Bad code x=y", Fault: smithy.FaultClient}), ""},
+		{"code with newline", sdkSendError(&smithy.GenericAPIError{Code: "Bad\nforged=1", Fault: smithy.FaultClient}), ""},
+		{"code with digits", sdkSendError(&smithy.GenericAPIError{Code: "Error404", Fault: smithy.FaultClient}), ""},
+		{"overlong code", sdkSendError(&smithy.GenericAPIError{Code: strings.Repeat("A", 65), Fault: smithy.FaultClient}), ""},
+		{"empty code", sdkSendError(&smithy.GenericAPIError{Fault: smithy.FaultClient}), ""},
+		{"not an API error", &net.OpError{Err: errors.New("dial")}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, buf := newTestSESSender(t, &fakeSESClient{err: tc.err})
+			if _, err := s.Send(context.Background(), Message{Kind: KindVerify, To: "a@example.com", Subject: "s", TextBody: "t", HTMLBody: "h"}); err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			logged := buf.String()
+			if tc.want == "" {
+				if strings.Contains(logged, "code=") {
+					t.Errorf("log carries an unsafe or absent code: %s", logged)
+				}
+				return
+			}
+			if !strings.Contains(logged, " code="+tc.want+"\n") {
+				t.Errorf("log missing code=%s, got: %s", tc.want, logged)
+			}
+		})
 	}
 }
 

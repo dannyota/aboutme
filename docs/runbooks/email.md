@@ -89,6 +89,15 @@ stack as one unit, or transfer retained resources out of CloudFormation before
 importing them, with a no-change plan and rollback steps. Never delete the stack
 as a shortcut.
 
+## Send failures
+
+A failed send logs `authmail: ses send failed` with the closed `outcome` and,
+when SES returns one, its error `code`. The log never carries the recipient,
+body, request ID, or SES error message. `code=MessageRejected` while the account
+is in sandbox usually means the recipient is not a verified identity;
+`code=AccessDeniedException` points at the app task role's `ses:SendEmail`
+policy.
+
 ## Verification
 
 Run from a workstation with the AWS CLI configured for the intended account. The
