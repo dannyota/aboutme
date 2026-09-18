@@ -138,6 +138,7 @@ apps/web/app/components/resume/sections/SkillSection.vue
 apps/web/app/components/resume/sections/WorkSection.vue
 apps/web/app/components/resume/useResumeStyles.ts
 apps/web/app/components/settings/ConnectedAgents.vue
+apps/web/app/components/settings/LinkedIdentities.vue
 apps/web/app/components/settings/PrivacySettings.vue
 apps/web/app/components/ui/alert-dialog/AlertDialog.vue
 apps/web/app/components/ui/alert-dialog/AlertDialogAction.vue
@@ -273,6 +274,7 @@ apps/web/app/components/ui/tooltip/TooltipProvider.vue
 apps/web/app/components/ui/tooltip/TooltipTrigger.vue
 apps/web/app/components/ui/tooltip/index.ts
 apps/web/app/composables/agentGrants.ts
+apps/web/app/composables/identitySettings.ts
 apps/web/app/composables/passwordSettings.ts
 apps/web/app/composables/privacySettings.ts
 apps/web/app/composables/providerAuthorization.ts
