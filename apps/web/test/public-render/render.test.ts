@@ -106,6 +106,13 @@ describe('public Vue worker document', () => {
       '</head><body><a href="#public-resume">Skip to content</a><main ',
     );
     expect(html).toContain('/_nuxt/assets/public-resume.mjs');
+    // The template's CSS and fonts come from the same self-hosted stylesheets
+    // the print document uses; without them the page renders unstyled.
+    expect(html).toContain(
+      '<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css">'
+      + '<link rel="stylesheet" href="/_nuxt/assets/print.css">',
+    );
+    expect(html).not.toMatch(/<style\b/iu);
     expect(html).toContain(
       '<script type="application/ld+json">'
       + '{"@context":"https://schema.org","@type":"ProfilePage",'

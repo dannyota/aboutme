@@ -89,3 +89,35 @@ func TestPublicHTMLLogsTheClosedReasonForA503(t *testing.T) {
 		}
 	}
 }
+
+// The page may link exactly the two self-hosted resume stylesheets, once each,
+// so the template's CSS and fonts load under style-src 'self'. Any other
+// stylesheet is rejected.
+func TestPublicHTMLAllowsOnlyTheResumeStylesheets(t *testing.T) {
+	origin := mustPublicOrigin(t)
+	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
+	jsonLD, err := publicformat.JSONLD(resume, origin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sheets = `<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css">`
+	base := validHTML("Ada", "https://aboutme.example/ada", "1", "")
+	styled := strings.Replace(base, `</head>`, sheets+`</head>`, 1)
+	if rule := publicHTMLRejection([]byte(styled), resume, origin, jsonLD, false); rule != "" {
+		t.Fatalf("page with the resume stylesheets rejected by %q", rule)
+	}
+	for _, test := range []struct{ name, extra string }{
+		{"foreign stylesheet", `<link rel="stylesheet" href="https://evil.example/x.css">`},
+		{"other local stylesheet", `<link rel="stylesheet" href="/_nuxt/assets/other.css">`},
+		{"duplicate stylesheet", `<link rel="stylesheet" href="/_nuxt/assets/print.css">`},
+		{"preload", `<link rel="preload" href="/_nuxt/assets/print.css" as="style">`},
+		{"extra attribute", `<link rel="stylesheet" href="/_nuxt/assets/print.css" media="print">`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := strings.Replace(styled, `</head>`, test.extra+`</head>`, 1)
+			if rule := publicHTMLRejection([]byte(candidate), resume, origin, jsonLD, false); rule != "stylesheet" {
+				t.Fatalf("rule = %q, want stylesheet", rule)
+			}
+		})
+	}
+}

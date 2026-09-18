@@ -146,6 +146,39 @@ test('proves a published resume hydrates in a real browser', async ({
     // The client hydration mounts the Vue app on the SSR root.
     await waitForHydration(publicPage, 'public-resume');
 
+    // The template stylesheets load under the page CSP and style the resume;
+    // DOM presence alone would pass on an unstyled page.
+    const styling = await publicPage.evaluate(() => {
+      const sheets = [...document.styleSheets].map((sheet) => ({
+        href: sheet.href === null ? '' : new URL(sheet.href).pathname,
+        rules: sheet.cssRules.length,
+      }));
+      const resume = document.querySelector('.resume-document');
+      if (resume === null) return { sheets, resume: null };
+      const computed = getComputedStyle(resume);
+      return {
+        sheets,
+        resume: {
+          boxSizing: computed.boxSizing,
+          paddingLeft: computed.paddingLeft,
+          fontFamily: computed.fontFamily,
+          fontVariable: computed.getPropertyValue('--font-family').trim(),
+        },
+      };
+    });
+    for (const path of [
+      '/_nuxt/assets/print-fonts.css',
+      '/_nuxt/assets/print.css',
+    ]) {
+      const sheet = styling.sheets.find((candidate) => candidate.href === path);
+      expect(sheet?.rules ?? 0, `${path} loaded with rules`).toBeGreaterThan(0);
+    }
+    expect(styling.resume).not.toBeNull();
+    expect(styling.resume?.boxSizing).toBe('border-box');
+    expect(styling.resume?.paddingLeft).not.toBe('0px');
+    expect(styling.resume?.fontVariable).not.toBe('');
+    expect(styling.resume?.fontFamily).toBe(styling.resume?.fontVariable);
+
     await publicContext.close();
   } finally {
     if (createdID !== undefined) {

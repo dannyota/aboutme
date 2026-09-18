@@ -177,6 +177,7 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, charsetMeta, viewportMeta int
 	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
 	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
+	stylesheets := map[string]bool{}
 	rule := ""
 	reject := func(name string) {
 		if rule == "" {
@@ -281,8 +282,23 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 				}
 				title = node
 			case "link":
+				if attribute(node, "rel") == "stylesheet" {
+					// Only the two self-hosted resume stylesheets, once each, with
+					// exactly rel and href; style-src 'self' then loads them.
+					href := attribute(node, "href")
+					if len(node.Attr) != 2 || attributeCount(node, "rel") != 1 || attributeCount(node, "href") != 1 || !resumeStylesheet(href) || stylesheets[href] {
+						reject("stylesheet")
+						return
+					}
+					stylesheets[href] = true
+					break
+				}
 				if !relHasToken(attribute(node, "rel"), "canonical") || canonical != nil || len(node.Attr) != 2 || attributeCount(node, "rel") != 1 || attribute(node, "rel") != "canonical" || attributeCount(node, "href") != 1 || attribute(node, "href") != origin.Resolve("/"+resume.Slug) {
-					reject("canonical")
+					if !relHasToken(attribute(node, "rel"), "canonical") {
+						reject("stylesheet")
+					} else {
+						reject("canonical")
+					}
 					return
 				}
 				canonical = node
@@ -343,6 +359,12 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 		return "script_count"
 	}
 	return ""
+}
+
+// resumeStylesheet reports whether href is one of the self-hosted stylesheets
+// that carry the resume template's CSS and fonts.
+func resumeStylesheet(href string) bool {
+	return href == "/_nuxt/assets/print-fonts.css" || href == "/_nuxt/assets/print.css"
 }
 
 func allowedPublicAnchor(href string) bool {
