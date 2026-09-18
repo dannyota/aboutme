@@ -72,7 +72,9 @@ describe('index.vue', () => {
     const heading = wrapper.get('[data-testid="landing-title"]');
 
     expect(heading.element.tagName).toBe('H1');
-    expect(heading.text()).toBe('The resume is public. You are not.');
+    expect(heading.text()).toBe(
+      'Your resume. Free. No one sees it unless you want them to.',
+    );
     expect(heading.classes()).toContain('text-2xl');
     expect(wrapper.find('[data-slot="card"]').exists()).toBe(false);
     const sample = wrapper.get('[data-testid="landing-sample"]');
@@ -205,7 +207,7 @@ describe('index.vue language', () => {
   it('renders Vietnamese by default', async () => {
     const wrapper = await mountLanding();
     expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
-      'CV thì công khai. Bạn thì không.',
+      'CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.',
     );
     expect(wrapper.get('[data-testid="landing-create-account"]').text()).toBe(
       'Tạo tài khoản',
@@ -245,9 +247,14 @@ describe('index.vue language', () => {
     expect(document.documentElement.lang).toBe('en');
   });
 
-  it('switches to English and remembers the choice', async () => {
-    const wrapper = await mountLanding();
-    const toggle = wrapper.get('[data-testid="landing-locale"]');
+  it('switches to English from the header and remembers it', async () => {
+    const wrapper = await mountSuspended(AppRoot, { route: '/' });
+    await flushPromises();
+    const toggle = wrapper
+      .get('[data-testid="app-shell"]')
+      .get('[data-testid="landing-locale"]');
+    expect(toggle.attributes('role')).toBe('group');
+    expect(toggle.attributes('aria-label')).toBe('Ngôn ngữ');
     const vi = toggle.get('[data-testid="landing-locale-vi"]');
     const en = toggle.get('[data-testid="landing-locale-en"]');
     expect(vi.attributes('aria-pressed')).toBe('true');
@@ -256,17 +263,36 @@ describe('index.vue language', () => {
     expect(vi.attributes('lang')).toBe('vi');
 
     await en.trigger('click');
-    expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
-      'The resume is public. You are not.',
-    );
+    await flushPromises();
     expect(en.attributes('aria-pressed')).toBe('true');
     expect(document.cookie).toContain('aboutme-locale=en');
+    wrapper.unmount();
+    // Browsers sync same-name cookie refs through cookieStore or
+    // BroadcastChannel; the test DOM has neither, so read the cookie afresh.
+    const page = await mountSuspended(LandingPage);
+    expect(page.get('[data-testid="landing-title"]').text()).toBe(
+      'Your resume. Free. No one sees it unless you want them to.',
+    );
+  });
+
+  it('renders the headline as two lines', async () => {
+    for (const locale of ['vi', 'en'] as const) {
+      const wrapper = await mountLanding(locale);
+      const lines = wrapper
+        .findAll('[data-testid="landing-title"] > span.block')
+        .map((line) => line.text());
+      expect(lines).toEqual(
+        locale === 'vi'
+          ? ['CV của bạn. Miễn phí.', 'Không ai thấy nếu bạn không muốn.']
+          : ['Your resume. Free.', 'No one sees it unless you want them to.'],
+      );
+    }
   });
 
   it('falls back to Vietnamese for an unknown cookie value', async () => {
     const wrapper = await mountLanding('fr' as 'vi');
     expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
-      'CV thì công khai. Bạn thì không.',
+      'CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.',
     );
   });
 });

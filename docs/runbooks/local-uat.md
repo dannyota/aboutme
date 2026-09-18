@@ -46,9 +46,10 @@ The UI proof vocabulary is part of the contract. Use these names when inspecting
 a run or updating a selector:
 
 - Landing: Vietnamese by default, with heading
-  `CV thì công khai. Bạn thì không.` and `html lang="vi"`. With the
-  `aboutme-locale=en` cookie: heading `The resume is public. You are not.`,
-  links `Create account` and `Sign in`, signed-in link `Open your resumes`, and
+  `CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.` and
+  `html lang="vi"`. With the `aboutme-locale=en` cookie: heading
+  `Your resume. Free. No one sees it unless you want them to.`, links
+  `Create account` and `Sign in`, signed-in link `Open your resumes`, and
   `[data-testid="landing-sample"]` with the seal label
   `Public at aboutme.vn/ada-lovelace`.
 - Authentication: the password control is an icon button named `Show password`

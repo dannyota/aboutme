@@ -4,13 +4,13 @@ import { computed } from 'vue';
 import AppSeal from '@/components/app/AppSeal.vue';
 import ResumeDocument from '@/components/resume/ResumeDocument.vue';
 import { buttonVariants } from '@/components/ui/button';
-import { landingCopy, landingLocales, localeNames } from '@/landing/copy';
+import { landingCopy } from '@/landing/copy';
 import { sampleContext } from '@/landing/sampleContext';
 import { sampleLink, sampleResume } from '@/landing/sampleResume';
 
 const { authState } = useAuth();
 const signedIn = computed(() => authState.value === 'authenticated');
-const { locale, setLocale } = useLandingLocale();
+const { locale } = useLandingLocale();
 const copy = computed(() => landingCopy[locale.value]);
 
 useHead(computed(() => ({
@@ -25,40 +25,21 @@ useHead(computed(() => ({
     class="landing mx-auto w-full max-w-7xl px-5 py-12 sm:px-8 sm:py-16"
     data-testid="landing"
   >
-    <div
-      class="mb-8 flex justify-end gap-1 text-sm"
-      role="group"
-      :aria-label="copy.localeLabel"
-      data-testid="landing-locale"
-    >
-      <button
-        v-for="option in landingLocales"
-        :key="option"
-        type="button"
-        class="rounded-sm px-2 py-1 underline-offset-4 hover:underline
-          aria-pressed:font-medium aria-pressed:text-foreground
-          text-muted-foreground"
-        :lang="option"
-        :aria-pressed="locale === option"
-        :data-testid="`landing-locale-${option}`"
-        @click="setLocale(option)"
-      >
-        {{ localeNames[option] }}
-      </button>
-    </div>
     <section
-      class="grid items-center gap-12 min-[42rem]:grid-cols-12
+      class="grid items-start gap-12 min-[42rem]:grid-cols-12
         min-[42rem]:gap-8"
       aria-labelledby="landing-title"
     >
-      <div class="min-[42rem]:col-span-5">
+      <div class="min-[42rem]:col-span-5 min-[42rem]:pt-24">
         <h1
           id="landing-title"
           class="text-balance text-2xl font-bold leading-tight
             tracking-[-0.02em] min-[42rem]:text-3xl"
           data-testid="landing-title"
         >
-          {{ copy.title }}
+          <span class="block">{{ copy.title[0] }}</span>{{ ' ' }}<span
+            class="block"
+          >{{ copy.title[1] }}</span>
         </h1>
         <p
           class="landing-lead mt-5 max-w-xl text-base leading-6
@@ -133,7 +114,7 @@ useHead(computed(() => ({
           class="block font-medium text-foreground"
           data-testid="landing-point-title"
         >{{ point.title }}</strong>
-        <span>{{ point.text }}</span>
+        <span class="mt-1 block text-sm">{{ point.text }}</span>
       </li>
     </ul>
 
@@ -168,7 +149,7 @@ useHead(computed(() => ({
     </section>
 
     <p
-      class="mt-16 text-center text-sm text-muted-foreground"
+      class="mt-16 text-sm text-muted-foreground"
       data-testid="landing-license"
     >
       {{ copy.licensePrefix }}
@@ -201,9 +182,12 @@ useHead(computed(() => ({
     zoom: 0.5;
   }
 
+  /* The sheet fills the width here, so the seal lands on the blank foot
+     of the main column instead of over the sidebar text. */
   .landing-seal {
-    right: 0;
-    bottom: 12px;
+    right: auto;
+    left: 30%;
+    bottom: 16px;
   }
 }
 
