@@ -1016,7 +1016,9 @@ paths:
                     hasPassword: false
                   csrfToken: kQ2f9Z3sV1n8LhTt7v0wYb-example
                   identities:
-                    - provider: google
+                    - id: 018f5b6a-9a3e-7c21-8b1e-000000000010
+                      provider: google
+                      createdAt: "2026-09-18T12:00:00Z"
         "401":
           description: Missing or invalid `__Host-session` cookie.
           content:
@@ -1128,6 +1130,112 @@ paths:
                 error:
                   code: account_unavailable
                   message: account operation unavailable; try again
+  /me/identities/{identityId}:
+    parameters:
+      - $ref: "#/components/parameters/IdentityID"
+    delete:
+      operationId: deleteMeIdentity
+      tags: [auth]
+      security:
+        - sessionCookie: []
+          csrfToken: []
+      summary: Unlink one of the caller's own provider identities
+      description: >-
+        Removes one linked provider identity from the caller's account. The
+        route is cookie-authenticated with the full CSRF rule set and requires
+        a recent reauthentication, checked before any row is touched. It never
+        accepts a bearer token, so a connected agent cannot call it. It works
+        for every provider, enabled or not, so a link to a provider that has
+        been turned off can still be removed.
+
+
+        The account must keep a sign-in method: a password credential or an
+        identity of a provider that `PROVIDER_LOGIN_ENABLED` enables. If this
+        identity is the last one, the request returns `409
+        last_sign_in_method` and changes nothing. The check and the delete run
+        in one transaction under the account's row lock, so two concurrent
+        unlinks cannot both remove the last methods.
+
+
+        Other sessions, including the current one, stay signed in. An
+        `identityId` that is malformed, unknown, or belongs to another account
+        returns the same `404`, which never echoes the path value.
+      responses:
+        "204":
+          description: Unlinked. No response body.
+        "401":
+          description: Missing or invalid `__Host-session` cookie. A bearer
+            token alone is not a session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: session_required
+                  message: a valid session is required
+        "403":
+          description: CSRF validation failed, or recent reauthentication is
+            required. Nothing was unlinked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                csrf_rejected:
+                  value:
+                    error:
+                      code: csrf_rejected
+                      message: CSRF validation failed
+                reauth_required:
+                  value:
+                    error:
+                      code: reauth_required
+                      message: recent reauthentication is required
+        "404":
+          description: No identity with this id belongs to the caller
+            (malformed, unknown, or another account's id; indistinguishable by
+            design).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: not_found
+                  message: no such identity
+        "405":
+          description: Unsupported method.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: method_not_allowed
+                  message: method not allowed
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: DELETE
+        "409":
+          description: The identity is the account's last sign-in method. Add
+            a password or link another enabled provider first. Nothing was
+            unlinked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: last_sign_in_method
+                  message: add a password or link another provider before
+                    removing this one
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
   /me/export:
     get:
       operationId: getAccountExport
@@ -4668,18 +4776,30 @@ components:
             connected-agent settings are registered.
     Identity:
       type: object
-      description: One linked OAuth provider identity. `GET /me` exposes
-        only the provider itself —
-        never the provider's own subject/user id, an internal correlation
-        key with no reason to ever reach a client.
+      description: One linked OAuth provider identity. `GET /me` exposes the
+        link's own id, its provider, and when it was linked — never the
+        provider's own subject/user id, an internal correlation key with no
+        reason to ever reach a client. `id` is the value `DELETE
+        /me/identities/{identityId}` takes.
       required:
+        - id
         - provider
+        - createdAt
       properties:
+        id:
+          type: string
+          format: uuid
         provider:
           type: string
           enum: [google, github, linkedin]
+        createdAt:
+          type: string
+          format: date-time
+          description: When the identity was linked, in UTC.
       example:
+        id: 018f5b6a-9a3e-7c21-8b1e-000000000010
         provider: google
+        createdAt: "2026-09-18T12:00:00Z"
     SessionDevice:
       type: object
       description: One of the caller's own live sessions, as returned by
@@ -6224,6 +6344,16 @@ components:
         type: string
         format: uuid
       example: 018f0f3e-9e3a-7000-8000-000000000001
+    IdentityID:
+      name: identityId
+      in: path
+      required: true
+      description: A linked identity's id (`identities.id`, `uuidv7`), as
+        `GET /me` returns it.
+      schema:
+        type: string
+        format: uuid
+      example: 018f5b6a-9a3e-7c21-8b1e-000000000010
     SessionID:
       name: id
       in: path

@@ -399,8 +399,9 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	exactSession := insertSession(ctx, t, pool, userID, retentionNow.Add(-90*24*time.Hour))
 	youngSession := insertSession(ctx, t, pool, userID, retentionNow.Add(-90*24*time.Hour+time.Second))
 
-	oldAudit := insertAudit(ctx, t, pool, retentionNow.Add(-180*24*time.Hour-time.Second))
-	exactAudit := insertAudit(ctx, t, pool, retentionNow.Add(-180*24*time.Hour))
+	oldAudit := insertAudit(ctx, t, pool, "account_deleted", retentionNow.Add(-180*24*time.Hour-time.Second))
+	// The sweep deletes every audit kind by age, including provider unlinks.
+	exactAudit := insertAudit(ctx, t, pool, "identity_unlinked", retentionNow.Add(-180*24*time.Hour))
 	youngAudit := insertAccountDeletionAudit(ctx, t, q, pool, retentionNow.Add(-180*24*time.Hour+time.Second))
 
 	oldCompleted := insertMediaJob(ctx, t, pool, retentionNow.Add(-181*24*time.Hour), retentionNow.Add(-180*24*time.Hour-time.Second), true)
@@ -522,10 +523,10 @@ func insertSession(ctx context.Context, t *testing.T, pool *store.Pool, userID u
 	return id
 }
 
-func insertAudit(ctx context.Context, t *testing.T, pool *store.Pool, occurredAt time.Time) uuid.UUID {
+func insertAudit(ctx context.Context, t *testing.T, pool *store.Pool, kind string, occurredAt time.Time) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
-	if _, err := pool.Exec(ctx, `INSERT INTO lifecycle_audit_events (id, kind, occurred_at) VALUES ($1, 'account_deleted', $2)`, id, occurredAt); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO lifecycle_audit_events (id, kind, occurred_at) VALUES ($1, $2, $3)`, id, kind, occurredAt); err != nil {
 		t.Fatalf("insert audit: %v", err)
 	}
 	return id
