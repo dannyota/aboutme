@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mockNuxtImport,
   mountSuspended,
@@ -13,6 +13,10 @@ import {
   type PasswordIssue,
   usePasswordAuth,
 } from '../app/composables/usePasswordAuth';
+import { setSiteLocale } from './support/locale';
+
+// These tests pin the English copy; Vietnamese has its own cases.
+beforeEach(() => setSiteLocale('en'));
 
 // The credentials test needs to observe the `credentials` option, which the
 // test runtime's `$fetch` swallows before the h3 mock server sees it. Route

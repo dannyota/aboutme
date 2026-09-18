@@ -164,10 +164,12 @@ fence and its 60-second cache trade-off.
 - Deletion copy distinguishes immediate access revocation, private-media removal
   targeted within 24 hours, and expiry from the 30-day backup schedule. An
   overdue physical delete is audited and retried; it does not restore access.
-- The v1 application interface is English, except the homepage, which defaults
-  to Vietnamese with an English toggle stored in the `aboutme-locale` cookie.
-  Vietnamese resume content is a first-class fixture and fallback target because
-  the initial community is Vietnamese. Other scripts remain valid content; font
+- The v1 application interface is English, except the homepage and the sign-in,
+  registration, password-reset, and email-verification pages. Those default to
+  Vietnamese with an English toggle stored in the `aboutme-locale` cookie. The
+  editor, settings, consent page, and resume display stay English. Vietnamese
+  resume content is a first-class fixture and fallback target because the
+  initial community is Vietnamese. Other scripts remain valid content; font
   choices state measured coverage instead of claiming universal coverage.
 - Accessibility is a release requirement for the editor, publish flow, public
   page, and generated artifacts.

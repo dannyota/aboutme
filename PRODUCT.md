@@ -91,7 +91,8 @@ so.
   Buttons name the action they perform; copy is sentence case.
 - Out of v1: cover letters, job tracker, first-party AI writing, custom domains,
   teams, analytics, a multilingual interface beyond the Vietnamese and English
-  homepage, collaborative editing, and any operator or admin surface.
+  homepage and authentication pages, collaborative editing, and any operator or
+  admin surface.
 - Undecided: the product name is in use as `aboutme` and the domain as
   `aboutme.vn`, but a name and trademark review is pending before production. No
   logo or wordmark exists beyond the lowercase word.

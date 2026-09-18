@@ -9,8 +9,8 @@
  *
  * `?error=` is a closed vocabulary produced by the callback landing
  * redirect: `auth_failed`, `email_not_verified`, `cancelled`, and
- * `email_already_registered`. Copy here is intentionally minimal — P5B
- * owns wording polish.
+ * `email_already_registered`. Copy for both languages lives in
+ * `app/i18n/auth.ts`.
  *
  * The password form sends closed copy for every failure and never retains
  * the password after a successful login.
@@ -21,6 +21,7 @@ import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { type AuthMessage, authCopy } from '@/i18n/auth';
 import {
   type PasswordAuthFailure,
   usePasswordAuth,
@@ -29,6 +30,8 @@ import { useCapabilities } from '../composables/useCapabilities';
 
 const route = useRoute();
 const { providerLogin } = useCapabilities();
+const { locale } = useLocale();
+const copy = computed(() => authCopy[locale.value]);
 
 const FALLBACK_NEXT = '/app/resumes';
 
@@ -53,24 +56,13 @@ function validateLoginNext(value: unknown): string | null {
 const explicitNext = computed(() => validateLoginNext(route.query.next));
 const loginDestination = computed(() => explicitNext.value ?? FALLBACK_NEXT);
 
-const providers = [
-  { id: 'google', label: 'Continue with Google' },
-  { id: 'github', label: 'Continue with GitHub' },
-  { id: 'linkedin', label: 'Continue with LinkedIn' },
-] as const;
+const providers = ['google', 'github', 'linkedin'] as const;
 
-const errorMessages: Record<string, string> = {
-  auth_failed:
-    'Something went wrong while signing you in. Please try ' + 'again.',
-  email_not_verified:
-    'Your email address must be verified with your '
-    + 'provider before you can sign in.',
-  cancelled: 'Sign-in was cancelled.',
-  // Deliberately does not name the existing provider — naming it hands an
-  // attacker a targeted-phishing hint (spec: OAuth email-collision rule).
-  email_already_registered:
-    'An account with this email already '
-    + 'exists. Sign in with the provider you used originally.',
+const errorMessages: Record<string, AuthMessage> = {
+  auth_failed: 'providerFailed',
+  email_not_verified: 'providerEmailNotVerified',
+  cancelled: 'providerCancelled',
+  email_already_registered: 'providerEmailRegistered',
 };
 
 const errorCode = computed(() => {
@@ -84,33 +76,33 @@ const errorMessage = computed(() => {
   // (`?error=constructor` renders `Object`'s constructor function,
   // `?error=__proto__` renders `{}`) rather than falling back — restrict
   // the lookup to the map's own keys, the actual closed vocabulary.
-  if (Object.hasOwn(errorMessages, errorCode.value)) {
-    return errorMessages[errorCode.value];
-  }
-  return errorMessages.auth_failed;
+  const key = Object.hasOwn(errorMessages, errorCode.value)
+    ? errorMessages[errorCode.value] as AuthMessage
+    : 'providerFailed';
+  return copy.value.messages[key];
 });
 
 const email = ref('');
 const password = ref('');
 const pending = ref(false);
-const formError = ref<string | null>(null);
+const formError = ref<AuthMessage | null>(null);
 
-function copyFor(failure: PasswordAuthFailure): string {
+function messageFor(failure: PasswordAuthFailure): AuthMessage {
   switch (failure.kind) {
     case 'authentication-failed':
-      return 'Invalid email or password.';
+      return 'invalidCredentials';
     case 'rate-limited':
-      return 'Too many attempts. Try again later.';
+      return 'rateLimited';
     case 'unavailable':
-      return 'Something went wrong. Please try again.';
+      return 'unavailable';
     default:
-      return 'Check your email and password and try again.';
+      return 'checkEmailAndPassword';
   }
 }
 
 async function onSubmit() {
   if (!email.value || !password.value) {
-    formError.value = 'Enter your email and password.';
+    formError.value = 'enterEmailAndPassword';
     return;
   }
   pending.value = true;
@@ -123,7 +115,7 @@ async function onSubmit() {
     password.value = '';
     await navigateTo(loginDestination.value);
   } catch (failure) {
-    formError.value = copyFor(failure as PasswordAuthFailure);
+    formError.value = messageFor(failure as PasswordAuthFailure);
   } finally {
     pending.value = false;
   }
@@ -139,10 +131,10 @@ async function onSubmit() {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      Sign in
+      {{ copy.signIn }}
     </h1>
     <p class="mt-4 text-base text-muted-foreground">
-      Use the email and password for your account.
+      {{ copy.login.lead }}
     </p>
     <StatusBanner
       v-if="errorMessage"
@@ -158,7 +150,7 @@ async function onSubmit() {
       kind="error"
       testid="login-form-error"
     >
-      {{ formError }}
+      {{ copy.messages[formError] }}
     </StatusBanner>
     <form
       class="mt-8 grid gap-6"
@@ -169,7 +161,7 @@ async function onSubmit() {
       <FormField
         id="login-email"
         v-slot="{ id, describedBy, invalid }"
-        label="Email"
+        :label="copy.email"
       >
         <Input
           :id="id"
@@ -184,14 +176,15 @@ async function onSubmit() {
         id="login-password"
         v-model="password"
         autocomplete="current-password"
-        label="Password"
+        :label="copy.password"
+        :locale="locale"
       />
       <Button
         class="h-9 w-full"
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? 'Signing in…' : 'Sign in' }}
+        {{ pending ? copy.login.pending : copy.signIn }}
       </Button>
     </form>
     <template v-if="providerLogin">
@@ -200,27 +193,27 @@ async function onSubmit() {
         data-testid="login-divider"
       >
         <Separator class="flex-1" />
-        or
+        {{ copy.login.or }}
         <Separator class="flex-1" />
       </div>
       <ul class="mt-4 grid gap-2">
         <li
           v-for="provider in providers"
-          :key="provider.id"
+          :key="provider"
         >
           <Button
             as="a"
             class="w-full"
             :href="
               explicitNext
-                ? `/api/v1/auth/${provider.id}/start?next=${encodeURIComponent(
+                ? `/api/v1/auth/${provider}/start?next=${encodeURIComponent(
                   explicitNext,
                 )}`
-                : `/api/v1/auth/${provider.id}/start`
+                : `/api/v1/auth/${provider}/start`
             "
             variant="outline"
           >
-            {{ provider.label }}
+            {{ copy.login.providers[provider] }}
           </Button>
         </li>
       </ul>
@@ -230,13 +223,13 @@ async function onSubmit() {
         class="text-primary underline-offset-4 hover:underline"
         to="/forgot-password"
       >
-        Forgot password?
+        {{ copy.login.forgotPassword }}
       </NuxtLink>
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
         to="/register"
       >
-        Create account
+        {{ copy.createAccount }}
       </NuxtLink>
     </nav>
   </main>

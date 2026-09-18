@@ -10,12 +10,11 @@ import { sampleLink, sampleResume } from '@/landing/sampleResume';
 
 const { authState } = useAuth();
 const signedIn = computed(() => authState.value === 'authenticated');
-const { locale } = useLandingLocale();
+const { locale } = useLocale();
 const copy = computed(() => landingCopy[locale.value]);
 
 useHead(computed(() => ({
   title: 'aboutme',
-  htmlAttrs: { lang: locale.value },
   meta: [{ name: 'description', content: copy.value.description }],
 })));
 </script>

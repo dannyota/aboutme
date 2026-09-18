@@ -1,15 +1,5 @@
-// Homepage copy. The homepage defaults to Vietnamese because the initial
-// community is Vietnamese (docs/design/product.md); English is one toggle away.
-
-export const landingLocales = ['vi', 'en'] as const;
-
-export type LandingLocale = (typeof landingLocales)[number];
-
-export const defaultLandingLocale: LandingLocale = 'vi';
-
-export function isLandingLocale(value: unknown): value is LandingLocale {
-  return landingLocales.includes(value as LandingLocale);
-}
+// Homepage copy in both site languages (see app/i18n/locale.ts).
+import type { Locale } from '@/i18n/locale';
 
 type Point = { readonly title: string; readonly text: string };
 
@@ -26,19 +16,9 @@ export type LandingCopy = {
   readonly publishTitle: string;
   readonly publishChoices: readonly [Point, Point, Point];
   readonly licensePrefix: string;
-  readonly localeLabel: string;
-  readonly lightMode: string;
-  readonly darkMode: string;
-  readonly switchToLight: string;
-  readonly switchToDark: string;
 };
 
-export const localeNames: Record<LandingLocale, string> = {
-  vi: 'Tiếng Việt',
-  en: 'English',
-};
-
-export const landingCopy: Record<LandingLocale, LandingCopy> = {
+export const landingCopy: Record<Locale, LandingCopy> = {
   vi: {
     description:
       'Công cụ tạo CV mã nguồn mở. Viết một lần, xem trước đúng bố cục '
@@ -86,11 +66,6 @@ export const landingCopy: Record<LandingLocale, LandingCopy> = {
       },
     ],
     licensePrefix: 'Mã nguồn mở theo giấy phép',
-    localeLabel: 'Ngôn ngữ',
-    lightMode: 'Chế độ sáng',
-    darkMode: 'Chế độ tối',
-    switchToLight: 'Chuyển sang chế độ sáng',
-    switchToDark: 'Chuyển sang chế độ tối',
   },
   en: {
     description:
@@ -140,10 +115,5 @@ export const landingCopy: Record<LandingLocale, LandingCopy> = {
       },
     ],
     licensePrefix: 'Open source under',
-    localeLabel: 'Language',
-    lightMode: 'Light mode',
-    darkMode: 'Dark mode',
-    switchToLight: 'Switch to light theme',
-    switchToDark: 'Switch to dark theme',
   },
 };

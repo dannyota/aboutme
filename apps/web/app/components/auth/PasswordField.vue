@@ -18,6 +18,8 @@ import { Eye, EyeOff } from '@lucide/vue';
 import IconButton from '@/components/app/IconButton.vue';
 import FormField from '@/components/app/FormField.vue';
 import { Input } from '@/components/ui/input';
+import { authCopy } from '@/i18n/auth';
+import type { Locale } from '@/i18n/locale';
 
 const props = withDefaults(
   defineProps<{
@@ -26,12 +28,15 @@ const props = withDefaults(
     autocomplete: 'current-password' | 'new-password';
     confirm?: boolean;
     confirmLabel?: string;
+    locale?: Locale;
   }>(),
   {
     confirm: false,
-    confirmLabel: 'Confirm password',
+    confirmLabel: undefined,
+    locale: 'en',
   },
 );
+const copy = computed(() => authCopy[props.locale]);
 
 const model = defineModel<string>({ default: '' });
 
@@ -39,9 +44,9 @@ const confirmValue = ref('');
 const visible = ref(false);
 
 const inputType = computed(() => (visible.value ? 'text' : 'password'));
-const visibilityLabel = computed(
-  () => `${visible.value ? 'Hide' : 'Show'} ${props.label.toLowerCase()}`,
-);
+const visibilityLabel = computed(() => visible.value
+  ? copy.value.hidePassword(props.label)
+  : copy.value.showPassword(props.label));
 
 const confirmMismatch = computed(
   () =>
@@ -100,8 +105,10 @@ function toggleVisibility(): void {
           describedBy: confirmDescribedBy,
           invalid: confirmInvalid,
         }"
-        :error="confirmMismatch ? 'Passwords do not match.' : undefined"
-        :label="confirmLabel"
+        :error="
+          confirmMismatch ? copy.messages.passwordsDoNotMatch : undefined
+        "
+        :label="confirmLabel ?? copy.confirmPassword"
       >
         <Input
           :id="confirmId"

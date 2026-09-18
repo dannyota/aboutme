@@ -12,18 +12,19 @@ import FormField from '@/components/app/FormField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { type AuthMessage, authCopy } from '@/i18n/auth';
 
-const GENERIC_COPY
-  = 'If an account exists for this email, we\'ve sent a password reset link.';
+const { locale } = useLocale();
+const copy = computed(() => authCopy[locale.value]);
 
 const email = ref('');
 const pending = ref(false);
-const errorMessage = ref<string | null>(null);
+const errorMessage = ref<AuthMessage | null>(null);
 const success = ref(false);
 
 async function onSubmit() {
   if (!email.value) {
-    errorMessage.value = 'Enter your email address.';
+    errorMessage.value = 'enterEmail';
     return;
   }
   pending.value = true;
@@ -32,7 +33,7 @@ async function onSubmit() {
     await usePasswordAuth().forgot(email.value);
     success.value = true;
   } catch {
-    errorMessage.value = GENERIC_COPY;
+    errorMessage.value = 'resetRequested';
   } finally {
     pending.value = false;
   }
@@ -48,10 +49,10 @@ async function onSubmit() {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      Forgot password
+      {{ copy.forgot.title }}
     </h1>
     <p class="mt-4 text-base text-muted-foreground">
-      Enter your email to receive a reset link if an account exists.
+      {{ copy.forgot.lead }}
     </p>
     <StatusBanner
       v-if="errorMessage"
@@ -59,7 +60,7 @@ async function onSubmit() {
       kind="error"
       testid="forgot-error"
     >
-      {{ errorMessage }}
+      {{ copy.messages[errorMessage] }}
     </StatusBanner>
     <StatusBanner
       v-if="success"
@@ -67,7 +68,7 @@ async function onSubmit() {
       kind="success"
       testid="forgot-success"
     >
-      {{ GENERIC_COPY }}
+      {{ copy.messages.resetRequested }}
     </StatusBanner>
     <form
       v-else
@@ -79,7 +80,7 @@ async function onSubmit() {
       <FormField
         id="forgot-email"
         v-slot="{ id, describedBy, invalid }"
-        label="Email"
+        :label="copy.email"
       >
         <Input
           :id="id"
@@ -95,7 +96,7 @@ async function onSubmit() {
         :disabled="pending"
         type="submit"
       >
-        {{ pending ? 'Sending…' : 'Send reset link' }}
+        {{ pending ? copy.forgot.pending : copy.forgot.submit }}
       </Button>
     </form>
     <nav class="mt-6 flex justify-between gap-3 text-sm">
@@ -103,7 +104,7 @@ async function onSubmit() {
         class="text-primary underline-offset-4 hover:underline"
         to="/login"
       >
-        Back to sign in
+        {{ copy.forgot.backToSignIn }}
       </NuxtLink>
     </nav>
   </main>

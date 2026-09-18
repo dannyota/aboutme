@@ -4,6 +4,7 @@ import {
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
   signInWithGoogle,
+  pinEnglish,
 } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
@@ -52,6 +53,7 @@ test('proves authenticated transport preserves cache and precondition bytes', as
   context,
   page,
 }) => {
+  await pinEnglish(context);
   const counters = newDiagnosticCounters();
   let observedAcceptEncoding = '';
   let capturedIfMatch = '';

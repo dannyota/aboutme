@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import ForgotPasswordPage from '../app/pages/forgot-password.vue';
+import { setSiteLocale } from './support/locale';
+
+// These tests pin the English copy; Vietnamese has its own cases.
+beforeEach(() => setSiteLocale('en'));
 
 const GENERIC_COPY
   = 'If an account exists for this email, we\'ve sent a password reset link.';
