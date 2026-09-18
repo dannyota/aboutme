@@ -7,6 +7,13 @@ export const loginProviderIds = ['google', 'github', 'linkedin'] as const;
 
 export type LoginProvider = (typeof loginProviderIds)[number];
 
+/** Brand names for the English settings surface. */
+export const providerNames: Record<LoginProvider, string> = {
+  google: 'Google',
+  github: 'GitHub',
+  linkedin: 'LinkedIn',
+};
+
 interface CapabilitiesEnvelope {
   data: Capabilities;
 }
