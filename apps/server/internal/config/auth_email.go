@@ -251,10 +251,15 @@ func parseLoopbackURL(raw string) (*url.URL, error) {
 	return u, nil
 }
 
-// validFromName matches the SES sender's display-name rule: empty, or at most
-// 64 runes with no control characters, so it can never inject a header line.
+// maxSESFromNameRunes matches the SES sender's display-name bound.
+const maxSESFromNameRunes = 64
+
+// validFromName repeats the SES sender's display-name rule so config fails at
+// startup: empty, or at most 64 runes with no control characters, so it can
+// never inject a header line. authmail is not imported here to keep the AWS
+// SDK out of config.
 func validFromName(name string) bool {
-	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > 64 {
+	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > maxSESFromNameRunes {
 		return false
 	}
 	for _, r := range name {

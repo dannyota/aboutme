@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Message copy is fixed code (D7). Each message is bilingual, Vietnamese first
+// Message copy is fixed code. Each message is bilingual, Vietnamese first
 // because the initial community is Vietnamese (docs/design/product.md), then
 // English. Only the canonical-origin link is interpolated, HTML-escaped. The
 // HTML has no image, script, stylesheet, web font, tracking pixel, or any
@@ -21,7 +21,7 @@ const (
 	fontStack   = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 	footerVI    = "aboutme, công cụ tạo CV mã nguồn mở."
 	footerEN    = "aboutme, the open-source resume builder."
-	fallbackVI  = "Nút không hoạt động? Sao chép liên kết này vào trình duyệt:"
+	fallbackVI  = "Nút không hoạt động? Sao chép và dán liên kết này vào trình duyệt:"
 	fallbackEN  = "Button not working? Paste this link into your browser:"
 	fallbackTxt = "Mở liên kết / Open the link:"
 )
@@ -46,12 +46,12 @@ type template struct {
 var templates = map[Kind]template{
 	KindVerify: {
 		subject:   "Xác minh email aboutme / Verify your aboutme email",
-		preheader: "Xác nhận email để hoàn tất tài khoản. Confirm your email to finish your account.",
+		preheader: "Xác nhận email để hoàn tất đăng ký. Confirm your email to finish your account.",
 		action:    "Xác minh email · Verify email",
 		vi: section{
 			lang:    "vi",
 			heading: "Xác minh email của bạn",
-			body:    "Cảm ơn bạn đã đăng ký aboutme. Hãy xác nhận địa chỉ email này để hoàn tất tạo tài khoản.",
+			body:    "Cảm ơn bạn đã đăng ký aboutme. Hãy xác nhận địa chỉ email này để hoàn tất việc tạo tài khoản.",
 			note:    "Liên kết có hiệu lực trong 24 giờ. Nếu bạn không đăng ký, hãy bỏ qua email này; sẽ không có tài khoản nào được tạo.",
 		},
 		en: section{
@@ -69,7 +69,7 @@ var templates = map[Kind]template{
 			lang:    "vi",
 			heading: "Đặt lại mật khẩu",
 			body:    "Có người đã yêu cầu đặt lại mật khẩu cho tài khoản aboutme dùng email này.",
-			note:    "Liên kết có hiệu lực trong 30 phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn không thay đổi.",
+			note:    "Liên kết có hiệu lực trong 30 phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn sẽ không thay đổi.",
 		},
 		en: section{
 			lang:    "en",

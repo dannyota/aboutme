@@ -16,7 +16,7 @@ import (
 	"github.com/aws/smithy-go"
 )
 
-// sesRegion is the exact SES region (D7).
+// sesRegion is the exact SES region.
 const sesRegion = "ap-southeast-1"
 
 // sesCharset is the charset for every text/HTML content part.
@@ -24,6 +24,9 @@ const sesCharset = "UTF-8"
 
 // maxFromNameRunes bounds the optional From display name.
 const maxFromNameRunes = 64
+
+// maxErrorCodeLen bounds the SES error code a send-failure log may carry.
+const maxErrorCodeLen = 64
 
 // SESClient is the minimal SendEmail surface production SES v2 provides; tests
 // inject a fake so no AWS client is ever constructed in tests.
@@ -45,10 +48,10 @@ type SESOptions struct {
 	Logger           *slog.Logger
 }
 
-// NewSESClient constructs a real SES v2 client for the exact D7 region with SDK
+// NewSESClient constructs a real SES v2 client for the exact region with SDK
 // retries disabled: the Worker owns retry timing, so the SDK must never retry a
-// SendEmail itself. It is only ever called by production wiring (T09), never by
-// tests or capture mode.
+// SendEmail itself. It is only ever called by production wiring, never by tests
+// or capture mode.
 func NewSESClient(ctx context.Context, region string) (*sesv2.Client, error) {
 	if region != sesRegion {
 		return nil, ErrSES
@@ -62,9 +65,10 @@ func NewSESClient(ctx context.Context, region string) (*sesv2.Client, error) {
 	}), nil
 }
 
-// NewSESSender validates the exact D7 configuration and returns a Sender that
-// owns one SendEmail call per Message. It never logs a recipient, body, AWS
-// request ID, or raw SDK error; every failure collapses to a closed outcome.
+// NewSESSender validates the exact configuration and returns a Sender that owns
+// one SendEmail call per Message. It never logs a recipient, body, AWS request
+// ID, or raw SDK error; every failure collapses to a closed outcome plus, when
+// present, the SES error code.
 func NewSESSender(opts SESOptions) (Sender, error) {
 	if opts.Region != sesRegion {
 		return nil, ErrSES
@@ -75,7 +79,7 @@ func NewSESSender(opts SESOptions) (Sender, error) {
 	if opts.Client == nil || opts.Logger == nil {
 		return nil, ErrSES
 	}
-	if !ValidFromName(opts.FromName) {
+	if !validFromName(opts.FromName) {
 		return nil, ErrSES
 	}
 	from := opts.From
@@ -114,14 +118,19 @@ func (s *sesSender) Send(ctx context.Context, msg Message) (SendResult, error) {
 
 	if _, err := s.client.SendEmail(ctx, input); err != nil {
 		outcome := classifySendError(err)
-		// Generic, secret-free log: no recipient, body, request ID, or SDK text.
-		s.logger.Warn("authmail: ses send failed", "outcome", outcome.String())
+		// Secret-free log: the closed outcome and, when present, the SES error
+		// code. Never the recipient, body, request ID, or SDK error message.
+		attrs := []any{"outcome", outcome.String()}
+		if code := sesErrorCode(err); code != "" {
+			attrs = append(attrs, "code", code)
+		}
+		s.logger.Warn("authmail: ses send failed", attrs...)
 		return SendResult{Outcome: outcome}, nil
 	}
 	return SendResult{Outcome: SendAccepted}, nil
 }
 
-// classifySendError maps one SDK error to the closed D7 outcome taxonomy.
+// classifySendError maps one SDK error to the closed outcome taxonomy.
 //   - Temporary: deadline/cancel, any transport/ambiguous error, 429
 //     (TooManyRequestsException), throttling (LimitExceededException), and every
 //     server fault (5xx).
@@ -161,6 +170,26 @@ func classifySendError(err error) SendOutcome {
 	return SendTemporaryFailure
 }
 
+// sesErrorCode returns the API error code of err, such as "MessageRejected",
+// only when it is 1-64 ASCII letters. It returns "" otherwise, so a malformed
+// code can never carry other text into a log line.
+func sesErrorCode(err error) string {
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) {
+		return ""
+	}
+	code := apiErr.ErrorCode()
+	if code == "" || len(code) > maxErrorCodeLen {
+		return ""
+	}
+	for _, r := range code {
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
+			return ""
+		}
+	}
+	return code
+}
+
 func (o SendOutcome) String() string {
 	switch o {
 	case SendAccepted:
@@ -174,10 +203,10 @@ func (o SendOutcome) String() string {
 	}
 }
 
-// ValidFromName reports whether name is usable as a From display name: empty,
+// validFromName reports whether name is usable as a From display name: empty,
 // or at most 64 runes of valid UTF-8 with no control characters, so it can
 // never inject a header line.
-func ValidFromName(name string) bool {
+func validFromName(name string) bool {
 	if !utf8.ValidString(name) || utf8.RuneCountInString(name) > maxFromNameRunes {
 		return false
 	}
