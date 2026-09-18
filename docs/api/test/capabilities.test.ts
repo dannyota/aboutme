@@ -13,18 +13,27 @@ describe("GET /capabilities", () => {
     expect(Object.keys(doc.paths["/capabilities"])).toEqual(["get"]);
   });
 
-  it("returns exactly two required booleans in the data envelope", () => {
+  it("returns two required booleans and the enabled providers in the data envelope", () => {
     const schema = doc.components.schemas.Capabilities;
     expect(schema.type).toBe("object");
     expect(schema.additionalProperties).toBe(false);
-    expect(schema.required.sort()).toEqual(["agentAccess", "providerLogin"]);
+    expect(schema.required.sort()).toEqual([
+      "agentAccess",
+      "providerLogin",
+      "providers",
+    ]);
     expect(schema.properties.providerLogin.type).toBe("boolean");
     expect(schema.properties.agentAccess.type).toBe("boolean");
+    expect(schema.properties.providers.type).toBe("array");
+    expect(schema.properties.providers.uniqueItems).toBe(true);
+    expect(schema.properties.providers.items.enum).toEqual([
+      "google",
+      "github",
+      "linkedin",
+    ]);
     const ok = op.responses["200"].content["application/json"].schema;
     const data = ok.allOf.find((part: any) => part.properties?.data);
-    expect(data.properties.data.$ref).toBe(
-      "#/components/schemas/Capabilities",
-    );
+    expect(data.properties.data.$ref).toBe("#/components/schemas/Capabilities");
   });
 
   it("documents no-store caching", () => {
@@ -33,20 +42,18 @@ describe("GET /capabilities", () => {
 });
 
 describe("provider operations are conditional", () => {
-  for (const path of [
-    "/auth/google/start",
-    "/auth/github/start",
-    "/auth/linkedin/start",
-    "/auth/google/callback",
-    "/auth/github/callback",
-    "/auth/linkedin/callback",
-  ]) {
-    it(`${path} says it is registered only when PROVIDER_LOGIN_ENABLED is true`, () => {
-      for (const method of Object.keys(doc.paths[path])) {
-        expect(doc.paths[path][method].description).toMatch(
-          /PROVIDER_LOGIN_ENABLED/,
-        );
-      }
-    });
+  for (const provider of ["google", "github", "linkedin"]) {
+    for (const path of [
+      `/auth/${provider}/start`,
+      `/auth/${provider}/callback`,
+    ]) {
+      it(`${path} says it is registered only when PROVIDER_LOGIN_ENABLED enables ${provider}`, () => {
+        for (const method of Object.keys(doc.paths[path])) {
+          expect(doc.paths[path][method].description).toContain(
+            `\`PROVIDER_LOGIN_ENABLED\` enables \`${provider}\``,
+          );
+        }
+      });
+    }
   }
 });

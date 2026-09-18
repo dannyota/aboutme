@@ -70,6 +70,51 @@ List names only:
 aws ssm get-parameters-by-path --path /aboutme/prod --recursive --query 'Parameters[].Name'
 ```
 
+## Google sign-in
+
+Google is the only provider production can enable. The `provider_login_enabled`
+variable sets `PROVIDER_LOGIN_ENABLED`: `""` (the default) keeps provider login
+off, and `"google"` turns on Google. With `"google"`, the app task reads its
+credentials from two SecureString parameters:
+
+- `/aboutme/prod/oauth/google-client-id`
+- `/aboutme/prod/oauth/google-client-secret`
+
+The server refuses to start when Google is enabled and either value is missing.
+To enable it:
+
+1. In the Google Cloud Console, create an OAuth client of type "Web application"
+   with the authorized redirect URI
+   `https://aboutme.vn/api/v1/auth/google/callback`. The app requests the
+   `openid`, `email`, and `profile` scopes. Put the consent screen in production
+   so that sign-in is not limited to test users.
+2. Store each value through a private tmpfs file, never a command argument. Put
+   the value in the file with an editor or `wl-paste`; the server trims a
+   trailing newline.
+
+   ```sh
+   umask 077
+   f=$(mktemp -p "$XDG_RUNTIME_DIR")
+   # write the client ID into "$f"
+   aws ssm put-parameter --region ap-southeast-1 --type SecureString \
+     --name /aboutme/prod/oauth/google-client-id --value "file://$f"
+   # overwrite "$f" with the client secret
+   aws ssm put-parameter --region ap-southeast-1 --type SecureString \
+     --name /aboutme/prod/oauth/google-client-secret --value "file://$f"
+   rm -f "$f"
+   ```
+
+3. Set `provider_login_enabled = "google"` in `prod.tfvars`, then run
+   `tofu apply`. The plan changes the app task definition.
+4. Deploy a release whose web build renders only the providers named in the
+   capabilities `providers` list. `deploy.sh` builds the new revision from the
+   task definition that `tofu apply` registered.
+5. Check `https://aboutme.vn/api/v1/capabilities`. It reports
+   `"providers":["google"]`, and `/api/v1/auth/github/start` returns 404.
+
+To turn Google off, set `provider_login_enabled = ""`, apply, and deploy. Leave
+the parameters in place.
+
 ## Deploy
 
 A release is a `v*` tag on `main` with green CI. The `release-images` workflow

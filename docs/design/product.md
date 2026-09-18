@@ -6,8 +6,8 @@ without publishing an account profile.
 
 ## Core journeys
 
-1. Sign in with email and password. Provider sign-in (Google, GitHub, LinkedIn)
-   is implemented but disabled in v1.
+1. Sign in with email and password, or with Google. GitHub and LinkedIn sign-in
+   are implemented but disabled.
 2. Create up to three resumes and edit incomplete drafts without save-time
    completeness errors.
 3. Preview the same layout used by the public page and PDF.
@@ -19,17 +19,17 @@ without publishing an account profile.
 
 ## V1 scope
 
-| Area                | V1 decision                                                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Resume editor       | Eight section types; rich text; one- or two-column layout; fonts, colors, spacing, headings, and presets                 |
-| Resume count        | At most three per account, enforced in PostgreSQL                                                                        |
-| Public identity     | One globally unique slug per resume; no username or account profile                                                      |
-| Authentication      | Email/password; provider login implemented behind a server flag that is off; zero or one password credential per account |
-| Preview and publish | Instant local preview, granular autosave, public SSR page, and live refresh                                              |
-| Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in                    |
-| Export              | Owner PDF; optional public PDF                                                                                           |
-| Agent access        | Remote Model Context Protocol (MCP) endpoint; editor parity minus publish; account-wide consent scopes                   |
-| Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                                  |
+| Area                | V1 decision                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Resume editor       | Eight section types; rich text; one- or two-column layout; fonts, colors, spacing, headings, and presets       |
+| Resume count        | At most three per account, enforced in PostgreSQL                                                              |
+| Public identity     | One globally unique slug per resume; no username or account profile                                            |
+| Authentication      | Email/password and Google; each provider enabled by server config; zero or one password credential per account |
+| Preview and publish | Instant local preview, granular autosave, public SSR page, and live refresh                                    |
+| Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in          |
+| Export              | Owner PDF; optional public PDF                                                                                 |
+| Agent access        | Remote Model Context Protocol (MCP) endpoint; editor parity minus publish; account-wide consent scopes         |
+| Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                        |
 
 Out of v1: cover letters, a job tracker, first-party AI writing features, custom
 domains, teams, analytics, a multilingual application interface, and

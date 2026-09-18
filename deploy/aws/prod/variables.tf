@@ -28,6 +28,12 @@ variable "ses_configuration_set" {
   default = "aboutme-auth"
 }
 
+variable "provider_login_enabled" {
+  type        = string
+  default     = ""
+  description = "\"google\" turns on Google login once its SSM parameters exist; \"\" keeps it off"
+}
+
 # Initial task definition images. deploy.sh registers later revisions.
 variable "image_server" {
   type = string

@@ -23,17 +23,31 @@ import (
 
 func TestCapabilitiesRegistrarReflectsConfig(t *testing.T) {
 	t.Parallel()
-	cfg := config.Config{ProviderLoginEnabled: true}
-	cfg.AgentAccess.Enabled = false
-	mux := http.NewServeMux()
-	capabilitiesRegistrar(cfg)(mux)
-	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/capabilities", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if got := rec.Body.String(); got != "{\"data\":{\"providerLogin\":true,\"agentAccess\":false}}\n" {
-		t.Fatalf("body = %q", got)
+	for _, tc := range []struct {
+		name  string
+		login config.ProviderLogin
+		want  string
+	}{
+		{"password only", config.ProviderLogin{}, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false}}` + "\n"},
+		{"google only", config.ProviderLogin{Google: true}, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false}}` + "\n"},
+		{"every provider", config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true},
+			`{"data":{"providerLogin":true,"providers":["google","github","linkedin"],"agentAccess":false}}` + "\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Config{ProviderLogin: tc.login}
+			cfg.AgentAccess.Enabled = false
+			mux := http.NewServeMux()
+			capabilitiesRegistrar(cfg)(mux)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/capabilities", nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			if got := rec.Body.String(); got != tc.want {
+				t.Fatalf("body = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -44,6 +44,7 @@ are accepted.
 | [0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md) | Accepted | One serving replica for the first release; migrations run as a deployment step; wake implementation retired           |
 | [0037](../adr/0037-single-host-production-without-hosted-uat.md)     | Accepted | First release deploys straight to single-host production behind Cloudflare; no hosted UAT until about 500 users       |
 | [0038](../adr/0038-single-baseline-and-plain-migrator.md)            | Accepted | One baseline migration with explicit app grants; plain goose migrator; replica runtime removed until a second replica |
+| [0039](../adr/0039-per-provider-login-enablement.md)                 | Accepted | `PROVIDER_LOGIN_ENABLED` enables providers one at a time; production enables Google only                              |
 
 ## Remaining gates
 

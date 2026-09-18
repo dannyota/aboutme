@@ -86,7 +86,7 @@ type testServiceConfig struct {
 	googleIssuer    string
 	githubEndpoint  string
 	linkedinIssuer  string
-	providerLogin   bool
+	providerLogin   config.ProviderLogin
 	logger          *slog.Logger
 	sessionIssuer   sessionIssuerForTest
 	startRateLimit  int
@@ -115,7 +115,12 @@ func withLinkedInIssuer(issuer string) testServiceOption {
 
 // withProviderLoginDisabled turns PROVIDER_LOGIN_ENABLED off for one test.
 func withProviderLoginDisabled() testServiceOption {
-	return func(c *testServiceConfig) { c.providerLogin = false }
+	return func(c *testServiceConfig) { c.providerLogin = config.ProviderLogin{} }
+}
+
+// withProviderLogin enables exactly the given providers for one test.
+func withProviderLogin(p config.ProviderLogin) testServiceOption {
+	return func(c *testServiceConfig) { c.providerLogin = p }
 }
 
 // withLogger captures Service rejection and internal-error logs.
@@ -146,7 +151,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	pool := newTestPool(t)
 	q := store.New(pool)
 
-	sc := testServiceConfig{providerLogin: true}
+	sc := testServiceConfig{providerLogin: config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}}
 	for _, opt := range opts {
 		opt(&sc)
 	}
@@ -157,7 +162,7 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 			"request to /start or /callback would perform live network I/O against the real provider")
 	}
 
-	cfg := config.Config{PublicOrigin: testPublicOrigin, ProviderLoginEnabled: sc.providerLogin}
+	cfg := config.Config{PublicOrigin: testPublicOrigin, ProviderLogin: sc.providerLogin}
 	if sc.googleIssuer != "" {
 		cfg.GoogleClientID = oidctest.DefaultClientID
 		cfg.GoogleClientSecret = "test-google-client-secret"
@@ -378,10 +383,10 @@ func TestGoogleProvider_DiscoveryDoesNotHoldCacheMutex(t *testing.T) {
 	p := oidctest.NewProvider(t)
 	pool := newTestPool(t)
 	cfg := config.Config{
-		PublicOrigin:         testPublicOrigin,
-		ProviderLoginEnabled: true,
-		GoogleClientID:       oidctest.DefaultClientID,
-		GoogleClientSecret:   "test-google-client-secret",
+		PublicOrigin:       testPublicOrigin,
+		ProviderLogin:      config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true},
+		GoogleClientID:     oidctest.DefaultClientID,
+		GoogleClientSecret: "test-google-client-secret",
 	}
 	svc, err := auth.NewServiceForTest(testLogger(), cfg, pool, p.URL, "", "")
 	if err != nil {
@@ -507,6 +512,36 @@ func TestService_RegisterRoutes_ProviderLoginDisabled_ProviderPathsAre404(t *tes
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("GET %s status = %d, want 401 (session routes stay registered)", auth.MePath, rec.Code)
+	}
+}
+
+func TestService_RegisterRoutes_GoogleOnly_OtherProviderPathsAre404(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL),
+		withProviderLogin(config.ProviderLogin{Google: true}))
+
+	for _, path := range []string{
+		auth.GitHubStartPath, auth.GitHubCallbackPath,
+		auth.LinkedInStartPath, auth.LinkedInCallbackPath,
+	} {
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodHead} {
+			req := httptest.NewRequestWithContext(t.Context(), method, path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("%s %s status = %d, want 404 with only Google enabled", method, path, rec.Code)
+			}
+		}
+	}
+
+	// The enabled Google start still redirects to the provider.
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, auth.GoogleStartPath, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound || !strings.HasPrefix(rec.Header().Get("Location"), p.URL) {
+		t.Fatalf("GET %s = %d Location %q, want 302 to the Google issuer", auth.GoogleStartPath, rec.Code, rec.Header().Get("Location"))
 	}
 }
 
@@ -938,10 +973,10 @@ func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *te
 	pool := newTestPool(t)
 	q := store.New(pool)
 	svc, err := auth.NewServiceForTest(testLogger(), config.Config{
-		PublicOrigin:         testPublicOrigin,
-		ProviderLoginEnabled: true,
-		GoogleClientID:       oidctest.DefaultClientID,
-		GoogleClientSecret:   "test-google-client-secret",
+		PublicOrigin:       testPublicOrigin,
+		ProviderLogin:      config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true},
+		GoogleClientID:     oidctest.DefaultClientID,
+		GoogleClientSecret: "test-google-client-secret",
 	}, pool, p.URL, "", "")
 	if err != nil {
 		t.Fatalf("NewServiceForTest() error = %v", err)

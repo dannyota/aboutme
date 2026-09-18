@@ -96,7 +96,7 @@ type Service struct {
 	logger     *slog.Logger
 
 	publicOrigin            string
-	providerLogin           bool
+	providerLogin           config.ProviderLogin
 	trustedProxies          api.TrustedProxies
 	googleIssuerURL         string
 	linkedinIssuerURL       string
@@ -145,7 +145,7 @@ func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Serv
 		sessionMgr:              sessionMgr,
 		logger:                  logger,
 		publicOrigin:            cfg.PublicOrigin,
-		providerLogin:           cfg.ProviderLoginEnabled,
+		providerLogin:           cfg.ProviderLogin,
 		trustedProxies:          api.TrustedProxies(cfg.TrustedProxyCIDRs),
 		googleIssuerURL:         endpointOrDefault(cfg.GoogleOIDCIssuerURL, googleIssuer),
 		linkedinIssuerURL:       endpointOrDefault(cfg.LinkedInOIDCIssuerURL, linkedinIssuer),
@@ -182,15 +182,23 @@ func endpointOrDefault(configured, fallback string) string {
 
 // RegisterRoutes attaches the authentication and session routes to mux.
 func (s *Service) RegisterRoutes(mux *http.ServeMux) {
-	if s.providerLogin {
-		// All providers share one bounded start-route limiter.
+	// A disabled provider's paths stay unregistered and return the uniform
+	// not-found response.
+	if s.providerLogin.Any() {
+		// All enabled providers share one bounded start-route limiter.
 		startLimit := s.startRateLimit()
-		mux.Handle(GoogleStartPath, s.startRoute(ProviderGoogle, s.buildGoogleAuthorizeURL, startLimit))
-		mux.Handle(GoogleCallbackPath, route(http.MethodGet, s.handleGoogleCallback))
-		mux.Handle(GitHubStartPath, s.startRoute(ProviderGitHub, s.buildGitHubAuthorizeURL, startLimit))
-		mux.Handle(GitHubCallbackPath, route(http.MethodGet, s.handleGitHubCallback))
-		mux.Handle(LinkedInStartPath, s.startRoute(ProviderLinkedIn, s.buildLinkedInAuthorizeURL, startLimit))
-		mux.Handle(LinkedInCallbackPath, route(http.MethodGet, s.handleLinkedInCallback))
+		if s.providerLogin.Google {
+			mux.Handle(GoogleStartPath, s.startRoute(ProviderGoogle, s.buildGoogleAuthorizeURL, startLimit))
+			mux.Handle(GoogleCallbackPath, route(http.MethodGet, s.handleGoogleCallback))
+		}
+		if s.providerLogin.GitHub {
+			mux.Handle(GitHubStartPath, s.startRoute(ProviderGitHub, s.buildGitHubAuthorizeURL, startLimit))
+			mux.Handle(GitHubCallbackPath, route(http.MethodGet, s.handleGitHubCallback))
+		}
+		if s.providerLogin.LinkedIn {
+			mux.Handle(LinkedInStartPath, s.startRoute(ProviderLinkedIn, s.buildLinkedInAuthorizeURL, startLimit))
+			mux.Handle(LinkedInCallbackPath, route(http.MethodGet, s.handleLinkedInCallback))
+		}
 	}
 
 	// Session routes authenticate before CSRF enforcement.

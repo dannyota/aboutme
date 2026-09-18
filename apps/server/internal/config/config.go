@@ -103,10 +103,10 @@ type Config struct {
 	// values are the frozen budgets from docs/design/budgets.md; operators may
 	// enable or disable the feature but cannot silently widen those bounds.
 	AgentAccess AgentAccessConfig
-	// ProviderLoginEnabled registers the Google, GitHub, and LinkedIn login,
-	// callback, link, and reauthentication routes. It is off for v1 (ADR 0027);
-	// the provider code stays so the flag can turn on without a code change.
-	ProviderLoginEnabled bool
+	// ProviderLogin names the providers whose login, callback, link, and
+	// reauthentication routes are registered (ADR 0027, ADR 0039). The zero
+	// value is password-only; each provider turns on without a code change.
+	ProviderLogin ProviderLogin
 }
 
 const (
@@ -196,17 +196,17 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
-	googleClientID, googleClientSecret, err := loadProviderCredentials("GOOGLE", "Google", getenv, env, providerLogin)
+	googleClientID, googleClientSecret, err := loadProviderCredentials("GOOGLE", "Google", getenv, env, providerLogin.Google)
 	if err != nil {
 		return Config{}, err
 	}
 
-	githubClientID, githubClientSecret, err := loadProviderCredentials("GITHUB", "GitHub", getenv, env, providerLogin)
+	githubClientID, githubClientSecret, err := loadProviderCredentials("GITHUB", "GitHub", getenv, env, providerLogin.GitHub)
 	if err != nil {
 		return Config{}, err
 	}
 
-	linkedInClientID, linkedInClientSecret, err := loadProviderCredentials("LINKEDIN", "LinkedIn", getenv, env, providerLogin)
+	linkedInClientID, linkedInClientSecret, err := loadProviderCredentials("LINKEDIN", "LinkedIn", getenv, env, providerLogin.LinkedIn)
 	if err != nil {
 		return Config{}, err
 	}
@@ -259,7 +259,7 @@ func Load(getenv func(string) string) (Config, error) {
 		MediaForcePathStyle:       mediaCfg.forcePathStyle,
 		AuthEmail:                 authEmail,
 		AgentAccess:               agentAccess,
-		ProviderLoginEnabled:      providerLogin,
+		ProviderLogin:             providerLogin,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return Config{}, err

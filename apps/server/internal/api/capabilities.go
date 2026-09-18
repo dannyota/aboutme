@@ -7,16 +7,22 @@ import (
 
 // Capabilities is the closed, unauthenticated feature-flag read the web uses
 // before rendering sign-in and settings surfaces (docs/design/api.md,
-// "Endpoint groups"). It carries flags only, never configuration values.
+// "Endpoint groups"). It carries flags and the enabled provider path names
+// (google, github, linkedin) only, never credentials or other configuration.
+// ProviderLogin reports whether Providers is non-empty.
 type Capabilities struct {
-	ProviderLogin bool `json:"providerLogin"`
-	AgentAccess   bool `json:"agentAccess"`
+	ProviderLogin bool     `json:"providerLogin"`
+	Providers     []string `json:"providers"`
+	AgentAccess   bool     `json:"agentAccess"`
 }
 
 // CapabilitiesHandler serves GET /api/v1/capabilities. The router's default
 // NoStoreCache chain supplies Cache-Control; this handler sets none. Unlike
 // ordinary GET resources, this closed configuration read rejects HEAD.
 func CapabilitiesHandler(c Capabilities) http.Handler {
+	if c.Providers == nil {
+		c.Providers = []string{}
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
