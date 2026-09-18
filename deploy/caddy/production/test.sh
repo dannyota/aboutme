@@ -97,4 +97,25 @@ fi
 start_stack "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.0/8 ::1/128 fc00::/7"
 got=$(forwarded)
 [[ $got == ip=203.0.113.7 ]] || { echo "trusted peer: Go received '$got', want ip=203.0.113.7" >&2; exit 1; }
+
+# Nothing listens on the web upstream here, so reverse_proxy logs the failed
+# request. Caddy's logs must keep the method and URI but never the visitor's
+# address or request headers.
+curl -s -o /dev/null --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${pull[@]}" \
+  -H 'CF-Connecting-IP: 203.0.113.7' -H 'User-Agent: privacy-probe-agent' \
+  -H 'Referer: https://referrer.example/privacy-probe' "https://aboutme.vn:$port/nested/privacy-probe" || true
+logs=$(podman logs "$name" 2>&1)
+grep -q '"uri":"/nested/privacy-probe"' <<<"$logs" || { echo "no proxy log line for the probe request" >&2; exit 1; }
+grep -q '"method":"GET"' <<<"$logs" || { echo "proxy log lost the method" >&2; exit 1; }
+for leak in client_ip remote_ip remote_port '"headers"' 203.0.113.7 privacy-probe-agent referrer.example Cf-Connecting-Ip; do
+  if grep -qF -- "$leak" <<<"$logs"; then
+    echo "Caddy log contains $leak" >&2
+    exit 1
+  fi
+done
+# Cloudflare reaches the origin over TCP only, so no HTTP/3 listener starts.
+if grep -i 'enabling HTTP/3 listener' <<<"$logs" >&2; then
+  echo "Caddy enabled HTTP/3" >&2
+  exit 1
+fi
 echo "caddy-prod-test: ok"

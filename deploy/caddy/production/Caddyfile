@@ -7,6 +7,20 @@
 		trusted_proxies static {$CLOUDFLARE_RANGES}
 		trusted_proxies_strict
 		client_ip_headers CF-Connecting-IP
+		# Cloudflare reaches the origin over TCP, so no HTTP/3 listener.
+		protocols h1 h2
+	}
+	# Request logs keep the method, URI, and status but never the visitor's
+	# address or request headers (privacy policy: no IP in request logs).
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			request>client_ip delete
+			request>remote_ip delete
+			request>remote_port delete
+			request>headers delete
+		}
 	}
 }
 
