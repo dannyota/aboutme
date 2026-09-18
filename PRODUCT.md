@@ -37,7 +37,8 @@ and no account URL. Each resume has its own globally unique slug, discovery by
 search engines and AI engines is off until the owner opts in, and unpublishing
 or deleting revokes the public link at once. A connected agent can read and edit
 resume content but can never publish. Neighboring builders sell a profile or a
-platform; aboutme publishes documents.
+platform; aboutme publishes documents. Resumes are free, and the homepage says
+so.
 
 ## Operating Context
 
@@ -115,8 +116,9 @@ platform; aboutme publishes documents.
 - Font catalog manifest with measured Vietnamese coverage:
   `apps/web/app/assets/fonts/catalog.json`.
 - Current-state screenshots (2026-09-04) under `.dev/design-qa/current/`.
-- Absent, never to be invented: testimonials, customer logos, user counts,
-  pricing, benchmarks, press, and any claim about hosted uptime or scale.
+- Absent, never to be invented: testimonials, customer logos, user counts, paid
+  plans or prices, benchmarks, press, and any claim about hosted uptime or
+  scale.
 
 ## Product Principles
 

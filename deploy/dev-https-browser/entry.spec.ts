@@ -103,7 +103,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
   try {
     await auditRouteInBothThemes(page, '/', async () => {
       await expect(page.getByTestId('landing-title')).toHaveText(
-        'CV thì công khai. Bạn thì không.',
+        'CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.',
       );
       await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
     });
@@ -114,7 +114,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await page.goto(`${ORIGIN}/`);
     await waitForHydration(page);
     await expect(page.getByTestId('landing-title')).toHaveText(
-      'The resume is public. You are not.',
+      'Your resume. Free. No one sees it unless you want them to.',
     );
     const main = page.getByRole('main');
     await expect(

@@ -15,7 +15,8 @@ type Point = { readonly title: string; readonly text: string };
 
 export type LandingCopy = {
   readonly description: string;
-  readonly title: string;
+  /** The headline, rendered as two lines. */
+  readonly title: readonly [string, string];
   readonly lead: string;
   readonly createAccount: string;
   readonly signIn: string;
@@ -26,6 +27,10 @@ export type LandingCopy = {
   readonly publishChoices: readonly [Point, Point, Point];
   readonly licensePrefix: string;
   readonly localeLabel: string;
+  readonly lightMode: string;
+  readonly darkMode: string;
+  readonly switchToLight: string;
+  readonly switchToDark: string;
 };
 
 export const localeNames: Record<LandingLocale, string> = {
@@ -38,7 +43,7 @@ export const landingCopy: Record<LandingLocale, LandingCopy> = {
     description:
       'Công cụ tạo CV mã nguồn mở. Viết một lần, xem trước đúng bố cục '
       + 'trang, và đăng từng CV tại một đường dẫn gọn gàng do bạn kiểm soát.',
-    title: 'CV thì công khai. Bạn thì không.',
+    title: ['CV của bạn. Miễn phí.', 'Không ai thấy nếu bạn không muốn.'],
     lead:
       'aboutme là công cụ tạo CV mã nguồn mở. Viết tối đa ba CV, xem trước '
       + 'đúng từng trang, và đăng mỗi CV tại một đường dẫn riêng. Tìm kiếm '
@@ -82,12 +87,16 @@ export const landingCopy: Record<LandingLocale, LandingCopy> = {
     ],
     licensePrefix: 'Mã nguồn mở theo giấy phép',
     localeLabel: 'Ngôn ngữ',
+    lightMode: 'Chế độ sáng',
+    darkMode: 'Chế độ tối',
+    switchToLight: 'Chuyển sang chế độ sáng',
+    switchToDark: 'Chuyển sang chế độ tối',
   },
   en: {
     description:
       'Open-source resume builder. Write once, preview the exact page '
       + 'layout, and publish each resume at a clean URL you control.',
-    title: 'The resume is public. You are not.',
+    title: ['Your resume. Free.', 'No one sees it unless you want them to.'],
     lead:
       'aboutme is an open-source resume builder. Write up to three resumes, '
       + 'preview the exact page, and publish each one at its own link. Search '
@@ -132,5 +141,9 @@ export const landingCopy: Record<LandingLocale, LandingCopy> = {
     ],
     licensePrefix: 'Open source under',
     localeLabel: 'Language',
+    lightMode: 'Light mode',
+    darkMode: 'Dark mode',
+    switchToLight: 'Switch to light theme',
+    switchToDark: 'Switch to dark theme',
   },
 };

@@ -37,6 +37,15 @@ registerEndpoint('/api/v1/auth/logout', {
     return null;
   },
 });
+// The homepage localizes the shell, so default to an English-only route.
+function mountShell(route = '/login') {
+  return mountSuspended(AppShell, { route });
+}
+function setLocaleCookie(value: string | undefined): void {
+  document.cookie = value === undefined
+    ? 'aboutme-locale=; max-age=0; path=/'
+    : `aboutme-locale=${value}; path=/`;
+}
 function links(
   wrapper: Awaited<ReturnType<typeof mountSuspended>>,
 ): Record<string, string> {
@@ -49,13 +58,14 @@ function links(
 
 describe('AppShell', () => {
   beforeEach(() => {
+    setLocaleCookie(undefined);
     clearNuxtData();
     vi.mocked(navigateTo).mockClear();
   });
 
   it('shows sign-in and registration while signed out', async () => {
     meStatus = 401;
-    const wrapper = await mountSuspended(AppShell);
+    const wrapper = await mountShell();
     await flushPromises();
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
@@ -66,7 +76,7 @@ describe('AppShell', () => {
   });
   it('shows the signed-out shell when /me returns a server error', async () => {
     meStatus = 500;
-    const wrapper = await mountSuspended(AppShell);
+    const wrapper = await mountShell();
     await flushPromises();
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
@@ -79,7 +89,7 @@ describe('AppShell', () => {
     meStatus = 200;
     const originalName = me.data.user.name;
     me.data.user.name = '<img src=x onerror=alert(1)>';
-    const wrapper = await mountSuspended(AppShell);
+    const wrapper = await mountShell();
     await flushPromises();
     const found = links(wrapper);
     expect(found['Resumes']).toBe('/app/resumes');
@@ -95,7 +105,7 @@ describe('AppShell', () => {
   });
   it('navigates from account menu and logs out', async () => {
     meStatus = 200;
-    const wrapper = await mountSuspended(AppShell);
+    const wrapper = await mountShell();
     await flushPromises();
     await wrapper.get('[data-testid="account-menu"]').trigger('click');
     await flushPromises();
@@ -117,7 +127,7 @@ describe('AppShell', () => {
   });
   it('moves signed-in theme control into the account menu', async () => {
     meStatus = 200;
-    const wrapper = await mountSuspended(AppShell);
+    const wrapper = await mountShell();
     await flushPromises();
     expect(wrapper.find('[aria-label^="Switch to"]').exists()).toBe(false);
 
@@ -135,9 +145,42 @@ describe('AppShell', () => {
   });
   it('keeps brand link and theme toggle in both states', async () => {
     meStatus = 401;
-    const wrapper = await mountSuspended(AppShell);
+    const wrapper = await mountShell();
     await flushPromises();
     expect(links(wrapper)['aboutme']).toBe('/');
     expect(wrapper.find('[aria-label^="Switch to"]').exists()).toBe(true);
+  });
+
+  it('speaks the homepage language in the signed-out shell on /', async () => {
+    meStatus = 401;
+    const wrapper = await mountShell('/');
+    await flushPromises();
+    const found = links(wrapper);
+    expect(found['Đăng nhập']).toBe('/login');
+    expect(found['Tạo tài khoản']).toBe('/register');
+    const theme = wrapper.get('[aria-label^="Chuyển sang chế độ"]');
+    expect(theme.text()).toMatch(/Chế độ (sáng|tối)/);
+
+    setLocaleCookie('en');
+    const english = await mountShell('/');
+    await flushPromises();
+    expect(links(english)['Sign in']).toBe('/login');
+    expect(english.find('[aria-label^="Switch to"]').exists()).toBe(true);
+  });
+  it('keeps English and no language toggle off the homepage', async () => {
+    meStatus = 401;
+    setLocaleCookie('vi');
+    const wrapper = await mountShell('/login');
+    await flushPromises();
+    expect(links(wrapper)['Sign in']).toBe('/login');
+    expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(false);
+  });
+  it('offers the language toggle on / when signed in', async () => {
+    meStatus = 200;
+    const wrapper = await mountShell('/');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(true);
+    expect(wrapper.find('[aria-label="Account menu"]').exists()).toBe(true);
+    wrapper.unmount();
   });
 });

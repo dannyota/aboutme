@@ -214,6 +214,13 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'en' },
       script: [{ src: '/theme-bootstrap.js' }],
+      // The a/m brand mark (docs/brand/aboutme-icon.png). sizes="32x32" keeps
+      // Chromium from preferring the ICO over the SVG.
+      link: [
+        { rel: 'icon', href: '/favicon.ico', sizes: '32x32' },
+        { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+      ],
     },
   },
 
