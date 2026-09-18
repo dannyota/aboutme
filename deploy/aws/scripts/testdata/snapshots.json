@@ -1,0 +1,15 @@
+{
+  "DBSnapshots": [
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-1-2-202607010000", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-07-01T00:00:00.123000+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-1-1-202609171438", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-09-17T07:38:12.345000+00:00", "TagList": []},
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-1-3-202610010000", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-10-01T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-1-2-202609200000", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-09-20T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-0-9-202601010000", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-01-01T00:00:00+00:00", "TagList": []},
+    {"DBSnapshotIdentifier": "manual-before-upgrade", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-01-01T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-1-0-202601010001", "DBInstanceIdentifier": "aboutme-staging", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-01-01T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "rds:aboutme-prod-2026-07-01-00-00", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "automated", "Status": "available", "SnapshotCreateTime": "2026-07-01T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "aboutme-prod-final", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-01-01T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-1-2-202606010000", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "deleting", "SnapshotCreateTime": "2026-06-01T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]},
+    {"DBSnapshotIdentifier": "aboutme-prod-v0-1-4-202610200000", "DBInstanceIdentifier": "aboutme-prod", "SnapshotType": "manual", "Status": "available", "SnapshotCreateTime": "2026-10-20T00:00:00+00:00", "TagList": [{"Key": "aboutme:created-by", "Value": "deploy.sh"}]}
+  ]
+}

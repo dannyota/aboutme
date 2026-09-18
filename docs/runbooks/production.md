@@ -142,6 +142,16 @@ disables the job schedules, stops `app`, runs the database steps, starts `web`
 then `app`, re-enables the schedules and smoke-tests through Cloudflare. The
 site is down between "site down" and "site up", usually one to three minutes.
 
+Each release snapshot is tagged `aboutme:created-by=deploy.sh`. After the smoke
+test passes, the script deletes release snapshots of `aboutme-prod` that are
+more than 30 days old by `SnapshotCreateTime`. It deletes only manual, available
+snapshots whose names match `aboutme-prod-<tag>-<YYYYMMDDHHMM>` and that carry
+the tag, plus the untagged `aboutme-prod-v0-1-1-202609171438`. Automated
+backups, the final snapshot, and any other snapshot stay. A failed release
+deletes nothing. A deletion failure prints a warning and the deploy still
+succeeds. Pruning runs only on a successful deploy, so a snapshot stays past 30
+days while no release succeeds.
+
 A failure after "site down" but before migrations complete restores the previous
 `app` revision and the job schedules' earlier state, then exits non-zero. If
 migrations were already applied, the script leaves the app and schedules stopped
@@ -166,10 +176,10 @@ revision.
 bash deploy/aws/scripts/deploy.sh --rollback <previous-tag>
 ```
 
-It redeploys earlier images without a snapshot or migration. It is safe only
-when the failed release applied no migration. After a migration, fix forward
-with a new release, or restore the database from the snapshot the failed deploy
-took.
+It redeploys earlier images without a snapshot, migration, or snapshot pruning.
+It is safe only when the failed release applied no migration. After a migration,
+fix forward with a new release, or restore the database from the snapshot the
+failed deploy took.
 
 A rollback builds from the current task definition, so it keeps the current
 settings. Before rolling back to a tag older than the provider list parser
