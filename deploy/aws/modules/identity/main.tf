@@ -151,3 +151,35 @@ resource "aws_iam_role_policy" "jobs" {
   role   = aws_iam_role.jobs.id
   policy = jsonencode({ Version = "2012-10-17", Statement = local.media_statements })
 }
+
+# The release-snapshot-sweep job lists the instance's snapshots and deletes
+# only the ones deploy.sh tagged, plus the one release snapshot taken before
+# tagging began. It cannot delete automated backups or any other snapshot.
+resource "aws_iam_role_policy" "jobs_release_snapshots" {
+  name = "release-snapshots"
+  role = aws_iam_role.jobs.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "rds:DescribeDBSnapshots"
+        Resource = [
+          "arn:aws:rds:ap-southeast-1:${var.account_id}:db:${var.name}",
+          "arn:aws:rds:ap-southeast-1:${var.account_id}:snapshot:*",
+        ]
+      },
+      {
+        Effect    = "Allow"
+        Action    = "rds:DeleteDBSnapshot"
+        Resource  = "arn:aws:rds:ap-southeast-1:${var.account_id}:snapshot:${var.name}-v*"
+        Condition = { StringEquals = { "aws:ResourceTag/aboutme:created-by" = "deploy.sh" } }
+      },
+      {
+        Effect   = "Allow"
+        Action   = "rds:DeleteDBSnapshot"
+        Resource = "arn:aws:rds:ap-southeast-1:${var.account_id}:snapshot:${var.name}-v0-1-1-202609171438"
+      },
+    ]
+  })
+}

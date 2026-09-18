@@ -18,6 +18,7 @@ locals {
     media-deletion-sweep     = "cron(15 * * * ? *)"
     privacy-retention-sweep  = "cron(30 19 * * ? *)"
     media-orphan-sweep       = "cron(45 18 ? * SUN *)"
+    release-snapshot-sweep   = "cron(0 20 * * ? *)"
   }
 }
 
@@ -87,8 +88,11 @@ resource "aws_scheduler_schedule" "job" {
       task_count          = 1
     }
 
+    # Scheduler retries only a failed task start, not a job that runs and
+    # fails. release-snapshot-sweep retries so a start failure does not cost
+    # a day of its 30-day margin.
     retry_policy {
-      maximum_retry_attempts = 0
+      maximum_retry_attempts = each.key == "release-snapshot-sweep" ? 2 : 0
     }
   }
 

@@ -7,10 +7,11 @@
 #
 # Order: build revisions, check that every task secret exists, snapshot,
 # register revisions, stop jobs and app, migrate, start web and app, re-enable
-# jobs, smoke, then delete this script's snapshots older than 30 days. Any
-# failure after the app stops restores the
-# previous app and job schedules, unless a database task may still be running
-# or migrations were applied; then both stay stopped for the operator.
+# jobs, smoke. The release-snapshot-sweep job deletes this script's tagged
+# snapshots once they are more than 27 days old, before they reach 30. Any
+# failure after the app stops restores the previous app and job schedules,
+# unless a database task may still be running or migrations were applied; then
+# both stay stopped for the operator.
 set -euo pipefail
 
 region=ap-southeast-1
@@ -18,12 +19,9 @@ cluster=aboutme-prod
 group=aboutme-prod-jobs
 repo=dannyota/aboutme
 families=(app web migrate jobs db-setup)
+# release-snapshot-sweep deletes snapshots with this tag within 30 days.
 snapshot_tag_key=aboutme:created-by
 snapshot_tag_value=deploy.sh
-snapshot_keep_days=30
-# Release snapshots taken before tagging began; they match the name pattern
-# but carry no tag.
-untagged_release_snapshots=(aboutme-prod-v0-1-1-202609171438)
 
 usage() {
   echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag>" >&2
@@ -257,39 +255,3 @@ if curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$ip/"; then
   exit 1
 fi
 say "deployed $tag"
-
-# 10. Delete this script's release snapshots of aboutme-prod that are more than
-# 30 days old, so backups expire within 30 days. Only a manual, available
-# snapshot whose name matches the pattern above and that carries the deploy.sh
-# tag (or is a listed untagged release snapshot) qualifies; automated backups,
-# the final snapshot, and every other snapshot are never touched. The release
-# has already succeeded, so a failure here only warns.
-prune_snapshots() {
-  local cutoff listed ids id failed=0
-  cutoff=$(($(date -u +%s) - snapshot_keep_days * 86400))
-  listed=$(aws_ rds describe-db-snapshots --db-instance-identifier aboutme-prod --snapshot-type manual \
-    --output json) || { say "warning: could not list release snapshots; none deleted"; return 1; }
-  ids=$(jq -r --argjson cutoff "$cutoff" --arg key "$snapshot_tag_key" --arg value "$snapshot_tag_value" \
-    --arg keep "$snap" --argjson untagged "$(printf '%s\n' "${untagged_release_snapshots[@]}" | jq -R . | jq -s .)" '
-    def epoch: sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601;
-    .DBSnapshots[]
-    | select(.DBInstanceIdentifier == "aboutme-prod" and .SnapshotType == "manual" and .Status == "available")
-    | select(.DBSnapshotIdentifier | test("^aboutme-prod-[0-9A-Za-z-]+-[0-9]{12}$"))
-    | select(.DBSnapshotIdentifier != $keep)
-    | select(any(.TagList[]?; .Key == $key and .Value == $value)
-        or (.DBSnapshotIdentifier as $id | $untagged | index($id)))
-    | select((.SnapshotCreateTime | epoch) < $cutoff)
-    | .DBSnapshotIdentifier' <<<"$listed") || { say "warning: could not read release snapshots; none deleted"; return 1; }
-  for id in $ids; do
-    if aws_ rds delete-db-snapshot --db-snapshot-identifier "$id" >/dev/null; then
-      say "deleted snapshot $id"
-    else
-      say "warning: could not delete snapshot $id"
-      failed=1
-    fi
-  done
-  return "$failed"
-}
-if ((!rollback)); then
-  prune_snapshots || say "warning: release snapshot pruning incomplete; the release itself succeeded"
-fi

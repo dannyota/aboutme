@@ -10,7 +10,7 @@ import (
 
 func TestParsePrivacyCommand(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"idempotency-expiry-sweep", "media-deletion-sweep", "media-orphan-sweep", "privacy-retention-sweep"} {
+	for _, name := range []string{"idempotency-expiry-sweep", "media-deletion-sweep", "media-orphan-sweep", "privacy-retention-sweep", "release-snapshot-sweep"} {
 		command, err := parsePrivacyCommand([]string{name})
 		if err != nil || command.name != name || command.dryRun {
 			t.Fatalf("command %s: parsed=%+v err=%v", name, command, err)
@@ -24,6 +24,7 @@ func TestParsePrivacyCommand(t *testing.T) {
 		nil, {"untrusted-input"}, {"media-orphan-sweep", "--unknown"},
 		{"media-deletion-sweep", "--dry-run"},
 		{"media-orphan-sweep", "--dry-run", "--dry-run"},
+		{"release-snapshot-sweep", "--dry-run"},
 	} {
 		if _, err := parsePrivacyCommand(args); err == nil {
 			t.Fatalf("accepted unsupported invocation: %v", args)

@@ -8,13 +8,13 @@ type privacyCommand struct {
 }
 
 func parsePrivacyCommand(args []string) (privacyCommand, error) {
-	invalid := errors.New("usage: server {idempotency-expiry-sweep|media-deletion-sweep|media-orphan-sweep [--dry-run]|privacy-retention-sweep}")
+	invalid := errors.New("usage: server {idempotency-expiry-sweep|media-deletion-sweep|media-orphan-sweep [--dry-run]|privacy-retention-sweep|release-snapshot-sweep}")
 	if len(args) == 0 || len(args) > 2 {
 		return privacyCommand{}, invalid
 	}
 	command := privacyCommand{name: args[0]}
 	switch command.name {
-	case "idempotency-expiry-sweep", "media-deletion-sweep", "media-orphan-sweep", "privacy-retention-sweep":
+	case "idempotency-expiry-sweep", "media-deletion-sweep", "media-orphan-sweep", "privacy-retention-sweep", "release-snapshot-sweep":
 	default:
 		return privacyCommand{}, invalid
 	}
