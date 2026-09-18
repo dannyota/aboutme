@@ -103,10 +103,14 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
   try {
     await auditRouteInBothThemes(page, '/', async () => {
       await expect(page.getByTestId('landing-title')).toHaveText(
-        'The resume is public. You are not.',
+        'CV thì công khai. Bạn thì không.',
       );
+      await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
     });
     await setTheme(page, 'light');
+    await page
+      .context()
+      .addCookies([{ name: 'aboutme-locale', value: 'en', url: ORIGIN }]);
     await page.goto(`${ORIGIN}/`);
     await waitForHydration(page);
     await expect(page.getByTestId('landing-title')).toHaveText(
