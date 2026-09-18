@@ -34,6 +34,7 @@ locals {
     { name = "AUTH_EMAIL_MODE", value = "ses" },
     { name = "AWS_REGION", value = "ap-southeast-1" },
     { name = "SES_FROM_ADDRESS", value = var.ses_from_address },
+    { name = "SES_FROM_NAME", value = var.ses_from_name },
     { name = "SES_CONFIGURATION_SET", value = var.ses_configuration_set },
     { name = "APP_BUILD_DIGEST", value = var.image_server },
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },

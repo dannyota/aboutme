@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"html"
 	"log/slog"
 	"sync"
 	"time"
@@ -484,41 +483,6 @@ func backoffCap(attempt int32) time.Duration {
 		}
 	}
 	return cap
-}
-
-// buildMessage renders the fixed D7 message templates for a decrypted payload.
-// Subjects and copy are fixed code; only the canonical-origin link is
-// interpolated, HTML-escaped, and there is no tracking pixel, external
-// resource, reply token, or user-controlled subject.
-func buildMessage(kind Kind, p Payload) Message {
-	switch kind {
-	case KindVerify:
-		return Message{
-			Kind:     kind,
-			To:       p.To,
-			Subject:  "Verify your email",
-			TextBody: "Confirm your email address by opening this link:\n" + p.Link,
-			HTMLBody: "<p>Confirm your email address by opening this link:</p><p><a href=\"" + html.EscapeString(p.Link) + "\">" + html.EscapeString(p.Link) + "</a></p>",
-		}
-	case KindReset:
-		return Message{
-			Kind:     kind,
-			To:       p.To,
-			Subject:  "Reset your password",
-			TextBody: "Reset your password by opening this link:\n" + p.Link,
-			HTMLBody: "<p>Reset your password by opening this link:</p><p><a href=\"" + html.EscapeString(p.Link) + "\">" + html.EscapeString(p.Link) + "</a></p>",
-		}
-	case KindPasswordChanged:
-		return Message{
-			Kind:     kind,
-			To:       p.To,
-			Subject:  "Your password was changed",
-			TextBody: "Your password was changed. If you did not make this change, contact support immediately.",
-			HTMLBody: "<p>Your password was changed. If you did not make this change, contact support immediately.</p>",
-		}
-	default:
-		return Message{Kind: kind, To: p.To}
-	}
 }
 
 // compile-time assertion that a *store.Pool opens transactions as expected.

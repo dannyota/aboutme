@@ -166,6 +166,56 @@ func TestSESSendSetsExactInputFields(t *testing.T) {
 	}
 }
 
+func TestSESSendFormatsDisplayName(t *testing.T) {
+	cases := []struct {
+		name, fromName, want string
+	}{
+		{"no name", "", "no-reply@aboutme.vn"},
+		{"ascii name", "Danny from aboutme", `"Danny from aboutme" <no-reply@aboutme.vn>`},
+		{"vietnamese name", "Danh Phạm", "=?utf-8?q?Danh_Ph=E1=BA=A1m?= <no-reply@aboutme.vn>"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := &fakeSESClient{}
+			logger, _ := testLogger()
+			s, err := NewSESSender(SESOptions{
+				Region:           sesRegion,
+				From:             "no-reply@aboutme.vn",
+				FromName:         tc.fromName,
+				ConfigurationSet: "aboutme-auth",
+				Client:           fake,
+				Logger:           logger,
+			})
+			if err != nil {
+				t.Fatalf("NewSESSender: %v", err)
+			}
+			if _, err := s.Send(context.Background(), Message{Kind: KindVerify, To: "a@example.com", Subject: "s", TextBody: "t", HTMLBody: "h"}); err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			if got := derefS(fake.calls[0].FromEmailAddress); got != tc.want {
+				t.Errorf("FromEmailAddress = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNewSESSenderRejectsUnsafeDisplayName(t *testing.T) {
+	logger, _ := testLogger()
+	for _, name := range []string{"Danny\r\nBcc: x@example.com", "tab\there", strings.Repeat("a", 65)} {
+		_, err := NewSESSender(SESOptions{
+			Region:           sesRegion,
+			From:             "no-reply@aboutme.vn",
+			FromName:         name,
+			ConfigurationSet: "aboutme-auth",
+			Client:           &fakeSESClient{},
+			Logger:           logger,
+		})
+		if !errors.Is(err, ErrSES) {
+			t.Errorf("FromName %q: err = %v, want ErrSES", name, err)
+		}
+	}
+}
+
 func TestSESSendNoRecipientBodyOrRequestIDInLogs(t *testing.T) {
 	fake := &fakeSESClient{err: &sesv2types.MessageRejected{}}
 	s, buf := newTestSESSender(t, fake)

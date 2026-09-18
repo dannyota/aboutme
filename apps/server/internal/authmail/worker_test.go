@@ -91,11 +91,13 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 	if msg.Kind != KindVerify || msg.To != "alice@example.com" {
 		t.Fatalf("msg = %+v, want verify to alice@example.com", msg)
 	}
-	if msg.Subject != "Verify your email" {
-		t.Errorf("subject = %q, want fixed subject", msg.Subject)
+	if msg.Subject != "Xác minh email aboutme / Verify your aboutme email" {
+		t.Errorf("subject = %q, want fixed bilingual subject", msg.Subject)
 	}
-	if msg.TextBody != "Confirm your email address by opening this link:\n"+p.Link {
-		t.Errorf("text body missing link: %q", msg.TextBody)
+	for _, want := range []string{"Xác minh email", "Verify your email", "24", p.Link} {
+		if !strings.Contains(msg.TextBody, want) {
+			t.Errorf("text body missing %q: %q", want, msg.TextBody)
+		}
 	}
 	// The HTML body must escape the link value (which carries an attacker
 	// controlled token suffix).
@@ -107,15 +109,52 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 	}
 
 	reset := buildMessage(KindReset, Payload{Version: 1, To: "b@c.d", Link: resetLinkPrefix + "tok"})
-	if reset.Subject != "Reset your password" {
+	if reset.Subject != "Đặt lại mật khẩu aboutme / Reset your aboutme password" {
 		t.Errorf("reset subject = %q", reset.Subject)
 	}
+	for _, want := range []string{"30", resetLinkPrefix + "tok"} {
+		if !strings.Contains(reset.TextBody, want) {
+			t.Errorf("reset text body missing %q", want)
+		}
+	}
 	changed := buildMessage(KindPasswordChanged, Payload{Version: 1, To: "b@c.d"})
-	if changed.Subject != "Your password was changed" {
+	if changed.Subject != "Mật khẩu aboutme đã thay đổi / Your aboutme password was changed" {
 		t.Errorf("password_changed subject = %q", changed.Subject)
 	}
-	if strings.Contains(changed.HTMLBody, "http") {
-		t.Errorf("password_changed html must not contain a link: %q", changed.HTMLBody)
+	for _, body := range []string{changed.HTMLBody, changed.TextBody} {
+		if strings.Contains(body, "http") {
+			t.Errorf("password_changed must not contain a link: %q", body)
+		}
+		if !strings.Contains(body, "reply to this email") {
+			t.Errorf("password_changed must say how to report it: %q", body)
+		}
+	}
+}
+
+func TestBuildMessageHTMLIsSelfContained(t *testing.T) {
+	for _, kind := range []Kind{KindVerify, KindReset, KindPasswordChanged} {
+		p := Payload{Version: payloadVersion, To: "a@b.c"}
+		switch kind {
+		case KindVerify:
+			p.Link = verifyLinkPrefix + "tok"
+		case KindReset:
+			p.Link = resetLinkPrefix + "tok"
+		}
+		msg := buildMessage(kind, p)
+		lower := strings.ToLower(msg.HTMLBody)
+		for _, banned := range []string{"<img", "<script", "<link", "url(", "@import", "<iframe"} {
+			if strings.Contains(lower, banned) {
+				t.Errorf("%v html contains %q", kind, banned)
+			}
+		}
+		for _, want := range []string{`lang="vi"`, `lang="en"`, "about<span", ">/</span>me"} {
+			if !strings.Contains(msg.HTMLBody, want) {
+				t.Errorf("%v html missing %q", kind, want)
+			}
+		}
+		if p.Link != "" && strings.Count(msg.HTMLBody, "href=") != 2 {
+			t.Errorf("%v html links = %d, want the button and the fallback", kind, strings.Count(msg.HTMLBody, "href="))
+		}
 	}
 }
 

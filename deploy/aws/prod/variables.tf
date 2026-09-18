@@ -18,6 +18,11 @@ variable "ses_from_address" {
   default = "danny@aboutme.vn"
 }
 
+variable "ses_from_name" {
+  type    = string
+  default = "Danny from aboutme"
+}
+
 variable "ses_configuration_set" {
   type    = string
   default = "aboutme-auth"
