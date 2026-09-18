@@ -7,6 +7,18 @@
 # Denied and reserved roots never reach an upstream. Other paths go to Nuxt.
 {
 	admin off
+	# Request logs keep the method, URI, and status but never the visitor's
+	# address or request headers, matching production.
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			request>client_ip delete
+			request>remote_ip delete
+			request>remote_port delete
+			request>headers delete
+		}
+	}
 }
 
 :80 {
