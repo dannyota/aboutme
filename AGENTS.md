@@ -209,7 +209,7 @@ Run the narrowest relevant checks:
 | OpenAPI                         | `make api-check`                                                                                                                                                   |
 | Go server                       | `make server-build server-vet server-test`                                                                                                                         |
 | Store or migrations             | Go gate plus `make sqlc-check server-test-db server-test-integration server-migration-test`                                                                        |
-| Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`                                                                                                                   |
+| Nuxt/Vue                        | `make web-lint web-typecheck web-test web-build`; after adding a web file, `make web-source-manifest-update`                                                       |
 | Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                                                                   |
 | Authenticated UI                | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check` (scripted headless Playwright); full product checks run in production |
 | Public surface                  | `make native-http-check` and `make dev-https-public-check`                                                                                                         |
