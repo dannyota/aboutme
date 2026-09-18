@@ -810,7 +810,11 @@ describe('sessions.vue capability gating', () => {
           new Promise((resolve) => {
             release = () =>
               resolve({
-                data: { providerLogin: true, agentAccess: true },
+                data: {
+                  providerLogin: true,
+                  agentAccess: true,
+                  providers: ['google', 'github', 'linkedin'],
+                },
               });
           }),
       );
@@ -818,7 +822,11 @@ describe('sessions.vue capability gating', () => {
       expect(wrapper.text()).not.toContain('Add another sign-in provider');
       expect(wrapper.text()).not.toContain('Connected agents');
       release({
-        data: { providerLogin: true, agentAccess: true },
+        data: {
+          providerLogin: true,
+          agentAccess: true,
+          providers: ['google', 'github', 'linkedin'],
+        },
       });
       await flushPromises();
       await flushPromises();

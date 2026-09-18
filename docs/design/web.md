@@ -25,10 +25,11 @@ is listed; an expired or incomplete verification link offers Google the same
 way. Registration, verification, forgot-password, and reset-password are
 separate Nuxt pages. Verification and reset strip the `#token=` fragment before
 any network call and load no third-party resource. Account settings show whether
-a password is set and allow add/change after recent reauthentication; the
-provider-linking block appears only when `providerLogin` is true and the
-connected-agents block only when `agentAccess` is true. Provider emails are
-never shown as a linkage decision.
+a password is set and allow add/change after recent reauthentication. The
+provider-linking block appears only when `providers` is non-empty and offers
+only listed providers; provider reauthentication uses only a linked provider
+that is listed. The connected-agents block appears only when `agentAccess` is
+true. Provider emails are never shown as a linkage decision.
 
 The application shell renders two variants from the client-side session state:
 signed out shows the brand, Sign in, Create account, and the theme toggle;
