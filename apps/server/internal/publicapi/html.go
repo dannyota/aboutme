@@ -3,6 +3,7 @@ package publicapi
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -25,6 +26,8 @@ type HTMLDependencies struct {
 	PublicOrigin   publicresume.PublicOrigin
 	AppDigest      string
 	RendererDigest string
+	// Logger receives one closed, content-free line per 503. Nil disables it.
+	Logger *slog.Logger
 }
 
 // NewHTMLHandler creates the handler for public resume HTML pages.
@@ -46,6 +49,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 				serveHTMLError(w, request, http.StatusNotFound)
 				return
 			}
+			logHTMLUnavailable(dependencies.Logger, request, "read_failed", "")
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
@@ -72,6 +76,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 
 		jsonLD, err := publicformat.JSONLD(snapshot.Public, dependencies.PublicOrigin, snapshot.DiscoveryEnabled)
 		if err != nil {
+			logHTMLUnavailable(dependencies.Logger, request, "jsonld_failed", "")
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
@@ -82,7 +87,13 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			CanonicalOrigin:  dependencies.PublicOrigin.String(),
 			DiscoveryEnabled: snapshot.DiscoveryEnabled,
 		})
-		if err != nil || !validPublicHTML(result.HTML, snapshot.Public, dependencies.PublicOrigin, jsonLD, snapshot.DiscoveryEnabled) {
+		if err != nil {
+			logHTMLUnavailable(dependencies.Logger, request, "render_failed", "")
+			serveHTMLError(w, request, http.StatusServiceUnavailable)
+			return
+		}
+		if rule := publicHTMLRejection(result.HTML, snapshot.Public, dependencies.PublicOrigin, jsonLD, snapshot.DiscoveryEnabled); rule != "" {
+			logHTMLUnavailable(dependencies.Logger, request, "html_rejected", rule)
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
@@ -93,6 +104,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 		}
 		response, err := NewSelectedResponse(http.StatusOK, "text/html; charset=utf-8", "no-cache, must-revalidate", result.HTML, extra)
 		if err != nil {
+			logHTMLUnavailable(dependencies.Logger, request, "response_failed", "")
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
@@ -108,6 +120,20 @@ func publicHTMLGetOrHead(w http.ResponseWriter, request *http.Request) bool {
 	w.Header().Set("Allow", "GET, HEAD")
 	serveHTMLError(w, request, http.StatusMethodNotAllowed)
 	return false
+}
+
+// logHTMLUnavailable records why a public page returned 503 with closed values
+// only: a reason and, for rejected HTML, the rule name. It never logs the slug
+// or any resume content.
+func logHTMLUnavailable(logger *slog.Logger, request *http.Request, reason, rule string) {
+	if logger == nil {
+		return
+	}
+	attrs := []any{"reason", reason}
+	if rule != "" {
+		attrs = append(attrs, "rule", rule)
+	}
+	logger.WarnContext(request.Context(), "publicapi: html unavailable", attrs...)
 }
 
 func serveHTMLError(w http.ResponseWriter, request *http.Request, status int) {
@@ -133,26 +159,42 @@ func serveHTMLError(w http.ResponseWriter, request *http.Request, status int) {
 }
 
 func validPublicHTML(source []byte, resume publicresume.PublicResume, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) bool {
+	return publicHTMLRejection(source, resume, origin, jsonLD, discoverable) == ""
+}
+
+// publicHTMLRejection returns "" for renderer output that passes every public
+// HTML rule, or the closed name of the first rule it breaks. The name never
+// carries resume content, so it is safe to log.
+func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) string {
 	if len(source) == 0 || len(source) > 2_097_152 {
-		return false
+		return "size"
 	}
 	document, err := html.Parse(strings.NewReader(string(source)))
 	if err != nil || !hasHTMLDoctype(document) {
-		return false
+		return "doctype"
 	}
 	var title, canonical, main *html.Node
 	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, charsetMeta, viewportMeta int
 	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
 	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
-	valid := true
+	rule := ""
+	reject := func(name string) {
+		if rule == "" {
+			rule = name
+		}
+	}
 	var walk func(*html.Node)
 	walk = func(node *html.Node) {
-		if !valid {
+		if rule != "" {
 			return
 		}
 		if node.Type == html.ElementNode {
-			if forbiddenResourceElement(node.Data) || hasUnexpectedResourceAttribute(node) {
-				valid = false
+			if forbiddenResourceElement(node.Data) {
+				reject("resource_element")
+				return
+			}
+			if name := unexpectedResourceAttribute(node); name != "" {
+				reject(name)
 				return
 			}
 			switch node.Data {
@@ -169,24 +211,24 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 					switch attribute(node, "property") {
 					case "og:image":
 						if attribute(node, "content") != imageURL {
-							valid = false
+							reject("meta_og_image")
 							return
 						}
 						ogImageMeta++
 					case "og:image:width":
 						if attribute(node, "content") != "1200" {
-							valid = false
+							reject("meta_og_image_size")
 							return
 						}
 						ogImageWidthMeta++
 					case "og:image:height":
 						if attribute(node, "content") != "630" {
-							valid = false
+							reject("meta_og_image_size")
 							return
 						}
 						ogImageHeightMeta++
 					default:
-						valid = false
+						reject("meta_unknown")
 						return
 					}
 					break
@@ -195,52 +237,52 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 					switch attribute(node, "name") {
 					case "twitter:card":
 						if attribute(node, "content") != "summary_large_image" {
-							valid = false
+							reject("meta_twitter")
 							return
 						}
 						twitterCardMeta++
 					case "twitter:image":
 						if attribute(node, "content") != imageURL {
-							valid = false
+							reject("meta_twitter")
 							return
 						}
 						twitterImageMeta++
 					default:
-						valid = false
+						reject("meta_unknown")
 						return
 					}
 					break
 				}
-				valid = false
+				reject("meta_unknown")
 				return
 			case "style":
-				valid = false
+				reject("style_element")
 				return
 			case "a":
 				href := attribute(node, "href")
 				if attributeCount(node, "href") != 1 {
-					valid = false
+					reject("anchor_href")
 					return
 				}
 				if href == "#public-resume" {
 					if skipLinks != 0 || textNode(node) != "Skip to content" {
-						valid = false
+						reject("skip_link")
 						return
 					}
 					skipLinks++
 				} else if !allowedPublicAnchor(href) {
-					valid = false
+					reject("anchor_scheme")
 					return
 				}
 			case "title":
 				if title != nil || len(node.Attr) != 0 || textNode(node) != resume.Document.PersonalDetails.FullName+" — Resume" {
-					valid = false
+					reject("title")
 					return
 				}
 				title = node
 			case "link":
 				if !relHasToken(attribute(node, "rel"), "canonical") || canonical != nil || len(node.Attr) != 2 || attributeCount(node, "rel") != 1 || attribute(node, "rel") != "canonical" || attributeCount(node, "href") != 1 || attribute(node, "href") != origin.Resolve("/"+resume.Slug) {
-					valid = false
+					reject("canonical")
 					return
 				}
 				canonical = node
@@ -248,14 +290,14 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 				images++
 				photo := resume.Document.PersonalDetails.Photo
 				if photo == nil || attributeCount(node, "src") != 1 || attribute(node, "src") != photo.URL || attributeCount(node, "alt") != 1 || attribute(node, "alt") != "" {
-					valid = false
+					reject("image")
 					return
 				}
 			case "main":
 				mainCount++
 				if attribute(node, "id") == "public-resume" {
 					if main != nil || len(node.Attr) != 2 || attributeCount(node, "id") != 1 || attributeCount(node, "data-revision") != 1 || attribute(node, "data-revision") != resume.Revision {
-						valid = false
+						reject("main")
 						return
 					}
 					main = node
@@ -264,14 +306,14 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 				scriptCount++
 				if attributeCount(node, "src") == 1 {
 					if len(node.Attr) != 2 || attribute(node, "src") != "/_nuxt/assets/public-resume.mjs" || attributeCount(node, "type") != 1 || attribute(node, "type") != "module" || textNode(node) != "" {
-						valid = false
+						reject("script")
 						return
 					}
 					externalScripts++
 					return
 				}
 				if len(node.Attr) != 1 || attributeCount(node, "src") != 0 || !discoverable || attributeCount(node, "type") != 1 || attribute(node, "type") != "application/ld+json" || textNode(node) != string(jsonLD.JSON) {
-					valid = false
+					reject("json_ld")
 					return
 				}
 				dataScripts++
@@ -282,19 +324,25 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 		}
 	}
 	walk(document)
-	if !valid || title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || charsetMeta != 1 || viewportMeta != 1 || externalScripts != 1 || ogImageMeta != 1 || ogImageWidthMeta != 1 || ogImageHeightMeta != 1 || twitterCardMeta != 1 || twitterImageMeta != 1 {
-		return false
+	if rule != "" {
+		return rule
 	}
-	if resume.Document.PersonalDetails.Photo == nil && images != 0 {
-		return false
+	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || charsetMeta != 1 || viewportMeta != 1 || externalScripts != 1 || ogImageMeta != 1 || ogImageWidthMeta != 1 || ogImageHeightMeta != 1 || twitterCardMeta != 1 || twitterImageMeta != 1 {
+		return "required_elements"
 	}
-	if resume.Document.PersonalDetails.Photo != nil && images != 1 {
-		return false
+	if (resume.Document.PersonalDetails.Photo == nil && images != 0) || (resume.Document.PersonalDetails.Photo != nil && images != 1) {
+		return "image_count"
 	}
 	if discoverable {
-		return scriptCount == 2 && dataScripts == 1
+		if scriptCount != 2 || dataScripts != 1 {
+			return "script_count"
+		}
+		return ""
 	}
-	return scriptCount == 1 && dataScripts == 0 && jsonLD.JSON == nil && jsonLD.Script == nil && jsonLD.CSP == publicformat.BaseCSP
+	if scriptCount != 1 || dataScripts != 0 || jsonLD.JSON != nil || jsonLD.Script != nil || jsonLD.CSP != publicformat.BaseCSP {
+		return "script_count"
+	}
+	return ""
 }
 
 func allowedPublicAnchor(href string) bool {
@@ -319,30 +367,32 @@ func forbiddenResourceElement(name string) bool {
 	}
 }
 
-func hasUnexpectedResourceAttribute(node *html.Node) bool {
+// unexpectedResourceAttribute returns the closed rule an attribute breaks, or
+// "" when every attribute is allowed.
+func unexpectedResourceAttribute(node *html.Node) string {
 	for _, attribute := range node.Attr {
 		key := strings.ToLower(attribute.Key)
 		if strings.HasPrefix(key, "on") {
-			return true
+			return "event_attribute"
 		}
 		switch key {
 		case "action", "background", "data", "formaction", "ping", "poster", "srcset":
-			return true
+			return "resource_attribute"
 		case "href":
 			if node.Data != "a" && node.Data != "link" {
-				return true
+				return "href_element"
 			}
 		case "src":
 			if node.Data != "img" && node.Data != "script" {
-				return true
+				return "src_element"
 			}
 		case "style":
 			if unsafeInlineStyle(attribute.Val) {
-				return true
+				return "inline_style"
 			}
 		}
 	}
-	return false
+	return ""
 }
 
 func unsafeInlineStyle(value string) bool {

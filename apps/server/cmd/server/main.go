@@ -166,7 +166,7 @@ func run() error {
 		Reader: reader, DiscoveryStore: queries, Coordinator: coordinator, Cache: cache, Renderer: renderer,
 		PublicOrigin: runtime.PublicOrigin, AppDigest: runtime.AppDigest, RendererDigest: runtime.RendererDigest,
 		Live: streams.PublicHandler(), PrintQueue: printQueue,
-		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Clock: time.Now,
+		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Clock: time.Now, Logger: logger,
 	})
 	if err != nil {
 		return fmt.Errorf("create public service: %w", err)
