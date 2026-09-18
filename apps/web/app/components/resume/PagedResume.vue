@@ -242,7 +242,7 @@ export default defineComponent({
               indexed ? targetRequest.blocks.indexOf(block) : undefined,
             )))
         : h('div', { class: 'layout-two-columns' }, [
-            h('main', { class: 'resume-main' }, main.map((block) =>
+            h('div', { class: 'resume-main' }, main.map((block) =>
               renderSection(
                 targetModel,
                 targetSections,

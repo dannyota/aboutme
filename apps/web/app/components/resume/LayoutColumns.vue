@@ -25,7 +25,7 @@ defineProps<{
     v-else
     class="layout-two-columns"
   >
-    <main class="resume-main">
+    <div class="resume-main">
       <SectionRenderer
         v-for="item in model.main"
         :key="item.key"
@@ -33,7 +33,7 @@ defineProps<{
         :date-format="model.dateFormat"
         :section-display="model.sectionDisplay"
       />
-    </main>
+    </div>
     <aside
       class="resume-sidebar"
       :style="model.styles.sidebar"

@@ -2,6 +2,7 @@ package publicapi
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -35,6 +36,8 @@ type ServiceDependencies struct {
 	TrustedProxies api.TrustedProxies
 	Clock          func() time.Time
 	Live           http.Handler
+	// Logger receives closed, content-free diagnostics. Nil disables them.
+	Logger *slog.Logger
 }
 
 var _ store.PublicReadQueries = (*store.Queries)(nil)
@@ -58,7 +61,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Reader == nil || dependencies.DiscoveryStore == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
 	}
-	html, err := NewHTMLHandler(HTMLDependencies{Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin, AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest})
+	html, err := NewHTMLHandler(HTMLDependencies{Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin, AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger})
 	if err != nil {
 		return nil, err
 	}
