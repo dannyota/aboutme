@@ -6,8 +6,10 @@ locals {
   db_url    = "postgres://%s@${var.db_endpoint}:5432/%s?sslmode=verify-full&sslrootcert=/etc/ssl/rds/global-bundle.pem"
   master_pw = "${var.db_master_secret_arn}:password::"
 
-  # Google credentials are referenced only when Google login is on, so an apply
-  # before the parameters exist cannot break the app task.
+  # The app task references Google's credentials only when Google login is on.
+  # With "", the parameters need not exist. With "google", they must exist
+  # before a deploy; deploy.sh refuses to start one while any task secret is
+  # missing.
   google_login = var.provider_login_enabled == "google"
   google_secrets = local.google_login ? [
     { name = "GOOGLE_CLIENT_ID", valueFrom = "${local.param}/oauth/google-client-id" },

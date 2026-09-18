@@ -26,7 +26,8 @@ environments.
 a comma list of `google`, `github`, and `linkedin`. The native HTTPS harness
 sets it to true for provider authentication proofs; native HTTP, Compose, and
 self-hosted configurations leave it unset for a password-only surface.
-Production sets `google`.
+Production can enable only Google; it stays off until
+`provider_login_enabled = "google"`.
 
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI

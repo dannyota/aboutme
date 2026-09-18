@@ -15,7 +15,16 @@ case "$cmd $args" in
   "curl "*"https://aboutme.vn/"*) echo 200 ;;
   "curl "*) exit 28 ;;
   "aws "*"ecs describe-task-definition"*)
-    echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]}]}' ;;
+    # One secret in each valueFrom form: SSM ARN, SSM name, Secrets Manager ARN.
+    echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}' ;;
+  "aws "*"ssm describe-parameters"*)
+    if [[ $STUB_CASE == secret_missing && $args == *google-client-id* ]]; then echo 0; else echo 1; fi ;;
+  "aws "*"secretsmanager describe-secret"*)
+    if [[ $STUB_CASE == secretsmanager_missing ]]; then
+      echo "ResourceNotFoundException" >&2
+      exit 254
+    fi
+    echo 'arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12' ;;
   "aws "*"ecs describe-services"*) echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3' ;;
   "aws "*"ecs register-task-definition"*)
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")

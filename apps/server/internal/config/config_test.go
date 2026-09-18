@@ -236,6 +236,44 @@ func TestLoad_ProviderLoginFlagRejectsBadLists(t *testing.T) {
 	}
 }
 
+// A disabled provider's credentials are never kept in the loaded config, even
+// when its variables are set.
+func TestLoad_DisabledProviderCredentialsAreNotRead(t *testing.T) {
+	t.Parallel()
+	for _, environment := range []string{"dev", "prod"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Parallel()
+			got, err := config.Load(env(map[string]string{
+				"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+				"PUBLIC_ORIGIN":          "https://aboutme.vn",
+				"ENV":                    environment,
+				"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+				"PROVIDER_LOGIN_ENABLED": "google",
+				"GOOGLE_CLIENT_ID":       "google-id",
+				"GOOGLE_CLIENT_SECRET":   "google-secret",
+				"GITHUB_CLIENT_ID":       "github-id",
+				"GITHUB_CLIENT_SECRET":   "github-secret",
+				"LINKEDIN_CLIENT_ID":     "linkedin-id",
+				"LINKEDIN_CLIENT_SECRET": "linkedin-secret",
+			}))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if got.GoogleClientID != "google-id" || got.GoogleClientSecret != "google-secret" {
+				t.Errorf("enabled Google credentials not loaded")
+			}
+			for name, value := range map[string]string{
+				"GitHubClientID": got.GitHubClientID, "GitHubClientSecret": got.GitHubClientSecret,
+				"LinkedInClientID": got.LinkedInClientID, "LinkedInClientSecret": got.LinkedInClientSecret,
+			} {
+				if value != "" {
+					t.Errorf("%s = %q, want empty for a disabled provider", name, value)
+				}
+			}
+		})
+	}
+}
+
 // Only an enabled provider needs credentials in prod and staging.
 func TestLoad_ProviderCredentialsRequiredPerEnabledProvider(t *testing.T) {
 	t.Parallel()
@@ -1086,11 +1124,12 @@ func TestLoad_GoogleCredentials_ValidConfig(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "dev",
-		"GOOGLE_CLIENT_ID":     "test-client-id",
-		"GOOGLE_CLIENT_SECRET": "test-client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "dev",
+		"PROVIDER_LOGIN_ENABLED": "google",
+		"GOOGLE_CLIENT_ID":       "test-client-id",
+		"GOOGLE_CLIENT_SECRET":   "test-client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -1207,11 +1246,12 @@ func TestLoad_GitHubCredentials_ValidConfig(t *testing.T) {
 	t.Parallel()
 
 	got, err := config.Load(env(map[string]string{
-		"DATABASE_URL":         "postgres://user:pass@localhost:5432/aboutme",
-		"PUBLIC_ORIGIN":        "https://aboutme.vn",
-		"ENV":                  "dev",
-		"GITHUB_CLIENT_ID":     "test-github-client-id",
-		"GITHUB_CLIENT_SECRET": "test-github-client-secret",
+		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+		"PUBLIC_ORIGIN":          "https://aboutme.vn",
+		"ENV":                    "dev",
+		"PROVIDER_LOGIN_ENABLED": "github",
+		"GITHUB_CLIENT_ID":       "test-github-client-id",
+		"GITHUB_CLIENT_SECRET":   "test-github-client-secret",
 	}))
 	if err != nil {
 		t.Fatalf("Load() unexpected error: %v", err)
@@ -1330,6 +1370,7 @@ func TestLoad_LinkedInCredentials_ValidConfig(t *testing.T) {
 		"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
 		"PUBLIC_ORIGIN":          "https://aboutme.vn",
 		"ENV":                    "dev",
+		"PROVIDER_LOGIN_ENABLED": "linkedin",
 		"LINKEDIN_CLIENT_ID":     "test-client-id",
 		"LINKEDIN_CLIENT_SECRET": "test-client-secret",
 	}))
