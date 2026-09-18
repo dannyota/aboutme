@@ -142,15 +142,29 @@ disables the job schedules, stops `app`, runs the database steps, starts `web`
 then `app`, re-enables the schedules and smoke-tests through Cloudflare. The
 site is down between "site down" and "site up", usually one to three minutes.
 
-Each release snapshot is tagged `aboutme:created-by=deploy.sh`. After the smoke
-test passes, the script deletes release snapshots of `aboutme-prod` that are
-more than 30 days old by `SnapshotCreateTime`. It deletes only manual, available
-snapshots whose names match `aboutme-prod-<tag>-<YYYYMMDDHHMM>` and that carry
-the tag, plus the untagged `aboutme-prod-v0-1-1-202609171438`. Automated
-backups, the final snapshot, and any other snapshot stay. A failed release
-deletes nothing. A deletion failure prints a warning and the deploy still
-succeeds. Pruning runs only on a successful deploy, so a snapshot stays past 30
-days while no release succeeds.
+Each release snapshot is tagged `aboutme:created-by=deploy.sh`. The script never
+deletes a snapshot. The daily `release-snapshot-sweep` job (20:00 UTC) deletes
+release snapshots of `aboutme-prod` more than 27 days old by
+`SnapshotCreateTime`, so none reaches 30 days even after one missed run. It
+deletes only manual, available snapshots whose names match
+`aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and that carry the tag, plus the untagged
+`aboutme-prod-v0-1-1-202609171438`. Automated backups, the final snapshot, and
+any other snapshot stay. The job's result reports counts; its log names each
+deleted or failed snapshot and the AWS error code of a failed delete. Scheduler
+retries a failed task start twice. Like every job schedule, it runs only after a
+deploy enables it.
+
+To keep a release snapshot longer, copy it without the tag and under a name the
+job does not match, then delete the copy when it is no longer needed. A kept
+copy is outside the 30-day backup promise in the privacy policy.
+
+```sh
+aws rds copy-db-snapshot --region ap-southeast-1 \
+  --source-db-snapshot-identifier <release-snapshot> \
+  --target-db-snapshot-identifier keep-<release-snapshot>
+```
+
+`copy-db-snapshot` copies no tags unless given `--copy-tags`.
 
 A failure after "site down" but before migrations complete restores the previous
 `app` revision and the job schedules' earlier state, then exits non-zero. If
@@ -176,16 +190,23 @@ revision.
 bash deploy/aws/scripts/deploy.sh --rollback <previous-tag>
 ```
 
-It redeploys earlier images without a snapshot, migration, or snapshot pruning.
-It is safe only when the failed release applied no migration. After a migration,
-fix forward with a new release, or restore the database from the snapshot the
-failed deploy took.
+It redeploys earlier images without a snapshot or migration. It is safe only
+when the failed release applied no migration. After a migration, fix forward
+with a new release, or restore the database from the snapshot the failed deploy
+took.
 
 A rollback builds from the current task definition, so it keeps the current
 settings. Before rolling back to a tag older than the provider list parser
 (older than `b8460d9`) while Google is on, set `provider_login_enabled = ""` and
 run `tofu apply`; that older release refuses to start with
 `PROVIDER_LOGIN_ENABLED=google`.
+
+A rollback also points the job schedules at the older `jobs` revision. Rolling
+back to a release that predates the `release-snapshot-sweep` command leaves that
+schedule failing daily with a usage error and deleting nothing until the next
+release. Each day without a successful run uses one day of the 30-day margin, so
+ship the fix-forward release within a day, or delete expired release snapshots
+by hand.
 
 ## Healthy state
 

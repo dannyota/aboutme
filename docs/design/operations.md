@@ -15,7 +15,7 @@ exercised at the environment that owns the risk.
 | Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                        |
 | Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                  |
 | Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                                    |
-| Backups          | Copies expire on the 30-day backup-retention schedule; disclosures distinguish this delay from live access and private-object deletion               |
+| Backups          | Automated backups and release snapshots expire after 30 days; disclosures distinguish this delay from live access and private-object deletion        |
 
 Account and resume delete APIs may succeed once reference revocation and every
 applicable deletion job commit together. Object-storage latency does not extend
@@ -67,10 +67,13 @@ automatically submits deletion.
 
 The server exposes one-shot `idempotency-expiry-sweep` and
 `media-deletion-sweep` commands hourly, `media-orphan-sweep` weekly, and
-`privacy-retention-sweep` daily. These commands use PostgreSQL advisory overlap
-locks, bounded runs and fixed numeric result fields. They never start the HTTP
-listeners or Chromium. Local tests execute them directly. In production,
-EventBridge Scheduler runs them and a failed run raises an alarm.
+`privacy-retention-sweep` and `release-snapshot-sweep` daily. The database
+commands use PostgreSQL advisory overlap locks; every command has a bounded run
+and fixed numeric result fields. `release-snapshot-sweep` deletes the tagged
+manual snapshots each release takes once they are more than 27 days old, so none
+reaches 30 days even after one missed run. They never start the HTTP listeners
+or Chromium. Local tests execute them directly. In production, EventBridge
+Scheduler runs them and a failed run raises an alarm.
 
 Session metadata is redacted 90 days after the session's creation. Lifecycle
 events contain only a generated event ID, fixed kind, occurrence time and an

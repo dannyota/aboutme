@@ -9,3 +9,7 @@ image_caddy  = "ghcr.io/dannyota/aboutme-caddy:unreleased"
 alarm_email = ""
 # Set to true after the first healthy deploy.
 site_alarm_enabled = false
+
+# Provider login: "" keeps it off; "google" enables Google sign-in and needs
+# /aboutme/prod/oauth/google-client-id and google-client-secret in SSM.
+provider_login_enabled = ""

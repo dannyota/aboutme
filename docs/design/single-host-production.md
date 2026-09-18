@@ -126,9 +126,9 @@ subnet with no public address. Its security group admits 5432 only from the host
 security group. `rds.force_ssl` is on, and Go connects with
 `sslmode=verify-full` against the AWS RDS CA bundle shipped in the server image.
 Automated backups keep 30 days with point-in-time recovery. Each release also
-takes a manual snapshot tagged `aboutme:created-by=deploy.sh`; the next
-successful deploy deletes those more than 30 days old, so a release snapshot
-outlives 30 days only while no release succeeds. Deletion protection is on and
+takes a manual snapshot tagged `aboutme:created-by=deploy.sh`; the daily
+`release-snapshot-sweep` job deletes each one once it is more than 27 days old,
+so none reaches 30 days even after one missed run. Deletion protection is on and
 deletion takes a final snapshot.
 
 The RDS master user is named `aboutme` and owns database `aboutme`. RDS manages
@@ -231,8 +231,6 @@ starts.
    schedules.
 8. Smoke through Cloudflare: health, TLS and security headers. A direct request
    to the Elastic IP must fail.
-9. Delete this script's release snapshots of `aboutme-prod` that are more than
-   30 days old. A failure here only warns; the release has succeeded.
 
 A failure after step 4 but before migrations complete restores the previous
 `app` revision and the job schedules' earlier state. The script leaves both
@@ -261,8 +259,11 @@ window applies Bottlerocket updates with `apiclient update apply --reboot`.
 EventBridge Scheduler runs the `jobs` task with the server image's privacy
 commands, per the [privacy runbook](../runbooks/privacy.md):
 `idempotency-expiry-sweep` and `media-deletion-sweep` hourly,
-`privacy-retention-sweep` daily, and `media-orphan-sweep` weekly. The commands
-hold advisory locks against overlap.
+`privacy-retention-sweep` and `release-snapshot-sweep` daily, and
+`media-orphan-sweep` weekly. The database commands hold advisory locks against
+overlap. `release-snapshot-sweep` reads only RDS snapshot metadata, and the
+`jobs` task role may delete only snapshots that carry the deploy.sh tag, plus
+the one release snapshot taken before tagging began.
 
 ## Monitoring and cost
 
