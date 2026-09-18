@@ -57,6 +57,7 @@ apps/web/app/components/app/ThemeToggle.vue
 apps/web/app/components/auth/AuthCard.vue
 apps/web/app/components/auth/PasswordField.vue
 apps/web/app/components/auth/PasswordSettings.vue
+apps/web/app/components/auth/ProviderButtons.vue
 apps/web/app/components/editor/ConflictPanel.vue
 apps/web/app/components/editor/EditorPreview.vue
 apps/web/app/components/editor/EditorShell.vue
@@ -101,6 +102,8 @@ apps/web/app/components/editor/structure/SectionControls.vue
 apps/web/app/components/editor/structure/StructurePanel.vue
 apps/web/app/components/editor/templates/TemplatePanel.vue
 apps/web/app/components/editor/templates/TemplatePartialDialog.vue
+apps/web/app/components/legal/LegalAgreement.vue
+apps/web/app/components/legal/LegalDocument.vue
 apps/web/app/components/print/PrintResumeApp.vue
 apps/web/app/components/print/vue-style.d.ts
 apps/web/app/components/public/PublicResumeApp.vue
@@ -275,6 +278,7 @@ apps/web/app/composables/privacySettings.ts
 apps/web/app/composables/providerAuthorization.ts
 apps/web/app/composables/useAuth.ts
 apps/web/app/composables/useCapabilities.ts
+apps/web/app/composables/useLocale.ts
 apps/web/app/composables/useNow.ts
 apps/web/app/composables/useOAuthConsent.ts
 apps/web/app/composables/usePasswordAuth.ts
@@ -313,6 +317,11 @@ apps/web/app/editor/revision.ts
 apps/web/app/editor/templateDiff.ts
 apps/web/app/editor/templateGroup.ts
 apps/web/app/editor/types.ts
+apps/web/app/i18n/auth.ts
+apps/web/app/i18n/legal.ts
+apps/web/app/i18n/locale.ts
+apps/web/app/i18n/shell.ts
+apps/web/app/landing/copy.ts
 apps/web/app/landing/sampleContext.ts
 apps/web/app/landing/sampleResume.ts
 apps/web/app/lib/utils.ts
@@ -326,8 +335,10 @@ apps/web/app/pages/authorize.vue
 apps/web/app/pages/forgot-password.vue
 apps/web/app/pages/index.vue
 apps/web/app/pages/login.vue
+apps/web/app/pages/privacy.vue
 apps/web/app/pages/register.vue
 apps/web/app/pages/reset-password.vue
+apps/web/app/pages/terms.vue
 apps/web/app/pages/verify-email.vue
 apps/web/app/public-roots.generated.ts
 apps/web/app/public/public-resume.client.ts
@@ -361,7 +372,10 @@ apps/web/e2e/support.ts
 apps/web/nuxt.config.ts
 apps/web/package-lock.json
 apps/web/package.json
+apps/web/public/apple-touch-icon.png
 apps/web/public/csp-bootstrap.js
+apps/web/public/favicon.ico
+apps/web/public/favicon.svg
 apps/web/public/font-licenses/THIRD_PARTY_NOTICES.txt
 apps/web/public/font-licenses/alegreya/OFL.txt
 apps/web/public/font-licenses/aleo/OFL.txt
