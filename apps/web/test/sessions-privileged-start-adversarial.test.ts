@@ -7,6 +7,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { createError, readRawBody, setResponseStatus, type H3Event } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
+import { providerNames } from '../app/composables/useCapabilities';
 import { registerCapabilities } from './support/capabilities';
 
 registerCapabilities();
@@ -178,7 +179,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
 
       for (const provider of providers) {
         const before = capturedStarts.length;
-        await settleClick(linkPage, `Link ${provider}`);
+        await settleClick(linkPage, `Link ${providerNames[provider]}`);
 
         expect(capturedStarts).toHaveLength(before + 1);
         expectBodilessCSRFPost(
@@ -209,7 +210,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
         return { data: { authorizeUrl: authorizeURLs.google } };
       };
       const retryStart = capturedStarts.length;
-      await settleClick(linkPage, 'Link google');
+      await settleClick(linkPage, 'Link Google');
 
       await vi.waitFor(() => expect(attempts).toBe(2));
       expect(meCalls).toBe(meCallsBeforeRetry + 1);
@@ -237,7 +238,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
         return { error: { code: 'csrf_rejected', message: 'rejected' } };
       };
       const navigationCount = vi.mocked(navigateTo).mock.calls.length;
-      await settleClick(linkPage, 'Link google');
+      await settleClick(linkPage, 'Link Google');
 
       await vi.waitFor(() => expect(attempts).toBe(2));
       expect(vi.mocked(navigateTo)).toHaveBeenCalledTimes(navigationCount);
@@ -279,7 +280,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
       for (const [name, response] of invalidResponses) {
         respondToStart = () => response;
         vi.mocked(navigateTo).mockClear();
-        await settleClick(linkPage, 'Link google');
+        await settleClick(linkPage, 'Link Google');
         expect(vi.mocked(navigateTo), name).not.toHaveBeenCalled();
         expect(
           linkPage.get('[data-testid="link-error"]').text(),
@@ -291,7 +292,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
         throw createError({ statusCode: 500, message: 'start failed' });
       };
       vi.mocked(navigateTo).mockClear();
-      await settleClick(linkPage, 'Link google');
+      await settleClick(linkPage, 'Link Google');
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
       expect(linkPage.get('[data-testid="link-error"]').text()).not.toBe('');
 
@@ -301,7 +302,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
       vi.mocked(navigateTo).mockRejectedValueOnce(
         new Error('navigation failed'),
       );
-      await settleClick(linkPage, 'Link google');
+      await settleClick(linkPage, 'Link Google');
       expect(linkPage.get('[data-testid="link-error"]').text()).not.toBe('');
 
       // Reauthentication uses the stable first identity. Refreshing /me lets
@@ -329,7 +330,10 @@ describe('settings privileged OAuth starts (adversarial)', () => {
         ).toHaveLength(0);
 
         const before = capturedStarts.length;
-        await settleClick(reauthPage, `Sign in again with ${provider}`);
+        await settleClick(
+          reauthPage,
+          `Sign in again with ${providerNames[provider]}`,
+        );
         expect(capturedStarts).toHaveLength(before + 1);
         expectBodilessCSRFPost(
           capturedStarts[before]!,
@@ -363,7 +367,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
     await refreshNuxtData();
     await flushPromises();
     window.happyDOM.setURL('https://localhost:20443/app/settings/sessions');
-    await settleClick(page, 'Sign in again with google');
+    await settleClick(page, 'Sign in again with Google');
     expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith(
       'https://localhost:20443/__uat/oauth/google/authorize',
       { external: true },
@@ -382,7 +386,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
     for (const authorizeUrl of invalidAuthorizeURLs) {
       respondToStart = () => ({ data: { authorizeUrl } });
       vi.mocked(navigateTo).mockClear();
-      await settleClick(page, 'Sign in again with google');
+      await settleClick(page, 'Sign in again with Google');
       expect(vi.mocked(navigateTo), authorizeUrl).not.toHaveBeenCalled();
       expect(
         page.get('[data-testid="link-error"]').text(),
@@ -398,7 +402,7 @@ describe('settings privileged OAuth starts (adversarial)', () => {
       },
     });
     vi.mocked(navigateTo).mockClear();
-    await settleClick(page, 'Sign in again with google');
+    await settleClick(page, 'Sign in again with Google');
     expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     expect(page.get('[data-testid="link-error"]').text()).not.toBe('');
   });

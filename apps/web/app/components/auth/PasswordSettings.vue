@@ -22,6 +22,7 @@ import {
 } from '../../composables/passwordSettings';
 import type { AuthProvider } from '../../composables/useAuth';
 import type { PasswordIssue } from '../../composables/usePasswordAuth';
+import { providerNames } from '@/composables/useCapabilities';
 
 const props = defineProps<{
   hasPassword: boolean;
@@ -33,12 +34,6 @@ const emit = defineEmits<{
 }>();
 
 const actions = inject(PasswordSettingsActionsKey, null);
-
-const PROVIDER_LABELS: Record<AuthProvider, string> = {
-  google: 'Google',
-  github: 'GitHub',
-  linkedin: 'LinkedIn',
-};
 
 const ISSUE_COPY: Record<PasswordIssue, string> = {
   length: 'Password must be at least 12 characters.',
@@ -280,7 +275,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
           type="button"
           @click="submitProviderReauth(provider)"
         >
-          {{ `Continue with ${PROVIDER_LABELS[provider]}` }}
+          {{ `Continue with ${providerNames[provider]}` }}
         </Button>
         <Button
           data-testid="password-cancel"

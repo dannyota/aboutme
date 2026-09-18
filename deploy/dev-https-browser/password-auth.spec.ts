@@ -195,7 +195,7 @@ test('proves password authentication over native HTTPS', async ({
       url.origin === ORIGIN
       && url.pathname === '/__uat/oauth/google/authorize'
     ),
-    page.getByRole('button', { name: 'Link google' }).click(),
+    page.getByRole('button', { name: 'Link Google' }).click(),
   ]);
   await page.getByLabel('Bob Local — bob@example.invalid').check();
   await Promise.all([

@@ -64,24 +64,44 @@ beforeEach(() => {
 describe('settings sign-in providers (ADR 0039)', () => {
   it('offers only Google when only Google is enabled', async () => {
     const wrapper = await mountSettings(['google']);
-    expect(await linkButtons(wrapper)).toEqual(['Link google']);
+    expect(await linkButtons(wrapper)).toEqual(['Link Google']);
   });
 
   it('offers every provider when all three are enabled', async () => {
     const wrapper = await mountSettings(['google', 'github', 'linkedin']);
     expect(await linkButtons(wrapper)).toEqual([
-      'Link google',
-      'Link github',
-      'Link linkedin',
+      'Link Google',
+      'Link GitHub',
+      'Link LinkedIn',
     ]);
   });
 
-  it('hides the provider block when none is enabled', async () => {
+  it('hides the provider block with no identity and nothing to link',
+    async () => {
+      const wrapper = await mountSettings([]);
+      expect(
+        wrapper.find('[aria-labelledby="providers-title"]').exists(),
+      ).toBe(false);
+    });
+
+  it('lists a linked provider that is enabled', async () => {
+    linked = [{ provider: 'google' }];
+    const wrapper = await mountSettings(['google']);
+    const row = wrapper.get('[data-testid="linked-provider-google"]');
+    expect(row.text()).toContain('Google');
+    expect(row.text()).toContain('Linked');
+    expect(row.text()).not.toContain('not available');
+  });
+
+  it('lists a linked provider that is no longer enabled', async () => {
     linked = [{ provider: 'github' }];
     const wrapper = await mountSettings([]);
     expect(
       wrapper.find('[aria-labelledby="providers-title"]').exists(),
-    ).toBe(false);
+    ).toBe(true);
+    const row = wrapper.get('[data-testid="linked-provider-github"]');
+    expect(row.get('span').text()).toBe('GitHub');
+    expect(row.text()).toContain('Linked, not available for sign-in');
     expect(wrapper.find('[data-testid="add-provider-button"]').exists()).toBe(
       false,
     );
@@ -107,7 +127,7 @@ describe('settings sign-in providers (ADR 0039)', () => {
         '/app/settings/sessions?error=reauth_required',
       );
       expect(wrapper.get('[data-testid="reauth-prompt"]').text()).toContain(
-        'Sign in again with google',
+        'Sign in again with Google',
       );
 
       linked = [{ provider: 'github' }];

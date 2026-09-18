@@ -67,7 +67,7 @@ describe('sessions.vue CSRF gating', () => {
 
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
       expect(prompt.get('[data-slot="button"]').text()).toBe(
-        'Sign in again with linkedin',
+        'Sign in again with LinkedIn',
       );
 
       meResponse = {};

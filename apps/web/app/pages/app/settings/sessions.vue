@@ -18,7 +18,10 @@ import {
   PrivacySettingsActionsKey,
   type PrivacySettingsActions,
 } from '../../../composables/privacySettings';
-import { useCapabilities } from '../../../composables/useCapabilities';
+import {
+  providerNames,
+  useCapabilities,
+} from '../../../composables/useCapabilities';
 import { useNow } from '../../../composables/useNow';
 import {
   validateAuthorizeUrl,
@@ -61,6 +64,14 @@ const {
 // Only providers the server enables (ADR 0039) get link or reauth controls;
 // a disabled provider's start route answers not found.
 const { loginProviders, agentAccess } = useCapabilities();
+// Every linked identity is listed, including one whose provider is now off.
+const notUsableLabel = 'Linked, not available for sign-in';
+const linkedIdentities = computed(() =>
+  identities.value.map((identity) => ({
+    provider: identity.provider,
+    name: providerNames[identity.provider],
+    usable: loginProviders.value.includes(identity.provider),
+  })));
 const enabledIdentities = computed(() =>
   identities.value.filter((identity) =>
     loginProviders.value.includes(identity.provider)));
@@ -418,7 +429,7 @@ const linkErrorMessage = computed(() => {
     </section>
 
     <section
-      v-if="loginProviders.length > 0"
+      v-if="linkedIdentities.length > 0 || unlinkedProviders.length > 0"
       aria-labelledby="providers-title"
       class="border-t py-8"
     >
@@ -435,6 +446,24 @@ const linkErrorMessage = computed(() => {
       >
         {{ linkErrorMessage }}
       </StatusBanner>
+      <ul
+        v-if="linkedIdentities.length"
+        class="mt-4 divide-y divide-border border-y border-border"
+        data-testid="linked-providers"
+      >
+        <li
+          v-for="identity in linkedIdentities"
+          :key="identity.provider"
+          class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1
+            py-3"
+          :data-testid="`linked-provider-${identity.provider}`"
+        >
+          <span class="font-medium">{{ identity.name }}</span>
+          <span class="text-sm text-muted-foreground">
+            {{ identity.usable ? 'Linked' : notUsableLabel }}
+          </span>
+        </li>
+      </ul>
       <StatusBanner
         v-if="reauthRequired && reauthProvider"
         kind="error"
@@ -447,7 +476,7 @@ const linkErrorMessage = computed(() => {
           variant="outline"
           @click="startOAuth(reauthProvider, 'reauth')"
         >
-          Sign in again with {{ reauthProvider }}
+          Sign in again with {{ providerNames[reauthProvider] }}
         </Button>
       </StatusBanner>
       <div
@@ -475,7 +504,7 @@ const linkErrorMessage = computed(() => {
               variant="outline"
               @click="startOAuth(provider, 'link')"
             >
-              Link {{ provider }}
+              Link {{ providerNames[provider] }}
             </Button>
           </li>
         </ul>

@@ -276,8 +276,8 @@ describe('sessions.vue', () => {
         .findAll('[data-slot="button"]')
         .filter((button) => button.text().startsWith('Link '));
       expect(linkButtons.map((button) => button.text())).toEqual([
-        'Link github',
-        'Link linkedin',
+        'Link GitHub',
+        'Link LinkedIn',
       ]);
 
       await linkButtons[0]!.trigger('click');
@@ -315,7 +315,7 @@ describe('sessions.vue', () => {
       await flushPromises();
       const githubButton = wrapper
         .findAll('[data-slot="button"]')
-        .find((button) => button.text() === 'Link github');
+        .find((button) => button.text() === 'Link GitHub');
       expect(githubButton).toBeDefined();
 
       await githubButton!.trigger('click');
@@ -326,7 +326,7 @@ describe('sessions.vue', () => {
       const prompt = wrapper.get('[data-testid="reauth-prompt"]');
       expect(prompt.text()).toContain('link a new provider');
       expect(prompt.get('[data-slot="button"]').text()).toBe(
-        'Sign in again with google',
+        'Sign in again with Google',
       );
       expect(wrapper.find('[data-testid="link-error"]').exists()).toBe(false);
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
@@ -358,7 +358,7 @@ describe('sessions.vue', () => {
       // meData's only linked identity is `google` — reauth targets that
       // existing provider, never the not-yet-linked one being added.
       const reauthButton = prompt.get('[data-slot="button"]');
-      expect(reauthButton.text()).toBe('Sign in again with google');
+      expect(reauthButton.text()).toBe('Sign in again with Google');
     },
   );
 
