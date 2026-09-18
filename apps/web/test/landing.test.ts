@@ -46,15 +46,28 @@ function apiPaths(): string[] {
     .filter((path) => path.startsWith('/api/'));
 }
 
+function setLocaleCookie(value: string | undefined): void {
+  document.cookie = value === undefined
+    ? 'aboutme-locale=; max-age=0; path=/'
+    : `aboutme-locale=${value}; path=/`;
+}
+
+async function mountLanding(locale?: 'vi' | 'en') {
+  setLocaleCookie(locale);
+  return mountSuspended(LandingPage);
+}
+
 beforeEach(() => {
   meStatus = 401;
   meRequests = 0;
   mocks.fetchMock.mockClear();
+  setLocaleCookie(undefined);
+  clearNuxtData();
 });
 
 describe('index.vue', () => {
   it('renders the approved stamped-document hero without a card', async () => {
-    const wrapper = await mountSuspended(LandingPage);
+    const wrapper = await mountLanding('en');
     expect(wrapper.get('[data-testid="landing"]').element.tagName).toBe('MAIN');
     const heading = wrapper.get('[data-testid="landing-title"]');
 
@@ -71,8 +84,8 @@ describe('index.vue', () => {
     );
   });
 
-  it('renders the approved copy', async () => {
-    const wrapper = await mountSuspended(LandingPage);
+  it('renders the approved English copy', async () => {
+    const wrapper = await mountLanding('en');
     expect(wrapper.text()).toContain(
       'aboutme is an open-source resume builder. Write up to three resumes, '
       + 'preview the exact page, and publish each one at its own link.',
@@ -98,7 +111,7 @@ describe('index.vue', () => {
   it(
     'offers registration before sign-in and nothing into the app',
     async () => {
-      const wrapper = await mountSuspended(LandingPage);
+      const wrapper = await mountLanding('en');
       expect(
         wrapper
           .get('[data-testid="landing-create-account"]')
@@ -119,7 +132,7 @@ describe('index.vue', () => {
 
   it('shows only the resume entry action when authenticated', async () => {
     meStatus = 200;
-    const wrapper = await mountSuspended(LandingPage);
+    const wrapper = await mountLanding('en');
     await flushPromises();
     expect(wrapper.get('[data-testid="landing-open-resumes"]').text()).toBe(
       'Open your resumes',
@@ -133,12 +146,16 @@ describe('index.vue', () => {
   });
 
   it('names no unshipped feature', async () => {
-    const wrapper = await mountSuspended(LandingPage);
-    expect(wrapper.text().toLowerCase()).not.toMatch(/realtime|real-time/);
+    for (const locale of ['en', 'vi'] as const) {
+      const wrapper = await mountLanding(locale);
+      expect(wrapper.text().toLowerCase()).not.toMatch(
+        /realtime|real-time|thời gian thực/u,
+      );
+    }
   });
 
   it('links the license line to the repository', async () => {
-    const wrapper = await mountSuspended(LandingPage);
+    const wrapper = await mountLanding('en');
     const license = wrapper.get('[data-testid="landing-license-link"]');
     expect(license.text()).toContain('AGPL-3.0');
     expect(license.attributes('href')).toBe(
@@ -182,4 +199,74 @@ describe('index.vue', () => {
       expect(source).not.toContain('Content-Security-Policy');
     },
   );
+});
+
+describe('index.vue language', () => {
+  it('renders Vietnamese by default', async () => {
+    const wrapper = await mountLanding();
+    expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
+      'CV thì công khai. Bạn thì không.',
+    );
+    expect(wrapper.get('[data-testid="landing-create-account"]').text()).toBe(
+      'Tạo tài khoản',
+    );
+    expect(wrapper.get('[data-testid="landing-sign-in"]').text()).toBe(
+      'Đăng nhập',
+    );
+    const points = wrapper
+      .findAll('[data-testid="landing-point-title"]')
+      .map((p) => p.text());
+    expect(points).toEqual([
+      'Của bạn, do bạn giữ.',
+      'Mỗi CV một đường dẫn.',
+      'Dùng trợ lý AI của bạn.',
+    ]);
+    expect(wrapper.text()).toContain('Đăng CV gồm ba lựa chọn');
+    expect(wrapper.text()).not.toContain('Create account');
+  });
+
+  it('keeps the auth links on their routes in Vietnamese', async () => {
+    const wrapper = await mountLanding('vi');
+    expect(
+      wrapper.get('[data-testid="landing-create-account"]').attributes('href'),
+    ).toBe('/register');
+    expect(
+      wrapper.get('[data-testid="landing-sign-in"]').attributes('href'),
+    ).toBe('/login');
+  });
+
+  it('marks the page language for the rendered copy', async () => {
+    await mountLanding();
+    await flushPromises();
+    expect(document.documentElement.lang).toBe('vi');
+
+    await mountLanding('en');
+    await flushPromises();
+    expect(document.documentElement.lang).toBe('en');
+  });
+
+  it('switches to English and remembers the choice', async () => {
+    const wrapper = await mountLanding();
+    const toggle = wrapper.get('[data-testid="landing-locale"]');
+    const vi = toggle.get('[data-testid="landing-locale-vi"]');
+    const en = toggle.get('[data-testid="landing-locale-en"]');
+    expect(vi.attributes('aria-pressed')).toBe('true');
+    expect(en.attributes('aria-pressed')).toBe('false');
+    expect(en.attributes('lang')).toBe('en');
+    expect(vi.attributes('lang')).toBe('vi');
+
+    await en.trigger('click');
+    expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
+      'The resume is public. You are not.',
+    );
+    expect(en.attributes('aria-pressed')).toBe('true');
+    expect(document.cookie).toContain('aboutme-locale=en');
+  });
+
+  it('falls back to Vietnamese for an unknown cookie value', async () => {
+    const wrapper = await mountLanding('fr' as 'vi');
+    expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
+      'CV thì công khai. Bạn thì không.',
+    );
+  });
 });

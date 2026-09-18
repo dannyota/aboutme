@@ -6,10 +6,11 @@ visible through a desk, a sheet of paper, and a seal applied by the person.
 
 ## Product principle
 
-The landing page leads with “The resume is public. You are not.” It shows a
-compiled-in resume rendered by the shared `ResumeDocument`, rather than a
-profile card or template carousel. Publishing is a deliberate action with three
-named choices: Public resume, PDF download, and SEO and GEO.
+The landing page leads with “The resume is public. You are not.” (in Vietnamese
+by default: “CV thì công khai. Bạn thì không.”). It shows a compiled-in resume
+rendered by the shared `ResumeDocument`, rather than a profile card or template
+carousel. Publishing is a deliberate action with three named choices: Public
+resume, PDF download, and SEO and GEO.
 
 The editor, public page, and PDF use the same document renderer. Application
 chrome may frame the renderer but does not change its output.

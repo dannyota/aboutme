@@ -4,42 +4,20 @@ import { computed } from 'vue';
 import AppSeal from '@/components/app/AppSeal.vue';
 import ResumeDocument from '@/components/resume/ResumeDocument.vue';
 import { buttonVariants } from '@/components/ui/button';
+import { landingCopy, landingLocales, localeNames } from '@/landing/copy';
 import { sampleContext } from '@/landing/sampleContext';
 import { sampleLink, sampleResume } from '@/landing/sampleResume';
 
 const { authState } = useAuth();
 const signedIn = computed(() => authState.value === 'authenticated');
+const { locale, setLocale } = useLandingLocale();
+const copy = computed(() => landingCopy[locale.value]);
 
-useHead({
+useHead(computed(() => ({
   title: 'aboutme',
-  meta: [
-    {
-      name: 'description',
-      content:
-        'Open-source resume builder. Write once, preview the exact page '
-        + 'layout, and publish each resume at a clean URL you control.',
-    },
-  ],
-});
-
-const points = [
-  {
-    title: 'Yours to keep.',
-    text: 'Up to three resumes per account, private until you publish.',
-  },
-  {
-    title: 'One link per resume.',
-    text:
-      'Publish, unpublish, and control search indexing for each resume '
-      + 'on its own.',
-  },
-  {
-    title: 'Bring your own agent.',
-    text:
-      'Connect an MCP-capable assistant with scopes you grant and can '
-      + 'revoke.',
-  },
-] as const;
+  htmlAttrs: { lang: locale.value },
+  meta: [{ name: 'description', content: copy.value.description }],
+})));
 </script>
 
 <template>
@@ -47,6 +25,27 @@ const points = [
     class="landing mx-auto w-full max-w-7xl px-5 py-12 sm:px-8 sm:py-16"
     data-testid="landing"
   >
+    <div
+      class="mb-8 flex justify-end gap-1 text-sm"
+      role="group"
+      :aria-label="copy.localeLabel"
+      data-testid="landing-locale"
+    >
+      <button
+        v-for="option in landingLocales"
+        :key="option"
+        type="button"
+        class="rounded-sm px-2 py-1 underline-offset-4 hover:underline
+          aria-pressed:font-medium aria-pressed:text-foreground
+          text-muted-foreground"
+        :lang="option"
+        :aria-pressed="locale === option"
+        :data-testid="`landing-locale-${option}`"
+        @click="setLocale(option)"
+      >
+        {{ localeNames[option] }}
+      </button>
+    </div>
     <section
       class="grid items-center gap-12 min-[42rem]:grid-cols-12
         min-[42rem]:gap-8"
@@ -59,15 +58,13 @@ const points = [
             tracking-[-0.02em] min-[42rem]:text-3xl"
           data-testid="landing-title"
         >
-          The resume is public. You are not.
+          {{ copy.title }}
         </h1>
         <p
           class="landing-lead mt-5 max-w-xl text-base leading-6
             text-muted-foreground"
         >
-          aboutme is an open-source resume builder. Write up to three resumes,
-          preview the exact page, and publish each one at its own link. Search
-          and AI discovery stay off until you turn them on.
+          {{ copy.lead }}
         </p>
         <div
           v-if="!signedIn"
@@ -77,12 +74,12 @@ const points = [
             :class="buttonVariants({ variant: 'default' })"
             data-testid="landing-create-account"
             to="/register"
-          >Create account</NuxtLink>
+          >{{ copy.createAccount }}</NuxtLink>
           <NuxtLink
             class="text-sm text-primary underline-offset-4 hover:underline"
             data-testid="landing-sign-in"
             to="/login"
-          >Sign in</NuxtLink>
+          >{{ copy.signIn }}</NuxtLink>
         </div>
         <div
           v-else
@@ -92,14 +89,14 @@ const points = [
             :class="buttonVariants({ variant: 'default' })"
             data-testid="landing-open-resumes"
             to="/app/resumes"
-          >Open your resumes</NuxtLink>
+          >{{ copy.openResumes }}</NuxtLink>
         </div>
       </div>
 
       <figure
         class="relative w-fit max-w-full min-w-0 justify-self-center
           min-[42rem]:col-span-7"
-        aria-label="Sample resume published at aboutme.vn/ada-lovelace"
+        :aria-label="copy.sampleLabel"
         data-testid="landing-sample"
       >
         <div
@@ -126,7 +123,7 @@ const points = [
         min-[42rem]:divide-x min-[42rem]:divide-y-0"
     >
       <li
-        v-for="point in points"
+        v-for="point in copy.points"
         :key="point.title"
         class="py-4 min-[42rem]:px-5 min-[42rem]:first:pl-0
           min-[42rem]:last:pr-0"
@@ -148,45 +145,23 @@ const points = [
         id="landing-publish-title"
         class="text-xl font-semibold tracking-tight"
       >
-        Publishing is three choices
+        {{ copy.publishTitle }}
       </h2>
       <dl
         class="mt-5 grid divide-y divide-border border-y border-border
           min-[42rem]:grid-cols-3 min-[42rem]:divide-x min-[42rem]:divide-y-0"
       >
         <div
+          v-for="choice in copy.publishChoices"
+          :key="choice.title"
           class="py-4 min-[42rem]:px-5 min-[42rem]:first:pl-0
             min-[42rem]:last:pr-0"
         >
           <dt class="font-medium">
-            Public resume
+            {{ choice.title }}
           </dt>
           <dd class="mt-1 text-sm text-muted-foreground">
-            Whether any public page exists.
-          </dd>
-        </div>
-        <div
-          class="py-4 min-[42rem]:px-5 min-[42rem]:first:pl-0
-            min-[42rem]:last:pr-0"
-        >
-          <dt class="font-medium">
-            PDF download
-          </dt>
-          <dd class="mt-1 text-sm text-muted-foreground">
-            Whether visitors can download the PDF. You can always export your
-            own.
-          </dd>
-        </div>
-        <div
-          class="py-4 min-[42rem]:px-5 min-[42rem]:first:pl-0
-            min-[42rem]:last:pr-0"
-        >
-          <dt class="font-medium">
-            SEO and GEO
-          </dt>
-          <dd class="mt-1 text-sm text-muted-foreground">
-            Whether search engines and AI answer engines may index it. Off by
-            default.
+            {{ choice.text }}
           </dd>
         </div>
       </dl>
@@ -196,7 +171,7 @@ const points = [
       class="mt-16 text-center text-sm text-muted-foreground"
       data-testid="landing-license"
     >
-      Open source under
+      {{ copy.licensePrefix }}
       <a
         class="text-primary underline underline-offset-4"
         data-testid="landing-license-link"
