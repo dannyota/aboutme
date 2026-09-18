@@ -20,6 +20,7 @@ func TestPrivacyLifecycleSchema(t *testing.T) {
 		{"unknown audit kind", `INSERT INTO lifecycle_audit_events (kind) VALUES ('untrusted')`, "lifecycle_audit_events_kind_check"},
 		{"media event needs job", `INSERT INTO lifecycle_audit_events (kind) VALUES ('media_deletion_completed')`, "lifecycle_audit_events_scope_check"},
 		{"account event has no job", `INSERT INTO lifecycle_audit_events (kind, media_job_id) VALUES ('account_deleted', uuidv7())`, "lifecycle_audit_events_scope_check"},
+		{"identity unlink event has no job", `INSERT INTO lifecycle_audit_events (kind, media_job_id) VALUES ('identity_unlinked', uuidv7())`, "lifecycle_audit_events_scope_check"},
 		{"unknown sweep", `INSERT INTO privacy_sweep_state (name) VALUES ('untrusted')`, "privacy_sweep_state_name_check"},
 		{"long cursor", `UPDATE privacy_sweep_state SET cursor = repeat('x', 1025)`, "privacy_sweep_state_cursor_check"},
 		{"control cursor", `UPDATE privacy_sweep_state SET cursor = E'bad\nvalue'`, "privacy_sweep_state_cursor_check"},
@@ -32,6 +33,15 @@ func TestPrivacyLifecycleSchema(t *testing.T) {
 			})
 			requireConstraintViolation(t, err, tt.constraint)
 		})
+	}
+}
+
+// An identity unlink records only its kind and time.
+func TestLifecycleAuditAcceptsIdentityUnlinked(t *testing.T) {
+	t.Parallel()
+	tx, ctx := newResumeSchemaTx(t)
+	if _, err := tx.Exec(ctx, `INSERT INTO lifecycle_audit_events (kind) VALUES ('identity_unlinked')`); err != nil {
+		t.Fatalf("insert identity_unlinked audit event: %v", err)
 	}
 }
 

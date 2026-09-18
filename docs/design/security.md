@@ -23,10 +23,25 @@ token never reaches a cookie route.
 Provider subject, not email, is identity. A verified email already owned by a
 different provider causes a generic `email_already_registered` result and no
 database write. The response never names the existing provider. Linking a second
-provider starts only from an authenticated account. V1 has no provider unlink or
+provider starts only from an authenticated account. There is no
 account-email-change endpoint.
 
-`GET /me` orders linked identities by `(created_at, id)`, oldest first. The
+`DELETE /me/identities/{identityId}` unlinks one of the caller's identities. It
+is a cookie-authenticated mutation with the full CSRF rule set below, requires
+recent reauthentication, and is limited per `(account, client IP)`. A bearer
+token never authenticates it, so an agent cannot unlink. It works for a provider
+that `PROVIDER_LOGIN_ENABLED` has turned off. It refuses with
+`last_sign_in_method` when the account would keep no password credential and no
+identity of an enabled provider, and it writes nothing then. The check and the
+delete run in one transaction under the user-row lock that password mutations
+and session issuers take, so concurrent unlinks cannot both remove the last
+methods. The same transaction writes one `identity_unlinked` lifecycle audit
+event with its kind and time only. A malformed, unknown, or foreign ID returns
+the uniform not-found response. Sessions record no provider, so every session
+stays signed in.
+
+`GET /me` returns each linked identity's `id`, `provider`, and `createdAt`,
+never the provider subject, ordered by `(created_at, id)`, oldest first. The
 settings UI uses that stable first identity as its default reauthentication
 provider. Equal timestamps must not make that choice depend on a PostgreSQL scan
 plan.

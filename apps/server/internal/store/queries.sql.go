@@ -1139,6 +1139,26 @@ func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, arg Delete
 	return result.RowsAffected(), nil
 }
 
+const deleteIdentityForUser = `-- name: DeleteIdentityForUser :execrows
+DELETE FROM identities WHERE id = $1 AND user_id = $2
+`
+
+type DeleteIdentityForUserParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// Unlinks one identity only when it belongs to the given user. The caller holds
+// the user-row lock, so the last-sign-in-method check and this delete cannot
+// interleave with another unlink.
+func (q *Queries) DeleteIdentityForUser(ctx context.Context, arg DeleteIdentityForUserParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteIdentityForUser, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteOAuthClient = `-- name: DeleteOAuthClient :execrows
 DELETE FROM oauth_clients WHERE id = $1
 `
@@ -2257,6 +2277,17 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, err
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertIdentityUnlinkedAuditEvent = `-- name: InsertIdentityUnlinkedAuditEvent :exec
+INSERT INTO lifecycle_audit_events (kind, occurred_at, media_job_id)
+VALUES ('identity_unlinked', $1::timestamptz, NULL)
+`
+
+// Records the unlink's kind and time only: no user, provider, or identity.
+func (q *Queries) InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error {
+	_, err := q.db.Exec(ctx, insertIdentityUnlinkedAuditEvent, occurredAt)
+	return err
 }
 
 const insertRotatedOAuthToken = `-- name: InsertRotatedOAuthToken :one

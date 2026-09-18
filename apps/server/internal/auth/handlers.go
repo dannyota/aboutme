@@ -207,6 +207,9 @@ func (s *Service) RegisterRoutes(mux *http.ServeMux) {
 	// Collection method dispatch runs before authentication, matching route.
 	mux.Handle(SessionsPath, http.HandlerFunc(s.handleSessionsCollection))
 	mux.Handle(SessionsPath+"/{id}", route(http.MethodDelete, s.sessionChain(s.handleRevokeSession)))
+	// Unlinking works for every provider, enabled or not, so a user can remove
+	// a link to a provider that has been turned off.
+	mux.Handle(MeIdentitiesPath+"/{id}", s.unlinkRoute())
 }
 
 // sessionRequiredCode collapses every invalid-session cause.

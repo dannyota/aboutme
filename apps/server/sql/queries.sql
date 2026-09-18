@@ -24,6 +24,17 @@ INSERT INTO identities (user_id, provider, provider_user_id) VALUES ($1, $2, $3)
 -- Ordered by creation time then ID, oldest first with a deterministic tie-breaker.
 SELECT * FROM identities WHERE user_id = $1 ORDER BY created_at ASC, id ASC;
 
+-- name: DeleteIdentityForUser :execrows
+-- Unlinks one identity only when it belongs to the given user. The caller holds
+-- the user-row lock, so the last-sign-in-method check and this delete cannot
+-- interleave with another unlink.
+DELETE FROM identities WHERE id = $1 AND user_id = $2;
+
+-- name: InsertIdentityUnlinkedAuditEvent :exec
+-- Records the unlink's kind and time only: no user, provider, or identity.
+INSERT INTO lifecycle_audit_events (kind, occurred_at, media_job_id)
+VALUES ('identity_unlinked', sqlc.arg(occurred_at)::timestamptz, NULL);
+
 -- name: CreateSession :one
 -- Always inserts a brand-new row -- used both by Issue (fixation defense: a
 -- login never reuses an existing session row) and by the >24h rotation

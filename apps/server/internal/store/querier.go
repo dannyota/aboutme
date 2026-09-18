@@ -165,6 +165,10 @@ type Querier interface {
 	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
+	// Unlinks one identity only when it belongs to the given user. The caller holds
+	// the user-row lock, so the last-sign-in-method check and this delete cannot
+	// interleave with another unlink.
+	DeleteIdentityForUser(ctx context.Context, arg DeleteIdentityForUserParams) (int64, error)
 	DeleteLifecycleAuditPage(ctx context.Context, arg DeleteLifecycleAuditPageParams) (int64, error)
 	// Removing a client cascades its codes, grants, and tokens: deregistering an
 	// agent ends every authorization it holds.
@@ -304,6 +308,8 @@ type Querier interface {
 	// The user-row lock every session issuer and password mutation serializes on.
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
 	InsertAccountDeletedAuditEvent(ctx context.Context, arg InsertAccountDeletedAuditEventParams) (LifecycleAuditEvent, error)
+	// Records the unlink's kind and time only: no user, provider, or identity.
+	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
 	// Refresh rotation (M3). Every identity field -- family, client, user, grant,
 	// and family expiry -- is read from the predecessor row rather than trusted
 	// from the caller, so a rotated token structurally cannot join a different

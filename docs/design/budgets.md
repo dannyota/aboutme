@@ -80,6 +80,7 @@ Callers use these shared policies only after the caller integration that ADR
 | Account JSON export                             | ≤ 12,582,912 bytes; 5/min per account and IP        | Account export route                                     |
 | Account export / photo read deadline            | 20 s / 5 s; cancel and join                         | Account export route                                     |
 | Account deletion attempts                       | 5/min per account and IP; 3 plan attempts/request   | Account deletion route                                   |
+| Provider unlink attempts                        | 5/min per account and IP                            | Provider unlink route                                    |
 | Privacy job run                                 | ≤ 30 min; cancel and join                           | One-shot job commands                                    |
 | Daily retention per category                    | 1,000/page; 10,000/run                              | Session/audit/completed-job sweeps                       |
 | Media job lease / object I/O                    | 30 s / 5 s                                          | Media cleanup                                            |

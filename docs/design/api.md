@@ -62,6 +62,7 @@ behavior that future contract changes must implement.
 | `GET /oauth/consent`, `POST /oauth/consent`                        | Agent consent read and the approve/deny decision                  |
 | `GET /me/agents`, `DELETE /me/agents/{grantId}`                    | Connected-agent list and grant revocation                         |
 | `GET /me/export`, `DELETE /me`                                     | Data export and recent-reauthenticated account deletion           |
+| `DELETE /me/identities/{identityId}`                               | Recent-reauthenticated provider unlink                            |
 
 Provider start and callback operations are registered only when
 `PROVIDER_LOGIN_ENABLED` enables that provider; the OpenAPI description on each

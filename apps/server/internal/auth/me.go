@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -23,13 +24,16 @@ type meUser struct {
 	HasPassword bool    `json:"hasPassword"`
 }
 
-// meIdentity exposes the provider but never its internal subject.
+// meIdentity exposes the link's own ID, provider, and creation time, never the
+// provider's subject.
 type meIdentity struct {
-	Provider string `json:"provider"`
+	ID        string    `json:"id"`
+	Provider  string    `json:"provider"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // meResponse is GET /me's full "data" payload:
-// {data:{user, csrfToken, identities:[{provider}]}}.
+// {data:{user, csrfToken, identities:[{id, provider, createdAt}]}}.
 type meResponse struct {
 	User       meUser       `json:"user"`
 	CSRFToken  string       `json:"csrfToken"`
@@ -69,7 +73,7 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request) {
 
 	identities := make([]meIdentity, len(identityRows))
 	for i, row := range identityRows {
-		identities[i] = meIdentity{Provider: row.Provider}
+		identities[i] = meIdentity{ID: row.ID.String(), Provider: row.Provider, CreatedAt: row.CreatedAt.UTC()}
 	}
 
 	api.WriteData(w, http.StatusOK, meResponse{
