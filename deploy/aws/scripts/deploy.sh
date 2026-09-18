@@ -117,13 +117,17 @@ secret_exists() { # valueFrom: SSM parameter ARN or name, or Secrets Manager ARN
         --query 'length(Parameters)' --output text 2>/dev/null) == 1 ]] ;;
   esac
 }
+# A plain assignment lets set -e stop on a jq failure; the app family always has
+# secrets, so an empty list means the read failed.
+refs=$(jq -r '.containerDefinitions[].secrets[]?.valueFrom' "$work"/*.json)
+[[ -n $refs ]] || { say "no task secrets found in the new revisions; refusing to deploy"; exit 1; }
 missing=0
 while IFS= read -r ref; do
   if ! secret_exists "$ref"; then
     say "missing secret $ref (not found, or not describable with these credentials)"
     missing=1
   fi
-done < <(jq -r '.containerDefinitions[].secrets[]?.valueFrom' "$work"/*.json | sort -u)
+done < <(sort -u <<<"$refs")
 ((!missing)) || { say "create the missing secrets, or turn off the setting that needs them, then rerun"; exit 1; }
 
 # 4. Snapshot.
