@@ -15,6 +15,7 @@
  */
 import FormField from '@/components/app/FormField.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
+import LegalAgreement from '@/components/legal/LegalAgreement.vue';
 import ProviderButtons from '@/components/auth/ProviderButtons.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
@@ -198,6 +199,12 @@ async function onSubmit() {
         :locale="locale"
         :next="explicitNext"
         :providers="loginProviders"
+      />
+      <!-- A first provider sign-in creates the account. -->
+      <LegalAgreement
+        class="mt-3"
+        :locale="locale"
+        testid="login-agreement"
       />
     </template>
     <nav class="mt-6 flex justify-between gap-3 text-sm">

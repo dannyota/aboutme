@@ -10,6 +10,7 @@
  */
 import FormField from '@/components/app/FormField.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
+import LegalAgreement from '@/components/legal/LegalAgreement.vue';
 import ProviderButtons from '@/components/auth/ProviderButtons.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
@@ -201,6 +202,12 @@ async function onSubmit() {
         {{ pending ? copy.register.pending : copy.createAccount }}
       </Button>
     </form>
+    <LegalAgreement
+      v-if="!success"
+      class="mt-3"
+      :locale="locale"
+      testid="register-agreement"
+    />
     <template v-if="!success && loginProviders.length > 0">
       <div
         class="mt-8 flex items-center gap-3 text-xs text-muted-foreground"
