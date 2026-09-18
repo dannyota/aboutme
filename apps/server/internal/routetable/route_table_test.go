@@ -428,6 +428,14 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "authorize_consent_page", method: http.MethodGet, path: "/authorize", want: wantWeb},
 		{name: "authorize_query", method: http.MethodGet, path: "/authorize?client_id=x", want: wantWeb},
 		{name: "authorize_markdown", method: http.MethodGet, path: "/authorize.md", want: wantWeb},
+		// The legal pages are fixed Nuxt roots whose names also satisfy the
+		// public-slug grammar; without their registry rows they would reach Go
+		// as resume slugs.
+		{name: "privacy_page", method: http.MethodGet, path: "/privacy", want: wantWeb},
+		{name: "privacy_markdown", method: http.MethodGet, path: "/privacy.md", want: wantWeb},
+		{name: "terms_page", method: http.MethodGet, path: "/terms", want: wantWeb},
+		{name: "terms_markdown", method: http.MethodGet, path: "/terms.md", want: wantWeb},
+		{name: "privacy_prefixed_slug", method: http.MethodGet, path: "/privacy-policy", want: wantGo},
 		{name: "unmatched_editor_route", method: http.MethodGet, path: "/resume/editor/summary", want: wantWeb},
 		{name: "nested_md_does_not_match_go", method: http.MethodGet, path: "/nested/path.md", want: wantWeb},
 		{name: "too_short_slug", method: http.MethodGet, path: "/abc", want: wantWeb},

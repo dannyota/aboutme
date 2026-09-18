@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "roots": [
     {
       "root": ".well-known",
@@ -62,6 +62,10 @@
       "dispatch": "deny"
     },
     {
+      "root": "privacy",
+      "dispatch": "nuxt"
+    },
+    {
       "root": "readyz",
       "dispatch": "go"
     },
@@ -80,6 +84,10 @@
     {
       "root": "sitemap.xml",
       "dispatch": "go"
+    },
+    {
+      "root": "terms",
+      "dispatch": "nuxt"
     },
     {
       "root": "u",

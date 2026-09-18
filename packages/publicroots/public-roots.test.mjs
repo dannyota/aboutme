@@ -17,7 +17,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
-const registryPath = join(here, "public-roots.v6.json");
+const registryPath = join(here, "public-roots.v7.json");
 const byteSort = (left, right) =>
   Buffer.compare(Buffer.from(left), Buffer.from(right));
 
@@ -37,16 +37,18 @@ const expectedRoots = [
   ["oauth", "go"],
   ["people", "reserved"],
   ["print", "deny"],
+  ["privacy", "nuxt"],
   ["readyz", "go"],
   ["register", "nuxt"],
   ["reset-password", "nuxt"],
   ["robots.txt", "go"],
   ["sitemap.xml", "go"],
+  ["terms", "nuxt"],
   ["u", "reserved"],
   ["verify-email", "nuxt"],
 ];
 
-test("the v6 registry is closed and authority ordered", async () => {
+test("the v7 registry is closed and authority ordered", async () => {
   const registryRaw = await readFile(registryPath);
   const registry = parsePublicRoots(registryRaw);
   assert.deepEqual(
@@ -67,7 +69,7 @@ test("the v6 registry is closed and authority ordered", async () => {
   }
 
   assert.throws(() =>
-    parsePublicRoots(Buffer.from(JSON.stringify({ ...registry, version: 5 }))),
+    parsePublicRoots(Buffer.from(JSON.stringify({ ...registry, version: 6 }))),
   );
   assert.throws(() =>
     parsePublicRoots(
@@ -86,7 +88,7 @@ test("the v6 registry is closed and authority ordered", async () => {
       Buffer.from(
         registryRaw
           .toString("utf8")
-          .replace('"version": 6', '"version": 5,\n  "version": 6'),
+          .replace('"version": 7', '"version": 6,\n  "version": 7'),
       ),
     ),
   );
