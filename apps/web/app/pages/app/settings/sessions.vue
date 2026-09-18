@@ -46,7 +46,6 @@ interface AuthStartEnvelope {
   };
 }
 
-const allProviders: AuthProvider[] = ['google', 'github', 'linkedin'];
 const props = defineProps<{ now?: Date }>();
 const now = props.now ?? useNow();
 
@@ -59,7 +58,12 @@ const {
   mutate,
   refresh: refreshMe,
 } = useAuth();
-const { providerLogin, agentAccess } = useCapabilities();
+// Only providers the server enables (ADR 0039) get link or reauth controls;
+// a disabled provider's start route answers not found.
+const { loginProviders, agentAccess } = useCapabilities();
+const enabledIdentities = computed(() =>
+  identities.value.filter((identity) =>
+    loginProviders.value.includes(identity.provider)));
 
 // Server-side rendering has neither the browser cookies nor the local proxy.
 const { data: sessionsResponse } = await useFetch<SessionsEnvelope>(
@@ -117,7 +121,9 @@ const reauthReason = ref<ReauthReason>(
   route.query.error === 'reauth_required' ? 'link' : 'action',
 );
 const reauthMessage = computed(() => reauthMessages[reauthReason.value]);
-const reauthProvider = computed(() => identities.value[0]?.provider ?? null);
+const reauthProvider = computed(
+  () => enabledIdentities.value[0]?.provider ?? null,
+);
 
 function triggerReauthPrompt(reason: ReauthReason): void {
   reauthRequired.value = true;
@@ -163,7 +169,7 @@ const linkedProviders = computed(
   () => new Set(identities.value.map((i) => i.provider)),
 );
 const unlinkedProviders = computed(() =>
-  allProviders.filter((p) => !linkedProviders.value.has(p)),
+  loginProviders.value.filter((p) => !linkedProviders.value.has(p)),
 );
 
 const showAddProvider = ref(false);
@@ -231,9 +237,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
 // rejects with a PasswordSettingsFailure rather than a raw server body. The
 // provider round trip reuses the same authorizeURL validation as linking.
 const passwordProviders = computed(() =>
-  providerLogin.value
-    ? identities.value.map((identity) => identity.provider)
-    : [],
+  enabledIdentities.value.map((identity) => identity.provider),
 );
 
 const passwordActions: PasswordSettingsActions = {
@@ -414,7 +418,7 @@ const linkErrorMessage = computed(() => {
     </section>
 
     <section
-      v-if="providerLogin"
+      v-if="loginProviders.length > 0"
       aria-labelledby="providers-title"
       class="border-t py-8"
     >
