@@ -293,6 +293,36 @@ describe('register.vue', () => {
       expect(JSON.parse(receivedBody ?? '{}')).toEqual(validInput);
     });
 
+  it('replaces the form after success so no stale field or error remains',
+    async () => {
+      registerEndpoint('/api/v1/auth/password/register', {
+        method: 'POST',
+        handler: (event) => {
+          setResponseStatus(event, 202);
+          return { data: { accepted: true } };
+        },
+      });
+      const wrapper = await mountSuspended(RegisterPage);
+      await wrapper.get('#register-name').setValue(validInput.name);
+      await wrapper.get('#register-email').setValue(validInput.email);
+      await wrapper.get('#register-password').setValue(validInput.password);
+      await wrapper.get('#register-password-confirm')
+        .setValue(validInput.password);
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
+      await settle();
+
+      expect(wrapper.find('[data-testid="register-form"]').exists())
+        .toBe(false);
+      expect(wrapper.find('input[type="password"]').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Passwords do not match');
+      expect(wrapper.find('[data-testid="register-error"]').exists())
+        .toBe(false);
+      expect(
+        wrapper.get('[data-testid="register-success-sign-in"]')
+          .attributes('href'),
+      ).toBe('/login');
+    });
+
   it('shows closed copy for each password policy issue', async () => {
     const issueCopy: Record<string, string> = {
       length: 'at least 12',

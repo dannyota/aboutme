@@ -104,13 +104,28 @@ async function onSubmit() {
     </StatusBanner>
     <StatusBanner
       v-if="success"
+      :focus-on-mount="true"
       class="mt-6"
       kind="success"
       testid="register-success"
     >
       Check your email to verify your address.
     </StatusBanner>
+    <p
+      v-if="success"
+      class="mt-6 text-sm"
+    >
+      <NuxtLink
+        class="text-primary underline-offset-4 hover:underline"
+        data-testid="register-success-sign-in"
+        to="/login"
+      >
+        Sign in
+      </NuxtLink>
+      after you verify your email.
+    </p>
     <form
+      v-if="!success"
       class="mt-8 grid gap-6"
       data-testid="register-form"
       novalidate
@@ -160,7 +175,10 @@ async function onSubmit() {
         {{ pending ? 'Creating account…' : 'Create account' }}
       </Button>
     </form>
-    <nav class="mt-6 flex justify-between gap-3 text-sm">
+    <nav
+      v-if="!success"
+      class="mt-6 flex justify-between gap-3 text-sm"
+    >
       <span>Already have an account?</span>
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
