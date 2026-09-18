@@ -69,10 +69,11 @@ protocol and MCP endpoints follow their protocol contracts and the accepted
 includes:
 
 - `GET` and `HEAD` health and readiness probes;
-- an unauthenticated capabilities read that reports whether provider login and
-  agent access are enabled;
+- an unauthenticated capabilities read that reports the enabled providers and
+  whether agent access is enabled;
 - Google and LinkedIn OpenID Connect plus GitHub OAuth login, whose routes are
-  registered only when `PROVIDER_LOGIN_ENABLED` is true (off by default);
+  registered only for the providers `PROVIDER_LOGIN_ENABLED` enables (none by
+  default);
 - email-and-password registration, verification, login, reauthentication,
   add/change, and reset;
 - authenticated, CSRF-protected provider link and reauthentication starts;

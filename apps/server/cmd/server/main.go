@@ -275,11 +275,12 @@ type agentRouteHandlers struct {
 	AgentGrant            http.Handler
 }
 
-// capabilitiesRegistrar exposes the two optional-surface flags to the web
-// without a second source of truth (ADR 0027).
+// capabilitiesRegistrar exposes the optional-surface flags and the enabled
+// providers to the web without a second source of truth (ADR 0027, ADR 0039).
 func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
 	handler := api.CapabilitiesHandler(api.Capabilities{
-		ProviderLogin: cfg.ProviderLoginEnabled,
+		ProviderLogin: cfg.ProviderLogin.Any(),
+		Providers:     cfg.ProviderLogin.Names(),
 		AgentAccess:   cfg.AgentAccess.Enabled,
 	})
 	return func(mux *http.ServeMux) {

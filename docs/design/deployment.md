@@ -22,10 +22,11 @@ native development account or database. The native script idempotently seeds
 command refuses any other database and is never run by Compose or cloud
 environments.
 
-`PROVIDER_LOGIN_ENABLED` defaults to false and accepts only `true`, `false`, or
-blank. The native HTTPS harness sets it to true for provider authentication
-proofs; native HTTP, Compose, self-hosted, and production configurations leave
-it unset for the password-only v1 surface.
+`PROVIDER_LOGIN_ENABLED` defaults to off and accepts blank, `false`, `true`, or
+a comma list of `google`, `github`, and `linkedin`. The native HTTPS harness
+sets it to true for provider authentication proofs; native HTTP, Compose, and
+self-hosted configurations leave it unset for a password-only surface.
+Production sets `google`.
 
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI

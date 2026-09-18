@@ -13,7 +13,7 @@ locals {
   })
   # Parameters each execution role may read, and nothing else.
   exec_params = {
-    app      = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca"]
+    app      = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "oauth/google-client-id", "oauth/google-client-secret"]
     web      = []
     migrate  = ["db/migrator-password"]
     jobs     = ["db/app-password"]

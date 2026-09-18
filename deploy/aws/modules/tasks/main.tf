@@ -6,6 +6,14 @@ locals {
   db_url    = "postgres://%s@${var.db_endpoint}:5432/%s?sslmode=verify-full&sslrootcert=/etc/ssl/rds/global-bundle.pem"
   master_pw = "${var.db_master_secret_arn}:password::"
 
+  # Google credentials are referenced only when Google login is on, so an apply
+  # before the parameters exist cannot break the app task.
+  google_login = var.provider_login_enabled == "google"
+  google_secrets = local.google_login ? [
+    { name = "GOOGLE_CLIENT_ID", valueFrom = "${local.param}/oauth/google-client-id" },
+    { name = "GOOGLE_CLIENT_SECRET", valueFrom = "${local.param}/oauth/google-client-secret" },
+  ] : []
+
   logs = { for c in ["server", "caddy", "web", "migrate", "admin", "jobs"] : c => {
     logDriver = "awslogs"
     options = {
@@ -36,6 +44,7 @@ locals {
     { name = "SES_FROM_ADDRESS", value = var.ses_from_address },
     { name = "SES_FROM_NAME", value = var.ses_from_name },
     { name = "SES_CONFIGURATION_SET", value = var.ses_configuration_set },
+    { name = "PROVIDER_LOGIN_ENABLED", value = local.google_login ? "google" : "false" },
     { name = "APP_BUILD_DIGEST", value = var.image_server },
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },
   ])
@@ -69,12 +78,12 @@ resource "aws_ecs_task_definition" "app" {
       cpu         = 512
       essential   = true
       environment = local.server_env
-      secrets = [
+      secrets = concat([
         { name = "PGPASSWORD", valueFrom = "${local.param}/db/app-password" },
         { name = "AUTH_EMAIL_ACTIVE_KEY_ID", valueFrom = "${local.param}/auth-email/active-key-id" },
         { name = "AUTH_EMAIL_ACTIVE_KEY", valueFrom = "${local.param}/auth-email/active-key" },
         { name = "PASSWORD_RATE_HMAC_KEY", valueFrom = "${local.param}/password-rate-hmac-key" },
-      ]
+      ], local.google_secrets)
       # SYS_ADMIN lets Docker's seccomp profile allow the user namespaces that
       # Chromium's sandbox needs. The image runs as a non-root user, so the
       # process gains no effective capability.

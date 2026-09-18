@@ -201,8 +201,9 @@ nothing.
 
 Non-secret configuration is plain task definition values: `ENV=prod`,
 `PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`, `PROVIDER_LOGIN_ENABLED`
-unset (provider OAuth credentials are then not required), `MEDIA_BACKEND=s3`
-without static keys, and the SES settings.
+from the `provider_login_enabled` variable (`false` or `google`),
+`MEDIA_BACKEND=s3` without static keys, and the SES settings. When Google is on,
+its client ID and secret are task secrets from SSM.
 
 ## Release and deploy
 

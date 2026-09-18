@@ -155,14 +155,20 @@ func TestLoad_MCPEnableFlagRejectsInvalidValueWithoutEcho(t *testing.T) {
 
 func TestLoad_ProviderLoginFlag(t *testing.T) {
 	t.Parallel()
+	all := config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}
 	for _, tc := range []struct {
-		name    string
-		raw     string
-		enabled bool
+		name string
+		raw  string
+		want config.ProviderLogin
 	}{
-		{name: "blank is off", raw: "", enabled: false},
-		{name: "false is off", raw: "false", enabled: false},
-		{name: "true is on", raw: "true", enabled: true},
+		{name: "blank is off", raw: "", want: config.ProviderLogin{}},
+		{name: "false is off", raw: "false", want: config.ProviderLogin{}},
+		{name: "true is every provider", raw: "true", want: all},
+		{name: "google only", raw: "google", want: config.ProviderLogin{Google: true}},
+		{name: "github only", raw: "github", want: config.ProviderLogin{GitHub: true}},
+		{name: "linkedin only", raw: "linkedin", want: config.ProviderLogin{LinkedIn: true}},
+		{name: "list with spaces", raw: " google , linkedin ", want: config.ProviderLogin{Google: true, LinkedIn: true}},
+		{name: "full list", raw: "linkedin,github,google", want: all},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -172,10 +178,112 @@ func TestLoad_ProviderLoginFlag(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Load() error = %v", err)
 			}
-			if got.ProviderLoginEnabled != tc.enabled {
-				t.Fatalf("ProviderLoginEnabled = %t, want %t", got.ProviderLoginEnabled, tc.enabled)
+			if got.ProviderLogin != tc.want {
+				t.Fatalf("ProviderLogin = %+v, want %+v", got.ProviderLogin, tc.want)
 			}
 		})
+	}
+}
+
+func TestProviderLogin_AnyAndNames(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		in    config.ProviderLogin
+		any   bool
+		names []string
+	}{
+		{config.ProviderLogin{}, false, []string{}},
+		{config.ProviderLogin{Google: true}, true, []string{"google"}},
+		{config.ProviderLogin{LinkedIn: true, Google: true}, true, []string{"google", "linkedin"}},
+		{config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}, true, []string{"google", "github", "linkedin"}},
+	} {
+		if got := tc.in.Any(); got != tc.any {
+			t.Errorf("%+v Any() = %t, want %t", tc.in, got, tc.any)
+		}
+		got := tc.in.Names()
+		if got == nil || strings.Join(got, ",") != strings.Join(tc.names, ",") {
+			t.Errorf("%+v Names() = %#v, want %#v", tc.in, got, tc.names)
+		}
+	}
+}
+
+func TestLoad_ProviderLoginFlagRejectsBadLists(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{
+		"google,google",
+		"google,unknown-secret-sentinel",
+		"Google",
+		"TRUE",
+		"google,",
+		",google",
+		"google,,github",
+		"true,google",
+		"false,google",
+		"google;github",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			vars := validDevEnv()
+			vars["PROVIDER_LOGIN_ENABLED"] = raw
+			_, err := config.Load(env(vars))
+			if err == nil {
+				t.Fatalf("Load(%q) error = nil, want PROVIDER_LOGIN_ENABLED rejection", raw)
+			}
+			if !strings.Contains(err.Error(), "PROVIDER_LOGIN_ENABLED") || strings.Contains(err.Error(), "sentinel") {
+				t.Fatalf("Load(%q) error = %q, want variable name without raw value", raw, err)
+			}
+		})
+	}
+}
+
+// Only an enabled provider needs credentials in prod and staging.
+func TestLoad_ProviderCredentialsRequiredPerEnabledProvider(t *testing.T) {
+	t.Parallel()
+	base := func(environment, flag string) map[string]string {
+		return map[string]string{
+			"DATABASE_URL":           "postgres://user:pass@localhost:5432/aboutme",
+			"PUBLIC_ORIGIN":          "https://aboutme.vn",
+			"ENV":                    environment,
+			"TRUSTED_PROXY_CIDRS":    "127.0.0.1/32",
+			"PROVIDER_LOGIN_ENABLED": flag,
+		}
+	}
+	for _, environment := range []string{"prod", "staging"} {
+		t.Run(environment+" google with google credentials", func(t *testing.T) {
+			t.Parallel()
+			vars := base(environment, "google")
+			vars["GOOGLE_CLIENT_ID"] = "google-id"
+			vars["GOOGLE_CLIENT_SECRET"] = "google-secret"
+			got, err := config.Load(env(vars))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if got.ProviderLogin != (config.ProviderLogin{Google: true}) {
+				t.Fatalf("ProviderLogin = %+v, want google only", got.ProviderLogin)
+			}
+		})
+		for _, tc := range []struct {
+			flag, missing string
+			set           map[string]string
+		}{
+			{"google", "GOOGLE_CLIENT_ID", map[string]string{"GOOGLE_CLIENT_SECRET": "s"}},
+			{"google", "GOOGLE_CLIENT_SECRET", map[string]string{"GOOGLE_CLIENT_ID": "i"}},
+			{"github", "GITHUB_CLIENT_ID", map[string]string{"GOOGLE_CLIENT_ID": "i", "GOOGLE_CLIENT_SECRET": "s"}},
+			{"linkedin", "LINKEDIN_CLIENT_ID", map[string]string{"GITHUB_CLIENT_ID": "i", "GITHUB_CLIENT_SECRET": "s"}},
+			{"google,linkedin", "LINKEDIN_CLIENT_ID", map[string]string{"GOOGLE_CLIENT_ID": "i", "GOOGLE_CLIENT_SECRET": "s"}},
+		} {
+			t.Run(environment+" "+tc.flag+" missing "+tc.missing, func(t *testing.T) {
+				t.Parallel()
+				vars := base(environment, tc.flag)
+				for k, v := range tc.set {
+					vars[k] = v
+				}
+				_, err := config.Load(env(vars))
+				if err == nil || !strings.Contains(err.Error(), tc.missing) {
+					t.Fatalf("Load() error = %v, want it to name %s", err, tc.missing)
+				}
+			})
+		}
 	}
 }
 

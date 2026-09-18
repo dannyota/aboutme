@@ -602,10 +602,10 @@ func TestPurposeReauth_RefreshesReauthenticatedAt_ButDoesNotCreateIdentity(t *te
 	ctx := context.Background()
 
 	cfg := config.Config{
-		PublicOrigin:         testPublicOrigin,
-		ProviderLoginEnabled: true,
-		GoogleClientID:       oidctest.DefaultClientID,
-		GoogleClientSecret:   "test-google-client-secret",
+		PublicOrigin:       testPublicOrigin,
+		ProviderLogin:      config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true},
+		GoogleClientID:     oidctest.DefaultClientID,
+		GoogleClientSecret: "test-google-client-secret",
 	}
 	svc, err := auth.NewServiceForTest(testLogger(), cfg, svcPool, p.URL, "", "")
 	if err != nil {

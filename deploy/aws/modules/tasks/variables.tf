@@ -30,6 +30,16 @@ variable "ses_configuration_set" {
   type = string
 }
 
+# Only Google's credentials are wired, so only Google may be enabled here.
+variable "provider_login_enabled" {
+  type        = string
+  description = "PROVIDER_LOGIN_ENABLED for the server: \"\" (off) or \"google\""
+  validation {
+    condition     = contains(["", "google"], var.provider_login_enabled)
+    error_message = "provider_login_enabled must be \"\" or \"google\"; no other provider has production credentials wired."
+  }
+}
+
 variable "exec_role_arns" {
   type = map(string)
 }

@@ -31,11 +31,14 @@ settings UI uses that stable first identity as its default reauthentication
 provider. Equal timestamps must not make that choice depend on a PostgreSQL scan
 plan.
 
-Provider login is gated by `PROVIDER_LOGIN_ENABLED`, default `false`. When
-false, no provider start or callback route is registered and the settings
-provider-link and provider-reauthentication starts are absent; each path returns
-the uniform not-found response. [ADR 0027](../adr/0027-provider-login-flag.md)
-records the decision.
+Provider login is gated per provider by `PROVIDER_LOGIN_ENABLED`, default off.
+It takes blank or `false` (none), `true` (all three), or a comma list such as
+`google`. A disabled provider has no start or callback route, so its login,
+settings link, and reauthentication starts return the uniform not-found
+response. In prod and staging only an enabled provider requires its client ID
+and secret. Production enables Google only; GitHub and LinkedIn stay off.
+[ADR 0027](../adr/0027-provider-login-flag.md) and
+[ADR 0039](../adr/0039-per-provider-login-enablement.md) record the decision.
 
 ## Password authentication
 

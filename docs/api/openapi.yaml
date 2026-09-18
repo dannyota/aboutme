@@ -356,8 +356,8 @@ paths:
       security: []
       summary: Begin "Sign in with Google"
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Begins a fresh
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh
         OAuth2/OIDC login transaction (PKCE S256, an OIDC
         nonce) and redirects the browser to Google's own authorize
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
@@ -401,8 +401,8 @@ paths:
           csrfToken: []
       summary: Begin a Google link or reauthentication
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Begins an OAuth
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth
         transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
@@ -494,8 +494,8 @@ paths:
       security: []
       summary: Complete "Sign in with Google"
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Consumes the
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the
         pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (PKCE), verifies the ID
         token (issuer/audience/signature/expiry, plus the OIDC nonce),
@@ -583,8 +583,8 @@ paths:
       security: []
       summary: Begin "Sign in with GitHub"
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Begins a fresh
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh
         OAuth2 login transaction (PKCE S256; GitHub has no
         OIDC ID token, so no nonce) and redirects the browser to GitHub's
         own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque
@@ -623,8 +623,8 @@ paths:
           csrfToken: []
       summary: Begin a GitHub link or reauthentication
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Begins an OAuth
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth
         transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
@@ -716,8 +716,8 @@ paths:
       security: []
       summary: Complete "Sign in with GitHub"
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Consumes the
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the
         pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code, and — for
         `purpose=login` only — fetches the authenticated user's verified
@@ -770,8 +770,8 @@ paths:
       security: []
       summary: Begin "Sign in with LinkedIn"
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Begins a fresh
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh
         OAuth2/OIDC login transaction (PKCE S256, an OIDC
         nonce) and redirects the browser to LinkedIn's own authorize
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
@@ -810,8 +810,8 @@ paths:
           csrfToken: []
       summary: Begin a LinkedIn link or reauthentication
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Begins an OAuth
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth
         transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
@@ -903,8 +903,8 @@ paths:
       security: []
       summary: Complete "Sign in with LinkedIn"
       description: >-
-        Registered only when `PROVIDER_LOGIN_ENABLED` is true; otherwise this
-        path returns the uniform not-found response (ADR 0027). Consumes the
+        Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
+        path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the
         pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (PKCE), verifies the ID
         token (issuer/audience/signature/expiry, plus the OIDC nonce), and
@@ -1233,8 +1233,8 @@ paths:
       security: []
       summary: Which optional sign-in and agent surfaces this deployment enables
       description: >-
-        Unauthenticated read of the two configuration flags the web needs before
-        it renders a sign-in or settings page: `providerLogin`
+        Unauthenticated read of the configuration the web needs before it
+        renders a sign-in or settings page: `providerLogin` and `providers`
         (`PROVIDER_LOGIN_ENABLED`) and `agentAccess` (`MCP_ENABLED`). The response
         is `Cache-Control: no-store` so a configuration change is visible on the
         next request. It reveals no other configuration.
@@ -1252,7 +1252,8 @@ paths:
                         $ref: "#/components/schemas/Capabilities"
               example:
                 data:
-                  providerLogin: false
+                  providerLogin: true
+                  providers: [google]
                   agentAccess: false
   /auth/logout:
     post:
@@ -4645,12 +4646,22 @@ components:
     Capabilities:
       type: object
       additionalProperties: false
-      required: [providerLogin, agentAccess]
+      required: [providerLogin, providers, agentAccess]
       properties:
         providerLogin:
           type: boolean
-          description: Google, GitHub, and LinkedIn login and linking routes
-            are registered.
+          description: At least one provider's login and linking routes are
+            registered; true exactly when `providers` is non-empty.
+        providers:
+          type: array
+          uniqueItems: true
+          maxItems: 3
+          description: The providers whose login and linking routes are
+            registered, in the fixed order google, github, linkedin. Empty
+            for a password-only deployment.
+          items:
+            type: string
+            enum: [google, github, linkedin]
         agentAccess:
           type: boolean
           description: The OAuth authorization server, `/mcp`, and
