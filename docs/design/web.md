@@ -17,14 +17,18 @@ produces the same document everywhere.
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.
 
-The login page shows the email/password form always and the provider links only
-when the capabilities read reports `providerLogin`. Registration, verification,
-forgot-password, and reset-password are separate Nuxt pages. Verification and
-reset strip the `#token=` fragment before any network call and load no
-third-party resource. Account settings show whether a password is set and allow
-add/change after recent reauthentication; the provider-linking block appears
-only when `providerLogin` is true and the connected-agents block only when
-`agentAccess` is true. Provider emails are never shown as a linkage decision.
+The login and registration pages show the email/password form always and one
+provider link for each name in the capabilities read's `providers` list (ADR
+0039); an empty or missing list shows none. After registration, a notice tells
+everyone to check spam if the email does not arrive, and offers Google when it
+is listed; an expired or incomplete verification link offers Google the same
+way. Registration, verification, forgot-password, and reset-password are
+separate Nuxt pages. Verification and reset strip the `#token=` fragment before
+any network call and load no third-party resource. Account settings show whether
+a password is set and allow add/change after recent reauthentication; the
+provider-linking block appears only when `providerLogin` is true and the
+connected-agents block only when `agentAccess` is true. Provider emails are
+never shown as a linkage decision.
 
 The application shell renders two variants from the client-side session state:
 signed out shows the brand, Sign in, Create account, and the theme toggle;

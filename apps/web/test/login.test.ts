@@ -316,7 +316,11 @@ describe('login.vue provider gating', () => {
       let release!: (body: unknown) => void;
       registerEndpoint('/api/v1/capabilities', () => new Promise((resolve) => {
         release = () => resolve({
-          data: { providerLogin: true, agentAccess: true },
+          data: {
+            providerLogin: true,
+            agentAccess: true,
+            providers: ['google', 'github', 'linkedin'],
+          },
         });
       }));
       const wrapper = await mountSuspended(LoginPage);
@@ -325,7 +329,11 @@ describe('login.vue provider gating', () => {
         wrapper.find('[data-testid="login-divider"]').exists(),
       ).toBe(false);
       release({
-        data: { providerLogin: true, agentAccess: true },
+        data: {
+          providerLogin: true,
+          agentAccess: true,
+          providers: ['google', 'github', 'linkedin'],
+        },
       });
       await flushPromises();
       await flushPromises();
@@ -333,7 +341,7 @@ describe('login.vue provider gating', () => {
     });
 
   it(
-    'renders the provider links after providerLogin resolves true',
+    'renders the provider links after the providers list resolves',
     async () => {
       registerCapabilities({ providerLogin: true, agentAccess: false });
       const wrapper = await mountSuspended(LoginPage);
