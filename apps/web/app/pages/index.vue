@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import AppSeal from '@/components/app/AppSeal.vue';
 import ResumeDocument from '@/components/resume/ResumeDocument.vue';
 import { buttonVariants } from '@/components/ui/button';
+import { legalCopy } from '@/i18n/legal';
 import { landingCopy } from '@/landing/copy';
 import { sampleContext } from '@/landing/sampleContext';
 import { sampleLink, sampleResume } from '@/landing/sampleResume';
@@ -12,6 +13,7 @@ const { authState } = useAuth();
 const signedIn = computed(() => authState.value === 'authenticated');
 const { locale } = useLocale();
 const copy = computed(() => landingCopy[locale.value]);
+const legal = computed(() => legalCopy[locale.value]);
 
 useHead(computed(() => ({
   title: 'aboutme',
@@ -158,6 +160,18 @@ useHead(computed(() => ({
         href="https://github.com/dannyota/aboutme"
         rel="noopener noreferrer"
       >AGPL-3.0</a>.
+      <span aria-hidden="true"> · </span>
+      <NuxtLink
+        class="text-primary underline underline-offset-4"
+        data-testid="landing-terms-link"
+        to="/terms"
+      >{{ legal.termsLink }}</NuxtLink>
+      <span aria-hidden="true"> · </span>
+      <NuxtLink
+        class="text-primary underline underline-offset-4"
+        data-testid="landing-privacy-link"
+        to="/privacy"
+      >{{ legal.privacyLink }}</NuxtLink>
     </p>
   </main>
 </template>

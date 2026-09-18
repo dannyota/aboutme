@@ -9,6 +9,7 @@ produces the same document everywhere.
 | Surface            | Route class                                                                        | Rendering model                                              |
 | ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Landing and auth   | `/`, `/login`, `/register`, `/verify-email`, `/forgot-password`, `/reset-password` | Nuxt SSR                                                     |
+| Legal              | `/privacy`, `/terms`                                                               | Nuxt SSR; static, no data fetch                              |
 | Agent consent      | `/authorize`                                                                       | Nuxt page; session required, decision posted client-side     |
 | Account and editor | `/app/**`                                                                          | Client application; authenticated requests never run in SSR  |
 | Public resume      | `/{slug}`                                                                          | Nuxt SSR followed by client hydration and live refetch       |

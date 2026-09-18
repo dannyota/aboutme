@@ -1,7 +1,7 @@
-// Site languages. The homepage and the account pages (sign in, registration,
-// password recovery, email verification) are bilingual and default to
-// Vietnamese for the initial community (docs/design/product.md). Every other
-// route stays English.
+// Site languages. The homepage, the account pages (sign in, registration,
+// password recovery, email verification), and the Privacy Policy and Terms
+// are bilingual and default to Vietnamese for the initial community
+// (docs/design/product.md). Every other route stays English.
 
 export const locales = ['vi', 'en'] as const;
 
@@ -27,6 +27,8 @@ const localizedPaths: ReadonlySet<string> = new Set([
   '/forgot-password',
   '/reset-password',
   '/verify-email',
+  '/privacy',
+  '/terms',
 ]);
 
 /** Whether a route path renders in the chosen language. */
