@@ -78,8 +78,8 @@ processes with `make dev-native-down`.
 
 See the [native development runbook](docs/runbooks/native-development.md) for
 status, logs, ports, and database rules. Run `make check` for the fast local
-gate. Independent contributors run `make ci` before a pull request; in a
-coordinated worker session, the integration owner runs it before integration.
+gate. Independent contributors run `make ci` before a pull request. In a
+coordinated worker session, GitHub CI on `main` is the full gate.
 
 ## Self-hosting
 

@@ -42,8 +42,9 @@ make check
 make ci
 ```
 
-In a coordinated worker session, workers run only their affected checks. The
-integration owner alone runs `make ci` before integrating the shared tree.
+In a coordinated worker session, workers run only their affected checks, and the
+pre-commit hook scans each commit for secrets. GitHub CI on `main` runs the full
+gate; a release requires it green.
 
 For documentation changes, run `make docs-fmt`; it formats and re-lints the
 documentation tree. [`.tool-versions`](.tool-versions) pins local and hosted CI

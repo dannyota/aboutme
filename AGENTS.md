@@ -31,10 +31,12 @@ secrets, personal data, credentials, or internal notes.
 Agile and local-first. Build a working slice, review it, improve it. Optimize
 for fast correct delivery, not token cost.
 
-- **The phase is the integration and push unit.** Workers run the narrowest
-  affected checks. The integration owner makes reviewed local commits as tasks
-  become coherent, then runs full `make ci`, connected `make scan`, and the
-  phase exit checklist once at the candidate commit before pushing.
+- **GitHub CI is the full gate.** Workers run the narrowest affected checks.
+  Locally, every commit runs only the pre-commit `gitleaks` secret scan. The
+  integration owner makes reviewed commits as tasks become coherent and pushes
+  `main`; GitHub CI then runs the full `make ci` set, Semgrep, and full-history
+  gitleaks. A red run is fixed forward at once. A release tag and a deploy
+  require green CI on that commit.
 - **Merge to `main` locally and push; no pull requests.** Do not keep work on a
   long-lived branch. After a branch is merged, delete it locally and on the
   remote.
@@ -64,11 +66,11 @@ change, not four:
    those invariants by name. Findings go back to an author; the same reviewer
    confirms the fix.
 
-Phase exit is `docs/plans/phase-<id>/exit-criteria.md` plus `make ci` and
-`make scan` at one unchanged candidate commit, run by the integration owner. A
-failing item is fixed and rerun. A wrong or unsatisfiable criterion is corrected
-when found, in the same phase, with the change noted. There is no frozen
-acceptance catalog and no separate acceptance worker.
+Phase exit is `docs/plans/phase-<id>/exit-criteria.md` plus green GitHub CI at
+one unchanged candidate commit, checked by the integration owner. A failing item
+is fixed and rerun. A wrong or unsatisfiable criterion is corrected when found,
+in the same phase, with the change noted. There is no frozen acceptance catalog
+and no separate acceptance worker.
 
 Model assignment depends on the coordinator:
 
@@ -104,9 +106,9 @@ are hard:
   `http://localhost:20080`. Logs and PIDs live under ignored `.dev/`.
 - **`make dev` is only an HTTP image/network smoke and self-hosting check.** It
   fails while `aboutme-test-db` runs, by design. Never use it for daily work.
-- Run full `make ci` alone, never beside a heavy worker wave. Large consumers:
-  Nuxt build/typecheck, `golangci-lint` (`GOGC=50`), big `go test -race`
-  packages, Semgrep.
+- Run full `make ci` locally only to debug a CI failure, and then alone, never
+  beside a heavy worker wave. Large consumers: Nuxt build/typecheck,
+  `golangci-lint` (`GOGC=50`), big `go test -race` packages, Semgrep.
 - Reconfiguring the database container is scheduled work: announce it, wait for
   an idle window, recreate, then verify container state, both databases, and a
   real host-port DB test.
@@ -200,7 +202,7 @@ Run the narrowest relevant checks:
 
 | Change area                     | Command or evidence                                                                                                                                                |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Integration handoff, owner only | `make ci`; workers never run it                                                                                                                                    |
+| Integration handoff, owner only | Green GitHub CI on the pushed commit; `make ci` locally only to debug a CI failure                                                                                 |
 | Markdown or YAML                | Prettier and markdownlint on owned paths; the owner runs `make docs-fmt`                                                                                           |
 | Local instructions              | `npx prettier --check --ignore-path /dev/null AGENTS.md CLAUDE.md`, then `npx markdownlint-cli2` on both                                                           |
 | Resume schema/generated types   | `make schema-check`                                                                                                                                                |
@@ -211,7 +213,7 @@ Run the narrowest relevant checks:
 | Unauthenticated UI              | Relevant gate plus `make web-e2e` (scripted headless Playwright)                                                                                                   |
 | Authenticated UI                | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check` (scripted headless Playwright); full product checks run in production |
 | Public surface                  | `make native-http-check` and `make dev-https-public-check`                                                                                                         |
-| Phase gate or security work     | `make scan` with `SEMGREP_APP_TOKEN` (connected SAST, SCA, secrets, full-history gitleaks)                                                                         |
+| Phase gate or security work     | GitHub CI's Semgrep and gitleaks jobs; `make scan` with `SEMGREP_APP_TOKEN` locally only to debug them                                                             |
 
 Reusable browser automation is scripted headless Playwright, committed and run
 through `make web-e2e`, `make dev-https-auth-check`,
