@@ -392,6 +392,7 @@ apps/web/app/utils/userAgent.ts
 apps/web/e2e/baselines/academic-dense--vn-full--paged.png
 apps/web/e2e/baselines/classic-serif--vn-full--justify--paged.png
 apps/web/e2e/baselines/classic-serif--vn-full--paged.png
+apps/web/e2e/baselines/consulting-formal--vn-full--letter--paged.png
 apps/web/e2e/baselines/consulting-formal--vn-full--paged.png
 apps/web/e2e/baselines/engineer-compact--vn-full--paged.png
 apps/web/e2e/baselines/executive-band--vn-full--paged.png
