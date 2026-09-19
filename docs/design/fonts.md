@@ -44,11 +44,6 @@ Schema enum IDs and manifest IDs must match mechanically. A released catalog
 entry and its asset hashes are immutable because changing metrics can reflow a
 published resume. A font update uses a new catalog version or stable ID.
 
-Served `.woff2` files keep fixed names under `/_nuxt/fonts/` and are cached as
-immutable for a year. A font file change must therefore rename the `.woff2`
-file. The rename changes the font stylesheet, which changes the public page's
-stylesheet version, so browsers fetch the new file.
-
 ## Version 2 catalog
 
 The initial v2 catalog has 26 families. The renderer exposes upright 400 and 700
